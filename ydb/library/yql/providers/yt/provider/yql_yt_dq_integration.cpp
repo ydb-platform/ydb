@@ -658,6 +658,64 @@ public:
         return read;
     }
 
+    TExprNode::TPtr RecaptureWrite(const TExprNode::TPtr& write, TExprContext& ctx) override {
+        if (auto maybeWrite = TMaybeNode<TYtWriteTable>(write)) {
+            if (State_->Configuration->_EnableYtDqProcessWriteConstraints.Get().GetOrElse(DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS)) {
+                const auto& content = maybeWrite.Cast().Content();
+                if (TYtMaterialize::Match(&SkipCallables(content.Ref(), {TCoSort::CallableName(), TCoTopSort::CallableName(), TCoAssumeSorted::CallableName(), TCoAssumeConstraints::CallableName()}))) {
+                    return write;
+                }
+                TExprNode::TPtr newContent;
+                const auto materializeWorld = ctx.NewWorld(write->Pos()); // TODO: maybeWrite.Cast().World()
+                if (content.Maybe<TCoAssumeSorted>()) {
+                    // Duplicate AssumeSorted before YtMaterialize, because DQ cannot keep sort and so optimizes AssumeSorted as complete Sort
+                    // Before: YtWrite -> AssumeSorted -> ...
+                    // After: YtWrite -> AssumeConstraints -> YtMaterialize -> AssumeSorted -> ...
+                    newContent = Build<TYtMaterialize>(ctx, content.Pos())
+                        .World(materializeWorld)
+                        .DataSink(maybeWrite.Cast().DataSink())
+                        .Input(content)
+                        .Settings().Build()
+                        .Done().Ptr();
+                } else if (content.Raw()->IsCallable({TCoSort::CallableName(), TCoTopSort::CallableName()}) && !content.Raw()->GetConstraint<TSortedConstraintNode>()) {
+                    // For Sorts by non members lambdas do it on YT side because of aux columns
+                    // Before: YtWrite -> Sort/TopSort -> ...
+                    // After: YtWrite -> Sort/TopSort -> YtMaterialize -> ...
+                    auto materialize = Build<TYtMaterialize>(ctx, content.Pos())
+                        .World(materializeWorld)
+                        .DataSink(maybeWrite.Cast().DataSink())
+                        .Input(content.Cast<TCoInputBase>().Input())
+                        .Settings().Build()
+                        .Done();
+                    newContent = ctx.ChangeChild(content.Ref(), TCoInputBase::idx_Input, materialize.Ptr());
+                } else {
+                    // Materialize dq graph to yt table before YtWrite:
+                    // Before: YtWrite -> Some callables ...
+                    // After: YtWrite -> YtMaterialize -> Some callables ...
+                    newContent = Build<TYtMaterialize>(ctx, content.Pos())
+                        .World(materializeWorld)
+                        .DataSink(maybeWrite.Cast().DataSink())
+                        .Input(content)
+                        .Settings().Build()
+                        .Done().Ptr();
+                }
+                if (content.Raw()->GetConstraint<TSortedConstraintNode>() || content.Raw()->GetConstraint<TDistinctConstraintNode>() || content.Raw()->GetConstraint<TUniqueConstraintNode>()) {
+                    newContent = Build<TCoAssumeConstraints>(ctx, content.Pos())
+                        .Input(newContent)
+                        .Value()
+                            .Value(NYT::NodeToYsonString(content.Raw()->GetConstraintSet().ToYson(), NYson::EYsonFormat::Text), TNodeFlags::MultilineContent)
+                        .Build()
+                        .Done().Ptr();
+                }
+                return Build<TYtWriteTable>(ctx, write->Pos())
+                    .InitFrom(maybeWrite.Cast())
+                    .Content(newContent)
+                    .Done().Ptr();
+            }
+        }
+        return write;
+    }
+
     void FillLookupSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType) override {
         const TDqLookupSourceWrap wrap(&node);
         auto table = wrap.Input().Cast<TYtTable>();
@@ -678,7 +736,6 @@ public:
         settings.PackFrom(source);
         sourceType = "yt";
     }
-
 
     TMaybe<bool> CanWrite(const TExprNode& node, TExprContext& ctx) override {
         if (auto maybeWrite = TMaybeNode<TYtWriteTable>(&node)) {
@@ -702,17 +759,19 @@ public:
                 return false;
             }
 
-            const auto content = maybeWrite.Cast().Content().Raw();
-            if (const auto sorted = content->GetConstraint<TSortedConstraintNode>()) {
-                if (const auto distinct = content->GetConstraint<TDistinctConstraintNode>()) {
-                    if (distinct->IsOrderBy(*sorted)) {
-                        AddInfo(ctx, "unsupported write of unique data", false);
+            if (!State_->Configuration->_EnableYtDqProcessWriteConstraints.Get().GetOrElse(DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS)) {
+                const auto content = maybeWrite.Cast().Content().Raw();
+                if (const auto sorted = content->GetConstraint<TSortedConstraintNode>()) {
+                    if (const auto distinct = content->GetConstraint<TDistinctConstraintNode>()) {
+                        if (distinct->IsOrderBy(*sorted)) {
+                            AddInfo(ctx, "unsupported write of unique data", false);
+                            return false;
+                        }
+                    }
+                    if (!content->IsCallable({"Sort", "TopSort", "AssumeSorted"})) {
+                        AddInfo(ctx, "unsupported write of sorted data", false);
                         return false;
                     }
-                }
-                if (!content->IsCallable({"Sort", "TopSort", "AssumeSorted"})) {
-                    AddInfo(ctx, "unsupported write of sorted data", false);
-                    return false;
                 }
             }
             return true;

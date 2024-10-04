@@ -399,6 +399,10 @@ private:
                 "Bad constraints yson-value: " << CurrentExceptionMessage()));
             return IGraphTransformer::TStatus::Error;
         }
+        if (!set) {
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "AssumeConstraints with empty constraints set"));
+            return IGraphTransformer::TStatus::Error;
+        }
         for (auto constraint: set.GetAllConstraints()) {
             if (!constraint->IsApplicableToType(*input->GetTypeAnn())) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << *constraint

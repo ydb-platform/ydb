@@ -486,6 +486,7 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, MinColumnGroupSize).Lower(2);
     REGISTER_SETTING(*this, MaxColumnGroups);
     REGISTER_SETTING(*this, ExtendedStatsMaxChunkCount);
+    REGISTER_SETTING(*this, _EnableYtDqProcessWriteConstraints);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

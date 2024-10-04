@@ -117,14 +117,15 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
         csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper(kikimr).CreateTestOlapTableWithoutStore();
         auto tableClient = kikimr.GetTableClient();
+        auto& client = kikimr.GetTestClient();
 
         Tests::NCommon::TLoggerInit(kikimr).SetComponents({NKikimrServices::TX_COLUMNSHARD}, "CS").SetPriority(NActors::NLog::PRI_DEBUG).Initialize();
 
         {
             auto alterQuery = TStringBuilder() <<
-                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=cms_ts, TYPE=COUNT_MIN_SKETCH,
+                R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_ts, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['timestamp']}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -134,7 +135,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         {
             auto alterQuery = TStringBuilder() <<
-                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=cms_res_id, TYPE=COUNT_MIN_SKETCH,
+                R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_res_id, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['resource_id']}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -144,7 +145,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         {
             auto alterQuery = TStringBuilder() <<
-                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=cms_uid, TYPE=COUNT_MIN_SKETCH,
+                R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_uid, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['uid']}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -154,7 +155,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         {
             auto alterQuery = TStringBuilder() <<
-                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=cms_level, TYPE=COUNT_MIN_SKETCH,
+                R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_level, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['level']}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -164,7 +165,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         {
             auto alterQuery = TStringBuilder() <<
-                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=cms_message, TYPE=COUNT_MIN_SKETCH,
+                R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_message, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['message']}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -172,15 +173,31 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
 
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1200000, 300200000, 10000);
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1300000, 300300000, 10000);
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1400000, 300400000, 10000);
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 2000000, 200000000, 70000);
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 3000000, 100000000, 110000);
+        WriteTestData(kikimr, "/Root/olapTable", 1000000, 300000000, 10000);
+        WriteTestData(kikimr, "/Root/olapTable", 1100000, 300100000, 10000);
+        WriteTestData(kikimr, "/Root/olapTable", 1200000, 300200000, 10000);
+        WriteTestData(kikimr, "/Root/olapTable", 1300000, 300300000, 10000);
+        WriteTestData(kikimr, "/Root/olapTable", 1400000, 300400000, 10000);
+        WriteTestData(kikimr, "/Root/olapTable", 2000000, 200000000, 70000);
+        WriteTestData(kikimr, "/Root/olapTable", 3000000, 100000000, 110000);
 
         csController->WaitActualization(TDuration::Seconds(10));
+
+        {
+            auto res = client.Ls("/Root/olapTable");
+            auto description = res->Record.GetPathDescription().GetColumnTableDescription();
+            auto indexes = description.GetSchema().GetIndexes();
+            UNIT_ASSERT(indexes.size() == 5);
+
+            std::unordered_set<TString> indexNames{"cms_ts", "cms_res_id", "cms_uid", "cms_level", "cms_message"};
+            for (const auto& i : indexes) {
+                Cerr << ">>> " << i.GetName() << " of class name " << i.GetClassName() << Endl;
+                UNIT_ASSERT(i.GetClassName() == "COUNT_MIN_SKETCH");
+                UNIT_ASSERT(indexNames.erase(i.GetName()));
+            }
+            UNIT_ASSERT(indexNames.empty());
+        }
+
         {
             auto runtime = kikimr.GetTestServer().GetRuntime();
             auto sender = runtime->AllocateEdgeActor();

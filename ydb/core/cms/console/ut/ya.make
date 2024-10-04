@@ -5,10 +5,6 @@ FORK_SUBTESTS()
 TIMEOUT(600)
 SIZE(MEDIUM)
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:16)
-ENDIF()
-
 PEERDIR(
     library/cpp/getopt
     library/cpp/protobuf/util

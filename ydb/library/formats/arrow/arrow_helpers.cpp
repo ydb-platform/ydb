@@ -804,4 +804,15 @@ std::vector<std::string> ConvertStrings(const std::vector<TString>& input) {
     return result;
 }
 
+std::shared_ptr<arrow::Table> DeepCopy(const std::shared_ptr<arrow::Table>& table, arrow::MemoryPool* pool) {
+    arrow::ArrayVector arrays;
+
+    for (const auto& column: table->columns()) {
+        auto&& array = TStatusValidator::GetValid(arrow::Concatenate(column->chunks(), pool));
+        arrays.push_back(std::move(array));
+    }
+
+    return arrow::Table::Make(table->schema(), arrays);
 }
+
+} // namespace NKikimr::NArrow

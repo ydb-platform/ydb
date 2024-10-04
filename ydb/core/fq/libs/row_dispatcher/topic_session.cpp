@@ -98,6 +98,7 @@ struct TEvPrivate {
 
 ui64 PrintStatePeriodSec = 60;
 ui64 MaxBatchSizeBytes = 10000000;
+ui64 MaxHandledEvents = 1000;
 
 TVector<TString> GetVector(const google::protobuf::RepeatedPtrField<TString>& value) {
     return {value.begin(), value.end()};
@@ -245,6 +246,7 @@ private:
         cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
         IgnoreFunc(NFq::TEvPrivate::TEvPqEventsReady);
         IgnoreFunc(NFq::TEvPrivate::TEvCreateSession);
+        IgnoreFunc(NFq::TEvPrivate::TEvDataParsed);
         IgnoreFunc(NFq::TEvPrivate::TEvDataAfterFilteration);
         IgnoreFunc(NFq::TEvPrivate::TEvStatus);
         IgnoreFunc(NFq::TEvPrivate::TEvDataFiltered);
@@ -482,7 +484,7 @@ void TTopicSession::Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
 }
 
 void TTopicSession::HandleNewEvents() {
-    while (true) {
+    for (ui64 i = 0; i < MaxHandledEvents; ++i) {
         if (!ReadSession) {
             return;
         }
@@ -515,7 +517,6 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
         LOG_ROW_DISPATCHER_TRACE("Data received: " << message.DebugString(true));
 
         TString item = message.GetData();
-        item.Detach();
         Self.SendToParsing(message.GetOffset(), item);
         Self.LastReceivedMessageOffset = message.GetOffset();
     }
@@ -578,6 +579,10 @@ void TTopicSession::SendToParsing(ui64 offset, const TString& message) {
             LOG_ROW_DISPATCHER_TRACE("Send message to client without parsing/filtering");
             AddDataToClient(info, offset, message);
         }
+    }
+
+    if (ClientsWithoutPredicate.size() == Clients.size()) {
+        return;
     }
 
     try {

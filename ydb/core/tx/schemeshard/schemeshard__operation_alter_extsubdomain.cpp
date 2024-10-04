@@ -936,21 +936,23 @@ public:
         // Create or derive alter.
         // (We could have always created new alter from a current subdomainInfo but
         // we need to take into account possible version increase from CreateHive suboperation.)
-        auto createAlterFrom = [&inputSettings, &delta](auto prototype) {
+        auto createAlterFrom = [&inputSettings](auto prototype, const TStoragePools& additionalPools) {
             return MakeIntrusive<TSubDomainInfo>(
                 *prototype,
                 inputSettings.GetPlanResolution(),
                 inputSettings.GetTimeCastBucketsPerMediator(),
-                delta.StoragePoolsAdded
+                additionalPools
             );
         };
         TSubDomainInfo::TPtr alter = [&delta, &subdomainInfo, &createAlterFrom, &context]() {
             if (delta.AddExternalHive && context.SS->EnableAlterDatabaseCreateHiveFirst) {
                 Y_ABORT_UNLESS(subdomainInfo->GetAlter());
-                return createAlterFrom(subdomainInfo->GetAlter());
+                //NOTE: existing alter already has all storage pools that combined operation wanted to add,
+                // should not add them second time when deriving alter from alter
+                return createAlterFrom(subdomainInfo->GetAlter(), {});
             } else {
                 Y_ABORT_UNLESS(!subdomainInfo->GetAlter());
-                return createAlterFrom(subdomainInfo);
+                return createAlterFrom(subdomainInfo, delta.StoragePoolsAdded);
             }
         }();
 

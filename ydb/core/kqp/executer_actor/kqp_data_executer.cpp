@@ -137,6 +137,7 @@ public:
         , FederatedQuerySetup(federatedQuerySetup)
         , GUCSettings(GUCSettings)
         , ShardIdToTableInfo(shardIdToTableInfo)
+        , BlockTrackingMode(tableServiceConfig.GetBlockTrackingMode())
     {
         Target = creator;
 
@@ -481,7 +482,7 @@ private:
             }()
             << ", Cookie=" << ev->Cookie
             << ", error=" << issues.ToString());
-    
+
         if (Stats) {
             Stats->AddDatashardPrepareStats(std::move(*res->Record.MutableTxStats()));
         }
@@ -2318,7 +2319,7 @@ private:
             // Volatile transactions must always use generic readsets
             VolatileTx ||
             // Transactions with topics must always use generic readsets
-            !topicTxs.empty() || 
+            !topicTxs.empty() ||
             // HTAP transactions always use generic readsets
             !evWriteTxs.empty());
 
@@ -2573,7 +2574,8 @@ private:
             .GUCSettings = GUCSettings,
             .MayRunTasksLocally = mayRunTasksLocally,
             .ResourceManager_ = Request.ResourceManager_,
-            .CaFactory_ = Request.CaFactory_
+            .CaFactory_ = Request.CaFactory_,
+            .BlockTrackingMode = BlockTrackingMode
         });
 
         auto err = Planner->PlanExecution();
@@ -2880,6 +2882,8 @@ private:
     // Lock handle for a newly acquired lock
     TLockHandle LockHandle;
     ui64 LastShard = 0;
+
+    NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
 };
 
 } // namespace

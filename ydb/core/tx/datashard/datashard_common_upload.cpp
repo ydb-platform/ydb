@@ -137,7 +137,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             }
 
             keyBytes += c.Size();
-            key.emplace_back(TRawTypeValue(c.AsRef(), kt));
+            key.emplace_back(TRawTypeValue(c.AsRef(), kt.GetTypeId()));
             ++ki;
         }
 
@@ -200,7 +200,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             }
 
             if (allowUpdate) {
-                value.emplace_back(NTable::TUpdateOp(vt.first, NTable::ECellOp::Set, TRawTypeValue(valueCells.GetCells()[vi].AsRef(), vt.second)));
+                value.emplace_back(NTable::TUpdateOp(vt.first, NTable::ECellOp::Set, TRawTypeValue(valueCells.GetCells()[vi].AsRef(), vt.second.GetTypeId())));
             }
             ++vi;
         }

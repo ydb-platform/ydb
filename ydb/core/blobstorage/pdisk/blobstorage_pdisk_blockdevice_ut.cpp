@@ -112,23 +112,27 @@ public:
     }
 };
 
-class TCompletionCounter : public NPDisk::TCompletionAction {
+class TCompletionWorkerWithCounter : public NPDisk::TCompletionAction {
 public:
-    TCompletionCounter(TAtomic& counter)
+    TCompletionWorkerWithCounter(TAtomic& counter, TDuration workTime = TDuration::Zero())
         : Counter(counter)
+        , WorkTime(workTime)
     {}
 
     void Exec(TActorSystem *) override {
+        Sleep(WorkTime);
         AtomicIncrement(Counter);
         delete this;
     }
 
     void Release(TActorSystem *) override {
+        AtomicIncrement(Counter);
         delete this;
     }
 
 private:
     TAtomic& Counter;
+    TDuration WorkTime;
 };
 
 static TString MakeDatabasePath(const char *dir) {
@@ -169,69 +173,6 @@ void WaitForValue(TAtomic *counter, TDuration maxDuration, TAtomicBase expectedV
     }
 }
 
-void RunTestMultipleRequestsFromCompletionAction() {
-    const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
-    THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
-    const ui32 dataSize = 4 << 10;
-    const ui64 generations = 8;
-    TAtomic counter = 0;
-
-
-    TTempDir tempDir;
-    TString path = CreateFile(tempDir().c_str(), dataSize);
-
-    {
-        TActorSystemCreator creator;
-        THolder<NPDisk::TBufferPool> bufferPool(NPDisk::CreateBufferPool(dataSize, 1, false, {}));
-        NPDisk::TBuffer::TPtr alignedBuffer(bufferPool->Pop());
-        memset(alignedBuffer->Data(), 0, dataSize);
-        THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDevice(path, *mon, 0, 0, 4,
-                NPDisk::TDeviceMode::LockFile, 2 << generations, nullptr));
-        device->Initialize(std::make_shared<NPDisk::TPDiskCtx>(creator.GetActorSystem()));
-
-        (new TWriter(*device, alignedBuffer.Get(), (i32)generations, &counter))->Exec(nullptr);
-
-        TAtomicBase expectedCounter = 0;
-        for (ui64 i = 0; i <= generations; ++i) {
-            expectedCounter += 1ull << i;
-        }
-        WaitForValue(&counter, TIMEOUT, expectedCounter);
-
-        TAtomicBase resultingCounter = AtomicGet(counter);
-
-        UNIT_ASSERT_VALUES_EQUAL(
-            resultingCounter,
-            expectedCounter
-        );
-    }
-    Ctest << "Done" << Endl;
-}
-
-void RunTestDestructionWithMultipleFlushesFromCompletionAction() {
-    const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
-    THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
-    const ui32 dataSize = 4 << 10;
-    const i32 generations = 8;
-    TAtomic counter = 0;
-
-    TTempDir tempDir;
-    TString path = CreateFile(tempDir().c_str(), dataSize);
-
-    TActorSystemCreator creator;
-    THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDevice(path, *mon, 0, 0, 4,
-                NPDisk::TDeviceMode::LockFile, 2 << generations, nullptr));
-    device->Initialize(std::make_shared<NPDisk::TPDiskCtx>(creator.GetActorSystem()));
-
-    (new TFlusher(*device, generations, &counter))->Exec(nullptr);
-    device->Stop();
-    for (int i = 0; i < 10000; ++i) {
-        (new TFlusher(*device, generations, &counter))->Exec(nullptr);
-    }
-    device.Destroy();
-
-    Ctest << "Done" << Endl;
-}
-
 void RunWriteTestWithSectorMap(NPDisk::NSectorMap::EDiskMode diskMode, ui32 diskSize, ui32 bufferSize, bool sequential = true) {
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
     THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
@@ -250,7 +191,7 @@ void RunWriteTestWithSectorMap(NPDisk::NSectorMap::EDiskMode diskMode, ui32 disk
     TAtomic expectedWrites = diskSize / (offsetIncrement);
 
     for (ui64 offset = 0; offset < diskSize; offset += offsetIncrement) {
-        device->PwriteAsync(data.Get(), data.Size(), offset, new TCompletionCounter(completedWrites), NPDisk::TReqId(NPDisk::TReqId::Test1, 0), {});
+        device->PwriteAsync(data.Get(), data.Size(), offset, new TCompletionWorkerWithCounter(completedWrites), NPDisk::TReqId(NPDisk::TReqId::Test1, 0), {});
     }
 
     WaitForValue(&completedWrites, TIMEOUT, expectedWrites);
@@ -259,14 +200,6 @@ void RunWriteTestWithSectorMap(NPDisk::NSectorMap::EDiskMode diskMode, ui32 disk
 }
 
 Y_UNIT_TEST_SUITE(TBlockDeviceTest) {
-
-    Y_UNIT_TEST(TestMultipleRequestsFromCompletionAction) {
-        RunTestMultipleRequestsFromCompletionAction();
-    }
-
-    Y_UNIT_TEST(TestDestructionWithMultipleFlushesFromCompletionAction) {
-        RunTestDestructionWithMultipleFlushesFromCompletionAction();
-    }
 
     Y_UNIT_TEST(TestDeviceWithSubmitGetThread) {
         const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
@@ -339,6 +272,56 @@ Y_UNIT_TEST_SUITE(TBlockDeviceTest) {
         ui32 bufferSize = 32 * 1024u;
         RunWriteTestWithSectorMap(NPDisk::NSectorMap::DM_HDD, diskSize, bufferSize);
         Ctest << "Done" << Endl;
+    }
+
+    Y_UNIT_TEST(WriteReadRestart) {
+        using namespace NPDisk;
+
+        TActorSystemCreator creator;
+        auto start = TMonotonic::Now();
+        while ((TMonotonic::Now() - start).Seconds() < 5) {
+            const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
+            THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
+
+            ui32 buffSize = 64_KB;
+            ui32 bufferPoolSize = 512;
+            THolder<NPDisk::TBufferPool> bufferPool(NPDisk::CreateBufferPool(buffSize, bufferPoolSize, false, {}));
+            ui64 inFlight = 128;
+            ui32 maxQueuedCompletionActions = bufferPoolSize / 2;
+            ui64 diskSize = 32_GB;
+
+            TIntrusivePtr<NPDisk::TSectorMap> sectorMap = new NPDisk::TSectorMap(diskSize, NSectorMap::DM_NONE);
+            THolder<NPDisk::IBlockDevice> device(CreateRealBlockDevice("", *mon, 0, 0, inFlight, TDeviceMode::None,
+                    maxQueuedCompletionActions, sectorMap));
+            device->Initialize(std::make_shared<TPDiskCtx>(creator.GetActorSystem()));
+
+            TAtomic counter = 0;
+            const i64 totalRequests = 500;
+            for (i64 i = 0; i < totalRequests; i++) {
+                auto *completion = new TCompletionWorkerWithCounter(counter, TDuration::MicroSeconds(100));
+                NPDisk::TBuffer::TPtr buffer(bufferPool->Pop());
+                buffer->FlushAction = completion;
+                auto* data = buffer->Data();
+                switch (RandomNumber<ui32>(3)) {
+                case 0:
+                    device->PreadAsync(data, 32_KB, 0, buffer.Release(), TReqId(), nullptr);
+                    break;
+                case 1:
+                    device->PwriteAsync(data, 32_KB, 0, buffer.Release(), TReqId(), nullptr);
+                    break;
+                case 2:
+                    device->FlushAsync(completion, TReqId());
+                    buffer->FlushAction = nullptr;
+                    break;
+                default:
+                    break;
+                }
+            }
+
+            Cerr << AtomicGet(counter)  << Endl;
+            device.Destroy();
+            UNIT_ASSERT(AtomicGet(counter) == totalRequests);
+        }
     }
 
     /*

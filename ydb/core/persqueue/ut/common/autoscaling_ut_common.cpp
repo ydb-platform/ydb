@@ -520,7 +520,7 @@ template<SdkVersion Sdk>
 void TTestReadSession<Sdk>::Close() {
     Run();
     Cerr << ">>>>> " << Impl->Name << " Closing reading session " << Endl << Flush;
-    Session->Close();
+    Session->Close(TDuration::Seconds(5));
     Session.reset();
 }
 

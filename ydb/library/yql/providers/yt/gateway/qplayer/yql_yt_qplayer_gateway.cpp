@@ -718,25 +718,7 @@ public:
 
     static TString SerializePathStat(const TPathStatResult& stat, ui32 index) {
         Y_ENSURE(index < stat.DataSize.size());
-        Y_ENSURE(index < stat.Extended.size());
-        auto xNode = NYT::TNode();
-        if (!stat.Extended[index].Defined()) {
-            xNode = NYT::TNode::CreateEntity();
-        } else {
-            auto dataWeightMap = NYT::TNode::CreateMap();
-            for (const auto& d : stat.Extended[index]->DataWeight) {
-                dataWeightMap(d.first, d.second);
-            }
-
-            auto uniqCountsMap = NYT::TNode::CreateMap();
-            for (const auto& e : stat.Extended[index]->EstimatedUniqueCounts) {
-                uniqCountsMap(e.first, e.second);
-            }
-
-            xNode = NYT::TNode()
-                ("DataWeight", dataWeightMap)
-                ("EstimatedUniqueCounts", uniqCountsMap);
-        }
+        auto xNode = NYT::TNode::CreateEntity();
 
         auto node = NYT::TNode()
             ("DataSize", stat.DataSize[index])
@@ -747,31 +729,16 @@ public:
 
     static void DeserializePathStat(const NYT::TNode& node, TPathStatResult& stat, ui32 index) {
         Y_ENSURE(index < stat.DataSize.size());
-        Y_ENSURE(index < stat.Extended.size());
         stat.DataSize[index] = node["DataSize"].AsUint64();
-        stat.Extended[index] = Nothing();
-        const auto& x  = node["Extended"];
-        if (!x.IsEntity()) {
-            auto& xValue = stat.Extended[index];
-            xValue.ConstructInPlace();
-            for (const auto& d : x["DataWeight"].AsMap()) {
-                xValue->DataWeight[d.first] = d.second.AsInt64();
-            }
-
-            for (const auto& e : x["EstimatedUniqueCounts"].AsMap()) {
-                xValue->EstimatedUniqueCounts[e.first] = e.second.AsUint64();
-            }
-        }
     }
 
     NThreading::TFuture<TPathStatResult> PathStat(TPathStatOptions&& options) final {
         if (QContext_.CanRead()) {
             TPathStatResult res;
             res.DataSize.resize(options.Paths().size(), 0);
-            res.Extended.resize(options.Paths().size());
 
             for (ui32 index = 0; index < options.Paths().size(); ++index) {
-                const auto& key = MakePathStatKey(options.Cluster(), options.Extended(), options.Paths()[index]);
+                const auto& key = MakePathStatKey(options.Cluster(), false, options.Paths()[index]);
                 auto item = QContext_.GetReader()->Get({YtGateway_PathStat, key}).GetValueSync();
                 if (!item) {
                     throw yexception() << "Missing replay data";
@@ -798,7 +765,7 @@ public:
                 }
 
                 for (ui32 index = 0; index < optionsDup.Paths().size(); ++index) {
-                    const auto& key = MakePathStatKey(optionsDup.Cluster(), optionsDup.Extended(), optionsDup.Paths()[index]);
+                    const auto& key = MakePathStatKey(optionsDup.Cluster(), false, optionsDup.Paths()[index]);
                     auto value = SerializePathStat(res, index);
                     qContext.GetWriter()->Put({YtGateway_PathStat, key}, value).GetValueSync();
                 }
@@ -809,10 +776,9 @@ public:
         if (QContext_.CanRead()) {
             TPathStatResult res;
             res.DataSize.resize(options.Paths().size(), 0);
-            res.Extended.resize(options.Paths().size());
 
             for (ui32 index = 0; index < options.Paths().size(); ++index) {
-                const auto& key = MakePathStatKey(options.Cluster(), options.Extended(), options.Paths()[index]);
+                const auto& key = MakePathStatKey(options.Cluster(), false, options.Paths()[index]);
                 auto item = QContext_.GetReader()->Get({YtGateway_PathStat, key}).GetValueSync();
                 if (!item) {
                     return res;

@@ -712,18 +712,22 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
 
     TExprNode::TPtr aggWideFlow;
     if (hashed) {
-        auto tmp = Ctx.Builder(Node->Pos())
-            .Callable("ToFlow")
-                .Callable(0, "BlockCombineHashed")
-                    .Add(0, blocks)
-                    .Callable(1, "Void")
-                    .Seal()
-                    .Add(2, Ctx.NewList(Node->Pos(), std::move(keyIdxs)))
-                    .Add(3, Ctx.NewList(Node->Pos(), std::move(aggs)))
+        auto aggWideStream = Ctx.Builder(Node->Pos())
+            .Callable("BlockCombineHashed")
+                .Add(0, blocks)
+                .Callable(1, "Void")
+                .Seal()
+                .Add(2, Ctx.NewList(Node->Pos(), std::move(keyIdxs)))
+                .Add(3, Ctx.NewList(Node->Pos(), std::move(aggs)))
+            .Seal()
+            .Build();
+        aggWideFlow = Ctx.Builder(Node->Pos()).
+            Callable("WideFromBlocks")
+                .Callable(0, "ToFlow")
+                    .Add(0, aggWideStream)
                 .Seal()
             .Seal()
             .Build();
-        aggWideFlow = Ctx.NewCallable(Node->Pos(), "WideFromBlocks", {tmp});
     } else {
         aggWideFlow = Ctx.Builder(Node->Pos())
             .Callable("BlockCombineAll")

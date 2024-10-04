@@ -24,6 +24,7 @@ const TString YtGateway_GetTableRange = "YtGateway_GetTableRange";
 const TString YtGateway_GetFolder = "YtGateway_GetFolder";
 const TString YtGateway_GetFolders = "YtGateway_GetFolders";
 const TString YtGateway_ResolveLinks = "YtGateway_ResolveLinks";
+const TString YtGateway_PathStat = "YtGateway_PathStat";
 
 TString MakeHash(const TString& str) {
     SHA256_CTX sha;
@@ -98,7 +99,7 @@ public:
 
                 if (valueNode.HasKey("Ranges")) {
                     p.Ranges.ConstructInPlace();
-                    for (const auto& r : valueNode["Ranges"].AsString()) {
+                    for (const auto& r : valueNode["Ranges"].AsList()) {
                         NYT::TReadRange range;
                         NYT::Deserialize(range, r);
                         p.Ranges->push_back(range);
@@ -697,17 +698,98 @@ public:
         return Inner_->DropTrackables(std::move(options));
     }
 
+    static TString MakePathStatKey(const TString& cluster, bool extended, const TPathStatReq& req) {
+        auto node = NYT::TNode()
+            ("Cluster", cluster)
+            ("Extended", extended);
+
+        NYT::TNode pathNode;
+        NYT::TNodeBuilder builder(&pathNode);
+        NYT::Serialize(req.Path(), &builder);
+        auto path = NYT::TNode()
+            ("Path", pathNode)
+            ("IsTemp", req.IsTemp())
+            ("IsAnonymous", req.IsAnonymous())
+            ("Epoch", req.Epoch());
+        
+        node("Path", path);
+        return MakeHash(NYT::NodeToCanonicalYsonString(node));
+    }
+
+    static TString SerializePathStat(const TPathStatResult& stat, ui32 index) {
+        Y_ENSURE(index < stat.DataSize.size());
+        auto xNode = NYT::TNode::CreateEntity();
+
+        auto node = NYT::TNode()
+            ("DataSize", stat.DataSize[index])
+            ("Extended", xNode);
+
+        return NYT::NodeToYsonString(node, NYT::NYson::EYsonFormat::Binary);
+    }
+
+    static void DeserializePathStat(const NYT::TNode& node, TPathStatResult& stat, ui32 index) {
+        Y_ENSURE(index < stat.DataSize.size());
+        stat.DataSize[index] = node["DataSize"].AsUint64();
+    }
+
     NThreading::TFuture<TPathStatResult> PathStat(TPathStatOptions&& options) final {
         if (QContext_.CanRead()) {
-            throw yexception() << "Can't replay PathStat";
+            TPathStatResult res;
+            res.DataSize.resize(options.Paths().size(), 0);
+
+            for (ui32 index = 0; index < options.Paths().size(); ++index) {
+                const auto& key = MakePathStatKey(options.Cluster(), false, options.Paths()[index]);
+                auto item = QContext_.GetReader()->Get({YtGateway_PathStat, key}).GetValueSync();
+                if (!item) {
+                    throw yexception() << "Missing replay data";
+                }
+
+                auto valueNode = NYT::NodeFromYsonString(TStringBuf(item->Value));
+                DeserializePathStat(valueNode, res, index);
+            }
+
+            res.SetSuccess();
+            return NThreading::MakeFuture<TPathStatResult>(res);
         }
 
-        return Inner_->PathStat(std::move(options));
+        auto optionsDup = options;
+        return Inner_->PathStat(std::move(options))
+            .Subscribe([optionsDup, qContext = QContext_](const NThreading::TFuture<TPathStatResult>& future) {
+                if (!qContext.CanWrite() || future.HasException()) {
+                    return;
+                }
+
+                const auto& res = future.GetValueSync();
+                if (!res.Success()) {
+                    return;
+                }
+
+                for (ui32 index = 0; index < optionsDup.Paths().size(); ++index) {
+                    const auto& key = MakePathStatKey(optionsDup.Cluster(), false, optionsDup.Paths()[index]);
+                    auto value = SerializePathStat(res, index);
+                    qContext.GetWriter()->Put({YtGateway_PathStat, key}, value).GetValueSync();
+                }
+        });
     }
 
     TPathStatResult TryPathStat(TPathStatOptions&& options) final {
         if (QContext_.CanRead()) {
-            throw yexception() << "Can't replay TryPathStat";
+            TPathStatResult res;
+            res.DataSize.resize(options.Paths().size(), 0);
+
+            for (ui32 index = 0; index < options.Paths().size(); ++index) {
+                const auto& key = MakePathStatKey(options.Cluster(), false, options.Paths()[index]);
+                auto item = QContext_.GetReader()->Get({YtGateway_PathStat, key}).GetValueSync();
+                if (!item) {
+                    return res;
+                }
+
+                auto valueNode = NYT::NodeFromYsonString(TStringBuf(item->Value));
+                DeserializePathStat(valueNode, res, index);
+            }
+
+            res.SetSuccess();
+            return res;
         }
 
         return Inner_->TryPathStat(std::move(options));

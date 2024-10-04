@@ -23,11 +23,9 @@ inline TString ProxyFieldNameConverter(const google::protobuf::FieldDescriptor& 
 
 class TYdsProtoToJsonPrinter : public NProtobufJson::TProto2JsonPrinter {
 public:
-    TYdsProtoToJsonPrinter(const google::protobuf::Reflection* reflection,
-                           const NProtobufJson::TProto2JsonConfig& config,
+    TYdsProtoToJsonPrinter(const NProtobufJson::TProto2JsonConfig& config,
                            bool skipBase64Encode)
     : NProtobufJson::TProto2JsonPrinter(config)
-    , ProtoReflection(reflection)
     , SkipBase64Encode(skipBase64Encode)
     {}
 
@@ -61,14 +59,15 @@ protected:
                     return Base64Encode(str);
                 };
 
+                auto* reflection = proto.GetReflection();
                 if (field.is_repeated()) {
-                    for (int i = 0, endI = ProtoReflection->FieldSize(proto, &field); i < endI; ++i) {
+                    for (int i = 0, endI = reflection->FieldSize(proto, &field); i < endI; ++i) {
                         PrintStringValue<false>(field, TStringBuf(),
-                            maybeBase64Encode(proto.GetReflection()->GetRepeatedString(proto, &field, i)), json);
+                            maybeBase64Encode(reflection->GetRepeatedString(proto, &field, i)), json);
                     }
                 } else {
                     PrintStringValue<true>(field, key,
-                        maybeBase64Encode(proto.GetReflection()->GetString(proto, &field)), json);
+                        maybeBase64Encode(reflection->GetString(proto, &field)), json);
                 }
                 return;
             }
@@ -82,13 +81,14 @@ protected:
                     key = MakeKey(field);
                 }
 
+                auto* reflection = proto.GetReflection();
                 if (field.is_repeated()) {
-                    for (int i = 0, endI = ProtoReflection->FieldSize(proto, &field); i < endI; ++i) {
-                        double value = proto.GetReflection()->GetRepeatedInt64(proto, &field, i) / 1000.0;
+                    for (int i = 0, endI = reflection->FieldSize(proto, &field); i < endI; ++i) {
+                        double value = reflection->GetRepeatedInt64(proto, &field, i) / 1000.0;
                         PrintDoubleValue<false>(TStringBuf(), value, json);
                     }
                 } else {
-                    double value = proto.GetReflection()->GetInt64(proto, &field) / 1000.0;
+                    double value = reflection->GetInt64(proto, &field) / 1000.0;
                     PrintDoubleValue<true>(key, value, json);
                 }
                 return;
@@ -103,19 +103,20 @@ protected:
                     key = MakeKey(field);
                 }
 
+                auto* reflection = proto.GetReflection();
                 if (field.is_repeated()) {
-                    for (int i = 0, endI = ProtoReflection->FieldSize(proto, &field); i < endI; ++i) {
-                        auto value = proto.GetReflection()->GetRepeatedString(proto, &field, i);
+                    for (int i = 0, endI = reflection->FieldSize(proto, &field); i < endI; ++i) {
+                        auto value = reflection->GetRepeatedString(proto, &field, i);
                         if (!value.empty()) {
                             PrintStringValue<false>(field, TStringBuf(),
-                                proto.GetReflection()->GetRepeatedString(proto, &field, i), json);
+                                reflection->GetRepeatedString(proto, &field, i), json);
                         }
                     }
                 } else {
-                    auto value = proto.GetReflection()->GetString(proto, &field);
+                    auto value = reflection->GetString(proto, &field);
                     if (!value.empty()) {
                         PrintStringValue<true>(field, key,
-                            proto.GetReflection()->GetString(proto, &field), json);
+                            reflection->GetString(proto, &field), json);
                     }
                 }
                 return;
@@ -126,7 +127,6 @@ protected:
     }
 
 private:
-    const google::protobuf::Reflection* ProtoReflection = nullptr;
     bool SkipBase64Encode;
 };
 
@@ -137,7 +137,7 @@ inline void ProtoToJson(const NProtoBuf::Message& resp, NJson::TJsonValue& value
                   .SetNameGenerator(ProxyFieldNameConverter)
                   .SetMapAsObject(true)
                   .SetEnumMode(NProtobufJson::TProto2JsonConfig::EnumName);
-    TYdsProtoToJsonPrinter printer(resp.GetReflection(), config, skipBase64Encode);
+    TYdsProtoToJsonPrinter printer(config, skipBase64Encode);
     printer.Print(resp, *NProtobufJson::CreateJsonMapOutput(value));
 }
 

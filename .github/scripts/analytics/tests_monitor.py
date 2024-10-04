@@ -257,14 +257,7 @@ def main():
 
         end_time = time.time()
         print(f'Dataframe inited: {end_time - start_time}')
-        start_time = time.time()
-        df = pd.DataFrame(data)
-
-        df = df.sort_values(by=['full_name', 'date_window'])
-
-        end_time = time.time()
-        print(f'Dataframe sorting: {end_time - start_time}')
-        start_time = time.time()
+       
 
         def determine_state(row):
             history_class = row['history_class']
@@ -291,12 +284,6 @@ def main():
                 else:
                     return history_class
 
-        def calculate_streak_flag(row):
-            if row['state'] == row['previous_state']:
-                return 0
-            else:
-                return 1
-
         def calculate_summary(row):
             return (
                 'Pass:'
@@ -320,7 +307,16 @@ def main():
                     return parts[1]
             else:
                 return owner
+        
+        start_time = time.time()
+        df = pd.DataFrame(data)
 
+        df = df.sort_values(by=['full_name', 'date_window'])
+
+        end_time = time.time()
+        
+        print(f'Dataframe sorting: {end_time - start_time}')
+        start_time = time.time()
         df['success_rate'] = (df['pass_count'] / (df['pass_count'] + df['mute_count'] + df['fail_count'])) * 100
         df['success_rate'] = df['success_rate'].fillna(0).astype(int)
 

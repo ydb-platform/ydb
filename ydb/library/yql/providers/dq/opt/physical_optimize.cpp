@@ -38,6 +38,7 @@ public:
         AddHandler(0, &TCoPartitionByKey::Match, HNDL(BuildPartitionStage<false>));
         AddHandler(0, &TCoAsList::Match, HNDL(BuildAggregationResultStage));
         AddHandler(0, &TCoTopSort::Match, HNDL(BuildTopSortStage<false>));
+        AddHandler(0, &TCoTop::Match, HNDL(BuildTopStage<false>));
         AddHandler(0, &TCoSort::Match, HNDL(BuildSortStage<false>));
         AddHandler(0, &TCoTakeBase::Match, HNDL(BuildTakeOrTakeSkipStage<false>));
         AddHandler(0, &TCoLength::Match, HNDL(RewriteLengthOfStageOutput<false>));
@@ -74,6 +75,7 @@ public:
         AddHandler(1, &TCoFinalizeByKey::Match, HNDL(BuildFinalizeByKeyStage<true>));
         AddHandler(1, &TCoPartitionByKey::Match, HNDL(BuildPartitionStage<true>));
         AddHandler(1, &TCoTopSort::Match, HNDL(BuildTopSortStage<true>));
+        AddHandler(1, &TCoTop::Match, HNDL(BuildTopStage<true>));
         AddHandler(1, &TCoSort::Match, HNDL(BuildSortStage<true>));
         AddHandler(1, &TCoTakeBase::Match, HNDL(BuildTakeOrTakeSkipStage<true>));
         AddHandler(1, &TCoLength::Match, HNDL(RewriteLengthOfStageOutput<true>));
@@ -182,6 +184,11 @@ protected:
     template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildTopSortStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
         return DqBuildTopSortStage(node, ctx, optCtx, *getParents(), IsGlobal);
+    }
+
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> BuildTopStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+        return DqBuildTopStage(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
     template <bool IsGlobal>

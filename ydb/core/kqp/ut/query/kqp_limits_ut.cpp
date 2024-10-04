@@ -189,6 +189,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     }
 
     Y_UNIT_TEST(ComputeActorMemoryAllocationFailureQueryService) {
+        
         auto app = NKikimrConfig::TAppConfig();
         app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10);
         app.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(2000);

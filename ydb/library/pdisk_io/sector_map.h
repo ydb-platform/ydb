@@ -191,16 +191,16 @@ public:
     TTicketLock MapLock;
     std::atomic<bool> IsLocked;
     std::optional<std::pair<TDuration, TDuration>> ImitateRandomWait;
-    std::atomic<double> ImitateIoErrorProbability;
-    std::atomic<double> ImitateReadIoErrorProbability;
+    std::atomic<ui64> IoErrorEveryNthRequests;
+    std::atomic<ui64> ReadIoErrorEveryNthRequests;
 
     std::atomic<ui64> AllocatedBytes;
 
     TSectorMap(ui64 deviceSize = 0, NSectorMap::EDiskMode diskMode = NSectorMap::DM_NONE)
       : DeviceSize(deviceSize)
       , IsLocked(false)
-      , ImitateIoErrorProbability(0.0)
-      , ImitateReadIoErrorProbability(0.0)
+      , IoErrorEveryNthRequests(0)
+      , ReadIoErrorEveryNthRequests(0)
       , AllocatedBytes(0)
       , DiskMode(diskMode)
     {
@@ -327,8 +327,8 @@ public:
             str << "ImitateRandomWait# [" << ImitateRandomWait->first << ", "
                 << ImitateRandomWait->first + ImitateRandomWait->second << ")" << "\n";
         }
-        str << "ImitateReadIoErrorProbability# " << ImitateReadIoErrorProbability.load() << "\n";
-        str << "ImitateIoErrorProbability# " << ImitateIoErrorProbability.load() << "\n";
+        str << "ReadIoErrorEveryNthRequests# " << ReadIoErrorEveryNthRequests.load() << "\n";
+        str << "IoErrorEveryNthRequests# " << IoErrorEveryNthRequests.load() << "\n";
         str << "AllocatedBytes (approx.)# " << HumanReadableSize(AllocatedBytes.load(), SF_QUANTITY)  << "\n";
         str << "DataBytes# " << HumanReadableSize(DataBytes(), SF_QUANTITY)  << "\n";
         str << "DiskMode# " << DiskModeToString(DiskMode) << "\n";

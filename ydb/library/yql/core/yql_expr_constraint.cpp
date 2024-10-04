@@ -2930,8 +2930,11 @@ private:
         }
 
         TExprNode::TPtr keySelectorLambda = input->Child(TCoMultiHoppingCore::idx_KeyExtractor);
-        std::vector<std::string_view> columns;
-        ExtractKeys(*keySelectorLambda, columns);
+        const auto keys = GetPathsToKeys(keySelectorLambda->Tail(), keySelectorLambda->Head().Head());
+        std::vector<std::string_view> columns(keys.size());
+        std::transform(keys.begin(), keys.end(), columns.begin(), [](const TPartOfConstraintBase::TPathType& path) -> std::string_view {
+            return path.front();
+        });
         if (!columns.empty()) {
             input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(columns));
             input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(columns));
@@ -2959,7 +2962,7 @@ private:
         }
     }
 
-    static void ExtractKeys(const TExprNode& keySelectorLambda, std::vector<std::string_view>& columns) {
+    static void ExtractKeys(const TExprNode& keySelectorLambda, TVector<TStringBuf>& columns) {
         const auto arg = keySelectorLambda.Head().Child(0);
         auto body = keySelectorLambda.Child(1);
         if (body->IsCallable("StablePickle")) {

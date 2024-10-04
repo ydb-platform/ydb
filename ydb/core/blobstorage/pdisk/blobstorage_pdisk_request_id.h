@@ -153,8 +153,6 @@ enum class ERequestType {
     RequestWriteMetadataResult,
     RequestPushUnformattedMetadataSector,
     RequestContinueReadMetadata,
-    RequestReadFormat,
-    RequestReadSysLog,
 };
 
 inline IOutputStream& operator <<(IOutputStream& out, const TReqId& reqId) {

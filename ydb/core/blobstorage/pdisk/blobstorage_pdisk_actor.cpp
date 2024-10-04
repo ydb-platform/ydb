@@ -280,7 +280,7 @@ public:
             str << " Config: " << Cfg->ToString();
             P_LOG(PRI_CRIT, BPD01, str.Str());
         } else {
-            PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TReadFormat>(SelfId()));
+            PDisk->InitiateReadSysLog(SelfId());
             StateErrorReason =
                 "PDisk is in StateInit, wait for PDisk to read sys log. Did you ckeck EvYardInit result? Marker# BSY09";
             Become(&TThis::StateInit);
@@ -557,8 +557,8 @@ public:
                     // PDisk GUID is OK and format is complete
                     *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialSysLogRead;
                     *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::BootingSysLogRead;
-
-                    PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TReadSysLog>(SelfId()));
+                    PDisk->Format.InitMagic();
+                    PDisk->ReadSysLog(SelfId());
                 }
             }
         }
@@ -1083,7 +1083,7 @@ public:
             }
 
             Send(ev->Sender, new TEvBlobStorage::TEvNotifyWardenPDiskRestarted(PCtx->PDiskId, NKikimrProto::EReplyStatus::NOTREADY));
-
+            
             return;
         }
 
@@ -1096,7 +1096,7 @@ public:
             NPDisk::TMainKey newMainKey = ev->Get()->MainKey;
 
             SecureWipeBuffer((ui8*)ev->Get()->MainKey.Keys.data(), sizeof(NPDisk::TKey) * ev->Get()->MainKey.Keys.size());
-
+            
             P_LOG(PRI_NOTICE, BSP01, "Going to restart PDisk since received TEvAskWardenRestartPDiskResult");
 
             const TActorIdentity& thisActorId = SelfId();
@@ -1109,7 +1109,7 @@ public:
             TIntrusivePtr<TPDiskConfig> actorCfg = std::move(Cfg);
 
             auto& newCfg = ev->Get()->Config;
-
+            
             if (newCfg) {
                 Y_VERIFY_S(newCfg->PDiskId == pdiskId,
                         "New config's PDiskId# " << newCfg->PDiskId << " is not equal to real PDiskId# " << pdiskId);
@@ -1124,7 +1124,7 @@ public:
             TGenericExecutorThread& executorThread = actorCtx.ExecutorThread;
 
             PassAway();
-
+            
             CreatePDiskActor(executorThread, counters, actorCfg, newMainKey, pdiskId, poolId, nodeId);
 
             Send(ev->Sender, new TEvBlobStorage::TEvNotifyWardenPDiskRestarted(pdiskId));

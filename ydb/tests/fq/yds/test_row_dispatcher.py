@@ -87,8 +87,11 @@ class TestPqRowDispatcher(TestYdsBase):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
-        self.init_topics("test_read_raw_format_without_row_dispatcher", create_output=False)
+        connections = client.list_connections(fq.Acl.Visibility.PRIVATE).result.connection
+        assert len(connections) == 1
+        assert connections[0].content.setting.data_streams.shared_reading == True
 
+        self.init_topics("test_read_raw_format_without_row_dispatcher", create_output=False)
         output_topic = "pq_test_pq_read_write_output"
 
         create_stream(output_topic, partitions_count=1)

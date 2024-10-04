@@ -49,6 +49,24 @@ namespace {
         static TString GetKeyToString(const TPage* page) {
             return ToString(GetKey(page));
         }
+
+        static EClockProPageLocation GetLocation(const TPage* page) {
+            return static_cast<EClockProPageLocation>(page->CacheFlags1);
+        }
+
+        static void SetLocation(TPage* page, EClockProPageLocation location) {
+            ui32 location_ = static_cast<ui32>(location);
+            Y_ABORT_UNLESS(location_ < (1 << 4));
+            page->CacheFlags1 = location_;
+        }
+
+        static bool GetReferenced(const TPage* page) {
+            return page->CacheFlags2;
+        }
+
+        static void SetReferenced(TPage* page, bool referenced) {
+            page->CacheFlags2 = referenced;
+        }
     };
 
 }

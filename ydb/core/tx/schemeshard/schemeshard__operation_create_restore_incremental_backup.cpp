@@ -403,7 +403,8 @@ TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, c
     const auto& srcTableName = restoreOp.GetSrcTableName();
     const auto& dstTableName = restoreOp.GetDstTableName();
 
-    const auto srcTablePath = workingDirPath.Child(srcTableName);
+    const auto srcTablePathX = workingDirPath.Child(srcTableName);
+    const auto srcTablePath = TPath::Resolve(srcTablePathX.PathString(), context.SS);
     {
         const auto checks = srcTablePath.Check();
         checks
@@ -422,7 +423,8 @@ TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, c
         }
     }
 
-    const auto dstTablePath = workingDirPath.Child(dstTableName);
+    const auto dstTablePathX = workingDirPath.Child(dstTableName);
+    const auto dstTablePath = TPath::Resolve(dstTablePathX.PathString(), context.SS);
     {
         const auto checks = srcTablePath.Check();
         checks
@@ -470,20 +472,22 @@ TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, c
 
     TVector<ISubOperation::TPtr> result;
 
-    DoCreateLock(opId, workingDirPath, srcTablePath, result);
-    DoCreateLock(opId, workingDirPath, dstTablePath, result);
+    DoCreateLock(opId, srcTablePath.Parent(), srcTablePath, result);
+    DoCreateLock(opId, dstTablePath.Parent(), dstTablePath, result);
 
     {
-        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable);
+        auto outTx = TransactionTemplate(srcTablePath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable);
         outTx.MutableRestoreIncrementalBackup()->CopyFrom(restoreOp);
         auto& restoreOp = *outTx.MutableRestoreIncrementalBackup();
+        restoreOp.SetSrcTableName(srcTablePath.LeafName());
+        restoreOp.SetDstTableName(dstTablePath.LeafName());
         PathIdFromPathId(srcTablePath.Base()->PathId, restoreOp.MutableSrcPathId());
         PathIdFromPathId(dstTablePath.Base()->PathId, restoreOp.MutableDstPathId());
         result.push_back(CreateRestoreIncrementalBackupAtTable(NextPartId(opId, result), outTx));
     }
 
-    DoDropLock(opId, workingDirPath, dstTablePath, result);
-    DoDropLock(opId, workingDirPath, srcTablePath, result);
+    DoDropLock(opId, srcTablePath.Parent(), srcTablePath, result);
+    DoDropLock(opId, dstTablePath.Parent(), dstTablePath, result);
 
     return result;
 }

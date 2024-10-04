@@ -75,6 +75,7 @@ private:
     virtual TStatus HandleDropBackupCollection(NNodes::TKiDropBackupCollection node, TExprContext& ctx) = 0;
     virtual TStatus HandleBackup(NNodes::TKiBackup node, TExprContext& ctx) = 0;
     virtual TStatus HandleBackupIncremental(NNodes::TKiBackupIncremental node, TExprContext& ctx) = 0;
+    virtual TStatus HandleRestore(NNodes::TKiRestore node, TExprContext& ctx) = 0;
 
     virtual TStatus HandleModifyPermissions(NNodes::TKiModifyPermissions node, TExprContext& ctx) = 0;
 

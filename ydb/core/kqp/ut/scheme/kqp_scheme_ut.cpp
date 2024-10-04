@@ -7596,6 +7596,32 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+        // =-=-=-=-
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE BACKUP COLLECTION `my_collection2` WITH(
+                    STORAGE = 'cluster',
+                    INCREMENTAL_BACKUP_ENABLED = 'true'
+                )
+                    TABLE `/Root/somepath/table2`;
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = r"(
+                --!syntax_v1
+                restore `my_collection2`;
+            )";
+
+            auto result = session.executeschemequery(query).getvaluesync();
+            unit_assert_values_equal_c(result.getstatus(), estatus::bad_request, result.getissues().tostring());
+            unit_assert_string_contains(result.getissues().toonelinestring(), "nothing to restore");
+        }
+
+
         // {
         //     auto query = Sprintf(R"(
         //         --!syntax_v1

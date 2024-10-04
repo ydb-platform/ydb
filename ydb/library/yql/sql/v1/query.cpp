@@ -3522,11 +3522,13 @@ class TRestoreNode final
 public:
     TRestoreNode(
         TPosition pos,
+        const TString& prefix,
         const TString& id,
         const TRestoreParameters& params,
         const TObjectOperatorContext& context)
             : TBase(pos)
             , TObjectOperatorContext(context)
+            , Prefix(prefix)
             , Id(id)
             , Params(params)
     {
@@ -3535,7 +3537,7 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) override {
         auto keys = Y("Key");
-        keys = L(keys, Q(Y(Q("restore"), Y("String", BuildQuotedAtom(Pos, Id)))));
+        keys = L(keys, Q(Y(Q("restore"), Y("String", BuildQuotedAtom(Pos, Id)), Y("String", BuildQuotedAtom(Pos, Prefix)))));
 
         auto opts = Y();
         opts->Add(Q(Y(Q("mode"), Q("restore"))));
@@ -3554,18 +3556,22 @@ public:
     }
 
     TPtr DoClone() const final {
-        return new TRestoreNode(GetPos(), Id, Params, *this);
+        return new TRestoreNode(GetPos(), Prefix, Id, Params, *this);
     }
 private:
+    TString Prefix;
     TString Id;
     TRestoreParameters Params;
 };
 
-TNodePtr BuildRestore(TPosition pos, const TString& id,
+TNodePtr BuildRestore(
+    TPosition pos,
+    const TString& prefix,
+    const TString& id,
     const TRestoreParameters& params,
     const TObjectOperatorContext& context)
 {
-    return new TRestoreNode(pos, id, params, context);
+    return new TRestoreNode(pos, prefix, id, params, context);
 }
 
 } // namespace NSQLTranslationV1

@@ -130,4 +130,26 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
     return result;
 }
 
+TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+    Y_UNUSED(opId, tx, context);
+
+    TString bcPathStr = JoinPath({tx.GetWorkingDir().c_str(), tx.GetRestoreBackupCollection().GetName().c_str()});
+
+    const TPath& bcPath = TPath::Resolve(bcPathStr, context.SS);
+
+    const auto& bc = context.SS->BackupCollections[bcPath->PathId];
+
+    Y_UNUSED(bc);
+
+    if (!bcPath.Base()->GetChildren().size()) {
+        return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, TStringBuilder() << "Nothing to restore")};
+    } else {
+        for (auto& [child, _] : bcPath.Base()->GetChildren()) {
+            Cerr << child << Endl;
+        }
+    }
+
+    return {};
+}
+
 }  // namespace NKikimr::NSchemeShard

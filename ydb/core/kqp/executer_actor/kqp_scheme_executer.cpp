@@ -384,7 +384,7 @@ public:
 
             // FIXME(+active)
             case NKqpProto::TKqpSchemeOperation::kRestore: {
-                const auto& modifyScheme = schemeOp.GetCreateBackupCollection();
+                const auto& modifyScheme = schemeOp.GetRestore();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }

@@ -9,16 +9,19 @@
 
 #include <ydb/core/control/immediate_control_board_wrapper.h>
 
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/folder/dirut.h>
 #include <util/folder/tempdir.h>
-#include <library/cpp/deprecated/atomic/atomic.h>
-#include <util/system/condvar.h>
+#include <util/random/entropy.h>
 #include <util/string/printf.h>
+#include <util/system/condvar.h>
 #include <util/system/file.h>
 #include <util/system/sanitizers.h>
 
 namespace NKikimr {
+
+using namespace NPDisk;
 
 class TWriter : public NPDisk::TCompletionAction {
     NPDisk::IBlockDevice &Device;
@@ -158,8 +161,6 @@ TString CreateFile(const char *baseDir, ui32 dataSize) {
     return path;
 }
 
-constexpr TDuration TIMEOUT = NSan::PlainOrUnderSanitizer(TDuration::Seconds(120), TDuration::Seconds(360));
-
 void WaitForValue(TAtomic *counter, TDuration maxDuration, TAtomicBase expectedValue) {
     TInstant finishTime = TInstant::Now() + maxDuration;
     while (TInstant::Now() < finishTime) {
@@ -171,30 +172,37 @@ void WaitForValue(TAtomic *counter, TDuration maxDuration, TAtomicBase expectedV
             }
         }
     }
+    UNIT_FAIL("deadline exceeded");
 }
 
-void RunWriteTestWithSectorMap(NPDisk::NSectorMap::EDiskMode diskMode, ui32 diskSize, ui32 bufferSize, bool sequential = true) {
+void RunWriteTestWithSectorMap(NSectorMap::EDiskMode diskMode, ui64 diskSize, ui32 bufferSize) {
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
     THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
 
     TActorSystemCreator creator;
-    TIntrusivePtr<NPDisk::TSectorMap> sectorMap = new NPDisk::TSectorMap(diskSize, diskMode);
-    THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(
-            /* path can be empty when sector map is used */ "", *mon, NPDisk::TDeviceMode::None, sectorMap, creator.GetActorSystem()));
-
-    NPDisk::TAlignedData data(bufferSize);
-    memset(data.Get(), 0, data.Size());
-
-    TAtomic completedWrites = 0;
-
-    ui32 offsetIncrement = sequential ? bufferSize : 2 * bufferSize;
-    TAtomic expectedWrites = diskSize / (offsetIncrement);
-
-    for (ui64 offset = 0; offset < diskSize; offset += offsetIncrement) {
-        device->PwriteAsync(data.Get(), data.Size(), offset, new TCompletionWorkerWithCounter(completedWrites), NPDisk::TReqId(NPDisk::TReqId::Test1, 0), {});
+    TIntrusivePtr<TSectorMap> sectorMap;
+    TTempDir tempDir;
+    TString path;
+    if (diskMode == NSectorMap::EDiskMode::DM_COUNT) {
+        path = CreateFile(tempDir().c_str(), diskSize);
+    } else {
+        /* path can be empty when sector map is used */
+        sectorMap = new TSectorMap(diskSize, diskMode);
     }
+    THolder<IBlockDevice> device(CreateRealBlockDeviceWithDefaults(path, *mon, TDeviceMode::None, sectorMap, creator.GetActorSystem()));
 
-    WaitForValue(&completedWrites, TIMEOUT, expectedWrites);
+    TAlignedData writeData(bufferSize);
+    TAlignedData readData(bufferSize);
+    TSimpleTimer t;
+    EntropyPool().Read(writeData.Get(), writeData.Size());
+    Ctest << bufferSize / t.Get().SecondsFloat() / 1e9 << " GB/s" << Endl;
+
+    for (ui64 offset : {ui64(0), NSectorMap::SECTOR_SIZE, 7 * NSectorMap::SECTOR_SIZE, diskSize - bufferSize}) {
+        device->PwriteSync(writeData.Get(), writeData.Size(), offset, NPDisk::TReqId(NPDisk::TReqId::Test1, 0), nullptr);
+        NSan::Poison(readData.Get(), readData.Size());
+        device->PreadSync(readData.Get(), readData.Size(), offset, NPDisk::TReqId(NPDisk::TReqId::Test1, 0), nullptr);
+        UNIT_ASSERT(writeData == readData);
+    }
 
     device.Destroy();
 }
@@ -219,59 +227,16 @@ Y_UNIT_TEST_SUITE(TBlockDeviceTest) {
         device->PwriteSync(data.Get(), data.Size(), 0, {}, nullptr);
 
         device.Destroy();
-        Ctest << "Done" << Endl;
     }
 
-    Y_UNIT_TEST(TestWriteWithNoneSectorMap2GbDisk8MbBuffer) {
-        ui32 diskSize = 2 * 1024 * 1024 * 1024u;
-        ui32 bufferSize = 8 * 1024 * 1024u;
-        RunWriteTestWithSectorMap(NPDisk::NSectorMap::DM_NONE, diskSize, bufferSize);
-        Ctest << "Done" << Endl;
-    }
-
-    Y_UNIT_TEST(TestWriteWithNoneSectorMap2GbDisk8MbBufferNonSequential) {
-        ui32 diskSize = 2 * 1024 * 1024 * 1024u;
-        ui32 bufferSize = 8 * 1024 * 1024u;
-        bool sequential = false;
-        RunWriteTestWithSectorMap(NPDisk::NSectorMap::DM_NONE, diskSize, bufferSize, sequential);
-        Ctest << "Done" << Endl;
-    }
-
-    Y_UNIT_TEST(TestWriteWithNoneSectorMap2GbDisk32KbBuffer) {
-        ui32 diskSize = 2 * 1024 * 1024 * 1024u;
-        ui32 bufferSize = 32 * 1024u;
-        RunWriteTestWithSectorMap(NPDisk::NSectorMap::DM_NONE, diskSize, bufferSize);
-        Ctest << "Done" << Endl;
-    }
-
-    Y_UNIT_TEST(TestWriteWithNoneSectorMap2GbDisk32KbBufferNonSequential) {
-        ui32 diskSize = 2 * 1024 * 1024 * 1024u;
-        ui32 bufferSize = 32 * 1024u;
-        bool sequential = false;
-        RunWriteTestWithSectorMap(NPDisk::NSectorMap::DM_NONE, diskSize, bufferSize, sequential);
-        Ctest << "Done" << Endl;
-    }
-
-    Y_UNIT_TEST(TestWriteWithHddSectorMap2GbDisk8MbBuffer) {
-        ui32 diskSize = 2 * 1024 * 1024 * 1024u;
-        ui32 bufferSize = 8 * 1024 * 1024u;
-        RunWriteTestWithSectorMap(NPDisk::NSectorMap::DM_HDD, diskSize, bufferSize);
-        Ctest << "Done" << Endl;
-    }
-
-    Y_UNIT_TEST(TestWriteWithHddSectorMap2GbDisk8MbBufferNonSequential) {
-        ui32 diskSize = 2 * 1024 * 1024 * 1024u;
-        ui32 bufferSize = 8 * 1024 * 1024u;
-        bool sequential = false;
-        RunWriteTestWithSectorMap(NPDisk::NSectorMap::DM_HDD, diskSize, bufferSize, sequential);
-        Ctest << "Done" << Endl;
-    }
-
-    Y_UNIT_TEST(TestWriteWithHddSectorMap2GbDisk32KbBuffer) {
-        ui32 diskSize = 2 * 1024 * 1024 * 1024u;
-        ui32 bufferSize = 32 * 1024u;
-        RunWriteTestWithSectorMap(NPDisk::NSectorMap::DM_HDD, diskSize, bufferSize);
-        Ctest << "Done" << Endl;
+    Y_UNIT_TEST(TestWriteSectorMapAllTypes) {
+        ui64 diskSize = 2_GB;
+        // DM_COUNT stands for real file
+        for (ui32 type = NPDisk::NSectorMap::DM_NONE; type <= NPDisk::NSectorMap::DM_COUNT; ++type) {
+            for (ui32 bufferSize : {256_KB, 4_MB}) {
+                RunWriteTestWithSectorMap((NPDisk::NSectorMap::EDiskMode)type, diskSize, bufferSize);
+            }
+        }
     }
 
     Y_UNIT_TEST(WriteReadRestart) {
@@ -319,7 +284,7 @@ Y_UNIT_TEST_SUITE(TBlockDeviceTest) {
                 }
             }
 
-            Cerr << AtomicGet(counter)  << Endl;
+            Ctest << AtomicGet(counter)  << Endl;
             device.Destroy();
             UNIT_ASSERT(AtomicGet(counter) == totalRequests);
         }

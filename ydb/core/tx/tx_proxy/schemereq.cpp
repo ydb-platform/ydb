@@ -365,10 +365,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableRestoreIncrementalBackup()->MutableSrcTableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterTieringRule:
-            return *modifyScheme.MutableModifyTieringRule()->MutableObject();
+            return *modifyScheme.MutableAlterTieringRule()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpCreateTieringRule:
-            return *modifyScheme.MutableModifyTieringRule()->MutableObject();
+            return *modifyScheme.MutableCreateTieringRule()->MutableName();
         }
     }
 

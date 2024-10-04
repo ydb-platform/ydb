@@ -145,10 +145,10 @@ public:
 };
 #endif
 
-NThreading::TFuture<TConclusion<THashMap<TString, NTiers::TTieringRule>>> ListTieringRules(const TActorContext& ctx) {
+THolder<IActor> MakeListTieringRulesActor(TActorId recipient) {
     // Not implemented
-    // ctx.Register(new TListTieringActor(promise));
-    ctx.Send(ctx.SelfID, new NTiers::TEvListTieringRulesResult(THashMap<TString, NTiers::TTieringRule>()));
+    TActivationContext::ActorSystem()->Send(recipient, new NTiers::TEvListTieringRulesResult(THashMap<TString, NTiers::TTieringRule>()));
+    return {};
 }
 
 }   // namespace NKikimr::NColumnShard

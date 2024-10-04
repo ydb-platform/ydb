@@ -72,7 +72,7 @@ void TTierPreparationActor::AdvanceCheckerState() {
                 new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>()));
             Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
                 new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TTierSnapshotConstructor>()));
-            ListTieringRules(ActorContext());
+            Register(MakeListTieringRulesActor(SelfId()).Release());
             State = FETCH_TIERING;
         }
         case FETCH_TIERING: {

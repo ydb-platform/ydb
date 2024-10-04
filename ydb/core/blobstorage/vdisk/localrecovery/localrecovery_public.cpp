@@ -190,6 +190,37 @@ namespace NKikimr {
             Become(&TThis::StateLoadBulkFormedSegments);
             VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::LoadBulkFormedSegments;
 
+            // find all the huge blobs and track their slot size
+            {
+                TIntrusivePtr<TLogoBlobsDs>& logoBlobs = LocRecCtx->HullDbRecovery->GetHullDs()->LogoBlobs;
+                TLevelSlice<TKeyLogoBlob, TMemRecLogoBlob>::TSstIterator iter(logoBlobs->CurSlice.Get(),
+                    logoBlobs->CurSlice->Level0CurSstsNum());
+
+                for (iter.SeekToFirst(); iter.Valid(); iter.Next()) {
+                    struct TMerger {
+                        TThis* const Self;
+
+                        void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound,
+                                const TKeyLogoBlob& /*key*/, ui64 /*circaLsn*/) {
+                            if (memRec.GetType() == TBlobType::HugeBlob || memRec.GetType() == TBlobType::ManyHugeBlobs) {
+                                TDiskDataExtractor extr;
+                                memRec.GetDiskData(&extr, outbound);
+                                for (const TDiskPart *location = extr.Begin; location != extr.End; ++location) {
+                                    if (location->ChunkIdx && location->Size) {
+                                        Self->LocRecCtx->RepairedHuge->RegisterBlob(*location);
+                                    }
+                                }
+                            }
+                        }
+                    } merger{this};
+
+                    TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>::TMemIterator blobIter(iter.Get().SstPtr.Get());
+                    for (blobIter.SeekToFirst(); blobIter.Valid(); blobIter.Next()) {
+                        blobIter.PutToMerger(&merger);
+                    }
+                }
+            }
+
             // start loading bulk-formed segments that are already not in index, but still required to recover SyncLog
             auto aid = ctx.Register(LocRecCtx->HullDbRecovery->GetHullDs()->LogoBlobs->CurSlice->BulkFormedSegments.CreateLoaderActor(
                     LocRecCtx->VCtx, LocRecCtx->PDiskCtx, SyncLogMaxLsnStored, ctx.SelfID));

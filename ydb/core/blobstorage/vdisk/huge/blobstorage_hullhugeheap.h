@@ -127,7 +127,7 @@ namespace NKikimr {
             THeapStat GetStat() const;
             // returns true is allocated, false otherwise
             bool RecoveryModeAllocate(const NPrivate::TChunkSlot &id);
-            void RecoveryModeAllocate(const NPrivate::TChunkSlot &id, TChunkID chunkId);
+            void RecoveryModeAllocate(const NPrivate::TChunkSlot &id, TChunkID chunkId, bool inLockedChunks);
             void Save(IOutputStream *s) const;
             void Load(IInputStream *s);
             bool HaveBeenUsed() const;
@@ -162,6 +162,7 @@ namespace NKikimr {
             TChainDelegator &operator =(const TChainDelegator &) = delete;
             THugeSlot Convert(const NPrivate::TChunkSlot &id) const;
             NPrivate::TChunkSlot Convert(const TDiskPart &addr) const;
+            NPrivate::TChunkSlot Convert(const THugeSlot &slot) const;
             void Save(IOutputStream *s) const;
             void Load(IInputStream *s);
             bool HaveBeenUsed() const;
@@ -308,6 +309,8 @@ namespace NKikimr {
             void RecoveryModeAllocate(const TDiskPart &addr);
             void RecoveryModeAddChunk(ui32 chunkId);
             void RecoveryModeRemoveChunks(const TVector<ui32> &chunkIds);
+            bool ReleaseSlot(THugeSlot slot);
+            void OccupySlot(THugeSlot slot, bool inLockedChunks);
 
             //////////////////////////////////////////////////////////////////////////////////////////
             // Serialize/Parse/Check

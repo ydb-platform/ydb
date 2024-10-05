@@ -401,14 +401,7 @@ public:
         return false;
     }
 
-    bool Empty() const { return Records.empty(); }
-    bool Produced() const { return Meta.GetProduced() != TPortionMeta::EProduced::UNSPECIFIED; }
-    bool Valid() const { return ValidSnapshotInfo() && !Empty() && Produced(); }
     bool ValidSnapshotInfo() const { return MinSnapshotDeprecated.Valid() && PathId && Portion; }
-    bool IsInserted() const { return Meta.GetProduced() == TPortionMeta::EProduced::INSERTED; }
-    bool IsEvicted() const { return Meta.GetProduced() == TPortionMeta::EProduced::EVICTED; }
-    bool CanHaveDups() const { return !Produced(); /* || IsInserted(); */ }
-    bool CanIntersectOthers() const { return !Valid() || IsInserted() || IsEvicted(); }
     size_t NumChunks() const { return Records.size(); }
 
     TString DebugString(const bool withDetails = false) const;
@@ -480,12 +473,9 @@ public:
         return SchemaVersion;
     }
 
-    bool IsVisible(const TSnapshot& snapshot) const {
-        if (Empty()) {
-            return false;
-        }
-
-        const bool visible = (Meta.RecordSnapshotMin <= snapshot) && (!RemoveSnapshot.Valid() || snapshot < RemoveSnapshot);
+    bool IsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot = true) const {
+        const bool visible = (Meta.RecordSnapshotMin <= snapshot) && (!RemoveSnapshot.Valid() || snapshot < RemoveSnapshot) &&
+                             (!checkCommitSnapshot || !CommitSnapshot || *CommitSnapshot <= snapshot);
 
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "IsVisible")("analyze_portion", DebugString())("visible", visible)("snapshot", snapshot.DebugString());
         return visible;

@@ -107,14 +107,14 @@ public:
         }
 
         void AddPortion(const TPortionInfo& info) {
-            if (info.IsInserted()) {
+            if (info.GetMeta().GetProduced() == NPortion::EProduced::INSERTED) {
                 Owner.Inserted.AddPortion(info);
             } else {
                 Owner.Compacted.AddPortion(info);
             }
         }
         void RemovePortion(const TPortionInfo& info) {
-            if (info.IsInserted()) {
+            if (info.GetMeta().GetProduced() == NPortion::EProduced::INSERTED) {
                 Owner.Inserted.RemovePortion(info);
             } else {
                 Owner.Compacted.RemovePortion(info);

@@ -107,6 +107,9 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
             }
             for (auto&& i : SwitchedPortions) {
                 stats->Merge(i.GetSerializationStat(*resultSchema));
+                if (i.GetMeta().GetDeletionsCount()) {
+                    dataColumnIds.emplace((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG);
+                }
                 if (dataColumnIds.size() != resultSchema->GetColumnsCount()) {
                     for (auto id : i.GetColumnIds()) {
                         if (resultSchema->HasColumnId(id)) {

@@ -1069,7 +1069,7 @@ public:
     void Handle(TEvBlobStorage::TEvAskWardenRestartPDiskResult::TPtr &ev) {
         bool restartAllowed = ev->Get()->RestartAllowed;
 
-        EInitPhase initPhase = PDisk->InitPhase;
+        EInitPhase initPhase = PDisk->InitPhase.load();
 
         bool isReadingLog = initPhase == EInitPhase::ReadingSysLog || initPhase == EInitPhase::ReadingLog;
 

@@ -598,6 +598,11 @@ private:
         return largestInMemoryBucketNum;
     }
 
+    bool IsSpillingWhileStateSplitAllowed() const {
+        // TODO: Write better condition here. For example: InMemorybuckets > 64
+        return true;
+    }
+
     bool SplitStateIntoBucketsAndWait() {
         if (SplitStateSpillingBucket != -1) {
             auto& bucket = SpilledBuckets[SplitStateSpillingBucket];
@@ -657,7 +662,7 @@ private:
                 static_cast<NUdf::TUnboxedValue&>(processingState.Throat[i - KeyWidth]) = std::move(keyAndState[i]);
             }
 
-            if (InMemoryBucketsCount && !HasMemoryForProcessing()) {
+            if (InMemoryBucketsCount && !HasMemoryForProcessing() && IsSpillingWhileStateSplitAllowed()) {
                 ui32 bucketNumToSpill = GetLargestInMemoryBucketNumber();
 
                 SplitStateSpillingBucket = bucketNumToSpill;

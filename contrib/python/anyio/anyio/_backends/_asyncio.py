@@ -4,6 +4,7 @@ import array
 import asyncio
 import concurrent.futures
 import math
+import os
 import socket
 import sys
 import threading
@@ -19,7 +20,7 @@ from asyncio import (
 )
 from asyncio.base_events import _run_until_complete_cb  # type: ignore[attr-defined]
 from collections import OrderedDict, deque
-from collections.abc import AsyncIterator, Generator, Iterable
+from collections.abc import AsyncIterator, Iterable
 from concurrent.futures import Future
 from contextlib import suppress
 from contextvars import Context, copy_context
@@ -47,7 +48,6 @@ from typing import (
     Collection,
     ContextManager,
     Coroutine,
-    Mapping,
     Optional,
     Sequence,
     Tuple,
@@ -58,7 +58,13 @@ from weakref import WeakKeyDictionary
 
 import sniffio
 
-from .. import CapacityLimiterStatistics, EventStatistics, TaskInfo, abc
+from .. import (
+    CapacityLimiterStatistics,
+    EventStatistics,
+    LockStatistics,
+    TaskInfo,
+    abc,
+)
 from .._core._eventloop import claim_worker_thread, threadlocals
 from .._core._exceptions import (
     BrokenResourceError,
@@ -66,12 +72,20 @@ from .._core._exceptions import (
     ClosedResourceError,
     EndOfStream,
     WouldBlock,
+    iterate_exceptions,
 )
 from .._core._sockets import convert_ipv6_sockaddr
 from .._core._streams import create_memory_object_stream
-from .._core._synchronization import CapacityLimiter as BaseCapacityLimiter
+from .._core._synchronization import (
+    CapacityLimiter as BaseCapacityLimiter,
+)
 from .._core._synchronization import Event as BaseEvent
-from .._core._synchronization import ResourceGuard
+from .._core._synchronization import Lock as BaseLock
+from .._core._synchronization import (
+    ResourceGuard,
+    SemaphoreStatistics,
+)
+from .._core._synchronization import Semaphore as BaseSemaphore
 from .._core._tasks import CancelScope as BaseCancelScope
 from ..abc import (
     AsyncBackend,
@@ -80,6 +94,7 @@ from ..abc import (
     UDPPacketType,
     UNIXDatagramPacketType,
 )
+from ..abc._eventloop import StrOrBytesPath
 from ..lowlevel import RunVar
 from ..streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 
@@ -630,16 +645,6 @@ class _AsyncioTaskStatus(abc.TaskStatus):
         _task_states[task].parent_id = self._parent_id
 
 
-def iterate_exceptions(
-    exception: BaseException,
-) -> Generator[BaseException, None, None]:
-    if isinstance(exception, BaseExceptionGroup):
-        for exc in exception.exceptions:
-            yield from iterate_exceptions(exc)
-    else:
-        yield exception
-
-
 class TaskGroup(abc.TaskGroup):
     def __init__(self) -> None:
         self.cancel_scope: CancelScope = CancelScope()
@@ -925,7 +930,7 @@ class StreamReaderWrapper(abc.ByteReceiveStream):
             raise EndOfStream
 
     async def aclose(self) -> None:
-        self._stream.feed_eof()
+        self._stream.set_exception(ClosedResourceError())
         await AsyncIOBackend.checkpoint()
 
 
@@ -1073,7 +1078,8 @@ class StreamProtocol(asyncio.Protocol):
         self.write_event.set()
 
     def data_received(self, data: bytes) -> None:
-        self.read_queue.append(data)
+        # ProactorEventloop sometimes sends bytearray instead of bytes
+        self.read_queue.append(bytes(data))
         self.read_event.set()
 
     def eof_received(self) -> bool | None:
@@ -1665,6 +1671,154 @@ class Event(BaseEvent):
         return EventStatistics(len(self._event._waiters))
 
 
+class Lock(BaseLock):
+    def __new__(cls, *, fast_acquire: bool = False) -> Lock:
+        return object.__new__(cls)
+
+    def __init__(self, *, fast_acquire: bool = False) -> None:
+        self._fast_acquire = fast_acquire
+        self._owner_task: asyncio.Task | None = None
+        self._waiters: deque[tuple[asyncio.Task, asyncio.Future]] = deque()
+
+    async def acquire(self) -> None:
+        if self._owner_task is None and not self._waiters:
+            await AsyncIOBackend.checkpoint_if_cancelled()
+            self._owner_task = current_task()
+
+            # Unless on the "fast path", yield control of the event loop so that other
+            # tasks can run too
+            if not self._fast_acquire:
+                try:
+                    await AsyncIOBackend.cancel_shielded_checkpoint()
+                except CancelledError:
+                    self.release()
+                    raise
+
+            return
+
+        task = cast(asyncio.Task, current_task())
+        fut: asyncio.Future[None] = asyncio.Future()
+        item = task, fut
+        self._waiters.append(item)
+        try:
+            await fut
+        except CancelledError:
+            self._waiters.remove(item)
+            if self._owner_task is task:
+                self.release()
+
+            raise
+
+        self._waiters.remove(item)
+
+    def acquire_nowait(self) -> None:
+        if self._owner_task is None and not self._waiters:
+            self._owner_task = current_task()
+            return
+
+        raise WouldBlock
+
+    def locked(self) -> bool:
+        return self._owner_task is not None
+
+    def release(self) -> None:
+        if self._owner_task != current_task():
+            raise RuntimeError("The current task is not holding this lock")
+
+        for task, fut in self._waiters:
+            if not fut.cancelled():
+                self._owner_task = task
+                fut.set_result(None)
+                return
+
+        self._owner_task = None
+
+    def statistics(self) -> LockStatistics:
+        task_info = AsyncIOTaskInfo(self._owner_task) if self._owner_task else None
+        return LockStatistics(self.locked(), task_info, len(self._waiters))
+
+
+class Semaphore(BaseSemaphore):
+    def __new__(
+        cls,
+        initial_value: int,
+        *,
+        max_value: int | None = None,
+        fast_acquire: bool = False,
+    ) -> Semaphore:
+        return object.__new__(cls)
+
+    def __init__(
+        self,
+        initial_value: int,
+        *,
+        max_value: int | None = None,
+        fast_acquire: bool = False,
+    ):
+        super().__init__(initial_value, max_value=max_value)
+        self._value = initial_value
+        self._max_value = max_value
+        self._fast_acquire = fast_acquire
+        self._waiters: deque[asyncio.Future[None]] = deque()
+
+    async def acquire(self) -> None:
+        if self._value > 0 and not self._waiters:
+            await AsyncIOBackend.checkpoint_if_cancelled()
+            self._value -= 1
+
+            # Unless on the "fast path", yield control of the event loop so that other
+            # tasks can run too
+            if not self._fast_acquire:
+                try:
+                    await AsyncIOBackend.cancel_shielded_checkpoint()
+                except CancelledError:
+                    self.release()
+                    raise
+
+            return
+
+        fut: asyncio.Future[None] = asyncio.Future()
+        self._waiters.append(fut)
+        try:
+            await fut
+        except CancelledError:
+            try:
+                self._waiters.remove(fut)
+            except ValueError:
+                self.release()
+
+            raise
+
+    def acquire_nowait(self) -> None:
+        if self._value == 0:
+            raise WouldBlock
+
+        self._value -= 1
+
+    def release(self) -> None:
+        if self._max_value is not None and self._value == self._max_value:
+            raise ValueError("semaphore released too many times")
+
+        for fut in self._waiters:
+            if not fut.cancelled():
+                fut.set_result(None)
+                self._waiters.remove(fut)
+                return
+
+        self._value += 1
+
+    @property
+    def value(self) -> int:
+        return self._value
+
+    @property
+    def max_value(self) -> int | None:
+        return self._max_value
+
+    def statistics(self) -> SemaphoreStatistics:
+        return SemaphoreStatistics(len(self._waiters))
+
+
 class CapacityLimiter(BaseCapacityLimiter):
     _total_tokens: float = 0
 
@@ -1861,7 +2015,9 @@ class AsyncIOTaskInfo(TaskInfo):
 
         if task_state := _task_states.get(task):
             if cancel_scope := task_state.cancel_scope:
-                return cancel_scope.cancel_called or cancel_scope._parent_cancelled()
+                return cancel_scope.cancel_called or (
+                    not cancel_scope.shield and cancel_scope._parent_cancelled()
+                )
 
         return False
 
@@ -1926,13 +2082,23 @@ class TestRunner(abc.TestRunner):
             tuple[Awaitable[T_Retval], asyncio.Future[T_Retval]]
         ],
     ) -> None:
+        from _pytest.outcomes import OutcomeException
+
         with receive_stream, self._send_stream:
             async for coro, future in receive_stream:
                 try:
                     retval = await coro
+                except CancelledError as exc:
+                    if not future.cancelled():
+                        future.cancel(*exc.args)
+
+                    raise
                 except BaseException as exc:
                     if not future.cancelled():
                         future.set_exception(exc)
+
+                    if not isinstance(exc, (Exception, OutcomeException)):
+                        raise
                 else:
                     if not future.cancelled():
                         future.set_result(retval)
@@ -2114,6 +2280,20 @@ class AsyncIOBackend(AsyncBackend):
         return Event()
 
     @classmethod
+    def create_lock(cls, *, fast_acquire: bool) -> abc.Lock:
+        return Lock(fast_acquire=fast_acquire)
+
+    @classmethod
+    def create_semaphore(
+        cls,
+        initial_value: int,
+        *,
+        max_value: int | None = None,
+        fast_acquire: bool = False,
+    ) -> abc.Semaphore:
+        return Semaphore(initial_value, max_value=max_value, fast_acquire=fast_acquire)
+
+    @classmethod
     def create_capacity_limiter(cls, total_tokens: float) -> abc.CapacityLimiter:
         return CapacityLimiter(total_tokens)
 
@@ -2245,26 +2425,24 @@ class AsyncIOBackend(AsyncBackend):
     @classmethod
     async def open_process(
         cls,
-        command: str | bytes | Sequence[str | bytes],
+        command: StrOrBytesPath | Sequence[StrOrBytesPath],
         *,
-        shell: bool,
         stdin: int | IO[Any] | None,
         stdout: int | IO[Any] | None,
         stderr: int | IO[Any] | None,
-        cwd: str | bytes | PathLike | None = None,
-        env: Mapping[str, str] | None = None,
-        start_new_session: bool = False,
+        **kwargs: Any,
     ) -> Process:
         await cls.checkpoint()
-        if shell:
+        if isinstance(command, PathLike):
+            command = os.fspath(command)
+
+        if isinstance(command, (str, bytes)):
             process = await asyncio.create_subprocess_shell(
-                cast("str | bytes", command),
+                command,
                 stdin=stdin,
                 stdout=stdout,
                 stderr=stderr,
-                cwd=cwd,
-                env=env,
-                start_new_session=start_new_session,
+                **kwargs,
             )
         else:
             process = await asyncio.create_subprocess_exec(
@@ -2272,9 +2450,7 @@ class AsyncIOBackend(AsyncBackend):
                 stdin=stdin,
                 stdout=stdout,
                 stderr=stderr,
-                cwd=cwd,
-                env=env,
-                start_new_session=start_new_session,
+                **kwargs,
             )
 
         stdin_stream = StreamWriterWrapper(process.stdin) if process.stdin else None
@@ -2289,7 +2465,7 @@ class AsyncIOBackend(AsyncBackend):
             name="AnyIO process pool shutdown task",
         )
         find_root_task().add_done_callback(
-            partial(_forcibly_shutdown_process_pool_on_exit, workers)
+            partial(_forcibly_shutdown_process_pool_on_exit, workers)  # type:ignore[arg-type]
         )
 
     @classmethod

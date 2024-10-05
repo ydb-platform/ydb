@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: anyio
-Version: 4.4.0
+Version: 4.5.0
 Summary: High level compatibility layer for multiple asynchronous event loop implementations
 Author-email: Alex Grönholm <alex.gronholm@nextday.fi>
 License: MIT
@@ -20,6 +20,7 @@ Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
 Requires-Python: >=3.8
 Description-Content-Type: text/x-rst
 License-File: LICENSE
@@ -29,7 +30,7 @@ Requires-Dist: exceptiongroup >=1.0.2 ; python_version < "3.11"
 Requires-Dist: typing-extensions >=4.1 ; python_version < "3.11"
 Provides-Extra: doc
 Requires-Dist: packaging ; extra == 'doc'
-Requires-Dist: Sphinx >=7 ; extra == 'doc'
+Requires-Dist: Sphinx ~=7.4 ; extra == 'doc'
 Requires-Dist: sphinx-rtd-theme ; extra == 'doc'
 Requires-Dist: sphinx-autodoc-typehints >=1.2.0 ; extra == 'doc'
 Provides-Extra: test
@@ -41,9 +42,9 @@ Requires-Dist: psutil >=5.9 ; extra == 'test'
 Requires-Dist: pytest >=7.0 ; extra == 'test'
 Requires-Dist: pytest-mock >=3.6.1 ; extra == 'test'
 Requires-Dist: trustme ; extra == 'test'
-Requires-Dist: uvloop >=0.17 ; (platform_python_implementation == "CPython" and platform_system != "Windows") and extra == 'test'
+Requires-Dist: uvloop >=0.21.0b1 ; (platform_python_implementation == "CPython" and platform_system != "Windows") and extra == 'test'
 Provides-Extra: trio
-Requires-Dist: trio >=0.23 ; extra == 'trio'
+Requires-Dist: trio >=0.26.1 ; extra == 'trio'
 
 .. image:: https://github.com/agronholm/anyio/actions/workflows/test.yml/badge.svg
   :target: https://github.com/agronholm/anyio/actions/workflows/test.yml

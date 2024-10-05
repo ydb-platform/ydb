@@ -179,6 +179,9 @@ struct TBatch {
     ui16 GetInternalPartsCount() const {
         return Header.GetInternalPartsCount();
     }
+    bool IsGreaterThan(ui64 offset, ui16 partNo) const {
+        return GetOffset() > offset || GetOffset() == offset && GetPartNo() > partNo;
+    }
 
     TBatch(const NKikimrPQ::TBatchHeader &header, const char* data)
         : Packed(true)

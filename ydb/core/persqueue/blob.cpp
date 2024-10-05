@@ -671,25 +671,24 @@ IOutputStream& operator <<(IOutputStream& out, const THead& value)
 }
 
 ui32 THead::FindPos(const ui64 offset, const ui16 partNo) const {
-    const ui32 nBatches = Batches.size();
-
-    if (!nBatches) {
+    if (Batches.empty()) {
         return Max<ui32>();
     }
 
-    ui32 i = nBatches - 1;
-    for (; i > 0; --i) {
-        if (Batches[i].GetOffset() < offset || Batches[i].GetOffset() == offset && Batches[i].GetPartNo() < partNo)
-            break;
+    ui32 i = Batches.size() - 1;
+    while (i > 0 && Batches[i].IsGreaterThan(offset, partNo)) {
+        --i;
     }
 
     if (i == 0) {
-        if (Batches[i].GetOffset() > offset || Batches[i].GetOffset() == offset && Batches[i].GetPartNo() > partNo)
+        if (Batches[i].IsGreaterThan(offset, partNo)) {
             return Max<ui32>();
-        return 0;
+        } else {
+            return 0;
+        }
     }
 
-    return Min(i + 1, nBatches - 1);
+    return i;
 }
 
 void THead::AddBatch(const TBatch& batch) {

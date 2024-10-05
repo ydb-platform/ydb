@@ -254,6 +254,7 @@ public:
     void PostProcessPlans();
     TString PrintSvg();
     TString PrintSvgSafe();
+    TString LoadAndPrintSvgSafe(const TString& plans);
 
     std::vector<TPlan> Plans;
     ui64 MaxTime = 1000;

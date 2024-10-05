@@ -1503,6 +1503,15 @@ TString TPlanVisualizer::PrintSvgSafe() {
     }
 }
 
+TString TPlanVisualizer::LoadAndPrintSvgSafe(const TString& plans) {
+    try {
+        LoadPlans(plans);
+        return PrintSvg();
+    } catch (std::exception& e) {
+        return Sprintf("<svg width='1024' height='256' xmlns='http://www.w3.org/2000/svg'><text>%s<text></svg>", e.what());
+    }
+}
+
 TString TPlanVisualizer::PrintSvg() {
     TStringBuilder background;
     TStringBuilder canvas;

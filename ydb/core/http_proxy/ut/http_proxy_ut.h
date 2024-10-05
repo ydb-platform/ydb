@@ -1970,6 +1970,10 @@ Y_UNIT_TEST_SUITE(TestHttpProxy) {
         UNIT_ASSERT(!GetByPath<TString>(succesful0, "MD5OfMessageAttributes").empty());
         UNIT_ASSERT(!GetByPath<TString>(succesful0, "MD5OfMessageBody").empty());
         UNIT_ASSERT(!GetByPath<TString>(succesful0, "MessageId").empty());
+
+        NJson::TJsonValue receiveMessageReq;
+        receiveMessageReq["QueueUrl"] = resultQueueUrl;
+        res = SendHttpRequest("/Root", "AmazonSQS.ReceiveMessage", std::move(receiveMessageReq), FormAuthorizationStr("ru-central1"));
     }
 
     Y_UNIT_TEST_F(TestDeleteMessageBatch, THttpProxyTestMock) {

@@ -1,3 +1,5 @@
+#include "node_warden.h"
+#include "node_warden_events.h"
 #include "node_warden_impl.h"
 
 #include <ydb/core/blobstorage/crypto/default.h>

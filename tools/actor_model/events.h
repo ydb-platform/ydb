@@ -2,10 +2,16 @@
 #include <library/cpp/actors/core/events.h>
 
 struct TEvents {
-    struct TEvWriteValueRequest : NActors::TEventLocal<TEvWriteValueRequest, NActors::TEvents::ES_PRIVATE> {
-        int64_t Value;
-        explicit TEvWriteValueRequest(int64_t value) : Value(value) {}
+    // Вам нужно самостоятельно сюда добавить все необходимые events в NActors::TEvents::ES_PRIVATE
+    enum Events {
+        EventResponse = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EventDone
     };
 
-    struct TEvDone : NActors::TEventLocal<TEvDone, NActors::TEvents::ES_PRIVATE> {};
+    struct TEvDone : NActors::TEventLocal<TEvDone, EventDone> {};
+
+    struct TEvWriteValueRequest : NActors::TEventLocal<TEvWriteValueRequest, EventResponse> {
+        int64_t value;
+        explicit TEvWriteValueRequest(int Value) : value(Value) {}
+    };
 };

@@ -110,12 +110,11 @@ public:
     bool UnregisterAllocation(const ui64 allocationId) {
         ui64 memoryAllocated = 0;
         auto it = AllocationInfo.find(allocationId);
-        if (it = AllocationInfo.end()) {
+        if (it == AllocationInfo.end()) {
             AFL_WARN(NKikimrServices::GROUPED_MEMORY_LIMITER)("reason", "allocation_cleaned_in_previous_scope_id_live")(
                 "allocation_id", allocationId)("process_id", ExternalProcessId)("external_scope_id", ExternalScopeId);
             return true;
         }
-        AFL_VERIFY(it != AllocationInfo.end());
         bool waitFlag = false;
         const ui64 internalGroupId = it->second->GetAllocationInternalGroupId();
         switch (it->second->GetAllocationStatus()) {

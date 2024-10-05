@@ -582,8 +582,6 @@ private:
         return ProcessSpilledData();
     }
 
-    i64 SplitStateSpillingBucket = -1;
-
     ui32 GetLargestInMemoryBucketNumber() const {
         ui64 maxSize = 0;
         ui32 largestInMemoryBucketNum = (ui32)-1;
@@ -606,7 +604,7 @@ private:
     bool SplitStateIntoBucketsAndWait() {
         if (SplitStateSpillingBucket != -1) {
             auto& bucket = SpilledBuckets[SplitStateSpillingBucket];
-            MKQL_ENSURE(bucket.AsyncWriteOperation.has_value(), "MISHA ERROR");
+            MKQL_ENSURE(bucket.AsyncWriteOperation.has_value(), "Internal logic error");
             if (!bucket.AsyncWriteOperation->HasValue()) return true;
             bucket.SpilledState->AsyncWriteCompleted(bucket.AsyncWriteOperation->ExtractValue());
             bucket.AsyncWriteOperation = std::nullopt;
@@ -620,12 +618,12 @@ private:
                 }
                 if (bucket.AsyncWriteOperation) return true;
 
-                bucket.AsyncWriteOperation = bucket.SpilledState->FinishWriting();
-                if (bucket.AsyncWriteOperation) return true;
+                // bucket.AsyncWriteOperation = bucket.SpilledState->FinishWriting();
+                // if (bucket.AsyncWriteOperation) return true;
             }
 
             SplitStateSpillingBucket = -1;
-            bucket.InMemoryProcessingState->ReadMore<false>();
+            // bucket.InMemoryProcessingState->ReadMore<false>();
         }
         while (const auto keyAndState = static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Extract())) {
             SaveMemoryDump();
@@ -667,7 +665,6 @@ private:
 
                 SplitStateSpillingBucket = bucketNumToSpill;
                 InMemoryBucketsCount--;
-                std::cerr << "MISHA spilling bucket during split: " << SplitStateSpillingBucket << std::endl;
 
                 auto& bucket = SpilledBuckets[bucketNumToSpill];
                 bucket.BucketState = TSpilledBucket::EBucketState::SpillingState;
@@ -699,6 +696,7 @@ private:
 
                 bucket.AsyncWriteOperation = bucket.SpilledState->FinishWriting();
                 if (bucket.AsyncWriteOperation) return true;
+                bucket.InMemoryProcessingState->ReadMore<false>();
 
                 bucket.BucketState = TSpilledBucket::EBucketState::SpillingData;
             }
@@ -711,7 +709,6 @@ private:
     }
 
     bool CheckMemoryAndSwitchToSpilling() {
-        //std::cerr << "MISHA spill: " << AllowSpilling << Ctx.SpillerFactory << IsSwitchToSpillingModeCondition() << std::endl;
         if (AllowSpilling && Ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
             LogMemoryUsage();
 
@@ -873,7 +870,7 @@ private:
             }
             case EOperatingMode::Spilling: {
                 YQL_LOG(INFO) << "switching Memory mode to Spilling";
-                // MKQL_ENSURE(EOperatingMode::SplittingState == Mode, "Internal logic error");
+                MKQL_ENSURE(EOperatingMode::SplittingState == Mode || EOperatingMode::InMemory == Mode, "Internal logic error");
 
                 Tongue = ViewForKeyAndState.data();
                 break;
@@ -923,6 +920,7 @@ private:
     ui64 BufferForUsedInputItemsBucketId;
     TUnboxedValueVector BufferForUsedInputItems;
     std::vector<NUdf::TUnboxedValuePod, TMKQLAllocator<NUdf::TUnboxedValuePod>> ViewForKeyAndState;
+    i64 SplitStateSpillingBucket = -1;
 
     TMemoryUsageInfo* MemInfo = nullptr;
     TEqualsFunc const Equal;

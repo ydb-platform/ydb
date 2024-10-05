@@ -409,54 +409,8 @@ public:
         Throat = InMemoryProcessingState.Throat;
     }
 
-    void WriteMemInfo() {
-        std::ofstream inmemfile("memUsageInMemory.csv");
-        inmemfile << "usage,limit" << std::endl;
-        for (const auto &val : memUsageInMemory) {
-            inmemfile << val.first << "," << val.second << std::endl;
-        }
-
-        std::ofstream splitfile("memUsageSplitting.csv");
-        splitfile << "usage,limit" << std::endl;
-        for (const auto &val : memUsageSplitting) {
-            splitfile << val.first << "," << val.second << std::endl;
-        }
-
-        std::ofstream spillfile("memUsageSpilling.csv");
-        spillfile << "usage,limit" << std::endl;
-        for (const auto &val : memUsageSpilling) {
-            spillfile << val.first << "," << val.second << std::endl;
-        }
-    }
-
-    void AddOnlyNewValueToMem(ui64 used, ui64 limit, std::vector<std::pair<ui64, ui64>>& memvec) {
-        if (memvec.empty()) {
-            memvec.push_back({used, limit});
-            return;
-        }
-
-        const auto& lastval = memvec.back();
-        if (lastval.first == used && lastval.second == limit) return;
-
-        memvec.push_back({used, limit});
-    }
-
-    void SaveMemoryDump() {
-        const auto used = TlsAllocState->GetUsed();
-        const auto limit = TlsAllocState->GetLimit();
-        if (GetMode() == EOperatingMode::InMemory) {
-            AddOnlyNewValueToMem(used, limit, memUsageInMemory);
-        } else if (GetMode() == EOperatingMode::SplittingState) {
-            AddOnlyNewValueToMem(used, limit, memUsageSplitting);
-        } else {
-            AddOnlyNewValueToMem(used, limit, memUsageSpilling);
-        }
-    }
-
     EUpdateResult Update() {
-        SaveMemoryDump();
         if (IsEverythingExtracted)  {
-            WriteMemInfo();
             return EUpdateResult::Finish;
         }
 
@@ -610,7 +564,6 @@ private:
             bucket.AsyncWriteOperation = std::nullopt;
 
             while (const auto keyAndState = static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Extract())) {
-                SaveMemoryDump();
                 bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
                 for (size_t i = 0; i < KeyAndStateType->GetElementsCount(); ++i) {
                     //releasing values stored in unsafe TUnboxedValue buffer
@@ -622,8 +575,6 @@ private:
             SplitStateSpillingBucket = -1;
         }
         while (const auto keyAndState = static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Extract())) {
-            SaveMemoryDump();
-
             auto hash = Hasher(keyAndState); //Hasher uses only key for hashing
             auto bucketId = hash % SpilledBucketCount;
             auto& bucket = SpilledBuckets[bucketId];

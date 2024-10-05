@@ -132,9 +132,9 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
             }
         }
 
-        for (ui32 pp = 0; pp < head.GetBatches().size(); ++pp) {
-            head.MutableBatch(pp).Unpack();
-            for (const auto& b : head.GetBatch(pp).Blobs)
+        for (ui32 pp = 0; pp < newHead.GetBatches().size(); ++pp) {
+            newHead.MutableBatch(pp).Unpack();
+            for (const auto& b : newHead.GetBatch(pp).Blobs)
                 real.push_back(b);
         }
     }

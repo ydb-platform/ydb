@@ -64,7 +64,7 @@ private:
     friend class TPortionInfoConstructor;
     TPortionInfo(TPortionMeta&& meta)
         : Meta(std::move(meta)) {
-        if (Meta.GetProduced() == NPortion::EProduced::INSERTED) {
+        if (HasInsertWriteId()) {
             AFL_VERIFY(!Meta.GetTierName());
         }
     }

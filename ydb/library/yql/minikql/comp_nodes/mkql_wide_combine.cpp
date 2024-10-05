@@ -617,13 +617,9 @@ private:
                     keyAndState[i].UnRef();
                 }
                 if (bucket.AsyncWriteOperation) return true;
-
-                // bucket.AsyncWriteOperation = bucket.SpilledState->FinishWriting();
-                // if (bucket.AsyncWriteOperation) return true;
             }
 
             SplitStateSpillingBucket = -1;
-            // bucket.InMemoryProcessingState->ReadMore<false>();
         }
         while (const auto keyAndState = static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Extract())) {
             SaveMemoryDump();

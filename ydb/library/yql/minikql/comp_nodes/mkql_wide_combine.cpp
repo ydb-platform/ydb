@@ -380,9 +380,6 @@ public:
         Finish
     };
 
-    std::vector<std::pair<ui64, ui64>> memUsageInMemory;
-    std::vector<std::pair<ui64, ui64>> memUsageSplitting;
-    std::vector<std::pair<ui64, ui64>> memUsageSpilling;
     TSpillingSupportState(
         TMemoryUsageInfo* memInfo,
         const TMultiType* usedInputItemType, const TMultiType* keyAndStateType, ui32 keyWidth, size_t itemNodesSize,
@@ -621,12 +618,10 @@ private:
                         keyAndState[i].UnRef();
                     }
                     if (bucket.AsyncWriteOperation) return true;
-
                 }
 
                 bucket.AsyncWriteOperation = bucket.SpilledState->FinishWriting();
                 if (bucket.AsyncWriteOperation) return true;
-
             }
         }
 

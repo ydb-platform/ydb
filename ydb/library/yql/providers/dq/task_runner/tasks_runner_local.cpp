@@ -225,7 +225,6 @@ public:
     }
 
     TIntrusivePtr<NDq::IDqTaskRunner> Get(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const TString& traceId) override {
-        Y_UNUSED(traceId);
         NDq::TDqTaskRunnerSettings settings;
         settings.TerminateOnError = TerminateOnError;
         settings.StatsMode = statsMode;
@@ -261,10 +260,10 @@ public:
             settings.ReadRanges.push_back(readRange);
         }
         auto ctx = ExecutionContext;
-        TLogFunc logger {};
+        TLogFunc logger;
         if (YQL_CLOG_ACTIVE(DEBUG, ProviderDq)) {
-            logger = [taskId = task.GetId(), traceId = traceId](const TString& message) {
-                YQL_LOG_CTX_ROOT_SESSION_SCOPE(traceId, ToString(taskId));
+            logger = [taskId = ToString(task.GetId()), traceId = traceId](const TString& message) {
+                YQL_LOG_CTX_ROOT_SESSION_SCOPE(traceId, taskId);
                 YQL_CLOG(DEBUG, ProviderDq) << message;
             };
         }

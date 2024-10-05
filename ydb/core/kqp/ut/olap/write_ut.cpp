@@ -110,11 +110,12 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         }
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        csController->WaitCompactions(TDuration::Seconds(5));
         AFL_VERIFY(Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
         {
             const auto startInstant = TMonotonic::Now();
             AFL_VERIFY(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount() == 0)
-            ("count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount());
+                ("count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount());
             while (Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() &&
                    TMonotonic::Now() - startInstant < TDuration::Seconds(200)) {
                 for (auto&& i : csController->GetShardActualIds()) {

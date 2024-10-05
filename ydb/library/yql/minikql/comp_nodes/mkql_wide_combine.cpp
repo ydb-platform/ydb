@@ -16,8 +16,6 @@
 
 #include <util/string/cast.h>
 
-#include <fstream>
-
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -1720,8 +1718,6 @@ private:
             AllowSpilling,
             ctx
         );
-
-        std::cerr << "MISHA MADE STATE\n";
     }
 
     void RegisterDependencies() const final {

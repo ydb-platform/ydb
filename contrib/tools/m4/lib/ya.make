@@ -79,7 +79,6 @@ SRCS(
     fflush.c
     filenamecat-lgpl.c
     filenamecat.c
-    float.c
     fopen-safer.c
     fpurge.c
     freading.c
@@ -97,7 +96,6 @@ SRCS(
     isnand.c
     isnanl.c
     isnanf.c
-    itold.c
     localcharset.c
     lseek.c
     malloca.c
@@ -114,7 +112,6 @@ SRCS(
     progname.c
     quotearg.c
     raise.c
-    rawmemchr.c
     realloc.c
     regex.c
     rmdir.c
@@ -126,7 +123,6 @@ SRCS(
     spawn-pipe.c
     stat.c
     stpcpy.c
-    strdup.c
     stripslash.c
     tempname.c
     tmpdir.c
@@ -140,7 +136,6 @@ SRCS(
     wctype-h.c
     xalloc-die.c
     xasprintf.c
-    xconcat-filename.c
     xmalloc.c
     xmalloca.c
     xprintf.c
@@ -161,21 +156,12 @@ IF (NOT OS_LINUX)
     )
 ENDIF()
 
-IF (NOT OS_WINDOWS)
-    SRCS(
-        stdio-write.c
-    )
-ENDIF()
-
 IF (OS_WINDOWS)
     SRCS(
-        wcrtomb.c
-        mkstemp.c
         vasprintf.c
         strsignal.c
         mkdtemp.c
         fseeko.c
-        fopen.c
         gettimeofday.c
         localeconv.c
         msvc-inval.c
@@ -184,7 +170,6 @@ IF (OS_WINDOWS)
         sigaction.c
         sigprocmask.c
         waitpid.c
-        wcwidth.c
         uniwidth/width.c
     )
 ENDIF()

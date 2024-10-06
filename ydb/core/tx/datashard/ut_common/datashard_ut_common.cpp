@@ -1864,6 +1864,24 @@ ui64 AsyncAlterRestoreIncrementalBackup(
     return RunSchemeTx(*server->GetRuntime(), std::move(request));
 }
 
+ui64 AsyncAlterRestoreMultipleIncrementalBackups(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TVector<TString>& srcTableNames,
+        const TString& dstTableName)
+{
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups, workingDir);
+
+    auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableRestoreMultipleIncrementalBackups();
+    for (const auto& srcTableName : srcTableNames) {
+        desc.AddSrcTableNames(srcTableName);
+    }
+    desc.SetDstTableName(dstTableName);
+
+    return RunSchemeTx(*server->GetRuntime(), std::move(request));
+}
+
+
 void WaitTxNotification(Tests::TServer::TPtr server, TActorId sender, ui64 txId) {
     auto &runtime = *server->GetRuntime();
     auto &settings = server->GetSettings();

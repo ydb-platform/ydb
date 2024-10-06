@@ -319,6 +319,7 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
             auto [readVersion, writeVersion] = Self->GetReadWriteVersions();
             Y_DEBUG_ABORT_UNLESS(readVersion == writeVersion);
             MvccReadWriteVersion = writeVersion;
+            Cerr << "--> --> --> " << MvccReadWriteVersion->Step << " " << MvccReadWriteVersion->TxId << " " << record.GetTxIdSeq() << Endl;
             Pipeline.AddCommittingOp(*MvccReadWriteVersion);
         }
 

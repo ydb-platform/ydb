@@ -278,7 +278,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        return Progress(context, &ISubOperationState::ProgressState, context);
+        return Progress(context, &ISubOperationState::ProgressState);
     }
 
     #define DefaultHandleReply(TEvType, ...) \
@@ -292,9 +292,70 @@ private:
     using TFunc = bool(ISubOperationState::*)(Args...);
 
     template <typename... Args>
-    bool Progress(TOperationContext& context, TFunc<Args...> func, Args&&... args) {
+    bool Progress(TOperationContext& context, TFunc<Args..., TOperationContext&> func, Args&&... args) {
         Y_ABORT_UNLESS(StateFunc);
-        const bool isDone = std::invoke(func, StateFunc.Get(), std::forward<Args>(args)...);
+        const bool isDone = std::invoke(func, StateFunc.Get(), std::forward<Args>(args)..., context);
+        if (isDone) {
+            StateDone(context);
+        }
+
+        return true;
+    }
+};
+
+class TBetterSubOperation: public TSubOperationBase {
+    TTxState::ETxState State = TTxState::Invalid;
+    TSubOperationState::TPtr StateFunc = nullptr;
+
+protected:
+    virtual TTxState::ETxState NextState(TTxState::ETxState state, TOperationContext& context) const = 0;
+    virtual TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) = 0;
+
+    virtual void StateDone(TOperationContext& context) {
+        auto state = NextState(GetState(), context);
+        SetState(state);
+
+        if (state != TTxState::Invalid) {
+            context.OnComplete.ActivateTx(OperationId);
+        }
+    }
+
+public:
+    using TSubOperationBase::TSubOperationBase;
+
+    explicit TBetterSubOperation(const TOperationId& id, TTxState::ETxState state)
+        : TSubOperationBase(id)
+        , State(state)
+    {
+    }
+
+    TTxState::ETxState GetState() const {
+        return State;
+    }
+
+    void SetState(TTxState::ETxState state) {
+        State = state;
+        StateFunc = SelectStateFunc(state);
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        return Progress(context, &ISubOperationState::ProgressState);
+    }
+
+    #define DefaultHandleReply(TEvType, ...) \
+        bool HandleReply(TEvType::TPtr& ev, TOperationContext& context) override;
+
+        SCHEMESHARD_INCOMING_EVENTS(DefaultHandleReply)
+    #undef DefaultHandleReply
+
+private:
+    template <typename... Args>
+    using TFunc = bool(ISubOperationState::*)(Args...);
+
+    template <typename... Args>
+    bool Progress(TOperationContext& context, TFunc<Args..., TOperationContext&> func, Args&&... args) {
+        Y_ABORT_UNLESS(StateFunc);
+        const bool isDone = std::invoke(func, StateFunc.Get(), std::forward<Args>(args)..., context);
         if (isDone) {
             StateDone(context);
         }
@@ -651,6 +712,7 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
 ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table);
 
 TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr> CreateRestoreMultipleIncrementalBackups(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 
 }
 }

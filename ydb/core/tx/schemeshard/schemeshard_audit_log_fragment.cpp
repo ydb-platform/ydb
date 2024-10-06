@@ -245,6 +245,7 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
     // incremental backup
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreMultipleIncrementalBackups:
         return "RESTORE";
     // backup collection
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection:
@@ -566,6 +567,9 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreIncrementalBackup().GetSrcTableName()}));
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreIncrementalBackup().GetDstTableName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreMultipleIncrementalBackups:
+        // TODO implement
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateBackupCollection().GetName()}));

@@ -27,11 +27,17 @@ public:
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
+        return EExecutionStatus::Executed;
+
+        auto rv = DataShard.GetMvccTxVersion(EMvccTxMode::ReadWrite, nullptr);
+
+        Cerr << rv.Step << " " << rv.TxId << Endl;;
+
         if (!IsRelevant(tx)) {
-            return EExecutionStatus::Executed;
+            return EExecutionStatus::Reschedule;
         }
 
-        return EExecutionStatus::Executed;
+        return EExecutionStatus::Reschedule;
     }
 
     bool IsReadyToExecute(TOperation::TPtr op) const override final {

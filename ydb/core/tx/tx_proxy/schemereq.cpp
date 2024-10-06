@@ -361,6 +361,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackup:
         case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
+        case NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups:
             return *modifyScheme.MutableRestoreIncrementalBackup()->MutableSrcTableName();
         case NKikimrSchemeOp::ESchemeOpCreateBackupCollection:
             return *modifyScheme.MutableCreateBackupCollection()->MutableName();
@@ -635,6 +636,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterResourcePool:
         case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackup:
         case NKikimrSchemeOp::ESchemeOpAlterBackupCollection:
+        case NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups:
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));

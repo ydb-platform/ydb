@@ -132,7 +132,8 @@ class TIncrRestoreChangeSenderMain
             partitionId,
             TargetTablePathId,
             TagMap,
-            ETableChangeSenderType::IncrementalRestore);
+            ETableChangeSenderType::IncrementalRestore,
+            SeqNo);
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
@@ -191,11 +192,17 @@ public:
         return NKikimrServices::TActivity::CHANGE_SENDER_INCR_RESTORE_ACTOR_MAIN;
     }
 
-    explicit TIncrRestoreChangeSenderMain(const TActorId& changeServerActor, const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& targetPathId)
+    explicit TIncrRestoreChangeSenderMain(
+        const TActorId& changeServerActor,
+        const TDataShardId& dataShard,
+        const TTableId& userTableId,
+        const TPathId& targetPathId,
+        std::optional<ui64> seqNo)
         : TActorBootstrapped()
         , TChangeSender(this, this, this, this, changeServerActor)
         , DataShard(dataShard)
         , UserTableId(userTableId)
+        , SeqNo(seqNo)
         , TargetTablePathId(targetPathId)
         , TargetTableVersion(0)
     {
@@ -225,6 +232,7 @@ public:
 private:
     const TDataShardId DataShard;
     const TTableId UserTableId;
+    const std::optional<ui64> SeqNo;
     mutable TMaybe<TString> LogPrefix;
 
     THashMap<TString, TTag> MainColumnToTag;
@@ -237,8 +245,14 @@ private:
     bool FirstServe = false;
 }; // TIncrRestoreChangeSenderMain
 
-IActor* CreateIncrRestoreChangeSender(const TActorId& changeServerActor, const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& restoreTargetPathId) {
-    return new TIncrRestoreChangeSenderMain(changeServerActor, dataShard, userTableId, restoreTargetPathId);
+IActor* CreateIncrRestoreChangeSender(
+    const TActorId& changeServerActor,
+    const TDataShardId& dataShard,
+    const TTableId& userTableId,
+    const TPathId& restoreTargetPathId,
+    std::optional<ui64> seqNo)
+{
+    return new TIncrRestoreChangeSenderMain(changeServerActor, dataShard, userTableId, restoreTargetPathId, seqNo);
 }
 
 } // namespace NKikimr::NDataShard

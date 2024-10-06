@@ -320,6 +320,7 @@ IActor* CreateTableChangeSenderShard(
     ui64 shardId,
     const TPathId& targetTablePathId,
     const TMap<TTag, TTag>& tagMap,
-    ETableChangeSenderType type);
+    ETableChangeSenderType type,
+    std::optional<ui64> seqNo = std::nullopt);
 
 } // namespace NKikimr::NDataShard

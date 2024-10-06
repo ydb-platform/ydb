@@ -146,7 +146,7 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
     // (3) run consistent copy-tables in __full__
     // (3.1) expand consistent copy-tables with restore-list
 
-    // # restore-list
+    // # restore-list (O(n^2) if ds sends to next ds, better orchestrate through schemeshard O(n))
     // (1) send propose to all __full__ and __incremental__
     // (2) when __full__ finish with full backup it strongly sends *continue* to first __incremental__
     // (3) when __incremental__ finishes restore it sends *continue* to next __incremental__

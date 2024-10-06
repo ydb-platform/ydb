@@ -1022,6 +1022,15 @@ message TRestoreIncrementalBackup {
 
     optional string DstTableName = 2;
     optional NKikimrProto.TPathID DstPathId = 4;
+
+    optional uint64 SeqNo = 5;
+}
+
+message TRestoreMultipleIncrementalBackups {
+    repeated string SrcTableNames = 1;
+    optional string DstTableName = 2;
+    repeated NKikimrProto.TPathID SrcPathIds = 3;
+    optional NKikimrProto.TPathID DstPathId = 4;
 }
 
 enum EIndexType {
@@ -1677,6 +1686,7 @@ enum EOperationType {
     ESchemeOpBackupBackupCollection = 108;
     ESchemeOpBackupIncrementalBackupCollection = 109;
     ESchemeOpRestoreBackupCollection = 110;
+    ESchemeOpRestoreMultipleIncrementalBackups = 111;
 }
 
 message TApplyIf {
@@ -1904,6 +1914,7 @@ message TModifyScheme {
     optional TBackupCollection BackupBackupCollection = 77;
     optional TBackupCollection BackupIncrementalBackupCollection = 78;
     optional TBackupCollection RestoreBackupCollection = 79;
+    optional TRestoreMultipleIncrementalBackups RestoreMultipleIncrementalBackups = 80;
 }
 
 message TCopySequence {

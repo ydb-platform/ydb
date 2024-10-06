@@ -1476,6 +1476,8 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         return CreateBackupIncrementalBackupCollection(NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         return CreateRestoreBackupCollection(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreMultipleIncrementalBackups:
+        return CreateRestoreMultipleIncrementalBackups(NextPartId(), tx, context);
     }
 
     Y_UNREACHABLE();

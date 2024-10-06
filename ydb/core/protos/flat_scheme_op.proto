@@ -1092,9 +1092,13 @@ message TGenericTxInFlyExtraData {
     message TTxRestoreIncrementalBackupAtTableExtraData {
         optional uint64 LoopSeqNo = 1;
     }
+    message TTxCopyTableExtraData {
+        optional NKikimrProto.TPathID CdcPathId = 1;
+    }
 
     oneof TxExtraData {
         TTxRestoreIncrementalBackupAtTableExtraData TxRestoreIncrementalBackupAtTableExtraData = 1;
+        TTxCopyTableExtraData TxCopyTableExtraData = 2;
     }
 }
 

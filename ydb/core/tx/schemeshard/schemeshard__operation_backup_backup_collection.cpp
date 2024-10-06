@@ -139,8 +139,6 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
 
     const auto& bc = context.SS->BackupCollections[bcPath->PathId];
 
-    Y_UNUSED(bc);
-
     // (1) iterate over bc children and find last __full__
     // (2) save __full__ to var and all consequent __incremental__ to array
     // (3) run consistent copy-tables in __full__
@@ -152,17 +150,75 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
     // (3) when __incremental__ finishes restore it sends *continue* to next __incremental__
     // (4) when all parts finished schemeshard finishes the operation
 
+    TString lastFullBackupName;
+    TVector<TString> incBackupNames;
+
     if (!bcPath.Base()->GetChildren().size()) {
         return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, TStringBuilder() << "Nothing to restore")};
     } else {
         for (auto& [child, _] : bcPath.Base()->GetChildren()) {
-            Cerr << child << Endl;
+            if (child.EndsWith("_full")) {
+                lastFullBackupName = child;
+                incBackupNames.clear();
+            } else if (child.EndsWith("_incremental")) {
+                incBackupNames.push_back(child);
+            }
         }
     }
 
-    // copytable last full, then apply ib per-table probably in single transaction
+    Cerr << "going to restore:" << Endl;
+    Cerr << "\tFullBackup:" << Endl;
+    Cerr << "\t\t" << bcPath.Child(lastFullBackupName).PathString() << Endl;
+    Cerr << "\tIncrBackups" << Endl;
+    Cerr << "\t\t" << ::JoinSeq(", ", incBackupNames) << Endl;
 
-    return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, TStringBuilder() << "Unimplemented")};
+    NKikimrSchemeOp::TModifyScheme modifyScheme;
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables);
+    modifyScheme.SetInternal(true);
+
+    auto& cct = *modifyScheme.MutableCreateConsistentCopyTables();
+    auto& copyTables = *cct.MutableCopyTableDescriptions();
+    const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
+
+    // cct.SetDstBasePath(bcPath.GetDomainPathString());
+
+    TVector<ISubOperation::TPtr> result;
+
+    size_t cutLen = bcPath.GetDomainPathString().size() + 1;
+
+    for (const auto& item : bc->Properties.GetExplicitEntryList().GetEntries()) {
+        Y_UNUSED(item, copyTables);
+
+       auto& desc = *copyTables.Add();
+        desc.SetSrcPath(bcPath.Child(lastFullBackupName).PathString() + item.GetPath().substr(cutLen - 1, item.GetPath().size() - cutLen + 1));
+        desc.SetDstPath(item.GetPath());
+        desc.SetOmitIndexes(true);
+        desc.SetOmitFollowers(true);
+        // desc.SetIsBackup(true);
+    }
+
+    CreateConsistentCopyTables(opId, modifyScheme, context, result);
+
+    // oh...
+
+    // //
+
+    // for (const auto& item : bc->Properties.GetExplicitEntryList().GetEntries()) {
+    //     NKikimrSchemeOp::TModifyScheme modifyScheme2;
+    //     modifyScheme2.SetOperationType(NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups);
+    //     modifyScheme2.SetInternal(true);
+
+    //     auto& desc = *modifyScheme2.MutableRestoreMultipleIncrementalBackups();
+    //     // for (const auto& srcTableName : srcTableNames) {
+    //     //     desc.AddSrcTableNames(srcTableName);
+    //     // }
+    //     desc.SetDstTableName(item.GetPath());
+
+    //     CreateRestoreMultipleIncrementalBackups(opId, modifyScheme2, context, result);
+    // }
+    // //
+
+    return result;
 }
 
 }  // namespace NKikimr::NSchemeShard

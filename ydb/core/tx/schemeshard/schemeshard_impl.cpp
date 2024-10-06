@@ -2349,8 +2349,8 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
         TTableInfo::TPtr tableInfo = Tables.at(pathId);
         extraData = tableInfo->SerializeAlterExtraData();
     } else if (txState.TxType == TTxState::TxCopyTable) {
-        NKikimrProto::TPathID proto;
-        PathIdFromPathId(txState.CdcPathId, &proto);
+        NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
+        PathIdFromPathId(txState.CdcPathId, proto.MutableTxCopyTableExtraData()->MutableCdcPathId());
         bool serializeRes = proto.SerializeToString(&extraData);
         Y_ABORT_UNLESS(serializeRes);
     } else if (txState.TxType == TTxState::TxRestoreIncrementalBackupAtTable) {

@@ -323,6 +323,7 @@ class TNewRestoreFromAtTable: public TBetterSubOperation {
     TTxState::ETxState NextState(TTxState::ETxState state, TOperationContext& context) const override {
         switch (state) {
         case TTxState::Waiting:
+            return TTxState::ConfigureParts;
         case TTxState::ConfigureParts:
             return TTxState::Propose;
         case TTxState::Propose:
@@ -422,8 +423,8 @@ class TNewRestoreFromAtTable: public TBetterSubOperation {
                 .IsTable()
                 .NotAsyncReplicaTable()
                 .NotUnderDeleting()
-                .IsCommonSensePath()
-                .IsUnderTheSameOperation(OperationId.GetTxId()); // lock op
+                .IsCommonSensePath();
+                // .IsUnderTheSameOperation(OperationId.GetTxId()); // lock op
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -443,8 +444,8 @@ class TNewRestoreFromAtTable: public TBetterSubOperation {
                 .IsTable()
                 .NotAsyncReplicaTable()
                 .NotUnderDeleting()
-                .IsCommonSensePath()
-                .IsUnderTheSameOperation(OperationId.GetTxId()); // lock op
+                .IsCommonSensePath();
+                // .IsUnderTheSameOperation(OperationId.GetTxId()); // lock op
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -612,7 +613,12 @@ ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, TTxSt
     return MakeSubOperation<NIncrRestore::TNewRestoreFromAtTable>(id, state, context);
 }
 
-TVector<ISubOperation::TPtr> CreateRestoreMultipleIncrementalBackups(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+bool CreateRestoreMultipleIncrementalBackups(
+    TOperationId opId,
+    const TTxTransaction& tx,
+    TOperationContext& context,
+    TVector<ISubOperation::TPtr>& result)
+{
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpRestoreMultipleIncrementalBackups);
 
     LOG_N("CreateRestoreMultipleIncrementalBackups"
@@ -642,7 +648,8 @@ TVector<ISubOperation::TPtr> CreateRestoreMultipleIncrementalBackups(TOperationI
                 .IsCommonSensePath();
 
             if (!checks) {
-                return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+                result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+                return false;
             }
         }
         srcPaths.push_back(srcTablePath);
@@ -664,7 +671,8 @@ TVector<ISubOperation::TPtr> CreateRestoreMultipleIncrementalBackups(TOperationI
             .IsCommonSensePath();
 
         if (!checks) {
-            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+            result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+            return false;
         }
     }
 
@@ -676,24 +684,24 @@ TVector<ISubOperation::TPtr> CreateRestoreMultipleIncrementalBackups(TOperationI
 
     TString errStr;
     if (!context.SS->CheckApplyIf(tx, errStr)) {
-        return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, errStr)};
+        result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, errStr)};
+        return false;
     }
 
     for (auto& srcTablePath : srcPaths) {
         if (!context.SS->CheckLocks(srcTablePath.Base()->PathId, tx, errStr)) {
-            return {CreateReject(opId, NKikimrScheme::StatusMultipleModifications, errStr)};
+            result = {CreateReject(opId, NKikimrScheme::StatusMultipleModifications, errStr)};
+            return false;
         }
     }
 
     // check dst locks
     // lock dst
 
-    TVector<ISubOperation::TPtr> result;
-
-    for (auto& srcTablePath : srcPaths) {
-        DoCreateLock(opId, srcTablePath.Parent(), srcTablePath, result);
-    }
-    DoCreateLock(opId, dstTablePath.Parent(), dstTablePath, result);
+    // for (auto& srcTablePath : srcPaths) {
+    //     DoCreateLock(opId, srcTablePath.Parent(), srcTablePath, result);
+    // }
+    // DoCreateLock(opId, dstTablePath.Parent(), dstTablePath, result);
 
     {
         auto outTx = TransactionTemplate(srcPaths[0].Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable);
@@ -709,11 +717,17 @@ TVector<ISubOperation::TPtr> CreateRestoreMultipleIncrementalBackups(TOperationI
         result.push_back(CreateRestoreIncrementalBackupAtTable(NextPartId(opId, result), outTx));
     }
 
-    for (auto& srcTablePath : srcPaths) {
-        DoDropLock(opId, srcTablePath.Parent(), srcTablePath, result);
-    }
-    DoDropLock(opId, dstTablePath.Parent(), dstTablePath, result);
+    // for (auto& srcTablePath : srcPaths) {
+    //     DoDropLock(opId, srcTablePath.Parent(), srcTablePath, result);
+    // }
+    // DoDropLock(opId, dstTablePath.Parent(), dstTablePath, result);
 
+    return true;
+}
+
+TVector<ISubOperation::TPtr> CreateRestoreMultipleIncrementalBackups(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+    TVector<ISubOperation::TPtr> result;
+    CreateRestoreMultipleIncrementalBackups(opId, tx, context, result);
     return result;
 }
 

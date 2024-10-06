@@ -3510,10 +3510,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                 } else if (txState.TxType == TTxState::TxCopyTable) {
                     if (!extraData.empty()) {
-                        NKikimrProto::TPathID proto;
+                        NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
                         bool deserializeRes = ParseFromStringNoSizeLimit(proto, extraData);
                         Y_ABORT_UNLESS(deserializeRes);
-                        txState.CdcPathId = PathIdFromPathId(proto);
+                        txState.CdcPathId = PathIdFromPathId(proto.GetTxCopyTableExtraData().GetCdcPathId());
                     }
                 } else if (txState.TxType == TTxState::TxRestoreIncrementalBackupAtTable) {
                     if (!extraData.empty()) {

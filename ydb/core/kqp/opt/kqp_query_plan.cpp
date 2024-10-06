@@ -663,7 +663,7 @@ private:
                     TStringBuilder rangeDescr;
 
                     auto removeForbiddenChars = [](std::string s) -> std::string {
-                        return IsUtf(s)? s: "";
+                        return IsUtf(s)? s: "Non-UTF8 string";
                     }; /* remove chars, that break json plan */
 
                     if (keyPartRange.From == keyPartRange.To) {

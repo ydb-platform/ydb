@@ -24,10 +24,6 @@ IF (OS_WINDOWS)
     ADDINCL(
         GLOBAL contrib/tools/m4/lib/platform/win64
     )
-ELSE()
-    ADDINCL(
-        GLOBAL contrib/tools/m4/lib/platform/posix
-    )
 ENDIF()
 
 IF (OS_DARWIN)
@@ -84,8 +80,6 @@ SRCS(
     freading.c
     fstat.c
     getdtablesize.c
-    getopt.c
-    getopt1.c
     gl_avltree_oset.c
     gl_linkedhash_list.c
     gl_list.c
@@ -162,6 +156,8 @@ IF (OS_WINDOWS)
         strsignal.c
         mkdtemp.c
         fseeko.c
+        getopt.c
+        getopt1.c
         gettimeofday.c
         localeconv.c
         msvc-inval.c

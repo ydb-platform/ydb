@@ -7,8 +7,18 @@ import socket
 import sys
 import types
 import weakref
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import (
+    AsyncGenerator,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Collection,
+    Coroutine,
+    Iterable,
+    Sequence,
+)
 from concurrent.futures import Future
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from functools import partial
 from io import IOBase
@@ -19,15 +29,8 @@ from types import TracebackType
 from typing import (
     IO,
     Any,
-    AsyncGenerator,
-    Awaitable,
-    Callable,
-    Collection,
-    ContextManager,
-    Coroutine,
     Generic,
     NoReturn,
-    Sequence,
     TypeVar,
     cast,
     overload,
@@ -1273,7 +1276,7 @@ class TrioBackend(AsyncBackend):
     @classmethod
     def open_signal_receiver(
         cls, *signals: Signals
-    ) -> ContextManager[AsyncIterator[Signals]]:
+    ) -> AbstractContextManager[AsyncIterator[Signals]]:
         return _SignalReceiver(signals)
 
     @classmethod

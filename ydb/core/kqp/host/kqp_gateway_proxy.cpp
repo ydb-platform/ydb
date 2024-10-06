@@ -532,8 +532,8 @@ public:
         Gateway->SetToken(cluster, token);
     }
 
-    void SetPeerName(const TString& peerName) override {
-        Gateway->SetPeerName(peerName);
+    void SetClientAddress(const TString& clientAddress) override {
+        Gateway->SetClientAddress(clientAddress);
     }
 
     bool GetDatabaseForLoginOperation(TString& database) {

@@ -201,7 +201,6 @@ message TEvQueryRequest {
     optional NActorsProto.TActorId RequestActorId = 4;
     optional string RequestType = 5;
     optional TRlPath RlPath = 6;
-    optional string PeerName = 10;
 
     repeated Ydb.Issue.IssueMessage QueryIssues = 7;
     optional Ydb.StatusIds.StatusCode YdbStatus = 8;

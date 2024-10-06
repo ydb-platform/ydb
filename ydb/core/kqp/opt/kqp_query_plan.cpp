@@ -662,20 +662,24 @@ private:
                 for (const auto& keyPartRange : scanRangeDescr) {
                     TStringBuilder rangeDescr;
 
+                    auto removeForbiddenChars = [](std::string s) -> std::string {
+                        return IsUtf(s)? s: "";
+                    }; /* remove chars, that break json plan */
+
                     if (keyPartRange.From == keyPartRange.To) {
                         if (keyPartRange.From.Empty()) {
                             rangeDescr << keyPartRange.ColumnName << " (-∞, +∞)";
                             readInfo.ScanBy.push_back(rangeDescr);
                         } else {
                             rangeDescr << keyPartRange.ColumnName
-                                       << " (" << keyPartRange.From << ")";
+                                       << " (" << removeForbiddenChars(keyPartRange.From) << ")";
                             readInfo.LookupBy.push_back(rangeDescr);
                         }
                     } else {
                         rangeDescr << keyPartRange.ColumnName << " "
                                    << (keyPartRange.From.Empty() ? "(" : leftParen)
-                                   << (keyPartRange.From.Empty() ? "-∞" : keyPartRange.From) << ", "
-                                   << (keyPartRange.To.Empty() ? "+∞" : keyPartRange.To)
+                                   << (keyPartRange.From.Empty() ? "-∞" : removeForbiddenChars(keyPartRange.From)) << ", "
+                                   << (keyPartRange.To.Empty() ? "+∞" : removeForbiddenChars(keyPartRange.To))
                                    << (keyPartRange.To.Empty() ? ")" : rightParen);
                         readInfo.ScanBy.push_back(rangeDescr);
                         hasRangeScans = true;
@@ -1925,6 +1929,11 @@ void WriteCommonTablesInfo(NJsonWriter::TBuf& writer, TMap<TString, TTableInfo>&
                    std::tie(r.Type, r.Keys, r.Columns);
         });
     }
+
+    // const auto convertBase64IfNeeded = [](TString s) -> TString {
+
+    //     return s;
+    // };
 
     writer.BeginList();
 

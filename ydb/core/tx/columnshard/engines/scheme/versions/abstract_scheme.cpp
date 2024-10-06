@@ -2,6 +2,7 @@
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/tx/columnshard/engines/index_info.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>

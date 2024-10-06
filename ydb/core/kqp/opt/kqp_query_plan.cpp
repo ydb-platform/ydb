@@ -1930,11 +1930,6 @@ void WriteCommonTablesInfo(NJsonWriter::TBuf& writer, TMap<TString, TTableInfo>&
         });
     }
 
-    // const auto convertBase64IfNeeded = [](TString s) -> TString {
-
-    //     return s;
-    // };
-
     writer.BeginList();
 
     for (auto& pair : tables) {

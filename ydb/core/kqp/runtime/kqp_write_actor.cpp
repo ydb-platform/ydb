@@ -185,9 +185,7 @@ public:
                 TShardedWriteControllerSettings {
                     .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
                     .MemoryLimitPerMessage = MessageSettings.MemoryLimitPerMessageBytes,
-                    .MaxBatchesPerMessage = (SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable
-                        ? 1
-                        : MessageSettings.MaxBatchesPerMessage),
+                    .MaxBatchesPerMessage = MessageSettings.MaxBatchesPerMessage,
                 },
                 TypeEnv,
                 Alloc);

@@ -111,9 +111,6 @@ SRCS(
     rmdir.c
     secure_getenv.c
     sig-handler.c
-    signbitd.c
-    signbitf.c
-    signbitl.c
     spawn-pipe.c
     stat.c
     stpcpy.c

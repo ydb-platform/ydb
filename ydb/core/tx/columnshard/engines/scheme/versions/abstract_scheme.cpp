@@ -301,6 +301,8 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
             const ui32 columnId = GetIndexInfo().GetColumnIdByIndexVerified(columnIndex);
             auto loader = GetIndexInfo().GetColumnLoaderVerified(columnId);
             auto saver = GetIndexInfo().GetColumnSaver(columnId);
+            saver.AddSerializerWithBorder(100, NArrow::NSerialization::TNativeSerializer::GetUncompressed());
+            saver.AddSerializerWithBorder(1000, NArrow::NSerialization::TNativeSerializer::GetFast());
             const auto& columnFeatures = GetIndexInfo().GetColumnFeaturesVerified(columnId);
             auto accessor = std::make_shared<NArrow::NAccessor::TTrivialArray>(incomingBatch->column(incomingIndex));
             std::shared_ptr<arrow::RecordBatch> rbToWrite =
@@ -323,7 +325,8 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
     if (!slice.GroupBlobs(blobs, NSplitter::TEntityGroups(NSplitter::TSplitSettings(), NBlobOperations::TGlobal::DefaultStorageId))) {
         return TConclusionStatus::Fail("cannot split data for appropriate blobs size");
     }
-    auto constructor = TWritePortionInfoWithBlobsConstructor::BuildByBlobs(std::move(blobs), {}, pathId, GetVersion(), GetSnapshot(), storagesManager);
+    auto constructor =
+        TWritePortionInfoWithBlobsConstructor::BuildByBlobs(std::move(blobs), {}, pathId, GetVersion(), GetSnapshot(), storagesManager);
 
     NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(GetIndexInfo().GetReplaceKey()));
     NArrow::TMinMaxSpecialKeys snapshotKeys(NArrow::MakeEmptyBatch(TIndexInfo::ArrowSchemaSnapshot(), 1), TIndexInfo::ArrowSchemaSnapshot());

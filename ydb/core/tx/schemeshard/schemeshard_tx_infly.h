@@ -268,7 +268,9 @@ struct TTxState {
     ETxState State = Invalid;
     TStepId MinStep = InvalidStepId;
     TStepId PlanStep = InvalidStepId;
-    TPathId CdcPathId = InvalidPathId;              // path (dir or table) being modified
+
+    TPathId CdcPathId = InvalidPathId;              // path (dir or table) being modified stored in extra data, used by backup
+    ui64 LoopSeqNo = 0;                             // stored in extra data by multi restore
 
     // persist - TxShards:
     TVector<TShardOperation> Shards; // shards + operations on them

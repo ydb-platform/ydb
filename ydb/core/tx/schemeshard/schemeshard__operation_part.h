@@ -309,11 +309,11 @@ class TBetterSubOperation: public TSubOperationBase {
 
 protected:
     virtual TTxState::ETxState NextState(TTxState::ETxState state, TOperationContext& context) const = 0;
-    virtual TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) = 0;
+    virtual TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state, TOperationContext& context) = 0;
 
     virtual void StateDone(TOperationContext& context) {
         auto state = NextState(GetState(), context);
-        SetState(state);
+        SetState(state, context);
 
         if (state != TTxState::Invalid) {
             context.OnComplete.ActivateTx(OperationId);
@@ -333,9 +333,9 @@ public:
         return State;
     }
 
-    void SetState(TTxState::ETxState state) {
+    void SetState(TTxState::ETxState state, TOperationContext& context) {
         State = state;
-        StateFunc = SelectStateFunc(state);
+        StateFunc = SelectStateFunc(state, context);
     }
 
     bool ProgressState(TOperationContext& context) override {
@@ -378,6 +378,13 @@ template <typename T, typename... Args>
 ISubOperation::TPtr MakeSubOperation(const TOperationId& id, TTxState::ETxState state, Args&&... args) {
     auto result = MakeHolder<T>(id, state, std::forward<Args>(args)...);
     result->SetState(state);
+    return result.Release();
+}
+
+template <typename T>
+ISubOperation::TPtr MakeSubOperation(const TOperationId& id, TTxState::ETxState state, TOperationContext& context) {
+    auto result = MakeHolder<T>(id, state);
+    result->SetState(state, context);
     return result.Release();
 }
 
@@ -690,7 +697,7 @@ ISubOperation::TPtr CreateDropResourcePool(TOperationId id, const TTxTransaction
 ISubOperation::TPtr CreateDropResourcePool(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, const TTxTransaction& tx);
-ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, TTxState::ETxState state, TOperationContext& context);
 
 // Backup Collection
 // Create

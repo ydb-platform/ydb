@@ -320,9 +320,6 @@ class TNewRestoreFromAtTable: public TBetterSubOperation {
         return TTxState::ConfigureParts;
     }
 
-    // FIXME(+active): use txState
-    mutable ui64 SeqNo = 0;
-
     TTxState::ETxState NextState(TTxState::ETxState state, TOperationContext& context) const override {
         switch (state) {
         case TTxState::Waiting:
@@ -334,9 +331,9 @@ class TNewRestoreFromAtTable: public TBetterSubOperation {
             auto* txState = context.SS->FindTx(OperationId);
             Y_ABORT_UNLESS(txState);
             // Y_ABORT_UNLESS(IsExpectedTxType(txState->TxType));
-            ++SeqNo;
-            if (SeqNo < Transaction.GetRestoreMultipleIncrementalBackups().SrcPathIdsSize()) {
-                txState->TargetPathId = PathIdFromPathId(Transaction.GetRestoreMultipleIncrementalBackups().GetSrcPathIds(SeqNo));
+            ++(txState->LoopSeqNo);
+            if (txState->LoopSeqNo < Transaction.GetRestoreMultipleIncrementalBackups().SrcPathIdsSize()) {
+                txState->TargetPathId = PathIdFromPathId(Transaction.GetRestoreMultipleIncrementalBackups().GetSrcPathIds(txState->LoopSeqNo));
                 txState->TxShardsListFinalized = false;
                 // TODO preserve TxState
                 return TTxState::ConfigureParts;
@@ -348,11 +345,15 @@ class TNewRestoreFromAtTable: public TBetterSubOperation {
         }
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state, TOperationContext& context) override {
         switch (state) {
         case TTxState::Waiting:
-        case TTxState::ConfigureParts:
-            return MakeHolder<NIncrRestore::TConfigurePartsAtTable>(OperationId, Transaction.GetRestoreMultipleIncrementalBackups(), SeqNo);
+        case TTxState::ConfigureParts: {
+            auto* txState = context.SS->FindTx(OperationId);
+            Y_ABORT_UNLESS(txState);
+            // Y_ABORT_UNLESS(IsExpectedTxType(txState->TxType));
+            return MakeHolder<NIncrRestore::TConfigurePartsAtTable>(OperationId, Transaction.GetRestoreMultipleIncrementalBackups(), txState->LoopSeqNo);
+        }
         case TTxState::Propose:
             return MakeHolder<NIncrRestore::TProposeAtTable>(OperationId);
         case TTxState::ProposedWaitParts:
@@ -364,8 +365,8 @@ class TNewRestoreFromAtTable: public TBetterSubOperation {
         }
     }
 
-public:
-    explicit TNewRestoreFromAtTable(TOperationId id, const TTxTransaction& tx)
+    public:
+        explicit TNewRestoreFromAtTable(TOperationId id, const TTxTransaction& tx)
         : TBetterSubOperation(id, tx)
     {
     }
@@ -490,7 +491,7 @@ public:
 
         context.OnComplete.ActivateTx(OperationId);
 
-        SetState(InitialState());
+        SetState(InitialState(), context);
         return result;
     }
 
@@ -606,9 +607,9 @@ ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, const
     return MakeSubOperation<NIncrRestore::TNewRestoreFromAtTable>(id, tx);
 }
 
-ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, TTxState::ETxState state, TOperationContext& context) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
-    return MakeSubOperation<NIncrRestore::TNewRestoreFromAtTable>(id, state);
+    return MakeSubOperation<NIncrRestore::TNewRestoreFromAtTable>(id, state, context);
 }
 
 TVector<ISubOperation::TPtr> CreateRestoreMultipleIncrementalBackups(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {

@@ -1088,6 +1088,16 @@ message TIndexCreationConfig {
     }
 }
 
+message TGenericTxInFlyExtraData {
+    message TTxRestoreIncrementalBackupAtTableExtraData {
+        optional uint64 LoopSeqNo = 1;
+    }
+
+    oneof TxExtraData {
+        TTxRestoreIncrementalBackupAtTableExtraData TxRestoreIncrementalBackupAtTableExtraData = 1;
+    }
+}
+
 message TIndexAlteringConfig {
     optional string Name = 1;
     optional EIndexState State = 2;

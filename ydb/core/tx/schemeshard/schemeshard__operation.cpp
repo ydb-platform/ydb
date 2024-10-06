@@ -989,7 +989,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
     return result;
 }
 
-ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::ETxState txState) const {
+ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::ETxState txState, TOperationContext& context) const {
     switch (txType) {
     case TTxState::ETxType::TxMkDir:
         return CreateMkDir(NextPartId(), txState);
@@ -1202,7 +1202,7 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateAlterResourcePool(NextPartId(), txState);
 
     case TTxState::ETxType::TxRestoreIncrementalBackupAtTable:
-        return CreateRestoreIncrementalBackupAtTable(NextPartId(), txState);
+        return CreateRestoreIncrementalBackupAtTable(NextPartId(), txState, context);
 
     case TTxState::ETxType::TxCreateBackupCollection:
         return CreateNewBackupCollection(NextPartId(), txState);

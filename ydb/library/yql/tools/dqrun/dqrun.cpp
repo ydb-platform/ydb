@@ -1044,7 +1044,6 @@ int RunMain(int argc, const char* argv[])
         dataProvidersInit.push_back(GetS3DataProviderInitializer(httpGateway, nullptr));
     }
 
-
     IPqGateway::TPtr pqGateway;
     if (gatewaysConfig.HasPq()) {
         TPqGatewayServices pqServices(

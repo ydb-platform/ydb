@@ -168,9 +168,9 @@ while (await ydbDataReader.ReadAsync())
 }
 ```
 
-In this example, we declare the parameters `series_id`, `season_id`, and `limit_size` within the SQL query and then add them to the command using `YdbParameter` objects.
+In this example, the parameters `series_id`, `season_id`, and `limit_size` are declared within the SQL query and then added to the command using `YdbParameter` objects.
 
-### Alternative style with @ prefix
+### Alternative style with `@` prefix
 
 Parameters can also be specified using the `@` prefix. In this case, there is no need to declare variables within the query itself. The query will look like this:
 

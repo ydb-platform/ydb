@@ -127,4 +127,4 @@ void compareJsons(ui16 port, const TString& query, const TString& referenceFile)
 
 }
 
-#include "http_proxy_ut.h"
+#include "kinesis_ut.h"

@@ -35,6 +35,8 @@ common:
     to: /concepts/glossary.md
   - from: /postgresql/pg-dump.md
     to: /postgresql/import.md
+  - from: /concepts/column-table.md
+    to: /concepts/datamodel/table.md
 
 # DevOps-related redirects
   - from: /getting_started/kubernetes.md
@@ -329,8 +331,6 @@ common:
     to: /integrations/migration/liquibase.md
 
 ru:
-  - from: /concepts/column-table.md
-    to: /concepts/datamodel/table.md
   - from: /postgresql/index.md
     to: /postgresql/intro.md
   - from: /db/terraform.md

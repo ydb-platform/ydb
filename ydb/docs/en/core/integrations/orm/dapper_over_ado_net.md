@@ -233,15 +233,13 @@ catch (YdbException e)
 }
 ```
 
-### Properties of YdbException
+### Properties of `YdbException`
 
-The `YdbException` exception has the following properties, which can help you handle errors more precisely:
+The `YdbException` exception has the following properties, which can help you handle errors properly:
 
-- `IsTransient`: Returns true if the error is temporary and can be resolved by retrying. For example, such an error might occur in case of a transaction lock violation, where the transaction did not manage to complete its commit.
-
-- `IsTransientWhenIdempotent`: Returns true if the error is temporary and can be resolved by retrying the operation, provided that the database operation is idempotent.
-
-- `StatusCode`: Contains the database error code, which can be useful for logging and detailed analysis of the problem.
+- `IsTransient` returns `true` if the error is temporary and can be resolved by retrying. For example, this might occur in cases of a transaction lock violation when the transaction fails to complete its commit.
+- `IsTransientWhenIdempotent` returns `true` if the error is temporary and can be resolved by retrying the operation, provided that the database operation is idempotent.
+- `StatusCode` contains the database error code, which is helpful for logging and detailed analysis of the issue.
 
 ## Integration of {{ ydb-short-name }} and Dapper
 

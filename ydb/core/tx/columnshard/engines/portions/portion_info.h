@@ -492,17 +492,27 @@ public:
         return Meta.IndexKeyEnd;
     }
 
-    const TSnapshot& RecordSnapshotMin() const {
+    const TSnapshot& RecordSnapshotMin(const std::optional<TSnapshot>& snapshotDefault = std::nulloptr) const {
         if (InsertWriteId) {
-            return GetCommitSnapshotVerified();
+            if (CommitSnapshot) {
+                return *CommitSnapshot;
+            } else {
+                AFL_VERIFY(snapshotDefault);
+                return *snapshotDefault;
+            }
         } else {
             return Meta.RecordSnapshotMin;
         }
     }
 
-    const TSnapshot& RecordSnapshotMax() const {
+    const TSnapshot& RecordSnapshotMax(const std::optional<TSnapshot>& snapshotDefault = std::nulloptr) const {
         if (InsertWriteId) {
-            return GetCommitSnapshotVerified();
+            if (CommitSnapshot) {
+                return *CommitSnapshot;
+            } else {
+                AFL_VERIFY(snapshotDefault);
+                return *snapshotDefault;
+            }
         } else {
             return Meta.RecordSnapshotMax;
         }

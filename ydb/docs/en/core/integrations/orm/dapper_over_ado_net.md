@@ -243,7 +243,7 @@ The `YdbException` exception has the following properties, which can help you ha
 
 - `StatusCode`: Contains the database error code, which can be useful for logging and detailed analysis of the problem.
 
-## Integration of YDB and Dapper
+## Integration of {{ ydb-short-name }} and Dapper
 
 To get started, you need an additional dependency [Dapper](https://www.nuget.org/packages/Dapper/).
 

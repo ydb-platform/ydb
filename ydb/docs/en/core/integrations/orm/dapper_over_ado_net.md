@@ -61,16 +61,16 @@ All available connection parameters are defined as properties in the `YdbConnect
 
 Here is a list of parameters that can be specified in the connection string:
 
-| Parameter         | Description                                                                                         | Default Value |
+| Parameter         | Description                                                                                         | Default value |
 |-------------------|-----------------------------------------------------------------------------------------------------|---------------|
-| `Host`            | Specifies the server host                                                                           | `localhost`   |
-| `Port`            | Specifies the server port                                                                           | `2136`        |
-| `Database`        | Specifies database name                                                                             | `/local`      |
+| `Host`            | Specifies the {{ ydb-short-name }} server host                                                                           | `localhost`   |
+| `Port`            | Specifies the {{ ydb-short-name }}  server port                                                                           | `2136`        |
+| `Database`        | Specifies the database name                                                                             | `/local`      |
 | `User`            | Specifies the username                                                                              | Not defined   |
 | `Password`        | Specifies the user password                                                                         | Not defined   |
-| `UseTls`          | Indicates whether to use the TLS protocol (grpc or grpcs)                                           | `false`       |
+| `UseTls`          | Indicates whether to use the TLS protocol (`grpcs` or `grpc`)                                           | `false`       |
 | `MaxSessionPool`  | Specifies the maximum session pool size                                                             | `100`         |
-| `RootCertificate` | Specifies the path to the trusted server certificate. If this parameter is set, UseTls will be true | Not defined   |
+| `RootCertificate` | Specifies the path to the trusted server TLS certificate. If this parameter is set, `UseTls` will be true | Not defined   |
 
 There are also additional parameters that do not participate in forming the ConnectionString. These can only be specified using `YdbConnectionStringBuilder`:
 

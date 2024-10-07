@@ -188,7 +188,7 @@ ADO.NET will prepare the query for you so that the variables conform to the YQL 
 
 ### Type Mapping Table for Writing
 
-| {{ ydb-short-name }}       | DbType                                                                                    | .Net types                   |
+| {{ ydb-short-name }} type      | DbType                                                                                    | .NET type                   |
 |----------------------------|-------------------------------------------------------------------------------------------|------------------------------|
 | `Bool`                     | `Boolean`                                                                                 | `bool`                       |
 | `Text` (synonym `Utf8`)    | `String`, `AnsiString`, `AnsiStringFixedLength`, `StringFixedLength`                      | `string`                     |

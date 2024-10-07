@@ -103,6 +103,8 @@ auth_config:
   scheme: "ldaps"
 ```
 
+Подробнее этот механизм описан в [{#T}](index.md#ldap-auth-config).
+
 ### Федеративные запросы
 
 [Федеративные запросы](../../concepts/federated_query/index.md) позволяют {{ ydb-short-name }} выполнять запросы к различным внешним источникам данных. Использование TLS при выполнении таких запросов контролируется параметром `USE_TLS` в запросах [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md). Изменения в серверной конфигурации не требуются.

@@ -277,6 +277,7 @@ public:
         if (Event->Get()->UserToken) {
             event->Record.SetUserToken(Event->Get()->UserToken);
         }
+        request.SetClientAddress(Event->Get()->Request.GetRemoteAddr());
         if (Action == "execute-script") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);

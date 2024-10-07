@@ -228,6 +228,14 @@ public:
         return Token_;
     }
 
+    TString GetClientAddress() const {
+        if (RequestCtx) {
+            return RequestCtx->GetPeerName();
+        }
+
+        return Record.GetRequest().GetClientAddress();
+    }
+
     const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& GetYdbParameters() const {
         if (YdbParameters) {
             return *YdbParameters;

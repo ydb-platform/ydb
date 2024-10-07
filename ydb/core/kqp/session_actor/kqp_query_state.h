@@ -64,6 +64,7 @@ public:
         , StartTime(TInstant::Now())
         , KeepSession(ev->Get()->GetKeepSession() || longSession)
         , UserToken(ev->Get()->GetUserToken())
+        , ClientAddress(ev->Get()->GetClientAddress())
         , StartedAt(startedAt)
     {
         RequestEv.reset(ev->Release().Release());
@@ -127,6 +128,7 @@ public:
     TKqpQueryStats QueryStats;
     bool KeepSession = false;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TString ClientAddress;
     NActors::TMonotonic StartedAt;
 
     THashMap<NKikimr::TTableId, ui64> TableVersions;

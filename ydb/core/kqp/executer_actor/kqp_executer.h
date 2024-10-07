@@ -101,7 +101,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
 IActor* CreateKqpSchemeExecuter(
     TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target,
     const TMaybe<TString>& requestType, const TString& database,
-    TIntrusiveConstPtr<NACLib::TUserToken> userToken,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress,
     bool temporary, TString SessionId, TIntrusivePtr<TUserRequestContext> ctx,
     const TActorId& kqpTempTablesAgentActor = TActorId());
 

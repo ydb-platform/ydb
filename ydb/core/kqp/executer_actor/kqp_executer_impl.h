@@ -123,9 +123,8 @@ public:
     TKqpExecuterBase(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         TKqpRequestCounters::TPtr counters,
-        const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
+        const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
-        const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex, ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase", bool streamResult = false)
         : Request(std::move(request))
@@ -134,8 +133,8 @@ public:
         , Counters(counters)
         , ExecuterSpan(spanVerbosity, std::move(Request.TraceId), spanName)
         , Planner(nullptr)
-        , ExecuterRetriesConfig(executerRetriesConfig)
-        , AggregationSettings(aggregation)
+        , ExecuterRetriesConfig(tableServiceConfig.GetExecuterRetriesConfig())
+        , AggregationSettings(tableServiceConfig.GetAggregationConfig())
         , HasOlapTable(false)
         , StreamResult(streamResult)
         , StatementResultIndex(statementResultIndex)
@@ -2001,8 +2000,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
-    const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
-    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
+    const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     TPreparedQueryHolder::TConstPtr preparedQuery, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex);
 

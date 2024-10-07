@@ -45,13 +45,12 @@ public:
 
     TKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
-        const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
-        const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
+        const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         TPreparedQueryHolder::TConstPtr preparedQuery,
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex)
-        : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, chanTransportVersion, aggregation,
+        : TBase(std::move(request), database, userToken, counters, tableServiceConfig, chanTransportVersion,
             userRequestContext, statementResultIndex, TWilsonKqp::ScanExecuter, "ScanExecuter",
             false
         )
@@ -363,12 +362,11 @@ private:
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
-    const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
-    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
+    const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     TPreparedQueryHolder::TConstPtr preparedQuery, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex)
 {
-    return new TKqpScanExecuter(std::move(request), database, userToken, counters, aggregation, executerRetriesConfig,
+    return new TKqpScanExecuter(std::move(request), database, userToken, counters, tableServiceConfig,
         preparedQuery, chanTransportVersion, userRequestContext, statementResultIndex);
 }
 

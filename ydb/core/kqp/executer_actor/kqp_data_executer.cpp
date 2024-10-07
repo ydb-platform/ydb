@@ -124,14 +124,13 @@ public:
     TKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         TKqpRequestCounters::TPtr counters, bool streamResult,
-        const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
+        const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
-        const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
         const TActorId& creator, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
         const TGUCSettings::TPtr& GUCSettings, const TShardIdToTableInfoPtr& shardIdToTableInfo)
-        : TBase(std::move(request), database, userToken, counters, tableServiceConfig,
+        : TBase(std::move(request), database, userToken, counters, tableServiceConfig, chanTransportVersion,
             userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter, "DataExecuter", streamResult)
         , AsyncIoFactory(std::move(asyncIoFactory))
         , UseEvWriteForOltp(tableServiceConfig.GetEnableOltpSink())
@@ -2348,6 +2347,7 @@ private:
 
             absl::flat_hash_set<ui64> sendingShardsSet;
             absl::flat_hash_set<ui64> receivingShardsSet;
+            absl::flat_hash_set<ui64> sendingColumnShardsSet;
             absl::flat_hash_set<ui64> receivingColumnShardsSet;
             ui64 arbiter = 0;
             std::optional<ui64> columnShardArbiter;
@@ -2511,20 +2511,20 @@ private:
                     }
                 }
 
-                for (auto& [shardId, t] : topicTxs) {
-                    t.tx.SetOp(NKikimrPQ::TDataTransaction::Commit);
+                for (auto& [shardId, tx] : topicTxs) {
+                    tx.SetOp(NKikimrPQ::TDataTransaction::Commit);
                     if (columnShardArbiter) {
-                        t.tx.AddSendingShards(*columnShardArbiter);
-                        t.tx.AddReceivingShards(*columnShardArbiter);
+                        tx.AddSendingShards(*columnShardArbiter);
+                        tx.AddReceivingShards(*columnShardArbiter);
                         if (sendingShardsSet.contains(shardId)) {
-                            t.tx.AddSendingShards(shardId);
+                            tx.AddSendingShards(shardId);
                         }
                         if (receivingShardsSet.contains(shardId)) {
-                            t.tx.AddReceivingShards(shardId);
+                            tx.AddReceivingShards(shardId);
                         }
                     } else {
-                        *t.tx.MutableSendingShards() = sendingShards;
-                        *t.tx.MutableReceivingShards() = receivingShards;
+                        *tx.MutableSendingShards() = sendingShards;
+                        *tx.MutableReceivingShards() = receivingShards;
                     }
                     YQL_ENSURE(!arbiter);
                 }

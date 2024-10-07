@@ -72,7 +72,7 @@ Here is a list of parameters that can be specified in the connection string:
 | `MaxSessionPool`  | Specifies the maximum session pool size                                                             | `100`         |
 | `RootCertificate` | Specifies the path to the trusted server TLS certificate. If this parameter is set, `UseTls` will be true | Not defined   |
 
-There are also additional parameters that do not participate in forming the ConnectionString. These can only be specified using `YdbConnectionStringBuilder`:
+There are also additional parameters that do not participate in forming the connection string. These can only be specified using `YdbConnectionStringBuilder`:
 
 | Parameter             | Description                                                     | Default Value |
 |-----------------------|-----------------------------------------------------------------|---------------|

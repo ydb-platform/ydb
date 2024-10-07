@@ -49,6 +49,7 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
         if (RequestCtx->GetSerializedToken()) {
             Record.SetUserToken(RequestCtx->GetSerializedToken());
         }
+        Record.MutableRequest()->SetClientAddress(RequestCtx->GetPeerName());
 
         Record.MutableRequest()->SetDatabase(Database);
         ActorIdToProto(RequestActorId, Record.MutableCancelationActor());

@@ -20,11 +20,11 @@
 
 #include <forward_list>
 
-#define LOG_T(stream) LOG_TRACE_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". " << "Ctx: " << *UserRequestContext << ". " << stream);
-#define LOG_D(stream) LOG_DEBUG_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". " << "Ctx: " << *UserRequestContext << ". " << stream);
-#define LOG_I(stream) LOG_INFO_S (NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". " << "Ctx: " << *UserRequestContext << ". " << stream);
-#define LOG_W(stream) LOG_WARN_S (NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". " << "Ctx: " << *UserRequestContext << ". " << stream);
-#define LOG_E(stream) LOG_ERROR_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". " << "Ctx: " << *UserRequestContext << ". " << stream);
+#define LOG_T(stream) LOG_TRACE_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". Ctx: " << *UserRequestContext << ". " << stream);
+#define LOG_D(stream) LOG_DEBUG_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". Ctx: " << *UserRequestContext << ". " << stream);
+#define LOG_I(stream) LOG_INFO_S (NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". Ctx: " << *UserRequestContext << ". " << stream);
+#define LOG_W(stream) LOG_WARN_S (NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". Ctx: " << *UserRequestContext << ". " << stream);
+#define LOG_E(stream) LOG_ERROR_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". Ctx: " << *UserRequestContext << ". " << stream);
 
 namespace NKikimr::NKqp {
 
@@ -322,7 +322,7 @@ private:
         auto resp = MakeHolder<TEvKqpExecuter::TEvStreamDataAck>();
         resp->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
         resp->Record.SetFreeSpace(QueryServiceConfig.GetScriptResultSizeLimit()
-                                 ? QueryServiceConfig.GetScriptResultSizeLimit() > std::numeric_limits<i64>::max() 
+                                 ? QueryServiceConfig.GetScriptResultSizeLimit() > std::numeric_limits<i64>::max()
                                     ? std::numeric_limits<i64>::max()
                                     : static_cast<i64>(QueryServiceConfig.GetScriptResultSizeLimit())
                                  : std::numeric_limits<i64>::max());

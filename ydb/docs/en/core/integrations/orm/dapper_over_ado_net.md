@@ -132,13 +132,13 @@ await ydbCommand.ExecuteNonQueryAsync();
 await ydbCommand.Transaction.CommitAsync();
 ```
 
-Here, a transaction with the `Serializable` isolation level is opened and two inserts into the `episodes` table are executed.
+Here, a transaction with the `Serializable` isolation level is opened, and two inserts into the `episodes` table are executed.
 
-### Using Parameters
+### Using parameters
 
-SQL query parameters can be set using the YdbParameter class:
+SQL query parameters can be set using the `YdbParameter` class.
 
-In this example, we declare the parameters $series_id, $season_id, and $limit_size within the SQL query and then add them to the command using YdbParameter objects.
+In this example, the parameters `$series_id`, `$season_id`, and `$limit_size` are declared within the SQL query and then added to the command using `YdbParameter` objects.
 
 ```c#
 await using var connection = new YdbConnection(_cmdOptions.SimpleConnectionString);

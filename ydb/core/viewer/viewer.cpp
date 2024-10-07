@@ -760,6 +760,7 @@ NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrHive::ETabletVolatileState st
     NKikimrViewer::EFlag flag = NKikimrViewer::EFlag::Grey;
     switch (state) {
         case NKikimrHive::ETabletVolatileState::TABLET_VOLATILE_STATE_STOPPED:
+        case NKikimrHive::ETabletVolatileState::TABLET_VOLATILE_STATE_WAITING:
             flag = NKikimrViewer::EFlag::Red;
             break;
         case NKikimrHive::ETabletVolatileState::TABLET_VOLATILE_STATE_BOOTING:

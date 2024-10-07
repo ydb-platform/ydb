@@ -138,7 +138,10 @@ bool TTabletInfo::IsReadyToStart(TInstant now) const {
             return false;
         }
     }
-    return NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_BOOTING && now >= PostponedStart;
+    return NodeId == 0 &&
+            (VolatileState == EVolatileState::TABLET_VOLATILE_STATE_BOOTING
+             || VolatileState == EVolatileState::TABLET_VOLATILE_STATE_WAITING)  &&
+            now >= PostponedStart;
 }
 
 bool TTabletInfo::IsStarting() const {

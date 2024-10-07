@@ -258,6 +258,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
                     }
                     tablet->ActorsToNotifyOnRestart.clear();
                     BootQueue.AddToWaitQueue(record); // waiting for new node
+                    tablet->ChangeVolatileState(TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_WAITING);
                     continue;
                 }
             }

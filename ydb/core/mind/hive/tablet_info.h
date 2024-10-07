@@ -117,6 +117,7 @@ public:
         case EVolatileState::TABLET_VOLATILE_STATE_STARTING: return "Starting";
         case EVolatileState::TABLET_VOLATILE_STATE_RUNNING: return "Running";
         case EVolatileState::_TABLET_VOLATILE_STATE_BLOCKED: return "Blocked";
+        case EVolatileState::TABLET_VOLATILE_STATE_WAITING: return "Waiting";
         default: return Sprintf("%d", static_cast<int>(value));
         }
     }

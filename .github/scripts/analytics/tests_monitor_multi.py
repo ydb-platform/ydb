@@ -11,7 +11,7 @@ import time
 import ydb
 from collections import Counter
 import pandas as pd
-
+from multiprocessing import Pool, cpu_count
 
 dir = os.path.dirname(__file__)
 config = configparser.ConfigParser()
@@ -19,7 +19,6 @@ config_file_path = f"{dir}/../../config/ydb_qa_db.ini"
 config.read(config_file_path)
 DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
 DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
-
 
 def create_tables(pool, table_path):
     print(f"> create table if not exists:'{table_path}'")
@@ -90,19 +89,106 @@ def bulk_upsert(table_client, table_path, rows):
     table_client.bulk_upsert(table_path, rows, column_types)
 
 
+def process_test_group(name, group, last_day_data, default_start_date):
+    """Processes data for a single test group (by full_name)."""
+    prev_state = 'no_runs'
+    prev_date = datetime.datetime(default_start_date.year, default_start_date.month, default_start_date.day)
+    current_days_in_state = 0
+    # Get 'days_in_state' for the last existing day for the current test
+    if last_day_data is not None and last_day_data.shape[0] > 0:
+        try:
+            last_day_days_in_state = last_day_data[last_day_data['full_name'] == name]['days_in_state'].iloc[0]
+            prev_state = last_day_data[last_day_data['full_name'] == name]['state'].iloc[0]
+            prev_date = last_day_data[last_day_data['full_name'] == name]['state_change_date'].iloc[0]
+        except IndexError:
+            # If data for this test doesn't exist in last_day_data, use default values
+            last_day_days_in_state = current_days_in_state
+        current_days_in_state = last_day_days_in_state
+
+    previous_state_list = []
+    state_change_date_list = []
+    days_in_state_list = []
+
+    for index, row in group.iterrows():
+        previous_state_list.append(prev_state)
+        if row['state'] != prev_state:
+            prev_state = row['state']
+            prev_date = row['date_window']
+            current_days_in_state = 1
+
+        state_change_date_list.append(prev_date)
+        days_in_state_list.append(current_days_in_state)
+        current_days_in_state += 1
+
+    return {
+        'previous_state': previous_state_list,
+        'state_change_date': state_change_date_list,
+        'days_in_state': days_in_state_list
+    }
+
+def determine_state(row):
+    history_class = row['history_class']
+    is_muted = row['is_muted']
+
+    if is_muted == 1:
+        if 'mute' in history_class:
+            return 'Muted Flaky'
+        elif 'pass' in history_class:
+            return 'Muted Stable'
+        elif 'skipped' in history_class or not history_class:
+            return 'Skipped'
+        else:
+            return history_class
+    else:
+        if 'failure' in history_class and 'mute' not in history_class:
+            return 'Flaky'
+        elif 'mute' in history_class:
+            return 'Muted'
+        elif 'skipped' in history_class or not history_class:
+            return 'Skipped'
+        elif 'pass' in history_class:
+            return 'Passed'
+        else:
+            return history_class
+
+
+def calculate_success_rate(row):
+    total_count = row['pass_count'] + row['mute_count'] + row['fail_count']
+    if total_count == 0:
+        return 0.0
+    else:
+        return (row['pass_count'] / total_count) * 100
+
+def calculate_summary(row):
+    return (
+        'Pass:'
+        + str(row['pass_count'])
+        + ' Fail:'
+        + str(row['fail_count'])
+        + ' Mute:'
+        + str(row['mute_count'])
+        + ' Skip:'
+        + str(row['skip_count'])
+    )
+
+def compute_owner(owner):
+    if not owner or owner == '':
+        return 'Unknown'
+    elif ';;' in owner:
+        parts = owner.split(';;', 1)
+        if 'TEAM' in parts[0]:
+            return parts[0]
+        else:
+            return parts[1]
+    else:
+        return owner
+
+
 def main():
     parser = argparse.ArgumentParser()
-
     parser.add_argument('--days-window', default=1, type=int, help='how many days back we collecting history')
-    parser.add_argument(
-        '--build_type',
-        choices=['relwithdebinfo', 'release-asan'],
-        default='relwithdebinfo',
-        type=str,
-        help='build : relwithdebinfo or release-asan',
-    )
+    parser.add_argument('--build_type', choices=['relwithdebinfo', 'release-asan'], default='relwithdebinfo', type=str, help='build : relwithdebinfo or release-asan')
     parser.add_argument('--branch', default='main', choices=['main'], type=str, help='branch')
-
     args, unknown = parser.parse_known_args()
     history_for_n_day = args.days_window
     build_type = args.build_type
@@ -112,25 +198,20 @@ def main():
         print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
         return 1
     else:
-        # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
-        # So, set up it locally
-        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
-            "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
-        ]
+        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
+
     with ydb.Driver(
         endpoint=DATABASE_ENDPOINT,
         database=DATABASE_PATH,
         credentials=ydb.credentials_from_env_variables(),
     ) as driver:
         driver.wait(timeout=10, fail_fast=True)
-
-        # settings, paths, consts
         tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=False)
         table_client = ydb.TableClient(driver, tc_settings)
         base_date = datetime.datetime(1970, 1, 1)
-        default_start_date =  datetime.date(2024, 10, 1)
+        default_start_date = datetime.date(2024, 10, 1)
         today = datetime.date.today()
-        table_path = f'test_results/analytics/tests_monitor_test'
+        table_path = f'test_results/analytics/tests_monitor_test_3'
 
         # Get last existing day
         query_last_exist_day = f"""
@@ -342,9 +423,11 @@ def main():
         start_time = time.time()
         df = pd.DataFrame(data)
         # **Concatenate DataFrames**
-        if last_exist_df.shape[0] > 0:
+        if last_exist_df is not None and last_exist_df.shape[0] > 0:
             last_day_data = last_exist_df[['full_name', 'days_in_state','state','state_change_date']]
             df = pd.concat([last_exist_df, df], ignore_index=True)
+        else: 
+            last_day_data = None
         end_time = time.time()
         print(f'Dataframe inited: {end_time - start_time}')
         tart_time = time.time()
@@ -354,68 +437,6 @@ def main():
         end_time = time.time()
         print(f'Dataframe sorted: {end_time - start_time}')
         start_time = time.time()
-
-        def determine_state(row):
-            history_class = row['history_class']
-            is_muted = row['is_muted']
-
-            if is_muted == 1:
-                if 'mute' in history_class:
-                    return 'Muted Flaky'
-                elif 'pass' in history_class:
-                    return 'Muted Stable'
-                elif 'skipped' in history_class or not history_class:
-                    return 'Skipped'
-                else:
-                    return history_class
-            else:
-                if 'failure' in history_class and 'mute' not in history_class:
-                    return 'Flaky'
-                elif 'mute' in history_class:
-                    return 'Muted'
-                elif 'skipped' in history_class or not history_class:
-                    return 'Skipped'
-                elif 'pass' in history_class:
-                    return 'Passed'
-                else:
-                    return history_class
-
-        def calculate_streak_flag(row):
-            if row['state'] == row['previous_state']:
-                return 0
-            else:
-                return 1
-
-        def calculate_success_rate(row):
-            total_count = row['pass_count'] + row['mute_count'] + row['fail_count']
-            if total_count == 0:
-                return 0.0
-            else:
-                return (row['pass_count'] / total_count) * 100
-
-        def calculate_summary(row):
-            return (
-                'Pass:'
-                + str(row['pass_count'])
-                + ' Fail:'
-                + str(row['fail_count'])
-                + ' Mute:'
-                + str(row['mute_count'])
-                + ' Skip:'
-                + str(row['skip_count'])
-            )
-
-        def compute_owner(owner):
-            if not owner or owner == '':
-                return 'Unknown'
-            elif ';;' in owner:
-                parts = owner.split(';;', 1)
-                if 'TEAM' in parts[0]:
-                    return parts[0]
-                else:
-                    return parts[1]
-            else:
-                return owner
 
         df['success_rate'] = df.apply(calculate_success_rate, axis=1).astype(int)
         df['summary'] = df.apply(calculate_summary, axis=1)
@@ -428,49 +449,24 @@ def main():
         end_time = time.time()
         print(f'Computed base params: {end_time - start_time}')
         start_time = time.time()
-        
+
         # Determ state for prev date and saving change state date
-        previous_state_list = []
-        state_change_date_list = []
-        days_in_state_list = []
+        with Pool(processes=cpu_count()) as pool:
+            results = pool.starmap(
+                process_test_group,
+                [(name, group, last_day_data, default_start_date) for name, group in df.groupby('full_name')]
+            )
 
-        # Use 'days_in_state' from 'tests_monitor' for the last existing day
-        
-        
-        for name, group in df.groupby('full_name'):
-            prev_state = 'no_runs'
-            prev_date = datetime.datetime(default_start_date.year, default_start_date.month, default_start_date.day)
-            current_days_in_state = 0
-            # Get 'days_in_state' for the last existing day for the current test
-            if last_exist_df.shape[0] > 0:
-                try:
-                    last_day_days_in_state = last_day_data[last_day_data['full_name'] == name]['days_in_state'].iloc[0]
-                    prev_state = last_day_data[last_day_data['full_name'] == name]['state'].iloc[0]
-                    prev_date = last_day_data[last_day_data['full_name'] == name]['state_change_date'].iloc[0]
-                except IndexError:
-                    # If data for this test doesn't exist in last_day_data, use default values
-                    last_day_days_in_state = current_days_in_state
-                current_days_in_state = last_day_days_in_state
-            
-            for index, row in group.iterrows():
-                previous_state_list.append(prev_state)
-                if row['state'] != prev_state:
-                    prev_state = row['state']
-                    prev_date = row['date_window']
-                    current_days_in_state = 1
-                
-                state_change_date_list.append(prev_date)
-                days_in_state_list.append(current_days_in_state)
-                current_days_in_state += 1
+            # Apply results to the DataFrame
+            for i, (name, group) in enumerate(df.groupby('full_name')):
+                df.loc[group.index, 'previous_state'] = results[i]['previous_state']
+                df.loc[group.index, 'state_change_date'] = results[i]['state_change_date']
+                df.loc[group.index, 'days_in_state'] = results[i]['days_in_state']
 
-
-        df['previous_state'] = previous_state_list
-        df['state_change_date'] = state_change_date_list
-        df['days_in_state'] = days_in_state_list
         df['state_change_date'] = df['state_change_date'].dt.date
         df['date_window'] = df['date_window'].dt.date
-        #df['streak_flag'] = df.apply(calculate_streak_flag, axis=1)
-        #df['streak_id'] = df.groupby('full_name')['streak_flag'].cumsum()
+        df['days_in_state'] = df['days_in_state'].astype(int)
+
         end_time = time.time()
         print(f'Computed days_in_state, state_change_date, perv_state params: {end_time - start_time}')
         start_time = time.time()

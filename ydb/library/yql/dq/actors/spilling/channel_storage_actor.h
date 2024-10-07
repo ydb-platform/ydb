@@ -1,3 +1,5 @@
+#pragma once
+
 #include "spilling_counters.h"
 
 #include <ydb/library/yql/dq/runtime/dq_channel_storage.h>

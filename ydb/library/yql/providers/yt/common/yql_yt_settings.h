@@ -282,6 +282,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui16, false> MinColumnGroupSize;
     NCommon::TConfSetting<ui16, false> MaxColumnGroups;
     NCommon::TConfSetting<ui64, false> ExtendedStatsMaxChunkCount;
+    NCommon::TConfSetting<bool, false> _EnableYtDqProcessWriteConstraints;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

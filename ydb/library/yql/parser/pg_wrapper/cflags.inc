@@ -36,6 +36,7 @@ CFLAGS(
 ENDIF()
 
 CFLAGS(
+    -Dmonths=yql_months
     -Darray_length=yql_array_length
     -Dpg_encoding_max_length=yql_pg_encoding_max_length
     -Dpg_encoding_mblen=yql_pg_encoding_mblen
@@ -132,10 +133,4 @@ CFLAGS(
     -Dpg_prng_seed_check=yql_pg_prng_seed_check
     -Dpg_prng_seed=yql_pg_prng_seed
     -Dpg_prng_double_normal=yql_pg_prng_double_normal
-    -Djson_errdetail=yql_json_errdetail
-    -Dpg_popcount32=yql_pg_popcount32
-    -Dpg_popcount64=yql_pg_popcount64
-    -Dpg_number_of_ones=yql_pg_number_of_ones
-    -Dpg_leftmost_one_pos=yql_pg_leftmost_one_pos
-    -Dpg_rightmost_one_pos=yql_pg_rightmost_one_pos
 )

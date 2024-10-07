@@ -525,6 +525,11 @@ message TNodeGroup {
 
 message TNodeInfo {
     uint32 NodeId = 1;
+    string Database = 2;
+    int32 UptimeSeconds = 3; // negative for disconnect time
+    bool Disconnected = 4;
+    float CpuUsage = 5;
+    float DiskSpaceUsage = 6;
     NKikimrWhiteboard.TSystemStateInfo SystemState = 10;
     repeated NKikimrWhiteboard.TPDiskStateInfo PDisks = 20;
     repeated NKikimrWhiteboard.TVDiskStateInfo VDisks = 30;

@@ -7,6 +7,7 @@ from .workspace import PnpmWorkspace
 from ..base import BasePackageManager, PackageManagerError
 from ..base.constants import NODE_MODULES_WORKSPACE_BUNDLE_FILENAME
 from ..base.node_modules_bundler import bundle_node_modules
+from ..base.timeit import timeit
 from ..base.utils import b_rooted, build_nm_bundle_path, build_pj_path, home_dir, s_rooted
 
 
@@ -37,6 +38,7 @@ class PnpmPackageManager(BasePackageManager):
     def get_local_pnpm_store():
         return os.path.join(home_dir(), ".cache", "pnpm-store")
 
+    @timeit
     def create_node_modules(self, yatool_prebuilder_path=None, local_cli=False, bundle=True):
         """
         Creates node_modules directory according to the lockfile.
@@ -56,6 +58,20 @@ class PnpmPackageManager(BasePackageManager):
             # It's a default value of pnpm itself. But it should be defined explicitly for not using values from the lockfiles or from the previous installations.
             virtual_store_dir = self._nm_path('.pnpm')
 
+        self._run_pnpm_install(store_dir, virtual_store_dir)
+        self._run_apply_addons_if_need(yatool_prebuilder_path, virtual_store_dir)
+        self._replace_internal_lockfile_with_original(virtual_store_dir)
+
+        if not local_cli and bundle:
+            bundle_node_modules(
+                build_root=self.build_root,
+                node_modules_path=self._nm_path(),
+                peers=ws.get_paths(base_path=self.module_path, ignore_self=True),
+                bundle_path=os.path.join(self.build_path, NODE_MODULES_WORKSPACE_BUNDLE_FILENAME),
+            )
+
+    @timeit
+    def _run_pnpm_install(self, store_dir: str, virtual_store_dir: str):
         install_cmd = [
             "install",
             "--frozen-lockfile",
@@ -75,17 +91,6 @@ class PnpmPackageManager(BasePackageManager):
         ]
 
         self._exec_command(install_cmd)
-
-        self._run_apply_addons_if_need(yatool_prebuilder_path, virtual_store_dir)
-        self._replace_internal_lockfile_with_original(virtual_store_dir)
-
-        if not local_cli and bundle:
-            bundle_node_modules(
-                build_root=self.build_root,
-                node_modules_path=self._nm_path(),
-                peers=ws.get_paths(base_path=self.module_path, ignore_self=True),
-                bundle_path=os.path.join(self.build_path, NODE_MODULES_WORKSPACE_BUNDLE_FILENAME),
-            )
 
     def calc_prepare_deps_inouts_and_resources(
         self, store_path: str, has_deps: bool
@@ -180,6 +185,7 @@ class PnpmPackageManager(BasePackageManager):
         if errors:
             raise PackageManagerError("Unable to process some lockfiles:\n{}".format("\n".join(errors)))
 
+    @timeit
     def _prepare_workspace(self):
         lf = self.load_lockfile(build_pre_lockfile_path(self.build_path))
         lf.update_tarball_resolutions(lambda p: "file:" + os.path.join(self.build_root, p.tarball_url))
@@ -232,6 +238,7 @@ class PnpmPackageManager(BasePackageManager):
 
         ws.write()
 
+    @timeit
     def _run_apply_addons_if_need(self, yatool_prebuilder_path, virtual_store_dir):
         if not yatool_prebuilder_path:
             return
@@ -252,6 +259,7 @@ class PnpmPackageManager(BasePackageManager):
 
         shutil.copyfile(original_lf_path, vs_lf_path)
 
+    @timeit
     def _copy_pnpm_patches(self):
         pj = self.load_package_json_from_dir(self.sources_path)
         patchedDependencies: dict[str, str] = pj.data.get("pnpm", {}).get("patchedDependencies", {})

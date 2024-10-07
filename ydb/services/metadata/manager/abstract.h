@@ -76,6 +76,7 @@ public:
     private:
         YDB_ACCESSOR_DEF(std::optional<NACLib::TUserToken>, UserToken);
         YDB_ACCESSOR_DEF(TString, Database);
+        YDB_ACCESSOR_DEF(TString, DatabaseId);
         using TActorSystemPtr = TActorSystem*;
         YDB_ACCESSOR_DEF(TActorSystemPtr, ActorSystem);
         YDB_ACCESSOR_DEF(NSQLTranslation::TTranslationSettings, TranslationSettings);

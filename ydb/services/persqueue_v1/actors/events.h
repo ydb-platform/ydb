@@ -7,6 +7,7 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/persqueue/key.h>
 #include <ydb/core/persqueue/percentile_counter.h>
+#include <ydb/core/tx/scheme_board/events.h>
 
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>

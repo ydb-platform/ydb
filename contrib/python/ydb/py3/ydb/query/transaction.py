@@ -327,9 +327,7 @@ class QueryTxContext(BaseQueryTxContext):
             self._prev_stream = None
 
     def begin(self, settings: Optional[BaseRequestSettings] = None) -> "QueryTxContext":
-        """WARNING: This API is experimental and could be changed.
-
-        Explicitly begins a transaction
+        """Explicitly begins a transaction
 
         :param settings: An additional request settings BaseRequestSettings;
 
@@ -340,9 +338,7 @@ class QueryTxContext(BaseQueryTxContext):
         return self
 
     def commit(self, settings: Optional[BaseRequestSettings] = None) -> None:
-        """WARNING: This API is experimental and could be changed.
-
-        Calls commit on a transaction if it is open otherwise is no-op. If transaction execution
+        """Calls commit on a transaction if it is open otherwise is no-op. If transaction execution
         failed then this method raises PreconditionFailed.
 
         :param settings: An additional request settings BaseRequestSettings;
@@ -361,9 +357,7 @@ class QueryTxContext(BaseQueryTxContext):
         self._commit_call(settings)
 
     def rollback(self, settings: Optional[BaseRequestSettings] = None) -> None:
-        """WARNING: This API is experimental and could be changed.
-
-        Calls rollback on a transaction if it is open otherwise is no-op. If transaction execution
+        """Calls rollback on a transaction if it is open otherwise is no-op. If transaction execution
         failed then this method raises PreconditionFailed.
 
         :param settings: An additional request settings BaseRequestSettings;
@@ -391,9 +385,7 @@ class QueryTxContext(BaseQueryTxContext):
         concurrent_result_sets: Optional[bool] = False,
         settings: Optional[BaseRequestSettings] = None,
     ) -> base.SyncResponseContextIterator:
-        """WARNING: This API is experimental and could be changed.
-
-        Sends a query to Query Service
+        """Sends a query to Query Service
 
         :param query: (YQL or SQL text) to be executed.
         :param parameters: dict with parameters and YDB types;

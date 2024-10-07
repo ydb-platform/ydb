@@ -65,8 +65,10 @@ void TChangeSender::CreateSendersImpl(const TVector<ui64>& partitionIds) {
     if (partitionIds) {
         CreateMissingSenders(partitionIds);
     } else {
-        RecreateSenders(std::exchange(GonePartitions, {}));
+        RecreateSenders(GonePartitions);
     }
+
+    GonePartitions.clear();
 
     if (!Enqueued || !RequestRecords()) {
         SendRecords();

@@ -104,6 +104,8 @@ void TFileLogWriterConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("enable_compression", &TThis::EnableCompression)
         .Default(false);
+    registrar.Parameter("enable_no_reuse", &TThis::EnableNoReuse)
+        .Default(false);
     registrar.Parameter("compression_method", &TThis::CompressionMethod)
         .Default(ECompressionMethod::Gzip);
     registrar.Parameter("compression_level", &TThis::CompressionLevel)

@@ -24,13 +24,16 @@
 #include <ydb/core/jaeger_tracing/request_discriminator.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
-#include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/util/ulid.h>
 
 #include <ydb/library/actors/wilson/wilson_span.h>
 
 #include <util/stream/str.h>
+
+namespace NKikimrScheme {
+    class TEvDescribeSchemeResult;
+}
 
 namespace NKikimr {
 
@@ -356,7 +359,7 @@ public:
 
 struct TRequestAuxSettings {
     TRateLimiterMode RlMode = TRateLimiterMode::Off;
-    void (*CustomAttributeProcessor)(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, ICheckerIface*) = nullptr;
+    void (*CustomAttributeProcessor)(const NKikimrScheme::TEvDescribeSchemeResult& schemeData, ICheckerIface*) = nullptr;
     TAuditMode AuditMode = TAuditMode::Off;
     NJaegerTracing::ERequestType RequestType = NJaegerTracing::ERequestType::UNSPECIFIED;
 };
@@ -416,7 +419,7 @@ public:
     virtual void SetRespHook(TRespHook&& hook) = 0;
     virtual void SetRlPath(TMaybe<NRpcService::TRlPath>&& path) = 0;
     virtual TRateLimiterMode GetRlMode() const = 0;
-    virtual bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
+    virtual bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult& schemeData,
         ICheckerIface* iface) = 0;
 
     // Pass request for next processing
@@ -665,7 +668,7 @@ public:
         return TRateLimiterMode::Off;
     }
 
-    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface*) override {
+    bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult&, ICheckerIface*) override {
         return false;
     }
 
@@ -763,7 +766,7 @@ public:
         return RlAllowed_ ? RateLimitMode : TRateLimiterMode::Off;
     }
 
-    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface*) override {
+    bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult&, ICheckerIface*) override {
         return false;
     }
 
@@ -1447,7 +1450,7 @@ public:
         return AuxSettings.RlMode;
     }
 
-    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
+    bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult& schemeData,
         ICheckerIface* iface) override
     {
         if (!AuxSettings.CustomAttributeProcessor) {
@@ -1500,7 +1503,7 @@ public:
         return RateLimitMode;
     }
 
-    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface*) override {
+    bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult&, ICheckerIface*) override {
         return false;
     }
 };
@@ -1524,7 +1527,7 @@ public:
         return RateLimitMode;
     }
 
-    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface*) override {
+    bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult&, ICheckerIface*) override {
         return false;
     }
 
@@ -1553,7 +1556,7 @@ public:
         return RlAllowed ? RateLimitMode : TRateLimiterMode::Off;
     }
 
-    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface*) override {
+    bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult&, ICheckerIface*) override {
         return false;
     }
 
@@ -1702,7 +1705,7 @@ public:
         return TRateLimiterMode::Rps;
     }
 
-    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult& /*schemeData*/, ICheckerIface* /*iface*/) override {
+    bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult& /*schemeData*/, ICheckerIface* /*iface*/) override {
         return false;
     }
 

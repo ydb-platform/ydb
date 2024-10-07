@@ -72,6 +72,7 @@ public:
         , RequestType(requestType)
         , KqpTempTablesAgentActor(kqpTempTablesAgentActor)
     {
+        YQL_ENSURE(RequestContext);
         YQL_ENSURE(PhyTx);
         YQL_ENSURE(PhyTx->GetType() == NKqpProto::TKqpPhyTx::TYPE_SCHEME);
 
@@ -403,6 +404,7 @@ public:
 
         NMetadata::NModifications::IOperationsManager::TExternalModificationContext context;
         context.SetDatabase(Database);
+        context.SetDatabaseId(RequestContext->DatabaseId);
         context.SetActorSystem(actorSystem);
         if (UserToken) {
             context.SetUserToken(*UserToken);

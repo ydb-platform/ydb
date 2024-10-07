@@ -23,8 +23,6 @@
  ***************************************************************************/
 #include "tool_setup.h"
 
-#define ENABLE_CURLX_PRINTF
-/* use our own printf() functions */
 #include "curlx.h"
 
 #include "tool_cfgable.h"
@@ -42,6 +40,7 @@
 #include "memdebug.h" /* keep this as LAST include */
 
 #define MAX_EXPAND_CONTENT 10000000
+#define MAX_VAR_LEN 128 /* max length of a name */
 
 static char *Memdup(const char *data, size_t len)
 {
@@ -62,7 +61,6 @@ void varcleanup(struct GlobalConfig *global)
     struct var *t = list;
     list = list->next;
     free((char *)t->content);
-    free((char *)t->name);
     free(t);
   }
 }
@@ -110,7 +108,7 @@ static ParameterError varfunc(struct GlobalConfig *global,
     if(*f == '}')
       /* end of functions */
       break;
-    /* On entry, this is known to be a colon already.  In subsequent laps, it
+    /* On entry, this is known to be a colon already. In subsequent laps, it
        is also known to be a colon since that is part of the FUNCMATCH()
        checks */
     f++;
@@ -233,7 +231,7 @@ ParameterError varexpand(struct GlobalConfig *global,
       line = &envp[2];
     }
     else if(envp) {
-      char name[128];
+      char name[MAX_VAR_LEN];
       size_t nlen;
       size_t i;
       char *funcp;
@@ -342,7 +340,7 @@ ParameterError varexpand(struct GlobalConfig *global,
 }
 
 /*
- * Created in a way that is not revealing how variables is actually stored so
+ * Created in a way that is not revealing how variables are actually stored so
  * that we can improve this if we want better performance when managing many
  * at a later point.
  */
@@ -355,29 +353,24 @@ static ParameterError addvariable(struct GlobalConfig *global,
 {
   struct var *p;
   const struct var *check = varcontent(global, name, nlen);
+  DEBUGASSERT(nlen);
   if(check)
     notef(global, "Overwriting variable '%s'", check->name);
 
-  p = calloc(1, sizeof(struct var));
-  if(!p)
-    return PARAM_NO_MEM;
+  p = calloc(1, sizeof(struct var) + nlen);
+  if(p) {
+    memcpy(p->name, name, nlen);
 
-  p->name = Memdup(name, nlen);
-  if(!p->name)
-    goto err;
+    p->content = contalloc ? content: Memdup(content, clen);
+    if(p->content) {
+      p->clen = clen;
 
-  p->content = contalloc ? content: Memdup(content, clen);
-  if(!p->content)
-    goto err;
-  p->clen = clen;
-
-  p->next = global->variables;
-  global->variables = p;
-  return PARAM_OK;
-err:
-  free((char *)p->content);
-  free((char *)p->name);
-  free(p);
+      p->next = global->variables;
+      global->variables = p;
+      return PARAM_OK;
+    }
+    free(p);
+  }
   return PARAM_NO_MEM;
 }
 
@@ -393,6 +386,7 @@ ParameterError setvariable(struct GlobalConfig *global,
   ParameterError err = PARAM_OK;
   bool import = FALSE;
   char *ge = NULL;
+  char buf[MAX_VAR_LEN];
 
   if(*input == '%') {
     import = TRUE;
@@ -402,12 +396,20 @@ ParameterError setvariable(struct GlobalConfig *global,
   while(*line && (ISALNUM(*line) || (*line == '_')))
     line++;
   nlen = line - name;
-  if(!nlen || (nlen > 128)) {
+  if(!nlen || (nlen >= MAX_VAR_LEN)) {
     warnf(global, "Bad variable name length (%zd), skipping", nlen);
     return PARAM_OK;
   }
   if(import) {
-    ge = curl_getenv(name);
+    /* this does not use curl_getenv() because we want "" support for blank
+       content */
+    if(*line) {
+      /* if there is a default action, we need to copy the name */
+      memcpy(buf, name, nlen);
+      buf[nlen] = 0;
+      name = buf;
+    }
+    ge = getenv(name);
     if(!*line && !ge) {
       /* no assign, no variable, fail */
       errorf(global, "Variable '%s' import fail, not set", name);
@@ -459,6 +461,5 @@ ParameterError setvariable(struct GlobalConfig *global,
     if(contalloc)
       free(content);
   }
-  curl_free(ge);
   return err;
 }

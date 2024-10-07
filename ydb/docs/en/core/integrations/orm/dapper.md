@@ -1,31 +1,31 @@
 # Using Dapper
 
-[Dapper](https://dappertutorial.net/) is a micro ORM (Object Relational Mapping) that provides a simple and flexible way to interact with databases. It works on top of the [ADO.NET](https://learn.microsoft.com/en-us/dotnet/framework/data/adonet/) standard and offers numerous features that simplify database operations.
+[Dapper](https://dappertutorial.net/) is a micro ORM (Object-Relational Mapping) tool that provides a simple and flexible way to interact with databases. It operates on top of the [ADO.NET](https://learn.microsoft.com/en-us/dotnet/framework/data/adonet/) standard and offers various features that simplify database operations.
 
 ## ADO.NET
 
-ADO.NET is a set of classes that provide data access for developers using the .NET Framework platform.
+ADO.NET is a set of classes that provide developers with data access using the [.NET Framework](https://dotnet.microsoft.com/en-us/download/dotnet-framework) platform.
 
-The YDB SDK C# provides a set of classes implementing the ADO.NET standard.
+The [{{ ydb-short-name }} SDK for C#](https://github.com/ydb-platform/ydb-dotnet-sdk) offers a set of classes that implement the ADO.NET standard.
 
 ### Installation
 
-The ADO.NET implementation for YDB is available through NuGet.
+The ADO.NET implementation for {{ ydb-short-name }} is available via NuGet.
 
-### Creating a Connection
+### Creating a connection
 
-A connection to YDB is established using YdbConnection.
+A connection to {{ ydb-short-name }} is established using `YdbConnection`.
 
 1. **Using the parameterless constructor**:
 
-   The following code creates a connection with default settings:
+   The following code creates a connection with the default settings:
 
     ```c#
     await using var ydbConnection = new YdbConnection();
     await ydbConnection.OpenAsync();
     ```
 
-   This option creates a connection to the database at the URL: `grpc://localhost:2136/local`, with anonymous authentication.
+   This option creates a connection to the database at the URL `grpc://localhost:2136/local` with anonymous authentication.
 
 2. **Using the constructor with a connection string**:
 
@@ -37,7 +37,7 @@ A connection to YDB is established using YdbConnection.
    await ydbConnection.OpenAsync();
    ```
 
-   In this case, the connection will be established at the URL: `grpc://database-sample-grpc:2135/root/database-sample`. When using the connection string method, parameters are specified as key=value pairs separated by a semicolon (`key1=value1;key2=value2`). The set of keys has fixed values, which will be discussed in detail in the following sections.
+  In this case, the connection is established at the URL `grpc://database-sample-grpc:2135/root/database-sample`. When using the connection string method, parameters are specified as key-value pairs, separated by semicolons (`key1=value1;key2=value2`). The supported set of keys is explained [below](#connection-parameters).
 
 3. **Using the constructor with a `YdbConnectionStringBuilder` argument**:
 
@@ -55,44 +55,44 @@ A connection to YDB is established using YdbConnection.
     await ydbConnection.OpenAsync();
     ```
 
-### Connection Parameters
+### Connection parameters {#connection-parameters}
 
 All available connection parameters are defined as properties in the `YdbConnectionStringBuilder`.
 
-Here is a list of parameters that can be specified in the ConnectionString:
+Here is a list of parameters that can be specified in the connection string:
 
-| Parameter         | Description                                                                                         | Default Value |
+| Parameter         | Description                                                                                         | Default value |
 |-------------------|-----------------------------------------------------------------------------------------------------|---------------|
-| `Host`            | Specifies the server host                                                                           | `localhost`   |
-| `Port`            | Specifies the server port                                                                           | `2136`        |
-| `Database`        | Specifies database name                                                                             | `/local`      |
+| `Host`            | Specifies the {{ ydb-short-name }} server host                                                                           | `localhost`   |
+| `Port`            | Specifies the {{ ydb-short-name }}  server port                                                                           | `2136`        |
+| `Database`        | Specifies the database name                                                                             | `/local`      |
 | `User`            | Specifies the username                                                                              | Not defined   |
 | `Password`        | Specifies the user password                                                                         | Not defined   |
-| `UseTls`          | Indicates whether to use the TLS protocol (grpc or grpcs)                                           | `false`       |
+| `UseTls`          | Indicates whether to use the TLS protocol (`grpcs` or `grpc`)                                           | `false`       |
 | `MaxSessionPool`  | Specifies the maximum session pool size                                                             | `100`         |
-| `RootCertificate` | Specifies the path to the trusted server certificate. If this parameter is set, UseTls will be true | Not defined   |
+| `RootCertificate` | Specifies the path to the trusted server TLS certificate. If this parameter is set, `UseTls` will be true | Not defined   |
 
-There are also additional parameters that do not participate in forming the ConnectionString. These can only be specified using `YdbConnectionStringBuilder`:
+There are also additional parameters that do not participate in forming the connection string. These can only be specified using `YdbConnectionStringBuilder`:
 
-| Parameter             | Description                                                     | Default Value |
+| Parameter             | Description                                                     | Default value |
 |-----------------------|-----------------------------------------------------------------|---------------|
 | `LoggerFactory`       | This parameter serves as a factory for creating logging classes | Not defined   |
 | `CredentialsProvider` | Authenticates the user using an external IAM provider           | Not defined   |
 
 ### Usage
 
-Executing queries is done through the YdbCommand object:
+The `YdbCommand` object is used to execute queries:
 
 ```c#
 await using var ydbConnection = new YdbConnection();
 await ydbConnection.OpenAsync();
 
 var ydbCommand = ydbConnection.CreateCommand();
-ydbCommand.CommandText = "SELECT 'Hello world!'u";
+ydbCommand.CommandText = "SELECT 'Hello, World!'u";
 Console.WriteLine(await ydbCommand.ExecuteScalarAsync());
 ```
 
-This example demonstrates outputting `Hello World!` to the console.
+This example demonstrates how to run the `Hello, World!` query and output its result to the console.
 
 ### Transactions
 
@@ -100,12 +100,12 @@ To create a client transaction, use the `ydbConnection.BeginTransaction()` metho
 
 Optionally, this method can accept a parameter of type `IsolationLevel`, which specifies the transaction isolation level. The following isolation levels are supported:
 
-- `Serializable`: Provides full transaction isolation using optimistic locks
-- `Unspecified`: Allows the database to determine the most appropriate isolation level
+- `Serializable`: Provides full transaction isolation using optimistic locks.
+- `Unspecified`: Allows the database to determine the most appropriate isolation level.
 
 You can also specify the `TxMode` parameter. For YDB-specific isolation levels, you can learn more [here](../../concepts/transactions.md).
 
-The `Serializable` isolation level used with the `TxMode.SerializableRW` parameter is equivalent to calling `BeginTransaction()` without parameters.
+Using the `Serializable` isolation level with the `TxMode.SerializableRW` parameter is equivalent to calling `BeginTransaction()` without parameters.
 
 Consider the following example of using a transaction:
 
@@ -132,13 +132,13 @@ await ydbCommand.ExecuteNonQueryAsync();
 await ydbCommand.Transaction.CommitAsync();
 ```
 
-Here, a transaction with the `Serializable` isolation level is opened and two inserts into the `episodes` table are executed.
+Here, a transaction with the `Serializable` isolation level is opened, and two inserts into the `episodes` table are executed.
 
-### Using Parameters
+### Using parameters
 
-SQL query parameters can be set using the YdbParameter class:
+SQL query parameters can be set using the `YdbParameter` class.
 
-In this example, we declare the parameters $series_id, $season_id, and $limit_size within the SQL query and then add them to the command using YdbParameter objects.
+In this example, the parameters `$series_id`, `$season_id`, and `$limit_size` are declared within the SQL query and then added to the command using `YdbParameter` objects.
 
 ```c#
 await using var connection = new YdbConnection(_cmdOptions.SimpleConnectionString);
@@ -168,9 +168,9 @@ while (await ydbDataReader.ReadAsync())
 }
 ```
 
-In this example, we declare the parameters `series_id`, `season_id`, and `limit_size` within the SQL query and then add them to the command using `YdbParameter` objects.
+In this example, the parameters `series_id`, `season_id`, and `limit_size` are declared within the SQL query and then added to the command using `YdbParameter` objects.
 
-### Alternative style with @ prefix
+### Alternative style with `@` prefix
 
 Parameters can also be specified using the `@` prefix. In this case, there is no need to declare variables within the query itself. The query will look like this:
 
@@ -186,9 +186,9 @@ ydbCommand.CommandText = """
 
 ADO.NET will prepare the query for you so that the variables conform to the YQL standard. The type will be determined according to the `DbType` or the `System.Type` of the value itself.
 
-### Type Mapping Table for Writing
+### Type mapping table for writing
 
-| {{ ydb-short-name }}       | DbType                                                                                    | .Net types                   |
+| {{ ydb-short-name }} type      | DbType                                                                                    | .NET type                   |
 |----------------------------|-------------------------------------------------------------------------------------------|------------------------------|
 | `Bool`                     | `Boolean`                                                                                 | `bool`                       |
 | `Text` (synonym `Utf8`)    | `String`, `AnsiString`, `AnsiStringFixedLength`, `StringFixedLength`                      | `string`                     |
@@ -216,7 +216,7 @@ You can also specify any {{ ydb-short-name }} type using the constructors from `
 var parameter = new YdbParameter("$parameter", YdbValue.MakeJsonDocument("{\"type\": \"jsondoc\"}")); 
 ```
 
-### Error Handling
+### Error handling
 
 All exceptions related to database operations are subclasses of `YdbException`.
 
@@ -233,17 +233,15 @@ catch (YdbException e)
 }
 ```
 
-### Properties of YdbException
+### Properties of `YdbException`
 
-The `YdbException` exception has the following properties, which can help you handle errors more precisely:
+The `YdbException` exception has the following properties, which can help you handle errors properly:
 
-- `IsTransient`: Returns true if the error is temporary and can be resolved by retrying. For example, such an error might occur in case of a transaction lock violation, where the transaction did not manage to complete its commit.
+- `IsTransient` returns `true` if the error is temporary and can be resolved by retrying. For example, this might occur in cases of a transaction lock violation when the transaction fails to complete its commit.
+- `IsTransientWhenIdempotent` returns `true` if the error is temporary and can be resolved by retrying the operation, provided that the database operation is idempotent.
+- `StatusCode` contains the database error code, which is helpful for logging and detailed analysis of the issue.
 
-- `IsTransientWhenIdempotent`: Returns true if the error is temporary and can be resolved by retrying the operation, provided that the database operation is idempotent.
-
-- `StatusCode`: Contains the database error code, which can be useful for logging and detailed analysis of the problem.
-
-## Integration of YDB and Dapper
+## Integration of {{ ydb-short-name }} and Dapper
 
 To get started, you need an additional dependency [Dapper](https://www.nuget.org/packages/Dapper/).
 
@@ -283,9 +281,9 @@ internal class User
 
 For more information, refer to the official [documentation](https://dappertutorial.net/).
 
-### Important Aspects
+### Important aspects
 
-In order for Dapper to interpret `DateTime` as {{ ydb-short-name }} type `Datetime`, execute the following code:
+For Dapper to interpret `DateTime` values as the {{ ydb-short-name }} type `DateTime`, execute the following code:
 
 ```c#
 SqlMapper.AddTypeMap(typeof(DateTime), DbType.DateTime);

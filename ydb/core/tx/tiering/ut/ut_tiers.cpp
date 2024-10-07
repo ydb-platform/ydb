@@ -863,7 +863,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             .SetEnableMetadataProvider(true)
         ;
         auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
-        csControllerGuard->SetCompactionsLimit(5);
+        csControllerGuard->SetCompactionsLimit(10);
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
         server->EnableGRpc(grpcPort);

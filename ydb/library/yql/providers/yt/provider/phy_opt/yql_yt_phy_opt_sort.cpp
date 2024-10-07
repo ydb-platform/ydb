@@ -462,18 +462,17 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TopSort(TExprBase node,
 }
 
 
-TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
+TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExprBase assume, TExprContext& ctx, const TGetParents& getParents) const {
     if (State_->Types->EvaluationInProgress || State_->PassiveExecution) {
-        return node;
+        return assume;
     }
 
-    auto assume = node.Cast<TCoInputBase>();
-    auto input = assume.Input();
+    auto input = TExprBase(assume.Ref().HeadPtr());
     if (!IsYtProviderInput(input)) {
-        return node;
+        return assume;
     }
 
-    auto sorted = node.Ref().GetConstraint<TSortedConstraintNode>();
+    auto sorted = assume.Ref().GetConstraint<TSortedConstraintNode>();
 
     auto maybeOp = input.Maybe<TYtOutput>().Operation();
     bool needSeparateOp = !maybeOp
@@ -493,12 +492,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
             }
         }
     }
-    if (equalSort && maybeOp.Maybe<TYtSort>() && node.Ref().GetAllConstraints().size() == 1 /* only sort constraint */) {
+    if (equalSort && maybeOp.Maybe<TYtSort>() && assume.Ref().GetAllConstraints().size() == 1 /* only sort constraint */) {
         return input;
     }
 
     const TStructExprType* outItemType = nullptr;
-    if (auto type = GetSequenceItemType(node, false, ctx)) {
+    if (auto type = GetSequenceItemType(assume, false, ctx)) {
         outItemType = type->Cast<TStructExprType>();
     } else {
         return {};

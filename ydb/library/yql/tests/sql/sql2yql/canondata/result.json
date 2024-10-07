@@ -8056,6 +8056,13 @@
             "uri": "https://{canondata_backend}/1936947/659b615f15086142a8960946dabd06b519d43335/resource.tar.gz#test_sql2yql.test_insert-udf_empty_/sql.yql"
         }
     ],
+    "test_sql2yql.test[insert-unique_distinct_hints]": [
+        {
+            "checksum": "612cefd5a5f6d7b10a69e5b7c690c61a",
+            "size": 8697,
+            "uri": "https://{canondata_backend}/1946324/0baf96cbe0e264fceeba707a8c23c220f2a8ab83/resource.tar.gz#test_sql2yql.test_insert-unique_distinct_hints_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[insert-use_anon_table_before_commit_fail]": [
         {
             "checksum": "ada894f798fdb1f818c11c1ed47c1d49",
@@ -17273,13 +17280,6 @@
             "checksum": "d06864be2c76d8908e262b1904920fdd",
             "size": 2120,
             "uri": "https://{canondata_backend}/1784117/d56ae82ad9d30397a41490647be1bd2124718f98/resource.tar.gz#test_sql2yql.test_select-uncorrelated_subqueries_/sql.yql"
-        }
-    ],
-    "test_sql2yql.test[select-unique_distinct_hints]": [
-        {
-            "checksum": "aaa817ff120630473a7befec2403d524",
-            "size": 7422,
-            "uri": "https://{canondata_backend}/1784826/25887a16fb0d5f4a40e0b2d518af48a8cdd1b847/resource.tar.gz#test_sql2yql.test_select-unique_distinct_hints_/sql.yql"
         }
     ],
     "test_sql2yql.test[select-unlabeled]": [
@@ -27754,6 +27754,13 @@
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_insert-udf_empty_/formatted.sql"
         }
     ],
+    "test_sql_format.test[insert-unique_distinct_hints]": [
+        {
+            "checksum": "5f5639f05f0f316521f467781fb10a41",
+            "size": 909,
+            "uri": "https://{canondata_backend}/1946324/0baf96cbe0e264fceeba707a8c23c220f2a8ab83/resource.tar.gz#test_sql_format.test_insert-unique_distinct_hints_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[insert-use_anon_table_before_commit_fail]": [
         {
             "checksum": "ef426f4b2f994739441cf52f5a299272",
@@ -33821,13 +33828,6 @@
             "checksum": "5a13cbd27f1516c61d3102ce88f6d797",
             "size": 313,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_select-uncorrelated_subqueries_/formatted.sql"
-        }
-    ],
-    "test_sql_format.test[select-unique_distinct_hints]": [
-        {
-            "checksum": "52d907d09a103af795823438653c4b5b",
-            "size": 774,
-            "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_select-unique_distinct_hints_/formatted.sql"
         }
     ],
     "test_sql_format.test[select-unlabeled]": [

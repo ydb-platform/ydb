@@ -11,3 +11,5 @@ INSERT INTO Output6 WITH TRUNCATE SELECT /*+ distinct(key) distinct(subkey) */ *
 
 -- Bad case: missed column - ignore hint with warning.
 INSERT INTO Output7 WITH TRUNCATE SELECT /*+ unique(subkey value) */ key, value FROM Input;
+
+INSERT INTO Output8 WITH TRUNCATE SELECT /*+ distinct(key subkey) */ key, subkey FROM Input ORDER BY key, subkey;

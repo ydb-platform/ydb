@@ -263,11 +263,17 @@ IExecutorPool *TTestActorSystem::CreateTestExecutorPool(ui32 nodeId) {
 thread_local TTestActorSystem *TTestActorSystem::CurrentTestActorSystem = nullptr;
 
 TIntrusivePtr<ITimeProvider> TTestActorSystem::CreateTimeProvider() {
+    auto& clock = CurrentTestActorSystem->Clock;
     class TTestActorTimeProvider : public ITimeProvider {
     public:
-        TInstant Now() override { return CurrentTestActorSystem->Clock; }
+        TTestActorTimeProvider(TInstant& clock)
+            : Clock(clock)
+        {}
+        TInstant Now() override { return Clock; }
+    private:
+        TInstant& Clock;
     };
-    return MakeIntrusive<TTestActorTimeProvider>();
+    return MakeIntrusive<TTestActorTimeProvider>(clock);
 }
 
 TIntrusivePtr<IMonotonicTimeProvider> TTestActorSystem::CreateMonotonicTimeProvider() {

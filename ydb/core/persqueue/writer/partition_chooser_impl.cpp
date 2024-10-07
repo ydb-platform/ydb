@@ -47,19 +47,38 @@ std::shared_ptr<IPartitionChooser> CreatePartitionChooser(const NKikimrSchemeOp:
     }
 }
 
+template<typename TPipeHelper>
 IActor* CreatePartitionChooserActor(TActorId parentId,
                                     const NKikimrSchemeOp::TPersQueueGroupDescription& config,
+                                    const std::shared_ptr<NPQ::IPartitionChooser>& chooser,
+                                    const std::shared_ptr<NPQ::TPartitionGraph>& graph,
                                     NPersQueue::TTopicConverterPtr& fullConverter,
                                     const TString& sourceId,
-                                    std::optional<ui32> preferedPartition,
-                                    bool withoutHash) {
-    auto chooser = CreatePartitionChooser(config, withoutHash);
+                                    std::optional<ui32> preferedPartition) {
     if (SplitMergeEnabled(config.GetPQTabletConfig())) {
-        return new NPartitionChooser::TSMPartitionChooserActor<NTabletPipe::TPipeHelper>(parentId, config, chooser, fullConverter, sourceId, preferedPartition);
+        return new NPartitionChooser::TSMPartitionChooserActor<TPipeHelper>(parentId, chooser, graph, fullConverter, sourceId, preferedPartition);
     } else {
-        return new NPartitionChooser::TPartitionChooserActor<NTabletPipe::TPipeHelper>(parentId, config, chooser, fullConverter, sourceId, preferedPartition);
+        return new NPartitionChooser::TPartitionChooserActor<TPipeHelper>(parentId, config, chooser, fullConverter, sourceId, preferedPartition);
     }
 }
+
+template
+IActor* CreatePartitionChooserActor<NTabletPipe::TPipeHelper>(TActorId parentId,
+                                    const NKikimrSchemeOp::TPersQueueGroupDescription& config,
+                                    const std::shared_ptr<NPQ::IPartitionChooser>& chooser,
+                                    const std::shared_ptr<NPQ::TPartitionGraph>& graph,
+                                    NPersQueue::TTopicConverterPtr& fullConverter,
+                                    const TString& sourceId,
+                                    std::optional<ui32> preferedPartition);
+
+template
+IActor* CreatePartitionChooserActor<NTabletPipe::NTest::TPipeMock>(TActorId parentId,
+                                    const NKikimrSchemeOp::TPersQueueGroupDescription& config,
+                                    const std::shared_ptr<NPQ::IPartitionChooser>& chooser,
+                                    const std::shared_ptr<NPQ::TPartitionGraph>& graph,
+                                    NPersQueue::TTopicConverterPtr& fullConverter,
+                                    const TString& sourceId,
+                                    std::optional<ui32> preferedPartition);
 
 } // namespace NKikimr::NPQ
 

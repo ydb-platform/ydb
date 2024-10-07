@@ -28,7 +28,7 @@ public:
 
     TPartitionChooserActor(TActorId parentId,
                            const NKikimrSchemeOp::TPersQueueGroupDescription& config,
-                           std::shared_ptr<IPartitionChooser>& chooser,
+                           const std::shared_ptr<IPartitionChooser>& chooser,
                            NPersQueue::TTopicConverterPtr& fullConverter,
                            const TString& sourceId,
                            std::optional<ui32> preferedPartition)

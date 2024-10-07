@@ -81,7 +81,7 @@ There are also additional parameters that do not participate in forming the conn
 
 ### Usage
 
-Executing queries is done through the YdbCommand object:
+The `YdbCommand` object is used to execute queries:
 
 ```c#
 await using var ydbConnection = new YdbConnection();

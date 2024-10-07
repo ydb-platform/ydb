@@ -18,6 +18,7 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/utils/utf8.h>
 
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
@@ -57,6 +58,11 @@ TString GetNameByReadType(EPlanTableReadType readType) {
         case EPlanTableReadType::MultiLookup:
             return "TableMultiLookup";
     }
+}
+
+/* remove chars, that break json plan */
+std::string RemoveForbiddenChars(std::string s) {
+    return NYql::IsUtf8(s)? s: "Non-UTF8 string";
 }
 
 struct TTableRead {
@@ -668,14 +674,14 @@ private:
                             readInfo.ScanBy.push_back(rangeDescr);
                         } else {
                             rangeDescr << keyPartRange.ColumnName
-                                       << " (" << keyPartRange.From << ")";
+                                       << " (" << RemoveForbiddenChars(keyPartRange.From) << ")";
                             readInfo.LookupBy.push_back(rangeDescr);
                         }
                     } else {
                         rangeDescr << keyPartRange.ColumnName << " "
                                    << (keyPartRange.From.Empty() ? "(" : leftParen)
-                                   << (keyPartRange.From.Empty() ? "-∞" : keyPartRange.From) << ", "
-                                   << (keyPartRange.To.Empty() ? "+∞" : keyPartRange.To)
+                                   << (keyPartRange.From.Empty() ? "-∞" : RemoveForbiddenChars(keyPartRange.From)) << ", "
+                                   << (keyPartRange.To.Empty() ? "+∞" : RemoveForbiddenChars(keyPartRange.To))
                                    << (keyPartRange.To.Empty() ? ")" : rightParen);
                         readInfo.ScanBy.push_back(rangeDescr);
                         hasRangeScans = true;
@@ -749,8 +755,8 @@ private:
                             TStringBuilder rangeDesc;
                             rangeDesc << keyColumns[colId] << " "
                                 << (from[keyColumns.size()].GetDataText() == "1" ? "[" : "(")
-                                << (from[colId].HaveValue() ? from[colId].GetSimpleValueText() : "-∞") << ", "
-                                << (to[colId].HaveValue() ? to[colId].GetSimpleValueText() : "+∞")
+                                << (from[colId].HaveValue() ? RemoveForbiddenChars(from[colId].GetSimpleValueText()) : "-∞") << ", "
+                                << (to[colId].HaveValue() ? RemoveForbiddenChars(to[colId].GetSimpleValueText()) : "+∞")
                                 << (to[keyColumns.size()].GetDataText() == "1" ? "]" : ")");
 
                             readInfo.ScanBy.push_back(rangeDesc);
@@ -1687,8 +1693,8 @@ private:
                         TStringBuilder rangeDesc;
                         rangeDesc << keyColumns[colId] << " "
                             << (from[keyColumns.size()].GetDataText() == "1" ? "[" : "(")
-                            << (from[colId].HaveValue() ? from[colId].GetSimpleValueText() : "-∞") << ", "
-                            << (to[colId].HaveValue() ? to[colId].GetSimpleValueText() : "+∞")
+                            << (from[colId].HaveValue() ? RemoveForbiddenChars(from[colId].GetSimpleValueText()) : "-∞") << ", "
+                            << (to[colId].HaveValue() ? RemoveForbiddenChars(to[colId].GetSimpleValueText()) : "+∞")
                             << (to[keyColumns.size()].GetDataText() == "1" ? "]" : ")");
 
                         readInfo.ScanBy.push_back(rangeDesc);
@@ -1810,14 +1816,14 @@ private:
                         readInfo.ScanBy.push_back(rangeDescr);
                     } else {
                         rangeDescr << keyPartRange.ColumnName
-                                   << " (" << keyPartRange.From << ")";
+                                   << " (" << RemoveForbiddenChars(keyPartRange.From) << ")";
                         readInfo.LookupBy.push_back(rangeDescr);
                     }
                 } else {
                     rangeDescr << keyPartRange.ColumnName << " "
                                << (keyPartRange.From.Empty() ? "(" : leftParen)
-                               << (keyPartRange.From.Empty() ? "-∞" : keyPartRange.From) << ", "
-                               << (keyPartRange.To.Empty() ? "+∞" : keyPartRange.To)
+                               << (keyPartRange.From.Empty() ? "-∞" : RemoveForbiddenChars(keyPartRange.From)) << ", "
+                               << (keyPartRange.To.Empty() ? "+∞" : RemoveForbiddenChars(keyPartRange.To))
                                << (keyPartRange.To.Empty() ? ")" : rightParen);
                     readInfo.ScanBy.push_back(rangeDescr);
                     hasRangeScans = true;

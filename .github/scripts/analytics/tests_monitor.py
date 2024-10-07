@@ -108,7 +108,7 @@ def main():
     build_type = args.build_type
     branch = args.branch
 
-    print(f'Getting aggregated history in window {history_for_n_day} days')
+
 
     if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
         print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
@@ -129,9 +129,80 @@ def main():
         # settings, paths, consts
         tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=False)
         table_client = ydb.TableClient(driver, tc_settings)
-
+        base_date = datetime.datetime(1970, 1, 1)
         table_path = f'test_results/analytics/tests_monitor'
 
+        # Get last existing day
+        query_last_exist_day = f"""
+            SELECT MAX(date_window) AS last_exist_day
+            FROM `{table_path}`
+            WHERE build_type = '{build_type}'
+            AND branch = '{branch}'
+        """
+        query = ydb.ScanQuery(query_last_exist_day, {})
+        it = driver.table_client.scan_query(query)
+        last_exist_day = None
+        while True:
+            try:
+                result = next(it)
+                last_exist_day = result.result_set.rows[0]['last_exist_day']
+                break
+            except StopIteration:
+                break
+        
+        # If no data exists, set last_exist_day to a default start date
+        if last_exist_day is None:
+            last_exist_day = datetime.date(2024, 8, 1)
+        last_exist_day_str = (base_date + datetime.timedelta(last_exist_day)).date()
+        # Get data from tests_monitor for last existing day
+        query_last_exist_data = f"""
+            SELECT *
+            FROM `{table_path}`
+            WHERE build_type = '{build_type}'
+            AND branch = '{branch}'
+            AND date_window = Date('{last_exist_day_str}')
+        """
+        query = ydb.ScanQuery(query_last_exist_data, {})
+        it = driver.table_client.scan_query(query)
+        last_exist_data = []
+       
+        while True:
+            try:
+                result = next(it)
+                # Convert each row to a dictionary with consistent keys
+                for row in result.result_set.rows:
+                    row_dict = {
+                        'test_name': row['test_name'],
+                        'suite_folder': row['suite_folder'],
+                        'full_name': row['full_name'],
+                        'date_window': base_date + datetime.timedelta(days=row['date_window']),
+                        'build_type': row['build_type'],
+                        'branch': row['branch'],
+                        'days_ago_window': row['days_ago_window'],
+                        'history': row['history'],
+                        'history_class': row['history_class'],
+                        'pass_count': row['pass_count'],
+                        'mute_count': row['mute_count'],
+                        'fail_count': row['fail_count'],
+                        'skip_count': row['skip_count'],
+                        'success_rate': row['success_rate'],
+                        'summary': row['summary'],
+                        'owners': row['owner'],
+                        'is_muted': row['is_muted'],
+                        'is_test_chunk': row['is_test_chunk'],
+                        'state': row['state'],
+                        'previous_state': row['previous_state'],
+                        'state_change_date': base_date + datetime.timedelta(days=row['state_change_date']),
+                        'days_in_state': row['days_in_state'],
+                    }
+                    last_exist_data.append(row_dict)
+            except StopIteration:
+                break
+
+        # Create a DataFrame from the last existing data
+        last_exist_df = pd.DataFrame(last_exist_data)
+
+        # Get data from flaky_tests_window table for dates after last existing day
         data = {
             'test_name': [],
             'suite_folder': [],
@@ -149,17 +220,17 @@ def main():
             'skip_count': [],
             'is_muted': [],
         }
-        base_date = datetime.datetime(1970, 1, 1)
-
+        
         today = datetime.date.today()
-        default_start_date = datetime.date(2024, 8, 1)
-        date_list = [today - datetime.timedelta(days=x) for x in range((today - default_start_date).days + 1)]
+        date_list = [today - datetime.timedelta(days=x) for x in range((today - last_exist_day_str).days)]
+        print(f'Getting aggregated history in window {history_for_n_day} days')
         for date in sorted(date_list):
+            # Query for data from flaky_tests_window with date_window >= last_existing_day
             query_get_history = f"""
-                SELECT
+                SELECT 
                     hist.branch AS branch,
                     hist.build_type AS build_type,
-                    hist.date_window AS date_window, 
+                    hist.date_window AS date_window,
                     hist.days_ago_window AS days_ago_window,
                     hist.fail_count AS fail_count,
                     hist.full_name AS full_name,
@@ -173,18 +244,13 @@ def main():
                     hist.skip_count AS skip_count,
                     hist.suite_folder AS suite_folder,
                     hist.test_name AS test_name
-                
                 FROM (
                     SELECT * FROM
                     `test_results/analytics/flaky_tests_window_{history_for_n_day}_days` 
                     WHERE 
                     date_window = Date('{date}')
-                    AND build_type = '{build_type}'
-                    AND branch = '{branch}'
-                    --and full_name in (
-                    --'ydb/tests/functional/compatibility/test_compatibility.py.TestCompatibility.test_simple')
-                    
-                    
+                    AND build_type = '{build_type}' 
+                    AND branch = '{branch}'    
                 ) AS hist 
                 LEFT JOIN (
                     SELECT 
@@ -216,9 +282,7 @@ def main():
                     hist.test_name = fallback_t.test_name
                     AND hist.suite_folder = fallback_t.suite_folder
                 WHERE
-                    owners_t.test_name IS NOT NULL OR fallback_t.test_name IS NOT NULL
-            
-        
+                    owners_t.test_name IS NOT NULL OR fallback_t.test_name IS NOT NULL;
             """
             query = ydb.ScanQuery(query_get_history, {})
             # start transaction time
@@ -237,38 +301,49 @@ def main():
             end_time = time.time()
             print(f'transaction for {date} duration: {end_time - start_time}')
             start_time = time.time()
-            for row in results:
-                data['test_name'].append(row['test_name'])
-                data['suite_folder'].append(row['suite_folder'])
-                data['full_name'].append(row['full_name'])
-                data['date_window'].append(base_date + datetime.timedelta(days=row['date_window']))
-                data['build_type'].append(row['build_type'])
-                data['branch'].append(row['branch'])
-                data['owners'].append(row['owners'])
-                data['days_ago_window'].append(row['days_ago_window'])
-                data['history'].append(
-                    row['history'].decode('utf-8') if isinstance(row['history'], bytes) else row['history']
-                )
-                data['history_class'].append(
-                    row['history_class'].decode('utf-8')
-                    if isinstance(row['history_class'], bytes)
-                    else row['history_class']
-                )
-                data['pass_count'].append(row['pass_count'])
-                data['mute_count'].append(row['mute_count'])
-                data['fail_count'].append(row['fail_count'])
-                data['skip_count'].append(row['skip_count'])
-                data['is_muted'].append(row['is_muted'])
 
-        end_time = time.time()
-        print(f'Dataframe inited: {end_time - start_time}')
+            # Check if new data was found
+            if results:
+                for row in results:
+                    data['test_name'].append(row['test_name'])
+                    data['suite_folder'].append(row['suite_folder'])
+                    data['full_name'].append(row['full_name'])
+                    data['date_window'].append(base_date + datetime.timedelta(days=row['date_window']))
+                    data['build_type'].append(row['build_type'])
+                    data['branch'].append(row['branch'])
+                    data['owners'].append(row['owners'])
+                    data['days_ago_window'].append(row['days_ago_window'])
+                    data['history'].append(
+                        row['history'].decode('utf-8') if isinstance(row['history'], bytes) else row['history']
+                    )
+                    data['history_class'].append(
+                        row['history_class'].decode('utf-8')
+                        if isinstance(row['history_class'], bytes)
+                        else row['history_class']
+                    )
+                    data['pass_count'].append(row['pass_count'])
+                    data['mute_count'].append(row['mute_count'])
+                    data['fail_count'].append(row['fail_count'])
+                    data['skip_count'].append(row['skip_count'])
+                    data['is_muted'].append(row['is_muted'])
+                
+            else:
+                print(f"Warning: No data found in flaky_tests_window for date {date} build_type='{build_type}', branch='{branch}'")
+
+
+
         start_time = time.time()
         df = pd.DataFrame(data)
-
+        # **Concatenate DataFrames**
+        df = pd.concat([last_exist_df, df], ignore_index=True)
+        end_time = time.time()
+        print(f'Dataframe inited: {end_time - start_time}')
+        tart_time = time.time()
+        
         df = df.sort_values(by=['full_name', 'date_window'])
         
         end_time = time.time()
-        print(f'Dataframe sorting: {end_time - start_time}')
+        print(f'Dataframe sorted: {end_time - start_time}')
         start_time = time.time()
 
         def determine_state(row):
@@ -341,29 +416,53 @@ def main():
         df['success_rate'].astype(int)
         df['state'] = df.apply(determine_state, axis=1)
 
+        end_time = time.time()
+        print(f'Computed base params: {end_time - start_time}')
+        start_time = time.time()
+        
         # Determ state for prev date and saving change state date
         previous_state_list = []
         state_change_date_list = []
+        days_in_state_list = []
 
+        # Use 'days_in_state' from 'tests_monitor' for the last existing day
+        last_day_data = last_exist_df[['full_name', 'days_in_state','state','state_change_date']]
+        
         for name, group in df.groupby('full_name'):
-            prev_status = 'no_runs'
+            prev_state = 'no_runs'
             prev_date = datetime.datetime.strptime('01/08/2024', "%d/%m/%Y")
+            # Get 'days_in_state' for the last existing day for the current test
+            try:
+                last_day_days_in_state = last_day_data[last_day_data['full_name'] == name]['days_in_state'].iloc[0]
+                prev_state = last_day_data[last_day_data['full_name'] == name]['state'].iloc[0]
+                prev_date = last_day_data[last_day_data['full_name'] == name]['state_change_date'].iloc[0]
+            except IndexError:
+                # If data for this test doesn't exist in last_day_data, use default values
+                last_day_days_in_state = 0
+            current_days_in_state = last_day_days_in_state
+            
             for index, row in group.iterrows():
-                previous_state_list.append(prev_status)
-                if row['state'] != prev_status:
-
-                    prev_status = row['state']
+                previous_state_list.append(prev_state)
+                if row['state'] != prev_state:
+                    prev_state = row['state']
                     prev_date = row['date_window']
-
+                    current_days_in_state = 1
+                
                 state_change_date_list.append(prev_date)
+                days_in_state_list.append(current_days_in_state)
+                current_days_in_state += 1
+
 
         df['previous_state'] = previous_state_list
         df['state_change_date'] = state_change_date_list
+        df['days_in_state'] = days_in_state_list
         df['state_change_date'] = df['state_change_date'].dt.date
         df['date_window'] = df['date_window'].dt.date
-        df['streak_flag'] = df.apply(calculate_streak_flag, axis=1)
-        df['streak_id'] = df.groupby('full_name')['streak_flag'].cumsum()
-        df['days_in_state'] = df.groupby(['full_name', 'streak_id']).cumcount() + 1
+        #df['streak_flag'] = df.apply(calculate_streak_flag, axis=1)
+        #df['streak_id'] = df.groupby('full_name')['streak_flag'].cumsum()
+        end_time = time.time()
+        print(f'Computed days_in_state, state_change_date, perv_state params: {end_time - start_time}')
+        start_time = time.time()
 
         result = df[
             [
@@ -393,19 +492,19 @@ def main():
         ]
 
         end_time = time.time()
-        print(f'Dataframe data processing {end_time - start_time}')
+        print(f'Dataframe prepared {end_time - start_time}')
         print(f'Data collected, {len(result)} rows')
         start_time = time.time()
         prepared_for_update_rows = result.to_dict('records')
         end_time = time.time()
-        print(f'Data converting to dict for upsert: {end_time - start_time}')
+        print(f'Data converted to dict for upsert: {end_time - start_time}')
 
         start_upsert_time = time.time()
 
         with ydb.SessionPool(driver) as pool:
 
-            create_tables(pool, table_path)
-            full_path = posixpath.join(DATABASE_PATH, table_path)
+            create_tables(pool, table_path )
+            full_path = posixpath.join(DATABASE_PATH, table_path )
 
             def chunk_data(data, chunk_size):
                 for i in range(0, len(data), chunk_size):

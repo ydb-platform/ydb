@@ -2293,6 +2293,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             );)", tableName.c_str(), precision, scale);
             auto createResult = session.ExecuteSchemeQuery(createQuery).GetValueSync();
 
+            if (precision == 0) {
+                UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::GENERIC_ERROR, createResult.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToString(), "Invalid decimal precision");
+                return;
+            }
+            if (precision == 33) {
+                UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::GENERIC_ERROR, createResult.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToString(), "Invalid decimal parameters");
+                return;
+            }
             if (precision == 36) {
                 UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::GENERIC_ERROR, createResult.GetIssues().ToString());
                 UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToString(), "Invalid decimal precision");
@@ -2323,10 +2333,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(decimalType.Scale, scale);
         };
 
+        createAndCheck(0, 0);
+        createAndCheck(1, 0);
         createAndCheck(2, 1);
         createAndCheck(22, 9);
-        createAndCheck(35, 9);
+        createAndCheck(35, 10);
         createAndCheck(22, 20);
+        createAndCheck(33, 34);
         createAndCheck(36, 35);
         createAndCheck(999, 99);
     }
@@ -2968,6 +2981,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )", tableName.c_str(), columnName.c_str(), precision, scale);
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
 
+            if (precision == 0) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid decimal precision");
+                return;
+            }
+            if (precision == 33) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid decimal parameters");
+                return;
+            }
             if (precision == 36) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
                 UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid decimal precision");
@@ -2982,10 +3005,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         };
 
+        addColumn(0, 0);
+        addColumn(1, 0);
         addColumn(2, 1);
         addColumn(22, 9);
-        addColumn(35, 9);
+        addColumn(35, 10);
         addColumn(22, 20);
+        addColumn(33, 34);
         addColumn(36, 35);
         addColumn(999, 99);
 
@@ -2993,7 +3019,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
         auto tableDesc = describe.GetTableDescription();
         TVector<TTableColumn> columns = tableDesc.GetTableColumns();
-        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 7);
 
         auto checkColumn = [&] (ui64 columnIdx, ui32 precision, ui32 scale) {
             TType valueType = columns[columnIdx].Type;
@@ -3002,16 +3028,17 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_EQUAL(optionalKind, TTypeParser::ETypeKind::Optional);
             parser.OpenOptional();
             auto kind = parser.GetKind();
-            UNIT_ASSERT_EQUAL(kind, TTypeParser::ETypeKind::Decimal);
+            UNIT_ASSERT_VALUES_EQUAL(kind, TTypeParser::ETypeKind::Decimal);
             TDecimalType decimalType = parser.GetDecimal();
             UNIT_ASSERT_VALUES_EQUAL(decimalType.Precision, precision);
             UNIT_ASSERT_VALUES_EQUAL(decimalType.Scale, scale);
         };
 
-        checkColumn(2, 2, 1);
-        checkColumn(3, 22, 9);
-        checkColumn(4, 35,9);
-        checkColumn(5, 22, 20);
+        checkColumn(0,22, 20);
+        checkColumn(3, 1, 0);
+        checkColumn(4, 2, 1);
+        checkColumn(5, 22,9);
+        checkColumn(6, 35, 10);
     }
 
     Y_UNIT_TEST(CreateUserWithPassword) {

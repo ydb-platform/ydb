@@ -181,6 +181,10 @@ def main():
                     date_window = Date('{date}')
                     AND build_type = '{build_type}'
                     AND branch = '{branch}'
+                    --and full_name in (
+                    --'ydb/tests/functional/compatibility/test_compatibility.py.TestCompatibility.test_simple')
+                    
+                    
                 ) AS hist 
                 LEFT JOIN (
                     SELECT 
@@ -217,8 +221,10 @@ def main():
         
             """
             query = ydb.ScanQuery(query_get_history, {})
+            # start transaction time
             start_time = time.time()
             it = driver.table_client.scan_query(query)
+            # end transaction time
 
             results = []
             prepared_for_update_rows = []
@@ -230,7 +236,6 @@ def main():
                     break
             end_time = time.time()
             print(f'transaction for {date} duration: {end_time - start_time}')
-
             start_time = time.time()
             for row in results:
                 data['test_name'].append(row['test_name'])
@@ -257,7 +262,14 @@ def main():
 
         end_time = time.time()
         print(f'Dataframe inited: {end_time - start_time}')
-       
+        start_time = time.time()
+        df = pd.DataFrame(data)
+
+        df = df.sort_values(by=['full_name', 'date_window'])
+        
+        end_time = time.time()
+        print(f'Dataframe sorting: {end_time - start_time}')
+        start_time = time.time()
 
         def determine_state(row):
             history_class = row['history_class']
@@ -284,6 +296,19 @@ def main():
                 else:
                     return history_class
 
+        def calculate_streak_flag(row):
+            if row['state'] == row['previous_state']:
+                return 0
+            else:
+                return 1
+
+        def calculate_success_rate(row):
+            total_count = row['pass_count'] + row['mute_count'] + row['fail_count']
+            if total_count == 0:
+                return 0.0
+            else:
+                return (row['pass_count'] / total_count) * 100
+
         def calculate_summary(row):
             return (
                 'Pass:'
@@ -307,45 +332,38 @@ def main():
                     return parts[1]
             else:
                 return owner
-        
-        start_time = time.time()
-        df = pd.DataFrame(data)
 
-        df = df.sort_values(by=['full_name', 'date_window'])
-
-        end_time = time.time()
-        
-        print(f'Dataframe sorting: {end_time - start_time}')
-        start_time = time.time()
-        df['success_rate'] = (df['pass_count'] / (df['pass_count'] + df['mute_count'] + df['fail_count'])) * 100
-        df['success_rate'] = df['success_rate'].fillna(0).astype(int)
-
+        df['success_rate'] = df.apply(calculate_success_rate, axis=1).astype(int)
         df['summary'] = df.apply(calculate_summary, axis=1)
         df['owner'] = df['owners'].apply(compute_owner)
         df['is_test_chunk'] = df['full_name'].str.contains('chunk chunk|chunk\+chunk', regex=True).astype(int)
         df['is_muted'] = df['is_muted'].fillna(0).astype(int)
+        df['success_rate'].astype(int)
         df['state'] = df.apply(determine_state, axis=1)
+
+        # Determ state for prev date and saving change state date
+        previous_state_list = []
+        state_change_date_list = []
+
+        for name, group in df.groupby('full_name'):
+            prev_status = 'no_runs'
+            prev_date = datetime.datetime.strptime('01/08/2024', "%d/%m/%Y")
+            for index, row in group.iterrows():
+                previous_state_list.append(prev_status)
+                if row['state'] != prev_status:
+
+                    prev_status = row['state']
+                    prev_date = row['date_window']
+
+                state_change_date_list.append(prev_date)
+
+        df['previous_state'] = previous_state_list
+        df['state_change_date'] = state_change_date_list
+        df['state_change_date'] = df['state_change_date'].dt.date
         df['date_window'] = df['date_window'].dt.date
-
-        # Calculate State Change Related Columns (Vectorized)
-        df['previous_state'] = df.groupby('full_name')['state'].shift(1)
-        df['previous_state'] = df.groupby('full_name')['previous_state'].fillna('no_runs')
-        # Calculate state change flag
-        df['state_change_flag'] = (df['state'] != df['previous_state']).astype(int)
-
-        # Calculate cumulative state change count
-        df['state_change_date'] = df.groupby('full_name')['state_change_flag'].cumsum()
-
-        # Assign the actual state change dates (Corrected)
-        df['state_change_date'] = df.groupby('full_name')['date_window'].transform(
-            lambda x: x.where(df['state_change_flag'] == 1)
-        )
-        # Fill NaT last knows values
-        df['state_change_date'] = (
-            df.groupby('full_name')['state_change_date'].fillna(method='ffill').fillna(pd.Timestamp(default_start_date))
-        )
-        # Calculate days in state
-        df['days_in_state'] = df.groupby(['full_name', 'state_change_date']).cumcount() + 1
+        df['streak_flag'] = df.apply(calculate_streak_flag, axis=1)
+        df['streak_id'] = df.groupby('full_name')['streak_flag'].cumsum()
+        df['days_in_state'] = df.groupby(['full_name', 'streak_id']).cumcount() + 1
 
         result = df[
             [

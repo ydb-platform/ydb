@@ -216,7 +216,7 @@ You can also specify any {{ ydb-short-name }} type using the constructors from `
 var parameter = new YdbParameter("$parameter", YdbValue.MakeJsonDocument("{\"type\": \"jsondoc\"}")); 
 ```
 
-### Error Handling
+### Error handling
 
 All exceptions related to database operations are subclasses of `YdbException`.
 

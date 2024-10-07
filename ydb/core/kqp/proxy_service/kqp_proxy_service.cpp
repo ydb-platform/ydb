@@ -1600,19 +1600,19 @@ private:
     bool TryFillPoolInfoFromCache(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 requestId) {
         ResourcePoolsCache.UpdateFeatureFlags(FeatureFlags, ActorContext());
 
-        const auto& database = ev->Get()->GetDatabase();
-        if (!ResourcePoolsCache.ResourcePoolsEnabled(database)) {
+        const auto& databaseId = ev->Get()->GetDatabaseId();
+        if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId)) {
             ev->Get()->SetPoolId("");
             return true;
         }
 
         const auto& userToken = ev->Get()->GetUserToken();
         if (!ev->Get()->GetPoolId()) {
-            ev->Get()->SetPoolId(ResourcePoolsCache.GetPoolId(database, userToken, ActorContext()));
+            ev->Get()->SetPoolId(ResourcePoolsCache.GetPoolId(databaseId, userToken, ActorContext()));
         }
 
         const auto& poolId = ev->Get()->GetPoolId();
-        const auto& poolInfo = ResourcePoolsCache.GetPoolInfo(database, poolId, ActorContext());
+        const auto& poolInfo = ResourcePoolsCache.GetPoolInfo(databaseId, poolId, ActorContext());
         if (!poolInfo) {
             return true;
         }
@@ -1871,12 +1871,12 @@ private:
     }
 
     void Handle(NWorkload::TEvUpdatePoolInfo::TPtr& ev) {
-        ResourcePoolsCache.UpdatePoolInfo(ev->Get()->Database, ev->Get()->PoolId, ev->Get()->Config, ev->Get()->SecurityObject, ActorContext());
+        ResourcePoolsCache.UpdatePoolInfo(ev->Get()->DatabaseId, ev->Get()->PoolId, ev->Get()->Config, ev->Get()->SecurityObject, ActorContext());
     }
 
     void Handle(TEvKqp::TEvUpdateDatabaseInfo::TPtr& ev) {
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
-            ResourcePoolsCache.UpdateDatabaseInfo(ev->Get()->Database, ev->Get()->Serverless);
+            ResourcePoolsCache.UpdateDatabaseInfo(ev->Get()->DatabaseId, ev->Get()->Serverless);
         }
         DatabasesCache.UpdateDatabaseInfo(ev, ActorContext());
     }

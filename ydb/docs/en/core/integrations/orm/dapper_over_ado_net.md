@@ -186,7 +186,7 @@ ydbCommand.CommandText = """
 
 ADO.NET will prepare the query for you so that the variables conform to the YQL standard. The type will be determined according to the `DbType` or the `System.Type` of the value itself.
 
-### Type Mapping Table for Writing
+### Type mapping table for writing
 
 | {{ ydb-short-name }} type      | DbType                                                                                    | .NET type                   |
 |----------------------------|-------------------------------------------------------------------------------------------|------------------------------|

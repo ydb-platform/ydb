@@ -1076,6 +1076,8 @@ private:
                     TString value;
                     if (listPtr->Child(2)->ChildrenSize() >= 1) {
                         value = TString(listPtr->Child(2)->Child(0)->Content());
+                    } else if (listPtr->Child(2)->ChildrenSize() == 0 && listPtr->Child(2)->Content()) {
+                        value = TString(listPtr->Child(2)->Content());
                     }
                     
                     return Sprintf("%s %s %s", attr.c_str(), strComp[compSign].c_str(), value.c_str());

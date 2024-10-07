@@ -123,6 +123,8 @@ public:
     const ui32* GetRawDWords() const;
     ui32* GetRawDWords();
 
+    bool IsMtn() const;
+
 private:
     std::array<ui8, ByteSize> Raw_ = {};
 };
@@ -226,7 +228,6 @@ class TMtnAddress
 {
 public:
     TMtnAddress() = default;
-
     TMtnAddress(TIP6Address address);
 
     ui64 GetPrefix() const;
@@ -241,11 +242,10 @@ public:
     ui64 GetHost() const;
     TMtnAddress& SetHost(ui64 host);
 
-    const TIP6Address& ToIP6Address() const;
+    TIP6Address ToIP6Address() const;
 
 private:
     ui64 GetBytesRangeValue(int leftIndex, int rightIndex) const;
-
     void SetBytesRangeValue(int leftIndex, int rightIndex, ui64 value);
 
     static constexpr int HostOffsetInBytes = 0;

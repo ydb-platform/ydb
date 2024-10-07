@@ -182,13 +182,13 @@ public:
     }
 
     const TInsertedData* AddAborted(TInsertedData&& data, const bool load = false);
-    bool EraseAborted(const TInsertWriteId writeId);
+    bool EraseAborted(const TInsertWriteId writeId, TVersionCounts* versionCounts = nullptr);
     bool HasAborted(const TInsertWriteId writeId);
 
-    bool EraseCommitted(const TCommittedData& data);
+    bool EraseCommitted(const TCommittedData& data, TVersionCounts* versionCounts = nullptr);
     bool HasCommitted(const TCommittedData& data);
 
-    const TInsertedData* AddInserted(TInsertedData&& data, const bool load = false);
+    const TInsertedData* AddInserted(TInsertedData&& data, const bool load = false, TVersionCounts* versionCounts = nullptr);
     std::optional<TInsertedData> ExtractInserted(const TInsertWriteId id);
 
     const TCounters& GetCountersPrepared() const {

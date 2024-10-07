@@ -3,6 +3,7 @@
 #include "inserted.h"
 
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
+#include <ydb/core/tx/columnshard/common/schema_versions.h>
 
 #include <util/generic/noncopyable.h>
 #include <util/generic/set.h>
@@ -68,14 +69,14 @@ public:
 
     TPathInfoIndexPriority GetIndexationPriority() const;
 
-    bool EraseCommitted(const TCommittedData& data);
+    bool EraseCommitted(const TCommittedData& data, TVersionCounts* versionCounts = nullptr);
     bool HasCommitted(const TCommittedData& data);
 
     const TSet<TCommittedData>& GetCommitted() const {
         return Committed;
     }
 
-    bool AddCommitted(TCommittedData&& data, const bool load = false);
+    bool AddCommitted(TCommittedData&& data, const bool load = false, TVersionCounts* versionCounts = nullptr);
 
     bool IsOverloaded() const {
         return CommittedOverload || InsertedOverload;

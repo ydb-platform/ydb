@@ -283,9 +283,9 @@ internal class User
 
 For more information, refer to the official [documentation](https://dappertutorial.net/).
 
-### Important Aspects
+### Important aspects
 
-In order for Dapper to interpret `DateTime` as {{ ydb-short-name }} type `Datetime`, execute the following code:
+For Dapper to interpret `DateTime` values as the {{ ydb-short-name }} type `DateTime`, execute the following code:
 
 ```c#
 SqlMapper.AddTypeMap(typeof(DateTime), DbType.DateTime);

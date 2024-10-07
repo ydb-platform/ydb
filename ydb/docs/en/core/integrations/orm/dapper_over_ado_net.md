@@ -88,7 +88,7 @@ await using var ydbConnection = new YdbConnection();
 await ydbConnection.OpenAsync();
 
 var ydbCommand = ydbConnection.CreateCommand();
-ydbCommand.CommandText = "SELECT 'Hello world!'u";
+ydbCommand.CommandText = "SELECT 'Hello, World!'u";
 Console.WriteLine(await ydbCommand.ExecuteScalarAsync());
 ```
 

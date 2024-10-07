@@ -6,6 +6,7 @@
 #include "blobstorage_pdisk_actorsystem_creator.h"
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_ut_defs.h"
+#include "blobstorage_pdisk_ut_helpers.h"
 
 #include <ydb/core/control/immediate_control_board_wrapper.h>
 
@@ -138,16 +139,6 @@ private:
     TDuration WorkTime;
 };
 
-static TString MakeDatabasePath(const char *dir) {
-    TString databaseDirectory = Sprintf("%s/yard", dir);
-    return databaseDirectory;
-}
-
-static TString MakePDiskPath(const char *dir) {
-    TString databaseDirectory = MakeDatabasePath(dir);
-    return databaseDirectory + "/pdisk.dat";
-}
-
 TString CreateFile(const char *baseDir, ui32 dataSize) {
     TString databaseDirectory = MakeDatabasePath(baseDir);
     MakeDirIfNotExist(databaseDirectory.c_str());
@@ -249,6 +240,7 @@ Y_UNIT_TEST_SUITE(TBlockDeviceTest) {
             THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
 
             ui32 buffSize = 64_KB;
+            auto randomData = PrepareData(buffSize);
             ui32 bufferPoolSize = 512;
             THolder<NPDisk::TBufferPool> bufferPool(NPDisk::CreateBufferPool(buffSize, bufferPoolSize, false, {}));
             ui64 inFlight = 128;
@@ -273,6 +265,7 @@ Y_UNIT_TEST_SUITE(TBlockDeviceTest) {
                     device->PreadAsync(data, 32_KB, 0, buffer.Release(), TReqId(), nullptr);
                     break;
                 case 1:
+                    memcpy(data, randomData.data(), 32_KB);
                     device->PwriteAsync(data, 32_KB, 0, buffer.Release(), TReqId(), nullptr);
                     break;
                 case 2:

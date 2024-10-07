@@ -37,7 +37,7 @@ A connection to {{ ydb-short-name }} is established using `YdbConnection`.
    await ydbConnection.OpenAsync();
    ```
 
-   In this case, the connection will be established at the URL: `grpc://database-sample-grpc:2135/root/database-sample`. When using the connection string method, parameters are specified as key=value pairs separated by a semicolon (`key1=value1;key2=value2`). The set of keys has fixed values, which will be discussed in detail in the following sections.
+  In this case, the connection is established at the URL `grpc://database-sample-grpc:2135/root/database-sample`. When using the connection string method, parameters are specified as key-value pairs, separated by semicolons (`key1=value1;key2=value2`). The supported set of keys is explained [below](#connection-parameters).
 
 3. **Using the constructor with a `YdbConnectionStringBuilder` argument**:
 

@@ -348,8 +348,8 @@ class TestPqRowDispatcher(TestYdsBase):
 
         sql3 = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{output_topic3}`
-            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
-            WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
+            SELECT event FROM {YDS_CONNECTION}.`{self.input_topic}`
+            WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, event String NOT NULL));'''
         query_id3 = start_yds_query(kikimr, client, sql3)
 
         data = [
@@ -358,11 +358,11 @@ class TestPqRowDispatcher(TestYdsBase):
         ]
 
         self.write_stream(data)
-        expected = ['103', '104']
-
-        assert self.read_stream(len(expected), topic_path=output_topic1) == expected
-        assert self.read_stream(len(expected), topic_path=output_topic2) == expected
-        assert self.read_stream(len(expected), topic_path=output_topic3) == expected
+        expected12 = ['103', '104']
+        expected3 = ['event3', 'event4']
+        assert self.read_stream(len(expected), topic_path=output_topic1) == expected12
+        assert self.read_stream(len(expected), topic_path=output_topic2) == expected12
+        assert self.read_stream(len(expected), topic_path=output_topic3) == expected3
 
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
 

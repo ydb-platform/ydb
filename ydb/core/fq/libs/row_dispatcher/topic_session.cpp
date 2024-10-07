@@ -582,6 +582,7 @@ void TTopicSession::SendToParsing(ui64 offset, const TString& message) {
     }
 
     if (ClientsWithoutPredicate.size() == Clients.size()) {
+        LastParsedMessageOffset = offset;
         return;
     }
 

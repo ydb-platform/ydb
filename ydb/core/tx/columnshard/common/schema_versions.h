@@ -43,8 +43,10 @@ public:
     ui32 VersionRemoveRef(ui64 version, ui32 source = 0) {
         ui32& count = VersionCounts[version];
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "version_removref")("source", source)("version", version)("ref_count", count - 1);
+        AFL_VERIFY(count > 0);
         if (--count == 0) {
             VersionsToErase.insert(version);
+            VersionCounts.erase(version);
         }
         return count;
     }

@@ -100,12 +100,12 @@ To create a client transaction, use the `ydbConnection.BeginTransaction()` metho
 
 Optionally, this method can accept a parameter of type `IsolationLevel`, which specifies the transaction isolation level. The following isolation levels are supported:
 
-- `Serializable`: Provides full transaction isolation using optimistic locks
-- `Unspecified`: Allows the database to determine the most appropriate isolation level
+- `Serializable`: Provides full transaction isolation using optimistic locks.
+- `Unspecified`: Allows the database to determine the most appropriate isolation level.
 
 You can also specify the `TxMode` parameter. For YDB-specific isolation levels, you can learn more [here](../../concepts/transactions.md).
 
-The `Serializable` isolation level used with the `TxMode.SerializableRW` parameter is equivalent to calling `BeginTransaction()` without parameters.
+Using the `Serializable` isolation level with the `TxMode.SerializableRW` parameter is equivalent to calling `BeginTransaction()` without parameters.
 
 Consider the following example of using a transaction:
 

@@ -10,6 +10,7 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tx_processing.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/statistics/events.h>

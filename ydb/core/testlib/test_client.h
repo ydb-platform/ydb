@@ -136,6 +136,7 @@ namespace Tests {
         bool EnableConsole = true;
         bool EnableNodeBroker = false;
         bool EnableConfigsDispatcher = true;
+        bool EnableFeatureFlagsConfigurator = false;
         bool UseRealThreads = true;
         bool EnableKqpSpilling = false;
         bool EnableYq = false;
@@ -190,6 +191,7 @@ namespace Tests {
         TServerSettings& SetEnableConsole(bool value) { EnableConsole = value; return *this; }
         TServerSettings& SetEnableNodeBroker(bool value) { EnableNodeBroker = value; return *this; }
         TServerSettings& SetEnableConfigsDispatcher(bool value) { EnableConfigsDispatcher = value; return *this; }
+        TServerSettings& SetEnableFeatureFlagsConfigurator(bool value) { EnableFeatureFlagsConfigurator = value; return *this; }
         TServerSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; }
         TServerSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = std::make_shared<NKikimrConfig::TAppConfig>(value); return *this; }
         TServerSettings& InitKikimrRunConfig() { KikimrRunConfig = std::make_shared<TKikimrRunConfig>(*AppConfig); return *this; }

@@ -1262,7 +1262,7 @@ const ::NMonitoring::TDynamicCounters::TCounterPtr TKqpCounters::GetDataShardTxR
 }
 
 TKqpDbCountersPtr TKqpCounters::GetDbCounters(const TString& database) {
-    if (!ActorSystem || !AppData(ActorSystem)->FeatureFlags.GetEnableDbCounters() || database.empty()) {
+    if (!ActorSystem || !DbWatcherActorId || database.empty()) {
         return {};
     }
 

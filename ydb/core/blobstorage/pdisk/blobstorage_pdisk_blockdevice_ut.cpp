@@ -5,6 +5,7 @@
 #include "blobstorage_pdisk_actorsystem_creator.h"
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_ut_defs.h"
+#include "blobstorage_pdisk_ut_helpers.h"
 
 #include <ydb/core/control/immediate_control_board_wrapper.h>
 
@@ -133,16 +134,6 @@ private:
     TAtomic& Counter;
     TDuration WorkTime;
 };
-
-static TString MakeDatabasePath(const char *dir) {
-    TString databaseDirectory = Sprintf("%s/yard", dir);
-    return databaseDirectory;
-}
-
-static TString MakePDiskPath(const char *dir) {
-    TString databaseDirectory = MakeDatabasePath(dir);
-    return databaseDirectory + "/pdisk.dat";
-}
 
 TString CreateFile(const char *baseDir, ui32 dataSize) {
     TString databaseDirectory = MakeDatabasePath(baseDir);

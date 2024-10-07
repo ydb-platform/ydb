@@ -492,7 +492,7 @@ public:
         return Meta.IndexKeyEnd;
     }
 
-    const TSnapshot& RecordSnapshotMin(const std::optional<TSnapshot>& snapshotDefault = std::nulloptr) const {
+    const TSnapshot& RecordSnapshotMin(const std::optional<TSnapshot>& snapshotDefault = std::nullopt) const {
         if (InsertWriteId) {
             if (CommitSnapshot) {
                 return *CommitSnapshot;
@@ -505,7 +505,7 @@ public:
         }
     }
 
-    const TSnapshot& RecordSnapshotMax(const std::optional<TSnapshot>& snapshotDefault = std::nulloptr) const {
+    const TSnapshot& RecordSnapshotMax(const std::optional<TSnapshot>& snapshotDefault = std::nullopt) const {
         if (InsertWriteId) {
             if (CommitSnapshot) {
                 return *CommitSnapshot;

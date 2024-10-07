@@ -334,7 +334,9 @@ public:
             if (LockHandle) {
                 ResponseEv->LockHandle = std::move(LockHandle);
             }
-            BuildLocks(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableLocks(), Locks);
+            if (!TxManager) {
+                BuildLocks(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableLocks(), Locks);
+            }
         }
 
         auto resultSize = ResponseEv->GetByteSize();

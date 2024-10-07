@@ -49,6 +49,8 @@ PEERDIR(
     ydb/library/yql/providers/yt/provider
     ydb/library/yql/providers/yt/codec/codegen/no_llvm
     ydb/library/yql/providers/yt/comp_nodes/no_llvm
+    ydb/library/yql/parser/pg_wrapper/interface
+    ydb/library/yql/parser/pg_catalog
 )
 
 YQL_LAST_ABI_VERSION()

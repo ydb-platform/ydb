@@ -5,6 +5,7 @@
 #include <ydb/library/yql/core/yql_atom_enums.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/yql_join.h>
+#include <ydb/library/yql/core/yql_opt_hopping.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/core/yql_opt_window.h>
 #include <ydb/library/yql/core/yql_type_helpers.h>
@@ -3043,6 +3044,190 @@ TExprNode::TPtr Normalize(const TCoAggregate& node, TExprContext& ctx) {
         .Done().Ptr();
 }
 
+TExprNode::TPtr RemoveDeadPayloadColumns(const TCoAggregate& aggr, TExprContext& ctx) {
+    const TExprNode::TPtr outputColumnsSetting = GetSetting(aggr.Settings().Ref(), "output_columns");
+    if (!outputColumnsSetting) {
+        return aggr.Ptr();
+    }
+    const TExprNode::TPtr outputColumns = outputColumnsSetting->ChildPtr(1);
+
+    TSet<TStringBuf> outMembers;
+    for (const auto& x : outputColumns->ChildrenList()) {
+        outMembers.insert(x->Content());
+    }
+
+    TExprNodeList newHandlers;
+    bool rebuildHandlers = false;
+    for (const auto& handler : aggr.Handlers()) {
+        if (handler.ColumnName().Ref().IsList()) {
+            // many columns
+            auto columns = handler.ColumnName().Cast<TCoAtomList>();
+            TVector<size_t> liveIndexes;
+            for (size_t i = 0; i < columns.Size(); ++i) {
+                if (outMembers.contains(columns.Item(i).Value())) {
+                    liveIndexes.push_back(i);
+                }
+            }
+
+            if (liveIndexes.empty()) {
+                // drop handler
+                rebuildHandlers = true;
+                continue;
+            } else if (liveIndexes.size() < columns.Size() && handler.Trait().Maybe<TCoAggregationTraits>()) {
+                auto traits = handler.Trait().Cast<TCoAggregationTraits>();
+
+                TExprNodeList nameNodes;
+                TExprNodeList finishBody;
+                TExprNode::TPtr arg = ctx.NewArgument(traits.FinishHandler().Pos(), "arg");
+                auto originalTuple = ctx.Builder(traits.FinishHandler().Pos())
+                    .Apply(traits.FinishHandler().Ref())
+                        .With(0, arg)
+                    .Seal()
+                    .Build();
+
+                for (auto& idx : liveIndexes) {
+                    nameNodes.emplace_back(columns.Item(idx).Ptr());
+                    finishBody.emplace_back(ctx.Builder(traits.FinishHandler().Pos())
+                        .Callable("Nth")
+                            .Add(0, originalTuple)
+                            .Atom(1, idx)
+                        .Seal()
+                        .Build());
+                }
+
+                auto finishLambda = ctx.NewLambda(traits.FinishHandler().Pos(),
+                    ctx.NewArguments(traits.FinishHandler().Pos(), { arg }),
+                    ctx.NewList(traits.FinishHandler().Pos(), std::move(finishBody)));
+
+                auto newHandler = Build<TCoAggregateTuple>(ctx, handler.Pos())
+                    .InitFrom(handler)
+                    .ColumnName(ctx.NewList(handler.ColumnName().Pos(), std::move(nameNodes)))
+                    .Trait<TCoAggregationTraits>()
+                        .InitFrom(traits)
+                        .FinishHandler(finishLambda)
+                    .Build()
+                    .Done().Ptr();
+
+                newHandlers.emplace_back(std::move(newHandler));
+                rebuildHandlers = true;
+                continue;
+            }
+        } else {
+            if (!outMembers.contains(handler.ColumnName().Cast<TCoAtom>().Value())) {
+                // drop handler
+                rebuildHandlers = true;
+                continue;
+            }
+        }
+
+        newHandlers.push_back(handler.Ptr());
+    }
+
+    if (rebuildHandlers) {
+        YQL_CLOG(DEBUG, Core) << "Drop unused payloads in " << aggr.CallableName();
+        return Build<TCoAggregate>(ctx, aggr.Pos())
+            .InitFrom(aggr)
+            .Handlers(ctx.NewList(aggr.Pos(), std::move(newHandlers)))
+            .Done()
+            .Ptr();
+    }
+
+    return aggr.Ptr();
+}
+
+TExprNode::TPtr RewriteAsHoppingWindowFullOutput(const TCoAggregate& aggregate, TExprContext& ctx) {
+    const auto pos = aggregate.Pos();
+
+    NHopping::EnsureNotDistinct(aggregate);
+
+    const auto maybeHopTraits = NHopping::ExtractHopTraits(aggregate, ctx, false);
+    if (!maybeHopTraits) {
+        return nullptr;
+    }
+    const auto hopTraits = *maybeHopTraits;
+
+    const auto aggregateInputType = GetSeqItemType(*aggregate.Ptr()->Head().GetTypeAnn()).Cast<TStructExprType>();
+    NHopping::TKeysDescription keysDescription(*aggregateInputType, aggregate.Keys(), hopTraits.Column);
+
+    const auto keyLambda = keysDescription.GetKeySelector(ctx, pos, aggregateInputType);
+    const auto timeExtractorLambda = NHopping::BuildTimeExtractor(hopTraits.Traits, ctx);
+    const auto initLambda = NHopping::BuildInitHopLambda(aggregate, ctx);
+    const auto updateLambda = NHopping::BuildUpdateHopLambda(aggregate, ctx);
+    const auto saveLambda = NHopping::BuildSaveHopLambda(aggregate, ctx);
+    const auto loadLambda = NHopping::BuildLoadHopLambda(aggregate, ctx);
+    const auto mergeLambda = NHopping::BuildMergeHopLambda(aggregate, ctx);
+    const auto finishLambda = NHopping::BuildFinishHopLambda(aggregate, keysDescription.GetActualGroupKeys(), hopTraits.Column, ctx);
+
+    const auto streamArg = Build<TCoArgument>(ctx, pos).Name("stream").Done();
+    auto multiHoppingCoreBuilder = Build<TCoMultiHoppingCore>(ctx, pos)
+        .KeyExtractor(keyLambda)
+        .TimeExtractor(timeExtractorLambda)
+        .Hop(hopTraits.Traits.Hop())
+        .Interval(hopTraits.Traits.Interval())
+        .Delay(hopTraits.Traits.Delay())
+        .DataWatermarks(hopTraits.Traits.DataWatermarks())
+        .InitHandler(initLambda)
+        .UpdateHandler(updateLambda)
+        .MergeHandler(mergeLambda)
+        .FinishHandler(finishLambda)
+        .SaveHandler(saveLambda)
+        .LoadHandler(loadLambda)
+        .template WatermarkMode<TCoAtom>().Build(ToString(false));
+
+    return Build<TCoPartitionsByKeys>(ctx, pos)
+        .Input(aggregate.Input())
+        .KeySelectorLambda(keyLambda)
+        .SortDirections<TCoBool>()
+                .Literal()
+                .Value("true")
+                .Build()
+            .Build()
+        .SortKeySelectorLambda(timeExtractorLambda)
+        .ListHandlerLambda()
+            .Args(streamArg)
+            .template Body<TCoForwardList>()
+                .Stream(Build<TCoMap>(ctx, pos)
+                    .Input(multiHoppingCoreBuilder
+                        .template Input<TCoIterator>()
+                            .List(streamArg)
+                            .Build()
+                        .Done())
+                    .Lambda(keysDescription.BuildUnpickleLambda(ctx, pos, *aggregateInputType))
+                    .Done())
+                .Build()
+            .Build()
+        .Done()
+        .Ptr();
+}
+
+TExprNode::TPtr RewriteAsHoppingWindow(TExprNode::TPtr node, TExprContext& ctx) {
+    const auto aggregate = TCoAggregate(node);
+
+    if (!IsPureIsolatedLambda(*aggregate.Ptr())) {
+        return nullptr;
+    }
+
+    if (!GetSetting(aggregate.Settings().Ref(), "hopping")) {
+        return nullptr;
+    }
+
+    auto result = RewriteAsHoppingWindowFullOutput(aggregate, ctx);
+    if (!result) {
+        return result;
+    }
+
+    auto outputColumnSetting = GetSetting(aggregate.Settings().Ref(), "output_columns");
+    if (!outputColumnSetting) {
+        return result;
+    }
+
+    return Build<TCoExtractMembers>(ctx, aggregate.Pos())
+        .Input(result)
+        .Members(outputColumnSetting->ChildPtr(1))
+        .Done()
+        .Ptr();
+}
+
 TExprNode::TPtr PullAssumeColumnOrderOverEquiJoin(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     TVector<ui32> withAssume;
     for (ui32 i = 0; i < node->ChildrenSize() - 2; i++) {
@@ -4761,6 +4946,15 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         if (auto normalized = Normalize(self, ctx); normalized != node) {
             YQL_CLOG(DEBUG, Core) << "Normalized " << node->Content() << " payloads";
             return normalized;
+        }
+
+        if (auto clean = RemoveDeadPayloadColumns(self, ctx); clean != node) {
+            return clean;
+        }
+
+        if (auto hopping = RewriteAsHoppingWindow(node, ctx)) {
+            YQL_CLOG(DEBUG, Core) << "RewriteAsHoppingWindow";
+            return hopping;
         }
 
         return DropReorder<false>(node, ctx);

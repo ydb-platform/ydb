@@ -63,7 +63,11 @@ public:
     }
 
     TString GetPeerName() const override {
-        return TStringBuilder() << GetPeerAddrNetAddr();
+        TStringBuilder ret;
+        if (IsConnectionAlive()) {
+            ret << GetPeerAddrNetAddr();
+        }
+        return std::move(ret);
     }
 
     THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;

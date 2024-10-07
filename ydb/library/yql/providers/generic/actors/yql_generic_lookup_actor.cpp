@@ -168,7 +168,7 @@ namespace NYql::NDq {
 
             *readRequest.add_splits() = split;
             readRequest.Setformat(NConnector::NApi::TReadSplitsRequest_EFormat::TReadSplitsRequest_EFormat_ARROW_IPC_STREAMING);
-            readRequest.set_filtering(::NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_MANDATORY);
+            readRequest.set_filtering(NConnector::NApi::TReadSplitsRequest::FILTERING_MANDATORY);
             Connector->ReadSplits(readRequest).Subscribe([actorSystem = TActivationContext::ActorSystem(), selfId = SelfId()](const NConnector::TReadSplitsStreamIteratorAsyncResult& asyncResult) {
                 YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got ReadSplitsStreamIterator from Connector";
                 auto result = ExtractFromConstFuture(asyncResult);

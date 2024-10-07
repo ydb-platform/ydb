@@ -24,7 +24,7 @@ on:
         default: ""
       build_target:
         type: string
-        default: "ydb/apps/ydbd"
+        default: "ydb"
         description: "limit build and test to specific target"
 
 jobs:

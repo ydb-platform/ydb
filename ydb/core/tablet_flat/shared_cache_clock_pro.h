@@ -20,7 +20,7 @@ class TClockProCache : public ICacheCache<TPage> {
     using TPageKey = typename TPageTraits::TPageKey;
 
     struct TPageEntry : public TIntrusiveListItem<TPageEntry> {
-        TPageKey Key; // TODO: don't store key twice?
+        TPageKey Key;
         TPage* Page;
         ui64 Size;
 

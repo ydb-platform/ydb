@@ -20,6 +20,7 @@ config.read(config_file_path)
 DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
 DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
+
 def create_tables(pool, table_path):
     print(f"> create table if not exists:'{table_path}'")
 
@@ -123,8 +124,9 @@ def process_test_group(name, group, last_day_data, default_start_date):
     return {
         'previous_state': previous_state_list,
         'state_change_date': state_change_date_list,
-        'days_in_state': days_in_state_list
+        'days_in_state': days_in_state_list,
     }
+
 
 def determine_state(row):
     history_class = row['history_class']
@@ -159,6 +161,7 @@ def calculate_success_rate(row):
     else:
         return (row['pass_count'] / total_count) * 100
 
+
 def calculate_summary(row):
     return (
         'Pass:'
@@ -170,6 +173,7 @@ def calculate_summary(row):
         + ' Skip:'
         + str(row['skip_count'])
     )
+
 
 def compute_owner(owner):
     if not owner or owner == '':
@@ -187,7 +191,13 @@ def compute_owner(owner):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--days-window', default=1, type=int, help='how many days back we collecting history')
-    parser.add_argument('--build_type', choices=['relwithdebinfo', 'release-asan'], default='relwithdebinfo', type=str, help='build : relwithdebinfo or release-asan')
+    parser.add_argument(
+        '--build_type',
+        choices=['relwithdebinfo', 'release-asan'],
+        default='relwithdebinfo',
+        type=str,
+        help='build : relwithdebinfo or release-asan',
+    )
     parser.add_argument('--branch', default='main', choices=['main'], type=str, help='branch')
     args, unknown = parser.parse_known_args()
     history_for_n_day = args.days_window
@@ -198,7 +208,9 @@ def main():
         print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
         return 1
     else:
-        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
+        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
+            "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
+        ]
 
     with ydb.Driver(
         endpoint=DATABASE_ENDPOINT,
@@ -226,25 +238,26 @@ def main():
         while True:
             try:
                 result = next(it)
-                last_exist_day = (base_date + datetime.timedelta(days=result.result_set.rows[0]['last_exist_day'] - 1)).date() #exclude last day, we want recalculate last day
+                last_exist_day = (
+                    base_date + datetime.timedelta(days=result.result_set.rows[0]['last_exist_day'] - 1)
+                ).date()  # exclude last day, we want recalculate last day
                 break
             except StopIteration:
                 break
             except Exception as e:
                 print(f"Error during fetching last existing day: {e}")
-        
-        
+
         last_exist_df = None
-        
+
         # If no data exists, set last_exist_day to a default start date
         if last_exist_day is None:
             last_exist_day = default_start_date
             last_exist_day_str = last_exist_day.strftime('%Y-%m-%d')
-            date_list = [today - datetime.timedelta(days=x) for x in range((today - last_exist_day).days +1)]
+            date_list = [today - datetime.timedelta(days=x) for x in range((today - last_exist_day).days + 1)]
         else:
             # Get data from tests_monitor for last existing day
             last_exist_day_str = last_exist_day.strftime('%Y-%m-%d')
-            date_list = [today - datetime.timedelta(days=x) for x in range((today - last_exist_day).days )]
+            date_list = [today - datetime.timedelta(days=x) for x in range((today - last_exist_day).days)]
             query_last_exist_data = f"""
                 SELECT *
                 FROM `{table_path}`
@@ -255,7 +268,7 @@ def main():
             query = ydb.ScanQuery(query_last_exist_data, {})
             it = driver.table_client.scan_query(query)
             last_exist_data = []
-           
+
             while True:
                 try:
                     result = next(it)
@@ -288,7 +301,7 @@ def main():
                         last_exist_data.append(row_dict)
                 except StopIteration:
                     break
-            
+
             last_exist_df = pd.DataFrame(last_exist_data)
 
         # Get data from flaky_tests_window table for dates after last existing day
@@ -309,8 +322,7 @@ def main():
             'skip_count': [],
             'is_muted': [],
         }
-        
-       
+
         print(f'Getting aggregated history in window {history_for_n_day} days')
         for date in sorted(date_list):
             # Query for data from flaky_tests_window with date_window >= last_existing_day
@@ -414,26 +426,26 @@ def main():
                     data['fail_count'].append(row['fail_count'])
                     data['skip_count'].append(row['skip_count'])
                     data['is_muted'].append(row['is_muted'])
-                
+
             else:
-                print(f"Warning: No data found in flaky_tests_window for date {date} build_type='{build_type}', branch='{branch}'")
-
-
+                print(
+                    f"Warning: No data found in flaky_tests_window for date {date} build_type='{build_type}', branch='{branch}'"
+                )
 
         start_time = time.time()
         df = pd.DataFrame(data)
         # **Concatenate DataFrames**
         if last_exist_df is not None and last_exist_df.shape[0] > 0:
-            last_day_data = last_exist_df[['full_name', 'days_in_state','state','state_change_date']]
+            last_day_data = last_exist_df[['full_name', 'days_in_state', 'state', 'state_change_date']]
             df = pd.concat([last_exist_df, df], ignore_index=True)
-        else: 
+        else:
             last_day_data = None
         end_time = time.time()
         print(f'Dataframe inited: {end_time - start_time}')
         tart_time = time.time()
-        
+
         df = df.sort_values(by=['full_name', 'date_window'])
-        
+
         end_time = time.time()
         print(f'Dataframe sorted: {end_time - start_time}')
         start_time = time.time()
@@ -454,7 +466,7 @@ def main():
         with Pool(processes=cpu_count()) as pool:
             results = pool.starmap(
                 process_test_group,
-                [(name, group, last_day_data, default_start_date) for name, group in df.groupby('full_name')]
+                [(name, group, last_day_data, default_start_date) for name, group in df.groupby('full_name')],
             )
 
             # Apply results to the DataFrame
@@ -510,8 +522,8 @@ def main():
 
         with ydb.SessionPool(driver) as pool:
 
-            create_tables(pool, table_path )
-            full_path = posixpath.join(DATABASE_PATH, table_path )
+            create_tables(pool, table_path)
+            full_path = posixpath.join(DATABASE_PATH, table_path)
 
             def chunk_data(data, chunk_size):
                 for i in range(0, len(data), chunk_size):

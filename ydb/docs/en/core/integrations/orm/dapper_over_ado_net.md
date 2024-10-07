@@ -92,7 +92,7 @@ ydbCommand.CommandText = "SELECT 'Hello world!'u";
 Console.WriteLine(await ydbCommand.ExecuteScalarAsync());
 ```
 
-This example demonstrates outputting `Hello World!` to the console.
+This example demonstrates how to run the `Hello, World!` query and output its result to the console.
 
 ### Transactions
 

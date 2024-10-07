@@ -14,6 +14,8 @@ private:
     const ui32 TabletTxNo;
     std::optional<NOlap::TSnapshot> LastCompletedTx;
     std::optional<TTxController::TPlanQueueItem> PlannedQueueItem;
+    std::optional<TMonotonic> StartExecution;
+    const TMonotonic ConstructionInstant = TMonotonic::Now();
 
 public:
     TTxProgressTx(TColumnShard* self)
@@ -29,7 +31,7 @@ public:
         NActors::TLogContextGuard logGuard =
             NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "execute");
         Y_ABORT_UNLESS(Self->ProgressTxInFlight);
-        Self->TabletCounters->Simple()[COUNTER_TX_COMPLETE_LAG].Set(Self->GetTxCompleteLag().MilliSeconds());
+        Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TX_COMPLETE_LAG, Self->GetTxCompleteLag().MilliSeconds());
 
         const size_t removedCount = Self->ProgressTxController->CleanExpiredTxs(txc);
         if (removedCount > 0) {
@@ -40,11 +42,22 @@ public:
         }
 
         // Process a single transaction at the front of the queue
-        auto plannedItem = Self->ProgressTxController->StartPlannedTx();
+        const auto plannedItem = Self->ProgressTxController->GetFirstPlannedTx();
         if (!!plannedItem) {
             PlannedQueueItem.emplace(plannedItem->PlanStep, plannedItem->TxId);
             ui64 step = plannedItem->PlanStep;
             ui64 txId = plannedItem->TxId;
+            TxOperator = Self->ProgressTxController->GetTxOperatorVerified(txId);
+            if (auto txPrepare = TxOperator->BuildTxPrepareForProgress(Self)) {
+                AbortedThroughRemoveExpired = true;
+                Self->ProgressTxInFlight = txId;
+                Self->Execute(txPrepare.release(), ctx);
+                return true;
+            } else {
+                Self->ProgressTxController->PopFirstPlannedTx();
+            }
+            StartExecution = TMonotonic::Now();
+
             LastCompletedTx = NOlap::TSnapshot(step, txId);
             if (LastCompletedTx > Self->LastCompletedTx) {
                 NIceDb::TNiceDb db(txc.DB);
@@ -52,9 +65,13 @@ public:
                 Schema::SaveSpecialValue(db, Schema::EValueIds::LastCompletedTxId, LastCompletedTx->GetTxId());
             }
 
-            TxOperator = Self->ProgressTxController->GetVerifiedTxOperator(txId);
             AFL_VERIFY(TxOperator->ProgressOnExecute(*Self, NOlap::TSnapshot(step, txId), txc));
-            Self->ProgressTxController->FinishPlannedTx(txId, txc);
+            Self->ProgressTxController->ProgressOnExecute(txId, txc);
+            Self->Counters.GetTabletCounters()->IncCounter(COUNTER_PLANNED_TX_COMPLETED);
+        }
+        Self->ProgressTxInFlight = std::nullopt;
+        if (!!Self->ProgressTxController->GetPlannedTx()) {
+            Self->EnqueueProgressTx(ctx, std::nullopt);
         }
         return true;
     }
@@ -70,23 +87,29 @@ public:
             Self->RescheduleWaitingReads();
         }
         if (PlannedQueueItem) {
-            Self->GetProgressTxController().CompleteRunningTx(*PlannedQueueItem);
+            AFL_VERIFY(TxOperator);
+            Self->GetProgressTxController().GetCounters().OnTxProgressLag(
+                TxOperator->GetOpType(), TMonotonic::Now() - TMonotonic::MilliSeconds(PlannedQueueItem->Step));
+            Self->GetProgressTxController().ProgressOnComplete(*PlannedQueueItem);
         }
         if (LastCompletedTx) {
             Self->LastCompletedTx = std::max(*LastCompletedTx, Self->LastCompletedTx);
         }
-        Self->ProgressTxInFlight = false;
-        if (!!Self->ProgressTxController->GetPlannedTx()) {
-            Self->EnqueueProgressTx(ctx);
+        if (StartExecution) {
+            Self->GetProgressTxController().GetCounters().OnTxExecuteDuration(TxOperator->GetOpType(), TMonotonic::Now() - *StartExecution);
+            Self->GetProgressTxController().GetCounters().OnTxLiveDuration(TxOperator->GetOpType(), TMonotonic::Now() - ConstructionInstant);
         }
         Self->SetupIndexation();
     }
 };
 
-void TColumnShard::EnqueueProgressTx(const TActorContext& ctx) {
+void TColumnShard::EnqueueProgressTx(const TActorContext& ctx, const std::optional<ui64> continueTxId) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "EnqueueProgressTx")("tablet_id", TabletID());
-    if (!ProgressTxInFlight) {
-        ProgressTxInFlight = true;
+    if (continueTxId) {
+        AFL_VERIFY(!ProgressTxInFlight || ProgressTxInFlight == continueTxId)("current", ProgressTxInFlight)("expected", continueTxId);
+    }
+    if (!ProgressTxInFlight || ProgressTxInFlight == continueTxId) {
+        ProgressTxInFlight = continueTxId.value_or(0);
         Execute(new TTxProgressTx(this), ctx);
     }
 }

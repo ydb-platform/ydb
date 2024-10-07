@@ -29,7 +29,7 @@ PEERDIR(
     ydb/library/yql/providers/s3/statistics
     ydb/library/yql/utils/plan
     ydb/core/kqp/provider
-    ydb/core/formats/arrow/protos
+    ydb/library/formats/arrow/protos
 )
 
 YQL_LAST_ABI_VERSION()

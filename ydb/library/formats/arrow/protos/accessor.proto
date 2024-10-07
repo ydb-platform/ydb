@@ -1,0 +1,30 @@
+package NKikimrArrowAccessorProto;
+
+message TRequestedConstructor {
+    optional string ClassName = 1;
+
+    message TPlain {
+    }
+
+    message TSparsed {
+    }
+
+    oneof Implementation {
+        TPlain Plain = 10;
+        TSparsed Sparsed = 11;
+    }
+}
+
+message TConstructor {
+    optional string ClassName = 1;
+
+    message TPlain {
+    }
+
+    message TSparsed {
+    }
+    oneof Implementation {
+        TPlain Plain = 10;
+        TSparsed Sparsed = 11;
+    }
+}

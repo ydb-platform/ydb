@@ -681,11 +681,23 @@ public:
         TProposeErrorCollector errors(*result);
         TColumnTableInfo::TPtr tableInfo;
         bool needUpdateObject = false;
+        auto domainInfo = parentPath.DomainInfo();
+        const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
+
         if (storeInfo) {
             TOlapPresetConstructor tableConstructor(*storeInfo);
             tableInfo = tableConstructor.BuildTableInfo(createDescription, context, errors);
             needUpdateObject = tableConstructor.GetNeedUpdateObject();
         } else {
+            ui64 columnCount = createDescription.schema().columns().size();
+            if (columnCount > limits.MaxColumnTableColumns) {
+                TString errStr = TStringBuilder()
+                    << "Too many columns"
+                    << ". new: " << columnCount
+                    << ". Limit: " << limits.MaxColumnTableColumns;
+                result->SetError(NKikimrScheme::StatusSchemeError, errStr);
+                return result;
+            }
             TOlapTableConstructor tableConstructor;
             tableInfo = tableConstructor.BuildTableInfo(createDescription, context, errors);
         }

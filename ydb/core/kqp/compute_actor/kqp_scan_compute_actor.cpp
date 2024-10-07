@@ -23,7 +23,7 @@ static constexpr TDuration RL_MAX_BATCH_DELAY = TDuration::Seconds(50);
 
 } // anonymous namespace
 
-TKqpScanComputeActor::TKqpScanComputeActor(TComputeActorSchedulingOptions cpuOptions, const TActorId& executerId, ui64 txId, ui64 lockTxId, ui32 lockNodeId,
+TKqpScanComputeActor::TKqpScanComputeActor(TComputeActorSchedulingOptions cpuOptions, const TActorId& executerId, ui64 txId, TMaybe<ui64> lockTxId, ui32 lockNodeId,
     NDqProto::TDqTask* task, IDqAsyncIoFactory::TPtr asyncIoFactory,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
     TIntrusivePtr<NActors::TProtoArenaHolder> arena)
@@ -149,14 +149,14 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
     for (const auto& lock : msg.GetLocksInfo().Locks) {
         Locks.insert(lock);
     }
-    for (const auto& lock : msg.GetLocksInfo().Locks) {
+    for (const auto& lock : msg.GetLocksInfo().BrokenLocks) {
         BrokenLocks.insert(lock);
     }
 
     auto guard = TaskRunner->BindAllocator();
     if (!!msg.GetArrowBatch()) {
         ScanData->AddData(NMiniKQL::TBatchDataAccessor(msg.GetArrowBatch(), std::move(msg.MutableDataIndexes())), msg.GetTabletId(), TaskRunner->GetHolderFactory());
-    } else {
+    } else if (!msg.GetRows().empty()) {
         ScanData->AddData(std::move(msg.MutableRows()), msg.GetTabletId(), TaskRunner->GetHolderFactory());
     }
     if (IsQuotingEnabled()) {

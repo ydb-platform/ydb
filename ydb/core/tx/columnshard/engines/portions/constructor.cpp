@@ -67,22 +67,6 @@ void TPortionInfoConstructor::LoadIndex(const TIndexChunkLoadContext& loadContex
 
 const NKikimr::NOlap::TColumnRecord& TPortionInfoConstructor::AppendOneChunkColumn(TColumnRecord&& record) {
     Y_ABORT_UNLESS(record.ColumnId);
-    std::optional<ui32> maxChunk;
-    for (auto&& i : Records) {
-        if (i.ColumnId == record.ColumnId) {
-            if (!maxChunk) {
-                maxChunk = i.Chunk;
-            } else {
-                Y_ABORT_UNLESS(*maxChunk + 1 == i.Chunk);
-                maxChunk = i.Chunk;
-            }
-        }
-    }
-    if (maxChunk) {
-        AFL_VERIFY(*maxChunk + 1 == record.Chunk)("max", *maxChunk)("record", record.Chunk);
-    } else {
-        AFL_VERIFY(0 == record.Chunk)("record", record.Chunk);
-    }
     Records.emplace_back(std::move(record));
     return Records.back();
 }

@@ -4478,7 +4478,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 REPLACE INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES
                     (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12), (4u, NULL, 13);
                 SELECT * FROM `/Root/ColumnShard` ORDER BY Col1;
-                INSERT INTO `/Root/ColumnShard` SELECT Col1 + 100 AS Col1, Col2, Col3 FROM `/Root/ColumnShard`;
+                INSERT INTO `/Root/ColumnShard` SELECT Col1 + 100u AS Col1, Col2, Col3 FROM `/Root/ColumnShard`;
                 SELECT * FROM `/Root/ColumnShard` ORDER BY Col1;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());

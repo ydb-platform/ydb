@@ -753,7 +753,6 @@ namespace NYql::NConnector::NTest {
 
             void FillWithDefaults() {
                 Format(NApi::TReadSplitsRequest::ARROW_IPC_STREAMING);
-                Filtering(NApi::TReadSplitsRequest::FILTERING_OPTIONAL);
             }
 
         private:

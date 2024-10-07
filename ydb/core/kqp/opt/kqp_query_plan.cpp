@@ -18,6 +18,7 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/utils/utf8.h>
 
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
@@ -57,6 +58,11 @@ TString GetNameByReadType(EPlanTableReadType readType) {
         case EPlanTableReadType::MultiLookup:
             return "TableMultiLookup";
     }
+}
+
+/* remove chars, that break json plan */
+std::string RemoveForbiddenChars(std::string s) {
+    return NYql::IsUtf8(s)? s: "Non-UTF8 string";
 }
 
 struct TTableRead {
@@ -662,24 +668,20 @@ private:
                 for (const auto& keyPartRange : scanRangeDescr) {
                     TStringBuilder rangeDescr;
 
-                    auto removeForbiddenChars = [](std::string s) -> std::string {
-                        return IsUtf(s)? s: "Non-UTF8 string";
-                    }; /* remove chars, that break json plan */
-
                     if (keyPartRange.From == keyPartRange.To) {
                         if (keyPartRange.From.Empty()) {
                             rangeDescr << keyPartRange.ColumnName << " (-∞, +∞)";
                             readInfo.ScanBy.push_back(rangeDescr);
                         } else {
                             rangeDescr << keyPartRange.ColumnName
-                                       << " (" << removeForbiddenChars(keyPartRange.From) << ")";
+                                       << " (" << RemoveForbiddenChars(keyPartRange.From) << ")";
                             readInfo.LookupBy.push_back(rangeDescr);
                         }
                     } else {
                         rangeDescr << keyPartRange.ColumnName << " "
                                    << (keyPartRange.From.Empty() ? "(" : leftParen)
-                                   << (keyPartRange.From.Empty() ? "-∞" : removeForbiddenChars(keyPartRange.From)) << ", "
-                                   << (keyPartRange.To.Empty() ? "+∞" : removeForbiddenChars(keyPartRange.To))
+                                   << (keyPartRange.From.Empty() ? "-∞" : RemoveForbiddenChars(keyPartRange.From)) << ", "
+                                   << (keyPartRange.To.Empty() ? "+∞" : RemoveForbiddenChars(keyPartRange.To))
                                    << (keyPartRange.To.Empty() ? ")" : rightParen);
                         readInfo.ScanBy.push_back(rangeDescr);
                         hasRangeScans = true;
@@ -753,8 +755,8 @@ private:
                             TStringBuilder rangeDesc;
                             rangeDesc << keyColumns[colId] << " "
                                 << (from[keyColumns.size()].GetDataText() == "1" ? "[" : "(")
-                                << (from[colId].HaveValue() ? from[colId].GetSimpleValueText() : "-∞") << ", "
-                                << (to[colId].HaveValue() ? to[colId].GetSimpleValueText() : "+∞")
+                                << (from[colId].HaveValue() ? RemoveForbiddenChars(from[colId].GetSimpleValueText()) : "-∞") << ", "
+                                << (to[colId].HaveValue() ? RemoveForbiddenChars(to[colId].GetSimpleValueText()) : "+∞")
                                 << (to[keyColumns.size()].GetDataText() == "1" ? "]" : ")");
 
                             readInfo.ScanBy.push_back(rangeDesc);
@@ -1691,8 +1693,8 @@ private:
                         TStringBuilder rangeDesc;
                         rangeDesc << keyColumns[colId] << " "
                             << (from[keyColumns.size()].GetDataText() == "1" ? "[" : "(")
-                            << (from[colId].HaveValue() ? from[colId].GetSimpleValueText() : "-∞") << ", "
-                            << (to[colId].HaveValue() ? to[colId].GetSimpleValueText() : "+∞")
+                            << (from[colId].HaveValue() ? RemoveForbiddenChars(from[colId].GetSimpleValueText()) : "-∞") << ", "
+                            << (to[colId].HaveValue() ? RemoveForbiddenChars(to[colId].GetSimpleValueText()) : "+∞")
                             << (to[keyColumns.size()].GetDataText() == "1" ? "]" : ")");
 
                         readInfo.ScanBy.push_back(rangeDesc);
@@ -1814,14 +1816,14 @@ private:
                         readInfo.ScanBy.push_back(rangeDescr);
                     } else {
                         rangeDescr << keyPartRange.ColumnName
-                                   << " (" << keyPartRange.From << ")";
+                                   << " (" << RemoveForbiddenChars(keyPartRange.From) << ")";
                         readInfo.LookupBy.push_back(rangeDescr);
                     }
                 } else {
                     rangeDescr << keyPartRange.ColumnName << " "
                                << (keyPartRange.From.Empty() ? "(" : leftParen)
-                               << (keyPartRange.From.Empty() ? "-∞" : keyPartRange.From) << ", "
-                               << (keyPartRange.To.Empty() ? "+∞" : keyPartRange.To)
+                               << (keyPartRange.From.Empty() ? "-∞" : RemoveForbiddenChars(keyPartRange.From)) << ", "
+                               << (keyPartRange.To.Empty() ? "+∞" : RemoveForbiddenChars(keyPartRange.To))
                                << (keyPartRange.To.Empty() ? ")" : rightParen);
                     readInfo.ScanBy.push_back(rangeDescr);
                     hasRangeScans = true;
@@ -2517,6 +2519,7 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
     const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config,
     TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx)
 {
+    Cout << "ZHOPA" << Endl;
     TSerializerCtx serializerCtx(ctx, cluster, tablesData, config, query.Transactions().Size(), std::move(pureTxResults), typeCtx, optCtx);
 
     /* bindingName -> stage */

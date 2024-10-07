@@ -17,8 +17,9 @@ std::shared_ptr<TJoinOptimizerNodeInternal> MakeJoinInternal(
 
     auto res = std::make_shared<TJoinOptimizerNodeInternal>(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinKind, joinAlgo, leftAny, rightAny);
     res->Stats = std::make_shared<TOptimizerStatistics>(ctx.ComputeJoinStats(*left->Stats, *right->Stats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeHint));
-    
-    res->Stats->StorageType = (left->Stats->StorageType == right->Stats->StorageType)? EStorageType::NA: right->Stats->StorageType;
+    if (left->Stats->StorageType == right->Stats->StorageType) { 
+        res->Stats->StorageType = left->Stats->StorageType; 
+    }
 
     return res;
 }

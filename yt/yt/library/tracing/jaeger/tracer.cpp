@@ -559,6 +559,15 @@ void TJaegerTracer::Flush()
 
     auto config = Config_.Acquire();
 
+    auto flushStartTime = TInstant::Now();
+
+    if (OpenChannelConfig_ != config->CollectorChannelConfig) {
+        OpenChannelConfig_ = config->CollectorChannelConfig;
+        for (auto& [endpoint, channel] : CollectorChannels_) {
+            CollectorChannels_[endpoint].ForceReset(flushStartTime);
+        }
+    }
+
     DequeueAll(config);
 
     if (TInstant::Now() - LastSuccessfulFlushTime_ > config->QueueStallTimeout) {
@@ -571,15 +580,6 @@ void TJaegerTracer::Flush()
         DropFullQueue();
         NotifyEmptyQueue();
         return;
-    }
-
-    auto flushStartTime = TInstant::Now();
-
-    if (OpenChannelConfig_ != config->CollectorChannelConfig) {
-        OpenChannelConfig_ = config->CollectorChannelConfig;
-        for (auto& [endpoint, channel] : CollectorChannels_) {
-            CollectorChannels_[endpoint].ForceReset(flushStartTime);
-        }
     }
 
     std::stack<TString> toRemove;

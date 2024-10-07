@@ -599,206 +599,94 @@ private:
         if (sourceSettings.RangesExpr().Maybe<TKqlKeyRange>()) {
             auto table = TString(sourceSettings.Table().Path());
             auto range = sourceSettings.RangesExpr().Cast<TKqlKeyRange>();
+            Visit(table, range, sourceSettings, planNode);
+            return;
+        }
+            
+        const auto table = TString(sourceSettings.Table().Path());
+        const auto explainPrompt = TKqpReadTableExplainPrompt::Parse(sourceSettings.ExplainPrompt().Cast());
 
-            TOperator op;
-            TTableRead readInfo;
+        TTableRead readInfo;
+        TOperator op;
 
-            auto describeBoundary = [this](const TExprBase& key) {
-                if (auto param = key.Maybe<TCoParameter>()) {
-                   return param.Cast().Name().StringValue();
-                }
+        auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, table);
+        op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : table;
+        planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
 
-                if (auto param = key.Maybe<TCoNth>().Tuple().Maybe<TCoParameter>()) {
-                    if (auto maybeResultBinding = ContainResultBinding(param.Cast().Name().StringValue())) {
-                        auto [txId, resId] = *maybeResultBinding;
-                        if (auto result = GetResult(txId, resId)) {
-                            auto index = FromString<ui32>(key.Cast<TCoNth>().Index());
-                            Y_ENSURE(index < result->Size());
-                            return DescribeValue((*result)[index]);
-                        }
-                    }
-                }
+        auto rangesDesc = NPlanUtils::PrettyExprStr(sourceSettings.RangesExpr());
+        if (rangesDesc == "Void" || explainPrompt.UsedKeyColumns.empty()) {
+            readInfo.Type = EPlanTableReadType::FullScan;
 
-                if (auto literal = key.Maybe<TCoUuid>()) {
-                    return NUuid::UuidBytesToString(literal.Cast().Literal().StringValue());
-                }
-
-                if (auto literal = key.Maybe<TCoDataCtor>()) {
-                    return literal.Cast().Literal().StringValue();
-                }
-
-                if (auto literal = key.Maybe<TCoNothing>()) {
-                    return TString("null");
-                }
-
-                return TString("n/a");
-            };
-
-            /* Collect info about scan range */
-            struct TKeyPartRange {
-                TString From;
-                TString To;
-                TString ColumnName;
-            };
-            auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, table);
-            op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : table;
-            planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
-            TVector<TKeyPartRange> scanRangeDescr(tableData.Metadata->KeyColumnNames.size());
-
-            auto maybeFromKey = range.From().Maybe<TKqlKeyTuple>();
-            auto maybeToKey = range.To().Maybe<TKqlKeyTuple>();
-            if (maybeFromKey && maybeToKey) {
-                auto fromKey = maybeFromKey.Cast();
-                auto toKey = maybeToKey.Cast();
-
-                for (ui32 i = 0; i < fromKey.ArgCount(); ++i) {
-                    scanRangeDescr[i].From = describeBoundary(fromKey.Arg(i));
-                }
-                for (ui32 i = 0; i < toKey.ArgCount(); ++i) {
-                    scanRangeDescr[i].To = describeBoundary(toKey.Arg(i));
-                }
-                for (ui32 i = 0; i < scanRangeDescr.size(); ++i) {
-                    scanRangeDescr[i].ColumnName = tableData.Metadata->KeyColumnNames[i];
-                }
-
-                TString leftParen = range.From().Maybe<TKqlKeyInc>().IsValid() ? "[" : "(";
-                TString rightParen = range.To().Maybe<TKqlKeyInc>().IsValid() ? "]" : ")";
-                bool hasRangeScans = false;
-                auto& ranges = op.Properties["ReadRange"];
-                for (const auto& keyPartRange : scanRangeDescr) {
-                    TStringBuilder rangeDescr;
-
-                    if (keyPartRange.From == keyPartRange.To) {
-                        if (keyPartRange.From.Empty()) {
-                            rangeDescr << keyPartRange.ColumnName << " (-∞, +∞)";
-                            readInfo.ScanBy.push_back(rangeDescr);
-                        } else {
-                            rangeDescr << keyPartRange.ColumnName
-                                       << " (" << RemoveForbiddenChars(keyPartRange.From) << ")";
-                            readInfo.LookupBy.push_back(rangeDescr);
-                        }
-                    } else {
-                        rangeDescr << keyPartRange.ColumnName << " "
-                                   << (keyPartRange.From.Empty() ? "(" : leftParen)
-                                   << (keyPartRange.From.Empty() ? "-∞" : RemoveForbiddenChars(keyPartRange.From)) << ", "
-                                   << (keyPartRange.To.Empty() ? "+∞" : RemoveForbiddenChars(keyPartRange.To))
-                                   << (keyPartRange.To.Empty() ? ")" : rightParen);
-                        readInfo.ScanBy.push_back(rangeDescr);
-                        hasRangeScans = true;
-                    }
-
-                    ranges.AppendValue(rangeDescr);
-                }
-
-                if (readInfo.LookupBy.size() > 0) {
-                    bool isFullPk = readInfo.LookupBy.size() == tableData.Metadata->KeyColumnNames.size();
-                    readInfo.Type = isFullPk ? EPlanTableReadType::Lookup : EPlanTableReadType::Scan;
-                } else {
-                    readInfo.Type = hasRangeScans ? EPlanTableReadType::Scan : EPlanTableReadType::FullScan;
-                }
+            auto& ranges = op.Properties["ReadRanges"];
+            for (const auto& col : tableData.Metadata->KeyColumnNames) {
+                TStringBuilder rangeDesc;
+                rangeDesc << col << " (-∞, +∞)";
+                readInfo.ScanBy.push_back(rangeDesc);
+                ranges.AppendValue(rangeDesc);
             }
+        } else if (auto maybeResultBinding = ContainResultBinding(rangesDesc)) {
+            readInfo.Type = EPlanTableReadType::Scan;
 
-            auto& columns = op.Properties["ReadColumns"];
-            for (auto const& col : sourceSettings.Columns()) {
-                readInfo.Columns.emplace_back(TString(col.Value()));
-                columns.AppendValue(col.Value());
-            }
+            auto [txId, resId] = *maybeResultBinding;
+            if (auto result = GetResult(txId, resId)) {
+                auto ranges = (*result)[0];
+                const auto& keyColumns = tableData.Metadata->KeyColumnNames;
+                for (size_t rangeId = 0; rangeId < ranges.Size(); ++rangeId) {
+                    Y_ENSURE(ranges[rangeId].HaveValue() && ranges[rangeId].Size() == 2);
+                    auto from = ranges[rangeId][0];
+                    auto to = ranges[rangeId][1];
 
-            AddReadTableSettings(op, sourceSettings.Settings(), readInfo);
-
-            AddOptimizerEstimates(op, sourceSettings);
-
-            SerializerCtx.Tables[table].Reads.push_back(readInfo);
-
-            auto readName = GetNameByReadType(readInfo.Type);
-            op.Properties["Name"] = readName;
-            AddOperator(planNode, readName, std::move(op));
-        } else {
-            const auto table = TString(sourceSettings.Table().Path());
-            const auto explainPrompt = TKqpReadTableExplainPrompt::Parse(sourceSettings.ExplainPrompt().Cast());
-
-            TTableRead readInfo;
-            TOperator op;
-
-            auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, table);
-            op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : table;
-            planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
-
-            auto rangesDesc = NPlanUtils::PrettyExprStr(sourceSettings.RangesExpr());
-            if (rangesDesc == "Void" || explainPrompt.UsedKeyColumns.empty()) {
-                readInfo.Type = EPlanTableReadType::FullScan;
-
-                auto& ranges = op.Properties["ReadRanges"];
-                for (const auto& col : tableData.Metadata->KeyColumnNames) {
-                    TStringBuilder rangeDesc;
-                    rangeDesc << col << " (-∞, +∞)";
-                    readInfo.ScanBy.push_back(rangeDesc);
-                    ranges.AppendValue(rangeDesc);
-                }
-            } else if (auto maybeResultBinding = ContainResultBinding(rangesDesc)) {
-                readInfo.Type = EPlanTableReadType::Scan;
-
-                auto [txId, resId] = *maybeResultBinding;
-                if (auto result = GetResult(txId, resId)) {
-                    auto ranges = (*result)[0];
-                    const auto& keyColumns = tableData.Metadata->KeyColumnNames;
-                    for (size_t rangeId = 0; rangeId < ranges.Size(); ++rangeId) {
-                        Y_ENSURE(ranges[rangeId].HaveValue() && ranges[rangeId].Size() == 2);
-                        auto from = ranges[rangeId][0];
-                        auto to = ranges[rangeId][1];
-
-                        for (size_t colId = 0; colId < keyColumns.size(); ++colId) {
-                            if (!from[colId].HaveValue() && !to[colId].HaveValue()) {
-                                continue;
-                            }
-
-                            TStringBuilder rangeDesc;
-                            rangeDesc << keyColumns[colId] << " "
-                                << (from[keyColumns.size()].GetDataText() == "1" ? "[" : "(")
-                                << (from[colId].HaveValue() ? RemoveForbiddenChars(from[colId].GetSimpleValueText()) : "-∞") << ", "
-                                << (to[colId].HaveValue() ? RemoveForbiddenChars(to[colId].GetSimpleValueText()) : "+∞")
-                                << (to[keyColumns.size()].GetDataText() == "1" ? "]" : ")");
-
-                            readInfo.ScanBy.push_back(rangeDesc);
-                            op.Properties["ReadRanges"].AppendValue(rangeDesc);
+                    for (size_t colId = 0; colId < keyColumns.size(); ++colId) {
+                        if (!from[colId].HaveValue() && !to[colId].HaveValue()) {
+                            continue;
                         }
+
+                        TStringBuilder rangeDesc;
+                        rangeDesc << keyColumns[colId] << " "
+                            << (from[keyColumns.size()].GetDataText() == "1" ? "[" : "(")
+                            << (from[colId].HaveValue() ? RemoveForbiddenChars(from[colId].GetSimpleValueText()) : "-∞") << ", "
+                            << (to[colId].HaveValue() ? RemoveForbiddenChars(to[colId].GetSimpleValueText()) : "+∞")
+                            << (to[keyColumns.size()].GetDataText() == "1" ? "]" : ")");
+
+                        readInfo.ScanBy.push_back(rangeDesc);
+                        op.Properties["ReadRanges"].AppendValue(rangeDesc);
                     }
-                } else {
-                    op.Properties["ReadRanges"] = rangesDesc;
                 }
             } else {
-                Y_ENSURE(false, rangesDesc);
+                op.Properties["ReadRanges"] = rangesDesc;
             }
-
-            if (!explainPrompt.UsedKeyColumns.empty()) {
-                auto& usedColumns = op.Properties["ReadRangesKeys"];
-                for (const auto& col : explainPrompt.UsedKeyColumns) {
-                    usedColumns.AppendValue(col);
-                }
-            }
-
-            if (explainPrompt.ExpectedMaxRanges) {
-                op.Properties["ReadRangesExpectedSize"] = ToString(*explainPrompt.ExpectedMaxRanges);
-            }
-
-            op.Properties["ReadRangesPointPrefixLen"] = ToString(explainPrompt.PointPrefixLen);
-
-            auto& columns = op.Properties["ReadColumns"];
-            for (const auto& col : sourceSettings.Columns()) {
-                readInfo.Columns.emplace_back(TString(col.Value()));
-                columns.AppendValue(col.Value());
-            }
-
-            AddReadTableSettings(op, sourceSettings.Settings(), readInfo);
-
-            AddOptimizerEstimates(op, sourceSettings);
-
-            auto readName = GetNameByReadType(readInfo.Type);
-            op.Properties["Name"] = readName;
-            AddOperator(planNode, readName, std::move(op));
-
-            SerializerCtx.Tables[table].Reads.push_back(std::move(readInfo));
+        } else {
+            Y_ENSURE(false, rangesDesc);
         }
+
+        if (!explainPrompt.UsedKeyColumns.empty()) {
+            auto& usedColumns = op.Properties["ReadRangesKeys"];
+            for (const auto& col : explainPrompt.UsedKeyColumns) {
+                usedColumns.AppendValue(col);
+            }
+        }
+
+        if (explainPrompt.ExpectedMaxRanges) {
+            op.Properties["ReadRangesExpectedSize"] = ToString(*explainPrompt.ExpectedMaxRanges);
+        }
+
+        op.Properties["ReadRangesPointPrefixLen"] = ToString(explainPrompt.PointPrefixLen);
+
+        auto& columns = op.Properties["ReadColumns"];
+        for (const auto& col : sourceSettings.Columns()) {
+            readInfo.Columns.emplace_back(TString(col.Value()));
+            columns.AppendValue(col.Value());
+        }
+
+        AddReadTableSettings(op, sourceSettings.Settings(), readInfo);
+
+        AddOptimizerEstimates(op, sourceSettings);
+
+        auto readName = GetNameByReadType(readInfo.Type);
+        op.Properties["Name"] = readName;
+        AddOperator(planNode, readName, std::move(op));
+
+        SerializerCtx.Tables[table].Reads.push_back(std::move(readInfo));
     }
 
     // Try get cluster from data surce or data sink node
@@ -1015,7 +903,9 @@ private:
         TMaybe<std::variant<ui32, TArgContext>> operatorId;
 
         if (auto maybeRead = TMaybeNode<TKqlReadTableBase>(node)) {
-            operatorId = Visit(maybeRead.Cast(), planNode);
+            auto read = maybeRead.Cast();
+            TString table = TString(read.Table().Path()); TKqlKeyRange range = read.Range();
+            operatorId = Visit(table, range, read, planNode);
         } else if (TMaybeNode<TKqlReadTableRangesBase>(node) && !TMaybeNode<TKqpReadOlapTableRangesBase>(node)) {
             auto maybeReadRanges = TMaybeNode<TKqlReadTableRangesBase>(node);
             operatorId = Visit(maybeReadRanges.Cast(), planNode);
@@ -1742,45 +1632,41 @@ private:
         return operatorId;
     }
 
-    std::variant<ui32, TArgContext> Visit(const TKqlReadTableBase& read, TQueryPlanNode& planNode) {
-        auto table = TString(read.Table().Path());
-        auto range = read.Range();
-
+    template <typename TReadTableNode>
+    std::variant<ui32, TArgContext> Visit(const TString& table, const TKqlKeyRange& range, const TReadTableNode& read, TQueryPlanNode& planNode) {
         TOperator op;
         TTableRead readInfo;
 
         auto describeBoundary = [this](const TExprBase& key) {
-            if (auto param = key.Maybe<TCoParameter>()) {
-               return param.Cast().Name().StringValue();
-            }
+            TString res("n/a");
 
-            if (auto param = key.Maybe<TCoNth>().Tuple().Maybe<TCoParameter>()) {
+            if (auto param = key.Maybe<TCoParameter>()) {
+                res = param.Cast().Name().StringValue();
+            } else if (auto param = key.Maybe<TCoNth>().Tuple().Maybe<TCoParameter>()) {
                 if (auto maybeResultBinding = ContainResultBinding(param.Cast().Name().StringValue())) {
                     auto [txId, resId] = *maybeResultBinding;
                     if (auto result = GetResult(txId, resId)) {
                         auto index = FromString<ui32>(key.Cast<TCoNth>().Index());
                         Y_ENSURE(index < result->Size());
-                        return DescribeValue((*result)[index]);
+                        res = DescribeValue((*result)[index]);
                     }
                 }
+            } else if (auto literal = key.Maybe<TCoUuid>()) {
+                res = NUuid::UuidBytesToString(literal.Cast().Literal().StringValue());
+            } else if (auto literal = key.Maybe<TCoDataCtor>()) {
+                res = literal.Cast().Literal().StringValue();
+            } else if (auto literal = key.Maybe<TCoNothing>()) {
+                res = TString("null");
             }
 
-            if (auto literal = key.Maybe<TCoDataCtor>()) {
-                return literal.Cast().Literal().StringValue();
-            }
-
-            if (auto literal = key.Maybe<TCoNothing>()) {
-                return TString("null");
-            }
-
-            return TString("n/a");
+            return res.empty()? "«»" : res;
         };
 
         /* Collect info about scan range */
         struct TKeyPartRange {
-            TString From;
-            TString To;
-            TString ColumnName;
+            std::optional<std::string> From{};
+            std::optional<std::string> To{};
+            std::string ColumnName{};
         };
         auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, table);
         op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : table;
@@ -1811,20 +1697,20 @@ private:
                 TStringBuilder rangeDescr;
 
                 if (keyPartRange.From == keyPartRange.To) {
-                    if (keyPartRange.From.Empty()) {
+                    if (!keyPartRange.From.has_value()) {
                         rangeDescr << keyPartRange.ColumnName << " (-∞, +∞)";
                         readInfo.ScanBy.push_back(rangeDescr);
                     } else {
                         rangeDescr << keyPartRange.ColumnName
-                                   << " (" << RemoveForbiddenChars(keyPartRange.From) << ")";
+                                   << " (" << RemoveForbiddenChars(*keyPartRange.From) << ")";
                         readInfo.LookupBy.push_back(rangeDescr);
                     }
                 } else {
                     rangeDescr << keyPartRange.ColumnName << " "
-                               << (keyPartRange.From.Empty() ? "(" : leftParen)
-                               << (keyPartRange.From.Empty() ? "-∞" : RemoveForbiddenChars(keyPartRange.From)) << ", "
-                               << (keyPartRange.To.Empty() ? "+∞" : RemoveForbiddenChars(keyPartRange.To))
-                               << (keyPartRange.To.Empty() ? ")" : rightParen);
+                               << (!keyPartRange.From.has_value() ? "(" : leftParen)
+                               << (!keyPartRange.From.has_value() ? "-∞" : RemoveForbiddenChars(*keyPartRange.From)) << ", "
+                               << (!keyPartRange.To.has_value() ? "+∞" : RemoveForbiddenChars(*keyPartRange.To))
+                               << (!keyPartRange.To.has_value() ? ")" : rightParen);
                     readInfo.ScanBy.push_back(rangeDescr);
                     hasRangeScans = true;
                 }
@@ -1846,7 +1732,11 @@ private:
             columns.AppendValue(col.Value());
         }
 
-        AddReadTableSettings(op, read, readInfo);
+        if constexpr (std::is_same_v<TKqpReadRangesSourceSettings, TReadTableNode>) {
+            AddReadTableSettings(op, read.Settings(), readInfo);
+        } else {
+            AddReadTableSettings(op, read, readInfo);
+        }
 
         SerializerCtx.Tables[table].Reads.push_back(readInfo);
 

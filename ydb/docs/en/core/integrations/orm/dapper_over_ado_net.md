@@ -74,7 +74,7 @@ Here is a list of parameters that can be specified in the connection string:
 
 There are also additional parameters that do not participate in forming the connection string. These can only be specified using `YdbConnectionStringBuilder`:
 
-| Parameter             | Description                                                     | Default Value |
+| Parameter             | Description                                                     | Default value |
 |-----------------------|-----------------------------------------------------------------|---------------|
 | `LoggerFactory`       | This parameter serves as a factory for creating logging classes | Not defined   |
 | `CredentialsProvider` | Authenticates the user using an external IAM provider           | Not defined   |

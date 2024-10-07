@@ -4,29 +4,27 @@
 
 namespace NKikimr::NGRpcProxy::V1 {
 
-bool RemoveEmptyMessages(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch& data) {
-    auto batchRemover = [&](PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch& batch) -> bool {
-        return batch.message_data_size() == 0;
-    };
-    auto partitionDataRemover = [&](PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::PartitionData& partition) -> bool {
-        NProtoBuf::RemoveRepeatedFieldItemIf(partition.mutable_batches(), batchRemover);
-        return partition.batches_size() == 0;
-    };
-    NProtoBuf::RemoveRepeatedFieldItemIf(data.mutable_partition_data(), partitionDataRemover);
-    return !data.partition_data().empty();
+bool HasMessages(const PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch& data) {
+    for (const auto& partData : data.partition_data()) {
+        for (const auto& batch : partData.batches()) {
+            if (batch.message_data_size() > 0) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 // TODO: remove after refactor
-bool RemoveEmptyMessages(Topic::StreamReadMessage::ReadResponse& data) {
-    auto batchRemover = [&](Topic::StreamReadMessage::ReadResponse::Batch& batch) -> bool {
-        return batch.message_data_size() == 0;
-    };
-    auto partitionDataRemover = [&](Topic::StreamReadMessage::ReadResponse::PartitionData& partition) -> bool {
-        NProtoBuf::RemoveRepeatedFieldItemIf(partition.mutable_batches(), batchRemover);
-        return partition.batches_size() == 0;
-    };
-    NProtoBuf::RemoveRepeatedFieldItemIf(data.mutable_partition_data(), partitionDataRemover);
-    return !data.partition_data().empty();
+bool HasMessages(const Topic::StreamReadMessage::ReadResponse& data) {
+    for (const auto& partData : data.partition_data()) {
+        for (const auto& batch : partData.batches()) {
+            if (batch.message_data_size() > 0) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 }

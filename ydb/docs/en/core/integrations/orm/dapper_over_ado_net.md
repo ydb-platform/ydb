@@ -12,13 +12,13 @@ The [{{ ydb-short-name }} SDK for C#](https://github.com/ydb-platform/ydb-dotnet
 
 The ADO.NET implementation for {{ ydb-short-name }} is available via NuGet.
 
-### Creating a Connection
+### Creating a connection
 
-A connection to YDB is established using YdbConnection.
+A connection to {{ ydb-short-name }} is established using `YdbConnection`.
 
 1. **Using the parameterless constructor**:
 
-   The following code creates a connection with default settings:
+   The following code creates a connection with the default settings:
 
     ```c#
     await using var ydbConnection = new YdbConnection();

@@ -111,11 +111,13 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
     const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
     const TVector<TString>& leftJoinKeys,
     const TVector<TString>& rightJoinKeys,
-    TKqpProviderContext& ctx) {
+    TKqpProviderContext& ctx
+) {
+    Y_UNUSED(left, joinConditions, leftJoinKeys);
 
-    Y_UNUSED(joinConditions);
-    Y_UNUSED(left);
-    Y_UNUSED(leftJoinKeys);
+    if (!(right->Stats->StorageType == EStorageType::RowStorage)) {
+        return false;
+    }
 
     auto rightStats = right->Stats;
 

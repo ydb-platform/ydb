@@ -25,7 +25,7 @@ A connection to {{ ydb-short-name }} is established using `YdbConnection`.
     await ydbConnection.OpenAsync();
     ```
 
-   This option creates a connection to the database at the URL: `grpc://localhost:2136/local`, with anonymous authentication.
+   This option creates a connection to the database at the URL `grpc://localhost:2136/local` with anonymous authentication.
 
 2. **Using the constructor with a connection string**:
 

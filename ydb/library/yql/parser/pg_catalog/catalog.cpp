@@ -4042,13 +4042,20 @@ void ImportExtensions(const TString& exported, bool typesOnly, IExtensionLoader*
         Y_ENSURE(proto.ParseFromString(exported));
         for (ui32 i = 0; i < proto.ExtensionSize(); ++i) {
             const auto& protoExt = proto.GetExtension(i);
-            TExtensionDesc ext;
-            ext.Name = protoExt.GetName();
-            ext.InstallName = protoExt.GetInstallName();
-            ext.TypesOnly = protoExt.GetTypesOnly();
-            ext.LibraryMD5 = protoExt.GetLibraryMD5();
-            ext.LibraryPath = protoExt.GetLibraryPath();
-            catalog.State->Extensions.push_back(ext);
+            TExtensionDesc e;
+            e.Name = protoExt.GetName();
+            e.InstallName = protoExt.GetInstallName();
+            e.TypesOnly = protoExt.GetTypesOnly();
+            e.LibraryMD5 = protoExt.GetLibraryMD5();
+            e.LibraryPath = protoExt.GetLibraryPath();
+            catalog.State->Extensions.push_back(e);
+            if (!catalog.State->ExtensionsByName.insert(std::make_pair(e.Name, i + 1)).second) {
+                throw yexception() << "Duplicated extension name: " << e.Name;
+            }
+
+            if (!catalog.State->ExtensionsByInstallName.insert(std::make_pair(e.InstallName, i + 1)).second) {
+                throw yexception() << "Duplicated extension install name: " << e.InstallName;
+            }
         }
 
         for (const auto& protoType : proto.GetType()) {

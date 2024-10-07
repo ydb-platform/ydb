@@ -59,7 +59,7 @@ A connection to {{ ydb-short-name }} is established using `YdbConnection`.
 
 All available connection parameters are defined as properties in the `YdbConnectionStringBuilder`.
 
-Here is a list of parameters that can be specified in the ConnectionString:
+Here is a list of parameters that can be specified in the connection string:
 
 | Parameter         | Description                                                                                         | Default Value |
 |-------------------|-----------------------------------------------------------------------------------------------------|---------------|

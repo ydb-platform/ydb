@@ -212,21 +212,6 @@ struct TDummyPartitionSession: public NYdb::NTopic::TPartitionSession {
     }
 };
 
-static bool IsPipe(const TString& filePath) {
-#ifdef _unix_
-    int file = open(filePath.c_str(), O_RDWR);
-    if (file < 0) {
-        return false;
-    }
-    struct stat stats;
-    if (fstat(file, &stats) != 0) {
-        return false;
-    }
-    return S_ISFIFO(stats.st_mode);
-#endif
-    return false;
-}
-
 std::shared_ptr<NYdb::NTopic::IReadSession> TFileTopicClient::CreateReadSession(const NYdb::NTopic::TReadSessionSettings& settings) {
     Y_ENSURE(!settings.Topics_.empty());
     const auto& topic = settings.Topics_.front();
@@ -246,11 +231,7 @@ std::shared_ptr<NYdb::NTopic::IReadSession> TFileTopicClient::CreateReadSession(
         if (fsPath.Exists() && topicsIt->second.PartitionsCount == 1) {
             filePath = *path;
         } else {
-            if (IsPipe(*path)) {
-                filePath = TStringBuilder() << *path << "_" << ToString(partitionId);
-            } else {
-                filePath = *path;
-            }
+            filePath = TStringBuilder() << *path << "_" << ToString(partitionId);
         }
     }
 

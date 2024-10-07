@@ -117,11 +117,11 @@ struct TEvSchedulerDeregister : public TEventLocal<TEvSchedulerDeregister, TKqpC
 };
 
 struct TEvSchedulerNewPool : public TEventLocal<TEvSchedulerNewPool, TKqpComputeSchedulerEvents::EvNewPool> {
-    TString Database;
+    TString DatabaseId;
     TString Pool;
 
-    TEvSchedulerNewPool(TString database, TString pool)
-        : Database(database)
+    TEvSchedulerNewPool(TString databaseId, TString pool)
+        : DatabaseId(databaseId)
         , Pool(pool)
     {
     }

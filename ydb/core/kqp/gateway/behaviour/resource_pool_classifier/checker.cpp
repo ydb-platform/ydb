@@ -48,13 +48,13 @@ class TRanksCheckerActor : public NKikimr::TQueryBase {
     using TBase = NKikimr::TQueryBase;
 
 public:
-    TRanksCheckerActor(const TString& database, const TString& sessionId, const TString& transactionId, const std::unordered_map<i64, TString>& ranksToCheck)
+    TRanksCheckerActor(const TString& databaseId, const TString& sessionId, const TString& transactionId, const std::unordered_map<i64, TString>& ranksToCheck)
         : TBase(NKikimrServices::KQP_GATEWAY, sessionId)
-        , Database(database)
+        , DatabaseId(databaseId)
         , RanksToCheck(ranksToCheck)
     {
         TxId = transactionId;
-        SetOperationInfo(__func__, Database);
+        SetOperationInfo(__func__, DatabaseId);
     }
 
     void OnRunQuery() override {
@@ -62,13 +62,13 @@ public:
 
         TStringBuilder sql = TStringBuilder() << R"(
             -- TRanksCheckerActor::OnRunQuery
-            DECLARE $database AS Text;
+            DECLARE $database_id AS Text;
         )";
 
         NYdb::TParamsBuilder params;
         params
-            .AddParam("$database")
-                .Utf8(CanonizePath(Database))
+            .AddParam("$database_id")
+                .Utf8(CanonizePath(DatabaseId))
                 .Build();
 
         if (!RanksToCheck.empty()) {
@@ -79,7 +79,7 @@ public:
                 SELECT
                     rank, name
                 FROM `)" << tablePath << R"(`
-                WHERE database = $database
+                WHERE database = $database_id
                   AND rank IN $ranks;
             )";
 
@@ -97,7 +97,7 @@ public:
                 MAX(rank) AS MaxRank,
                 COUNT(*) AS NumberClassifiers
             FROM `)" << tablePath << R"(`
-            WHERE database = $database;
+            WHERE database = $database_id;
         )";
 
         RunDataQuery(sql, &params, TTxControl::ContinueTx());
@@ -149,7 +149,7 @@ public:
     }
 
 private:
-    const TString Database;
+    const TString DatabaseId;
     const std::unordered_map<i64, TString> RanksToCheck;
 
     ui64 ExpectedResultSets = 1;
@@ -235,8 +235,8 @@ public:
             TResourcePoolClassifierConfig object;
             TResourcePoolClassifierConfig::TDecoder::DeserializeFromRecord(object, objectRecord);
 
-            if (!snapshot->GetClassifierConfig(CanonizePath(object.GetDatabase()), object.GetName())) {
-                FailAndPassAway(TStringBuilder() << "Classifier with name " << object.GetName() << " not found in database " << object.GetDatabase());
+            if (!snapshot->GetClassifierConfig(object.GetDatabase(), object.GetName())) {
+                FailAndPassAway(TStringBuilder() << "Classifier with name " << object.GetName() << " not found in database with id " << object.GetDatabase());
                 return;
             }
         }
@@ -279,7 +279,7 @@ private:
         }
 
         Register(new TQueryRetryActor<TRanksCheckerActor, TEvPrivate::TEvRanksCheckerResponse, TString, TString, TString, std::unordered_map<i64, TString>>(
-            SelfId(), Context.GetExternalData().GetDatabase(), AlterContext.GetSessionId(), AlterContext.GetTransactionId(), ranksToNames
+            SelfId(), Context.GetExternalData().GetDatabaseId(), AlterContext.GetSessionId(), AlterContext.GetTransactionId(), ranksToNames
         ));
     }
 

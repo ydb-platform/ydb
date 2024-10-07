@@ -99,6 +99,9 @@ private:
 };
 
 
+TString CreateDatabaseId(const TString& database, bool serverless, TPathId pathId);
+TString DatabaseIdToDatabase(TStringBuf databaseId);
+
 NYql::TIssues GroupIssues(const NYql::TIssues& issues, const TString& message);
 
 void ParsePoolSettings(const NKikimrSchemeOp::TResourcePoolDescription& description, NResourcePool::TPoolSettings& poolConfig);

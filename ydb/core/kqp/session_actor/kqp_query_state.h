@@ -88,6 +88,7 @@ public:
         }
         UserRequestContext->PoolId = RequestEv->GetPoolId();
         UserRequestContext->PoolConfig = RequestEv->GetPoolConfig();
+        UserRequestContext->DatabaseId = RequestEv->GetDatabaseId();
     }
 
     // the monotonously growing counter, the ordinal number of the query,

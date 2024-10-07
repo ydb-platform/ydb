@@ -493,11 +493,19 @@ public:
     }
 
     const TSnapshot& RecordSnapshotMin() const {
-        return Meta.RecordSnapshotMin;
+        if (InsertWriteId) {
+            return GetCommitSnapshotVerified();
+        } else {
+            return Meta.RecordSnapshotMin;
+        }
     }
 
     const TSnapshot& RecordSnapshotMax() const {
-        return Meta.RecordSnapshotMax;
+        if (InsertWriteId) {
+            return GetCommitSnapshotVerified();
+        } else {
+            return Meta.RecordSnapshotMax;
+        }
     }
 
 

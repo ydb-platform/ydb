@@ -983,7 +983,9 @@ public:
     void Handle(TEvBlobStorage::TEvAskWardenRestartPDiskResult::TPtr &ev) {
         bool restartAllowed = ev->Get()->RestartAllowed;
 
-        bool isReadingLog = PDisk->InitPhase == EInitPhase::ReadingSysLog || PDisk->InitPhase == EInitPhase::ReadingLog;
+        EInitPhase initPhase = PDisk->InitPhase.load();
+
+        bool isReadingLog = initPhase == EInitPhase::ReadingSysLog || initPhase == EInitPhase::ReadingLog;
 
         if ((isReadingLog && CurrentStateFunc() != &TPDiskActor::StateError) || IsFormattingNow) {
             // If disk is in the process of initialization (reading log) and it is not in error state, or disk is being formatted,

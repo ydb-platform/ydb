@@ -3,7 +3,7 @@
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
-#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/base/iface.h>
 #include <ydb/core/grpc_services/cancelation/cancelation_event.h>
 #include <ydb/core/grpc_services/cancelation/cancelation.h>
 

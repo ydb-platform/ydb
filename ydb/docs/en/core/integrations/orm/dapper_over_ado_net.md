@@ -55,7 +55,7 @@ A connection to {{ ydb-short-name }} is established using `YdbConnection`.
     await ydbConnection.OpenAsync();
     ```
 
-### Connection Parameters
+### Connection parameters {#connection-parameters}
 
 All available connection parameters are defined as properties in the `YdbConnectionStringBuilder`.
 

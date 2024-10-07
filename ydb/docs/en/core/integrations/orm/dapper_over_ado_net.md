@@ -4,9 +4,9 @@
 
 ## ADO.NET
 
-ADO.NET is a set of classes that provide data access for developers using the .NET Framework platform.
+ADO.NET is a set of classes that provide developers with data access using the [.NET Framework](https://dotnet.microsoft.com/en-us/download/dotnet-framework) platform.
 
-The YDB SDK C# provides a set of classes implementing the ADO.NET standard.
+The [{{ ydb-short-name }} SDK for C#](https://github.com/ydb-platform/ydb-dotnet-sdk) offers a set of classes that implement the ADO.NET standard.
 
 ### Installation
 

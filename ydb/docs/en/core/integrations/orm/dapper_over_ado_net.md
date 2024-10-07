@@ -10,7 +10,7 @@ The [{{ ydb-short-name }} SDK for C#](https://github.com/ydb-platform/ydb-dotnet
 
 ### Installation
 
-The ADO.NET implementation for YDB is available through NuGet.
+The ADO.NET implementation for {{ ydb-short-name }} is available via NuGet.
 
 ### Creating a Connection
 

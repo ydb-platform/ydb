@@ -19,9 +19,6 @@
 #include <util/generic/size_literals.h>
 #include <util/folder/dirut.h>
 
-#include <ydb/core/fq/libs/init/init.h>
-#include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
-
 namespace NYql {
 
 using namespace NActors;

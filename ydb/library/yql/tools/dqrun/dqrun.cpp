@@ -498,6 +498,31 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
     return 0;
 }
 
+void InitFq(const NFq::NConfig::TConfig& fqConfig, TVector<std::pair<TActorId, TActorSetupCmd>>& additionalLocalServices) {
+    if (fqConfig.HasRowDispatcher() && fqConfig.GetRowDispatcher().GetEnabled()) {
+        NFq::IYqSharedResources::TPtr iSharedResources = NFq::CreateYqSharedResources(
+            fqConfig,
+            NKikimr::CreateYdbCredentialsProviderFactory,
+            MakeIntrusive<NMonitoring::TDynamicCounters>());
+        NFq::TYqSharedResources::TPtr yqSharedResources = NFq::TYqSharedResources::Cast(iSharedResources);
+        ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
+
+        NFq::NConfig::TCommonConfig commonConfig;
+        auto rowDispatcher = NFq::NewRowDispatcherService(
+            fqConfig.GetRowDispatcher(),
+            commonConfig,
+            NKikimr::CreateYdbCredentialsProviderFactory,
+            yqSharedResources,
+            credentialsFactory,
+            "/tenant",
+            MakeIntrusive<NMonitoring::TDynamicCounters>());
+
+        additionalLocalServices.emplace_back(
+            NFq::RowDispatcherServiceActorId(),
+            TActorSetupCmd(rowDispatcher.release(), TMailboxType::Simple, 0));
+    }
+}
+
 int RunMain(int argc, const char* argv[])
 {
     TString gatewaysCfgFile;
@@ -1019,6 +1044,7 @@ int RunMain(int argc, const char* argv[])
         dataProvidersInit.push_back(GetS3DataProviderInitializer(httpGateway, nullptr));
     }
 
+
     IPqGateway::TPtr pqGateway;
     if (gatewaysConfig.HasPq()) {
         TPqGatewayServices pqServices(
@@ -1063,6 +1089,8 @@ int RunMain(int argc, const char* argv[])
             clusters.emplace(to_lower(cluster.GetName()), TString{NYql::SolomonProviderName});
         }
     }
+    TVector<std::pair<TActorId, TActorSetupCmd>> additionalLocalServices;
+    InitFq(fqConfig, additionalLocalServices);
 
     std::function<NActors::IActor*(void)> metricsPusherFactory = {};
 
@@ -1087,7 +1115,7 @@ int RunMain(int argc, const char* argv[])
             bool enableSpilling = res.Has("enable-spilling");
             dqGateway = CreateLocalDqGateway(funcRegistry.Get(), dqCompFactory, dqTaskTransformFactory, dqTaskPreprocessorFactories, enableSpilling,
                 CreateAsyncIoFactory(driver, httpGateway, ytFileServices, genericClient, credentialsFactory, *funcRegistry, requestTimeout, maxRetries, pqGateway), threads,
-                metricsRegistry, metricsPusherFactory, fqConfig);
+                metricsRegistry, metricsPusherFactory, std::move(additionalLocalServices));
         }
 
         dataProvidersInit.push_back(GetDqDataProviderInitializer(&CreateDqExecTransformer, dqGateway, dqCompFactory, {}, storage));

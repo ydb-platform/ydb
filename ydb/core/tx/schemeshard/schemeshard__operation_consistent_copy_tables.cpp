@@ -214,6 +214,7 @@ void CreateConsistentCopyTables(
         }
 
         Cerr << "<----- CopyTables" << Endl;
+        Cerr << dstStr << Endl;
         TPath dstPath = op.HasDstBasePath() ? TPath::Resolve(JoinPath({op.GetDstBasePath(), dstStr}), context.SS) : TPath::Resolve(dstStr, context.SS);
 
         THashSet<TString> sequences;

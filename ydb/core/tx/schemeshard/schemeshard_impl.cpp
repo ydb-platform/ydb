@@ -4902,6 +4902,10 @@ void TSchemeShard::RemoveTx(const TActorContext &ctx, NIceDb::TNiceDb &db, TOper
     }
 
     TxInFlight.erase(opId); // must be called last, erases txState invalidating txState ptr
+
+    if (auto it = HackPostponedOps.find(opId.GetTxId()); it != HackPostponedOps.end()) {
+        Send(TxAllocatorClient, new TEvTxAllocatorClient::TEvAllocate(), 0, opId.GetTxId().GetValue());
+    }
 }
 
 TMaybe<NKikimrSchemeOp::TPartitionConfig> TSchemeShard::GetTablePartitionConfigWithAlterData(TPathId pathId) const {
@@ -6387,11 +6391,15 @@ void TSchemeShard::Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, con
         return Execute(CreateTxProgressImport(ev), ctx);
     } else if (IndexBuilds.contains(TIndexBuildId(id))) {
         return Execute(CreateTxReply(ev), ctx);
+    } else if (HackPostponedOps.contains(TTxId(id))) {
+        HackPostponedOps[TTxId(id)](ctx, SelfId(), ev);
+        HackPostponedOps.erase(TTxId(id));
     }
 
     LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                "no able to determine destination for message TEvAllocateResult: "
-                   << " Cookie: " << id
+                   << "ev: " << ev->Get()->TxIds.front()
+                   << ", Cookie: " << id
                    << ", at schemeshard: " << TabletID());
 }
 
@@ -6417,7 +6425,8 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr
 
     LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                "no able to determine destination for message TEvModifySchemeTransactionResult: "
-                   << " txId: " << txId
+                   << ", ev: " << ev->Get()->Record.ShortDebugString()
+                   << ", txId: " << txId
                    << ", at schemeshard: " << TabletID());
 }
 

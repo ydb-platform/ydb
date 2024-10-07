@@ -184,14 +184,16 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
 
     TVector<ISubOperation::TPtr> result;
 
+    cct.SetDstBasePath(bcPath.GetDomainPathString());
+
     size_t cutLen = bcPath.GetDomainPathString().size() + 1;
 
     for (const auto& item : bc->Properties.GetExplicitEntryList().GetEntries()) {
         Y_UNUSED(item, copyTables);
 
-       auto& desc = *copyTables.Add();
+        auto& desc = *copyTables.Add();
         desc.SetSrcPath(bcPath.Child(lastFullBackupName).PathString() + item.GetPath().substr(cutLen - 1, item.GetPath().size() - cutLen + 1));
-        desc.SetDstPath(item.GetPath());
+        desc.SetDstPath(item.GetPath().substr(cutLen, item.GetPath().size() - cutLen));
         desc.SetOmitIndexes(true);
         desc.SetOmitFollowers(true);
         // desc.SetIsBackup(true);
@@ -199,23 +201,41 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
 
     CreateConsistentCopyTables(opId, modifyScheme, context, result);
 
+    TVector<NKikimrSchemeOp::TModifyScheme> postponed;
+    for (const auto& item : bc->Properties.GetExplicitEntryList().GetEntries()) {
+        NKikimrSchemeOp::TModifyScheme modifyScheme2;
+        modifyScheme2.SetOperationType(NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups);
+        modifyScheme2.SetInternal(true);
+
+        auto& desc = *modifyScheme2.MutableRestoreMultipleIncrementalBackups();
+        for (const auto& incr : incBackupNames) {
+            auto path = bcPath.Child(incr).PathString() + item.GetPath().substr(cutLen - 1, item.GetPath().size() - cutLen + 1);
+            Cerr << "set src _@@@_ " << path << Endl;
+            desc.AddSrcTableNames(path);
+        }
+        desc.SetDstTableName(item.GetPath());
+
+        postponed.push_back(modifyScheme2);
+    }
+
     // oh...
+    context.SS->HackPostponedOps[opId.GetTxId()] = [toActivate = std::move(postponed), tabletId = context.SS->TabletID()](
+        const TActorContext& ctx,
+        TActorId self,
+        TEvTxAllocatorClient::TEvAllocateResult::TPtr& allocateResult)
+    {
+        const auto txId = TTxId(allocateResult->Get()->TxIds.front());
+        auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId.GetValue(), tabletId);
+        auto& record = propose->Record;
 
-    // //
+        for (const auto& req : toActivate) {
+            record.AddTransaction()->CopyFrom(req);
+        }
 
-    // for (const auto& item : bc->Properties.GetExplicitEntryList().GetEntries()) {
-    //     NKikimrSchemeOp::TModifyScheme modifyScheme2;
-    //     modifyScheme2.SetOperationType(NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups);
-    //     modifyScheme2.SetInternal(true);
+        ctx.Send(self, static_cast<IEventBase*>(propose.Release()), 0, 0);
+    };
 
-    //     auto& desc = *modifyScheme2.MutableRestoreMultipleIncrementalBackups();
-    //     // for (const auto& srcTableName : srcTableNames) {
-    //     //     desc.AddSrcTableNames(srcTableName);
-    //     // }
-    //     desc.SetDstTableName(item.GetPath());
 
-    //     CreateRestoreMultipleIncrementalBackups(opId, modifyScheme2, context, result);
-    // }
     // //
 
     return result;

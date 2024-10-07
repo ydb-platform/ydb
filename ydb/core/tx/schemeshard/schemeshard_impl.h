@@ -375,6 +375,8 @@ public:
     TActorId DelayedInitTenantDestination;
     TAutoPtr<TEvSchemeShard::TEvInitTenantSchemeShardResult> DelayedInitTenantReply;
 
+    THashMap<TTxId, std::function<void(const TActorContext& ctx, TActorId self, TEvTxAllocatorClient::TEvAllocateResult::TPtr& allocateResult)>> HackPostponedOps;
+
     NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory{NExternalSource::CreateExternalSourceFactory({})};
 
     THolder<TProposeResponse> IgniteOperation(TProposeRequest& request, TOperationContext& context);

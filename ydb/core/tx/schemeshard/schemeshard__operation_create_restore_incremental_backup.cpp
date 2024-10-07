@@ -644,7 +644,7 @@ bool CreateRestoreMultipleIncrementalBackups(
                 .NotDeleted()
                 .IsTable()
                 .NotUnderDeleting()
-                .NotUnderOperation()
+                // .NotUnderOperation()
                 .IsCommonSensePath();
 
             if (!checks) {
@@ -667,7 +667,7 @@ bool CreateRestoreMultipleIncrementalBackups(
             .NotDeleted()
             .IsTable()
             .NotUnderDeleting()
-            .NotUnderOperation()
+            // .NotUnderOperation()
             .IsCommonSensePath();
 
         if (!checks) {

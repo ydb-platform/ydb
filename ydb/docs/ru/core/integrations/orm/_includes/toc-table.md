@@ -5,4 +5,4 @@
 | [Hibernate](https://hibernate.org/orm/)                         | [Инструкция](../hibernate.md)           |
 | [Spring Data JDBC](https://spring.io/projects/spring-data-jdbc) | [Инструкция](../spring-data-jdbc.md)    |
 | [JOOQ](https://www.jooq.org/)                                   | [Инструкция](../jooq.md)                |
-| [Dapper](https://dappertutorial.net/)                           | [Инструкция](../dapper_over_ado_net.md) |
+| [Dapper](https://www.learndapper.com/)                           | [Инструкция](../dapper) |

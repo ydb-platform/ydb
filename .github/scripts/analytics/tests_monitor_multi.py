@@ -50,6 +50,9 @@ def create_tables(pool, table_path):
                 `previous_state` Utf8,
                 `state_change_date` Date,
                 `days_in_state` Uint64,
+                `previous_state_filtered` Utf8,
+                `state_change_date_filtered` Date,
+                `days_in_state_filtered` Uint64,
                 PRIMARY KEY (`test_name`, `suite_folder`, `full_name`,date_window, build_type, branch)
             )
                 PARTITION BY HASH(build_type,branch)
@@ -86,6 +89,9 @@ def bulk_upsert(table_client, table_path, rows):
         .add_column("previous_state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("state_change_date", ydb.OptionalType(ydb.PrimitiveType.Date))
         .add_column("days_in_state", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+        .add_column("previous_state_filtered", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("state_change_date_filtered", ydb.OptionalType(ydb.PrimitiveType.Date))
+        .add_column("days_in_state_filtered", ydb.OptionalType(ydb.PrimitiveType.Uint64))
     )
     table_client.bulk_upsert(table_path, rows, column_types)
 
@@ -95,20 +101,35 @@ def process_test_group(name, group, last_day_data, default_start_date):
     prev_state = 'no_runs'
     prev_date = datetime.datetime(default_start_date.year, default_start_date.month, default_start_date.day)
     current_days_in_state = 0
+    state_list_for_filter = ['Muted', 'Muted Flaky', 'Muted Stable', 'Flaky', 'Passed']
+    
     # Get 'days_in_state' for the last existing day for the current test
     if last_day_data is not None and last_day_data.shape[0] > 0:
         try:
             last_day_days_in_state = last_day_data[last_day_data['full_name'] == name]['days_in_state'].iloc[0]
             prev_state = last_day_data[last_day_data['full_name'] == name]['state'].iloc[0]
             prev_date = last_day_data[last_day_data['full_name'] == name]['state_change_date'].iloc[0]
+            last_day_days_in_state_filtered = last_day_data[last_day_data['full_name'] == name]['days_in_state_filtered'].iloc[0]
+            prev_state_filtered = last_day_data[last_day_data['full_name'] == name]['previous_state_filtered'].iloc[0]
+            prev_date_filtered = last_day_data[last_day_data['full_name'] == name]['state_change_date_filtered'].iloc[0]
         except IndexError:
             # If data for this test doesn't exist in last_day_data, use default values
             last_day_days_in_state = current_days_in_state
+            last_day_days_in_state_filtered = current_days_in_state_filtered
         current_days_in_state = last_day_days_in_state
+        current_days_in_state_filtered = last_day_days_in_state_filtered
 
     previous_state_list = []
     state_change_date_list = []
     days_in_state_list = []
+
+    prev_state_filtered = 'no_runs'
+    prev_date_filtered = datetime.datetime(default_start_date.year, default_start_date.month, default_start_date.day)
+    current_days_in_state_filtered = 0
+
+    previous_state_filtered_list = []
+    state_change_date_filtered_list = []
+    days_in_state_filtered_list = []
 
     for index, row in group.iterrows():
         previous_state_list.append(prev_state)
@@ -121,10 +142,29 @@ def process_test_group(name, group, last_day_data, default_start_date):
         days_in_state_list.append(current_days_in_state)
         current_days_in_state += 1
 
+        # Process filtered states
+        previous_state_filtered_list.append(prev_state_filtered)
+        if row['state'] not in state_list_for_filter:
+            row['state_filtered'] = prev_state_filtered 
+        else:
+           row['state_filtered'] =  row['state']
+            
+        if row['state_filtered'] != prev_state_filtered:
+            prev_state_filtered = row['state_filtered']
+            prev_date_filtered = row['date_window']
+            current_days_in_state_filtered = 1
+
+        state_change_date_filtered_list.append(prev_date_filtered)
+        days_in_state_filtered_list.append(current_days_in_state_filtered)
+        current_days_in_state_filtered += 1
+
     return {
         'previous_state': previous_state_list,
         'state_change_date': state_change_date_list,
         'days_in_state': days_in_state_list,
+        'previous_state_filtered': previous_state_filtered_list,
+        'state_change_date_filtered': state_change_date_filtered_list,
+        'days_in_state_filtered': days_in_state_filtered_list,
     }
 
 
@@ -221,9 +261,9 @@ def main():
         tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=False)
         table_client = ydb.TableClient(driver, tc_settings)
         base_date = datetime.datetime(1970, 1, 1)
-        default_start_date = datetime.date(2024, 10, 1)
+        default_start_date = datetime.date(2024, 8, 1)
         today = datetime.date.today()
-        table_path = f'test_results/analytics/tests_monitor_test_3'
+        table_path = f'test_results/analytics/tests_monitor_test_with_additional_info'
 
         # Get last existing day
         query_last_exist_day = f"""
@@ -248,6 +288,7 @@ def main():
                 print(f"Error during fetching last existing day: {e}")
 
         last_exist_df = None
+        last_day_data = None
 
         # If no data exists, set last_exist_day to a default start date
         if last_exist_day is None:
@@ -297,6 +338,9 @@ def main():
                             'previous_state': row['previous_state'],
                             'state_change_date': base_date + datetime.timedelta(days=row['state_change_date']),
                             'days_in_state': row['days_in_state'],
+                            'previous_state_filtered': row['previous_state_filtered'],
+                            'state_change_date_filtered': base_date + datetime.timedelta(days=row['state_change_date_filtered']),
+                            'days_in_state_filtered': row['days_in_state_filtered'],
                         }
                         last_exist_data.append(row_dict)
                 except StopIteration:
@@ -436,10 +480,9 @@ def main():
         df = pd.DataFrame(data)
         # **Concatenate DataFrames**
         if last_exist_df is not None and last_exist_df.shape[0] > 0:
-            last_day_data = last_exist_df[['full_name', 'days_in_state', 'state', 'state_change_date']]
+            last_day_data = last_exist_df[['full_name', 'days_in_state', 'state', 'state_change_date', 'days_in_state_filtered', 'state_change_date_filtered', 'previous_state_filtered']]
             df = pd.concat([last_exist_df, df], ignore_index=True)
-        else:
-            last_day_data = None
+
         end_time = time.time()
         print(f'Dataframe inited: {end_time - start_time}')
         tart_time = time.time()
@@ -474,10 +517,15 @@ def main():
                 df.loc[group.index, 'previous_state'] = results[i]['previous_state']
                 df.loc[group.index, 'state_change_date'] = results[i]['state_change_date']
                 df.loc[group.index, 'days_in_state'] = results[i]['days_in_state']
+                df.loc[group.index, 'previous_state_filtered'] = results[i]['previous_state_filtered']
+                df.loc[group.index, 'state_change_date_filtered'] = results[i]['state_change_date_filtered']
+                df.loc[group.index, 'days_in_state_filtered'] = results[i]['days_in_state_filtered']
 
         df['state_change_date'] = df['state_change_date'].dt.date
         df['date_window'] = df['date_window'].dt.date
         df['days_in_state'] = df['days_in_state'].astype(int)
+        df['state_change_date_filtered'] = df['state_change_date_filtered'].dt.date
+        df['days_in_state_filtered'] = df['days_in_state_filtered'].astype(int)
 
         end_time = time.time()
         print(f'Computed days_in_state, state_change_date, perv_state params: {end_time - start_time}')
@@ -506,6 +554,9 @@ def main():
                 'previous_state',
                 'state_change_date',
                 'days_in_state',
+                'previous_state_filtered',
+                'state_change_date_filtered',
+                'days_in_state_filtered',
                 'success_rate',
             ]
         ]

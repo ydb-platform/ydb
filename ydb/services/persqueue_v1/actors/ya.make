@@ -30,7 +30,6 @@ SRCS(
     persqueue_utils.h
     persqueue_utils.cpp
     helpers.h
-    helpers.cpp
     partition_actor.h
     partition_actor.cpp
     partition_id.h

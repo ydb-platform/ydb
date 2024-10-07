@@ -726,8 +726,6 @@ private:
     static ui32 NormalizeMaxReadSize(ui32 sourceValue);
     static ui32 NormalizeMaxReadPartitionsCount(ui32 sourceValue);
 
-    static bool RemoveEmptyMessages(NPersQueue::TReadResponse::TBatchedData& data); // returns true if there are nonempty messages
-
 private:
     IReadSessionHandlerRef Handler;
 

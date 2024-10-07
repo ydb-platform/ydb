@@ -1912,13 +1912,7 @@ ui64 TReadSessionActor<UseMigrationProtocol>::PrepareResponse(typename TFormedRe
 
     formedResponse->ByteSizeBeforeFiltering = formedResponse->Response.ByteSize();
 
-    if constexpr (UseMigrationProtocol) {
-        formedResponse->HasMessages = RemoveEmptyMessages(*formedResponse->Response.mutable_data_batch());
-    } else {
-        formedResponse->HasMessages = RemoveEmptyMessages(*formedResponse->Response.mutable_read_response());
-    }
-
-    return formedResponse->HasMessages ? formedResponse->Response.ByteSize() : 0;
+    return formedResponse->Response.ByteSize();
 }
 
 

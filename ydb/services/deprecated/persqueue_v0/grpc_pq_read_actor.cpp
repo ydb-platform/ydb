@@ -1525,19 +1525,14 @@ bool TReadSessionActor::ProcessAnswer(const TActorContext& ctx, TFormedReadRespo
 
     Y_ABORT_UNLESS(formedResponse->RequestsInfly == 0);
     i64 diff = formedResponse->Response.ByteSize();
-    const bool hasMessages = RemoveEmptyMessages(*formedResponse->Response.MutableBatchedData());
-    if (hasMessages) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " assign read id " << ReadIdToResponse << " to read request " << formedResponse->Guid);
-        formedResponse->Response.MutableBatchedData()->SetCookie(ReadIdToResponse);
-        // reply to client
-        if (ProtocolVersion < NPersQueue::TReadRequest::Batching) {
-            ConvertToOldBatch(formedResponse->Response);
-        }
-        diff -= formedResponse->Response.ByteSize(); // Bytes will be tracked inside handler
-        Handler->Reply(std::move(formedResponse->Response));
-    } else {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " empty read result " << formedResponse->Guid << ", start new reading");
+
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " assign read id " << ReadIdToResponse << " to read request " << formedResponse->Guid);
+    formedResponse->Response.MutableBatchedData()->SetCookie(ReadIdToResponse);
+    if (ProtocolVersion < NPersQueue::TReadRequest::Batching) {
+        ConvertToOldBatch(formedResponse->Response);
     }
+    diff -= formedResponse->Response.ByteSize(); // Bytes will be tracked inside handler
+    Handler->Reply(std::move(formedResponse->Response));
 
     BytesInflight_ -= diff;
     if (BytesInflight) (*BytesInflight) -= diff;
@@ -1563,16 +1558,9 @@ bool TReadSessionActor::ProcessAnswer(const TActorContext& ctx, TFormedReadRespo
 
     ReadsInfly--;
 
-    if (hasMessages) {
-        if (!CommitsDisabled)
-            Offsets.emplace_back(std::move(formedResponse->Offsets)); // even empty responses are needed for correct offsets commit.
-        ReadIdToResponse++;
-    } else {
-        // process new read
-        NPersQueue::TReadRequest req;
-        req.MutableRead();
-        Reads.emplace_back(new TEvPQProxy::TEvRead(req, formedResponse->Guid)); // Start new reading request with the same guid
-    }
+    if (!CommitsDisabled)
+        Offsets.emplace_back(std::move(formedResponse->Offsets)); // even empty responses are needed for correct offsets commit.
+    ReadIdToResponse++;
 
     return ProcessReads(ctx); // returns false if actor died
 }
@@ -1756,28 +1744,6 @@ void TReadSessionActor::HandleWakeup(const TActorContext& ctx) {
 
         SendAuthRequest(ctx);
     }
-}
-
-bool TReadSessionActor::RemoveEmptyMessages(TReadResponse::TBatchedData& data) {
-    bool hasNonEmptyMessages = false;
-    auto isMessageEmpty = [&](TReadResponse::TBatchedData::TMessageData& message) -> bool {
-        if (message.GetData().empty()) {
-            return true;
-        } else {
-            hasNonEmptyMessages = true;
-            return false;
-        }
-    };
-    auto batchRemover = [&](TReadResponse::TBatchedData::TBatch& batch) -> bool {
-        NProtoBuf::RemoveRepeatedFieldItemIf(batch.MutableMessageData(), isMessageEmpty);
-        return batch.MessageDataSize() == 0;
-    };
-    auto partitionDataRemover = [&](TReadResponse::TBatchedData::TPartitionData& partition) -> bool {
-        NProtoBuf::RemoveRepeatedFieldItemIf(partition.MutableBatch(), batchRemover);
-        return partition.BatchSize() == 0;
-    };
-    NProtoBuf::RemoveRepeatedFieldItemIf(data.MutablePartitionData(), partitionDataRemover);
-    return hasNonEmptyMessages;
 }
 
 

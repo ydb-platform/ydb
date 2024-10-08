@@ -60,8 +60,14 @@ const TColumnEngineStats& TColumnEngineForLogs::GetTotalStats() {
 
 void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, EStatsUpdateType updateType,
                                             const TPortionInfo* exPortionInfo) {
-    UpdatePortionStats(Counters, portionInfo, updateType, exPortionInfo);
-
+    if (IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_DEBUG, NKikimrServices::TX_COLUMNSHARD)) {
+        auto before = Counters.Active();
+        UpdatePortionStats(Counters, portionInfo, updateType, exPortionInfo);
+        auto after = Counters.Active();
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "portion_stats_updated")("type", updateType)("path_id", portionInfo.GetPathId())("portion", portionInfo.GetPortionId())("before_size", before.Bytes)("after_size", after.Bytes)("before_rows", before.Rows)("after_rows", after.Rows);
+    } else {
+        UpdatePortionStats(Counters, portionInfo, updateType, exPortionInfo);
+    }
     const ui64 pathId = portionInfo.GetPathId();
     Y_ABORT_UNLESS(pathId);
     if (!PathStats.contains(pathId)) {

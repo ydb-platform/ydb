@@ -1,3 +1,4 @@
+
 ```yql
 SELECT
     CAST("12345" AS Double),                -- 12345.0

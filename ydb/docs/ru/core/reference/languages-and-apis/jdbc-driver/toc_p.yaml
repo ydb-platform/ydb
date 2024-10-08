@@ -1,12 +1,12 @@
 items:
 - name: Быстрый старт
   href: quickstart.md
-- name: Использование JDBC-драйвера с Maven
+- name: Использование с Maven
   href: maven.md
 - name: Режимы аутентификации
   href: authentication.md
-- name: Свойства JDBC-драйвера
+- name: Свойства
   href: properties.md
-- name: Сборка JDBC-драйвера
+- name: Сборка
   href: building.md
 

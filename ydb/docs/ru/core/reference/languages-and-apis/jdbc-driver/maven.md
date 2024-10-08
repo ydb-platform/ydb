@@ -1,8 +1,6 @@
 # Использование JDBC-драйвера с Maven
 
-Рекомендованный способ использования JDBC-драйвера для {{ ydb-short-name }} в проекте — это указать драйвер в Maven.
-
-Добавьте JDBC-драйвер для {{ ydb-short-name }} в секцию `dependencies`:
+Рекомендованный способ использования JDBC-драйвера для {{ ydb-short-name }} в проекте — это добавить драйвер как зависимость в Maven. Укажите JDBC-драйвер для {{ ydb-short-name }} в секции `dependencies` файла `pom.xml`:
 
 ```xml
 <dependencies>

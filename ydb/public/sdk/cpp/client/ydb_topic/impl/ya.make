@@ -13,6 +13,7 @@ SRCS(
     topic_impl.h
     topic_impl.cpp
     topic.cpp
+    transaction.cpp
     write_session_impl.h
     write_session_impl.cpp
     write_session.h

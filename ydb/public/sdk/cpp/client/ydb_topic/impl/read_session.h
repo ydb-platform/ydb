@@ -3,6 +3,7 @@
 #include "counters_logger.h"
 #include "read_session_impl.ipp"
 #include "topic_impl.h"
+#include "transaction.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
 
@@ -63,19 +64,37 @@ private:
     void AbortImpl(EStatus statusCode, const TString& message, TDeferredActions<false>& deferred);
 
 private:
+    // topic -> partition -> (begin, end)
     using TOffsetRanges = THashMap<TString, THashMap<ui64, TDisjointIntervalTree<ui64>>>;
     using TOffsetRangesPtr = std::shared_ptr<TOffsetRanges>;
+
+    struct TTransactionInfo {
+        TSpinLock Lock;
+        bool IsActive = false;
+        bool Subscribed = false;
+    };
+
+    using TTransactionInfoPtr = std::shared_ptr<TTransactionInfo>;
 
     void CollectOffsets(NTable::TTransaction& tx,
                         const TReadSessionEvent::TDataReceivedEvent& event);
     void CollectOffsets(NTable::TTransaction& tx,
                         const TString& topicPath, ui32 partitionId, ui64 offset);
-    void UpdateOffsets(const NTable::TTransaction& tx);
+    //void UpdateOffsets(const NTable::TTransaction& tx);
+
+    void TrySubscribeOnTransactionCommit(TTransaction& tx, TOffsetRangesPtr ranges);
+    TTransactionInfoPtr GetOrCreateTxInfo(const TTransactionId& txId);
+    TAsyncStatus AsyncUpdateOffsets(const TTransactionId& txId);
+
+    auto MakeUpdateOffsetsInTransactionCaller(std::shared_ptr<TTopicClient::TImpl> client,
+                                              const TTransactionId& txId,
+                                              TOffsetRangesPtr offsets,
+                                              const TString& consumer);
 
     //
     // (session, tx) -> topic -> partition -> (begin, end)
     //
-    THashMap<std::pair<TString, TString>, TOffsetRangesPtr> OffsetRanges;
+    THashMap<TTransactionId, TOffsetRangesPtr> OffsetRanges;
 
     TReadSessionSettings Settings;
     const TString SessionId;
@@ -96,6 +115,8 @@ private:
     // Exiting.
     bool Aborting = false;
     bool Closing = false;
+
+    THashMap<TTransactionId, TTransactionInfoPtr> Txs;
 };
 
 }  // namespace NYdb::NTopic

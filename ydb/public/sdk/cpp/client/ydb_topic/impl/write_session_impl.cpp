@@ -1,4 +1,5 @@
 #include "write_session_impl.h"
+#include "transaction.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/common/trace_lazy.h>
@@ -511,26 +512,6 @@ void TWriteSessionImpl::OnTransactionCommit()
 {
 }
 
-TStatus MakeStatus(EStatus code, NYql::TIssues&& issues)
-{
-    return {code, std::move(issues)};
-}
-
-TStatus MakeSessionExpiredError()
-{
-    return MakeStatus(EStatus::SESSION_EXPIRED, {});
-}
-
-TStatus MakeCommitTransactionSuccess()
-{
-    return MakeStatus(EStatus::SUCCESS, {});
-}
-
-std::pair<TString, TString> MakeTransactionId(const TTransaction& tx)
-{
-    return {tx.GetSession().GetId(), tx.GetId()};
-}
-
 void TWriteSessionImpl::TrySubscribeOnTransactionCommit(TTransaction* tx)
 {
     if (!tx) {
@@ -588,7 +569,7 @@ void TWriteSessionImpl::TrySignalAllAcksReceived(ui64 seqNo)
         ++txInfo->AckCount;
 
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
-                 LogPrefix() << "OnAck: seqNo=" << seqNo << ", txId=" << txId.second<< ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
+                 LogPrefix() << "OnAck: seqNo=" << seqNo << ", txId=" << GetTxId(txId) << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
 
         if (txInfo->CommitCalled && (txInfo->WriteCount == txInfo->AckCount)) {
             txInfo->AllAcksReceived.SetValue(MakeCommitTransactionSuccess());
@@ -627,7 +608,7 @@ void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
             WrittenInTx[seqNo] = txId;
 
             LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
-                     LogPrefix() << "OnWrite: seqNo=" << seqNo << ", txId=" << txId.second << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
+                     LogPrefix() << "OnWrite: seqNo=" << seqNo << ", txId=" << GetTxId(txId) << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
         }
 
         CurrentBatch.Add(

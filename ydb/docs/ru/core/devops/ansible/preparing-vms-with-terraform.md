@@ -10,7 +10,7 @@
 
 ## Установка Terraform {#terraform-install}
 
-Скачать и установить Terraform можно следуя [инструкции](https://developer.hashicorp.com/terraform/install) на сайте HashiCorp, однако доступ к официальным репозиториям для скачивания может быть ограничен для пользователей из России. 
+Скачать и установить Terraform можно следуя [инструкции](https://developer.hashicorp.com/terraform/install) на сайте HashiCorp, однако доступ к официальным репозиториям для скачивания может быть ограничен для пользователей из России.
 
 Скачать и установить Terraform можно с зеркала Yandex Cloud:
 
@@ -21,11 +21,11 @@
     1. Перейдите по [ссылке](https://hashicorp-releases.yandexcloud.net/terraform/) и выберите подходящую вам версию Terraform.
     1. Скачайте архив
 
-        ```bash
-        sudo curl -L -o <archive_name>.zip \
-        https://hashicorp-releases.yandexcloud.net/terraform/<terraform_version>/ \
-        <terraform_version_architecture_and_os>.zip
-        ```
+      ```bash
+      sudo curl -L -o <archive_name>.zip \
+      https://hashicorp-releases.yandexcloud.net/terraform/<terraform_version>/ \
+      <terraform_version_architecture_and_os>.zip
+      ```
 
     1. Распакуйте архив с помощью команды `unzip <archive_name>.zip`. Будет распакован бинарный файл Terraform и сопроводительные файлы. Установить `unzip` можно командой `apt update && apt install unzip`.
     1. Создайте _alias_ для Terraform (способ создания сокращений для команд):
@@ -36,15 +36,7 @@
 - macOS
 
     1. Перейдите по [ссылке](https://hashicorp-releases.yandexcloud.net/terraform/) и выберите подходящую вам версию Terraform.
-    1. Скачайте архив
-
-        ```bash
-        sudo curl -L -o <archive_name>.zip \
-        https://hashicorp-releases.yandexcloud.net/terraform/<terraform_version>/ \
-        <terraform_version_architecture_and_os>.zip
-        ```
-
-    1. Распакуйте архив с помощью встроенного архиватора в macOS. Будет распакован бинарный файл Terraform и сопроводительные файлы.
+    1. Скачайте архив и распакуйте его с помощью стандартных средств macOS. Будет распакован бинарный файл Terraform и сопроводительные файлы.
     1. Создайте _alias_ для Terraform (способ создания сокращений для команд):
         * Откройте в текстовом редакторе конфигурационный файл оболочки (`~/.bashrc` или `~/.zshrc`) и добавьте в конец файла `alias terraform='<path_to_binary_file_terraform>'`;
         * Сохраните изменения и перечитайте конфигурацию командой `source ~/.bashrc` или `source ~/.zshrc`;
@@ -164,7 +156,7 @@ provider_installation {
     exclude = ["registry.terraform.io/*/*"]
     exclude = ["terraform.storage.ydb.tech/*/*"]
   }
-}  
+}
 ```
 
 Если уже используются Terraform-провайдеры, представленные в [официальном репозитории](https://registry.terraform.io/browse/providers), они продолжат работать.

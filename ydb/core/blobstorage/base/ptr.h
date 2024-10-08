@@ -1,7 +1,7 @@
 #pragma once
 
 #include "defs.h"
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 
 namespace NKikimr {
 

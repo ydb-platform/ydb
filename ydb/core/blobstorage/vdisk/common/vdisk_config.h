@@ -9,6 +9,7 @@
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/base/feature_flags.h>
 
 namespace NKikimr {
 

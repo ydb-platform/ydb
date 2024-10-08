@@ -36,22 +36,20 @@ public:
     }
 
     void MakeParser(TVector<TString> columns, TVector<TString> types) {
-        Parser = NFq::NewJsonParser(columns, types, [this](TVector<TVector<std::string_view>>&& parsedValues, TJsonParserBuffer::TPtr buffer) {
-            ResultOffset = buffer->GetOffset();
-            ParsedValues = std::move(parsedValues);
-            ResultNumberValues = ParsedValues.empty() ? 0 : ParsedValues.front().size();
-        });
+        Parser = NFq::NewJsonParser(columns, types);
     }
 
     void MakeParser(TVector<TString> columns) {
         MakeParser(columns, TVector<TString>(columns.size(), "String"));
     }
 
-    void PushToParser(ui64 offset, const TString& data) const {
-        TJsonParserBuffer& buffer = Parser->GetBuffer(offset);
+    void PushToParser(const TString& data) {
+        TJsonParserBuffer& buffer = Parser->GetBuffer();
         buffer.Reserve(data.size());
         buffer.AddValue(data);
-        Parser->Parse();
+
+        ParsedValues = Parser->Parse();
+        ResultNumberValues = ParsedValues ? ParsedValues.front().size() : 0;
     }
 
     TVector<TString> GetParsedRow(size_t id) const {
@@ -67,16 +65,14 @@ public:
     NActors::TTestActorRuntime Runtime;
     std::unique_ptr<NFq::TJsonParser> Parser;
 
-    ui64 ResultOffset;
-    ui64 ResultNumberValues;
+    ui64 ResultNumberValues = 0;
     TVector<TVector<std::string_view>> ParsedValues;
 };
 
 Y_UNIT_TEST_SUITE(TJsonParserTests) {
     Y_UNIT_TEST_F(Simple1, TFixture) {
         MakeParser({"a1", "a2"}, {"String", "Optional<Uint64>"});
-        PushToParser(5, R"({"a1": "hello1", "a2": 101, "event": "event1"})");
-        UNIT_ASSERT_VALUES_EQUAL(5, ResultOffset);
+        PushToParser(R"({"a1": "hello1", "a2": 101, "event": "event1"})");
         UNIT_ASSERT_VALUES_EQUAL(1, ResultNumberValues);
 
         const auto& result = GetParsedRow(0);
@@ -87,8 +83,7 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
 
     Y_UNIT_TEST_F(Simple2, TFixture) {
         MakeParser({"a2", "a1"});
-        PushToParser(5, R"({"a1": "hello1", "a2": "101", "event": "event1"})");
-        UNIT_ASSERT_VALUES_EQUAL(5, ResultOffset);
+        PushToParser(R"({"a1": "hello1", "a2": "101", "event": "event1"})");
         UNIT_ASSERT_VALUES_EQUAL(1, ResultNumberValues);
 
         const auto& result = GetParsedRow(0);
@@ -99,8 +94,7 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
 
     Y_UNIT_TEST_F(Simple3, TFixture) {
         MakeParser({"a1", "a2"});
-        PushToParser(5, R"({"a2": "hello1", "a1": "101", "event": "event1"})");
-        UNIT_ASSERT_VALUES_EQUAL(5, ResultOffset);
+        PushToParser(R"({"a2": "hello1", "a1": "101", "event": "event1"})");
         UNIT_ASSERT_VALUES_EQUAL(1, ResultNumberValues);
 
         const auto& result = GetParsedRow(0);
@@ -111,8 +105,7 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
 
     Y_UNIT_TEST_F(Simple4, TFixture) {
         MakeParser({"a2", "a1"});
-        PushToParser(5, R"({"a2": "hello1", "a1": "101", "event": "event1"})");
-        UNIT_ASSERT_VALUES_EQUAL(5, ResultOffset);
+        PushToParser(R"({"a2": "hello1", "a1": "101", "event": "event1"})");
         UNIT_ASSERT_VALUES_EQUAL(1, ResultNumberValues);
 
         const auto& result = GetParsedRow(0);
@@ -124,15 +117,14 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
     Y_UNIT_TEST_F(ManyValues, TFixture) {
         MakeParser({"a1", "a2"});
 
-        TJsonParserBuffer& buffer = Parser->GetBuffer(42);
+        TJsonParserBuffer& buffer = Parser->GetBuffer();
         buffer.AddValue(R"({"a1": "hello1", "a2": 101, "event": "event1"})");
         buffer.AddValue(R"({"a1": "hello1", "a2": "101", "event": "event2"})");
         buffer.AddValue(R"({"a2": "101", "a1": "hello1", "event": "event3"})");
 
-        Parser->Parse();
-        UNIT_ASSERT_VALUES_EQUAL(42, ResultOffset);
+        ParsedValues = Parser->Parse();
+        ResultNumberValues = ParsedValues.front().size();
         UNIT_ASSERT_VALUES_EQUAL(3, ResultNumberValues);
-
         for (size_t i = 0; i < ResultNumberValues; ++i) {
             const auto& result = GetParsedRow(i);
             UNIT_ASSERT_VALUES_EQUAL_C(2, result.size(), i);
@@ -143,7 +135,7 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
 
     Y_UNIT_TEST_F(ThrowExceptionByError, TFixture) {
         MakeParser({"a2", "a1"});
-        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(5, R"(ydb)"), simdjson::simdjson_error, "INCORRECT_TYPE: The JSON element does not have the requested type.");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(R"(ydb)"), simdjson::simdjson_error, "INCORRECT_TYPE: The JSON element does not have the requested type.");
     }
 }
 

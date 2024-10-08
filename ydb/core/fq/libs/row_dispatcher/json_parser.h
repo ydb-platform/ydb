@@ -1,6 +1,5 @@
 #pragma once
 
-#include <util/generic/list.h>
 #include <util/string/builder.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -8,9 +7,6 @@
 namespace NFq {
 
 class TJsonParserBuffer {
-public:
-    using TPtr = TList<TJsonParserBuffer>::iterator;
-
 public:
     TJsonParserBuffer();
 
@@ -23,7 +19,6 @@ public:
     void Clear();
 
 private:
-    YDB_ACCESSOR_DEF(ui64, Offset);
     YDB_READONLY_DEF(size_t, NumberValues);
     YDB_READONLY_DEF(bool, Finished)
 
@@ -32,31 +27,20 @@ private:
 
 class TJsonParser {
 public:
-    using TCallback = std::function<void(TVector<TVector<std::string_view>>&&, TJsonParserBuffer::TPtr)>;
-
-public:
-    TJsonParser(
-        const TVector<TString>& columns,
-        const TVector<TString>& types,
-        TCallback callback);
-
+    TJsonParser(const TVector<TString>& columns, const TVector<TString>& types);
     ~TJsonParser();
 
-    TJsonParserBuffer& GetBuffer(ui64 offset);
-    void ReleaseBuffer(TJsonParserBuffer::TPtr buffer);
-
-    void Parse();
+    TJsonParserBuffer& GetBuffer();
+    const TVector<TVector<std::string_view>>& Parse();
 
     TString GetDescription() const;
+    TString GetDebugString(const TVector<TVector<std::string_view>>& parsedValues) const;
 
 private:
     class TImpl;
     const std::unique_ptr<TImpl> Impl;
 };
 
-std::unique_ptr<TJsonParser> NewJsonParser(
-    const TVector<TString>& columns,
-    const TVector<TString>& types,
-    TJsonParser::TCallback callback);
+std::unique_ptr<TJsonParser> NewJsonParser(const TVector<TString>& columns, const TVector<TString>& types);
 
 } // namespace NFq

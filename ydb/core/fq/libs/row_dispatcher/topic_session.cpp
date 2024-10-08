@@ -50,7 +50,6 @@ struct TEvPrivate {
         EvPqEventsReady = EvBegin + 10,
         EvCreateSession,
         EvStatus,
-        EvDataParsed,
         EvDataAfterFilteration,
         EvDataFiltered,
         EvPrintState,
@@ -63,32 +62,6 @@ struct TEvPrivate {
     struct TEvCreateSession : public NActors::TEventLocal<TEvCreateSession, EvCreateSession> {};
     struct TEvPrintState : public NActors::TEventLocal<TEvPrintState, EvPrintState> {};
     struct TEvStatus : public NActors::TEventLocal<TEvStatus, EvStatus> {};
-
-    struct TEvDataParsed : public NActors::TEventLocal<TEvDataParsed, EvDataParsed> {
-        TEvDataParsed(TVector<TVector<std::string_view>>&& parsedValues, TJsonParserBuffer::TPtr buffer) 
-            : Offset(buffer->GetOffset())
-            , NumberValues(parsedValues.empty() ? 0 : parsedValues.front().size())
-            , ParsedValues(std::move(parsedValues))
-            , Buffer(buffer)
-        {}
-
-        TString DebugString() const {
-            TStringBuilder result;
-            for (const auto& columnResult : ParsedValues) {
-                result << "Parsed column: ";
-                for (const auto& value : columnResult) {
-                    result << "'" << value << "' ";
-                }
-                result << "\n";
-            }
-            return result;
-        }
-
-        const ui64 Offset;
-        const ui64 NumberValues;
-        TVector<TVector<std::string_view>> ParsedValues;
-        TJsonParserBuffer::TPtr Buffer;
-    };
 
     struct TEvDataFiltered : public NActors::TEventLocal<TEvDataFiltered, EvDataFiltered> {
         TEvDataFiltered(ui64 offset, ui64 numberValues) 
@@ -201,6 +174,7 @@ private:
     void CloseTopicSession();
     void SubscribeOnNextEvent();
     void SendToParsing(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
+    void SendToFiltering(ui64 offset, const TVector<TVector<std::string_view>>& parsedValues);
     void SendData(ClientsInfo& info);
     void InitParser(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams);
     void FatalError(const TString& message, const std::unique_ptr<TJsonFilter>* filter = nullptr);
@@ -215,7 +189,6 @@ private:
 
     void Handle(NFq::TEvPrivate::TEvPqEventsReady::TPtr&);
     void Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&);
-    void Handle(NFq::TEvPrivate::TEvDataParsed::TPtr&);
     void Handle(NFq::TEvPrivate::TEvDataAfterFilteration::TPtr&);
     void Handle(NFq::TEvPrivate::TEvStatus::TPtr&);
     void Handle(NFq::TEvPrivate::TEvDataFiltered::TPtr&);
@@ -233,7 +206,6 @@ private:
     STRICT_STFUNC_EXC(StateFunc,
         hFunc(NFq::TEvPrivate::TEvPqEventsReady, Handle);
         hFunc(NFq::TEvPrivate::TEvCreateSession, Handle);
-        hFunc(NFq::TEvPrivate::TEvDataParsed, Handle);
         hFunc(NFq::TEvPrivate::TEvDataAfterFilteration, Handle);
         hFunc(NFq::TEvPrivate::TEvStatus, Handle);
         hFunc(NFq::TEvPrivate::TEvDataFiltered, Handle);
@@ -249,7 +221,6 @@ private:
         cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
         IgnoreFunc(NFq::TEvPrivate::TEvPqEventsReady);
         IgnoreFunc(NFq::TEvPrivate::TEvCreateSession);
-        IgnoreFunc(NFq::TEvPrivate::TEvDataParsed);
         IgnoreFunc(NFq::TEvPrivate::TEvDataAfterFilteration);
         IgnoreFunc(NFq::TEvPrivate::TEvStatus);
         IgnoreFunc(NFq::TEvPrivate::TEvDataFiltered);
@@ -389,23 +360,6 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvPqEventsReady::TPtr&) {
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&) {
     CreateTopicSession();
-}
-
-void TTopicSession::Handle(NFq::TEvPrivate::TEvDataParsed::TPtr& ev) {
-    LOG_ROW_DISPATCHER_TRACE("TEvDataParsed, offset " << ev->Get()->Offset << ", data:\n" << ev->Get()->DebugString());
-
-    for (auto& [actorId, info] : Clients) {
-        try {
-            if (info.Filter) {
-                info.Filter->Push(ev->Get()->Offset, ev->Get()->ParsedValues);
-            }
-        } catch (const std::exception& e) {
-            FatalError(e.what(), &info.Filter);
-        }
-    }
-    Parser->ReleaseBuffer(ev->Get()->Buffer);
-
-    Send(SelfId(), new TEvPrivate::TEvDataFiltered(ev->Get()->Offset, ev->Get()->NumberValues));
 }
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvDataAfterFilteration::TPtr& ev) {
@@ -564,19 +518,38 @@ void TTopicSession::SendToParsing(const TVector<NYdb::NTopic::TReadSessionEvent:
         return;
     }
 
-    TJsonParserBuffer& buffer = Parser->GetBuffer(messages.front().GetOffset());
+    TJsonParserBuffer& buffer = Parser->GetBuffer();
     buffer.Reserve(valuesSize);
     for (const auto& message : messages) {
         buffer.AddValue(message.GetData());
     }
 
-    LOG_ROW_DISPATCHER_TRACE("SendToParsing, buffer with offset " << buffer.GetOffset() << " and size " << buffer.GetNumberValues());
+    const ui64 offset = messages.front().GetOffset();
+    LOG_ROW_DISPATCHER_TRACE("SendToParsing, buffer with offset " << offset << " and size " << buffer.GetNumberValues());
 
     try {
-        Parser->Parse();
+        const auto& parsedValues = Parser->Parse();
+        SendToFiltering(offset, parsedValues);
     } catch (const std::exception& e) {
         FatalError(e.what());
     }
+}
+
+void TTopicSession::SendToFiltering(ui64 offset, const TVector<TVector<std::string_view>>& parsedValues) {
+    Y_ENSURE(parsedValues, "Expected non empty schema");
+    LOG_ROW_DISPATCHER_TRACE("TEvDataParsed, offset " << offset << ", data:\n" << Parser->GetDebugString(parsedValues));
+
+    for (auto& [actorId, info] : Clients) {
+        try {
+            if (info.Filter) {
+                info.Filter->Push(offset, parsedValues);
+            }
+        } catch (const std::exception& e) {
+            FatalError(e.what(), &info.Filter);
+        }
+    }
+
+    Send(SelfId(), new TEvPrivate::TEvDataFiltered(offset, parsedValues.front().size()));
 }
 
 void TTopicSession::SendData(ClientsInfo& info) {
@@ -705,13 +678,7 @@ void TTopicSession::InitParser(const NYql::NPq::NProto::TDqPqTopicSource& source
     }
     try {
         CurrentParserTypes = std::make_pair(GetVector(sourceParams.GetColumns()), GetVector(sourceParams.GetColumnTypes()));
-        NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
-        Parser = NewJsonParser(
-            GetVector(sourceParams.GetColumns()),
-            GetVector(sourceParams.GetColumnTypes()),
-            [actorSystem, selfId = SelfId()](TVector<TVector<std::string_view>>&& parsedValues, TJsonParserBuffer::TPtr buffer){
-                actorSystem->Send(selfId, new NFq::TEvPrivate::TEvDataParsed(std::move(parsedValues), buffer));
-            });
+        Parser = NewJsonParser(GetVector(sourceParams.GetColumns()), GetVector(sourceParams.GetColumnTypes()));
     } catch (const NYql::NPureCalc::TCompileError& e) {
         FatalError(e.GetIssues());
     }

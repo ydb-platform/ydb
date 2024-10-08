@@ -8,9 +8,7 @@
 
 namespace {
 
-using TCallback = NFq::TJsonParser::TCallback;
 TString LogPrefix = "JsonParser: ";
-constexpr ui64 MAX_NUMBER_BUFFERS = 10;
 
 } // anonymous namespace
 
@@ -19,8 +17,7 @@ namespace NFq {
 //// TParserBuffer
 
 TJsonParserBuffer::TJsonParserBuffer()
-    : Offset(0)
-    , NumberValues(0)
+    : NumberValues(0)
     , Finished(false)
 {}
 
@@ -52,7 +49,6 @@ std::pair<const char*, size_t> TJsonParserBuffer::Finish() {
 
 void TJsonParserBuffer::Clear() {
     Y_ENSURE(Finished, "Cannot clear not finished buffer");
-    Offset = 0;
     NumberValues = 0;
     Finished = false;
     Values.clear();
@@ -62,8 +58,8 @@ void TJsonParserBuffer::Clear() {
 
 class TJsonParser::TImpl {
 public:
-    TImpl(const TVector<TString>& columns, const TVector<TString>& types, TCallback callback)
-        : Callback(callback)
+    TImpl(const TVector<TString>& columns, const TVector<TString>& types)
+        : ParsedValues(columns.size())
     {
         Y_UNUSED(types);  // TODO: Will be used for UV creation
 
@@ -78,17 +74,13 @@ public:
         }
     }
 
-    void Parse() {
-        Y_ENSURE(UsedBuffers, "Nothing to parse");
+    const TVector<TVector<std::string_view>>& Parse() {
+        const auto [values, size] = Buffer.Finish();
+        LOG_ROW_DISPATCHER_TRACE("Parse values:\n" << values);
 
-        TJsonParserBuffer::TPtr buffer = UsedBuffers.begin();
-        const auto [values, size] = buffer->Finish();
-        LOG_ROW_DISPATCHER_TRACE("Parse values for offset " << buffer->GetOffset() << ":\n" << values);
-
-        const ui64 numberValues = buffer->GetNumberValues();
-        TVector<TVector<std::string_view>> parsedValues(Columns.size());
-        for (auto& parsedColumn : parsedValues) {
-            parsedColumn.reserve(numberValues);
+        for (auto& parsedColumn : ParsedValues) {
+            parsedColumn.clear();
+            parsedColumn.reserve(Buffer.GetNumberValues());
         }
 
         simdjson::ondemand::parser parser;
@@ -102,39 +94,26 @@ public:
                     continue;
                 }
 
-                auto& parsedColumn = parsedValues[it->second];
+                auto& parsedColumn = ParsedValues[it->second];
                 if (item.value().is_string()) {
                     parsedColumn.emplace_back(CreateHolderIfNeeded(
-                        values, size, buffer, item.value().get_string().value()
+                        values, size, item.value().get_string().value()
                     ));
                 } else {
                     parsedColumn.emplace_back(CreateHolderIfNeeded(
-                        values, size, buffer, item.value().raw_json_token().value()
+                        values, size, item.value().raw_json_token().value()
                     ));
                 }
             }
         }
-
-        Callback(std::move(parsedValues), buffer);
+        return ParsedValues;
     }
 
-    TJsonParserBuffer& GetBuffer(ui64 offset) {
-        if (FreeBuffers) {
-            UsedBuffers.emplace_front(std::move(FreeBuffers.front()));
-            FreeBuffers.erase(FreeBuffers.begin());
-        } else {
-            UsedBuffers.emplace_front();
+    TJsonParserBuffer& GetBuffer() {
+        if (Buffer.GetFinished()) {
+            Buffer.Clear();
         }
-
-        return UsedBuffers.front().SetOffset(offset);
-    }
-
-    void ReleaseBuffer(TJsonParserBuffer::TPtr buffer) {
-        buffer->Clear();
-        if (FreeBuffers.size() + UsedBuffers.size() <= MAX_NUMBER_BUFFERS) {
-            FreeBuffers.emplace_back(std::move(*buffer));
-        }
-        UsedBuffers.erase(buffer);
+        return Buffer;
     }
 
     TString GetDescription() const {
@@ -142,52 +121,64 @@ public:
         for (const auto& column : Columns) {
             description << "'" << column << "' ";
         }
+        description << "\nBuffer size: " << Buffer.GetNumberValues() << ", finished: " << Buffer.GetFinished();
         return description;
     }
 
+    TString GetDebugString(const TVector<TVector<std::string_view>>& parsedValues) const {
+        TStringBuilder result;
+        for (size_t i = 0; i < Columns.size(); ++i) {
+            result << "Parsed column '" << Columns[i] << "': ";
+            for (const auto& value : parsedValues[i]) {
+                result << "'" << value << "' ";
+            }
+            result << "\n";
+        }
+        return result;
+    }
+
 private:
-    std::string_view CreateHolderIfNeeded(const char* dataHolder, size_t size, TJsonParserBuffer::TPtr buffer, std::string_view value) {
+    std::string_view CreateHolderIfNeeded(const char* dataHolder, size_t size, std::string_view value) {
         ptrdiff_t diff = value.data() - dataHolder;
         if (0 <= diff && static_cast<size_t>(diff) < size) {
             return value;
         }
-        return buffer->AddHolder(value);
+        return Buffer.AddHolder(value);
     }
 
 private:
-    const TCallback Callback;
     TVector<std::string> Columns;
     absl::flat_hash_map<std::string_view, size_t> ColumnsIndex;
 
-    TList<TJsonParserBuffer> UsedBuffers;
-    TList<TJsonParserBuffer> FreeBuffers;
+    TJsonParserBuffer Buffer;
+    TVector<TVector<std::string_view>> ParsedValues;
 };
 
-TJsonParser::TJsonParser(const TVector<TString>& columns, const TVector<TString>& types, TCallback callback)
-    : Impl(std::make_unique<TJsonParser::TImpl>(columns, types, callback))
+TJsonParser::TJsonParser(const TVector<TString>& columns, const TVector<TString>& types)
+    : Impl(std::make_unique<TJsonParser::TImpl>(columns, types))
 {}
 
 TJsonParser::~TJsonParser() {
 }
 
-TJsonParserBuffer& TJsonParser::GetBuffer(ui64 offset) {
-    return Impl->GetBuffer(offset);
+TJsonParserBuffer& TJsonParser::GetBuffer() {
+    return Impl->GetBuffer();
 }
 
-void TJsonParser::ReleaseBuffer(TJsonParserBuffer::TPtr buffer) {
-    Impl->ReleaseBuffer(buffer);
-}
-
-void TJsonParser::Parse() {
-    Impl->Parse();
+const TVector<TVector<std::string_view>>& TJsonParser::Parse() {
+    return Impl->Parse();
 }
 
 TString TJsonParser::GetDescription() const {
     return Impl->GetDescription();
 }
 
-std::unique_ptr<TJsonParser> NewJsonParser(const TVector<TString>& columns, const TVector<TString>& types, TCallback callback) {
-    return std::unique_ptr<TJsonParser>(new TJsonParser(columns, types, callback));
+TString TJsonParser::GetDebugString(const TVector<TVector<std::string_view>>& parsedValues) const {
+    return Impl->GetDebugString(parsedValues);
+}
+
+std::unique_ptr<TJsonParser> NewJsonParser(const TVector<TString>& columns, const TVector<TString>& types) {
+    return std::unique_ptr<TJsonParser>(new TJsonParser(columns, types));
 }
 
 } // namespace NFq

@@ -9,7 +9,11 @@
     1. Перейдите по [ссылке](https://hashicorp-releases.yandexcloud.net/terraform/) и выберите подходящую вам версию Terraform.
     1. Скачайте архив
 
-        ```sudo curl -L -o <archive_name>.zip https://hashicorp-releases.yandexcloud.net/terraform/<terraform_version>/<terraform_version_architecture_and_os>.zip```
+        ```bash
+        sudo curl -L -o <archive_name>.zip \
+        https://hashicorp-releases.yandexcloud.net/terraform/<terraform_version>/ \
+        <terraform_version_architecture_and_os>.zip
+        ```
 
     1. Распакуйте архив с помощью встроенного архиватора в macOS или командой `unzip <archive_name>.zip` для Linux. Будет распакован бинарный файл Terraform и сопроводительные файлы. Установить `unzip` можно командой `apt update && apt install unzip`.
     1. Создайте _alias_ для Terraform (способ создания сокращений для команд):

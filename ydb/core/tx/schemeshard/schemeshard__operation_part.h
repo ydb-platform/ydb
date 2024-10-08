@@ -278,7 +278,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        return Progress(context, &ISubOperationState::ProgressState, context);
+        return Progress(context, &ISubOperationState::ProgressState);
     }
 
     #define DefaultHandleReply(TEvType, ...) \
@@ -292,9 +292,9 @@ private:
     using TFunc = bool(ISubOperationState::*)(Args...);
 
     template <typename... Args>
-    bool Progress(TOperationContext& context, TFunc<Args...> func, Args&&... args) {
+    bool Progress(TOperationContext& context, TFunc<Args..., TOperationContext&> func, Args&&... args) {
         Y_ABORT_UNLESS(StateFunc);
-        const bool isDone = std::invoke(func, StateFunc.Get(), std::forward<Args>(args)...);
+        const bool isDone = std::invoke(func, StateFunc.Get(), std::forward<Args>(args)..., context);
         if (isDone) {
             StateDone(context);
         }

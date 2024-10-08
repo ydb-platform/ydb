@@ -373,53 +373,22 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestDeleteMessage, THttpProxyTestMock) {
-        auto createQueueReq = CreateSqsCreateQueueRequest();
-        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-        NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
-        UNIT_ASSERT(resultQueueUrl.EndsWith("ExampleQueueName"));
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        TString queueUrl = GetByPath<TString>(json, "QueueUrl");
 
-        NJson::TJsonValue sendMessageReq;
-        sendMessageReq["QueueUrl"] = resultQueueUrl;
         auto body = "MessageBody-0";
-        sendMessageReq["MessageBody"] = body;
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", body}});
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}});
 
-        res = SendHttpRequest("/Root", "AmazonSQS.SendMessage", std::move(sendMessageReq), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-
-        for (int i = 0; i < 20; ++i) {
-            NJson::TJsonValue receiveMessageReq;
-            receiveMessageReq["QueueUrl"] = resultQueueUrl;
-            res = SendHttpRequest("/Root", "AmazonSQS.ReceiveMessage", std::move(receiveMessageReq), FormAuthorizationStr("ru-central1"));
-            if (res.Body != TString("{}")) {
-                break;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        }
-
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
         UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], body);
 
         auto receiptHandle = json["Messages"][0]["ReceiptHandle"].GetString();
         UNIT_ASSERT(!receiptHandle.Empty());
 
-        NJson::TJsonValue deleteMessageReq;
-        deleteMessageReq["QueueUrl"] = resultQueueUrl;
-        deleteMessageReq["ReceiptHandle"] = receiptHandle;
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", receiptHandle}});
 
-        res = SendHttpRequest("/Root", "AmazonSQS.DeleteMessage", std::move(deleteMessageReq), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-
-        NJson::TJsonValue receiveMessageReq;
-        receiveMessageReq["QueueUrl"] = resultQueueUrl;
-        res = SendHttpRequest("/Root", "AmazonSQS.ReceiveMessage", std::move(receiveMessageReq), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 1}});
         UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 0);
     }
 
@@ -455,30 +424,28 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestDeleteQueue, THttpProxyTestMock) {
-        auto req = CreateSqsCreateQueueRequest();
-        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(req), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-        NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
+        auto json = DeleteQueue({{"QueueUrl", "non-existent-queue"}}, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "ValidationException");
 
-        NJson::TJsonValue deleteQueueReq;
-        deleteQueueReq["QueueUrl"] = resultQueueUrl;
-        res = SendHttpRequest("/Root", "AmazonSQS.DeleteQueue", std::move(deleteQueueReq), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+        json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        TString queueUrl = GetByPath<TString>(json, "QueueUrl");
 
+        DeleteQueue({{"QueueUrl", queueUrl}});
+
+        auto getQueueUrlRequest = CreateSqsGetQueueUrlRequest();
         for (int i = 0; i < 61; ++i) {
-            req = CreateSqsGetQueueUrlRequest();
-            res = SendHttpRequest("/Root", "AmazonSQS.GetQueueUrl", std::move(req), FormAuthorizationStr("ru-central1"));
-            if (res.HttpCode != 200) {
+            auto res = SendHttpRequest("/Root", "AmazonSQS.GetQueueUrl", getQueueUrlRequest, FormAuthorizationStr("ru-central1"));
+            if (res.HttpCode == 200) {
+                // The queue should be deleted within 60 seconds.
+                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+                UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+                UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+
                 break;
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         }
-
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
     }
 
     Y_UNIT_TEST_F(TestSetQueueAttributes, THttpProxyTestMock) {

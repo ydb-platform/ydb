@@ -346,12 +346,43 @@ public:
         return json;
     }
 
+    NJson::TJsonMap DeleteQueue(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto res = SendHttpRequest("/Root", "AmazonSQS.DeleteQueue", request, FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        return json;
+    }
+
     NJson::TJsonMap GetQueueAttributes(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         auto res = SendHttpRequest("/Root", "AmazonSQS.GetQueueAttributes", request, FormAuthorizationStr("ru-central1"));
         UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
         NJson::TJsonMap json;
         UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        // UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["DelaySeconds"], "1");
+        return json;
+    }
+
+    NJson::TJsonMap SendMessage(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto res = SendHttpRequest("/Root", "AmazonSQS.SendMessage", request, FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        return json;
+    }
+
+    NJson::TJsonMap ReceiveMessage(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto res = SendHttpRequest("/Root", "AmazonSQS.ReceiveMessage", request, FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        return json;
+    }
+
+    NJson::TJsonMap DeleteMessage(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto res = SendHttpRequest("/Root", "AmazonSQS.DeleteMessage", request, FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
         return json;
     }
 

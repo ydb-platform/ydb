@@ -38,6 +38,14 @@ void TEvYdbProxy::TReadTopicResult::Out(IOutputStream& out) const {
     << " }";
 }
 
+void TEvYdbProxy::TEndTopicPartitionResult::Out(IOutputStream& out) const {
+    out << "{"
+        << " PartitionId: " << PartitionId
+        << " AdjacentPartitionsIds [" << JoinSeq(",", AdjacentPartitionsIds) << "]"
+        << " ChildPartitionsIds [" << JoinSeq(",", ChildPartitionsIds) << "]"
+    << " }";
+}
+
 template <typename TDerived>
 class TBaseProxyActor: public TActor<TDerived> {
     class TRequest;
@@ -200,20 +208,28 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
         }
 
         if (auto* x = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+            LastWaitingCommittedOffset = 0;
+            LastCommittedOffset = 0;
+            EndPartitionSessionEvent.Clear();
+
             x->Confirm();
             return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
         } else if (auto* x = std::get_if<TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
             x->Confirm();
             return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
         } else if (auto* x = std::get_if<TReadSessionEvent::TEndPartitionSessionEvent>(&*event)) {
-            x->Confirm();
+            EndPartitionSessionEvent = event;
+            SendEndPartitionIfNeed(ev);
             return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
         } else if (auto* x = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+            UpdateWaitingCommittedOffset(*x);
             if (AutoCommit) {
                 DeferredCommit.Add(*x);
             }
             return (void)Send(ev->Get()->Sender, new TEvYdbProxy::TEvReadTopicResponse(*x), 0, ev->Get()->Cookie);
-        } else if (std::get_if<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&*event)) {
+        } else if (auto* x = std::get_if<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&*event)) {
+            LastCommittedOffset = x->GetCommittedOffset();
+            SendEndPartitionIfNeed(ev);
             return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
         } else if (std::get_if<TReadSessionEvent::TPartitionSessionStatusEvent>(&*event)) {
             return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
@@ -237,11 +253,32 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
         TBaseProxyActor<TTopicReader>::PassAway();
     }
 
+    void SendEndPartitionIfNeed(const TEvPrivate::TEvTopicEventReady::TPtr& ev) {
+        if (EndPartitionSessionEvent && LastCommittedOffset == LastWaitingCommittedOffset) {
+            auto* x = std::get_if<TReadSessionEvent::TEndPartitionSessionEvent>(&*EndPartitionSessionEvent);
+            x->Confirm();
+            return (void)Send(ev->Get()->Sender, new TEvYdbProxy::TEvTopicEndPartition(*x));
+        }
+    }
+
+    void UpdateWaitingCommittedOffset(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& x) {
+        if (auto count = x.GetMessagesCount()) {
+            if (x.HasCompressedMessages()) {
+                LastWaitingCommittedOffset = x.GetCompressedMessages()[count - 1].GetOffset();
+            } else {
+                LastWaitingCommittedOffset = x.GetMessages()[count - 1].GetOffset();
+            }
+        }
+    }
+
 public:
     explicit TTopicReader(const std::shared_ptr<IReadSession>& session, bool autoCommit)
         : TBaseProxyActor(&TThis::StateWork)
         , Session(session)
         , AutoCommit(autoCommit)
+        , LastWaitingCommittedOffset(0)
+        , LastCommittedOffset(0)
+        , EndPartitionSessionEvent()
     {
     }
 
@@ -259,6 +296,10 @@ private:
     std::shared_ptr<IReadSession> Session;
     const bool AutoCommit;
     TDeferredCommit DeferredCommit;
+
+    ui64 LastWaitingCommittedOffset;
+    ui64 LastCommittedOffset;
+    TMaybe<TReadSessionEvent::TEvent> EndPartitionSessionEvent;
 
 }; // TTopicReader
 

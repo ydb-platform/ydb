@@ -51,6 +51,7 @@ struct TEvYdbProxy {
         EvTopicReaderGone,
         EV_REQUEST_RESPONSE(ReadTopic),
         EV_REQUEST_RESPONSE(CommitOffset),
+        EvTopicEndPartition,
 
         EvEnd,
     };
@@ -206,6 +207,25 @@ struct TEvYdbProxy {
 
         ui64 PartitionId;
         TVector<TMessage> Messages;
+    };
+
+    struct TEndTopicPartitionResult {
+
+        explicit TEndTopicPartitionResult(const NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& event) {
+            PartitionId = event.GetPartitionSession()->GetPartitionId();
+            AdjacentPartitionsIds.insert(AdjacentPartitionsIds.end(), event.GetAdjacentPartitionIds().begin(), event.GetAdjacentPartitionIds().end());
+            ChildPartitionsIds.insert(ChildPartitionsIds.end(), event.GetChildPartitionIds().begin(), event.GetChildPartitionIds().end());
+        }
+
+        void Out(IOutputStream& out) const;
+
+        ui64 PartitionId;
+        TVector<ui64> AdjacentPartitionsIds;
+        TVector<ui64> ChildPartitionsIds;
+    };
+
+    struct TEvTopicEndPartition: public TGenericResponse<TEvTopicEndPartition, EvTopicEndPartition, TEndTopicPartitionResult> {
+        using TBase::TBase;
     };
 
     #define DEFINE_GENERIC_REQUEST(name, ...) \

@@ -18,35 +18,35 @@
 
 - Linux/macOS
 
-  1. Перейдите по [ссылке](https://hashicorp-releases.yandexcloud.net/terraform/) и выберите подходящую вам версию Terraform.
-  1. Скачайте архив
+1. Перейдите по [ссылке](https://hashicorp-releases.yandexcloud.net/terraform/) и выберите подходящую вам версию Terraform.
+1. Скачайте архив:
 
-  ```bash
-  sudo curl -L -o <archive_name>.zip \
-  https://hashicorp-releases.yandexcloud.net/terraform/<terraform_version>/ \
-  <terraform_version_architecture_and_os>.zip
-  ```
+```bash
+sudo curl -L -o <archive_name>.zip \
+https://hashicorp-releases.yandexcloud.net/terraform/<terraform_version>/ \
+<terraform_version_architecture_and_os>.zip
+```
 
-  1. Распакуйте архив с помощью команды `unzip <archive_name>.zip`. Будет распакован бинарный файл Terraform и сопроводительные файлы. Установить `unzip` можно командой `apt update && apt install unzip`.
-  1. Создайте _alias_ для Terraform (способ создания сокращений для команд):
-    * Откройте в текстовом редакторе конфигурационный файл оболочки (`~/.bashrc` или `~/.zshrc`) и добавьте в конец файла `alias terraform='<path_to_binary_file_terraform>'`;
-    * Сохраните изменения и перечитайте конфигурацию командой `source ~/.bashrc` или `source ~/.zshrc`;
-  1. Проверьте работоспособность Terraform, выполнив команду `terraform -version`.
+1. Распакуйте архив с помощью команды `unzip <archive_name>.zip`. Будет распакован бинарный файл Terraform и сопроводительные файлы. Установить `unzip` можно командой `apt update && apt install unzip`.
+1. Создайте _alias_ для Terraform (способ создания сокращений для команд):
+  * Откройте в текстовом редакторе конфигурационный файл оболочки (`~/.bashrc` или `~/.zshrc`) и добавьте в конец файла `alias terraform='<path_to_binary_file_terraform>'`;
+  * Сохраните изменения и перечитайте конфигурацию командой `source ~/.bashrc` или `source ~/.zshrc`;
+1. Проверьте работоспособность Terraform, выполнив команду `terraform -version`.
 
 - macOS
 
-  1. Перейдите по [ссылке](https://hashicorp-releases.yandexcloud.net/terraform/) и выберите подходящую вам версию Terraform.
-  1. Скачайте архив и распакуйте его с помощью стандартных средств macOS. Будет распакован бинарный файл Terraform и сопроводительные файлы.
-  1. Создайте _alias_ для Terraform (способ создания сокращений для команд):
-    * Откройте в текстовом редакторе конфигурационный файл оболочки (`~/.bashrc` или `~/.zshrc`) и добавьте в конец файла `alias terraform='<path_to_binary_file_terraform>'`;
-    * Сохраните изменения и перечитайте конфигурацию командой `source ~/.bashrc` или `source ~/.zshrc`;
-  1. Проверьте работоспособность Terraform, выполнив команду `terraform -version`.
+1. Перейдите по [ссылке](https://hashicorp-releases.yandexcloud.net/terraform/) и выберите подходящую вам версию Terraform.
+1. Скачайте архив и распакуйте его с помощью стандартных средств macOS. Будет распакован бинарный файл Terraform и сопроводительные файлы.
+1. Создайте _alias_ для Terraform (способ создания сокращений для команд):
+  * Откройте в текстовом редакторе конфигурационный файл оболочки (`~/.bashrc` или `~/.zshrc`) и добавьте в конец файла `alias terraform='<path_to_binary_file_terraform>'`;
+  * Сохраните изменения и перечитайте конфигурацию командой `source ~/.bashrc` или `source ~/.zshrc`;
+1. Проверьте работоспособность Terraform, выполнив команду `terraform -version`.
 
 - Windows
 
-  1. Перейдите по [ссылке](https://hashicorp-releases.yandexcloud.net/terraform/) и выберите подходящую вам версию Terraform и скачайте архив.
-  1. Распакуйте архив стандартными средствами Windows в удобную вам директорию.
-  1. Откройте командную строку PowerShell и проверьте работоспособность terraform, выполнив команду `terraform -version` в директории, куда был распакован Terraform.
+1. Перейдите по [ссылке](https://hashicorp-releases.yandexcloud.net/terraform/) и выберите подходящую вам версию Terraform и скачайте архив.
+1. Распакуйте архив стандартными средствами Windows в удобную вам директорию.
+1. Откройте командную строку PowerShell и проверьте работоспособность terraform, выполнив команду `terraform -version` в директории, куда был распакован Terraform.
 
 {% endlist %}
 

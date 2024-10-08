@@ -1058,11 +1058,513 @@ protected:
 };
 
 template <typename TKey, typename TAggregator, typename TFixedAggState, bool UseSet, bool UseFilter, bool Finalize, bool Many, typename TDerived>
+struct THashedWrapperBaseState : public TBlockState {
+private:
+    static constexpr bool UseArena = !InlineAggState && std::is_same<TFixedAggState, TStateArena>::value;
+public:
+    bool WritingOutput_ = false;
+    bool IsFinished_ = false;
+
+    const std::optional<ui32> FilterColumn_;
+    const std::vector<TKeyParams> Keys_;
+    const std::vector<TAggParams<TAggregator>>& AggsParams_;
+    const ui32 KeyLength_;
+    const ui32 StreamIndex_;
+    const std::vector<std::vector<ui32>> Streams_;
+    const size_t MaxBlockLen_;
+    const size_t Width_;
+    const size_t OutputWidth_;
+
+    template<typename TKeyType>
+    struct THashSettings {
+        static constexpr bool CacheHash = std::is_same_v<TKeyType, TSSOKey>;
+    };
+    using TDynMapImpl = TDynamicHashMapImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>;
+    using TSetImpl = THashSetImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>;
+    using TFixedMapImpl = TFixedHashMapImpl<TKey, TFixedAggState, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>;
+
+    ui64 BatchNum_ = 0;
+    TUnboxedValueVector Values_;
+    std::vector<std::unique_ptr<TAggregator>> Aggs_;
+    std::vector<ui32> AggStateOffsets_;
+    TUnboxedValueVector UnwrappedValues_;
+    std::vector<std::unique_ptr<IBlockReader>> Readers_;
+    std::vector<std::unique_ptr<IArrayBuilder>> Builders_;
+    std::vector<std::unique_ptr<IAggColumnBuilder>> AggBuilders_;
+    bool HasValues_ = false;
+    ui32 TotalStateSize_ = 0;
+    size_t OutputBlockSize_ = 0;
+    std::unique_ptr<TDynMapImpl> HashMap_;
+    typename TDynMapImpl::const_iterator HashMapIt_;
+    std::unique_ptr<TSetImpl> HashSet_;
+    typename TSetImpl::const_iterator HashSetIt_;
+    std::unique_ptr<TFixedMapImpl> HashFixedMap_;
+    typename TFixedMapImpl::const_iterator HashFixedMapIt_;
+    TPagedArena Arena_;
+
+    THashedWrapperBaseState(TMemoryUsageInfo* memInfo, ui32 keyLength, ui32 streamIndex, size_t width, size_t outputWidth, std::optional<ui32> filterColumn, const std::vector<TAggParams<TAggregator>>& params,
+        const std::vector<std::vector<ui32>>& streams, const std::vector<TKeyParams>& keys, size_t maxBlockLen, TComputationContext& ctx)
+        : TBlockState(memInfo, outputWidth)
+        , FilterColumn_(filterColumn)
+        , Keys_(keys)
+        , AggsParams_(params)
+        , KeyLength_(keyLength)
+        , StreamIndex_(streamIndex)
+        , Streams_(streams)
+        , MaxBlockLen_(maxBlockLen)
+        , Width_(width)
+        , OutputWidth_(outputWidth)
+        , Values_(width)
+        , UnwrappedValues_(width)
+        , Readers_(keys.size())
+        , Builders_(keys.size())
+        , Arena_(TlsAllocState)
+    {
+        Pointer_ = Values_.data();
+        for (size_t i = 0; i < Keys_.size(); ++i) {
+            auto itemType = AS_TYPE(TBlockType, Keys_[i].Type)->GetItemType();
+            Readers_[i] = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType);
+            Builders_[i] = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, ctx.ArrowMemoryPool, MaxBlockLen_, &ctx.Builder->GetPgBuilder());
+        }
+
+        if constexpr (Many) {
+            TotalStateSize_ += Streams_.size();
+        }
+
+        for (const auto& p : AggsParams_) {
+            Aggs_.emplace_back(p.Prepared_->Make(ctx));
+            MKQL_ENSURE(Aggs_.back()->StateSize == p.Prepared_->StateSize, "State size mismatch");
+            AggStateOffsets_.emplace_back(TotalStateSize_);
+            TotalStateSize_ += Aggs_.back()->StateSize;
+        }
+
+        auto equal = MakeEqual<TKey>(KeyLength_);
+        auto hasher = MakeHash<TKey>(KeyLength_);
+        if constexpr (UseSet) {
+            MKQL_ENSURE(params.empty(), "Only keys are supported");
+            HashSet_ = std::make_unique<THashSetImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(hasher, equal);
+        } else {
+            if (!InlineAggState) {
+                HashFixedMap_ = std::make_unique<TFixedHashMapImpl<TKey, TFixedAggState, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(hasher, equal);
+            } else {
+                HashMap_ = std::make_unique<TDynamicHashMapImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(TotalStateSize_, hasher, equal);
+            }
+        }
+    }
+
+    void ProcessInput(const THolderFactory& holderFactory) {
+        ++BatchNum_;
+        const auto batchLength = TArrowBlock::From(Values_.back()).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+        if (!batchLength) {
+            return;
+        }
+
+        const ui8* filterBitmap = nullptr;
+        if constexpr (UseFilter) {
+            auto filterDatum = TArrowBlock::From(Values_[*FilterColumn_]).GetDatum();
+            if (filterDatum.is_scalar()) {
+                if (!filterDatum.template scalar_as<arrow::UInt8Scalar>().value) {
+                    return;
+                }
+            } else {
+                const auto& arr = filterDatum.array();
+                filterBitmap = arr->template GetValues<ui8>(1);
+                ui64 popCount = GetBitmapPopCount(arr);
+                if (popCount == 0) {
+                    return;
+                }
+            }
+        }
+
+        const ui32* streamIndexData = nullptr;
+        TMaybe<ui32> streamIndexScalar;
+        if constexpr (Many) {
+            auto streamIndexDatum = TArrowBlock::From(Values_[StreamIndex_]).GetDatum();
+            if (streamIndexDatum.is_scalar()) {
+                streamIndexScalar = streamIndexDatum.template scalar_as<arrow::UInt32Scalar>().value;
+            } else {
+                MKQL_ENSURE(streamIndexDatum.is_array(), "Expected array");
+                streamIndexData = streamIndexDatum.array()->template GetValues<ui32>(1);
+            }
+            UnwrappedValues_ = Values_;
+            for (const auto& p : AggsParams_) {
+                const auto& columnDatum = TArrowBlock::From(UnwrappedValues_[p.Column_]).GetDatum();
+                MKQL_ENSURE(columnDatum.is_array(), "Expected array");
+                UnwrappedValues_[p.Column_] = holderFactory.CreateArrowBlock(Unwrap(*columnDatum.array(), p.StateType_));
+            }
+        }
+
+        HasValues_ = true;
+        std::vector<arrow::Datum> keysDatum;
+        keysDatum.reserve(Keys_.size());
+        for (ui32 i = 0; i < Keys_.size(); ++i) {
+            keysDatum.emplace_back(TArrowBlock::From(Values_[Keys_[i].Index]).GetDatum());
+        }
+
+        std::array<TOutputBuffer, PrefetchBatchSize> out;
+        for (ui32 i = 0; i < PrefetchBatchSize; ++i) {
+            out[i].Resize(sizeof(TKey));
+        }
+
+        std::array<TRobinHoodBatchRequestItem<TKey>, PrefetchBatchSize> insertBatch;
+        std::array<ui64, PrefetchBatchSize> insertBatchRows;
+        std::array<char*, PrefetchBatchSize> insertBatchPayloads;
+        std::array<bool, PrefetchBatchSize> insertBatchIsNew;
+        ui32 insertBatchLen = 0;
+
+        const auto processInsertBatch = [&]() {
+            for (ui32 i = 0; i < insertBatchLen; ++i) {
+                auto& r = insertBatch[i];
+                TStringBuf str = out[i].Finish();
+                TKey key = MakeKey<TKey>(str, KeyLength_);
+                r.ConstructKey(key);
+            }
+
+            if constexpr (UseSet) {
+                HashSet_->BatchInsert({insertBatch.data(), insertBatchLen},[&](size_t index, typename THashedWrapperBaseState::TSetImpl::iterator iter, bool isNew) {
+                    Y_UNUSED(index);
+                    if (isNew) {
+                        if constexpr (std::is_same<TKey, TSSOKey>::value || std::is_same<TKey, TExternalFixedSizeKey>::value) {
+                            MoveKeyToArena(HashSet_->GetKey(iter), Arena_, KeyLength_);
+                        }
+                    }
+                });
+            } else {
+                using THashTable = std::conditional_t<InlineAggState, typename THashedWrapperBaseState::TDynMapImpl, typename THashedWrapperBaseState::TFixedMapImpl>;
+                THashTable* hash;
+                if constexpr (!InlineAggState) {
+                    hash = HashFixedMap_.get();
+                } else {
+                    hash = HashMap_.get();
+                }
+
+                hash->BatchInsert({insertBatch.data(), insertBatchLen}, [&](size_t index, typename THashTable::iterator iter, bool isNew) {
+                    if (isNew) {
+                        if constexpr (std::is_same<TKey, TSSOKey>::value || std::is_same<TKey, TExternalFixedSizeKey>::value) {
+                            MoveKeyToArena(hash->GetKey(iter), Arena_, KeyLength_);
+                        }
+                    }
+
+                    if constexpr (UseArena) {
+                        // prefetch payloads only
+                        auto payload = hash->GetPayload(iter);
+                        char* ptr;
+                        if (isNew) {
+                            ptr = (char*)Arena_.Alloc(TotalStateSize_);
+                            *(char**)payload = ptr;
+                        } else {
+                            ptr = *(char**)payload;
+                        }
+
+                        insertBatchIsNew[index] = isNew;
+                        insertBatchPayloads[index] = ptr;
+                        NYql::PrefetchForWrite(ptr);
+                    } else {
+                        // process insert
+                        auto payload = (char*)hash->GetPayload(iter);
+                        auto row = insertBatchRows[index];
+                        ui32 streamIndex = 0;
+                        if constexpr (Many) {
+                            streamIndex = streamIndexScalar ? *streamIndexScalar : streamIndexData[row];
+                        }
+
+                        Insert(row, payload, isNew, streamIndex);
+                    }
+                });
+
+                if constexpr (UseArena) {
+                    for (ui32 i = 0; i < insertBatchLen; ++i) {
+                        auto row = insertBatchRows[i];
+                        ui32 streamIndex = 0;
+                        if constexpr (Many) {
+                            streamIndex = streamIndexScalar ? *streamIndexScalar : streamIndexData[row];
+                        }
+
+                        bool isNew = insertBatchIsNew[i];
+                        char* payload = insertBatchPayloads[i];
+                        Insert(row, payload, isNew, streamIndex);
+                    }
+                }
+            }
+        };
+
+        for (ui64 row = 0; row < batchLength; ++row) {
+            if constexpr (UseFilter) {
+                if (filterBitmap && !filterBitmap[row]) {
+                    continue;
+                }
+            }
+
+            // encode key
+            out[insertBatchLen].Rewind();
+            for (ui32 i = 0; i < keysDatum.size(); ++i) {
+                if (keysDatum[i].is_scalar()) {
+                    // TODO: more efficient code when grouping by scalar
+                    Readers_[i]->SaveScalarItem(*keysDatum[i].scalar(), out[insertBatchLen]);
+                } else {
+                    Readers_[i]->SaveItem(*keysDatum[i].array(), row, out[insertBatchLen]);
+                }
+            }
+
+            insertBatchRows[insertBatchLen] = row;
+            ++insertBatchLen;
+            if (insertBatchLen == PrefetchBatchSize) {
+                processInsertBatch();
+                insertBatchLen = 0;
+            }
+        }
+
+        processInsertBatch();
+    }
+
+    bool Finish() {
+        if (!HasValues_) {
+            IsFinished_ = true;
+            return false;
+        }
+
+        WritingOutput_ = true;
+        OutputBlockSize_ = 0;
+        PrepareAggBuilders();
+
+        if constexpr (UseSet) {
+            HashSetIt_ = HashSet_->Begin();
+        } else {
+            if constexpr (!InlineAggState) {
+                HashFixedMapIt_ = HashFixedMap_->Begin();
+            } else {
+                HashMapIt_ = HashMap_->Begin();
+            }
+        }
+        return true;
+    }
+
+    bool FillOutput(const THolderFactory& holderFactory) {
+        bool exit = false;
+        while (WritingOutput_) {
+            if constexpr (UseSet) {
+                for (;!exit && HashSetIt_ != HashSet_->End(); HashSet_->Advance(HashSetIt_)) {
+                    if (!HashSet_->IsValid(HashSetIt_)) {
+                        continue;
+                    }
+
+                    if (OutputBlockSize_ == MaxBlockLen_) {
+                        Flush(false, holderFactory);
+                        //return EFetchResult::One;
+                        exit = true;
+                        break;
+                    }
+
+                    const TKey& key = HashSet_->GetKey(HashSetIt_);
+                    TInputBuffer in(GetKeyView<TKey>(key, KeyLength_));
+                    for (auto& kb : Builders_) {
+                        kb->Add(in);
+                    }
+                    ++OutputBlockSize_;
+                }
+                break;
+            } else {
+                const bool done = InlineAggState ?
+                    Iterate(*HashMap_, HashMapIt_) :
+                    Iterate(*HashFixedMap_, HashFixedMapIt_);
+                if (done) {
+                    break;
+                }
+                Flush(false, holderFactory);
+                exit = true;
+                break;
+            }
+        }
+
+        if (!exit) {
+            IsFinished_ = true;
+            WritingOutput_ = false;
+            if (!OutputBlockSize_)
+                return false;
+            Flush(true, holderFactory);
+        }
+
+        FillArrays();
+        return true;
+    }
+private:
+    void PrepareAggBuilders() {
+        if constexpr (!UseSet) {
+            AggBuilders_.clear();
+            AggBuilders_.reserve(Aggs_.size());
+            for (const auto& a : Aggs_) {
+                if constexpr (Finalize) {
+                    AggBuilders_.emplace_back(a->MakeResultBuilder(MaxBlockLen_));
+                } else {
+                    AggBuilders_.emplace_back(a->MakeStateBuilder(MaxBlockLen_));
+                }
+            }
+        }
+    }
+
+    void Flush(bool final, const THolderFactory& holderFactory) {
+        if (!OutputBlockSize_) {
+            return;
+        }
+
+        for (size_t i = 0; i < Builders_.size(); ++i) {
+            Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(final));
+        }
+
+        if constexpr (!UseSet) {
+            for (size_t i = 0; i < Aggs_.size(); ++i) {
+                Values[Builders_.size() + i] = AggBuilders_[i]->Build();
+            }
+            if (!final) {
+                PrepareAggBuilders();
+            }
+        }
+
+        Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(OutputBlockSize_)));
+        OutputBlockSize_ = 0;
+    }
+
+    void Insert(ui64 row, char* payload, bool isNew, ui32 currentStreamIndex) const {
+        char* ptr = payload;
+
+        if (isNew) {
+            if constexpr (Many) {
+                static_assert(Finalize);
+                MKQL_ENSURE(currentStreamIndex < Streams_.size(), "Invalid stream index");
+                memset(ptr, 0, Streams_.size());
+                ptr[currentStreamIndex] = 1;
+
+                for (auto i : Streams_[currentStreamIndex]) {
+
+                    Aggs_[i]->LoadState(ptr + AggStateOffsets_[i], BatchNum_, UnwrappedValues_.data(), row);
+                }
+            } else {
+                for (size_t i = 0; i < Aggs_.size(); ++i) {
+                    if constexpr (Finalize) {
+                        Aggs_[i]->LoadState(ptr, BatchNum_, Values_.data(), row);
+                    } else {
+                        Aggs_[i]->InitKey(ptr, BatchNum_, Values_.data(), row);
+                    }
+
+                    ptr += Aggs_[i]->StateSize;
+                }
+            }
+        } else {
+            if constexpr (Many) {
+                static_assert(Finalize);
+                MKQL_ENSURE(currentStreamIndex < Streams_.size(), "Invalid stream index");
+
+                bool isNewStream = !ptr[currentStreamIndex];
+                ptr[currentStreamIndex] = 1;
+
+                for (auto i : Streams_[currentStreamIndex]) {
+
+                    if (isNewStream) {
+                        Aggs_[i]->LoadState(ptr + AggStateOffsets_[i], BatchNum_, UnwrappedValues_.data(), row);
+                    } else {
+                        Aggs_[i]->UpdateState(ptr + AggStateOffsets_[i], BatchNum_, UnwrappedValues_.data(), row);
+                    }
+                }
+            } else {
+                for (size_t i = 0; i < Aggs_.size(); ++i) {
+                    if constexpr (Finalize) {
+                        Aggs_[i]->UpdateState(ptr, BatchNum_, Values_.data(), row);
+                    } else {
+                        Aggs_[i]->UpdateKey(ptr, BatchNum_, Values_.data(), row);
+                    }
+
+                    ptr += Aggs_[i]->StateSize;
+                }
+            }
+        }
+    }
+
+    template <typename THash>
+    bool Iterate(THash& hash, typename THash::const_iterator& iter) {
+        MKQL_ENSURE(WritingOutput_, "Supposed to be called at the end");
+        std::array<typename THash::const_iterator, PrefetchBatchSize> iters;
+        ui32 itersLen = 0;
+        auto iterateBatch = [&]() {
+            for (ui32 i = 0; i < itersLen; ++i) {
+                auto iter = iters[i];
+                const TKey& key = hash.GetKey(iter);
+                auto payload = (char*)hash.GetPayload(iter);
+                char* ptr;
+                if constexpr (UseArena) {
+                    ptr = *(char**)payload;
+                } else {
+                    ptr = payload;
+                }
+
+                TInputBuffer in(GetKeyView<TKey>(key, KeyLength_));
+                for (auto& kb : Builders_) {
+                    kb->Add(in);
+                }
+
+                if constexpr (Many) {
+                    for (ui32 i = 0; i < Streams_.size(); ++i) {
+                        MKQL_ENSURE(ptr[i], "Missing partial aggregation state for stream #" << i);
+                    }
+
+                    ptr += Streams_.size();
+                }
+
+                for (size_t i = 0; i < Aggs_.size(); ++i) {
+                    AggBuilders_[i]->Add(ptr);
+                    Aggs_[i]->DestroyState(ptr);
+
+                    ptr += Aggs_[i]->StateSize;
+                }
+            }
+        };
+
+        for (; iter != hash.End(); hash.Advance(iter)) {
+            if (!hash.IsValid(iter)) {
+                continue;
+            }
+
+            if (OutputBlockSize_ == MaxBlockLen_) {
+                iterateBatch();
+                return false;
+            }
+
+            if (itersLen == iters.size()) {
+                iterateBatch();
+                itersLen = 0;
+            }
+
+            iters[itersLen] = iter;
+            ++itersLen;
+            ++OutputBlockSize_;
+            if constexpr (UseArena) {
+                auto payload = (char*)hash.GetPayload(iter);
+                auto ptr = *(char**)payload;
+                NYql::PrefetchForWrite(ptr);
+            }
+
+            if constexpr (std::is_same<TKey, TSSOKey>::value) {
+                const auto& key = hash.GetKey(iter);
+                if (!key.IsInplace()) {
+                    NYql::PrefetchForRead(key.AsView().Data());
+                }
+            } else if constexpr (std::is_same<TKey, TExternalFixedSizeKey>::value) {
+                const auto& key = hash.GetKey(iter);
+                NYql::PrefetchForRead(key.Data);
+            }
+        }
+
+        iterateBatch();
+        return true;
+    }
+};
+
+template <typename TKey, typename TAggregator, typename TFixedAggState, bool UseSet, bool UseFilter, bool Finalize, bool Many, typename TDerived>
 class THashedWrapperBaseFromFlow : public TStatefulWideFlowCodegeneratorNode<TDerived>,
     protected THashedWrapperCodegenBase
 {
     using TComputationBase = TStatefulWideFlowCodegeneratorNode<TDerived>;
-    static constexpr bool UseArena = !InlineAggState && std::is_same<TFixedAggState, TStateArena>::value;
+
+    using TState = THashedWrapperBaseState<TKey, TAggregator, TFixedAggState, UseSet, UseFilter, Finalize, Many, TDerived>;
 public:
     THashedWrapperBaseFromFlow(TComputationMutables& mutables,
         IComputationWideFlowNode* flow,
@@ -1145,499 +1647,6 @@ public:
     }
 #endif
 private:
-    struct TState : public TBlockState {
-        bool WritingOutput_ = false;
-        bool IsFinished_ = false;
-
-        const std::optional<ui32> FilterColumn_;
-        const std::vector<TKeyParams> Keys_;
-        const std::vector<TAggParams<TAggregator>>& AggsParams_;
-        const ui32 KeyLength_;
-        const ui32 StreamIndex_;
-        const std::vector<std::vector<ui32>> Streams_;
-        const size_t MaxBlockLen_;
-
-        template<typename TKeyType>
-        struct THashSettings {
-            static constexpr bool CacheHash = std::is_same_v<TKeyType, TSSOKey>;
-        };
-        using TDynMapImpl = TDynamicHashMapImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>;
-        using TSetImpl = THashSetImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>;
-        using TFixedMapImpl = TFixedHashMapImpl<TKey, TFixedAggState, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>;
-
-        ui64 BatchNum_ = 0;
-        TUnboxedValueVector Values_;
-        std::vector<std::unique_ptr<TAggregator>> Aggs_;
-        std::vector<ui32> AggStateOffsets_;
-        TUnboxedValueVector UnwrappedValues_;
-        std::vector<std::unique_ptr<IBlockReader>> Readers_;
-        std::vector<std::unique_ptr<IArrayBuilder>> Builders_;
-        std::vector<std::unique_ptr<IAggColumnBuilder>> AggBuilders_;
-        bool HasValues_ = false;
-        ui32 TotalStateSize_ = 0;
-        size_t OutputBlockSize_ = 0;
-        std::unique_ptr<TDynMapImpl> HashMap_;
-        typename TDynMapImpl::const_iterator HashMapIt_;
-        std::unique_ptr<TSetImpl> HashSet_;
-        typename TSetImpl::const_iterator HashSetIt_;
-        std::unique_ptr<TFixedMapImpl> HashFixedMap_;
-        typename TFixedMapImpl::const_iterator HashFixedMapIt_;
-        TPagedArena Arena_;
-
-        TState(TMemoryUsageInfo* memInfo, ui32 keyLength, ui32 streamIndex, size_t width, size_t outputWidth, std::optional<ui32> filterColumn, const std::vector<TAggParams<TAggregator>>& params,
-            const std::vector<std::vector<ui32>>& streams, const std::vector<TKeyParams>& keys, size_t maxBlockLen, TComputationContext& ctx)
-            : TBlockState(memInfo, outputWidth)
-            , FilterColumn_(filterColumn)
-            , Keys_(keys)
-            , AggsParams_(params)
-            , KeyLength_(keyLength)
-            , StreamIndex_(streamIndex)
-            , Streams_(streams)
-            , MaxBlockLen_(maxBlockLen)
-            , Values_(width)
-            , UnwrappedValues_(width)
-            , Readers_(keys.size())
-            , Builders_(keys.size())
-            , Arena_(TlsAllocState)
-        {
-            Pointer_ = Values_.data();
-            for (size_t i = 0; i < Keys_.size(); ++i) {
-                auto itemType = AS_TYPE(TBlockType, Keys_[i].Type)->GetItemType();
-                Readers_[i] = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType);
-                Builders_[i] = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, ctx.ArrowMemoryPool, MaxBlockLen_, &ctx.Builder->GetPgBuilder());
-            }
-
-            if constexpr (Many) {
-                TotalStateSize_ += Streams_.size();
-            }
-
-            for (const auto& p : AggsParams_) {
-                Aggs_.emplace_back(p.Prepared_->Make(ctx));
-                MKQL_ENSURE(Aggs_.back()->StateSize == p.Prepared_->StateSize, "State size mismatch");
-                AggStateOffsets_.emplace_back(TotalStateSize_);
-                TotalStateSize_ += Aggs_.back()->StateSize;
-            }
-
-            auto equal = MakeEqual<TKey>(KeyLength_);
-            auto hasher = MakeHash<TKey>(KeyLength_);
-            if constexpr (UseSet) {
-                MKQL_ENSURE(params.empty(), "Only keys are supported");
-                HashSet_ = std::make_unique<THashSetImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(hasher, equal);
-            } else {
-                if (!InlineAggState) {
-                    HashFixedMap_ = std::make_unique<TFixedHashMapImpl<TKey, TFixedAggState, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(hasher, equal);
-                } else {
-                    HashMap_ = std::make_unique<TDynamicHashMapImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(TotalStateSize_, hasher, equal);
-                }
-            }
-        }
-
-        void ProcessInput(const THolderFactory& holderFactory) {
-            ++BatchNum_;
-            const auto batchLength = TArrowBlock::From(Values_.back()).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
-            if (!batchLength) {
-                return;
-            }
-
-            const ui8* filterBitmap = nullptr;
-            if constexpr (UseFilter) {
-                auto filterDatum = TArrowBlock::From(Values_[*FilterColumn_]).GetDatum();
-                if (filterDatum.is_scalar()) {
-                    if (!filterDatum.template scalar_as<arrow::UInt8Scalar>().value) {
-                        return;
-                    }
-                } else {
-                    const auto& arr = filterDatum.array();
-                    filterBitmap = arr->template GetValues<ui8>(1);
-                    ui64 popCount = GetBitmapPopCount(arr);
-                    if (popCount == 0) {
-                        return;
-                    }
-                }
-            }
-
-            const ui32* streamIndexData = nullptr;
-            TMaybe<ui32> streamIndexScalar;
-            if constexpr (Many) {
-                auto streamIndexDatum = TArrowBlock::From(Values_[StreamIndex_]).GetDatum();
-                if (streamIndexDatum.is_scalar()) {
-                    streamIndexScalar = streamIndexDatum.template scalar_as<arrow::UInt32Scalar>().value;
-                } else {
-                    MKQL_ENSURE(streamIndexDatum.is_array(), "Expected array");
-                    streamIndexData = streamIndexDatum.array()->template GetValues<ui32>(1);
-                }
-                UnwrappedValues_ = Values_;
-                for (const auto& p : AggsParams_) {
-                    const auto& columnDatum = TArrowBlock::From(UnwrappedValues_[p.Column_]).GetDatum();
-                    MKQL_ENSURE(columnDatum.is_array(), "Expected array");
-                    UnwrappedValues_[p.Column_] = holderFactory.CreateArrowBlock(Unwrap(*columnDatum.array(), p.StateType_));
-                }
-            }
-
-            HasValues_ = true;
-            std::vector<arrow::Datum> keysDatum;
-            keysDatum.reserve(Keys_.size());
-            for (ui32 i = 0; i < Keys_.size(); ++i) {
-                keysDatum.emplace_back(TArrowBlock::From(Values_[Keys_[i].Index]).GetDatum());
-            }
-
-            std::array<TOutputBuffer, PrefetchBatchSize> out;
-            for (ui32 i = 0; i < PrefetchBatchSize; ++i) {
-                out[i].Resize(sizeof(TKey));
-            }
-
-            std::array<TRobinHoodBatchRequestItem<TKey>, PrefetchBatchSize> insertBatch;
-            std::array<ui64, PrefetchBatchSize> insertBatchRows;
-            std::array<char*, PrefetchBatchSize> insertBatchPayloads;
-            std::array<bool, PrefetchBatchSize> insertBatchIsNew;
-            ui32 insertBatchLen = 0;
-
-            const auto processInsertBatch = [&]() {
-                for (ui32 i = 0; i < insertBatchLen; ++i) {
-                    auto& r = insertBatch[i];
-                    TStringBuf str = out[i].Finish();
-                    TKey key = MakeKey<TKey>(str, KeyLength_);
-                    r.ConstructKey(key);
-                }
-
-                if constexpr (UseSet) {
-                    HashSet_->BatchInsert({insertBatch.data(), insertBatchLen},[&](size_t index, typename TState::TSetImpl::iterator iter, bool isNew) {
-                        Y_UNUSED(index);
-                        if (isNew) {
-                            if constexpr (std::is_same<TKey, TSSOKey>::value || std::is_same<TKey, TExternalFixedSizeKey>::value) {
-                                MoveKeyToArena(HashSet_->GetKey(iter), Arena_, KeyLength_);
-                            }
-                        }
-                    });
-                } else {
-                    using THashTable = std::conditional_t<InlineAggState, typename TState::TDynMapImpl, typename TState::TFixedMapImpl>;
-                    THashTable* hash;
-                    if constexpr (!InlineAggState) {
-                        hash = HashFixedMap_.get();
-                    } else {
-                        hash = HashMap_.get();
-                    }
-
-                    hash->BatchInsert({insertBatch.data(), insertBatchLen}, [&](size_t index, typename THashTable::iterator iter, bool isNew) {
-                        if (isNew) {
-                            if constexpr (std::is_same<TKey, TSSOKey>::value || std::is_same<TKey, TExternalFixedSizeKey>::value) {
-                                MoveKeyToArena(hash->GetKey(iter), Arena_, KeyLength_);
-                            }
-                        }
-
-                        if constexpr (UseArena) {
-                            // prefetch payloads only
-                            auto payload = hash->GetPayload(iter);
-                            char* ptr;
-                            if (isNew) {
-                                ptr = (char*)Arena_.Alloc(TotalStateSize_);
-                                *(char**)payload = ptr;
-                            } else {
-                                ptr = *(char**)payload;
-                            }
-
-                            insertBatchIsNew[index] = isNew;
-                            insertBatchPayloads[index] = ptr;
-                            NYql::PrefetchForWrite(ptr);
-                        } else {
-                            // process insert
-                            auto payload = (char*)hash->GetPayload(iter);
-                            auto row = insertBatchRows[index];
-                            ui32 streamIndex = 0;
-                            if constexpr (Many) {
-                                streamIndex = streamIndexScalar ? *streamIndexScalar : streamIndexData[row];
-                            }
-
-                            Insert(row, payload, isNew, streamIndex);
-                        }
-                    });
-
-                    if constexpr (UseArena) {
-                        for (ui32 i = 0; i < insertBatchLen; ++i) {
-                            auto row = insertBatchRows[i];
-                            ui32 streamIndex = 0;
-                            if constexpr (Many) {
-                                streamIndex = streamIndexScalar ? *streamIndexScalar : streamIndexData[row];
-                            }
-
-                            bool isNew = insertBatchIsNew[i];
-                            char* payload = insertBatchPayloads[i];
-                            Insert(row, payload, isNew, streamIndex);
-                        }
-                    }
-                }
-            };
-
-            for (ui64 row = 0; row < batchLength; ++row) {
-                if constexpr (UseFilter) {
-                    if (filterBitmap && !filterBitmap[row]) {
-                        continue;
-                    }
-                }
-
-                // encode key
-                out[insertBatchLen].Rewind();
-                for (ui32 i = 0; i < keysDatum.size(); ++i) {
-                    if (keysDatum[i].is_scalar()) {
-                        // TODO: more efficient code when grouping by scalar
-                        Readers_[i]->SaveScalarItem(*keysDatum[i].scalar(), out[insertBatchLen]);
-                    } else {
-                        Readers_[i]->SaveItem(*keysDatum[i].array(), row, out[insertBatchLen]);
-                    }
-                }
-
-                insertBatchRows[insertBatchLen] = row;
-                ++insertBatchLen;
-                if (insertBatchLen == PrefetchBatchSize) {
-                    processInsertBatch();
-                    insertBatchLen = 0;
-                }
-            }
-
-            processInsertBatch();
-        }
-
-        bool Finish() {
-            if (!HasValues_) {
-                IsFinished_ = true;
-                return false;
-            }
-
-            WritingOutput_ = true;
-            OutputBlockSize_ = 0;
-            PrepareAggBuilders();
-
-            if constexpr (UseSet) {
-                HashSetIt_ = HashSet_->Begin();
-            } else {
-                if constexpr (!InlineAggState) {
-                    HashFixedMapIt_ = HashFixedMap_->Begin();
-                } else {
-                    HashMapIt_ = HashMap_->Begin();
-                }
-            }
-            return true;
-        }
-
-        bool FillOutput(const THolderFactory& holderFactory) {
-            bool exit = false;
-            while (WritingOutput_) {
-                if constexpr (UseSet) {
-                    for (;!exit && HashSetIt_ != HashSet_->End(); HashSet_->Advance(HashSetIt_)) {
-                        if (!HashSet_->IsValid(HashSetIt_)) {
-                            continue;
-                        }
-
-                        if (OutputBlockSize_ == MaxBlockLen_) {
-                            Flush(false, holderFactory);
-                            //return EFetchResult::One;
-                            exit = true;
-                            break;
-                        }
-
-                        const TKey& key = HashSet_->GetKey(HashSetIt_);
-                        TInputBuffer in(GetKeyView<TKey>(key, KeyLength_));
-                        for (auto& kb : Builders_) {
-                            kb->Add(in);
-                        }
-                        ++OutputBlockSize_;
-                    }
-                    break;
-                } else {
-                    const bool done = InlineAggState ?
-                        Iterate(*HashMap_, HashMapIt_) :
-                        Iterate(*HashFixedMap_, HashFixedMapIt_);
-                    if (done) {
-                        break;
-                    }
-                    Flush(false, holderFactory);
-                    exit = true;
-                    break;
-                }
-            }
-
-            if (!exit) {
-                IsFinished_ = true;
-                WritingOutput_ = false;
-                if (!OutputBlockSize_)
-                    return false;
-                Flush(true, holderFactory);
-            }
-
-            FillArrays();
-            return true;
-        }
-    private:
-        void PrepareAggBuilders() {
-            if constexpr (!UseSet) {
-                AggBuilders_.clear();
-                AggBuilders_.reserve(Aggs_.size());
-                for (const auto& a : Aggs_) {
-                    if constexpr (Finalize) {
-                        AggBuilders_.emplace_back(a->MakeResultBuilder(MaxBlockLen_));
-                    } else {
-                        AggBuilders_.emplace_back(a->MakeStateBuilder(MaxBlockLen_));
-                    }
-                }
-            }
-        }
-
-        void Flush(bool final, const THolderFactory& holderFactory) {
-            if (!OutputBlockSize_) {
-                return;
-            }
-
-            for (size_t i = 0; i < Builders_.size(); ++i) {
-                Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(final));
-            }
-
-            if constexpr (!UseSet) {
-                for (size_t i = 0; i < Aggs_.size(); ++i) {
-                    Values[Builders_.size() + i] = AggBuilders_[i]->Build();
-                }
-                if (!final) {
-                    PrepareAggBuilders();
-                }
-            }
-
-            Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(OutputBlockSize_)));
-            OutputBlockSize_ = 0;
-        }
-
-        void Insert(ui64 row, char* payload, bool isNew, ui32 currentStreamIndex) const {
-            char* ptr = payload;
-
-            if (isNew) {
-                if constexpr (Many) {
-                    static_assert(Finalize);
-                    MKQL_ENSURE(currentStreamIndex < Streams_.size(), "Invalid stream index");
-                    memset(ptr, 0, Streams_.size());
-                    ptr[currentStreamIndex] = 1;
-
-                    for (auto i : Streams_[currentStreamIndex]) {
-
-                        Aggs_[i]->LoadState(ptr + AggStateOffsets_[i], BatchNum_, UnwrappedValues_.data(), row);
-                    }
-                } else {
-                    for (size_t i = 0; i < Aggs_.size(); ++i) {
-                        if constexpr (Finalize) {
-                            Aggs_[i]->LoadState(ptr, BatchNum_, Values_.data(), row);
-                        } else {
-                            Aggs_[i]->InitKey(ptr, BatchNum_, Values_.data(), row);
-                        }
-
-                        ptr += Aggs_[i]->StateSize;
-                    }
-                }
-            } else {
-                if constexpr (Many) {
-                    static_assert(Finalize);
-                    MKQL_ENSURE(currentStreamIndex < Streams_.size(), "Invalid stream index");
-
-                    bool isNewStream = !ptr[currentStreamIndex];
-                    ptr[currentStreamIndex] = 1;
-
-                    for (auto i : Streams_[currentStreamIndex]) {
-
-                        if (isNewStream) {
-                            Aggs_[i]->LoadState(ptr + AggStateOffsets_[i], BatchNum_, UnwrappedValues_.data(), row);
-                        } else {
-                            Aggs_[i]->UpdateState(ptr + AggStateOffsets_[i], BatchNum_, UnwrappedValues_.data(), row);
-                        }
-                    }
-                } else {
-                    for (size_t i = 0; i < Aggs_.size(); ++i) {
-                        if constexpr (Finalize) {
-                            Aggs_[i]->UpdateState(ptr, BatchNum_, Values_.data(), row);
-                        } else {
-                            Aggs_[i]->UpdateKey(ptr, BatchNum_, Values_.data(), row);
-                        }
-
-                        ptr += Aggs_[i]->StateSize;
-                    }
-                }
-            }
-        }
-
-        template <typename THash>
-        bool Iterate(THash& hash, typename THash::const_iterator& iter) {
-            MKQL_ENSURE(WritingOutput_, "Supposed to be called at the end");
-            std::array<typename THash::const_iterator, PrefetchBatchSize> iters;
-            ui32 itersLen = 0;
-            auto iterateBatch = [&]() {
-                for (ui32 i = 0; i < itersLen; ++i) {
-                    auto iter = iters[i];
-                    const TKey& key = hash.GetKey(iter);
-                    auto payload = (char*)hash.GetPayload(iter);
-                    char* ptr;
-                    if constexpr (UseArena) {
-                        ptr = *(char**)payload;
-                    } else {
-                        ptr = payload;
-                    }
-
-                    TInputBuffer in(GetKeyView<TKey>(key, KeyLength_));
-                    for (auto& kb : Builders_) {
-                        kb->Add(in);
-                    }
-
-                    if constexpr (Many) {
-                        for (ui32 i = 0; i < Streams_.size(); ++i) {
-                            MKQL_ENSURE(ptr[i], "Missing partial aggregation state for stream #" << i);
-                        }
-
-                        ptr += Streams_.size();
-                    }
-
-                    for (size_t i = 0; i < Aggs_.size(); ++i) {
-                        AggBuilders_[i]->Add(ptr);
-                        Aggs_[i]->DestroyState(ptr);
-
-                        ptr += Aggs_[i]->StateSize;
-                    }
-                }
-            };
-
-            for (; iter != hash.End(); hash.Advance(iter)) {
-                if (!hash.IsValid(iter)) {
-                    continue;
-                }
-
-                if (OutputBlockSize_ == MaxBlockLen_) {
-                    iterateBatch();
-                    return false;
-                }
-
-                if (itersLen == iters.size()) {
-                    iterateBatch();
-                    itersLen = 0;
-                }
-
-                iters[itersLen] = iter;
-                ++itersLen;
-                ++OutputBlockSize_;
-                if constexpr (UseArena) {
-                    auto payload = (char*)hash.GetPayload(iter);
-                    auto ptr = *(char**)payload;
-                    NYql::PrefetchForWrite(ptr);
-                }
-
-                if constexpr (std::is_same<TKey, TSSOKey>::value) {
-                    const auto& key = hash.GetKey(iter);
-                    if (!key.IsInplace()) {
-                        NYql::PrefetchForRead(key.AsView().Data());
-                    }
-                } else if constexpr (std::is_same<TKey, TExternalFixedSizeKey>::value) {
-                    const auto& key = hash.GetKey(iter);
-                    NYql::PrefetchForRead(key.Data);
-                }
-            }
-
-            iterateBatch();
-            return true;
-        }
-    };
-private:
     void RegisterDependencies() const final {
         this->FlowDependsOn(Flow_);
     }
@@ -1679,7 +1688,8 @@ class THashedWrapperBaseFromStream : public TMutableComputationNode<TDerived>,
     protected THashedWrapperCodegenBase
 {
     using TComputationBase = TMutableComputationNode<TDerived>;
-    static constexpr bool UseArena = !InlineAggState && std::is_same<TFixedAggState, TStateArena>::value;
+
+    using TState = THashedWrapperBaseState<TKey, TAggregator, TFixedAggState, UseSet, UseFilter, Finalize, Many, TDerived>;
 public:
     THashedWrapperBaseFromStream(TComputationMutables& mutables,
         IComputationNode* stream,
@@ -1719,503 +1729,6 @@ public:
         return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory, std::move(state), std::move(Stream_->GetValue(ctx)));
     }
 private:
-    struct TState : public TBlockState {
-        bool WritingOutput_ = false;
-        bool IsFinished_ = false;
-
-        const std::optional<ui32> FilterColumn_;
-        const size_t Width_;
-        const size_t OutputWidth_;
-        const std::vector<TKeyParams> Keys_;
-        const std::vector<TAggParams<TAggregator>>& AggsParams_;
-        const ui32 KeyLength_;
-        const ui32 StreamIndex_;
-        const std::vector<std::vector<ui32>> Streams_;
-        const size_t MaxBlockLen_;
-
-        template<typename TKeyType>
-        struct THashSettings {
-            static constexpr bool CacheHash = std::is_same_v<TKeyType, TSSOKey>;
-        };
-        using TDynMapImpl = TDynamicHashMapImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>;
-        using TSetImpl = THashSetImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>;
-        using TFixedMapImpl = TFixedHashMapImpl<TKey, TFixedAggState, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>;
-
-        ui64 BatchNum_ = 0;
-        TUnboxedValueVector Values_;
-        std::vector<std::unique_ptr<TAggregator>> Aggs_;
-        std::vector<ui32> AggStateOffsets_;
-        TUnboxedValueVector UnwrappedValues_;
-        std::vector<std::unique_ptr<IBlockReader>> Readers_;
-        std::vector<std::unique_ptr<IArrayBuilder>> Builders_;
-        std::vector<std::unique_ptr<IAggColumnBuilder>> AggBuilders_;
-        bool HasValues_ = false;
-        ui32 TotalStateSize_ = 0;
-        size_t OutputBlockSize_ = 0;
-        std::unique_ptr<TDynMapImpl> HashMap_;
-        typename TDynMapImpl::const_iterator HashMapIt_;
-        std::unique_ptr<TSetImpl> HashSet_;
-        typename TSetImpl::const_iterator HashSetIt_;
-        std::unique_ptr<TFixedMapImpl> HashFixedMap_;
-        typename TFixedMapImpl::const_iterator HashFixedMapIt_;
-        TPagedArena Arena_;
-
-        TState(TMemoryUsageInfo* memInfo, ui32 keyLength, ui32 streamIndex, size_t width, size_t outputWidth, std::optional<ui32> filterColumn, const std::vector<TAggParams<TAggregator>>& params,
-            const std::vector<std::vector<ui32>>& streams, const std::vector<TKeyParams>& keys, size_t maxBlockLen, TComputationContext& ctx)
-            : TBlockState(memInfo, outputWidth)
-            , FilterColumn_(filterColumn)
-            , Width_(width)
-            , OutputWidth_(outputWidth)
-            , Keys_(keys)
-            , AggsParams_(params)
-            , KeyLength_(keyLength)
-            , StreamIndex_(streamIndex)
-            , Streams_(streams)
-            , MaxBlockLen_(maxBlockLen)
-            , Values_(width)
-            , UnwrappedValues_(width)
-            , Readers_(keys.size())
-            , Builders_(keys.size())
-            , Arena_(TlsAllocState)
-        {
-            Pointer_ = Values_.data();
-            for (size_t i = 0; i < Keys_.size(); ++i) {
-                auto itemType = AS_TYPE(TBlockType, Keys_[i].Type)->GetItemType();
-                Readers_[i] = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType);
-                Builders_[i] = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, ctx.ArrowMemoryPool, MaxBlockLen_, &ctx.Builder->GetPgBuilder());
-            }
-
-            if constexpr (Many) {
-                TotalStateSize_ += Streams_.size();
-            }
-
-            for (const auto& p : AggsParams_) {
-                Aggs_.emplace_back(p.Prepared_->Make(ctx));
-                MKQL_ENSURE(Aggs_.back()->StateSize == p.Prepared_->StateSize, "State size mismatch");
-                AggStateOffsets_.emplace_back(TotalStateSize_);
-                TotalStateSize_ += Aggs_.back()->StateSize;
-            }
-
-            auto equal = MakeEqual<TKey>(KeyLength_);
-            auto hasher = MakeHash<TKey>(KeyLength_);
-            if constexpr (UseSet) {
-                MKQL_ENSURE(params.empty(), "Only keys are supported");
-                HashSet_ = std::make_unique<THashSetImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(hasher, equal);
-            } else {
-                if (!InlineAggState) {
-                    HashFixedMap_ = std::make_unique<TFixedHashMapImpl<TKey, TFixedAggState, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(hasher, equal);
-                } else {
-                    HashMap_ = std::make_unique<TDynamicHashMapImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(TotalStateSize_, hasher, equal);
-                }
-            }
-        }
-
-        void ProcessInput(const THolderFactory& holderFactory) {
-            ++BatchNum_;
-            const auto batchLength = TArrowBlock::From(Values_.back()).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
-            if (!batchLength) {
-                return;
-            }
-
-            const ui8* filterBitmap = nullptr;
-            if constexpr (UseFilter) {
-                auto filterDatum = TArrowBlock::From(Values_[*FilterColumn_]).GetDatum();
-                if (filterDatum.is_scalar()) {
-                    if (!filterDatum.template scalar_as<arrow::UInt8Scalar>().value) {
-                        return;
-                    }
-                } else {
-                    const auto& arr = filterDatum.array();
-                    filterBitmap = arr->template GetValues<ui8>(1);
-                    ui64 popCount = GetBitmapPopCount(arr);
-                    if (popCount == 0) {
-                        return;
-                    }
-                }
-            }
-
-            const ui32* streamIndexData = nullptr;
-            TMaybe<ui32> streamIndexScalar;
-            if constexpr (Many) {
-                auto streamIndexDatum = TArrowBlock::From(Values_[StreamIndex_]).GetDatum();
-                if (streamIndexDatum.is_scalar()) {
-                    streamIndexScalar = streamIndexDatum.template scalar_as<arrow::UInt32Scalar>().value;
-                } else {
-                    MKQL_ENSURE(streamIndexDatum.is_array(), "Expected array");
-                    streamIndexData = streamIndexDatum.array()->template GetValues<ui32>(1);
-                }
-                UnwrappedValues_ = Values_;
-                for (const auto& p : AggsParams_) {
-                    const auto& columnDatum = TArrowBlock::From(UnwrappedValues_[p.Column_]).GetDatum();
-                    MKQL_ENSURE(columnDatum.is_array(), "Expected array");
-                    UnwrappedValues_[p.Column_] = holderFactory.CreateArrowBlock(Unwrap(*columnDatum.array(), p.StateType_));
-                }
-            }
-
-            HasValues_ = true;
-            std::vector<arrow::Datum> keysDatum;
-            keysDatum.reserve(Keys_.size());
-            for (ui32 i = 0; i < Keys_.size(); ++i) {
-                keysDatum.emplace_back(TArrowBlock::From(Values_[Keys_[i].Index]).GetDatum());
-            }
-
-            std::array<TOutputBuffer, PrefetchBatchSize> out;
-            for (ui32 i = 0; i < PrefetchBatchSize; ++i) {
-                out[i].Resize(sizeof(TKey));
-            }
-
-            std::array<TRobinHoodBatchRequestItem<TKey>, PrefetchBatchSize> insertBatch;
-            std::array<ui64, PrefetchBatchSize> insertBatchRows;
-            std::array<char*, PrefetchBatchSize> insertBatchPayloads;
-            std::array<bool, PrefetchBatchSize> insertBatchIsNew;
-            ui32 insertBatchLen = 0;
-
-            const auto processInsertBatch = [&]() {
-                for (ui32 i = 0; i < insertBatchLen; ++i) {
-                    auto& r = insertBatch[i];
-                    TStringBuf str = out[i].Finish();
-                    TKey key = MakeKey<TKey>(str, KeyLength_);
-                    r.ConstructKey(key);
-                }
-
-                if constexpr (UseSet) {
-                    HashSet_->BatchInsert({insertBatch.data(), insertBatchLen},[&](size_t index, typename TState::TSetImpl::iterator iter, bool isNew) {
-                        Y_UNUSED(index);
-                        if (isNew) {
-                            if constexpr (std::is_same<TKey, TSSOKey>::value || std::is_same<TKey, TExternalFixedSizeKey>::value) {
-                                MoveKeyToArena(HashSet_->GetKey(iter), Arena_, KeyLength_);
-                            }
-                        }
-                    });
-                } else {
-                    using THashTable = std::conditional_t<InlineAggState, typename TState::TDynMapImpl, typename TState::TFixedMapImpl>;
-                    THashTable* hash;
-                    if constexpr (!InlineAggState) {
-                        hash = HashFixedMap_.get();
-                    } else {
-                        hash = HashMap_.get();
-                    }
-
-                    hash->BatchInsert({insertBatch.data(), insertBatchLen}, [&](size_t index, typename THashTable::iterator iter, bool isNew) {
-                        if (isNew) {
-                            if constexpr (std::is_same<TKey, TSSOKey>::value || std::is_same<TKey, TExternalFixedSizeKey>::value) {
-                                MoveKeyToArena(hash->GetKey(iter), Arena_, KeyLength_);
-                            }
-                        }
-
-                        if constexpr (UseArena) {
-                            // prefetch payloads only
-                            auto payload = hash->GetPayload(iter);
-                            char* ptr;
-                            if (isNew) {
-                                ptr = (char*)Arena_.Alloc(TotalStateSize_);
-                                *(char**)payload = ptr;
-                            } else {
-                                ptr = *(char**)payload;
-                            }
-
-                            insertBatchIsNew[index] = isNew;
-                            insertBatchPayloads[index] = ptr;
-                            NYql::PrefetchForWrite(ptr);
-                        } else {
-                            // process insert
-                            auto payload = (char*)hash->GetPayload(iter);
-                            auto row = insertBatchRows[index];
-                            ui32 streamIndex = 0;
-                            if constexpr (Many) {
-                                streamIndex = streamIndexScalar ? *streamIndexScalar : streamIndexData[row];
-                            }
-
-                            Insert(row, payload, isNew, streamIndex);
-                        }
-                    });
-
-                    if constexpr (UseArena) {
-                        for (ui32 i = 0; i < insertBatchLen; ++i) {
-                            auto row = insertBatchRows[i];
-                            ui32 streamIndex = 0;
-                            if constexpr (Many) {
-                                streamIndex = streamIndexScalar ? *streamIndexScalar : streamIndexData[row];
-                            }
-
-                            bool isNew = insertBatchIsNew[i];
-                            char* payload = insertBatchPayloads[i];
-                            Insert(row, payload, isNew, streamIndex);
-                        }
-                    }
-                }
-            };
-
-            for (ui64 row = 0; row < batchLength; ++row) {
-                if constexpr (UseFilter) {
-                    if (filterBitmap && !filterBitmap[row]) {
-                        continue;
-                    }
-                }
-
-                // encode key
-                out[insertBatchLen].Rewind();
-                for (ui32 i = 0; i < keysDatum.size(); ++i) {
-                    if (keysDatum[i].is_scalar()) {
-                        // TODO: more efficient code when grouping by scalar
-                        Readers_[i]->SaveScalarItem(*keysDatum[i].scalar(), out[insertBatchLen]);
-                    } else {
-                        Readers_[i]->SaveItem(*keysDatum[i].array(), row, out[insertBatchLen]);
-                    }
-                }
-
-                insertBatchRows[insertBatchLen] = row;
-                ++insertBatchLen;
-                if (insertBatchLen == PrefetchBatchSize) {
-                    processInsertBatch();
-                    insertBatchLen = 0;
-                }
-            }
-
-            processInsertBatch();
-        }
-
-        bool Finish() {
-            if (!HasValues_) {
-                IsFinished_ = true;
-                return false;
-            }
-
-            WritingOutput_ = true;
-            OutputBlockSize_ = 0;
-            PrepareAggBuilders();
-
-            if constexpr (UseSet) {
-                HashSetIt_ = HashSet_->Begin();
-            } else {
-                if constexpr (!InlineAggState) {
-                    HashFixedMapIt_ = HashFixedMap_->Begin();
-                } else {
-                    HashMapIt_ = HashMap_->Begin();
-                }
-            }
-            return true;
-        }
-
-        bool FillOutput(const THolderFactory& holderFactory) {
-            bool exit = false;
-            while (WritingOutput_) {
-                if constexpr (UseSet) {
-                    for (;!exit && HashSetIt_ != HashSet_->End(); HashSet_->Advance(HashSetIt_)) {
-                        if (!HashSet_->IsValid(HashSetIt_)) {
-                            continue;
-                        }
-
-                        if (OutputBlockSize_ == MaxBlockLen_) {
-                            Flush(false, holderFactory);
-                            //return EFetchResult::One;
-                            exit = true;
-                            break;
-                        }
-
-                        const TKey& key = HashSet_->GetKey(HashSetIt_);
-                        TInputBuffer in(GetKeyView<TKey>(key, KeyLength_));
-                        for (auto& kb : Builders_) {
-                            kb->Add(in);
-                        }
-                        ++OutputBlockSize_;
-                    }
-                    break;
-                } else {
-                    const bool done = InlineAggState ?
-                        Iterate(*HashMap_, HashMapIt_) :
-                        Iterate(*HashFixedMap_, HashFixedMapIt_);
-                    if (done) {
-                        break;
-                    }
-                    Flush(false, holderFactory);
-                    exit = true;
-                    break;
-                }
-            }
-
-            if (!exit) {
-                IsFinished_ = true;
-                WritingOutput_ = false;
-                if (!OutputBlockSize_)
-                    return false;
-                Flush(true, holderFactory);
-            }
-
-            FillArrays();
-            return true;
-        }
-    private:
-        void PrepareAggBuilders() {
-            if constexpr (!UseSet) {
-                AggBuilders_.clear();
-                AggBuilders_.reserve(Aggs_.size());
-                for (const auto& a : Aggs_) {
-                    if constexpr (Finalize) {
-                        AggBuilders_.emplace_back(a->MakeResultBuilder(MaxBlockLen_));
-                    } else {
-                        AggBuilders_.emplace_back(a->MakeStateBuilder(MaxBlockLen_));
-                    }
-                }
-            }
-        }
-
-        void Flush(bool final, const THolderFactory& holderFactory) {
-            if (!OutputBlockSize_) {
-                return;
-            }
-
-            for (size_t i = 0; i < Builders_.size(); ++i) {
-                Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(final));
-            }
-
-            if constexpr (!UseSet) {
-                for (size_t i = 0; i < Aggs_.size(); ++i) {
-                    Values[Builders_.size() + i] = AggBuilders_[i]->Build();
-                }
-                if (!final) {
-                    PrepareAggBuilders();
-                }
-            }
-
-            Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(OutputBlockSize_)));
-            OutputBlockSize_ = 0;
-        }
-
-        void Insert(ui64 row, char* payload, bool isNew, ui32 currentStreamIndex) const {
-            char* ptr = payload;
-
-            if (isNew) {
-                if constexpr (Many) {
-                    static_assert(Finalize);
-                    MKQL_ENSURE(currentStreamIndex < Streams_.size(), "Invalid stream index");
-                    memset(ptr, 0, Streams_.size());
-                    ptr[currentStreamIndex] = 1;
-
-                    for (auto i : Streams_[currentStreamIndex]) {
-
-                        Aggs_[i]->LoadState(ptr + AggStateOffsets_[i], BatchNum_, UnwrappedValues_.data(), row);
-                    }
-                } else {
-                    for (size_t i = 0; i < Aggs_.size(); ++i) {
-                        if constexpr (Finalize) {
-                            Aggs_[i]->LoadState(ptr, BatchNum_, Values_.data(), row);
-                        } else {
-                            Aggs_[i]->InitKey(ptr, BatchNum_, Values_.data(), row);
-                        }
-
-                        ptr += Aggs_[i]->StateSize;
-                    }
-                }
-            } else {
-                if constexpr (Many) {
-                    static_assert(Finalize);
-                    MKQL_ENSURE(currentStreamIndex < Streams_.size(), "Invalid stream index");
-
-                    bool isNewStream = !ptr[currentStreamIndex];
-                    ptr[currentStreamIndex] = 1;
-
-                    for (auto i : Streams_[currentStreamIndex]) {
-
-                        if (isNewStream) {
-                            Aggs_[i]->LoadState(ptr + AggStateOffsets_[i], BatchNum_, UnwrappedValues_.data(), row);
-                        } else {
-                            Aggs_[i]->UpdateState(ptr + AggStateOffsets_[i], BatchNum_, UnwrappedValues_.data(), row);
-                        }
-                    }
-                } else {
-                    for (size_t i = 0; i < Aggs_.size(); ++i) {
-                        if constexpr (Finalize) {
-                            Aggs_[i]->UpdateState(ptr, BatchNum_, Values_.data(), row);
-                        } else {
-                            Aggs_[i]->UpdateKey(ptr, BatchNum_, Values_.data(), row);
-                        }
-
-                        ptr += Aggs_[i]->StateSize;
-                    }
-                }
-            }
-        }
-
-        template <typename THash>
-        bool Iterate(THash& hash, typename THash::const_iterator& iter) {
-            MKQL_ENSURE(WritingOutput_, "Supposed to be called at the end");
-            std::array<typename THash::const_iterator, PrefetchBatchSize> iters;
-            ui32 itersLen = 0;
-            auto iterateBatch = [&]() {
-                for (ui32 i = 0; i < itersLen; ++i) {
-                    auto iter = iters[i];
-                    const TKey& key = hash.GetKey(iter);
-                    auto payload = (char*)hash.GetPayload(iter);
-                    char* ptr;
-                    if constexpr (UseArena) {
-                        ptr = *(char**)payload;
-                    } else {
-                        ptr = payload;
-                    }
-
-                    TInputBuffer in(GetKeyView<TKey>(key, KeyLength_));
-                    for (auto& kb : Builders_) {
-                        kb->Add(in);
-                    }
-
-                    if constexpr (Many) {
-                        for (ui32 i = 0; i < Streams_.size(); ++i) {
-                            MKQL_ENSURE(ptr[i], "Missing partial aggregation state for stream #" << i);
-                        }
-
-                        ptr += Streams_.size();
-                    }
-
-                    for (size_t i = 0; i < Aggs_.size(); ++i) {
-                        AggBuilders_[i]->Add(ptr);
-                        Aggs_[i]->DestroyState(ptr);
-
-                        ptr += Aggs_[i]->StateSize;
-                    }
-                }
-            };
-
-            for (; iter != hash.End(); hash.Advance(iter)) {
-                if (!hash.IsValid(iter)) {
-                    continue;
-                }
-
-                if (OutputBlockSize_ == MaxBlockLen_) {
-                    iterateBatch();
-                    return false;
-                }
-
-                if (itersLen == iters.size()) {
-                    iterateBatch();
-                    itersLen = 0;
-                }
-
-                iters[itersLen] = iter;
-                ++itersLen;
-                ++OutputBlockSize_;
-                if constexpr (UseArena) {
-                    auto payload = (char*)hash.GetPayload(iter);
-                    auto ptr = *(char**)payload;
-                    NYql::PrefetchForWrite(ptr);
-                }
-
-                if constexpr (std::is_same<TKey, TSSOKey>::value) {
-                    const auto& key = hash.GetKey(iter);
-                    if (!key.IsInplace()) {
-                        NYql::PrefetchForRead(key.AsView().Data());
-                    }
-                } else if constexpr (std::is_same<TKey, TExternalFixedSizeKey>::value) {
-                    const auto& key = hash.GetKey(iter);
-                    NYql::PrefetchForRead(key.Data);
-                }
-            }
-
-            iterateBatch();
-            return true;
-        }
-    };
-
     class TStreamValue : public TComputationValue<TStreamValue> {
     using TBase = TComputationValue<TStreamValue>;
     public:
@@ -2226,7 +1739,6 @@ private:
             , Stream_(stream)
             , HolderFactory_(holderFactory)
         {
-            Cerr << "STREEEEEEEEEEEEAM\n";
         }
 
     private:

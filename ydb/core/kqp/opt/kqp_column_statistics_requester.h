@@ -65,9 +65,7 @@ private:
     struct TColumnStatisticsResponse : public NYql::IKikimrGateway::TGenericResult {
         THashMap<TString, TOptimizerStatistics::TColumnStatMap> ColumnStatisticsByTableName;
     };
-
-    NThreading::TFuture<TColumnStatisticsResponse> FutureWithColumnStatistics;
-    // NThreading::TPromise<TColumnStatisticsResponse> Promise;
+    std::optional<TColumnStatisticsResponse> ColumnStatisticsResponse;
     NThreading::TPromise<void> AsyncReadiness;
 
     //////////////////////////////////////////////////////////////

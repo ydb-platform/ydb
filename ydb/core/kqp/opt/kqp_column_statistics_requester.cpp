@@ -114,6 +114,7 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
     using TRequest = NStat::TEvStatistics::TEvGetStatistics;
     using TResponse = NStat::TEvStatistics::TEvGetStatisticsResult;
 
+    AsyncReadiness = NewPromise<void>();
     auto promise = NewPromise<TColumnStatisticsResponse>();
     auto callback = [tableMetaByPathId = std::move(tableMetaByPathId)]
     (TPromise<TColumnStatisticsResponse> promise, NStat::TEvStatistics::TEvGetStatisticsResult&& response) mutable {
@@ -139,24 +140,21 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
     ActorSystem
         ->Register(requestHandler, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
 
-    FutureWithColumnStatistics = promise.GetFuture();
-    FutureWithColumnStatistics.Subscribe([this](auto){ AsyncReadiness.SetValue(); });
+    promise.GetFuture().Subscribe([this](auto result){ ColumnStatisticsResponse = result.ExtractValue(); AsyncReadiness.SetValue(); });
 
     return TStatus::Async;
 }
 
 IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoApplyAsyncChanges(TExprNode::TPtr, TExprNode::TPtr&, TExprContext&) {
-    Y_ENSURE(FutureWithColumnStatistics.IsReady());
+    Y_ENSURE(AsyncReadiness.IsReady() && ColumnStatisticsResponse.has_value());
 
-    auto columnStatisticsResponse = FutureWithColumnStatistics.ExtractValue();
-
-    if (!columnStatisticsResponse.Issues().Empty()) {
-        TStringStream ss; columnStatisticsResponse.Issues().PrintTo(ss);
+    if (!ColumnStatisticsResponse->Issues().Empty()) {
+        TStringStream ss; ColumnStatisticsResponse->Issues().PrintTo(ss);
         YQL_CLOG(TRACE, ProviderKikimr) << "Can't load columns statistics for request: " << ss.Str();
         return IGraphTransformer::TStatus::Ok;
     }
 
-    for (auto&& [tableName, columnStatistics]:  columnStatisticsResponse.ColumnStatisticsByTableName) {
+    for (auto&& [tableName, columnStatistics]:  ColumnStatisticsResponse->ColumnStatisticsByTableName) {
         TypesCtx.ColumnStatisticsByTableName.insert(
             {std::move(tableName), new TOptimizerStatistics::TColumnStatMap(std::move(columnStatistics))}
         );

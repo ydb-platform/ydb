@@ -43,8 +43,8 @@ void AssertEquivialent(const TParsedToken& lhs, const TParsedToken& rhs) {
         return;
     }
 
-    UNIT_ASSERT_EQUAL(lhs.Name, rhs.Name);
-    UNIT_ASSERT_EQUAL(lhs.Content, rhs.Content);
+    UNIT_ASSERT_VALUES_EQUAL(lhs.Name, rhs.Name);
+    UNIT_ASSERT_VALUES_EQUAL(lhs.Content, rhs.Content);
     UNIT_ASSERT_EQUAL(lhs.Line, rhs.Line);
     UNIT_ASSERT_EQUAL(lhs.RawPos, rhs.RawPos);
 }

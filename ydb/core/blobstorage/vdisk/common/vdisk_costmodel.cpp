@@ -1,5 +1,6 @@
 #include "vdisk_costmodel.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_handle_class.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
 namespace NKikimr {
 

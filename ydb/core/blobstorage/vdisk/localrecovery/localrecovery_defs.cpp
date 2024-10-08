@@ -225,7 +225,7 @@ namespace NKikimr {
     }
 
     void TLocalRecoveryInfo::HandleReadLogResult(
-            const NPDisk::TEvReadLogResult::TResults &results)
+            const TVector<NPDisk::TLogRecord> &results)
     {
         ui64 firstSegLsn = 0;
         ui64 lastSegLsn = 0;

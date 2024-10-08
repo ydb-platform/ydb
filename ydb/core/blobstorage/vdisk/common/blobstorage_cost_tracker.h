@@ -267,18 +267,10 @@ public:
 
     /////// PDisk requests
     // READS
-    ui64 GetCost(const NPDisk::TEvChunkRead& ev) const {
-        return ReadCost(ev.Size);
-    }
+    ui64 GetCost(const NPDisk::TEvChunkRead& ev) const;
 
     // WRITES
-    ui64 GetCost(const NPDisk::TEvChunkWrite& ev) const {
-        if (ev.PriorityClass == NPriPut::Log) {
-            return WriteCost(ev.PartsPtr->ByteSize());
-        } else {
-            return HugeWriteCost(ev.PartsPtr->ByteSize());
-        }
-    }
+    ui64 GetCost(const NPDisk::TEvChunkWrite& ev) const;
 };
 
 struct TFailTimer {

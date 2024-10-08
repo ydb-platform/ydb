@@ -243,6 +243,29 @@
 
 #include <util/system/hostname.h>
 
+#ifndef KIKIMR_DISABLE_S3_OPS
+#include <aws/core/Aws.h>
+#endif
+
+namespace {
+
+#ifndef KIKIMR_DISABLE_S3_OPS
+struct TAwsApiGuard {
+    TAwsApiGuard() {
+        Aws::InitAPI(Options);
+    }
+
+    ~TAwsApiGuard() {
+        Aws::ShutdownAPI(Options);
+    }
+
+private:
+    Aws::SDKOptions Options;
+};
+#endif
+
+}
+
 namespace NKikimr {
 
 namespace NKikimrServicesInitializers {
@@ -2815,6 +2838,19 @@ void TGraphServiceInitializer::InitializeServices(NActors::TActorSystemSetup* se
         NGraph::MakeGraphServiceId(),
         TActorSetupCmd(NGraph::CreateGraphService(appData->TenantName), TMailboxType::HTSwap, appData->UserPoolId));
 }
+
+#ifndef KIKIMR_DISABLE_S3_OPS
+TAwsApiInitializer::TAwsApiInitializer(IGlobalObjectStorage& globalObjects)
+    : GlobalObjects(globalObjects)
+{
+}
+
+void TAwsApiInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    Y_UNUSED(setup);
+    Y_UNUSED(appData);
+    GlobalObjects.AddGlobalObject(std::make_shared<TAwsApiGuard>());
+}
+#endif
 
 } // namespace NKikimrServicesInitializers
 } // namespace NKikimr

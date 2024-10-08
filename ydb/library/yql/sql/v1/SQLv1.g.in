@@ -597,7 +597,7 @@ alter_external_data_source_action:
 drop_external_data_source_stmt: DROP EXTERNAL DATA SOURCE (IF EXISTS)? object_ref;
 
 create_view_stmt: CREATE VIEW object_ref
-    with_table_settings
+    create_object_features?
     AS select_stmt
 ;
 
@@ -625,7 +625,7 @@ drop_object_stmt: DROP OBJECT (IF EXISTS)? object_ref
 ;
 drop_object_features: WITH object_features;
 
-object_feature_value: id_or_type | bind_parameter | STRING_VALUE;
+object_feature_value: id_or_type | bind_parameter | STRING_VALUE | bool_value;
 object_feature_kv: an_id_or_type EQUALS object_feature_value;
 object_feature_flag: an_id_or_type;
 object_feature: object_feature_kv | object_feature_flag;

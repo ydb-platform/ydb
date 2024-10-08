@@ -42,6 +42,7 @@ public:
         TString RedirectMainPageTo;
         TString Certificate;
         ui32 MaxRequestsPerSecond = 0;
+        bool FilterMetrics = false;
     };
 
     virtual ~TMon() = default;

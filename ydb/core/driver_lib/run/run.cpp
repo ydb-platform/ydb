@@ -444,6 +444,7 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
             monConfig.Certificate = TUnbufferedFileInput(appConfig.GetMonitoringConfig().GetMonitoringCertificateFile()).ReadAll();
         }
         monConfig.RedirectMainPageTo = appConfig.GetMonitoringConfig().GetRedirectMainPageTo();
+        monConfig.FilterMetrics = appConfig.GetMonitoringConfig().GetFilterMetrics();
         if (includeHostName) {
             if (appConfig.HasNameserviceConfig() && appConfig.GetNameserviceConfig().NodeSize() > 0) {
                 for (const auto& it : appConfig.GetNameserviceConfig().GetNode()) {

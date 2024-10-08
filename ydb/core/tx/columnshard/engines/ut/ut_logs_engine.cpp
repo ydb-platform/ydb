@@ -278,7 +278,7 @@ TString MakeTestBlob(i64 start = 0, i64 end = 100, ui32 step = 1) {
 void AddIdsToBlobs(std::vector<TWritePortionInfoWithBlobsResult>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs, ui32& step) {
     for (auto& portion : portions) {
         THashMap<TUnifiedBlobId, TString> blobsData;
-        for (auto& b : portion.GetBlobs()) {
+        for (auto& b : portion.MutableBlobs()) {
             const auto blobId = MakeUnifiedBlobId(++step, b.GetSize());
             b.RegisterBlobId(portion, blobId);
             blobsData.emplace(blobId, b.GetResultBlob());

@@ -8,10 +8,17 @@
 
 namespace NKikimr::NSchemeShard {
 
+#ifndef NDEBUG
+TPath::TChecker::TChecker(const TPath& path, const NCompat::TSourceLocation location)
+#else
 TPath::TChecker::TChecker(const TPath& path)
+#endif
     : Path(path)
     , Failed(false)
     , Status(EStatus::StatusSuccess)
+#ifndef NDEBUG
+    , Location(location)
+#endif
 {
 }
 
@@ -32,7 +39,11 @@ const TPath::TChecker& TPath::TChecker::Fail(EStatus status, const TString& erro
     Status = status;
     Error = TStringBuilder() << "Check failed"
         << ": path: '" << Path.PathString() << "'"
-        << ", error: " << error;
+        << ", error: " << error
+#ifndef NDEBUG
+        << ", source_location: " << Location.file_name() << ":" << Location.line()
+#endif
+        ;
 
     return *this;
 }
@@ -1102,9 +1113,15 @@ TPath::TPath(TVector<TPathElement::TPtr>&& elements, TSchemeShard* ss)
     Y_ABORT_UNLESS(IsResolved());
 }
 
+#ifndef NDEBUG
+TPath::TChecker TPath::Check(const NCompat::TSourceLocation location) const {
+    return TChecker(*this, location);
+}
+#else
 TPath::TChecker TPath::Check() const {
     return TChecker(*this);
 }
+#endif
 
 bool TPath::IsEmpty() const {
     return NameParts.empty();

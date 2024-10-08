@@ -11,6 +11,18 @@
 
 namespace NKikimr::NScheme {
 
+TDecimalType::TDecimalType(ui32 precision, ui32 scale)
+    : Precision(precision)
+    , Scale(scale)
+{
+    TString error;
+    Y_ABORT_UNLESS(Validate(precision, scale, error), "%s", error.c_str());
+}
+
+bool TDecimalType::operator==(const TDecimalType& other) const {
+    return Precision == other.Precision && Scale == other.Scale;
+} 
+
 TString TDecimalType::CellValueToString(const std::pair<ui64, i64>& cellValue) const {
     return NYql::NDecimal::ToString(NYql::NDecimal::FromHalfs(cellValue.first, cellValue.second),
         Precision, Scale);
@@ -44,6 +56,10 @@ const std::optional<TDecimalType> TDecimalType::ParseTypeName(const TStringBuf& 
 }
 
 bool TDecimalType::Validate(ui32 precision, ui32 scale, TString& error) {
+    if (precision == 0) {
+        error = Sprintf("Decimal precision should not be zero");
+        return false;
+    }
     if (precision > NKikimr::NScheme::DECIMAL_MAX_PRECISION) {
         error = Sprintf("Decimal precision %u should be less than %u", precision, NKikimr::NScheme::DECIMAL_MAX_PRECISION);
         return false;

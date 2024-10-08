@@ -7,7 +7,6 @@ PEERDIR(
 
 SRCS(
     hints_ut.cpp
-    lexer_ut.cpp
     parse_hints_ut.cpp
 )
 

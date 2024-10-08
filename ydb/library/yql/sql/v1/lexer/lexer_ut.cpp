@@ -1,8 +1,7 @@
-#include <ydb/library/yql/parser/lexer_common/lexer.h>
+#include "lexer.h"
 
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/library/yql/sql/settings/translation_settings.h>
-#include <ydb/library/yql/sql/v1/lexer/lexer.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

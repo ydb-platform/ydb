@@ -2,7 +2,6 @@
 
 #include "defs.h"
 #include "vdisk_events.h"
-#include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/base/blobstorage.h>
 
 

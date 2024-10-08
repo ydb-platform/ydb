@@ -1,7 +1,6 @@
 # Using the JDBC driver with Maven
 
-The recommended way to use the {{ ydb-short-name }} JDBC driver in your project is to consume it from Maven.
-Specify the {{ ydb-short-name }} JDBC driver in the `dependencies` section:
+The recommended way to use the {{ ydb-short-name }} JDBC driver in a project is to include it as a Maven dependency. Specify the {{ ydb-short-name }} JDBC driver in the `dependencies` section of `pom.xml`:
 
 ```xml
 <dependencies>

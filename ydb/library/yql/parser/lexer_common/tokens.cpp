@@ -1,7 +1,5 @@
 #include "lexer.h"
 
-#include <util/string/ascii.h>
-
 namespace NSQLTranslation {
 
 IOutputStream& OutputTokens(IOutputStream& out, TParsedTokenList::const_iterator begin, TParsedTokenList::const_iterator end) {
@@ -17,10 +15,6 @@ bool Tokenize(ILexer& lexer, const TString& query, const TString& queryName, TPa
     };
 
     return lexer.Tokenize(query, queryName, onNextToken, issues, maxErrors);
-}
-
-bool IsProbablyKeyword(const TParsedToken& token) {
-    return AsciiEqualsIgnoreCase(token.Name, token.Content);
 }
 
 }

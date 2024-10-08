@@ -1,6 +1,5 @@
 #include "yql_highlight.h"
 
-#include <ydb/library/yql/parser/lexer_common/lexer.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/sql/settings/translation_settings.h>
 #include <ydb/library/yql/sql/v1/lexer/lexer.h>
@@ -13,8 +12,8 @@
 
 namespace NYdb {
     namespace NConsoleClient {
-        using NSQLTranslation::IsProbablyKeyword;
         using NSQLTranslation::SQL_MAX_PARSER_ERRORS;
+        using NSQLTranslationV1::IsProbablyKeyword;
         using NSQLTranslationV1::MakeLexer;
         using NYql::TIssues;
 

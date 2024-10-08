@@ -3821,7 +3821,7 @@ public:
             }
         } catch (TPageGenBase& gen) {
             out.Clear();
-            out << EncodeHtmlPcdata(gen.what());
+            out << gen.what();
         } catch (...) {
             out.Clear();
             if (request.GetParams().Get("error") == "text") {

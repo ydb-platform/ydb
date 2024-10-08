@@ -10,7 +10,58 @@ This article describes how to create and configure the necessary set of virtual 
 
 ![AiC_scheme](./_assets/terraform/AiC_scheme.png)
 
-{% include [terraform-alt-way-to-install](./_includes/terraform/terraform-alt-way-to-install.md) %}
+## Setting up Terraform {#terraform-install}
+
+You can download and install Terraform by following the [instructions](https://developer.hashicorp.com/terraform/install) on the HashiCorp website, however, access to the official repositories for downloading may be restricted for users from Russia.
+
+You can download and install Terraform from the Yandex Cloud mirror:
+
+{% list tabs %}
+
+- Linux
+
+    1. Go to this [link](https://hashicorp-releases.yandexcloud.net/terraform/) and choose the version of Terraform that suits you.
+    1. Download the archive using:
+
+        ```bash
+        sudo curl -L -o <archive_name>.zip \
+        https://hashicorp-releases.yandexcloud.net/terraform/<terraform_version>/ \
+        <terraform_version_architecture_and_os>.zip
+        ```
+
+    1. Unpack the archive using the command unzip `unzip <archive_name>.zip`. This will extract the Terraform binary file and accompanying files. You can install `unzip` with the command `apt update && apt install unzip`.
+    1. Create an _alias_ for Terraform (a way to create shortcuts for commands):
+        * Open the shell configuration file in a text editor (`~/.bashrc` or `~/.zshrc`) and add the following line to the end of the file: `alias terraform='<path_to_binary_file_terraform>'`;
+        * Save the changes and reload the configuration with the command `source ~/.bashrc` or `source ~/.zshrc`;
+    1. Check that Terraform is working by running the command `terraform -version`.
+
+- macOS 
+
+    1. Go to this [link](https://hashicorp-releases.yandexcloud.net/terraform/) and choose the version of Terraform that suits you.
+    1. Download the archive using:
+
+        ```bash
+        sudo curl -L -o <archive_name>.zip \
+        https://hashicorp-releases.yandexcloud.net/terraform/<terraform_version>/ \
+        <terraform_version_architecture_and_os>.zip
+        ```
+
+    1. Unpack the archive using the built-in archiver in macOS.
+    1. Create an _alias_ for Terraform (a way to create shortcuts for commands):
+        * Open the shell configuration file in a text editor (`~/.bashrc` or `~/.zshrc`) and add the following line to the end of the file: `alias terraform='<path_to_binary_file_terraform>'`;
+        * Save the changes and reload the configuration with the command `source ~/.bashrc` or `source ~/.zshrc`;
+    1. Check that Terraform is working by running the command `terraform -version`.
+
+
+- Windows
+
+    1. Go to this [link](https://hashicorp-releases.yandexcloud.net/terraform/) and choose the version of Terraform that suits you.
+    1. Extract the archive using the standard Windows tools into a directory convenient for you.
+    1. Open the PowerShell command prompt and verify that Terraform is working by running the command `terraform -version` in the directory where Terraform was extracted.
+
+{% endlist %}
+
+## Terraform files structure and syntax {#terraform-files-structure}
 
 The configuration for setting up the VM environment is described in YAML format, and the infrastructure code is written in [HCL](https://github.com/hashicorp/hcl) (Terraform configuration language). The basic logical unit of recording in HCL is a "block". A block consists of a keyword identifying its type, name, and the block's body inside curly brackets. For example, this is what a virtual server control block in AWS might look like:
 

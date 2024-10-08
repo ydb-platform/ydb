@@ -25,7 +25,8 @@ struct TSettings {
         UnaryOperators = 1 << 15, // -, Abs, Size
         DoNotCheckCompareArgumentsTypes = 1 << 16,
         TimestampCtor = 1 << 17,
-        JustPassthroughOperators = 1 << 18 // if + coalesce + just
+        JustPassthroughOperators = 1 << 18, // if + coalesce + just
+        ImplicitConversionSignedAndUnsignedInt = 1 << 19  // // Allow implicit conversions between all signed and unsigned integer types
     };
 
     explicit TSettings(NLog::EComponent logComponent)

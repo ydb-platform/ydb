@@ -99,7 +99,7 @@ public:
         if (auto it = Entries.find(TPageTraits::GetKey(page)); it != Entries.end()) {
             TPageEntry* entry = it->Get();
 
-            EvictEntry(entry);
+            EraseEntry(entry);
 
             Entries.erase(it);
         } else {
@@ -172,6 +172,9 @@ public:
             Y_DEBUG_ABORT_UNLESS(!HandTest);
         }
 
+        if (count) result << "; ";
+        result << "ColdTarget: " << ColdTarget;
+
         return result;
     }
 
@@ -225,11 +228,115 @@ private:
     TIntrusiveList<TPage> EvictWhileFull() {
         TIntrusiveList<TPage> evictedList;
         
-        // while (TPage* evictedPage = EvictOneIfFull()) {
-        //     evictedList.PushBack(evictedPage);
-        // }
+        while (SizeHot + SizeCold > MaxSize) {
+            RunHandCold(evictedList);
+        }
 
         return evictedList;
+    }
+
+    void RunHandCold(TIntrusiveList<TPage>& evictedList) {
+        Cerr << "{RunHandCold " << Dump() << Endl;
+
+        Y_ABORT_UNLESS(HandCold);
+        TPageEntry* entry = HandCold->Node();
+
+        if (IsCold(entry)) {
+            if (TPageTraits::GetReferenced(entry->Page)) {
+                TPageTraits::SetReferenced(entry->Page, false);
+                
+                Y_ABORT_UNLESS(SizeCold >= entry->Size);
+                SizeCold -= entry->Size;
+
+                TPageTraits::SetLocation(entry->Page, EClockProPageLocation::Hot);
+
+                SizeHot += entry->Size;
+            } else {
+                Y_ABORT_UNLESS(SizeCold >= entry->Size);
+                SizeCold -= entry->Size;
+
+                TPageTraits::SetLocation(entry->Page, EClockProPageLocation::None);
+                evictedList.PushBack(entry->Page);
+                entry->Page = nullptr;
+
+                SizeTest += entry->Size;
+
+                while (SizeTest > MaxSize) {
+                    RunHandTest(evictedList);
+                }
+            }
+        }
+
+        HandCold = HandCold->Next();
+
+        while (SizeHot > MaxSize - ColdTarget) {
+            RunHandHot(evictedList);
+        }
+
+        Cerr << "}RunHandCold " << Dump() << Endl;
+    }
+
+    void RunHandHot(TIntrusiveList<TPage>& evictedList) {
+        Cerr << "{RunHandHot  " << Dump() << Endl;
+        
+        Y_ABORT_UNLESS(HandHot);
+
+        if (HandHot == HandTest) {
+            RunHandTest(evictedList);
+            if (!HandHot) {
+                return;
+            }
+        }
+
+        TPageEntry* entry = HandHot->Node();
+        if (IsHot(entry)) {
+            if (TPageTraits::GetReferenced(entry->Page)) {
+                TPageTraits::SetReferenced(entry->Page, false);
+            } else {
+                Y_ABORT_UNLESS(SizeHot >= entry->Size);
+                SizeHot -= entry->Size;
+
+                TPageTraits::SetLocation(entry->Page, EClockProPageLocation::Cold);
+
+                SizeCold += entry->Size;
+            }
+        }
+
+        HandHot = HandHot->Next();
+
+        Cerr << "}RunHandHot  " << Dump() << Endl;
+    }
+
+    void RunHandTest(TIntrusiveList<TPage>& evictedList) {
+        Cerr << "{RunHandTest " << Dump() << Endl;
+        
+        Y_ABORT_UNLESS(HandTest);
+
+        if (HandTest == HandCold) {
+            RunHandCold(evictedList);
+            if (!HandTest) {
+                return;
+            }
+        }
+
+        TPageEntry* entry = HandTest->Node();
+        if (IsTest(entry)) {
+            Y_ABORT_UNLESS(SizeTest >= entry->Size);
+            SizeTest -= entry->Size;
+
+            ColdTarget -= Min(ColdTarget, entry->Size);
+
+            UnlinkEntry(entry);
+
+            auto it = Entries.find(entry->Key);
+            Y_ABORT_UNLESS(it != Entries.end());
+            Y_ABORT_UNLESS(it->Get() == entry);
+            Entries.erase(it);
+        }
+
+        HandTest = HandTest->Next();
+
+        Cerr << "}RunHandTest " << Dump() << Endl;
     }
 
     void LinkEntry(TPageEntry* entry) {
@@ -262,7 +369,7 @@ private:
         }
     }
 
-    void EvictEntry(TPageEntry* entry) {
+    void EraseEntry(TPageEntry* entry) {
         if (entry->Page) {
             switch (TPageTraits::GetLocation(entry->Page)) {
                 case EClockProPageLocation::Hot:
@@ -285,6 +392,18 @@ private:
         }
 
         UnlinkEntry(entry);
+    }
+
+    bool IsHot(TPageEntry* entry) {
+        return entry->Page && TPageTraits::GetLocation(entry->Page) == EClockProPageLocation::Hot;
+    }
+
+    bool IsCold(TPageEntry* entry) {
+        return entry->Page && TPageTraits::GetLocation(entry->Page) == EClockProPageLocation::Cold;
+    }
+
+    bool IsTest(TPageEntry* entry) {
+        return entry->Page == nullptr;
     }
 
 private:

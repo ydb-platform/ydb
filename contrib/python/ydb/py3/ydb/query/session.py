@@ -235,9 +235,7 @@ class QuerySession(BaseQuerySession):
                 self._state._change_state(QuerySessionStateEnum.CLOSED)
 
     def delete(self, settings: Optional[BaseRequestSettings] = None) -> None:
-        """WARNING: This API is experimental and could be changed.
-
-        Deletes a Session of Query Service on server side and releases resources.
+        """Deletes a Session of Query Service on server side and releases resources.
 
         :return: None
         """
@@ -249,9 +247,7 @@ class QuerySession(BaseQuerySession):
         self._stream.cancel()
 
     def create(self, settings: Optional[BaseRequestSettings] = None) -> "QuerySession":
-        """WARNING: This API is experimental and could be changed.
-
-        Creates a Session of Query Service on server side and attaches it.
+        """Creates a Session of Query Service on server side and attaches it.
 
         :return: QuerySession object.
         """
@@ -266,9 +262,7 @@ class QuerySession(BaseQuerySession):
         return self
 
     def transaction(self, tx_mode: Optional[base.BaseQueryTxMode] = None) -> QueryTxContext:
-        """WARNING: This API is experimental and could be changed.
-
-        Creates a transaction context manager with specified transaction mode.
+        """Creates a transaction context manager with specified transaction mode.
 
         :param tx_mode: Transaction mode, which is a one from the following choises:
          1) QuerySerializableReadWrite() which is default mode;
@@ -299,9 +293,7 @@ class QuerySession(BaseQuerySession):
         concurrent_result_sets: bool = False,
         settings: Optional[BaseRequestSettings] = None,
     ) -> base.SyncResponseContextIterator:
-        """WARNING: This API is experimental and could be changed.
-
-        Sends a query to Query Service
+        """Sends a query to Query Service
 
         :param query: (YQL or SQL text) to be executed.
         :param syntax: Syntax of the query, which is a one from the following choises:

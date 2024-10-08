@@ -27,6 +27,8 @@ SRCS(
     change_sender.cpp
     change_sender_async_index.cpp
     change_sender_cdc_stream.cpp
+    change_sender_incr_restore.cpp
+    change_sender_table_base.cpp
     check_commit_writes_tx_unit.cpp
     check_data_tx_unit.cpp
     check_distributed_erase_tx_unit.cpp
@@ -40,6 +42,7 @@ SRCS(
     conflicts_cache.cpp
     create_cdc_stream_unit.cpp
     create_persistent_snapshot_unit.cpp
+    create_incremental_restore_src_unit.cpp
     create_table_unit.cpp
     create_volatile_snapshot_unit.cpp
     datashard.cpp
@@ -123,7 +126,6 @@ SRCS(
     datashard_split_dst.cpp
     datashard_split_src.cpp
     datashard_subdomain_path_id.cpp
-    datashard_switch_mvcc_state.cpp
     datashard_trans_queue.cpp
     datashard_trans_queue.h
     datashard_txs.h
@@ -165,6 +167,7 @@ SRCS(
     key_conflicts.cpp
     key_conflicts.h
     key_validator.cpp
+    kmeans_helper.cpp
     load_and_wait_in_rs_unit.cpp
     load_tx_details_unit.cpp
     load_write_details_unit.cpp
@@ -195,6 +198,7 @@ SRCS(
     remove_lock_change_records.cpp
     remove_locks.cpp
     remove_schema_snapshots.cpp
+    reshuffle_kmeans.cpp
     restore_unit.cpp
     sample_k.cpp
     scan_common.cpp
@@ -208,6 +212,7 @@ SRCS(
     store_snapshot_tx_unit.cpp
     store_write_unit.cpp
     stream_scan_common.cpp
+    type_serialization.cpp
     upload_stats.cpp
     volatile_tx.cpp
     wait_for_plan_unit.cpp
@@ -253,7 +258,6 @@ PEERDIR(
     ydb/core/formats
     ydb/core/io_formats/ydb_dump
     ydb/core/kqp/runtime
-    ydb/core/persqueue/partition_key_range
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/tablet
@@ -311,6 +315,7 @@ RECURSE_FOR_TESTS(
     ut_kqp
     ut_kqp_errors
     ut_kqp_scan
+    ut_local_kmeans
     ut_locks
     ut_minikql
     ut_minstep
@@ -321,7 +326,9 @@ RECURSE_FOR_TESTS(
     ut_read_table
     ut_reassign
     ut_replication
+    ut_reshuffle_kmeans
     ut_rs
+    ut_sample_k
     ut_sequence
     ut_snapshot
     ut_stats

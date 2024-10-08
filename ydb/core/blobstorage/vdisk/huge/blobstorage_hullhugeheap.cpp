@@ -138,7 +138,7 @@ namespace NKikimr {
             Y_VERIFY_S(chunkId, VDiskLogPrefix << "chunkId# " << chunkId);
             TFreeSpace::iterator it;
 
-            auto freeFoundSlot = [&] (TFreeSpace &container, const char *containerName) {
+            auto freeFoundSlot = [&] (TFreeSpace &container, const char *containerName, bool inLockedChunks) {
                 TMask &mask = it->second;
                 Y_VERIFY_S(!mask.Get(slotId), VDiskLogPrefix << "TChain::Free: containerName# " << containerName
                         << " id# " << id.ToString() << " State# " << ToString());
@@ -148,15 +148,15 @@ namespace NKikimr {
                     // free chunk
                     container.erase(it);
                     FreeSlotsInFreeSpace -= SlotsInChunk;
-                    return TFreeRes(chunkId, ConstMask, SlotsInChunk);
+                    return TFreeRes(chunkId, ConstMask, SlotsInChunk, inLockedChunks);
                 } else
-                    return TFreeRes(0, mask, SlotsInChunk);
+                    return TFreeRes(0, mask, SlotsInChunk, false);
             };
 
             if ((it = FreeSpace.find(chunkId)) != FreeSpace.end()) {
-                return freeFoundSlot(FreeSpace, "FreeSpace");
+                return freeFoundSlot(FreeSpace, "FreeSpace", false);
             } else if ((it = LockedChunks.find(chunkId)) != LockedChunks.end()) {
-                return freeFoundSlot(LockedChunks, "LockedChunks");
+                return freeFoundSlot(LockedChunks, "LockedChunks", true);
             } else {
                 // chunk is neither in FreeSpace nor in LockedChunks
                 TDynBitMap mask;
@@ -166,13 +166,13 @@ namespace NKikimr {
                 ++FreeSlotsInFreeSpace;
 
                 FreeSpace.emplace(chunkId, mask);
-                return TFreeRes(0, mask, SlotsInChunk); // no empty chunk
+                return TFreeRes(0, mask, SlotsInChunk, false); // no empty chunk
             }
         }
 
         bool TChain::LockChunkForAllocation(TChunkID chunkId) {
-            if (TFreeSpace::iterator it = FreeSpace.find(chunkId); it != FreeSpace.end()) {
-                LockedChunks.insert(FreeSpace.extract(it));
+            if (auto nh = FreeSpace.extract(chunkId)) {
+                LockedChunks.insert(std::move(nh));
                 return true;
             } else {
                 // chunk is already freed
@@ -181,8 +181,8 @@ namespace NKikimr {
         }
 
         void TChain::UnlockChunk(TChunkID chunkId) {
-            if (auto it = LockedChunks.find(chunkId); it != LockedChunks.end()) {
-                FreeSpace.insert(LockedChunks.extract(it));
+            if (auto nh = LockedChunks.extract(chunkId)) {
+                FreeSpace.insert(std::move(nh));
             }
         }
 
@@ -211,15 +211,20 @@ namespace NKikimr {
             ui32 chunkId = id.GetChunkId();
             ui32 slotId = id.GetSlotId();
 
-            TFreeSpace::iterator it = FreeSpace.find(chunkId);
-            if (it != FreeSpace.end()) {
+            TFreeSpace *map = &FreeSpace;
+            TFreeSpace::iterator it = map->find(chunkId);
+            if (it == map->end()) {
+                map = &LockedChunks;
+                it = map->find(chunkId);
+            }
+            if (it != map->end()) {
                 TMask &mask = it->second;
                 Y_VERIFY_S(mask.Get(slotId), VDiskLogPrefix << "RecoveryModeAllocate:"
                         << " id# " << id.ToString() << " State# " << ToString());
                 mask.Reset(slotId);
 
                 if (mask.Empty()) {
-                    FreeSpace.erase(it);
+                    map->erase(it);
                 }
 
                 --FreeSlotsInFreeSpace;
@@ -230,11 +235,11 @@ namespace NKikimr {
             }
         }
 
-        void TChain::RecoveryModeAllocate(const NPrivate::TChunkSlot &id, TChunkID chunkId) {
-            Y_VERIFY_S(id.GetChunkId() == chunkId && FreeSpace.find(chunkId) == FreeSpace.end(),
+        void TChain::RecoveryModeAllocate(const NPrivate::TChunkSlot &id, TChunkID chunkId, bool inLockedChunks) {
+            Y_VERIFY_S(id.GetChunkId() == chunkId && !FreeSpace.contains(chunkId) && !LockedChunks.contains(chunkId),
                     VDiskLogPrefix << " id# " << id.ToString() << " chunkId# " << chunkId << " State# " << ToString());
 
-            FreeSpace.emplace(chunkId, ConstMask);
+            (inLockedChunks ? LockedChunks : FreeSpace).emplace(chunkId, ConstMask);
             FreeSlotsInFreeSpace += SlotsInChunk;
             bool res = RecoveryModeAllocate(id);
 
@@ -356,6 +361,10 @@ namespace NKikimr {
             Y_VERIFY_S(slotId * SlotSize == addr.Offset, VDiskLogPrefix
                     << "slotId# " << slotId << " addr# " << addr.ToString() << " State# " << ToString());
             return NPrivate::TChunkSlot(addr.ChunkIdx, slotId);
+        }
+
+        NPrivate::TChunkSlot TChainDelegator::Convert(const THugeSlot &slot) const {
+            return Convert(slot.GetDiskPart());
         }
 
         void TChainDelegator::Save(IOutputStream *s) const {
@@ -791,7 +800,7 @@ namespace NKikimr {
                 TFreeChunks::iterator it = FreeChunks.find(chunkId);
                 Y_VERIFY_S(it != FreeChunks.end(), VDiskLogPrefix << "addr# " << addr.ToString() << " State# " << ToString());
                 FreeChunks.erase(it);
-                chainD->ChainPtr->RecoveryModeAllocate(id, chunkId);
+                chainD->ChainPtr->RecoveryModeAllocate(id, chunkId, false);
             }
         }
 
@@ -804,6 +813,26 @@ namespace NKikimr {
                 TFreeChunks::iterator it = FreeChunks.find(x);
                 Y_VERIFY_S(it != FreeChunks.end(), VDiskLogPrefix << "chunkId# " << x << " State# " << ToString());
                 FreeChunks.erase(it);
+            }
+        }
+
+        bool THeap::ReleaseSlot(THugeSlot slot) {
+            TChainDelegator* const chain = Chains.GetChain(slot.GetSize());
+            Y_VERIFY_S(chain, VDiskLogPrefix << "State# " << ToString() << " slot# " << slot.ToString());
+            if (TFreeRes res = chain->ChainPtr->Free(chain->Convert(slot)); res.ChunkId) {
+                PutChunkIdToFreeChunks(res.ChunkId);
+                return res.InLockedChunks;
+            }
+            return false;
+        }
+
+        void THeap::OccupySlot(THugeSlot slot, bool inLockedChunks) {
+            TChainDelegator* const chain = Chains.GetChain(slot.GetSize());
+            Y_VERIFY_S(chain, VDiskLogPrefix << "State# " << ToString() << " slot# " << slot.ToString());
+            if (!chain->ChainPtr->RecoveryModeAllocate(chain->Convert(slot))) {
+                const size_t numErased = FreeChunks.erase(slot.GetChunkId());
+                Y_VERIFY_S(numErased, VDiskLogPrefix << "State# " << ToString() << " slot# " << slot.ToString());
+                chain->ChainPtr->RecoveryModeAllocate(chain->Convert(slot), slot.GetChunkId(), inLockedChunks);
             }
         }
 

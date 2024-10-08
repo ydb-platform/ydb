@@ -7,6 +7,7 @@ SRCS(
     GLOBAL clean.cpp
     GLOBAL clean_empty.cpp
     GLOBAL broken_blobs.cpp
+    GLOBAL special_cleaner.cpp
 )
 
 PEERDIR(

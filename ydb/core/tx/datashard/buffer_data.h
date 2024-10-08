@@ -1,3 +1,5 @@
+#pragma once
+
 #include "ydb/core/scheme/scheme_tablecell.h"
 #include "ydb/core/tx/datashard/upload_stats.h"
 #include "ydb/core/tx/tx_proxy/upload_rows.h"

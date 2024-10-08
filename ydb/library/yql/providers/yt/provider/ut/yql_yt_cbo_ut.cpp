@@ -81,7 +81,7 @@ Y_UNIT_TEST(NonReordable) {
     std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>> joinConditions;
     joinConditions.insert({NDq::TJoinColumn{"a", "b"}, NDq::TJoinColumn{"a","c"}});
     auto root = std::make_shared<TJoinOptimizerNode>(
-        left, right, joinConditions, EJoinKind::InnerJoin, EJoinAlgoType::GraceJoin, true);
+        left, right, joinConditions, EJoinKind::InnerJoin, EJoinAlgoType::GraceJoin, false, false, true);
     TBaseProviderContext optCtx;
     std::unique_ptr<IOptimizerNew> opt = std::unique_ptr<IOptimizerNew>(NDq::MakeNativeOptimizerNew(optCtx, 1024));
     auto result = opt->JoinSearch(root);

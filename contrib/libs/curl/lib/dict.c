@@ -76,7 +76,7 @@ static CURLcode dict_do(struct Curl_easy *data, bool *done);
  */
 
 const struct Curl_handler Curl_handler_dict = {
-  "DICT",                               /* scheme */
+  "dict",                               /* scheme */
   ZERO_NULL,                            /* setup_connection */
   dict_do,                              /* do_it */
   ZERO_NULL,                            /* done */
@@ -89,7 +89,8 @@ const struct Curl_handler Curl_handler_dict = {
   ZERO_NULL,                            /* domore_getsock */
   ZERO_NULL,                            /* perform_getsock */
   ZERO_NULL,                            /* disconnect */
-  ZERO_NULL,                            /* readwrite */
+  ZERO_NULL,                            /* write_resp */
+  ZERO_NULL,                            /* write_resp_hd */
   ZERO_NULL,                            /* connection_check */
   ZERO_NULL,                            /* attach connection */
   PORT_DICT,                            /* defport */
@@ -122,10 +123,12 @@ static char *unescape_word(const char *input)
 }
 
 /* sendf() sends formatted data to the server */
-static CURLcode sendf(curl_socket_t sockfd, struct Curl_easy *data,
-                      const char *fmt, ...)
+static CURLcode sendf(struct Curl_easy *data,
+                      const char *fmt, ...) CURL_PRINTF(2, 3);
+
+static CURLcode sendf(struct Curl_easy *data, const char *fmt, ...)
 {
-  ssize_t bytes_written;
+  size_t bytes_written;
   size_t write_len;
   CURLcode result = CURLE_OK;
   char *s;
@@ -143,7 +146,7 @@ static CURLcode sendf(curl_socket_t sockfd, struct Curl_easy *data,
 
   for(;;) {
     /* Write the buffer to the socket */
-    result = Curl_write(data, sockfd, sptr, write_len, &bytes_written);
+    result = Curl_xfer_send(data, sptr, write_len, FALSE, &bytes_written);
 
     if(result)
       break;
@@ -175,8 +178,6 @@ static CURLcode dict_do(struct Curl_easy *data, bool *done)
   char *nthdef = NULL; /* This is not part of the protocol, but required
                           by RFC 2229 */
   CURLcode result;
-  struct connectdata *conn = data->conn;
-  curl_socket_t sockfd = conn->sock[FIRSTSOCKET];
 
   char *path;
 
@@ -225,7 +226,7 @@ static CURLcode dict_do(struct Curl_easy *data, bool *done)
       goto error;
     }
 
-    result = sendf(sockfd, data,
+    result = sendf(data,
                    "CLIENT " LIBCURL_NAME " " LIBCURL_VERSION "\r\n"
                    "MATCH "
                    "%s "    /* database */
@@ -240,7 +241,7 @@ static CURLcode dict_do(struct Curl_easy *data, bool *done)
       failf(data, "Failed sending DICT request");
       goto error;
     }
-    Curl_setup_transfer(data, FIRSTSOCKET, -1, FALSE, -1); /* no upload */
+    Curl_xfer_setup1(data, CURL_XFER_RECV, -1, FALSE); /* no upload */
   }
   else if(strncasecompare(path, DICT_DEFINE, sizeof(DICT_DEFINE)-1) ||
           strncasecompare(path, DICT_DEFINE2, sizeof(DICT_DEFINE2)-1) ||
@@ -273,7 +274,7 @@ static CURLcode dict_do(struct Curl_easy *data, bool *done)
       goto error;
     }
 
-    result = sendf(sockfd, data,
+    result = sendf(data,
                    "CLIENT " LIBCURL_NAME " " LIBCURL_VERSION "\r\n"
                    "DEFINE "
                    "%s "     /* database */
@@ -286,7 +287,7 @@ static CURLcode dict_do(struct Curl_easy *data, bool *done)
       failf(data, "Failed sending DICT request");
       goto error;
     }
-    Curl_setup_transfer(data, FIRSTSOCKET, -1, FALSE, -1);
+    Curl_xfer_setup1(data, CURL_XFER_RECV, -1, FALSE);
   }
   else {
 
@@ -299,7 +300,7 @@ static CURLcode dict_do(struct Curl_easy *data, bool *done)
         if(ppath[i] == ':')
           ppath[i] = ' ';
       }
-      result = sendf(sockfd, data,
+      result = sendf(data,
                      "CLIENT " LIBCURL_NAME " " LIBCURL_VERSION "\r\n"
                      "%s\r\n"
                      "QUIT\r\n", ppath);
@@ -308,7 +309,7 @@ static CURLcode dict_do(struct Curl_easy *data, bool *done)
         goto error;
       }
 
-      Curl_setup_transfer(data, FIRSTSOCKET, -1, FALSE, -1);
+      Curl_xfer_setup1(data, CURL_XFER_RECV, -1, FALSE);
     }
   }
 

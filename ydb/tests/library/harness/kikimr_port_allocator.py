@@ -130,6 +130,12 @@ class KikimrPortManagerNodePortAllocator(KikimrNodePortAllocatorInterface):
             self.__public_http_port = self.__port_manager.get_port()
         return self.__public_http_port
 
+    @property
+    def ext_port(self):
+        if self.__ext_port is None:
+            self.__ext_port = self.__port_manager.get_port()
+        return self.__ext_port
+
 
 class KikimrPortManagerPortAllocator(KikimrPortAllocatorInterface):
     def __init__(self, port_manager=None):

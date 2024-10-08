@@ -378,9 +378,7 @@ public:
         KeyColumnTypes.reserve(Settings->GetKeyColumnTypes().size());
         for (size_t i = 0; i < Settings->KeyColumnTypesSize(); ++i) {
             NScheme::TTypeId typeId = Settings->GetKeyColumnTypes(i);
-            NScheme::TTypeInfo typeInfo = typeId == NScheme::NTypeIds::Pg ?
-                NScheme::TTypeInfo(typeId, NPg::TypeDescFromPgTypeId(Settings->GetKeyColumnTypeInfos(i).GetPgTypeId())) :
-                NScheme::TTypeInfo(typeId);
+            NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(typeId, Settings->GetKeyColumnTypeInfos(i));
             KeyColumnTypes.push_back(typeInfo);
         }
         Counters->ReadActorsCount->Inc();
@@ -1109,7 +1107,8 @@ public:
                 } else {
                     hasResultColumns = true;
                     stats.AddStatistics(
-                        NMiniKQL::WriteColumnValuesFromArrow(editAccessors, NMiniKQL::TBatchDataAccessor(result->Get()->GetArrowBatch()), columnIndex, resultColumnIndex, column.TypeInfo)
+                        // TODO: what block tracking mode to use here?
+                        NMiniKQL::WriteColumnValuesFromArrow(editAccessors, NMiniKQL::TBatchDataAccessor(result->Get()->GetArrowBatch(), NKikimrConfig::TTableServiceConfig::BLOCK_TRACKING_NONE), columnIndex, resultColumnIndex, column.TypeInfo)
                     );
                     if (column.NotNull) {
                         std::shared_ptr<arrow::Array> columnSharedPtr = result->Get()->GetArrowBatch()->column(columnIndex);
@@ -1211,13 +1210,13 @@ public:
                 for (size_t deduplicateColumn = 0; deduplicateColumn < DuplicateCheckColumnRemap.size(); ++deduplicateColumn) {
                     cells[deduplicateColumn] = row[DuplicateCheckColumnRemap[deduplicateColumn]];
                 }
-                TString result = TSerializedCellVec::Serialize(cells); 
+                TString result = TSerializedCellVec::Serialize(cells);
                 if (auto ptr = DuplicateCheckStats.FindPtr(result)) {
                     TVector<NScheme::TTypeInfo> types;
                     for (auto& column : Settings->GetDuplicateCheckColumns()) {
                         types.push_back(NScheme::TTypeInfo((NScheme::TTypeId)column.GetType()));
                     }
-                    TString rowRepr = DebugPrintPoint(types, cells, *AppData()->TypeRegistry); 
+                    TString rowRepr = DebugPrintPoint(types, cells, *AppData()->TypeRegistry);
 
                     TStringBuilder rowMessage;
                     rowMessage << "found duplicate rows from table "
@@ -1229,7 +1228,7 @@ public:
                         << " previous seqNo is " << ptr->SeqNo
                         << " current is " << handle.SeqNo
                         << " previous row number is " << ptr->RowIndex
-                        << " current is " << rowIndex 
+                        << " current is " << rowIndex
                         << " key is " << rowRepr;
                     CA_LOG_E(rowMessage);
                     Counters->RowsDuplicationsFound->Inc();
@@ -1461,11 +1460,7 @@ public:
 private:
     NScheme::TTypeInfo MakeTypeInfo(const NKikimrTxDataShard::TKqpTransaction_TColumnMeta& info) {
         NScheme::TTypeId typeId = info.GetType();
-        if (typeId == NScheme::NTypeIds::Pg) {
-            return {typeId, NPg::TypeDescFromPgTypeId(info.GetTypeInfo().GetPgTypeId())};
-        } else {
-            return {typeId};
-        }
+        return NScheme::TypeInfoFromProto(typeId, info.GetTypeInfo());
     }
 
     void InitResultColumns() {

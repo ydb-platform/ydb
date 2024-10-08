@@ -23,7 +23,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 SIZE(MEDIUM)
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:16)
+    REQUIREMENTS(ram:16 cpu:4)
 ENDIF()
 
 END()

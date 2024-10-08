@@ -121,11 +121,10 @@ NKikimr::TConclusionStatus TSchemaTransactionOperator::ValidateTableSchema(const
         TString name = column.GetName();
         NScheme::TTypeId typeId = column.GetTypeId();
         NScheme::TTypeInfo schemeType;
-        if (column.GetTypeId() == NTypeIds::Pg && column.HasTypeInfo()) {
-            auto typeDescr = NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId());
-            schemeType = {typeId, typeDescr};
+        if (column.HasTypeInfo()) {
+            schemeType = NScheme::TypeInfoFromProto(typeId, column.GetTypeInfo());
         } else {
-            schemeType = {typeId};
+            schemeType = typeId;
         }
 
         if (keyColumns.contains(name) && !pkSupportedTypes.contains(column.GetTypeId())) {

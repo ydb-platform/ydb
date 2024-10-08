@@ -5668,7 +5668,11 @@ namespace {
                 }
             }
 
-            input->SetTypeAnn(retType);
+            if (originalType && originalType->GetKind() != NYql::ETypeAnnotationKind::Null) {
+                input->SetTypeAnn(originalType);
+            } else {
+                input->SetTypeAnn(retType);
+            }
         } else if (name == "min" || name == "max") {
             auto itemType = input->Child(overState ? 2 : 1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
             const TTypeAnnotationNode* retType;

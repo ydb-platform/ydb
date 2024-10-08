@@ -5892,9 +5892,9 @@ TRuntimeNode TProgramBuilder::ScalarApply(const TArrayRef<const TRuntimeNode>& a
     return TRuntimeNode(builder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode dict,
+TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode stream, TRuntimeNode dict,
     EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns,
-    const TArrayRef<const ui32>& leftKeyDrops
+    const TArrayRef<const ui32>& leftKeyDrops, TType* returnType
 ) {
     if constexpr (RuntimeVersion < 51U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
@@ -5923,47 +5923,8 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode d
             return NewDataLiteral(idx);
         });
 
-    const auto leftFlowItems = ValidateBlockFlowType(flow.GetStaticType(), false);
-    const THashSet<ui32> leftKeyDropsSet(leftKeyDrops.cbegin(), leftKeyDrops.cend());
-    TVector<TType*> returnJoinItems;
-    for (size_t i = 0; i < leftFlowItems.size(); i++) {
-        if (leftKeyDropsSet.contains(i)) {
-            continue;
-        }
-        returnJoinItems.push_back(leftFlowItems[i]);
-    }
-
-    const auto payloadType = AS_TYPE(TDictType, dict.GetStaticType())->GetPayloadType();
-    const auto payloadItemType = payloadType->IsList()
-                               ? AS_TYPE(TListType, payloadType)->GetItemType()
-                               : payloadType;
-    if (joinKind == EJoinKind::Inner || joinKind == EJoinKind::Left) {
-        // XXX: This is the contract ensured by the expression compiler and
-        // optimizers to ease the processing of the dict payload in wide context.
-        MKQL_ENSURE(payloadItemType->IsTuple(), "Dict payload has to be a Tuple");
-        const auto payloadItems = AS_TYPE(TTupleType, payloadItemType)->GetElements();
-        TVector<TType*> dictBlockItems;
-        dictBlockItems.reserve(payloadItems.size());
-        for (const auto& payloadItem : payloadItems) {
-            MKQL_ENSURE(!payloadItem->IsBlock(), "Dict payload item has to be non-block");
-            const auto itemType = joinKind == EJoinKind::Inner ? payloadItem
-                                : NewOptionalType(payloadItem);
-            dictBlockItems.emplace_back(NewBlockType(itemType, TBlockType::EShape::Many));
-        }
-        // Block length column has to be the last column in wide block flow item,
-        // so all contents of the dict payload should be appended to the resulting
-        // wide type before the block size column.
-        const auto blockLenPos = std::prev(returnJoinItems.end());
-        returnJoinItems.insert(blockLenPos, dictBlockItems.cbegin(), dictBlockItems.cend());
-    } else {
-        // XXX: This is the contract ensured by the expression compiler and
-        // optimizers for join types that don't require the right (i.e. dict) part.
-        MKQL_ENSURE(payloadItemType->IsVoid(), "Dict payload has to be Void");
-    }
-    TType* returnJoinType = NewFlowType(NewMultiType(returnJoinItems));
-
-    TCallableBuilder callableBuilder(Env, __func__, returnJoinType);
-    callableBuilder.Add(flow);
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    callableBuilder.Add(stream);
     callableBuilder.Add(dict);
     callableBuilder.Add(NewDataLiteral((ui32)joinKind));
     callableBuilder.Add(NewTuple(leftKeyColumnsNodes));

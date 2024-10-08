@@ -1,6 +1,7 @@
 #pragma once
 
 #include "public.h"
+#include "versioned_io_options.h"
 
 #include <yt/yt/client/chunk_client/config.h>
 
@@ -432,6 +433,8 @@ public:
     NYTree::INodePtr CastAnyToCompositeNode;
 
     ETableSchemaModification SchemaModification;
+
+    TVersionedWriteOptions VersionedWriteOptions;
 
     EOptimizeFor OptimizeFor;
     std::optional<NChunkClient::EChunkFormat> ChunkFormat;

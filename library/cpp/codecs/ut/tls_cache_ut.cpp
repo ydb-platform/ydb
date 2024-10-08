@@ -27,7 +27,7 @@ Y_UNIT_TEST(TestAcquireReleaseReuse) {
         // expecting it zero sized but having the same memory
         auto buf2 = factory.Item();
         UNIT_ASSERT_VALUES_EQUAL(buf2.Get().Size(), 0u);
-        buf2.Get().Resize(TStringBuf("Buffer_02").Size());
+        buf2.Get().Resize(TStringBuf("Buffer_02").size());
         UNIT_ASSERT_EQUAL(AsStringBuf(buf2.Get()), "Buffer_02");
     }
     // when the factory dies we should see no leaks

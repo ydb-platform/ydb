@@ -379,7 +379,7 @@ namespace NKikimr {
         template <class TRecordMerger>
         void PutToMerger(const TMemRec &memRec, ui64 lsn, TRecordMerger *merger) {
             TKey key = It.GetValue().Key;
-            if (merger->HaveToMergeData() && memRec.HasData() && memRec.GetType() == TBlobType::MemBlob) {
+            if (merger->HaveToMergeData() && memRec.GetType() == TBlobType::MemBlob) {
                 const TMemPart p = memRec.GetMemData();
                 const TRope& rope = Seg->GetLogoBlobData(p);
                 merger->AddFromFresh(memRec, &rope, key, lsn);

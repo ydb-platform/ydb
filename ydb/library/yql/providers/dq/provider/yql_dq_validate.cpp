@@ -185,7 +185,7 @@ public:
             }
         }
 
-        if (!hasError && HasMapJoin_ && !TypeCtx_.ForceDq && !TypeCtx_.QContext.CanRead()) {
+        if (!hasError && HasMapJoin_ && !TypeCtx_.ForceDq) {
             size_t dataSize = 0;
             for (auto& [integration, nodes]: ReadsPerProvider_) {
                 TMaybe<ui64> size;

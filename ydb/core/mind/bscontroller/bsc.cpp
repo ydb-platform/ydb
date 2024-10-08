@@ -108,9 +108,6 @@ void TBlobStorageController::OnActivateExecutor(const TActorContext&) {
         ResponsivenessActorID = RegisterWithSameMailbox(ResponsivenessPinger);
     }
 
-    // request node list
-    Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(true));
-
     // create storage pool stats monitor
     StoragePoolStat = std::make_unique<TStoragePoolStat>(GetServiceCounters(AppData()->Counters, "storage_pool_stat"));
 
@@ -134,7 +131,9 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     const TMonotonic mono = TActivationContext::Monotonic();
 
     if (StorageConfig.HasBlobStorageConfig()) {
-        if (const auto& bsConfig = StorageConfig.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
+        const auto& bsConfig = StorageConfig.GetBlobStorageConfig();
+
+        if (bsConfig.HasServiceSet()) {
             const auto& ss = bsConfig.GetServiceSet();
             for (const auto& pdisk : ss.GetPDisks()) {
                 const TPDiskId pdiskId(pdisk.GetNodeID(), pdisk.GetPDiskID());
@@ -156,10 +155,23 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         } else {
             Y_FAIL("no storage configuration provided");
         }
+
+        if (bsConfig.HasAutoconfigSettings()) {
+            // assuming that in autoconfig mode HostRecords are managed by the distconf; we need to apply it here to
+            // avoid race with box autoconfiguration and node list change
+            HostRecords = std::make_shared<THostRecordMap::element_type>(StorageConfig);
+            if (SelfHealId) {
+                Send(SelfHealId, new TEvPrivate::TEvUpdateHostRecords(HostRecords));
+            }
+        }
     }
 
-    if (!std::exchange(StorageConfigObtained, true) && HostRecords) {
-        Execute(CreateTxInitScheme());
+    if (!std::exchange(StorageConfigObtained, true)) { // this is the first time we get StorageConfig in this instance of BSC
+        if (HostRecords) {
+            OnHostRecordsInitiate();
+        } else {
+            Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(true));
+        }
     }
 
     if (Loaded) {
@@ -269,23 +281,25 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateGroupStat
 
 void TBlobStorageController::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev) {
     STLOG(PRI_DEBUG, BS_CONTROLLER, BSC01, "Handle TEvInterconnect::TEvNodesInfo");
-    const bool initial = !HostRecords;
-    HostRecords = std::make_shared<THostRecordMap::element_type>(ev->Get());
-    if (initial) {
-        if (auto *appData = AppData()) {
-            if (appData->Icb) {
-                EnableSelfHealWithDegraded = std::make_shared<TControlWrapper>(0, 0, 1);
-                appData->Icb->RegisterSharedControl(*EnableSelfHealWithDegraded,
-                    "BlobStorageControllerControls.EnableSelfHealWithDegraded");
-            }
-        }
-        SelfHealId = Register(CreateSelfHealActor());
-        PushStaticGroupsToSelfHeal();
-        if (StorageConfigObtained) {
-            Execute(CreateTxInitScheme());
-        }
+    if (!std::exchange(HostRecords, std::make_shared<THostRecordMap::element_type>(ev->Get()))) {
+        OnHostRecordsInitiate();
     }
     Send(SelfHealId, new TEvPrivate::TEvUpdateHostRecords(HostRecords));
+}
+
+void TBlobStorageController::OnHostRecordsInitiate() {
+    if (auto *appData = AppData()) {
+        if (appData->Icb) {
+            EnableSelfHealWithDegraded = std::make_shared<TControlWrapper>(0, 0, 1);
+            appData->Icb->RegisterSharedControl(*EnableSelfHealWithDegraded,
+                "BlobStorageControllerControls.EnableSelfHealWithDegraded");
+        }
+    }
+    SelfHealId = Register(CreateSelfHealActor());
+    PushStaticGroupsToSelfHeal();
+    if (StorageConfigObtained) {
+        Execute(CreateTxInitScheme());
+    }
 }
 
 void TBlobStorageController::IssueInitialGroupContent() {

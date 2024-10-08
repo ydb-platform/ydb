@@ -85,7 +85,11 @@ public:
     TNativeSerializer(const arrow::ipc::IpcWriteOptions& options = GetDefaultOptions())
         : Options(options) {
         Options.use_threads = false;
+    }
 
+    TNativeSerializer(arrow::MemoryPool* pool) {
+        Options.use_threads = false;
+        Options.memory_pool = pool;
     }
 };
 

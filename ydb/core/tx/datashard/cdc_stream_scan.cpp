@@ -193,7 +193,7 @@ class TDataShard::TTxCdcStreamScanProgress
             const auto tag = tags.at(pos);
             auto it = table->Columns.find(tag);
             Y_ABORT_UNLESS(it != table->Columns.end());
-            updates.emplace_back(tag, ECellOp::Set, TRawTypeValue(cells.at(pos).AsRef(), it->second.Type));
+            updates.emplace_back(tag, ECellOp::Set, TRawTypeValue(cells.at(pos).AsRef(), it->second.Type.GetTypeId()));
         }
 
         return updates;
@@ -231,7 +231,8 @@ public:
         const auto& valueTags = ev.ValueTags;
 
         LOG_D("Progress"
-            << ": streamPathId# " << streamPathId);
+            << ": streamPathId# " << streamPathId
+            << ", rows# " << ev.Rows.size());
 
         if (!Self->GetUserTables().contains(tablePathId.LocalPathId)) {
             LOG_W("Cannot progress on unknown table"

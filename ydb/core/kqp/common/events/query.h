@@ -3,7 +3,7 @@
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
-#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/base/iface.h>
 #include <ydb/core/grpc_services/cancelation/cancelation_event.h>
 #include <ydb/core/grpc_services/cancelation/cancelation.h>
 
@@ -70,7 +70,9 @@ public:
         const TQueryRequestSettings& querySettings = TQueryRequestSettings(),
         const TString& poolId = "");
 
-    TEvQueryRequest() = default;
+    TEvQueryRequest() {
+        Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
+    }
 
     bool IsSerializable() const override {
         return true;
@@ -226,6 +228,14 @@ public:
         return Token_;
     }
 
+    TString GetClientAddress() const {
+        if (RequestCtx) {
+            return RequestCtx->GetPeerName();
+        }
+
+        return Record.GetRequest().GetClientAddress();
+    }
+
     const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& GetYdbParameters() const {
         if (YdbParameters) {
             return *YdbParameters;
@@ -351,6 +361,14 @@ public:
         return PoolConfig;
     }
 
+    const TString& GetDatabaseId() const {
+        return DatabaseId ? DatabaseId : Record.GetRequest().GetDatabaseId();
+    }
+
+    void SetDatabaseId(const TString& databaseId) {
+        DatabaseId = databaseId;
+    }
+
     mutable NKikimrKqp::TEvQueryRequest Record;
 
 private:
@@ -363,6 +381,7 @@ private:
     mutable TIntrusiveConstPtr<NACLib::TUserToken> Token_;
     TActorId RequestActorId;
     TString Database;
+    TString DatabaseId;
     TString SessionId;
     TString YqlText;
     TString QueryId;

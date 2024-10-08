@@ -239,8 +239,10 @@ public:
                 NYql::NDqs::TProtoBuilder protoBuilder(resultFormatSettings.ResultType, resultFormatSettings.Columns);
 
                 bool ysonTruncated = false;
-                result.Data = protoBuilder.BuildYson(std::move(rows), resultFormatSettings.SizeLimit.GetOrElse(Max<ui64>()),
-                    resultFormatSettings.RowsLimit.GetOrElse(Max<ui64>()), &ysonTruncated);
+                result.Data = protoBuilder.BuildYson(std::move(rows),
+                    result.Truncated ? resultFormatSettings.SizeLimit.GetOrElse(Max<ui64>()) : Max<ui64>(),
+                    result.Truncated ? resultFormatSettings.RowsLimit.GetOrElse(Max<ui64>()) : Max<ui64>(),
+                    &ysonTruncated);
 
                 result.Truncated = result.Truncated || ysonTruncated;
                 result.AddIssues(issues);

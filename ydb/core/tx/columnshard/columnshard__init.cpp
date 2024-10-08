@@ -102,18 +102,6 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     TBlobGroupSelector dsGroupSelector(Self->Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
     {
-        ACFL_DEBUG("step", "TInsertTable::Load_Start");
-        TMemoryProfileGuard g("TTxInit/InsertTable");
-        auto localInsertTable = std::make_unique<NOlap::TInsertTable>();
-        if (!localInsertTable->Load(db, dbTable, TAppData::TimeProvider->Now())) {
-            ACFL_ERROR("step", "TInsertTable::Load_Fails");
-            return false;
-        }
-        ACFL_DEBUG("step", "TInsertTable::Load_Finish");
-        Self->InsertTable.swap(localInsertTable);
-    }
-
-    {
         ACFL_DEBUG("step", "TTablesManager::Load_Start");
         TTablesManager tManagerLocal(Self->StoragesManager, Self->TabletID());
         {
@@ -136,6 +124,21 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
         Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, Self->TablesManager.GetSchemaPresets().size());
         Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, Self->TablesManager.GetTtl().PathsCount());
         ACFL_DEBUG("step", "TTablesManager::Load_Finish");
+    }
+
+    {
+        ACFL_DEBUG("step", "TInsertTable::Load_Start");
+        TMemoryProfileGuard g("TTxInit/InsertTable");
+        auto localInsertTable = std::make_unique<NOlap::TInsertTable>();
+        for (auto&& i : Self->TablesManager.GetTables()) {
+            localInsertTable->RegisterPathInfo(i.first);
+        }
+        if (!localInsertTable->Load(db, dbTable, TAppData::TimeProvider->Now())) {
+            ACFL_ERROR("step", "TInsertTable::Load_Fails");
+            return false;
+        }
+        ACFL_DEBUG("step", "TInsertTable::Load_Finish");
+        Self->InsertTable.swap(localInsertTable);
     }
 
     {

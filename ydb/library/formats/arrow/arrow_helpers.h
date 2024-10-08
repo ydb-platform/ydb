@@ -98,4 +98,7 @@ NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> array, const ui3
 std::shared_ptr<arrow::RecordBatch> Reorder(const std::shared_ptr<arrow::RecordBatch>& batch,
                                             const std::shared_ptr<arrow::UInt64Array>& permutation, const bool canRemove);
 
-}
+// Deep-copies all internal arrow::buffers - and makes sure that new buffers don't have any parents.
+std::shared_ptr<arrow::Table> DeepCopy(const std::shared_ptr<arrow::Table>& table, arrow::MemoryPool* pool = arrow::default_memory_pool());
+
+} // namespace NKikimr::NArrow

@@ -23,8 +23,6 @@
  ***************************************************************************/
 #include "tool_setup.h"
 
-#define ENABLE_CURLX_PRINTF
-/* use our own printf() functions */
 #include "curlx.h"
 #include "dynbuf.h"
 
@@ -65,7 +63,7 @@ static char *ipfs_gateway(void)
   char *ipfs_path = NULL;
   char *gateway_composed_file_path = NULL;
   FILE *gateway_file = NULL;
-  char *gateway = curlx_getenv("IPFS_GATEWAY");
+  char *gateway = curl_getenv("IPFS_GATEWAY");
 
   /* Gateway is found from environment variable. */
   if(gateway) {
@@ -75,15 +73,13 @@ static char *ipfs_gateway(void)
   }
 
   /* Try to find the gateway in the IPFS data folder. */
-  ipfs_path = curlx_getenv("IPFS_PATH");
+  ipfs_path = curl_getenv("IPFS_PATH");
 
   if(!ipfs_path) {
-    char *home = curlx_getenv("HOME");
+    char *home = getenv("HOME");
     if(home && *home)
       ipfs_path = aprintf("%s/.ipfs/", home);
-    /* fallback to "~/.ipfs", as that's the default location. */
-
-    Curl_safefree(home);
+    /* fallback to "~/.ipfs", as that is the default location. */
   }
 
   if(!ipfs_path || ensure_trailing_slash(&ipfs_path))
@@ -134,7 +130,7 @@ fail:
 }
 
 /*
- * Rewrite ipfs://<cid> and ipns://<cid> to a HTTP(S)
+ * Rewrite ipfs://<cid> and ipns://<cid> to an HTTP(S)
  * URL that can be handled by an IPFS gateway.
  */
 CURLcode ipfs_url_rewrite(CURLU *uh, const char *protocol, char **url,
@@ -164,7 +160,7 @@ CURLcode ipfs_url_rewrite(CURLU *uh, const char *protocol, char **url,
     goto clean;
 
   /* We might have a --ipfs-gateway argument. Check it first and use it. Error
-   * if we do have something but if it's an invalid url.
+   * if we do have something but if it is an invalid url.
    */
   if(config->ipfs_gateway) {
     /* ensure the gateway ends in a trailing / */
@@ -275,22 +271,19 @@ clean:
   curl_free(pathbuffer);
   curl_url_cleanup(gatewayurl);
   {
-    const char *msg = NULL;
     switch(result) {
     case CURLE_URL_MALFORMAT:
-      msg = "malformed target URL";
+      helpf(tool_stderr, "malformed target URL");
       break;
     case CURLE_FILE_COULDNT_READ_FILE:
-      msg = "IPFS automatic gateway detection failed";
+      helpf(tool_stderr, "IPFS automatic gateway detection failed");
       break;
     case CURLE_BAD_FUNCTION_ARGUMENT:
-      msg = "--ipfs-gateway was given a malformed URL";
+      helpf(tool_stderr, "--ipfs-gateway was given a malformed URL");
       break;
     default:
       break;
     }
-    if(msg)
-      helpf(tool_stderr, msg);
   }
   return result;
 }

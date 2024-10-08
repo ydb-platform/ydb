@@ -224,10 +224,24 @@ void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>&
         auto rBatch = NArrow::DeserializeBatch(bData, std::make_shared<arrow::Schema>(CommittedBlob.GetSchemaSubset().Apply(schema->fields())));
         AFL_VERIFY(rBatch)("schema", schema->ToString());
         auto batch = std::make_shared<NArrow::TGeneralContainer>(rBatch);
-        batchSchema->AdaptBatchToSchema(*batch, resultSchema);
-        GetContext()->GetReadMetadata()->GetIndexInfo().AddSnapshotColumns(*batch, CommittedBlob.GetSnapshotDef(TSnapshot::Zero()));
+        std::set<ui32> columnIdsToDelete = batchSchema->GetColumnIdsToDelete(resultSchema);
+        if (!columnIdsToDelete.empty()) {
+            batch->DeleteFieldsByIndex(batchSchema->ConvertColumnIdsToIndexes(columnIdsToDelete));
+        }
+        TSnapshot ss = TSnapshot::Zero();
+        if (CommittedBlob.IsCommitted()) {
+            ss = CommittedBlob.GetCommittedSnapshotVerified();
+        } else {
+            ss = GetContext()->GetReadMetadata()->IsMyUncommitted(CommittedBlob.GetInsertWriteId())
+                     ? GetContext()->GetReadMetadata()->GetRequestSnapshot()
+                     : TSnapshot::Zero();
+        }
+        GetContext()->GetReadMetadata()->GetIndexInfo().AddSnapshotColumns(*batch, ss, (ui64)CommittedBlob.GetInsertWriteId());
         GetContext()->GetReadMetadata()->GetIndexInfo().AddDeleteFlagsColumn(*batch, CommittedBlob.GetIsDelete());
         MutableStageData().AddBatch(batch);
+        if (CommittedBlob.GetIsDelete()) {
+            MutableStageData().AddFilter(NArrow::TColumnFilter::BuildDenyFilter());
+        }
     }
     MutableStageData().SyncTableColumns(columns->GetSchema()->fields(), *resultSchema);
 }

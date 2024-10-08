@@ -2,6 +2,8 @@
 
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 
+#include <library/cpp/yt/misc/concepts.h>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -30,8 +32,12 @@ public:
     bool CompareExchange(T& expected, const T& desired);
 
     //! Atomically transforms the value with function #func.
-    template <class F>
+    template <CInvocable<void(T&)> F>
     void Transform(const F& func);
+
+    //! Atomicaly reads the value with function #func.
+    template <class R = void, CInvocable<R(const T&)> F>
+    R Read(const F& func) const;
 
     T Load() const;
 

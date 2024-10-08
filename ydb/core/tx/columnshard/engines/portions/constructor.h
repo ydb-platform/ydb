@@ -91,6 +91,11 @@ public:
         return MetaConstructor;
     }
 
+    TInsertWriteId GetInsertWriteIdVerified() const {
+        AFL_VERIFY(InsertWriteId);
+        return *InsertWriteId;
+    }
+
     TPortionInfoConstructor(const TPortionInfo& portion, const bool withBlobs, const bool withMetadata)
         : PathId(portion.GetPathId())
         , PortionId(portion.GetPortionId())

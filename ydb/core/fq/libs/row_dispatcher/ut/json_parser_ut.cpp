@@ -7,9 +7,9 @@
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/actor_helpers.h>
 
-#include <ydb/library/yql/public/purecalc/common/interface.h>
-
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <contrib/libs/simdjson/include/simdjson.h>
 
 namespace {
 
@@ -24,8 +24,9 @@ public:
 
     void SetUp(NUnitTest::TTestContext&) override {
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
+        Runtime.SetLogBackend(CreateStderrBackend());
+        Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_TRACE);
         Runtime.Initialize(app->Unwrap());
-        Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_DEBUG);
     }
 
     void TearDown(NUnitTest::TTestContext& /* context */) override {
@@ -34,89 +35,116 @@ public:
         }
     }
 
-    void MakeParser(TVector<TString> columns, TVector<TString> types, NFq::TJsonParser::TCallback callback) {
-        try {
-            Parser = NFq::NewJsonParser(
-                columns,
-                types,
-                callback);
-        } catch (NYql::NPureCalc::TCompileError compileError) {
-            UNIT_ASSERT_C(false, TStringBuilder() << "Failed to create json parser: " << compileError.what() << "\nQuery text:\n" << compileError.GetYql() << "Reason:\n" << compileError.GetIssues());
-        }
+    void MakeParser(TVector<TString> columns, TVector<TString> types) {
+        Parser = NFq::NewJsonParser(columns, types, [this](TVector<TVector<std::string_view>>&& parsedValues, TJsonParserBuffer::TPtr buffer){
+            ResultOffset = buffer->GetOffset();
+            ParsedValues = std::move(parsedValues);
+            ResultNumberValues = ParsedValues.empty() ? 0 : ParsedValues.front().size();
+        });
     }
 
-    void MakeParser(TVector<TString> columns, NFq::TJsonParser::TCallback callback) {
-        MakeParser(columns, TVector<TString>(columns.size(), "String"), callback);
+    void MakeParser(TVector<TString> columns) {
+        MakeParser(columns, TVector<TString>(columns.size(), "String"));
+    }
+
+    void PushToParser(ui64 offset, const TString& data) const {
+        TJsonParserBuffer& buffer = Parser->GetBuffer(offset);
+        buffer.Reserve(data.size());
+        buffer.AddValue(data);
+        Parser->Parse();
+    }
+
+    TVector<TString> GetParsedRow(size_t id) const {
+        TVector<TString> result;
+        result.reserve(ParsedValues.size());
+        for (const auto& columnResult : ParsedValues) {
+            result.emplace_back(columnResult[id]);
+        }
+        return result;
     }
 
     TActorSystemStub actorSystemStub;
     NActors::TTestActorRuntime Runtime;
     std::unique_ptr<NFq::TJsonParser> Parser;
+
+    ui64 ResultOffset;
+    ui64 ResultNumberValues;
+    TVector<TVector<std::string_view>> ParsedValues;
 };
 
 Y_UNIT_TEST_SUITE(TJsonParserTests) {
-    Y_UNIT_TEST_F(Simple1, TFixture) { 
-        TList<TString> result;
-        ui64 resultOffset;
-        MakeParser({"a1", "a2"}, {"String", "Optional<Uint64>"}, [&](ui64 offset, TList<TString>&& value){
-                resultOffset = offset;
-                result = std::move(value);
-            });
-        Parser->Push(5, R"({"a1": "hello1", "a2": 101,  "event": "event1"})");
-        UNIT_ASSERT_VALUES_EQUAL(5, resultOffset);
+    Y_UNIT_TEST_F(Simple1, TFixture) {
+        MakeParser({"a1", "a2"}, {"String", "Optional<Uint64>"});
+        PushToParser(5, R"({"a1": "hello1", "a2": 101, "event": "event1"})");
+        UNIT_ASSERT_VALUES_EQUAL(5, ResultOffset);
+        UNIT_ASSERT_VALUES_EQUAL(1, ResultNumberValues);
+
+        const auto& result = GetParsedRow(0);
         UNIT_ASSERT_VALUES_EQUAL(2, result.size());
         UNIT_ASSERT_VALUES_EQUAL("hello1", result.front());
         UNIT_ASSERT_VALUES_EQUAL("101", result.back());
     }
 
-    Y_UNIT_TEST_F(Simple2, TFixture) { 
-        TList<TString> result;
-        ui64 resultOffset;
-        MakeParser({"a2", "a1"}, [&](ui64 offset, TList<TString>&& value){
-                resultOffset = offset;
-                result = std::move(value);
-            });
-        Parser->Push(5, R"({"a1": "hello1", "a2": "101",  "event": "event1"})");
-        UNIT_ASSERT_VALUES_EQUAL(5, resultOffset);
+    Y_UNIT_TEST_F(Simple2, TFixture) {
+        MakeParser({"a2", "a1"});
+        PushToParser(5, R"({"a1": "hello1", "a2": "101", "event": "event1"})");
+        UNIT_ASSERT_VALUES_EQUAL(5, ResultOffset);
+        UNIT_ASSERT_VALUES_EQUAL(1, ResultNumberValues);
+
+        const auto& result = GetParsedRow(0);
         UNIT_ASSERT_VALUES_EQUAL(2, result.size());
         UNIT_ASSERT_VALUES_EQUAL("101", result.front());
         UNIT_ASSERT_VALUES_EQUAL("hello1", result.back());
     }
 
-    Y_UNIT_TEST_F(Simple3, TFixture) { 
-        TList<TString> result;
-        ui64 resultOffset;
-        MakeParser({"a1", "a2"}, [&](ui64 offset, TList<TString>&& value){
-                resultOffset = offset;
-                result = std::move(value);
-            });
-        Parser->Push(5, R"({"a2": "hello1", "a1": "101",  "event": "event1"})");
-        UNIT_ASSERT_VALUES_EQUAL(5, resultOffset);
+    Y_UNIT_TEST_F(Simple3, TFixture) {
+        MakeParser({"a1", "a2"});
+        PushToParser(5, R"({"a2": "hello1", "a1": "101", "event": "event1"})");
+        UNIT_ASSERT_VALUES_EQUAL(5, ResultOffset);
+        UNIT_ASSERT_VALUES_EQUAL(1, ResultNumberValues);
+
+        const auto& result = GetParsedRow(0);
         UNIT_ASSERT_VALUES_EQUAL(2, result.size());
         UNIT_ASSERT_VALUES_EQUAL("101", result.front());
         UNIT_ASSERT_VALUES_EQUAL("hello1", result.back());
     }
 
-    Y_UNIT_TEST_F(Simple4, TFixture) { 
-        TList<TString> result;
-        ui64 resultOffset;
-        MakeParser({"a2", "a1"}, [&](ui64 offset, TList<TString>&& value){
-                resultOffset = offset;
-                result = std::move(value);
-            });
-        Parser->Push(5, R"({"a2": "hello1", "a1": "101",  "event": "event1"})");
-        UNIT_ASSERT_VALUES_EQUAL(5, resultOffset);
+    Y_UNIT_TEST_F(Simple4, TFixture) {
+        MakeParser({"a2", "a1"});
+        PushToParser(5, R"({"a2": "hello1", "a1": "101", "event": "event1"})");
+        UNIT_ASSERT_VALUES_EQUAL(5, ResultOffset);
+        UNIT_ASSERT_VALUES_EQUAL(1, ResultNumberValues);
+
+        const auto& result = GetParsedRow(0);
         UNIT_ASSERT_VALUES_EQUAL(2, result.size());
         UNIT_ASSERT_VALUES_EQUAL("hello1", result.front());
         UNIT_ASSERT_VALUES_EQUAL("101", result.back());
     }
 
-    Y_UNIT_TEST_F(ThrowExceptionByError, TFixture) { 
+    Y_UNIT_TEST_F(ManyValues, TFixture) {
+        MakeParser({"a1", "a2"});
 
-        MakeParser({"a2", "a1"}, [&](ui64, TList<TString>&&){ });
-        UNIT_ASSERT_EXCEPTION_CONTAINS(Parser->Push(5, R"(ydb)"), yexception, "DB::ParsingException: Cannot parse input: expected '{' before: 'ydb': (at row 1)");
+        TJsonParserBuffer& buffer = Parser->GetBuffer(42);
+        buffer.AddValue(R"({"a1": "hello1", "a2": 101, "event": "event1"})");
+        buffer.AddValue(R"({"a1": "hello1", "a2": "101", "event": "event2"})");
+        buffer.AddValue(R"({"a2": "101", "a1": "hello1", "event": "event3"})");
+
+        Parser->Parse();
+        UNIT_ASSERT_VALUES_EQUAL(42, ResultOffset);
+        UNIT_ASSERT_VALUES_EQUAL(3, ResultNumberValues);
+
+        for (size_t i = 0; i < ResultNumberValues; ++i) {
+            const auto& result = GetParsedRow(i);
+            UNIT_ASSERT_VALUES_EQUAL_C(2, result.size(), i);
+            UNIT_ASSERT_VALUES_EQUAL_C("hello1", result.front(), i);
+            UNIT_ASSERT_VALUES_EQUAL_C("101", result.back(), i);
+        }
+    }
+
+    Y_UNIT_TEST_F(ThrowExceptionByError, TFixture) {
+        MakeParser({"a2", "a1"});
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(5, R"(ydb)"), simdjson::simdjson_error, "INCORRECT_TYPE: The JSON element does not have the requested type.");
     }
 }
 
 }
-

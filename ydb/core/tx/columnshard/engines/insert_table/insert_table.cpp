@@ -73,12 +73,12 @@ TInsertionSummary::TCounters TInsertTable::CommitEphemeral(IDbWrapper& dbTable, 
     return counters;
 }
 
-void TInsertTable::Abort(IDbWrapper& dbTable, const THashSet<TInsertWriteId>& writeIds) {
+void TInsertTable::Abort(IDbWrapper& dbTable, const THashSet<TInsertWriteId>& writeIds, TVersionCounts* versionCounts) {
     Y_ABORT_UNLESS(!writeIds.empty());
 
     for (auto writeId : writeIds) {
         // There could be inconsistency with txs and writes in case of bugs. So we could find no record for writeId.
-        if (std::optional<TInsertedData> data = Summary.ExtractInserted(writeId)) {
+        if (std::optional<TInsertedData> data = Summary.ExtractInserted(writeId, versionCounts)) {
             AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "abort_insertion")("path_id", data->GetPathId())(
                 "blob_range", data->GetBlobRange().ToString())("write_id", writeId);
             dbTable.EraseInserted(*data);

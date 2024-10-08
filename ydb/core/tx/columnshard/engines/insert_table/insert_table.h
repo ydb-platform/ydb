@@ -105,7 +105,7 @@ public:
     TInsertionSummary::TCounters Commit(
         IDbWrapper& dbTable, ui64 planStep, ui64 txId, const THashSet<TInsertWriteId>& writeIds, std::function<bool(ui64)> pathExists);
     TInsertionSummary::TCounters CommitEphemeral(IDbWrapper& dbTable, TCommittedData&& data, TVersionCounts* versionCounts);
-    void Abort(IDbWrapper& dbTable, const THashSet<TInsertWriteId>& writeIds);
+    void Abort(IDbWrapper& dbTable, const THashSet<TInsertWriteId>& writeIds, TVersionCounts* versionCounts);
     void MarkAsNotAbortable(const TInsertWriteId writeId) {
         Summary.MarkAsNotAbortable(writeId);
     }

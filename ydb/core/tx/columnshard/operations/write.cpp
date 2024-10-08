@@ -133,7 +133,7 @@ void TWriteOperation::AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::T
     if (!WritePortions) {
         THashSet<TInsertWriteId> writeIds;
         writeIds.insert(InsertWriteIds.begin(), InsertWriteIds.end());
-        owner.InsertTable->Abort(dbTable, writeIds);
+        owner.InsertTable->Abort(dbTable, writeIds, owner.TablesManager.MutablePrimaryIndex().MutableVersionCounts());
     } else {
         for (auto&& i : InsertWriteIds) {
             owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId).AbortPortionOnExecute(txc, i);

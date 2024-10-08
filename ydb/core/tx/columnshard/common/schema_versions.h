@@ -31,22 +31,22 @@ public:
     THashSet<ui64> VersionsToErase;
 
 private:
-    THashMap<ui64, ui32> VersionCounts;
+    THashMap<ui64, ui32> VersionCounters;
 
 public:
     void VersionAddRef(ui64 version, ui32 source = 0) {
-        ui32 count = ++VersionCounts[version];
+        ui32 count = ++VersionCounters[version];
         Y_UNUSED(count);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "version_addref")("source", source)("version", version)("ref_count", count);
     }
 
     ui32 VersionRemoveRef(ui64 version, ui32 source = 0) {
-        ui32& count = VersionCounts[version];
+        ui32& count = VersionCounters[version];
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "version_removref")("source", source)("version", version)("ref_count", count - 1);
         AFL_VERIFY(count > 0);
         if (--count == 0) {
             VersionsToErase.insert(version);
-            VersionCounts.erase(version);
+            VersionCounters.erase(version);
         }
         return count;
     }

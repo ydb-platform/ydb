@@ -146,12 +146,15 @@ const TInsertedData* TInsertionSummary::AddAborted(TInsertedData&& data, const b
     return &insertInfo.first->second;
 }
 
-std::optional<TInsertedData> TInsertionSummary::ExtractInserted(const TInsertWriteId id) {
+std::optional<TInsertedData> TInsertionSummary::ExtractInserted(const TInsertWriteId id, TVersionCounts* versionCounts) {
     auto result = Inserted.ExtractOptional(id);
     if (result) {
         auto pathInfo = GetPathInfoOptional(result->GetPathId());
         if (pathInfo) {
             OnEraseInserted(*pathInfo, result->BlobSize());
+            if (versionCounts != nullptr) {
+                versionCounts->VersionRemoveRef(result->GetSchemaVersion());
+            }
         }
     }
     return result;

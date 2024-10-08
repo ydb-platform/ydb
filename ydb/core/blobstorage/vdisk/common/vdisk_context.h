@@ -12,7 +12,6 @@
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blobstorage/base/ptr.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
-// #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
 namespace NKikimr {
     class TCostModel;

@@ -278,7 +278,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        return Progress(context, &ISubOperationState::ProgressState, context);
+        return Progress(context, &ISubOperationState::ProgressState);
     }
 
     #define DefaultHandleReply(TEvType, ...) \
@@ -292,9 +292,70 @@ private:
     using TFunc = bool(ISubOperationState::*)(Args...);
 
     template <typename... Args>
-    bool Progress(TOperationContext& context, TFunc<Args...> func, Args&&... args) {
+    bool Progress(TOperationContext& context, TFunc<Args..., TOperationContext&> func, Args&&... args) {
         Y_ABORT_UNLESS(StateFunc);
-        const bool isDone = std::invoke(func, StateFunc.Get(), std::forward<Args>(args)...);
+        const bool isDone = std::invoke(func, StateFunc.Get(), std::forward<Args>(args)..., context);
+        if (isDone) {
+            StateDone(context);
+        }
+
+        return true;
+    }
+};
+
+class TBetterSubOperation: public TSubOperationBase {
+    TTxState::ETxState State = TTxState::Invalid;
+    TSubOperationState::TPtr StateFunc = nullptr;
+
+protected:
+    virtual TTxState::ETxState NextState(TTxState::ETxState state, TOperationContext& context) const = 0;
+    virtual TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state, TOperationContext& context) = 0;
+
+    virtual void StateDone(TOperationContext& context) {
+        auto state = NextState(GetState(), context);
+        SetState(state, context);
+
+        if (state != TTxState::Invalid) {
+            context.OnComplete.ActivateTx(OperationId);
+        }
+    }
+
+public:
+    using TSubOperationBase::TSubOperationBase;
+
+    explicit TBetterSubOperation(const TOperationId& id, TTxState::ETxState state)
+        : TSubOperationBase(id)
+        , State(state)
+    {
+    }
+
+    TTxState::ETxState GetState() const {
+        return State;
+    }
+
+    void SetState(TTxState::ETxState state, TOperationContext& context) {
+        State = state;
+        StateFunc = SelectStateFunc(state, context);
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        return Progress(context, &ISubOperationState::ProgressState);
+    }
+
+    #define DefaultHandleReply(TEvType, ...) \
+        bool HandleReply(TEvType::TPtr& ev, TOperationContext& context) override;
+
+        SCHEMESHARD_INCOMING_EVENTS(DefaultHandleReply)
+    #undef DefaultHandleReply
+
+private:
+    template <typename... Args>
+    using TFunc = bool(ISubOperationState::*)(Args...);
+
+    template <typename... Args>
+    bool Progress(TOperationContext& context, TFunc<Args..., TOperationContext&> func, Args&&... args) {
+        Y_ABORT_UNLESS(StateFunc);
+        const bool isDone = std::invoke(func, StateFunc.Get(), std::forward<Args>(args)..., context);
         if (isDone) {
             StateDone(context);
         }
@@ -317,6 +378,13 @@ template <typename T, typename... Args>
 ISubOperation::TPtr MakeSubOperation(const TOperationId& id, TTxState::ETxState state, Args&&... args) {
     auto result = MakeHolder<T>(id, state, std::forward<Args>(args)...);
     result->SetState(state);
+    return result.Release();
+}
+
+template <typename T>
+ISubOperation::TPtr MakeSubOperation(const TOperationId& id, TTxState::ETxState state, TOperationContext& context) {
+    auto result = MakeHolder<T>(id, state);
+    result->SetState(state, context);
     return result.Release();
 }
 
@@ -421,8 +489,10 @@ ISubOperation::TPtr CreateDropCdcStreamAtTable(TOperationId id, TTxState::ETxSta
 
 /// Continuous Backup
 // Create
+bool CreateNewContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result);
 TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+bool CreateAlterContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result);
 TVector<ISubOperation::TPtr> CreateDropContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateBackup(TOperationId id, const TTxTransaction& tx);
@@ -443,6 +513,11 @@ ISubOperation::TPtr CreateDropTableIndex(TOperationId id, TTxState::ETxState sta
 ISubOperation::TPtr CreateAlterTableIndex(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAlterTableIndex(TOperationId id, TTxState::ETxState state);
 
+void CreateConsistentCopyTables(
+    TOperationId nextId,
+    const TTxTransaction& tx,
+    TOperationContext& context,
+    TVector<ISubOperation::TPtr>& result);
 TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateNewOlapStore(TOperationId id, const TTxTransaction& tx);
@@ -622,12 +697,30 @@ ISubOperation::TPtr CreateDropResourcePool(TOperationId id, const TTxTransaction
 ISubOperation::TPtr CreateDropResourcePool(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, const TTxTransaction& tx);
-ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, TTxState::ETxState state, TOperationContext& context);
+
+// Backup Collection
+// Create
+ISubOperation::TPtr CreateNewBackupCollection(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewBackupCollection(TOperationId id, TTxState::ETxState state);
+// Alter
+ISubOperation::TPtr CreateAlterBackupCollection(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateAlterBackupCollection(TOperationId id, TTxState::ETxState state);
+// Drop
+ISubOperation::TPtr CreateDropBackupCollection(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateDropBackupCollection(TOperationId id, TTxState::ETxState state);
+// Backup
+TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
+// Restore
+TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 
 // returns Reject in case of error, nullptr otherwise
 ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table);
 
 TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr> CreateRestoreMultipleIncrementalBackups(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
+bool CreateRestoreMultipleIncrementalBackups(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result);
 
 }
 }

@@ -9,17 +9,27 @@
 
 #include <util/generic/algorithm.h>
 
-NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst, bool omitFollowers, bool isBackup) {
+NKikimrSchemeOp::TModifyScheme CopyTableTask(
+    NKikimr::NSchemeShard::TPath& src,
+    const TString& dstWorkingDir,
+    const TString& dstLeaf,
+    bool omitFollowers,
+    bool isBackup,
+    const NKikimrSchemeOp::TCopyTableConfig& descr)
+{
     using namespace NKikimr::NSchemeShard;
 
-    auto scheme = TransactionTemplate(dst.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
+    auto scheme = TransactionTemplate(dstWorkingDir, NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
     scheme.SetFailOnExist(true);
 
     auto operation = scheme.MutableCreateTable();
-    operation->SetName(dst.LeafName());
+    operation->SetName(dstLeaf);
     operation->SetCopyFromTable(src.PathString());
     operation->SetOmitFollowers(omitFollowers);
     operation->SetIsBackup(isBackup);
+    if (descr.HasCreateCdcStream()) {
+        operation->MutableCreateCdcStream()->CopyFrom(descr.GetCreateCdcStream());
+    }
 
     return scheme;
 }
@@ -47,52 +57,57 @@ NKikimrSchemeOp::TModifyScheme CreateIndexTask(NKikimr::NSchemeShard::TTableInde
 
 namespace NKikimr::NSchemeShard {
 
-TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
+void CreateConsistentCopyTables(
+    TOperationId nextId,
+    const TTxTransaction& tx,
+    TOperationContext& context,
+    TVector<ISubOperation::TPtr>& result)
+{
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables);
 
     const auto& op = tx.GetCreateConsistentCopyTables();
 
     if (0 == op.CopyTableDescriptionsSize()) {
         TString msg = TStringBuilder() << "no task to do, empty list CopyTableDescriptions";
-        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
+        result = {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
+        return;
     }
 
     TPath firstPath = TPath::Resolve(op.GetCopyTableDescriptions(0).GetSrcPath(), context.SS);
-    {
-        auto checks = TPath::TChecker(firstPath);
-        checks
-            .NotEmpty()
-            .NotUnderDomainUpgrade()
-            .IsAtLocalSchemeShard();
+    // {
+    //     auto checks = TPath::TChecker(firstPath);
+    //     checks
+    //         .NotEmpty()
+    //         .NotUnderDomainUpgrade()
+    //         .IsAtLocalSchemeShard();
 
-        if (!checks) {
-            return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
-        }
-    }
+    //     if (!checks) {
+    //         return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+    //     }
+    // }
 
-    const auto allForBackup = AllOf(op.GetCopyTableDescriptions(), [](const auto& item) {
-        return item.GetIsBackup();
-    });
+    // const auto allForBackup = AllOf(op.GetCopyTableDescriptions(), [](const auto& item) {
+    //     return item.GetIsBackup();
+    // });
 
-    const auto& limits = firstPath.DomainInfo()->GetSchemeLimits();
-    const auto limit = allForBackup
-        ? Max(limits.MaxObjectsInBackup, limits.MaxConsistentCopyTargets)
-        : limits.MaxConsistentCopyTargets;
+    // const auto& limits = firstPath.DomainInfo()->GetSchemeLimits();
+    // const auto limit = allForBackup
+    //     ? Max(limits.MaxObjectsInBackup, limits.MaxConsistentCopyTargets)
+    //     : limits.MaxConsistentCopyTargets;
 
-    if (op.CopyTableDescriptionsSize() > limit) {
-        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, TStringBuilder()
-            << "Consistent copy object count limit exceeded"
-                << ", limit: " << limit
-                << ", objects: " << op.CopyTableDescriptionsSize()
-        )};
-    }
+    // if (op.CopyTableDescriptionsSize() > limit) {
+    //     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, TStringBuilder()
+    //         << "Consistent copy object count limit exceeded"
+    //             << ", limit: " << limit
+    //             << ", objects: " << op.CopyTableDescriptionsSize()
+    //     )};
+    // }
 
     TString errStr;
     if (!context.SS->CheckApplyIf(tx, errStr)) {
-        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, errStr)};
+        result = {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, errStr)};
+        return;
     }
-
-    TVector<ISubOperation::TPtr> result;
 
     for (const auto& descr: op.GetCopyTableDescriptions()) {
         const auto& srcStr = descr.GetSrcPath();
@@ -108,12 +123,99 @@ TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, con
                   .IsTheSameDomain(firstPath);
 
             if (!checks) {
-                return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+                Y_ABORT("%s, %s", srcPath.PathString().c_str(), checks.GetError().c_str());
+                result = {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+                return;
             }
         }
 
-        TPath dstPath = TPath::Resolve(dstStr, context.SS);
-        TPath dstParentPath = dstPath.Parent();
+        if (op.HasDstBasePath()) {
+            TVector<TTxTransaction> mkdirs;
+
+            auto dstBaseStr = op.GetDstBasePath();
+            TPath path = TPath::Resolve(JoinPath({dstBaseStr, dstStr}), context.SS).Parent();
+
+            const TPath parentPath = TPath::Resolve(dstBaseStr, context.SS);
+            {
+                TPath::TChecker checks = parentPath.Check();
+                checks
+                    .NotUnderDomainUpgrade()
+                    .IsAtLocalSchemeShard()
+                    .IsResolved()
+                    .NotDeleted()
+                    .NotUnderDeleting()
+                    .IsCommonSensePath()
+                    .IsLikeDirectory();
+
+                if (!checks) {
+                    Y_ABORT("%s", checks.GetError().c_str());
+                    // result.Transactions.push_back(tx);
+                    // return result;
+                }
+            }
+
+            while (path != parentPath) {
+                TPath::TChecker checks = path.Check();
+                checks
+                    .NotUnderDomainUpgrade()
+                    .IsAtLocalSchemeShard();
+
+                if (path.IsResolved()) {
+                    checks.IsResolved();
+
+                    if (path.IsDeleted()) {
+                        checks.IsDeleted();
+                    } else {
+                        checks
+                            .NotDeleted()
+                            .NotUnderDeleting()
+                            .IsCommonSensePath()
+                            .IsLikeDirectory();
+
+                        if (checks) {
+                            break;
+                        }
+                    }
+                } else {
+                    checks
+                        .NotEmpty()
+                        .NotResolved();
+                }
+
+                if (checks) {
+                    checks.IsValidLeafName();
+                }
+
+                if (!checks) {
+                    Y_ABORT("%s", checks.GetError().c_str());
+                    // result.Status = checks.GetStatus();
+                    // result.Reason = checks.GetError();
+                    // mkdirs.clear();
+                    // mkdirs.push_back(tx);
+                    // return result;
+                }
+
+                const TString name = path.LeafName();
+                path.Rise();
+
+                TTxTransaction mkdir;
+                mkdir.SetFailOnExist(false);
+                mkdir.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
+                mkdir.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
+                mkdir.SetWorkingDir(path.PathString());
+                mkdir.MutableMkDir()->SetName(name);
+                mkdirs.push_back(mkdir);
+                Cerr << " @ add @ " << name << " to " << path.PathString() << Endl;
+            }
+
+            for (auto it = mkdirs.rbegin(); it != mkdirs.rend(); ++it) {
+                result.push_back(CreateMkDir(NextPartId(nextId, result), std::move(*it)));
+            }
+        }
+
+        Cerr << "<----- CopyTables" << Endl;
+        Cerr << dstStr << Endl;
+        TPath dstPath = op.HasDstBasePath() ? TPath::Resolve(JoinPath({op.GetDstBasePath(), dstStr}), context.SS) : TPath::Resolve(dstStr, context.SS);
 
         THashSet<TString> sequences;
         for (const auto& child: srcPath.Base()->GetChildren()) {
@@ -135,63 +237,82 @@ TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, con
         }
 
         result.push_back(CreateCopyTable(NextPartId(nextId, result),
-            CopyTableTask(srcPath, dstPath, descr.GetOmitFollowers(), descr.GetIsBackup()), sequences));
+            CopyTableTask(srcPath,
+                          // op.HasDstBasePath() ? op.GetDstBasePath() : dstPath.Parent().PathString(),
+                          // op.HasDstBasePath() ? dstStr : dstPath.LeafName(),
+                          dstPath.Parent().PathString(),
+                          dstPath.LeafName(),
+                          descr.GetOmitFollowers(),
+                          descr.GetIsBackup(),
+                          descr),
+                                         sequences));
 
-        TVector<NKikimrSchemeOp::TSequenceDescription> sequenceDescriptions;
-        for (const auto& child: srcPath.Base()->GetChildren()) {
-            const auto& name = child.first;
-            const auto& pathId = child.second;
+        // TVector<NKikimrSchemeOp::TSequenceDescription> sequenceDescriptions;
+        // for (const auto& child: srcPath.Base()->GetChildren()) {
+        //     const auto& name = child.first;
+        //     const auto& pathId = child.second;
 
-            TPath srcIndexPath = srcPath.Child(name);
-            TPath dstIndexPath = dstPath.Child(name);
+        //     TPath srcIndexPath = srcPath.Child(name);
+        //     TPath dstIndexPath = dstPath.Child(name);
 
-            if (srcIndexPath.IsDeleted()) {
-                continue;
-            }
+        //     if (srcIndexPath.IsDeleted()) {
+        //         continue;
+        //     }
 
-            if (srcIndexPath.IsSequence()) {
-                TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
-                const auto& sequenceDesc = sequenceInfo->Description;
-                sequenceDescriptions.push_back(sequenceDesc);
-                continue;
-            }
+        //     if (srcIndexPath.IsSequence()) {
+        //         TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
+        //         const auto& sequenceDesc = sequenceInfo->Description;
+        //         sequenceDescriptions.push_back(sequenceDesc);
+        //         continue;
+        //     }
 
-            if (descr.GetOmitIndexes()) {
-                continue;
-            }
+        //     if (descr.GetOmitIndexes()) {
+        //         continue;
+        //     }
 
-            if (!srcIndexPath.IsTableIndex()) {
-                continue;
-            }
+        //     if (!srcIndexPath.IsTableIndex()) {
+        //         continue;
+        //     }
 
-            Y_ABORT_UNLESS(srcIndexPath.Base()->PathId == pathId);
-            Y_VERIFY_S(srcIndexPath.Base()->GetChildren().size() == 1, srcIndexPath.PathString() << " has children " << srcIndexPath.Base()->GetChildren().size() << " but 1 expected");
+        //     Y_ABORT_UNLESS(srcIndexPath.Base()->PathId == pathId);
+        //     Y_VERIFY_S(srcIndexPath.Base()->GetChildren().size() == 1, srcIndexPath.PathString() << " has children " << srcIndexPath.Base()->GetChildren().size() << " but 1 expected");
 
-            TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
-            result.push_back(CreateNewTableIndex(NextPartId(nextId, result), CreateIndexTask(indexInfo, dstIndexPath)));
+        //     TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
+        //     result.push_back(CreateNewTableIndex(NextPartId(nextId, result), CreateIndexTask(indexInfo, dstIndexPath)));
 
-            TString srcImplTableName = srcIndexPath.Base()->GetChildren().begin()->first;
-            TPath srcImplTable = srcIndexPath.Child(srcImplTableName);
-            Y_ABORT_UNLESS(srcImplTable.Base()->PathId == srcIndexPath.Base()->GetChildren().begin()->second);
-            TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
+        //     TString srcImplTableName = srcIndexPath.Base()->GetChildren().begin()->first;
+        //     TPath srcImplTable = srcIndexPath.Child(srcImplTableName);
+        //     Y_ABORT_UNLESS(srcImplTable.Base()->PathId == srcIndexPath.Base()->GetChildren().begin()->second);
+        //     TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
 
-            result.push_back(CreateCopyTable(NextPartId(nextId, result),
-                CopyTableTask(srcImplTable, dstImplTable, descr.GetOmitFollowers(), descr.GetIsBackup())));
-        }
+        //     result.push_back(CreateCopyTable(NextPartId(nextId, result),
+        //         CopyTableTask(
+        //             srcImplTable,
+        //             dstImplTable.Parent().PathString(),
+        //             dstImplTable.LeafName(),
+        //             descr.GetOmitFollowers(),
+        //             descr.GetIsBackup())));
+        // }
 
-        for (auto&& sequenceDescription : sequenceDescriptions) {
-            auto scheme = TransactionTemplate(
-                dstPath.PathString(),
-                NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
-            scheme.SetFailOnExist(true);
+        // for (auto&& sequenceDescription : sequenceDescriptions) {
+        //     auto scheme = TransactionTemplate(
+        //         dstPath.PathString(),
+        //         NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
+        //     scheme.SetFailOnExist(true);
 
-            auto* copySequence = scheme.MutableCopySequence();
-            copySequence->SetCopyFrom(srcPath.PathString() + "/" + sequenceDescription.GetName());
-            *scheme.MutableSequence() = std::move(sequenceDescription);
+        //     auto* copySequence = scheme.MutableCopySequence();
+        //     copySequence->SetCopyFrom(srcPath.PathString() + "/" + sequenceDescription.GetName());
+        //     *scheme.MutableSequence() = std::move(sequenceDescription);
 
-            result.push_back(CreateCopySequence(NextPartId(nextId, result), scheme));
-        }
+        //     result.push_back(CreateCopySequence(NextPartId(nextId, result), scheme));
+        // }
     }
+}
+
+TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
+    TVector<ISubOperation::TPtr> result;
+
+    CreateConsistentCopyTables(nextId, tx, context, result);
 
     return result;
 }

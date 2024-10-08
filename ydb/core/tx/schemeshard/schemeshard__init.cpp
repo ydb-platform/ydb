@@ -3514,8 +3514,21 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     if (!path->UserAttrs->AlterData) {
                         path->UserAttrs->AlterData = new TUserAttributes(path->UserAttrs->AlterVersion + 1);
                     }
+                } else if (txState.TxType == TTxState::TxCopyTable) {
+                    if (!extraData.empty()) {
+                        NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
+                        bool deserializeRes = ParseFromStringNoSizeLimit(proto, extraData);
+                        Y_ABORT_UNLESS(deserializeRes);
+                        txState.CdcPathId = PathIdFromPathId(proto.GetTxCopyTableExtraData().GetCdcPathId());
+                    }
+                } else if (txState.TxType == TTxState::TxRestoreIncrementalBackupAtTable) {
+                    if (!extraData.empty()) {
+                        NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
+                        bool deserializeRes = ParseFromStringNoSizeLimit(proto, extraData);
+                        Y_ABORT_UNLESS(deserializeRes);
+                        txState.LoopSeqNo = proto.GetTxRestoreIncrementalBackupAtTableExtraData().GetLoopSeqNo();
+                    }
                 }
-
 
                 Y_ABORT_UNLESS(txState.TxType != TTxState::TxInvalid);
                 Y_ABORT_UNLESS(txState.State != TTxState::Invalid);
@@ -3560,7 +3573,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 TOperation::TPtr operation = Self->Operations.at(operationId.GetTxId());
                 Y_ABORT_UNLESS(operationId.GetSubTxId() == operation->Parts.size());
-                ISubOperation::TPtr part = operation->RestorePart(txState.TxType, txState.State);
+                TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
+                ISubOperation::TPtr part = operation->RestorePart(txState.TxType, txState.State, context);
                 operation->AddPart(part);
 
                 if (!txInFlightRowset.Next())

@@ -59,7 +59,8 @@ protected:
 
     THolder<NTable::IScan> CreateScan(
         const ::NKikimrSchemeOp::TRestoreIncrementalBackup& incrBackup,
-        ui64 txId)
+        ui64 txId,
+        std::optional<ui64> seqNo)
     {
         TPathId tablePathId = PathIdFromPathId(incrBackup.GetSrcPathId());
         TPathId dstTablePathId = PathIdFromPathId(incrBackup.GetDstPathId());
@@ -67,7 +68,11 @@ protected:
 
         return CreateIncrementalRestoreScan(
                 DataShard.SelfId(),
-                [=, tabletID = DataShard.TabletID(), generation = DataShard.Generation(), tabletActor = DataShard.SelfId()](const TActorContext& ctx, TActorId parent) {
+                [=,
+                 tabletID = DataShard.TabletID(),
+                 generation = DataShard.Generation(),
+                 tabletActor = DataShard.SelfId()
+                ](const TActorContext& ctx, TActorId parent) {
                     return ctx.Register(
                         CreateIncrRestoreChangeSender(
                             parent,
@@ -77,7 +82,8 @@ protected:
                                 .ActorId = tabletActor,
                             },
                             tablePathId,
-                            dstTablePathId));
+                            dstTablePathId,
+                            seqNo));
                 },
                 tablePathId,
                 DataShard.GetUserTables().at(tableId),
@@ -101,7 +107,13 @@ protected:
 
         Y_ABORT_UNLESS(restoreSrc.HasDstPathId());
 
-        THolder<NTable::IScan> scan{CreateScan(restoreSrc, op->GetTxId())};
+        std::optional<ui64> seqNo;
+
+        if (restoreSrc.HasSeqNo()) {
+            seqNo = restoreSrc.GetSeqNo();
+        }
+
+        THolder<NTable::IScan> scan{CreateScan(restoreSrc, op->GetTxId(), seqNo)};
 
         auto* appData = AppData(ctx);
         const auto& taskName = appData->DataShardConfig.GetRestoreTaskName();

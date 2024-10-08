@@ -122,6 +122,7 @@ public:
     bool IsFileStore() const;
     bool IsKesus() const;
     bool IsOlapStore() const;
+    bool IsBackupCollection() const;
     bool IsColumnTable() const;
     bool IsSequence() const;
     bool IsReplication() const;

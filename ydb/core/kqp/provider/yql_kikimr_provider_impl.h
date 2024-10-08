@@ -70,6 +70,13 @@ private:
     virtual TStatus HandleDropSequence(NNodes::TKiDropSequence node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterSequence(NNodes::TKiAlterSequence node, TExprContext& ctx) = 0;
 
+    virtual TStatus HandleCreateBackupCollection(NNodes::TKiCreateBackupCollection node, TExprContext& ctx) = 0;
+    virtual TStatus HandleAlterBackupCollection(NNodes::TKiAlterBackupCollection node, TExprContext& ctx) = 0;
+    virtual TStatus HandleDropBackupCollection(NNodes::TKiDropBackupCollection node, TExprContext& ctx) = 0;
+    virtual TStatus HandleBackup(NNodes::TKiBackup node, TExprContext& ctx) = 0;
+    virtual TStatus HandleBackupIncremental(NNodes::TKiBackupIncremental node, TExprContext& ctx) = 0;
+    virtual TStatus HandleRestore(NNodes::TKiRestore node, TExprContext& ctx) = 0;
+
     virtual TStatus HandleModifyPermissions(NNodes::TKiModifyPermissions node, TExprContext& ctx) = 0;
 
     virtual TStatus HandleReturningList(NNodes::TKiReturningList node, TExprContext& ctx) = 0;
@@ -89,11 +96,17 @@ public:
         Permission,
         PGObject,
         Replication,
+        BackupCollection,
     };
 
     struct TViewDescription {
         TString Name;
         bool PrimaryFlag = false;
+    };
+
+    struct TBackupCollectionDescription {
+        TString Prefix;
+        TString Name;
     };
 
 public:
@@ -171,6 +184,16 @@ public:
         return *ObjectType;
     }
 
+    TBackupCollectionDescription GetBackupCollectionPath() const {
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::BackupCollection);
+        Y_DEBUG_ABORT_UNLESS(ExplicitPrefix.Defined());
+        return TBackupCollectionDescription {
+                .Prefix = *ExplicitPrefix,
+                .Name = Target,
+            };
+    }
+
     bool Extract(const TExprNode& key);
 
 private:
@@ -179,6 +202,7 @@ private:
     TString Target;
     TMaybe<TString> ObjectType;
     TMaybe<TViewDescription> View;
+    TMaybe<TString> ExplicitPrefix;
 };
 
 struct TKiDataQueryBlockSettings {

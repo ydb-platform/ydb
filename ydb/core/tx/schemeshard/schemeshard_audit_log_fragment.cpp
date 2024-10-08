@@ -245,6 +245,20 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
     // incremental backup
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreMultipleIncrementalBackups:
+        return "RESTORE";
+    // backup collection
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection:
+        return "CREATE BACKUP COLLECTION";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBackupCollection:
+        return "ALTER BACKUP COLLECTION";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection:
+        return "DROP BACKUP COLLECTION";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection:
+        return "BACKUP";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
+        return "BACKUP INCREMENTAL";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         return "RESTORE";
     }
     Y_ABORT("switch should cover all operation types");
@@ -553,6 +567,27 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreIncrementalBackup().GetSrcTableName()}));
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreIncrementalBackup().GetDstTableName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreMultipleIncrementalBackups:
+        // TODO implement
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateBackupCollection().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBackupCollection:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterBackupCollection().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropBackupCollection().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetBackupBackupCollection().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetBackupIncrementalBackupCollection().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()}));
         break;
     }
 

@@ -833,6 +833,36 @@ struct TAnalyzeSettings {
     TVector<TString> Columns;
 };
 
+struct TBackupCollectionSettings {
+    bool IncrementalBackupEnabled;
+};
+
+struct TCreateBackupCollectionSettings {
+    struct TDatabase {};
+
+    struct TTable {
+        TString Path;
+    };
+
+    TString Name;
+    std::variant<TDatabase, TVector<TTable>> Entries;
+    TBackupCollectionSettings Settings;
+};
+
+struct TAlterBackupCollectionSettings {
+    TString Name;
+    TBackupCollectionSettings Settings;
+};
+
+struct TDropBackupCollectionSettings {
+    TString Name;
+    bool Cascade = false;
+};
+
+struct TBackupSettings {
+    TString Name;
+};
+
 struct TKikimrListPathItem {
     TKikimrListPathItem(TString name, bool isDirectory) {
         Name = name;
@@ -1026,6 +1056,18 @@ public:
     virtual NThreading::TFuture<TGenericResult> AlterObject(const TString& cluster, const TAlterObjectSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropObject(const TString& cluster, const TDropObjectSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> CreateBackupCollection(const TString& cluster, const TCreateBackupCollectionSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> AlterBackupCollection(const TString& cluster, const TAlterBackupCollectionSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> DropBackupCollection(const TString& cluster, const TDropBackupCollectionSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> Backup(const TString& cluster, const TBackupSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> BackupIncremental(const TString& cluster, const TBackupSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> Restore(const TString& cluster, const TBackupSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateGroup(const TString& cluster, const TCreateGroupSettings& settings) = 0;
 

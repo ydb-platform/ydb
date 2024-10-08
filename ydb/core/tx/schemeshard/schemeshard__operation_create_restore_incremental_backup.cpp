@@ -65,13 +65,21 @@ protected:
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
         auto table = context.SS->Tables.at(pathId);
 
-        tx.MutableCreateIncrementalRestoreSrc()->CopyFrom(RestoreOp);
+        auto& op = *tx.MutableCreateIncrementalRestoreSrc();
+        op.MutableSrcPathId()->CopyFrom(RestoreOp.GetSrcPathIds(SeqNo));
+        op.SetSrcTableName(RestoreOp.GetSrcTableNames(SeqNo));
+        op.MutableDstPathId()->CopyFrom(RestoreOp.GetDstPathId());
+        op.SetDstTableName(RestoreOp.GetDstTableName());
     }
 
 public:
-    explicit TConfigurePartsAtTable(TOperationId id, const NKikimrSchemeOp::TRestoreIncrementalBackup& restoreOp)
+    explicit TConfigurePartsAtTable(
+            TOperationId id,
+            const NKikimrSchemeOp::TRestoreMultipleIncrementalBackups& restoreOp,
+            ui64 seqNo)
         : OperationId(id)
         , RestoreOp(restoreOp)
+        , SeqNo(seqNo)
     {
         IgnoreMessages(DebugHint(), {});
     }
@@ -122,7 +130,8 @@ public:
 
 private:
     const TOperationId OperationId;
-    const NKikimrSchemeOp::TRestoreIncrementalBackup RestoreOp;
+    const NKikimrSchemeOp::TRestoreMultipleIncrementalBackups RestoreOp;
+    const ui64 SeqNo;
 }; // TConfigurePartsAtTable
 
 class TProposeAtTable: public TSubOperationState {
@@ -212,34 +221,144 @@ protected:
 
 }; // TProposeAtTable
 
-class TNewRestoreFromAtTable: public TSubOperation {
-    static TTxState::ETxState NextState() {
+class TProposedWaitParts: public TSubOperationState {
+private:
+    TOperationId OperationId;
+    const TTxState::ETxState NextState;
+
+    TString DebugHint() const override {
+        return TStringBuilder()
+                << "NTableState::TProposedWaitParts"
+                << " operationId# " << OperationId;
+    }
+
+public:
+    TProposedWaitParts(TOperationId id, TTxState::ETxState nextState = TTxState::Done)
+        : OperationId(id)
+        , NextState(nextState)
+    {
+        IgnoreMessages(DebugHint(),
+            { TEvHive::TEvCreateTabletReply::EventType
+            , TEvDataShard::TEvProposeTransactionResult::EventType
+            , TEvPrivate::TEvOperationPlan::EventType }
+        );
+    }
+
+    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
+        TTabletId ssId = context.SS->SelfTabletId();
+        const auto& evRecord = ev->Get()->Record;
+
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " HandleReply TEvSchemaChanged"
+                               << " at tablet: " << ssId);
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    DebugHint() << " HandleReply TEvSchemaChanged"
+                                << " at tablet: " << ssId
+                                << " message: " << evRecord.ShortDebugString());
+
+        if (!NTableState::CollectSchemaChanged(OperationId, ev, context)) {
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        DebugHint() << " HandleReply TEvSchemaChanged"
+                                    << " CollectSchemaChanged: false");
+            return false;
+        }
+
+        Y_ABORT_UNLESS(context.SS->FindTx(OperationId));
+        TTxState& txState = *context.SS->FindTx(OperationId);
+
+        if (!txState.ReadyForNotifications) {
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        DebugHint() << " HandleReply TEvSchemaChanged"
+                                    << " ReadyForNotifications: false");
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        TTabletId ssId = context.SS->SelfTabletId();
+
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     DebugHint() << " ProgressState"
+                     << " at tablet: " << ssId);
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+
+        NIceDb::TNiceDb db(context.GetDB());
+
+        txState->ClearShardsInProgress();
+        for (TTxState::TShardOperation& shard : txState->Shards) {
+            if (shard.Operation < TTxState::ProposedWaitParts) {
+                shard.Operation = TTxState::ProposedWaitParts;
+                context.SS->PersistUpdateTxShard(db, OperationId, shard.Idx, shard.Operation);
+            }
+            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.Idx));
+            context.OnComplete.RouteByTablet(OperationId,  context.SS->ShardInfos.at(shard.Idx).TabletID);
+        }
+        txState->UpdateShardsInProgress(TTxState::ProposedWaitParts);
+
+        // Move all notifications that were already received
+        // NOTE: SchemeChangeNotification is sent form DS after it has got PlanStep from coordinator and the schema tx has completed
+        // At that moment the SS might not have received PlanStep from coordinator yet (this message might be still on its way to SS)
+        // So we are going to accumulate SchemeChangeNotification that are received before this Tx switches to WaitParts state
+        txState->AcceptPendingSchemeNotification();
+
+        // Got notifications from all datashards?
+        if (txState->ShardsInProgress.empty()) {
+            NTableState::AckAllSchemaChanges(OperationId, *txState, context);
+            context.SS->ChangeTxState(db, OperationId, NextState);
+            return true;
+        }
+
+        return false;
+    }
+};
+
+class TNewRestoreFromAtTable: public TBetterSubOperation {
+    static TTxState::ETxState InitialState() {
         return TTxState::ConfigureParts;
     }
 
-    TTxState::ETxState NextState(TTxState::ETxState state) const override {
+    TTxState::ETxState NextState(TTxState::ETxState state, TOperationContext& context) const override {
         switch (state) {
         case TTxState::Waiting:
+            return TTxState::ConfigureParts;
         case TTxState::ConfigureParts:
             return TTxState::Propose;
         case TTxState::Propose:
             return TTxState::ProposedWaitParts;
-        case TTxState::ProposedWaitParts:
+        case TTxState::ProposedWaitParts: {
+            auto* txState = context.SS->FindTx(OperationId);
+            Y_ABORT_UNLESS(txState);
+            // Y_ABORT_UNLESS(IsExpectedTxType(txState->TxType));
+            ++(txState->LoopSeqNo);
+            if (txState->LoopSeqNo < Transaction.GetRestoreMultipleIncrementalBackups().SrcPathIdsSize()) {
+                txState->TargetPathId = PathIdFromPathId(Transaction.GetRestoreMultipleIncrementalBackups().GetSrcPathIds(txState->LoopSeqNo));
+                txState->TxShardsListFinalized = false;
+                // TODO preserve TxState
+                return TTxState::ConfigureParts;
+            }
             return TTxState::Done;
+        }
         default:
             return TTxState::Invalid;
         }
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state, TOperationContext& context) override {
         switch (state) {
         case TTxState::Waiting:
-        case TTxState::ConfigureParts:
-            return MakeHolder<NIncrRestore::TConfigurePartsAtTable>(OperationId, Transaction.GetRestoreIncrementalBackup());
+        case TTxState::ConfigureParts: {
+            auto* txState = context.SS->FindTx(OperationId);
+            Y_ABORT_UNLESS(txState);
+            // Y_ABORT_UNLESS(IsExpectedTxType(txState->TxType));
+            return MakeHolder<NIncrRestore::TConfigurePartsAtTable>(OperationId, Transaction.GetRestoreMultipleIncrementalBackups(), txState->LoopSeqNo);
+        }
         case TTxState::Propose:
             return MakeHolder<NIncrRestore::TProposeAtTable>(OperationId);
         case TTxState::ProposedWaitParts:
-            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+            return MakeHolder<NIncrRestore::TProposedWaitParts>(OperationId);
         case TTxState::Done:
             return MakeHolder<TDone>(OperationId);
         default:
@@ -247,21 +366,21 @@ class TNewRestoreFromAtTable: public TSubOperation {
         }
     }
 
-public:
-    explicit TNewRestoreFromAtTable(TOperationId id, const TTxTransaction& tx)
-        : TSubOperation(id, tx)
+    public:
+        explicit TNewRestoreFromAtTable(TOperationId id, const TTxTransaction& tx)
+        : TBetterSubOperation(id, tx)
     {
     }
 
     explicit TNewRestoreFromAtTable(TOperationId id, TTxState::ETxState state)
-        : TSubOperation(id, state)
+        : TBetterSubOperation(id, state)
     {
     }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
-        const auto& op = Transaction.GetRestoreIncrementalBackup();
-        const auto& tableName = op.GetSrcTableName();
+        const auto& op = Transaction.GetRestoreMultipleIncrementalBackups();
+        const auto& tableName = op.GetSrcTableNames(0);
         const auto& dstTableName = op.GetDstTableName();
 
         LOG_N("TNewRestoreFromAtTable Propose"
@@ -304,8 +423,8 @@ public:
                 .IsTable()
                 .NotAsyncReplicaTable()
                 .NotUnderDeleting()
-                .IsCommonSensePath()
-                .IsUnderTheSameOperation(OperationId.GetTxId()); // lock op
+                .IsCommonSensePath();
+                // .IsUnderTheSameOperation(OperationId.GetTxId()); // lock op
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -325,8 +444,8 @@ public:
                 .IsTable()
                 .NotAsyncReplicaTable()
                 .NotUnderDeleting()
-                .IsCommonSensePath()
-                .IsUnderTheSameOperation(OperationId.GetTxId()); // lock op
+                .IsCommonSensePath();
+                // .IsUnderTheSameOperation(OperationId.GetTxId()); // lock op
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -350,6 +469,8 @@ public:
         context.DbChanges.PersistPath(tablePath.Base()->PathId);
         context.DbChanges.PersistTxState(OperationId);
 
+        // Cerr << " <-- <-- <-- " << (op.GetSeqNo() > 0 ? "dep" : "nodep") << tableName << " from " << OperationId.GetTxId().GetValue() << " to " << OperationId.GetTxId().GetValue() - 1 << Endl;
+
         Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
         auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
@@ -371,7 +492,7 @@ public:
 
         context.OnComplete.ActivateTx(OperationId);
 
-        SetState(NextState());
+        SetState(InitialState(), context);
         return result;
     }
 
@@ -394,6 +515,8 @@ public:
 TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup);
 
+    Y_ABORT("Intentnionally broken");
+
     LOG_N("CreateRestoreIncrementalBackup"
         << ": opId# " << opId
         << ", tx# " << tx.ShortDebugString());
@@ -403,7 +526,8 @@ TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, c
     const auto& srcTableName = restoreOp.GetSrcTableName();
     const auto& dstTableName = restoreOp.GetDstTableName();
 
-    const auto srcTablePath = workingDirPath.Child(srcTableName);
+    const auto srcTablePathX = workingDirPath.Child(srcTableName);
+    const auto srcTablePath = TPath::Resolve(srcTablePathX.PathString(), context.SS);
     {
         const auto checks = srcTablePath.Check();
         checks
@@ -422,7 +546,8 @@ TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, c
         }
     }
 
-    const auto dstTablePath = workingDirPath.Child(dstTableName);
+    const auto dstTablePathX = workingDirPath.Child(dstTableName);
+    const auto dstTablePath = TPath::Resolve(dstTablePathX.PathString(), context.SS);
     {
         const auto checks = srcTablePath.Check();
         checks
@@ -457,33 +582,24 @@ TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, c
     // check dst locks
     // lock dst
 
-    TVector<TString> boundaries;
-    const auto& partitions = srcTable->GetPartitions();
-    boundaries.reserve(partitions.size() - 1);
-
-    for (ui32 i = 0; i < partitions.size(); ++i) {
-        const auto& partition = partitions.at(i);
-        if (i != partitions.size() - 1) {
-            boundaries.push_back(partition.EndOfRange);
-        }
-    }
-
     TVector<ISubOperation::TPtr> result;
 
-    DoCreateLock(opId, workingDirPath, srcTablePath, result);
-    DoCreateLock(opId, workingDirPath, dstTablePath, result);
+    DoCreateLock(opId, srcTablePath.Parent(), srcTablePath, result);
+    DoCreateLock(opId, dstTablePath.Parent(), dstTablePath, result);
 
     {
-        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable);
+        auto outTx = TransactionTemplate(srcTablePath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable);
         outTx.MutableRestoreIncrementalBackup()->CopyFrom(restoreOp);
         auto& restoreOp = *outTx.MutableRestoreIncrementalBackup();
+        restoreOp.SetSrcTableName(srcTablePath.LeafName());
+        restoreOp.SetDstTableName(dstTablePath.LeafName());
         PathIdFromPathId(srcTablePath.Base()->PathId, restoreOp.MutableSrcPathId());
         PathIdFromPathId(dstTablePath.Base()->PathId, restoreOp.MutableDstPathId());
         result.push_back(CreateRestoreIncrementalBackupAtTable(NextPartId(opId, result), outTx));
     }
 
-    DoDropLock(opId, workingDirPath, dstTablePath, result);
-    DoDropLock(opId, workingDirPath, srcTablePath, result);
+    DoDropLock(opId, srcTablePath.Parent(), srcTablePath, result);
+    DoDropLock(opId, dstTablePath.Parent(), dstTablePath, result);
 
     return result;
 }
@@ -492,9 +608,127 @@ ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, const
     return MakeSubOperation<NIncrRestore::TNewRestoreFromAtTable>(id, tx);
 }
 
-ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, TTxState::ETxState state, TOperationContext& context) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
-    return MakeSubOperation<NIncrRestore::TNewRestoreFromAtTable>(id, state);
+    return MakeSubOperation<NIncrRestore::TNewRestoreFromAtTable>(id, state, context);
+}
+
+bool CreateRestoreMultipleIncrementalBackups(
+    TOperationId opId,
+    const TTxTransaction& tx,
+    TOperationContext& context,
+    TVector<ISubOperation::TPtr>& result)
+{
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpRestoreMultipleIncrementalBackups);
+
+    LOG_N("CreateRestoreMultipleIncrementalBackups"
+        << ": opId# " << opId
+        << ", tx# " << tx.ShortDebugString());
+
+    const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
+    const auto& restoreOp = tx.GetRestoreMultipleIncrementalBackups();
+    const auto& dstTableName = restoreOp.GetDstTableName();
+
+    TVector<TPath> srcPaths;
+
+    for (const auto& srcTableName : restoreOp.GetSrcTableNames()) {
+        const auto srcTablePathX = workingDirPath.Child(srcTableName);
+        const auto srcTablePath = TPath::Resolve(srcTablePathX.PathString(), context.SS);
+        {
+            const auto checks = srcTablePath.Check();
+            checks
+                .NotEmpty()
+                .NotUnderDomainUpgrade()
+                .IsAtLocalSchemeShard()
+                .IsResolved()
+                .NotDeleted()
+                .IsTable()
+                .NotUnderDeleting()
+                // .NotUnderOperation()
+                .IsCommonSensePath();
+
+            if (!checks) {
+                result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+                return false;
+            }
+        }
+        srcPaths.push_back(srcTablePath);
+    }
+
+    const auto dstTablePathX = workingDirPath.Child(dstTableName);
+    const auto dstTablePath = TPath::Resolve(dstTablePathX.PathString(), context.SS);
+    {
+        const auto checks = dstTablePath.Check();
+        checks
+            .NotEmpty()
+            .NotUnderDomainUpgrade()
+            .IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotDeleted()
+            .IsTable()
+            .NotUnderDeleting()
+            // .NotUnderOperation()
+            .IsCommonSensePath();
+
+        if (!checks) {
+            result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+            return false;
+        }
+    }
+
+
+    for (auto& srcTablePath : srcPaths) {
+        Y_ABORT_UNLESS(context.SS->Tables.contains(srcTablePath.Base()->PathId));
+        auto srcTable = context.SS->Tables.at(srcTablePath.Base()->PathId);
+    }
+
+    TString errStr;
+    if (!context.SS->CheckApplyIf(tx, errStr)) {
+        result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, errStr)};
+        return false;
+    }
+
+    for (auto& srcTablePath : srcPaths) {
+        if (!context.SS->CheckLocks(srcTablePath.Base()->PathId, tx, errStr)) {
+            result = {CreateReject(opId, NKikimrScheme::StatusMultipleModifications, errStr)};
+            return false;
+        }
+    }
+
+    // check dst locks
+    // lock dst
+
+    // for (auto& srcTablePath : srcPaths) {
+    //     DoCreateLock(opId, srcTablePath.Parent(), srcTablePath, result);
+    // }
+    // DoCreateLock(opId, dstTablePath.Parent(), dstTablePath, result);
+
+    {
+        auto outTx = TransactionTemplate(srcPaths[0].Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable);
+        auto& restoreOp = *outTx.MutableRestoreMultipleIncrementalBackups();
+        restoreOp.SetDstTableName(dstTablePath.LeafName());
+        PathIdFromPathId(dstTablePath.Base()->PathId, restoreOp.MutableDstPathId());
+
+        for (const auto& srcTablePath : srcPaths) {
+            restoreOp.AddSrcTableNames(srcTablePath.LeafName());
+            PathIdFromPathId(srcTablePath.Base()->PathId, restoreOp.AddSrcPathIds());
+        }
+
+        result.push_back(CreateRestoreIncrementalBackupAtTable(NextPartId(opId, result), outTx));
+    }
+
+    // for (auto& srcTablePath : srcPaths) {
+    //     DoDropLock(opId, srcTablePath.Parent(), srcTablePath, result);
+    // }
+    // DoDropLock(opId, dstTablePath.Parent(), dstTablePath, result);
+
+    return true;
+}
+
+TVector<ISubOperation::TPtr> CreateRestoreMultipleIncrementalBackups(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+    TVector<ISubOperation::TPtr> result;
+    CreateRestoreMultipleIncrementalBackups(opId, tx, context, result);
+    return result;
 }
 
 } // namespace NKikimr::NSchemeShard

@@ -165,6 +165,10 @@ bool TPathElement::IsOlapStore() const {
     return PathType == EPathType::EPathTypeColumnStore;
 }
 
+bool TPathElement::IsBackupCollection() const {
+    return PathType == EPathType::EPathTypeBackupCollection;
+}
+
 bool TPathElement::IsColumnTable() const {
     return PathType == EPathType::EPathTypeColumnTable;
 }
@@ -187,7 +191,7 @@ bool TPathElement::IsContainer() const {
 }
 
 bool TPathElement::IsLikeDirectory() const {
-    return IsDirectory() || IsDomainRoot() || IsOlapStore() || IsTableIndex();
+    return IsDirectory() || IsDomainRoot() || IsOlapStore() || IsTableIndex() || IsBackupCollection();
 }
 
 bool TPathElement::HasActiveChanges() const {

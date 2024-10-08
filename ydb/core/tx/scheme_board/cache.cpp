@@ -763,6 +763,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             FileStoreInfo.Drop();
             ViewInfo.Drop();
             ResourcePoolInfo.Drop();
+            BackupCollectionInfo.Drop();
         }
 
         void FillTableInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
@@ -1278,6 +1279,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             DESCRIPTION_PART(FileStoreInfo);
             DESCRIPTION_PART(ViewInfo);
             DESCRIPTION_PART(ResourcePoolInfo);
+            DESCRIPTION_PART(BackupCollectionInfo);
 
             #undef DESCRIPTION_PART
 
@@ -1610,6 +1612,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 Kind = TNavigate::KindResourcePool;
                 FillInfo(Kind, ResourcePoolInfo, std::move(*pathDesc.MutableResourcePoolDescription()));
                 break;
+            case NKikimrSchemeOp::EPathTypeBackupCollection:
+                Kind = TNavigate::KindBackupCollection;
+                FillInfo(Kind, BackupCollectionInfo, std::move(*pathDesc.MutableBackupCollectionDescription()));
+                break;
             case NKikimrSchemeOp::EPathTypeInvalid:
                 Y_DEBUG_ABORT("Invalid path type");
                 break;
@@ -1682,6 +1688,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         break;
                     case NKikimrSchemeOp::EPathTypeResourcePool:
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindResourcePool);
+                        break;
+                    case NKikimrSchemeOp::EPathTypeBackupCollection:
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindBackupCollection);
                         break;
                     case NKikimrSchemeOp::EPathTypeTableIndex:
                     case NKikimrSchemeOp::EPathTypeInvalid:
@@ -1904,6 +1913,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.FileStoreInfo = FileStoreInfo;
             entry.ViewInfo = ViewInfo;
             entry.ResourcePoolInfo = ResourcePoolInfo;
+            entry.BackupCollectionInfo = BackupCollectionInfo;
         }
 
         bool CheckColumns(TResolveContext* context, TResolve::TEntry& entry,
@@ -2201,6 +2211,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         // ResourcePool specific
         TIntrusivePtr<TNavigate::TResourcePoolInfo> ResourcePoolInfo;
+
+        // BackupCollection specific
+        TIntrusivePtr<TNavigate::TBackupCollectionInfo> BackupCollectionInfo;
 
     }; // TCacheItem
 

@@ -51,12 +51,59 @@ public:
         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
 
+    static void FillSrcSnapshot(const TTxState* const txState, ui64 dstDatashardId, NKikimrTxDataShard::TSendSnapshot& snapshot) {
+        snapshot.SetTableId_Deprecated(txState->SourcePathId.LocalPathId);
+        snapshot.MutableTableId()->SetOwnerId(txState->SourcePathId.OwnerId);
+        snapshot.MutableTableId()->SetTableId(txState->SourcePathId.LocalPathId);
+        snapshot.AddSendTo()->SetShard(dstDatashardId);
+    }
+
+    static void FillNotice(const TPathId& pathId, TOperationContext& context, NKikimrTxDataShard::TCreateCdcStreamNotice& notice) {
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
+        auto path = context.SS->PathsById.at(pathId);
+
+        Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
+        auto table = context.SS->Tables.at(pathId);
+
+        PathIdFromPathId(pathId, notice.MutablePathId());
+        notice.SetTableSchemaVersion(table->AlterVersion + 1);
+
+        bool found = false;
+        for (const auto& [childName, childPathId] : path->GetChildren()) {
+            Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
+            auto childPath = context.SS->PathsById.at(childPathId);
+
+            if (!childPath->IsCdcStream() || childPath->Dropped()) {
+                continue;
+            }
+
+            Y_ABORT_UNLESS(context.SS->CdcStreams.contains(childPathId));
+            auto stream = context.SS->CdcStreams.at(childPathId);
+
+            if (stream->State != TCdcStreamInfo::EState::ECdcStreamStateInvalid) {
+                continue;
+            }
+
+            Y_VERIFY_S(!found, "Too many cdc streams are planned to create"
+                << ": found# " << PathIdFromPathId(notice.GetStreamDescription().GetPathId())
+                << ", another# " << childPathId);
+            found = true;
+
+            Y_ABORT_UNLESS(stream->AlterData);
+            context.SS->DescribeCdcStream(childPathId, childName, stream->AlterData, *notice.MutableStreamDescription());
+
+            if (stream->AlterData->State == TCdcStreamInfo::EState::ECdcStreamStateScan) {
+                notice.SetSnapshotName("ChangefeedInitialScan");
+            }
+        }
+    }
+
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      DebugHint() << " ProgressState"
-                     << " at tablet" << ssId);
+                     << " at tablet " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -108,11 +155,16 @@ public:
             // Send "SendParts" transaction to source datashard
             NKikimrTxDataShard::TFlatSchemeTransaction oldShardTx;
             context.SS->FillSeqNo(oldShardTx, seqNo);
-            oldShardTx.MutableSendSnapshot()->SetTableId_Deprecated(txState->SourcePathId.LocalPathId);
-            oldShardTx.MutableSendSnapshot()->MutableTableId()->SetOwnerId(txState->SourcePathId.OwnerId);
-            oldShardTx.MutableSendSnapshot()->MutableTableId()->SetTableId(txState->SourcePathId.LocalPathId);
-            oldShardTx.MutableSendSnapshot()->AddSendTo()->SetShard(ui64(dstDatashardId));
-            oldShardTx.SetReadOnly(true);
+
+            if (txState->CdcPathId != InvalidPathId) {
+                auto& combined = *oldShardTx.MutableCreateIncrementalBackupSrc();
+                FillSrcSnapshot(txState, ui64(dstDatashardId), *combined.MutableSendSnapshot());
+                FillNotice(txState->CdcPathId, context, *combined.MutableCreateCdcStreamNotice());
+            } else {
+                FillSrcSnapshot(txState, ui64(dstDatashardId), *oldShardTx.MutableSendSnapshot());
+                oldShardTx.SetReadOnly(true);
+            }
+
             auto srcEvent = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, oldShardTx.SerializeAsString(), context.Ctx);
             context.OnComplete.BindMsgToPipe(OperationId, srcDatashardId, srcShardIdx, srcEvent.Release());
         }
@@ -201,7 +253,29 @@ public:
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
 
+        // --->
+
+        if (txState->CdcPathId != InvalidPathId) {
+            TPathId srcPathId = txState->SourcePathId;
+
+            Y_ABORT_UNLESS(context.SS->PathsById.contains(srcPathId));
+            auto srcPath = context.SS->PathsById.at(srcPathId);
+
+            Y_ABORT_UNLESS(context.SS->Tables.contains(srcPathId));
+            auto srcTable = context.SS->Tables.at(srcPathId);
+
+            srcTable->AlterVersion += 1;
+
+            context.SS->PersistTableAlterVersion(db, srcPathId, table);
+
+            context.SS->ClearDescribePathCaches(path);
+            context.OnComplete.PublishToSchemeBoard(OperationId, srcPathId);
+        }
+
+        // <---
+
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
+
         return true;
     }
 
@@ -255,7 +329,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvPrivate::TEvCompleteBarrier"
                                << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet" << ssId);
+                               << ", at tablet " << ssId);
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -373,7 +447,7 @@ public:
                         .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of copying base table
                 } else {
                     checks
-                        .NotUnderOperation()
+                        // .NotUnderOperation()
                         .IsCommonSensePath()
                         .IsLikeDirectory();
                 }
@@ -381,6 +455,7 @@ public:
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
+                Y_ABORT("parent: %s, %s", parent.PathString().c_str(), checks.GetError().c_str());
                 return result;
             }
         }
@@ -407,8 +482,11 @@ public:
                 }
             }
 
+            // FIXME: additional checks when with cdc
+
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
+                Y_ABORT("srcPath: %s", srcPath.PathString().c_str());
                 return result;
             }
         }
@@ -454,6 +532,7 @@ public:
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
+                Y_ABORT("dstPath: %s, %s", dstPath.PathString().c_str(), checks.GetError().c_str());
                 return result;
             }
         }
@@ -578,6 +657,7 @@ public:
             }
         }
 
+
         auto guard = context.DbGuard();
         TPathId allocatedPathId = context.SS->AllocatePathId();
         context.MemChanges.GrabNewPath(context.SS, allocatedPathId);
@@ -613,6 +693,9 @@ public:
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCopyTable, newTable->PathId, srcPath.Base()->PathId);
         txState.State = TTxState::CreateParts;
+        if (Transaction.GetCreateTable().HasCreateCdcStream()) {
+            txState.CdcPathId = srcPath.Base()->PathId;
+        }
 
         TShardInfo datashardInfo = TShardInfo::DataShardInfo(OperationId.GetTxId(), newTable->PathId);
         datashardInfo.BindedChannels = channelsBinding;
@@ -733,6 +816,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             .IsCommonSensePath(); //forbid copy impl index tables directly
 
         if (!checks) {
+            Y_ABORT("%s", srcPath.PathString().c_str());
             return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
         }
     }
@@ -770,6 +854,9 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         operation->SetOmitFollowers(copying.GetOmitFollowers());
         operation->SetIsBackup(copying.GetIsBackup());
         operation->MutablePartitionConfig()->CopyFrom(copying.GetPartitionConfig());
+        if (copying.HasCreateCdcStream()) {
+            operation->MutableCreateCdcStream()->CopyFrom(copying.GetCreateCdcStream());
+        }
 
         result.push_back(CreateCopyTable(NextPartId(nextId, result), schema, sequences));
     }

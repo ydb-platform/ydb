@@ -361,7 +361,20 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackup:
         case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
+        case NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups:
             return *modifyScheme.MutableRestoreIncrementalBackup()->MutableSrcTableName();
+        case NKikimrSchemeOp::ESchemeOpCreateBackupCollection:
+            return *modifyScheme.MutableCreateBackupCollection()->MutableName();
+        case NKikimrSchemeOp::ESchemeOpAlterBackupCollection:
+            return *modifyScheme.MutableAlterBackupCollection()->MutableName();
+        case NKikimrSchemeOp::ESchemeOpDropBackupCollection:
+            return *modifyScheme.MutableDropBackupCollection()->MutableName();
+        case NKikimrSchemeOp::ESchemeOpBackupBackupCollection:
+            return *modifyScheme.MutableBackupBackupCollection()->MutableName();
+        case NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection:
+            return *modifyScheme.MutableBackupIncrementalBackupCollection()->MutableName();
+        case NKikimrSchemeOp::ESchemeOpRestoreBackupCollection:
+            return *modifyScheme.MutableRestoreBackupCollection()->MutableName();
         }
     }
 
@@ -622,6 +635,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropContinuousBackup:
         case NKikimrSchemeOp::ESchemeOpAlterResourcePool:
         case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackup:
+        case NKikimrSchemeOp::ESchemeOpAlterBackupCollection:
+        case NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups:
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
@@ -646,6 +661,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropExternalDataSource:
         case NKikimrSchemeOp::ESchemeOpDropView:
         case NKikimrSchemeOp::ESchemeOpDropResourcePool:
+        case NKikimrSchemeOp::ESchemeOpDropBackupCollection:
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
@@ -708,6 +724,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateExternalDataSource:
         case NKikimrSchemeOp::ESchemeOpCreateView:
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
+        case NKikimrSchemeOp::ESchemeOpCreateBackupCollection:
+        case NKikimrSchemeOp::ESchemeOpBackupBackupCollection:
+        case NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection:
+        case NKikimrSchemeOp::ESchemeOpRestoreBackupCollection:
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = workingDir;

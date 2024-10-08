@@ -88,6 +88,7 @@ NKikimrScheme::TEvModifySchemeTransaction GetRecordForPrint(const NKikimrScheme:
 }
 
 THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request, TOperationContext& context) {
+    Cerr << "--> Ignite " << request.Record.DebugString() << Endl;
     THolder<TProposeResponse> response = nullptr;
 
     auto selfId = SelfTabletId();
@@ -770,10 +771,14 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
         if (tx.GetCreateTable().HasCopyFromTable()) {
-            result.Transactions.push_back(tx);
-            return result;
+            Y_ABORT("%s", tx.DebugString().c_str());
+            // result.Transactions.push_back(tx);
+            // return result;
         }
         targetName = tx.GetCreateTable().GetName();
+        Cerr << Endl;
+        Cerr << "--->" << targetName << Endl;
+        Cerr << Endl;
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
         targetName = tx.GetCreatePersQueueGroup().GetName();
@@ -817,6 +822,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
         targetName = tx.GetCreateResourcePool().GetName();
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection:
+        targetName = tx.GetCreateBackupCollection().GetName();
         break;
     default:
         result.Transactions.push_back(tx);
@@ -911,6 +919,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
             create.MutableCreateResourcePool()->SetName(name);
             break;
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection:
+            create.MutableCreateBackupCollection()->SetName(name);
+            break;
         default:
             Y_UNREACHABLE();
         }
@@ -978,7 +989,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
     return result;
 }
 
-ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::ETxState txState) const {
+ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::ETxState txState, TOperationContext& context) const {
     switch (txType) {
     case TTxState::ETxType::TxMkDir:
         return CreateMkDir(NextPartId(), txState);
@@ -1191,7 +1202,10 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateAlterResourcePool(NextPartId(), txState);
 
     case TTxState::ETxType::TxRestoreIncrementalBackupAtTable:
-        return CreateRestoreIncrementalBackupAtTable(NextPartId(), txState);
+        return CreateRestoreIncrementalBackupAtTable(NextPartId(), txState, context);
+
+    case TTxState::ETxType::TxCreateBackupCollection:
+        return CreateNewBackupCollection(NextPartId(), txState);
 
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
@@ -1446,6 +1460,24 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         return CreateRestoreIncrementalBackup(NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
+
+    // BackupCollection
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection:
+        return {CreateNewBackupCollection(NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBackupCollection:
+        Y_ABORT("unimplemented");
+        // return {CreateAlterBackupCollection(NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection:
+        Y_ABORT("unimplemented");
+        // return {CreateDropBackupCollection(NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection:
+        return CreateBackupBackupCollection(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
+        return CreateBackupIncrementalBackupCollection(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
+        return CreateRestoreBackupCollection(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreMultipleIncrementalBackups:
+        return CreateRestoreMultipleIncrementalBackups(NextPartId(), tx, context);
     }
 
     Y_UNREACHABLE();

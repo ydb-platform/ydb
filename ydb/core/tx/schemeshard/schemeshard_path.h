@@ -6,6 +6,7 @@
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 
 #include <util/generic/maybe.h>
+#include <source_location>
 
 namespace NKikimr::NSchemeShard {
 
@@ -20,6 +21,7 @@ public:
     class TChecker {
         using EStatus = NKikimrScheme::EStatus;
 
+        std::source_location Location;
         const TPath& Path;
         mutable bool Failed;
         mutable EStatus Status;
@@ -30,7 +32,7 @@ public:
         const TChecker& Fail(EStatus status, const TString& error) const;
 
     public:
-        explicit TChecker(const TPath& path);
+        explicit TChecker(const TPath& path, const std::source_location location);
 
         explicit operator bool() const;
         EStatus GetStatus() const;
@@ -123,7 +125,7 @@ public:
 
     static TPath Init(const TPathId pathId, TSchemeShard* ss);
 
-    TChecker Check() const;
+    TChecker Check(const std::source_location location = std::source_location::current()) const;
     bool IsEmpty() const;
     bool IsResolved() const;
 

@@ -138,6 +138,7 @@ struct TTxState {
         item(TxDropResourcePool, 92) \
         item(TxAlterResourcePool, 93) \
         item(TxRestoreIncrementalBackupAtTable, 94) \
+        item(TxCreateBackupCollection, 95) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -268,6 +269,9 @@ struct TTxState {
     TStepId MinStep = InvalidStepId;
     TStepId PlanStep = InvalidStepId;
 
+    TPathId CdcPathId = InvalidPathId;              // path (dir or table) being modified stored in extra data, used by backup
+    ui64 LoopSeqNo = 0;                             // stored in extra data by multi restore
+
     // persist - TxShards:
     TVector<TShardOperation> Shards; // shards + operations on them
     bool NeedUpdateObject = false;
@@ -355,6 +359,7 @@ struct TTxState {
         case TxCopySequence:
         case TxCreateContinuousBackup:
         case TxCreateResourcePool:
+        case TxCreateBackupCollection:
             return true;
         case TxInitializeBuildIndex: //this is more like alter
         case TxCreateCdcStreamAtTable:
@@ -498,6 +503,7 @@ struct TTxState {
         case TxCreateContinuousBackup:
         case TxCreateResourcePool:
         case TxRestoreIncrementalBackupAtTable:
+        case TxCreateBackupCollection:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -606,6 +612,7 @@ struct TTxState {
         case TxCreateContinuousBackup:
         case TxCreateResourcePool:
         case TxRestoreIncrementalBackupAtTable:
+        case TxCreateBackupCollection:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:

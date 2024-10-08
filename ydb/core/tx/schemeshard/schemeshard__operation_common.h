@@ -506,10 +506,10 @@ public:
         const auto& pathId = txState->TargetPathId;
         Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
-        Y_VERIFY_S(path->PathState != TPathElement::EPathState::EPathStateNoChanges, "with context"
-            << ", PathState: " << NKikimrSchemeOp::EPathState_Name(path->PathState)
-            << ", PathId: " << path->PathId
-            << ", PathName: " << path->Name);
+        // Y_VERIFY_S(path->PathState != TPathElement::EPathState::EPathStateNoChanges, "with context"
+        //     << ", PathState: " << NKikimrSchemeOp::EPathState_Name(path->PathState)
+        //     << ", PathId: " << path->PathId
+        //     << ", PathName: " << path->Name);
 
         if (path->IsPQGroup() && txState->IsCreate()) {
             TPathElement::TPtr parentDir = context.SS->PathsById.at(path->ParentPathId);

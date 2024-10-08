@@ -569,7 +569,8 @@ public:
                 if (InitialScan) {
                     checks.IsUnderTheSameOperation(OperationId.GetTxId()); // lock op
                 } else {
-                    checks.NotUnderOperation();
+                    checks.IsUnderTheSameOperation(OperationId.GetTxId()); // lock op
+                    // checks.NotUnderOperation();
                 }
             }
 
@@ -749,6 +750,21 @@ static void FillModifySchemaForCdc(
     }
 }
 
+void DoCreateStreamImpl(
+        TVector<ISubOperation::TPtr>& result,
+        const NKikimrSchemeOp::TCreateCdcStream& op,
+        const TOperationId& opId,
+        const TPath& workingDirPath,
+        const TPath& tablePath,
+        const bool acceptExisted,
+        const bool initialScan)
+{
+    Y_UNUSED(workingDirPath);
+    auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamImpl);
+    FillModifySchemaForCdc(outTx, op, opId, acceptExisted, initialScan);
+    result.push_back(CreateNewCdcStreamImpl(NextPartId(opId, result), outTx));
+}
+
 void DoCreateStream(
         TVector<ISubOperation::TPtr>& result,
         const NKikimrSchemeOp::TCreateCdcStream& op,
@@ -758,11 +774,7 @@ void DoCreateStream(
         const bool acceptExisted,
         const bool initialScan)
 {
-    {
-        auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamImpl);
-        FillModifySchemaForCdc(outTx, op, opId, acceptExisted, initialScan);
-        result.push_back(CreateNewCdcStreamImpl(NextPartId(opId, result), outTx));
-    }
+    DoCreateStreamImpl(result, op, opId, workingDirPath, tablePath, acceptExisted, initialScan);
     {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamAtTable);
         FillModifySchemaForCdc(outTx, op, opId, acceptExisted, initialScan);
@@ -880,6 +892,7 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
 {
     const auto tablePath = workingDirPath.Child(tableName);
     if (auto reject = RejectOnTablePathChecks(opId, tablePath, restore)) {
+        // Y_ABORT("'%s' '%s' '%s'", workingDirPath.PathString().c_str(), tableName.c_str(), streamName.c_str());
         return reject;
     }
 

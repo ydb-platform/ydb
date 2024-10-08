@@ -253,6 +253,7 @@ public:
     THashMap<TPathId, TExternalDataSourceInfo::TPtr> ExternalDataSources;
     THashMap<TPathId, TViewInfo::TPtr> Views;
     THashMap<TPathId, TResourcePoolInfo::TPtr> ResourcePools;
+    THashMap<TPathId, TBackupCollectionInfo::TPtr> BackupCollections;
 
     TTempDirsState TempDirsState;
 
@@ -373,6 +374,8 @@ public:
 
     TActorId DelayedInitTenantDestination;
     TAutoPtr<TEvSchemeShard::TEvInitTenantSchemeShardResult> DelayedInitTenantReply;
+
+    THashMap<TTxId, std::function<void(const TActorContext& ctx, TActorId self, TEvTxAllocatorClient::TEvAllocateResult::TPtr& allocateResult)>> HackPostponedOps;
 
     NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory{NExternalSource::CreateExternalSourceFactory({})};
 
@@ -822,6 +825,8 @@ public:
     // ResourcePool
     void PersistResourcePool(NIceDb::TNiceDb& db, TPathId pathId, const TResourcePoolInfo::TPtr resourcePool);
     void PersistRemoveResourcePool(NIceDb::TNiceDb& db, TPathId pathId);
+
+    void PersistBackupCollection(NIceDb::TNiceDb &db, TPathId pathId, const TBackupCollectionInfo::TPtr backupCollection);
 
     TTabletId GetGlobalHive(const TActorContext& ctx) const;
 

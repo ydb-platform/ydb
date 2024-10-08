@@ -150,6 +150,9 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     void Adjust(NKikimrChangeExchange::TChangeRecord& record) const {
         record.SetPathOwnerId(TargetTablePathId.OwnerId);
         record.SetLocalPathId(TargetTablePathId.LocalPathId);
+        if (SeqNo) {
+            record.SetTxIdSeq(*SeqNo);
+        }
 
         switch(Type) {
             case ETableChangeSenderType::AsyncIndex:
@@ -296,13 +299,15 @@ public:
         ui64 shardId,
         const TPathId& targetTablePathId,
         const TMap<TTag, TTag>& tagMap,
-        ETableChangeSenderType type)
+        ETableChangeSenderType type,
+        std::optional<ui64> seqNo)
             : Type(type)
             , Parent(parent)
             , DataShard(dataShard)
             , ShardId(shardId)
             , TargetTablePathId(targetTablePathId)
             , TagMap(tagMap)
+            , SeqNo(seqNo)
             , LeaseConfirmationCookie(0)
             , LastRecordOrder(0)
     {
@@ -328,6 +333,7 @@ private:
     const ui64 ShardId;
     const TPathId TargetTablePathId;
     const TMap<TTag, TTag> TagMap; // from main to index
+    const std::optional<ui64> SeqNo;
     mutable TMaybe<TString> LogPrefix;
 
     TActorId LeaderPipeCache;
@@ -348,7 +354,8 @@ IActor* CreateTableChangeSenderShard(
     ui64 shardId,
     const TPathId& targetTablePathId,
     const TMap<TTag, TTag>& tagMap,
-    ETableChangeSenderType type)
+    ETableChangeSenderType type,
+    std::optional<ui64> seqNo)
 {
     return new TTableChangeSenderShard(
         parent,
@@ -356,7 +363,8 @@ IActor* CreateTableChangeSenderShard(
         shardId,
         targetTablePathId,
         tagMap,
-        type);
+        type,
+        seqNo);
 }
 
 } // namespace NKikimr::NDataShard

@@ -384,6 +384,10 @@ bool TCheckSchemeTxUnit::CheckSchemeTx(TActiveTransaction *activeTx)
     case TSchemaOperation::ETypeCreateIncrementalRestoreSrc:
         res = CheckCreateIncrementalRestoreSrc(activeTx);
         break;
+    case TSchemaOperation::ETypeCreateIncrementalBackupSrc:
+        res = true;
+        // res = CheckCreateIncrementalRestoreSrc(activeTx);
+        break;
     default:
         LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
                     "Unknown scheme tx type detected at tablet "

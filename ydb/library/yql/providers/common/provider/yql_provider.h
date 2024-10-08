@@ -96,6 +96,17 @@ struct TWriteReplicationSettings {
     {}
 };
 
+struct TWriteBackupCollectionSettings {
+    NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
+    NNodes::TMaybeNode<NNodes::TCoBackupCollectionEntryList> Entries;
+    NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> BackupCollectionSettings;
+    NNodes::TCoNameValueTupleList Other;
+
+    TWriteBackupCollectionSettings(const NNodes::TCoNameValueTupleList& other)
+        : Other(other)
+    {}
+};
+
 struct TWriteRoleSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
     NNodes::TMaybeNode<NNodes::TCoAtomList> Roles;
@@ -167,6 +178,7 @@ TVector<TString> GetResOrPullColumnHints(const TExprNode& node);
 TWriteTableSettings ParseWriteTableSettings(NNodes::TExprList node, TExprContext& ctx);
 TWriteTopicSettings ParseWriteTopicSettings(NNodes::TExprList node, TExprContext& ctx);
 TWriteReplicationSettings ParseWriteReplicationSettings(NNodes::TExprList node, TExprContext& ctx);
+TWriteBackupCollectionSettings ParseWriteBackupCollectionSettings(NNodes::TExprList node, TExprContext& ctx);
 
 TWriteRoleSettings ParseWriteRoleSettings(NNodes::TExprList node, TExprContext& ctx);
 TWriteObjectSettings ParseWriteObjectSettings(NNodes::TExprList node, TExprContext& ctx);

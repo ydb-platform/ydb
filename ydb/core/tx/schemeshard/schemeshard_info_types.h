@@ -3417,6 +3417,25 @@ struct TResourcePoolInfo : TSimpleRefCount<TResourcePoolInfo> {
     NKikimrSchemeOp::TResourcePoolProperties Properties;
 };
 
+struct TBackupCollectionInfo : TSimpleRefCount<TBackupCollectionInfo> {
+    using TPtr = TIntrusivePtr<TBackupCollectionInfo>;
+
+    static TPtr New() {
+        return new TBackupCollectionInfo();
+    }
+
+    static TPtr Create(const NKikimrSchemeOp::TBackupCollection& desc) {
+        TPtr result = New();
+
+        result->Properties = desc.GetProperties();
+
+        return result;
+    }
+
+    ui64 AlterVersion = 0;
+    NKikimrSchemeOp::TBackupCollectionProperties Properties;
+};
+
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     const THashMap<ui32, TTableInfo::TColumn>& sourceColumns,
     const THashMap<ui32, TTableInfo::TColumn>& alterColumns,

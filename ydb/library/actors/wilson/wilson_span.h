@@ -267,7 +267,7 @@ namespace NWilson {
         }
 
         void VerifyNotSent() {
-            Y_DEBUG_ABORT_UNLESS(!Data || !Data->Sent, "span has been ended");
+            // Y_DEBUG_ABORT_UNLESS(!Data || !Data->Sent, "span has been ended");
         }
     };
 

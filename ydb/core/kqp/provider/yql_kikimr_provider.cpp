@@ -74,6 +74,12 @@ struct TKikimrData {
         DataSinkNames.insert(TKiDropSequence::CallableName());
         DataSinkNames.insert(TKiAlterSequence::CallableName());
         DataSinkNames.insert(TKiAnalyzeTable::CallableName());
+        DataSinkNames.insert(TKiCreateBackupCollection::CallableName());
+        DataSinkNames.insert(TKiAlterBackupCollection::CallableName());
+        DataSinkNames.insert(TKiDropBackupCollection::CallableName());
+        DataSinkNames.insert(TKiBackup::CallableName());
+        DataSinkNames.insert(TKiBackupIncremental::CallableName());
+        DataSinkNames.insert(TKiRestore::CallableName());
 
         CommitModes.insert(CommitModeFlush);
         CommitModes.insert(CommitModeRollback);
@@ -120,7 +126,13 @@ struct TKikimrData {
             TYdbOperation::AlterGroup |
             TYdbOperation::DropGroup |
             TYdbOperation::RenameGroup |
-            TYdbOperation::ModifyPermission;
+            TYdbOperation::ModifyPermission |
+            TYdbOperation::CreateBackupCollection |
+            TYdbOperation::AlterBackupCollection |
+            TYdbOperation::DropBackupCollection |
+            TYdbOperation::Backup |
+            TYdbOperation::BackupIncremental |
+            TYdbOperation::Restore;
 
         SystemColumns = {
             {"_yql_partition_id", NKikimr::NUdf::EDataSlot::Uint64}
@@ -432,6 +444,10 @@ bool TKikimrKey::Extract(const TExprNode& key) {
         KeyType = Type::PGObject;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
         ObjectType = key.Child(0)->Child(2)->Child(0)->Content();
+    } else if (tagName == "backupCollection" || tagName == "backup" || tagName == "restore") {
+        KeyType = Type::BackupCollection;
+        Target = key.Child(0)->Child(1)->Child(0)->Content();
+        ExplicitPrefix = key.Child(0)->Child(2)->Child(0)->Content();
     } else {
         Ctx.AddError(TIssue(Ctx.GetPosition(key.Child(0)->Pos()), TString("Unexpected tag for kikimr key: ") + tagName));
         return false;

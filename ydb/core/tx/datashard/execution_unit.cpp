@@ -152,6 +152,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateExecuteWriteUnit(dataShard, pipeline);
     case EExecutionUnitKind::CreateIncrementalRestoreSrc:
         return CreateIncrementalRestoreSrcUnit(dataShard, pipeline);
+    case EExecutionUnitKind::CreateIncrementalBackupSrc:
+        return CreateIncrementalBackupSrcUnit(dataShard, pipeline);
     default:
         Y_FAIL_S("Unexpected execution kind " << kind << " (" << (ui32)kind << ")");
     }

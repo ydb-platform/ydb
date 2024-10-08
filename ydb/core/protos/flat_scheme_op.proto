@@ -423,6 +423,9 @@ message TTableDescription {
     // on table creation to allow system column names (started with __ydb_)
     // It won't be present on describes and won't be preserved
     optional bool SystemColumnNamesAllowed = 42;
+
+    // again create only
+    optional TCreateCdcStream CreateCdcStream = 44;
 }
 
 message TDictionaryEncodingSettings {
@@ -1023,6 +1026,15 @@ message TRestoreIncrementalBackup {
 
     optional string DstTableName = 2;
     optional NKikimrProto.TPathID DstPathId = 4;
+
+    optional uint64 SeqNo = 5;
+}
+
+message TRestoreMultipleIncrementalBackups {
+    repeated string SrcTableNames = 1;
+    optional string DstTableName = 2;
+    repeated NKikimrProto.TPathID SrcPathIds = 3;
+    optional NKikimrProto.TPathID DstPathId = 4;
 }
 
 enum EIndexType {
@@ -1080,6 +1092,20 @@ message TIndexCreationConfig {
     }
 }
 
+message TGenericTxInFlyExtraData {
+    message TTxRestoreIncrementalBackupAtTableExtraData {
+        optional uint64 LoopSeqNo = 1;
+    }
+    message TTxCopyTableExtraData {
+        optional NKikimrProto.TPathID CdcPathId = 1;
+    }
+
+    oneof TxExtraData {
+        TTxRestoreIncrementalBackupAtTableExtraData TxRestoreIncrementalBackupAtTableExtraData = 1;
+        TTxCopyTableExtraData TxCopyTableExtraData = 2;
+    }
+}
+
 message TIndexAlteringConfig {
     optional string Name = 1;
     optional EIndexState State = 2;
@@ -1128,10 +1154,12 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
     optional bool OmitIndexes = 3 [default = false];
     optional bool OmitFollowers = 4 [default = false];
     optional bool IsBackup = 5 [default = false];
+    optional TCreateCdcStream CreateCdcStream = 6;
 }
 
 message TConsistentTableCopyingConfig {
     repeated TCopyTableConfig CopyTableDescriptions = 1;
+    optional string DstBasePath = 2;
 }
 
 message TYTSettings {
@@ -1669,6 +1697,14 @@ enum EOperationType {
 
     ESchemeOpRestoreIncrementalBackup = 103;
     ESchemeOpRestoreIncrementalBackupAtTable = 104;
+
+    ESchemeOpCreateBackupCollection = 105;
+    ESchemeOpAlterBackupCollection = 106;
+    ESchemeOpDropBackupCollection = 107;
+    ESchemeOpBackupBackupCollection = 108;
+    ESchemeOpBackupIncrementalBackupCollection = 109;
+    ESchemeOpRestoreBackupCollection = 110;
+    ESchemeOpRestoreMultipleIncrementalBackups = 111;
 }
 
 message TApplyIf {
@@ -1755,6 +1791,43 @@ message TAlterShards {
         TShardingModification Modification = 20;
         TShardingTransfers Transfer = 21;
     }
+}
+
+message TBackupCollectionProperties {
+    message TBackupEntry {
+        enum EType {
+            ETypeInvalid = 0;
+            ETypeTable = 1;
+        }
+
+        optional EType Type = 1;
+        optional string Path = 2;
+    }
+
+    message TExplicitEntryList {
+        repeated TBackupEntry Entries = 1;
+    }
+
+    message TIncrementalBackupConfig {
+
+    }
+
+    oneof Entries {
+        google.protobuf.NullValue Database = 1;
+        TExplicitEntryList ExplicitEntryList = 2;
+    }
+
+    // non-empty enables data-collection
+    optional TIncrementalBackupConfig IncrementalBackupConfig = 3;
+
+    oneof Storage {
+        google.protobuf.NullValue Cluster = 4;
+    }
+}
+
+message TBackupCollection {
+    optional string Name = 1;
+    optional TBackupCollectionProperties Properties = 2;
 }
 
 // Request for scheme modification
@@ -1852,6 +1925,14 @@ message TModifyScheme {
     optional TResourcePoolDescription CreateResourcePool = 72;
 
     optional TRestoreIncrementalBackup RestoreIncrementalBackup = 73;
+
+    optional TBackupCollection CreateBackupCollection = 74;
+    optional TBackupCollection AlterBackupCollection = 75;
+    optional TBackupCollection DropBackupCollection = 76;
+    optional TBackupCollection BackupBackupCollection = 77;
+    optional TBackupCollection BackupIncrementalBackupCollection = 78;
+    optional TBackupCollection RestoreBackupCollection = 79;
+    optional TRestoreMultipleIncrementalBackups RestoreMultipleIncrementalBackups = 80;
 }
 
 message TCopySequence {
@@ -1917,6 +1998,7 @@ enum EPathType {
     EPathTypeExternalDataSource = 19;
     EPathTypeView = 20;
     EPathTypeResourcePool = 21;
+    EPathTypeBackupCollection = 22;
 }
 
 enum EPathSubType {
@@ -1973,6 +2055,7 @@ message TPathVersion {
     optional uint64 ExternalDataSourceVersion = 28;
     optional uint64 ViewVersion = 29;
     optional uint64 ResourcePoolVersion = 30;
+    optional uint64 BackupCollectionVersion = 31;
 }
 
 // Describes single path
@@ -2062,6 +2145,7 @@ message TPathDescription {
     optional TExternalDataSourceDescription ExternalDataSourceDescription = 28;
     optional TViewDescription ViewDescription = 29;
     optional TResourcePoolDescription ResourcePoolDescription = 30;
+    optional TBackupCollectionDescription BackupCollectionDescription = 31;
 }
 
 // For persisting AlterTable Tx description in Schemeshard internal DB
@@ -2201,4 +2285,11 @@ message TResourcePoolDescription {
     optional NKikimrProto.TPathID PathId = 2;
     optional uint64 Version = 3;
     optional TResourcePoolProperties Properties = 4;
+}
+
+message TBackupCollectionDescription {
+    optional string Name = 1;
+    optional NKikimrProto.TPathID PathId = 2;
+    optional uint64 Version = 3;
+    optional TBackupCollectionProperties Properties = 4;
 }

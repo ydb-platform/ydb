@@ -103,7 +103,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
     {
         ACFL_DEBUG("step", "TTablesManager::Load_Start");
-        TTablesManager tManagerLocal(Self->StoragesManager, Self->TabletID());
+        TTablesManager tManagerLocal(Self->StoragesManager, Self->TabletID(), Self->VersionCounts);
         {
             TMemoryProfileGuard g("TTxInit/TTablesManager");
             if (!tManagerLocal.InitFromDB(db)) {
@@ -119,9 +119,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
             }
         }
         Self->TablesManager = std::move(tManagerLocal);
-        if (Self->TablesManager.HasPrimaryIndex()) {
-            Self->InsertTable->CalcVersionCounts(Self->TablesManager.MutablePrimaryIndex().MutableVersionCounts());
-        }
+        Self->InsertTable->CalcVersionCounts();
 
         Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, Self->TablesManager.GetTables().size());
         Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, Self->TablesManager.GetSchemaPresets().size());
@@ -132,7 +130,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     {
         ACFL_DEBUG("step", "TInsertTable::Load_Start");
         TMemoryProfileGuard g("TTxInit/InsertTable");
-        auto localInsertTable = std::make_unique<NOlap::TInsertTable>();
+        auto localInsertTable = std::make_unique<NOlap::TInsertTable>(Self->VersionCounts);
         for (auto&& i : Self->TablesManager.GetTables()) {
             localInsertTable->RegisterPathInfo(i.first);
         }

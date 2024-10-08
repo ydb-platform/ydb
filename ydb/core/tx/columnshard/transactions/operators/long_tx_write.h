@@ -89,7 +89,7 @@ namespace NKikimr::NColumnShard {
             }
             TBlobGroupSelector dsGroupSelector(owner.Info());
             NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-            owner.InsertTable->Abort(dbTable, WriteIds, owner.TablesManager.MutablePrimaryIndex().MutableVersionCounts());
+            owner.InsertTable->Abort(dbTable, WriteIds);
             return true;
         }
         virtual bool CompleteOnAbort(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {

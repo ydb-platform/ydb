@@ -235,6 +235,7 @@ namespace NYql::NDq {
             // Prepare request
             NConnector::NApi::TReadSplitsRequest request;
             request.set_format(NConnector::NApi::TReadSplitsRequest::ARROW_IPC_STREAMING);
+            request.set_filtering(NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL);
             request.mutable_splits()->Reserve(Splits_.size());
 
             std::for_each(

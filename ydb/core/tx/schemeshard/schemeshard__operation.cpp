@@ -1200,12 +1200,12 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateRestoreIncrementalBackupAtTable(NextPartId(), txState);
 
     // TieringRule
-    case TTxState::ETxType::TxCreateTieringRule:
-        return CreateNewTieringRule(NextPartId(), txState);
-    case TTxState::ETxType::TxDropTieringRule:
-        return CreateDropTieringRule(NextPartId(), txState);
-    case TTxState::ETxType::TxAlterTieringRule:
-        return CreateAlterTieringRule(NextPartId(), txState);
+    case TTxState::ETxType::TxCreateMetadataObject:
+        return CreateNewMetadataObject(NextPartId(), txState);
+    case TTxState::ETxType::TxDropMetadataObject:
+        return CreateDropMetadataObject(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterMetadataObject:
+        return CreateAlterMetadataObject(NextPartId(), txState);
 
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
@@ -1459,11 +1459,11 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
 
     // TieringRule
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTieringRule:
-        return {CreateNewTieringRule(NextPartId(), tx)};
+        return {CreateNewMetadataObject(NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropTieringRule:
-        return {CreateDropTieringRule(NextPartId(), tx)};
+        return {CreateDropMetadataObject(NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTieringRule:
-        return {CreateAlterTieringRule(NextPartId(), tx)};
+        return {CreateAlterMetadataObject(NextPartId(), tx)};
 
     // IncrementalBackup
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:

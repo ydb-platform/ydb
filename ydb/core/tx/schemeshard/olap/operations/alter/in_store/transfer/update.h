@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/update.h>
+#include <ydb/core/tx/schemeshard/operations/abstract/update.h>
 #include <ydb/core/tx/schemeshard/olap/operations/alter/in_store/common/update.h>
 #include <ydb/core/tx/schemeshard/olap/operations/alter/in_store/object.h>
 #include <ydb/core/tx/columnshard/data_sharing/protos/sessions.pb.h>
@@ -18,7 +18,7 @@ private:
         AFL_VERIFY(TargetInStoreTable);
         return TargetInStoreTable->GetTableInfoPtrVerified();
     }
-    virtual std::shared_ptr<ISSEntity> GetTargetSSEntity() const override {
+    virtual std::shared_ptr<NOperations::ISSEntity> GetTargetSSEntity() const override {
         return TargetInStoreTable;
     }
 
@@ -26,7 +26,7 @@ private:
         return NKikimrTxColumnShard::ETransactionKind::TX_KIND_SHARING;
     }
 
-    virtual TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) override;
+    virtual TConclusionStatus DoInitializeImpl(const NOperations::TUpdateInitializationContext& context) override;
 
     virtual TString DoGetShardTxBodyString(const ui64 tabletId, const TMessageSeqNo& /*seqNo*/) const override {
         auto it = DestinationSessions.find(tabletId);

@@ -1,6 +1,6 @@
 #pragma once
 #include "object.h"
-#include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/update.h>
+#include <ydb/core/tx/schemeshard/operations/abstract/update.h>
 #include <ydb/core/tx/schemeshard/olap/operations/alter/common/update.h>
 #include <ydb/core/tx/schemeshard/olap/schema/update.h>
 #include <ydb/core/tx/schemeshard/olap/ttl/update.h>
@@ -13,13 +13,13 @@ private:
     std::optional<TOlapSchemaUpdate> AlterSchema;
     std::optional<TOlapTTLUpdate> AlterTTL;
     std::shared_ptr<TStandaloneTable> TargetStandalone;
-    virtual TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) override;
+    virtual TConclusionStatus DoInitializeImpl(const NOperations::TUpdateInitializationContext& context) override;
 
     virtual std::shared_ptr<TColumnTableInfo> GetTargetTableInfo() const override {
         return TargetStandalone->GetTableInfoPtrVerified();
     }
 
-    virtual std::shared_ptr<ISSEntity> GetTargetSSEntity() const override {
+    virtual std::shared_ptr<NOperations::ISSEntity> GetTargetSSEntity() const override {
         return TargetStandalone;
     }
 

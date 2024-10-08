@@ -5,6 +5,7 @@ SRCS(
     object.cpp
     GLOBAL behaviour.cpp
     ss_checker.cpp
+    checker.cpp
     GLOBAL ss_fetcher.cpp
 )
 

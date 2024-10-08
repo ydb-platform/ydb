@@ -640,12 +640,12 @@ ISubOperation::TPtr CreateDropResourcePool(TOperationId id, TTxState::ETxState s
 ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, TTxState::ETxState state);
 
-ISubOperation::TPtr CreateNewTieringRule(TOperationId id, const TTxTransaction& tx);
-ISubOperation::TPtr CreateNewTieringRule(TOperationId id, TTxState::ETxState state);
-ISubOperation::TPtr CreateAlterTieringRule(TOperationId id, const TTxTransaction& tx);
-ISubOperation::TPtr CreateAlterTieringRule(TOperationId id, TTxState::ETxState state);
-ISubOperation::TPtr CreateDropTieringRule(TOperationId id, const TTxTransaction& tx);
-ISubOperation::TPtr CreateDropTieringRule(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateNewMetadataObject(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewMetadataObject(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateAlterMetadataObject(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateAlterMetadataObject(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateDropMetadataObject(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateDropMetadataObject(TOperationId id, TTxState::ETxState state);
 
 // returns Reject in case of error, nullptr otherwise
 ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table);

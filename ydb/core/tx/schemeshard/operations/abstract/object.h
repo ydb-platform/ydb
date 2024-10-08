@@ -4,7 +4,7 @@
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 
-namespace NKikimr::NSchemeShard::NOlap::NAlter {
+namespace NKikimr::NSchemeShard::NOperations {
 
 class ISSEntityUpdate;
 
@@ -44,8 +44,6 @@ public:
     {
 
     }
-
-    static std::shared_ptr<ISSEntity> GetEntityVerified(TOperationContext& context, const TPath& path);
 };
 
 }

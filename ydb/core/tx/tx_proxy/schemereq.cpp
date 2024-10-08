@@ -365,7 +365,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableRestoreIncrementalBackup()->MutableSrcTableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterTieringRule:
-            return *modifyScheme.MutableAlterTieringRule()->MutableName();
+            return *modifyScheme.MutableCreateTieringRule()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpCreateTieringRule:
             return *modifyScheme.MutableCreateTieringRule()->MutableName();

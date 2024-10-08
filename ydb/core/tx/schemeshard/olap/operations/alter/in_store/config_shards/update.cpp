@@ -1,10 +1,10 @@
 #include "update.h"
-#include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/converter.h>
+#include <ydb/core/tx/schemeshard/olap/operations/alter/common/converter.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
-TConclusionStatus TInStoreShardsUpdate::DoInitializeImpl(const TUpdateInitializationContext& context) {
+TConclusionStatus TInStoreShardsUpdate::DoInitializeImpl(const NOperations::TUpdateInitializationContext& context) {
     const auto& original = context.GetOriginalEntityAsVerified<TInStoreTable>();
     if (!context.GetModification()->GetAlterColumnTable().HasAlterShards()) {
         return TConclusionStatus::Fail("no data about shards altering");
@@ -38,7 +38,7 @@ TConclusionStatus TInStoreShardsUpdate::DoInitializeImpl(const TUpdateInitializa
     auto targetInfo = std::make_shared<TColumnTableInfo>(tableInfo->AlterVersion + 1, std::move(description),
         TMaybe<NKikimrSchemeOp::TColumnStoreSharding>(), context.GetModification()->GetAlterColumnTable());
 
-    TEntityInitializationContext eContext(context.GetSSOperationContext());
+    NOperations::TEntityInitializationContext eContext(context.GetSSOperationContext());
     TargetInStoreTable = std::make_shared<TInStoreTable>(original.GetPathId(), targetInfo, eContext);
 
     return TConclusionStatus::Success();
@@ -64,7 +64,7 @@ void TInStoreShardsUpdate::FillToShardTx(NKikimrTxColumnShard::TCreateTable& inf
     }
 }
 
-NKikimr::TConclusionStatus TInStoreShardsUpdate::DoFinishImpl(const TUpdateFinishContext& context) {
+NKikimr::TConclusionStatus TInStoreShardsUpdate::DoFinishImpl(const NOperations::TUpdateFinishContext& context) {
     auto conclusion = TBase::DoFinishImpl(context);
     if (conclusion.IsFail()) {
         return conclusion;

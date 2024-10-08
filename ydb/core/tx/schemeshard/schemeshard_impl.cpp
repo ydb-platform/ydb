@@ -1520,7 +1520,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateView:
     case TTxState::TxCreateContinuousBackup:
     case TTxState::TxCreateResourcePool:
-    case TTxState::TxCreateTieringRule:
+    case TTxState::TxCreateMetadataObject:
         return TPathElement::EPathState::EPathStateCreate;
     case TTxState::TxAlterPQGroup:
     case TTxState::TxAlterTable:
@@ -1556,7 +1556,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterView:
     case TTxState::TxAlterContinuousBackup:
     case TTxState::TxAlterResourcePool:
-    case TTxState::TxAlterTieringRule:
+    case TTxState::TxAlterMetadataObject:
         return TPathElement::EPathState::EPathStateAlter;
     case TTxState::TxDropTable:
     case TTxState::TxDropPQGroup:
@@ -1581,7 +1581,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropView:
     case TTxState::TxDropContinuousBackup:
     case TTxState::TxDropResourcePool:
-    case TTxState::TxDropTieringRule:
+    case TTxState::TxDropMetadataObject:
         return TPathElement::EPathState::EPathStateDrop;
     case TTxState::TxBackup:
         return TPathElement::EPathState::EPathStateBackup;

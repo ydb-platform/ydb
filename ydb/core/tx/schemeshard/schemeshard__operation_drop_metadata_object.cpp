@@ -1,7 +1,8 @@
-#include "schemeshard__operation_common_tiering_rule.h"
+#include "schemeshard__operation_common_metadata_object.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/tx/schemeshard/operations/metadata/abstract/update.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -19,7 +20,7 @@ public:
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropTieringRule);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropMetadataObject);
 
         const TPathId& pathId = txState->TargetPathId;
         const TPathElement::TPtr pathPtr = context.SS->PathsById.at(pathId);
@@ -30,12 +31,10 @@ public:
         Y_ABORT_UNLESS(!pathPtr->Dropped());
         pathPtr->SetDropped(step, OperationId.GetTxId());
         context.SS->PersistDropStep(db, pathId, step, OperationId);
-        context.SS->PersistRemoveTieringRule(db, pathId);
 
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
         domainInfo->DecPathsInside();
         parentDirPtr->DecAliveChildren();
-        context.SS->TabletCounters->Simple()[COUNTER_RESOURCE_POOL_COUNT].Sub(1);
 
         ++parentDirPtr->DirAlterVersion;
         context.SS->PersistPathDirAlterVersion(db, parentDirPtr);
@@ -56,7 +55,7 @@ public:
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropTieringRule);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropMetadataObject);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -64,14 +63,14 @@ public:
 
 private:
     TString DebugHint() const override {
-        return TStringBuilder() << "TDropTieringRule TPropose, operationId: " << OperationId << ", ";
+        return TStringBuilder() << "TDropMetadataObject TPropose, operationId: " << OperationId << ", ";
     }
 
 private:
     const TOperationId OperationId;
 };
 
-class TDropTieringRule : public TSubOperation {
+class TDropMetadataObject : public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::Propose;
     }
@@ -96,7 +95,7 @@ class TDropTieringRule : public TSubOperation {
         }
     }
 
-    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TOperationContext& context, const TPath& dstPath) {
+    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TOperationContext& /*context*/, const TPath& dstPath, const TPathElement::EPathType expectedPathType) {
         auto checks = dstPath.Check();
         checks
             .NotEmpty()
@@ -105,21 +104,19 @@ class TDropTieringRule : public TSubOperation {
             .IsResolved()
             .NotDeleted()
             .NotUnderDeleting()
-            .IsTieringRule()
             .NotUnderOperation()
             .IsCommonSensePath();
 
         if (checks) {
-            const TTieringRuleInfo::TPtr tieringRule = context.SS->TieringRules.Value(dstPath->PathId, nullptr);
-            if (!tieringRule) {
-                result->SetError(NKikimrScheme::StatusSchemeError, "Resource pool doesn't exist");
+            if (dstPath.Base()->PathType != expectedPathType) {
+                result->SetError(NKikimrScheme::StatusSchemeError, "Object has different type");
                 return false;
             }
         }
 
         if (!checks) {
             result->SetError(checks.GetStatus(), checks.GetError());
-            if (dstPath.IsResolved() && dstPath.Base()->IsTieringRule() && (dstPath.Base()->PlannedToDrop() || dstPath.Base()->Dropped())) {
+            if (dstPath.IsResolved() && dstPath.Base()->PathType == expectedPathType && (dstPath.Base()->PlannedToDrop() || dstPath.Base()->Dropped())) {
                 result->SetPathDropTxId(ui64(dstPath.Base()->DropTxId));
                 result->SetPathId(dstPath.Base()->PathId.LocalPathId);
             }
@@ -128,27 +125,26 @@ class TDropTieringRule : public TSubOperation {
         return static_cast<bool>(checks);
     }
 
-    void CreateTransaction(const TOperationContext& context, const TPathId& tieringRulePathId) const {
-        TTxState& txState = NTieringRule::CreateTransaction(OperationId, context, tieringRulePathId, TTxState::TxDropTieringRule);
+    void CreateTransaction(const TOperationContext& context, const TPathId& objectPathId) const {
+        TTxState& txState = NMetadataObject::CreateTransaction(OperationId, context, objectPathId, TTxState::TxDropMetadataObject);
         txState.State = TTxState::Propose;
         txState.MinStep = TStepId(1);
     }
 
-    void DropTieringRulePathElement(const TPath& dstPath) const {
-        TPathElement::TPtr tieringRule = dstPath.Base();
+    void DropPathElement(const TPath& dstPath) const {
+        TPathElement::TPtr object = dstPath.Base();
 
-        tieringRule->PathState = TPathElement::EPathState::EPathStateDrop;
-        tieringRule->DropTxId = OperationId.GetTxId();
-        tieringRule->LastTxId = OperationId.GetTxId();
+        object->PathState = TPathElement::EPathState::EPathStateDrop;
+        object->DropTxId = OperationId.GetTxId();
+        object->LastTxId = OperationId.GetTxId();
     }
 
-    void PersistDropTieringRule(const TOperationContext& context, const TPath& dstPath) const {
+    void PersistDropPath(const TOperationContext& context, const TPath& dstPath) const {
         const TPathId& pathId = dstPath.Base()->PathId;
 
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
         context.MemChanges.GrabPath(context.SS, pathId);
         context.MemChanges.GrabPath(context.SS, dstPath->ParentPathId);
-        context.MemChanges.GrabTieringRule(context.SS, pathId);
 
         context.DbChanges.PersistTxState(OperationId);
         context.DbChanges.PersistPath(pathId);
@@ -161,33 +157,43 @@ public:
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         Y_UNUSED(owner);
 
-        const TString& parentPathStr = Transaction.GetWorkingDir();
-        const auto& dropDescription = Transaction.GetDrop();
-        const TString& name = dropDescription.GetName();
-        LOG_N("TDropTieringRule Propose: opId# " << OperationId << ", path# " << parentPathStr << "/" << name);
+        auto update = NOperations::TMetadataUpdate::MakeUpdate(Transaction);
+        AFL_VERIFY(update);
+
+        LOG_N("TDropMetadataObject Propose: opId# " << OperationId << ", path# " << update->GetPathString());
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(context.SS->SelfTabletId()));
 
-        const TPath& dstPath = dropDescription.HasId()
-            ? TPath::Init(context.SS->MakeLocalId(dropDescription.GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
-        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, context, dstPath));
-        RETURN_RESULT_UNLESS(NTieringRule::IsApplyIfChecksPassed(Transaction, result, context));
+        TPath dstPath = TPath::Resolve(update->GetPathString(), context.SS);
+        TPath parentPath = dstPath.Parent();
+        RETURN_RESULT_UNLESS(NMetadataObject::IsParentPathValid(result, parentPath));
+        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, context, dstPath, update->GetObjectPathType()));
+        RETURN_RESULT_UNLESS(NMetadataObject::IsApplyIfChecksPassed(Transaction, result, context));
 
-        if (auto tables = context.SS->ColumnTables.GetTablesWithTiering(name); !tables.empty()) {
-            const TString tableString = TPath::Init(*tables.begin(), context.SS).PathString();
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Tiering is in use by column table: " + tableString);
-            return result;
+        std::shared_ptr<NOperations::ISSEntity> originalEntity;
+        if (dstPath.IsResolved()) {
+            originalEntity = update->MakeEntity(dstPath->PathId);
+            if (auto status = originalEntity->Initialize(NOperations::TEntityInitializationContext(&context)); status.IsFail()) {
+                result->SetError(NKikimrScheme::StatusSchemeError, status.GetErrorMessage());
+                return result;
+            }
         }
 
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
+        NIceDb::TNiceDb db(context.GetDB());
+        NOperations::TUpdateStartContext executionContext(&dstPath, &context, &db);
+        if (auto status = update->Start(executionContext); status.IsFail()) {
+            result->SetError(NKikimrScheme::StatusSchemeError, status.GetErrorMessage());
+            return result;
+        }
+
         auto guard = context.DbGuard();
-        PersistDropTieringRule(context, dstPath);
+        PersistDropPath(context, dstPath);
         CreateTransaction(context, dstPath.Base()->PathId);
-        DropTieringRulePathElement(dstPath);
+        DropPathElement(dstPath);
 
         context.OnComplete.ActivateTx(OperationId);
 
@@ -198,24 +204,25 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TDropTieringRule AbortPropose: opId# " << OperationId);
+        LOG_N("TDropMetadataObject AbortPropose: opId# " << OperationId);
+        Y_ABORT("no AbortPropose for TDropMetadataObject");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TDropTieringRule AbortUnsafe: opId# " << OperationId << ", txId# " << forceDropTxId);
+        LOG_N("TDropMetadataObject AbortUnsafe: opId# " << OperationId << ", txId# " << forceDropTxId);
         context.OnComplete.DoneOperation(OperationId);
     }
 };
 
 }  // anonymous namespace
 
-ISubOperation::TPtr CreateDropTieringRule(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TDropTieringRule>(id, tx);
+ISubOperation::TPtr CreateDropMetadataObject(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<TDropMetadataObject>(id, tx);
 }
 
-ISubOperation::TPtr CreateDropTieringRule(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateDropMetadataObject(TOperationId id, TTxState::ETxState state) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
-    return MakeSubOperation<TDropTieringRule>(id, state);
+    return MakeSubOperation<TDropMetadataObject>(id, state);
 }
 
 }  // namespace NKikimr::NSchemeShard

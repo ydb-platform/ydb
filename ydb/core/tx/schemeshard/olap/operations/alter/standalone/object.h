@@ -10,8 +10,8 @@ private:
     using TBase = TColumnTableEntity;
     std::optional<TOlapSchema> TableSchema;
     std::optional<TOlapTTL> TableTTL;
-    virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> DoCreateUpdateImpl(const TUpdateInitializationContext& context) const override;
-    virtual TConclusionStatus DoInitializeImpl(const TEntityInitializationContext& context) override;
+    virtual TConclusion<std::shared_ptr<NOperations::ISSEntityUpdate>> DoCreateUpdateImpl(const NOperations::TUpdateInitializationContext& context) const override;
+    virtual TConclusionStatus DoInitializeImpl(const NOperations::TEntityInitializationContext& context) override;
     TConclusionStatus InitializeFromTableInfo();
 public:
     TStandaloneTable(const TPathId& pathId)

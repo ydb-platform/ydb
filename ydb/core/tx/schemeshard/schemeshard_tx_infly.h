@@ -138,9 +138,9 @@ struct TTxState {
         item(TxDropResourcePool, 92) \
         item(TxAlterResourcePool, 93) \
         item(TxRestoreIncrementalBackupAtTable, 94) \
-        item(TxCreateTieringRule, 95) \
-        item(TxDropTieringRule, 96) \
-        item(TxAlterTieringRule, 97) \
+        item(TxCreateMetadataObject, 95) \
+        item(TxDropMetadataObject, 96) \
+        item(TxAlterMetadataObject, 97) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -358,7 +358,7 @@ struct TTxState {
         case TxCopySequence:
         case TxCreateContinuousBackup:
         case TxCreateResourcePool:
-        case TxCreateTieringRule:
+        case TxCreateMetadataObject:
             return true;
         case TxInitializeBuildIndex: //this is more like alter
         case TxCreateCdcStreamAtTable:
@@ -395,7 +395,7 @@ struct TTxState {
         case TxDropView:
         case TxDropContinuousBackup:
         case TxDropResourcePool:
-        case TxDropTieringRule:
+        case TxDropMetadataObject:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -430,7 +430,7 @@ struct TTxState {
         case TxAlterContinuousBackup:
         case TxAlterResourcePool:
         case TxRestoreIncrementalBackupAtTable:
-        case TxAlterTieringRule:
+        case TxAlterMetadataObject:
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
@@ -467,7 +467,7 @@ struct TTxState {
         case TxDropView:
         case TxDropContinuousBackup:
         case TxDropResourcePool:
-        case TxDropTieringRule:
+        case TxDropMetadataObject:
             return true;
         case TxMkDir:
         case TxCreateTable:
@@ -505,7 +505,7 @@ struct TTxState {
         case TxCreateContinuousBackup:
         case TxCreateResourcePool:
         case TxRestoreIncrementalBackupAtTable:
-        case TxCreateTieringRule:
+        case TxCreateMetadataObject:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -539,7 +539,7 @@ struct TTxState {
         case TxAlterView:
         case TxAlterContinuousBackup:
         case TxAlterResourcePool:
-        case TxAlterTieringRule:
+        case TxAlterMetadataObject:
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
@@ -580,7 +580,7 @@ struct TTxState {
         case TxDropExternalDataSource:
         case TxDropView:
         case TxDropResourcePool:
-        case TxDropTieringRule:
+        case TxDropMetadataObject:
             return false;
         case TxMkDir:
         case TxCreateTable:
@@ -616,7 +616,7 @@ struct TTxState {
         case TxCreateContinuousBackup:
         case TxCreateResourcePool:
         case TxRestoreIncrementalBackupAtTable:
-        case TxCreateTieringRule:
+        case TxCreateMetadataObject:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -651,7 +651,7 @@ struct TTxState {
         case TxAlterView:
         case TxAlterContinuousBackup:
         case TxAlterResourcePool:
-        case TxAlterTieringRule:
+        case TxAlterMetadataObject:
             return false;
         case TxInvalid:
         case TxAllocatePQ:
@@ -755,9 +755,9 @@ struct TTxState {
             case NKikimrSchemeOp::ESchemeOpCreateResourcePool: return TxCreateResourcePool;
             case NKikimrSchemeOp::ESchemeOpAlterResourcePool: return TxAlterResourcePool;
             case NKikimrSchemeOp::ESchemeOpDropResourcePool: return TxDropResourcePool;
-            case NKikimrSchemeOp::ESchemeOpCreateTieringRule: return TxCreateTieringRule;
-            case NKikimrSchemeOp::ESchemeOpAlterTieringRule: return TxAlterTieringRule;
-            case NKikimrSchemeOp::ESchemeOpDropTieringRule: return TxDropTieringRule;
+            case NKikimrSchemeOp::ESchemeOpCreateTieringRule: return TxCreateMetadataObject;
+            case NKikimrSchemeOp::ESchemeOpAlterTieringRule: return TxAlterMetadataObject;
+            case NKikimrSchemeOp::ESchemeOpDropTieringRule: return TxDropMetadataObject;
             case NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive: return TxInvalid;
             case NKikimrSchemeOp::ESchemeOpDropExternalTable: return TxInvalid;
             case NKikimrSchemeOp::ESchemeOpDropExternalDataSource: return TxInvalid;

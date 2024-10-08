@@ -246,6 +246,9 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     }
 
     TShardIdx shardIdx = Self->TabletIdToShardIdx[datashardId];
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "PersistSingleStats for pathId " << pathId.LocalPathId << " shard idx " << shardIdx << " data size " << dataSize << " row count " << rowCount
+    );
     const auto* shardInfo = Self->ShardInfos.FindPtr(shardIdx);
     if (!shardInfo) {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

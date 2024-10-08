@@ -252,6 +252,16 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
         }
         ResourcePools.pop();
     }
+
+    while (TieringRules) {
+        const auto& [id, elem] = TieringRules.top();
+        if (elem) {
+            ss->TieringRules[id] = elem;
+        } else {
+            ss->TieringRules.erase(id);
+        }
+        TieringRules.pop();
+    }
 }
 
 }

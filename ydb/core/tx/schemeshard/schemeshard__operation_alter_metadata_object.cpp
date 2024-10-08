@@ -1,6 +1,8 @@
-#include "schemeshard__operation_common_tiering_rule.h"
+#include "schemeshard__operation_common_metadata_object.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+
+#include <ydb/core/tx/schemeshard/operations/metadata/abstract/update.h>
 
 
 namespace NKikimr::NSchemeShard {
@@ -19,7 +21,7 @@ public:
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterTieringRule);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterMetadataObject);
 
         const TPathId& pathId = txState->TargetPathId;
         const TPath& path = TPath::Init(pathId, context.SS);
@@ -40,7 +42,7 @@ public:
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterTieringRule);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterMetadataObject);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -48,14 +50,14 @@ public:
 
 private:
     TString DebugHint() const override {
-        return TStringBuilder() << "TAlterTieringRule TPropose, operationId: " << OperationId << ", ";
+        return TStringBuilder() << "TAlterMetadataObject TPropose, operationId: " << OperationId << ", ";
     }
 
 private:
     const TOperationId OperationId;
 };
 
-class TAlterTieringRule : public TSubOperation {
+class TAlterMetadataObject : public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::Propose;
     }
@@ -82,12 +84,12 @@ class TAlterTieringRule : public TSubOperation {
         }
     }
 
-    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TPath& dstPath, const TString& acl) {
+    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TPath& dstPath, const TString& acl, const TPathElement::EPathType expectedPathType) {
         const auto checks = dstPath.Check();
         checks.IsAtLocalSchemeShard()
             .IsResolved()
             .NotUnderDeleting()
-            .FailOnWrongType(TPathElement::EPathType::EPathTypeTieringRule)
+            .FailOnWrongType(expectedPathType)
             .IsValidLeafName()
             .DepthLimit()
             .PathsLimit()
@@ -105,13 +107,13 @@ class TAlterTieringRule : public TSubOperation {
         return static_cast<bool>(checks);
     }
 
-    TPathElement::TPtr ReplaceTieringRulePathElement(const TPath& dstPath) const {
-        TPathElement::TPtr tieringRule = dstPath.Base();
+    TPathElement::TPtr ReplacePathElement(const TPath& dstPath) const {
+        TPathElement::TPtr object = dstPath.Base();
 
-        tieringRule->PathState = TPathElement::EPathState::EPathStateAlter;
-        tieringRule->LastTxId  = OperationId.GetTxId();
+        object->PathState = TPathElement::EPathState::EPathStateAlter;
+        object->LastTxId  = OperationId.GetTxId();
 
-        return tieringRule;
+        return object;
     }
 
 public:
@@ -120,65 +122,74 @@ public:
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         Y_UNUSED(owner);
 
-        const TString& parentPathStr = Transaction.GetWorkingDir();
-        const auto& tieringRuleDescription = Transaction.GetAlterTieringRule();
-        const TString& name = tieringRuleDescription.GetName();
-        LOG_N("TAlterTieringRule Propose: opId# " << OperationId << ", path# " << parentPathStr << "/" << name);
+        auto update = NOperations::TMetadataUpdate::MakeUpdate(Transaction);
+        AFL_VERIFY(update);
+
+        LOG_N("TAlterMetadataObject Propose: opId# " << OperationId << ", path# " << update->GetPathString());
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(context.SS->SelfTabletId()));
 
-        const TPath& parentPath = TPath::Resolve(parentPathStr, context.SS);
-        RETURN_RESULT_UNLESS(NTieringRule::IsParentPathValid(result, parentPath));
-
-        const TPath& dstPath = parentPath.Child(name);
+        TPath dstPath = TPath::Resolve(update->GetPathString(), context.SS);
+        TPath parentPath = dstPath.Parent();
         const TString& acl = Transaction.GetModifyACL().GetDiffACL();
-        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl));
-        RETURN_RESULT_UNLESS(NTieringRule::IsApplyIfChecksPassed(Transaction, result, context));
-        RETURN_RESULT_UNLESS(NTieringRule::IsDescriptionValid(result, tieringRuleDescription));
+        RETURN_RESULT_UNLESS(NMetadataObject::IsParentPathValid(result, parentPath));
+        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl, update->GetObjectPathType()));
+        RETURN_RESULT_UNLESS(NMetadataObject::IsApplyIfChecksPassed(Transaction, result, context));
 
-        const auto& oldTieringRuleInfo = context.SS->TieringRules.Value(dstPath->PathId, nullptr);
-        Y_ABORT_UNLESS(oldTieringRuleInfo);
-        const TTieringRuleInfo::TPtr tieringRuleInfo = NTieringRule::ModifyTieringRule(tieringRuleDescription, oldTieringRuleInfo);
-        Y_ABORT_UNLESS(tieringRuleInfo);
-        RETURN_RESULT_UNLESS(NTieringRule::IsTieringRuleInfoValid(result, tieringRuleInfo));
+        std::shared_ptr<NOperations::ISSEntity> originalEntity;
+        originalEntity = update->MakeEntity(dstPath->PathId);
+        if (auto status = originalEntity->Initialize(NOperations::TEntityInitializationContext(&context)); status.IsFail()) {
+            result->SetError(NKikimrScheme::StatusSchemeError, status.GetErrorMessage());
+            return result;
+        }
+
+        NOperations::TUpdateInitializationContext initializationContext(originalEntity.get(), &context, &Transaction, OperationId.GetTxId().GetValue());
+        if (auto status = update->Initialize(initializationContext); status.IsFail()) {
+            result->SetError(NKikimrScheme::StatusSchemeError, status.GetErrorMessage());
+            return result;
+        }
 
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
-        const TPathElement::TPtr resourcePool = ReplaceTieringRulePathElement(dstPath);
-        NTieringRule::CreateTransaction(OperationId, context, resourcePool->PathId, TTxState::TxAlterResourcePool);
-        NTieringRule::RegisterParentPathDependencies(OperationId, context, parentPath);
+        const TPathElement::TPtr object = ReplacePathElement(dstPath);
+        NMetadataObject::CreateTransaction(OperationId, context, object->PathId, TTxState::TxAlterMetadataObject);
+        NMetadataObject::RegisterParentPathDependencies(OperationId, context, parentPath);
 
         NIceDb::TNiceDb db(context.GetDB());
-        NTieringRule::AdvanceTransactionStateToPropose(OperationId, context, db);
-        NTieringRule::PersistTieringRule(OperationId, context, db, resourcePool, tieringRuleInfo, acl);
+        NOperations::TUpdateStartContext executionContext(&dstPath, &context, &db);
+        if (auto status = update->Start(executionContext); status.IsFail()) {
+            result->SetError(NKikimrScheme::StatusSchemeError, status.GetErrorMessage());
+            return result;
+        }
 
+        NMetadataObject::AdvanceTransactionStateToPropose(OperationId, context, db);
+        NMetadataObject::PersistOperation(OperationId, context, db, object, acl, false);
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
-
         SetState(NextState());
         return result;
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TAlterTieringRule AbortPropose: opId# " << OperationId);
-        Y_ABORT("no AbortPropose for TAlterTieringRule");
+        LOG_N("TAlterMetadataObject AbortPropose: opId# " << OperationId);
+        Y_ABORT("no AbortPropose for TAlterMetadataObject");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TAlterTieringRule AbortUnsafe: opId# " << OperationId << ", txId# " << forceDropTxId);
+        LOG_N("TAlterMetadataObject AbortUnsafe: opId# " << OperationId << ", txId# " << forceDropTxId);
         context.OnComplete.DoneOperation(OperationId);
     }
 };
 
 }  // anonymous namespace
 
-ISubOperation::TPtr CreateAlterTieringRule(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TAlterTieringRule>(id, tx);
+ISubOperation::TPtr CreateAlterMetadataObject(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<TAlterMetadataObject>(id, tx);
 }
 
-ISubOperation::TPtr CreateAlterTieringRule(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateAlterMetadataObject(TOperationId id, TTxState::ETxState state) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
-    return MakeSubOperation<TAlterTieringRule>(id, state);
+    return MakeSubOperation<TAlterMetadataObject>(id, state);
 }
 
 }  // namespace NKikimr::NSchemeShard

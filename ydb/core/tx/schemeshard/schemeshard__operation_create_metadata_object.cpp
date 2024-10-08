@@ -1,7 +1,8 @@
-#include "schemeshard__operation_common_tiering_rule.h"
+#include "schemeshard__operation_common_metadata_object.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/tx/schemeshard/operations/metadata/abstract/update.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -19,7 +20,7 @@ public:
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateTieringRule);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateMetadataObject);
 
         const TPathId& pathId = txState->TargetPathId;
         const TPath& path = TPath::Init(pathId, context.SS);
@@ -29,8 +30,6 @@ public:
 
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
-
-        context.SS->TabletCounters->Simple()[COUNTER_TIERING_RULE_COUNT].Add(1);
 
         IncParentDirAlterVersionWithRepublish(OperationId, path, context);
         context.SS->ClearDescribePathCaches(pathPtr);
@@ -45,7 +44,7 @@ public:
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateTieringRule);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateMetadataObject);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -53,14 +52,14 @@ public:
 
 private:
     TString DebugHint() const override {
-        return TStringBuilder() << "TCreateTieringRule TPropose, operationId: " << OperationId << ", ";
+        return TStringBuilder() << "TCreateMetadataObject TPropose, operationId: " << OperationId << ", ";
     }
 
 private:
     const TOperationId OperationId;
 };
 
-class TCreateTieringRule : public TSubOperation {
+class TCreateMetadataObject : public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::Propose;
     }
@@ -87,14 +86,14 @@ class TCreateTieringRule : public TSubOperation {
         }
     }
 
-    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TPath& dstPath, const TString& acl, bool acceptExisted) {
+    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TPath& dstPath, const TString& acl, bool acceptExisted, const TPathElement::EPathType expectedPathType) {
         const auto checks = dstPath.Check();
         checks.IsAtLocalSchemeShard();
         if (dstPath.IsResolved()) {
             checks
                 .IsResolved()
                 .NotUnderDeleting()
-                .FailOnExist(TPathElement::EPathType::EPathTypeTieringRule, acceptExisted);
+                .FailOnExist(expectedPathType, acceptExisted);
         } else {
             checks
                 .NotEmpty()
@@ -126,15 +125,15 @@ class TCreateTieringRule : public TSubOperation {
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
     }
 
-    TPathElement::TPtr CreateTieringRulePathElement(const TPath& dstPath) const {
-        TPathElement::TPtr tieringRule = dstPath.Base();
+    TPathElement::TPtr CreatePathElement(const TPath& dstPath, const TPathElement::EPathType pathType) const {
+        TPathElement::TPtr object = dstPath.Base();
 
-        tieringRule->CreateTxId = OperationId.GetTxId();
-        tieringRule->PathType = TPathElement::EPathType::EPathTypeTieringRule;
-        tieringRule->PathState = TPathElement::EPathState::EPathStateCreate;
-        tieringRule->LastTxId  = OperationId.GetTxId();
+        object->CreateTxId = OperationId.GetTxId();
+        object->PathType = pathType;
+        object->PathState = TPathElement::EPathState::EPathStateCreate;
+        object->LastTxId  = OperationId.GetTxId();
 
-        return tieringRule;
+        return object;
     }
 
     static void UpdatePathSizeCounts(const TPath& parentPath, const TPath& dstPath) {
@@ -146,65 +145,81 @@ public:
     using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
-        const TString& parentPathStr = Transaction.GetWorkingDir();
-        const auto& tieringRuleDescription = Transaction.GetCreateTieringRule();
-        const TString& name = tieringRuleDescription.GetName();
-        LOG_N("TCreateTieringRule Propose: opId# " << OperationId << ", path# " << parentPathStr << "/" << name);
+        auto update = NOperations::TMetadataUpdate::MakeUpdate(Transaction);
+        AFL_VERIFY(update);
+
+        LOG_N("TCreateMetadataObject Propose: opId# " << OperationId << ", path# " << update->GetPathString());
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(context.SS->SelfTabletId()));
 
-        const TPath& parentPath = TPath::Resolve(parentPathStr, context.SS);
-        RETURN_RESULT_UNLESS(NTieringRule::IsParentPathValid(result, parentPath));
-
-        TPath dstPath = parentPath.Child(name);
+        TPath dstPath = TPath::Resolve(update->GetPathString(), context.SS);
+        TPath parentPath = dstPath.Parent();
         const TString& acl = Transaction.GetModifyACL().GetDiffACL();
-        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl, !Transaction.GetFailOnExist()));
-        RETURN_RESULT_UNLESS(NTieringRule::IsApplyIfChecksPassed(Transaction, result, context));
-        RETURN_RESULT_UNLESS(NTieringRule::IsDescriptionValid(result, tieringRuleDescription));
+        RETURN_RESULT_UNLESS(NMetadataObject::IsParentPathValid(result, parentPath));
+        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl, !Transaction.GetFailOnExist(), update->GetObjectPathType()));
+        RETURN_RESULT_UNLESS(NMetadataObject::IsApplyIfChecksPassed(Transaction, result, context));
 
-        const TTieringRuleInfo::TPtr tieringRuleInfo = NTieringRule::CreateTieringRule(tieringRuleDescription, 1);
-        Y_ABORT_UNLESS(tieringRuleInfo);
-        RETURN_RESULT_UNLESS(NTieringRule::IsTieringRuleInfoValid(result, tieringRuleInfo));
+        std::shared_ptr<NOperations::ISSEntity> originalEntity;
+        if (dstPath.IsResolved()) {
+            originalEntity = update->MakeEntity(dstPath->PathId);
+            if (auto status = originalEntity->Initialize(NOperations::TEntityInitializationContext(&context)); status.IsFail()) {
+                result->SetError(NKikimrScheme::StatusSchemeError, status.GetErrorMessage());
+                return result;
+            }
+        }
 
-        AddPathInSchemeShard(result, dstPath, owner);
-        const TPathElement::TPtr tieringRule = CreateTieringRulePathElement(dstPath);
-        NTieringRule::CreateTransaction(OperationId, context, tieringRule->PathId, TTxState::TxCreateTieringRule);
-        NTieringRule::RegisterParentPathDependencies(OperationId, context, parentPath);
+        NOperations::TUpdateInitializationContext initializationContext(originalEntity.get(), &context, &Transaction, OperationId.GetTxId().GetValue());
+        if (auto status = update->Initialize(initializationContext); status.IsFail()) {
+            result->SetError(NKikimrScheme::StatusSchemeError, status.GetErrorMessage());
+            return result;
+        }
+
+        bool created = false;
+        if (!dstPath.IsResolved()) {
+            AddPathInSchemeShard(result, dstPath, owner);
+            created = true;
+        }
+        const TPathElement::TPtr object = CreatePathElement(dstPath, update->GetObjectPathType());
+        NMetadataObject::CreateTransaction(OperationId, context, object->PathId, TTxState::TxCreateMetadataObject);
+        NMetadataObject::RegisterParentPathDependencies(OperationId, context, parentPath);
 
         NIceDb::TNiceDb db(context.GetDB());
-        NTieringRule::AdvanceTransactionStateToPropose(OperationId, context, db);
-        NTieringRule::PersistTieringRule(OperationId, context, db, tieringRule, tieringRuleInfo, acl);
+        NOperations::TUpdateStartContext executionContext(&dstPath, &context, &db);
+        if (auto status = update->Start(executionContext); status.IsFail()) {
+            result->SetError(NKikimrScheme::StatusSchemeError, status.GetErrorMessage());
+            return result;
+        }
 
+        NMetadataObject::AdvanceTransactionStateToPropose(OperationId, context, db);
+        NMetadataObject::PersistOperation(OperationId, context, db, dstPath.Base(), acl, created);
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
-
         UpdatePathSizeCounts(parentPath, dstPath);
-
         SetState(NextState());
         return result;
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TCreateTieringRule AbortPropose: opId# " << OperationId);
-        Y_ABORT("no AbortPropose for TCreateTieringRule");
+        LOG_N("TCreateMetadataObject AbortPropose: opId# " << OperationId);
+        Y_ABORT("no AbortPropose for TCreateMetadataObject");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TCreateTieringRule AbortUnsafe: opId# " << OperationId << ", txId# " << forceDropTxId);
+        LOG_N("TCreateMetadataObject AbortUnsafe: opId# " << OperationId << ", txId# " << forceDropTxId);
         context.OnComplete.DoneOperation(OperationId);
     }
 };
 
 }  // anonymous namespace
 
-ISubOperation::TPtr CreateNewTieringRule(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TCreateTieringRule>(id, tx);
+ISubOperation::TPtr CreateNewMetadataObject(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<TCreateMetadataObject>(id, tx);
 }
 
-ISubOperation::TPtr CreateNewTieringRule(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateNewMetadataObject(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
-    return MakeSubOperation<TCreateTieringRule>(id, state);
+    return MakeSubOperation<TCreateMetadataObject>(id, state);
 }
 
 }  // namespace NKikimr::NSchemeShard

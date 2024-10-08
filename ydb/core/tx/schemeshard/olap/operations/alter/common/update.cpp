@@ -4,7 +4,7 @@
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
-TConclusionStatus TColumnTableUpdate::DoStart(const TUpdateStartContext& context) {
+TConclusionStatus TColumnTableUpdate::DoStart(const NOperations::TUpdateStartContext& context) {
     auto conclusion = DoStartImpl(context);
     if (conclusion.IsFail()) {
         return conclusion;
@@ -16,7 +16,7 @@ TConclusionStatus TColumnTableUpdate::DoStart(const TUpdateStartContext& context
     return TConclusionStatus::Success();
 }
 
-TConclusionStatus TColumnTableUpdate::DoFinish(const TUpdateFinishContext& context) {
+TConclusionStatus TColumnTableUpdate::DoFinish(const NOperations::TUpdateFinishContext& context) {
     auto conclusion = DoFinishImpl(context);
     if (conclusion.IsFail()) {
         return conclusion;
@@ -30,7 +30,7 @@ TConclusionStatus TColumnTableUpdate::DoFinish(const TUpdateFinishContext& conte
 }
 
 bool TColumnTableUpdate::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttl, const TOlapSchema& schema,
-    const TUpdateInitializationContext& context, IErrorCollector& errors) {
+    const NOperations::TUpdateInitializationContext& context, IErrorCollector& errors) {
     if (!schema.ValidateTtlSettings(ttl, errors)) {
         return false;
     }

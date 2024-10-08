@@ -13,9 +13,9 @@ private:
     YDB_READONLY_DEF(TOlapStoreInfo::TPtr, StoreInfo);
     std::optional<TOlapSchema> TableSchema;
     std::optional<TOlapTTL> TableTTL;
-    virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> DoCreateUpdateImpl(const TUpdateInitializationContext& context) const override;
-    virtual TConclusionStatus DoInitializeImpl(const TEntityInitializationContext& context) override;
-    [[nodiscard]] TConclusionStatus InitializeWithTableInfo(const TEntityInitializationContext& context);
+    virtual TConclusion<std::shared_ptr<NOperations::ISSEntityUpdate>> DoCreateUpdateImpl(const NOperations::TUpdateInitializationContext& context) const override;
+    virtual TConclusionStatus DoInitializeImpl(const NOperations::TEntityInitializationContext& context) override;
+    [[nodiscard]] TConclusionStatus InitializeWithTableInfo(const NOperations::TEntityInitializationContext& context);
 public:
     virtual TString GetClassName() const override {
         return "IN_STORE_TABLE";
@@ -23,7 +23,7 @@ public:
 
     using TBase::TBase;
 
-    TInStoreTable(const TPathId& pathId, const std::shared_ptr<TColumnTableInfo>& tableInfo, const TEntityInitializationContext& context)
+    TInStoreTable(const TPathId& pathId, const std::shared_ptr<TColumnTableInfo>& tableInfo, const NOperations::TEntityInitializationContext& context)
         : TBase(pathId, tableInfo)
     {
         InitializeWithTableInfo(context).Validate();

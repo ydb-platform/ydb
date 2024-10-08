@@ -1,6 +1,7 @@
 #include "manager.h"
 
 #include <ydb/core/tx/tiering/rule/behaviour.h>
+#include <ydb/core/tx/tiering/rule/checker.h>
 #include <ydb/core/tx/tiering/tier/object.h>
 
 namespace NKikimr::NColumnShard::NTiers {
@@ -77,8 +78,6 @@ void TTieringRulesManager::DoBuildRequestFromSettings(
         controller->OnBuildProblem("undefined params: " + settings.GetFeaturesExtractor().GetRemainedParamsString());
     }
 
-    // TODO: Validate tiers using metadata service
-
     NKikimrSchemeOp::TModifyScheme modifyScheme;
     modifyScheme.SetWorkingDir(TTieringRuleBehaviour().GetStorageTablePath());
     modifyScheme.SetFailedOnAlreadyExists(!settings.GetExistingOk());
@@ -91,7 +90,7 @@ void TTieringRulesManager::DoBuildRequestFromSettings(
             modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTieringRule);
             break;
         case IOperationsManager::EActivityType::Alter:
-            *modifyScheme.MutableAlterTieringRule() = std::move(operation);
+            *modifyScheme.MutableCreateTieringRule() = std::move(operation);
             modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTieringRule);
             break;
         case IOperationsManager::EActivityType::Drop:
@@ -111,6 +110,8 @@ void TTieringRulesManager::DoBuildRequestFromSettings(
         userToken = context.GetExternalData().GetUserToken();
     }
 
-    controller->OnBuildFinished(std::move(modifyScheme), std::move(userToken));
+    auto* actorSystem = context.GetExternalData().GetActorSystem();
+    AFL_VERIFY(actorSystem);
+    actorSystem->Register(new TTieringRulePreparationActor(std::move(modifyScheme), std::move(userToken), controller, context));
 }
 }

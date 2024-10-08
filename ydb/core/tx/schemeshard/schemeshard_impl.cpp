@@ -1561,9 +1561,6 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterBackupCollection:
     case TTxState::TxAlterTieringRule:
         return TPathElement::EPathState::EPathStateAlter;
-    case TTxState::TxDropTable:
-    case TTxState::TxDropPQGroup:
-    case TTxState::TxRmDir:
     case TTxState::TxDropSubDomain:
     case TTxState::TxForceDropSubDomain:
     case TTxState::TxForceDropExtSubDomain:
@@ -1587,9 +1584,6 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropBackupCollection:
     case TTxState::TxDropTieringRule:
         return TPathElement::EPathState::EPathStateDrop;
-    case TTxState::TxBackup:
-        return TPathElement::EPathState::EPathStateBackup;
-    case TTxState::TxRestore:
         return TPathElement::EPathState::EPathStateRestore;
     case TTxState::TxUpgradeSubDomain:
         return TPathElement::EPathState::EPathStateUpgrade;

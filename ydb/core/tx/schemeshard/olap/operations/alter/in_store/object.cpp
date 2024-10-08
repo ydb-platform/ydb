@@ -7,7 +7,7 @@
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
-TConclusionStatus TInStoreTable::InitializeWithTableInfo(const TEntityInitializationContext& context) {
+TConclusionStatus TInStoreTable::InitializeWithTableInfo(const NOperations::TEntityInitializationContext& context) {
     AFL_VERIFY(!GetTableInfoPtrVerified()->IsStandalone());
     const auto storePathId = GetTableInfoPtrVerified()->GetOlapStorePathIdVerified();
     TPath storePath = TPath::Init(storePathId, context.GetSSOperationContext()->SS);
@@ -38,12 +38,12 @@ TConclusionStatus TInStoreTable::InitializeWithTableInfo(const TEntityInitializa
     return TConclusionStatus::Success();
 }
 
-TConclusionStatus TInStoreTable::DoInitializeImpl(const TEntityInitializationContext& context) {
+TConclusionStatus TInStoreTable::DoInitializeImpl(const NOperations::TEntityInitializationContext& context) {
     return InitializeWithTableInfo(context);
 }
 
-TConclusion<std::shared_ptr<ISSEntityUpdate>> TInStoreTable::DoCreateUpdateImpl(const TUpdateInitializationContext& context) const {
-    std::shared_ptr<ISSEntityUpdate> result;
+TConclusion<std::shared_ptr<NOperations::ISSEntityUpdate>> TInStoreTable::DoCreateUpdateImpl(const NOperations::TUpdateInitializationContext& context) const {
+    std::shared_ptr<NOperations::ISSEntityUpdate> result;
     if (context.GetModification()->HasAlterTable()) {
         result = std::make_shared<TInStoreSchemaUpdate>();
     } else if (context.GetModification()->HasAlterColumnTable()) {

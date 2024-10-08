@@ -373,7 +373,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropBackupCollection:
             return *modifyScheme.MutableDropBackupCollection()->MutableName();
         case NKikimrSchemeOp::ESchemeOpAlterTieringRule:
-            return *modifyScheme.MutableAlterTieringRule()->MutableName();
+            return *modifyScheme.MutableCreateTieringRule()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpCreateTieringRule:
             return *modifyScheme.MutableCreateTieringRule()->MutableName();

@@ -1,10 +1,10 @@
 #include "update.h"
 
-#include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/converter.h>
+#include <ydb/core/tx/schemeshard/olap/operations/alter/common/converter.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
-NKikimr::TConclusionStatus TInStoreSchemaUpdate::DoInitializeImpl(const TUpdateInitializationContext& context) {
+NKikimr::TConclusionStatus TInStoreSchemaUpdate::DoInitializeImpl(const NOperations::TUpdateInitializationContext& context) {
     auto alter = TConverterModifyToAlter().Convert(*context.GetModification());
     if (alter.IsFail()) {
         return alter;
@@ -50,7 +50,7 @@ NKikimr::TConclusionStatus TInStoreSchemaUpdate::DoInitializeImpl(const TUpdateI
 
     auto targetInfo = std::make_shared<TColumnTableInfo>(context.GetOriginalEntityAsVerified<TInStoreTable>().GetTableInfoVerified().AlterVersion + 1,
         std::move(description), TMaybe<NKikimrSchemeOp::TColumnStoreSharding>(), std::move(alterCS));
-    TEntityInitializationContext eContext(context.GetSSOperationContext());
+    NOperations::TEntityInitializationContext eContext(context.GetSSOperationContext());
     TargetInStoreTable = std::make_shared<TInStoreTable>(context.GetOriginalEntity().GetPathId(), targetInfo, eContext);
     return TConclusionStatus::Success();
 }

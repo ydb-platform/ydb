@@ -119,10 +119,14 @@ public:
         size_t count = 0;
         ui64 sizeHot = 0, sizeCold = 0, sizeTest = 0; 
 
-        auto it = HandHot;
-        while (it != nullptr) {
+        auto ptr = HandHot;
+        while (ptr != nullptr) {
+            TPageEntry* entry = ptr->Node();
+            auto it = Entries.find(entry->Key);
+            Y_DEBUG_ABORT_UNLESS(it != Entries.end());
+            Y_DEBUG_ABORT_UNLESS(it->Get() == entry);
+
             if (count != 0) result << ", ";
-            TPageEntry* entry = it->Node();
             if (entry == HandHot) result << "Hot>";
             if (entry == HandCold) result << "Cold>";
             if (entry == HandTest) result << "Test>";
@@ -154,8 +158,8 @@ public:
             }
             result << entry->Size << "b}";
 
-            it = it->Next();
-            if (it == HandHot) break;
+            ptr = ptr->Next();
+            if (ptr == HandHot) break;
         }
         
         Y_DEBUG_ABORT_UNLESS(sizeHot == SizeHot);

@@ -271,7 +271,6 @@ struct TObjectStorageExternalSource : public IExternalSource {
             return issues;
         }
 
-        Ydb::Column lastColumn;
         TSet<TString> partitionedBySet{partitionedBy.begin(), partitionedBy.end()};
 
         for (const auto& column: schema.column()) {

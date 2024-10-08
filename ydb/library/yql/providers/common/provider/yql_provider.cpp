@@ -1653,7 +1653,7 @@ bool ValidateFormatForInput(
         }
     }
     else if (schemaStructRowType && format == TStringBuf("json_list")) {
-        ui64 failedSchemaColumnsCount = 0;
+        bool failedSchemaColumns = false;
 
         for (const TItemExprType* item : schemaStructRowType->GetItems()) {
             if (excludeFields && excludeFields(item->GetName())) {
@@ -1668,11 +1668,11 @@ bool ValidateFormatForInput(
                 && IsDataTypeDateOrTzDateOrInterval(rowType->Cast<TDataExprType>()->GetSlot())) {
                 ctx.AddError(TIssue(TStringBuilder() << "Date, Timestamp and Interval types are not allowed in json_list format (you have '"
                     << item->GetName() << " " << FormatType(rowType) << "' field)"));
-                failedSchemaColumnsCount++;
+                failedSchemaColumns = true;
             }
         }
 
-        if (failedSchemaColumnsCount > 0) {
+        if (failedSchemaColumns) {
             return false;
         }
     }

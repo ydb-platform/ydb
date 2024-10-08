@@ -2733,6 +2733,16 @@ TExprBase DqPropagatePrecomuteTake(TExprBase node, TExprContext& ctx, IOptimizat
         return node;
     }
 
+    auto* typeAnn = precompute.Connection().Raw()->GetTypeAnn();
+    if (!typeAnn || typeAnn->GetKind() != ETypeAnnotationKind::Stream) {
+        return node;
+    }
+
+    typeAnn = typeAnn->Cast<TStreamExprType>()->GetItemType();
+    if (typeAnn->GetKind() != ETypeAnnotationKind::List && typeAnn->GetKind() != ETypeAnnotationKind::Optional) {
+        return node;
+    }
+
     auto takeLambda = Build<TCoLambda>(ctx, node.Pos())
         .Args({"list_stream"})
         .Body<TCoMap>()

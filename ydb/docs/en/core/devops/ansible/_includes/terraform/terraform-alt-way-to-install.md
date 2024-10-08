@@ -7,7 +7,14 @@ You can download and install Terraform from the Yandex Cloud mirror:
 - Linux/macOS
 
     1. Go to this [link](https://hashicorp-releases.yandexcloud.net/terraform/) and choose the version of Terraform that suits you.
-    1. Download the archive using: `sudo curl -L -o <archive_name>.zip https://hashicorp-releases.yandexcloud.net/terraform/<terraform_version>/<terraform_version_architecture_and_os>.zip`.
+    1. Download the archive using:
+
+        ```bash
+        sudo curl -L -o <archive_name>.zip \
+        https://hashicorp-releases.yandexcloud.net/terraform/<terraform_version>/ \
+        <terraform_version_architecture_and_os>.zip
+        ```
+
     1. Unpack the archive using the built-in archiver in macOS or with the command unzip `unzip <archive_name>.zip` for Linux. This will extract the Terraform binary file and accompanying files. You can install `unzip` with the command `apt update && apt install unzip`.
     1. Create an _alias_ for Terraform (a way to create shortcuts for commands):
 

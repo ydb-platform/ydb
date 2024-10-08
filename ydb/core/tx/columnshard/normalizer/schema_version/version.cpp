@@ -160,21 +160,24 @@ public:
         std::vector<TKey> portion;
         tablePortion.reserve(10000);
         portion.reserve(10000);
+        auto addPortion = [&]() {
+            if (portion.size() + tablePortion.size() >= 10000) {
+                changes.emplace_back(std::make_shared<TNormalizerResult>(std::move(portion), std::move(tablePortion)));
+                portion = std::vector<TKey>();
+                tablePortion = std::vector<TTableKey>();
+            }
+        };
         for (const auto& id: unusedSchemaIds) {
             if (!maxVersion.has_value() || (id.Version != *maxVersion)) {
                 portion.push_back(id);
-                if (portion.size() + tablePortion.size() >= 10000) {
-                    changes.emplace_back(std::make_shared<TNormalizerResult>(std::move(portion), std::move(tablePortion)));
-                }
+                addPortion();
             }
         }
 
         for (const auto& id: unusedTableSchemaIds) {
             if (!maxVersion.has_value() || (id.Version != *maxVersion)) {
                 tablePortion.push_back(id);
-                if (portion.size() + tablePortion.size() >= 10000) {
-                    changes.emplace_back(std::make_shared<TNormalizerResult>(std::move(portion), std::move(tablePortion)));
-                }
+                addPortion();
             }
         }
 

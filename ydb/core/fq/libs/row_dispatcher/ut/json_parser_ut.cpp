@@ -36,7 +36,7 @@ public:
     }
 
     void MakeParser(TVector<TString> columns, TVector<TString> types) {
-        Parser = NFq::NewJsonParser(columns, types, [this](TVector<TVector<std::string_view>>&& parsedValues, TJsonParserBuffer::TPtr buffer){
+        Parser = NFq::NewJsonParser(columns, types, [this](TVector<TVector<std::string_view>>&& parsedValues, TJsonParserBuffer::TPtr buffer) {
             ResultOffset = buffer->GetOffset();
             ParsedValues = std::move(parsedValues);
             ResultNumberValues = ParsedValues.empty() ? 0 : ParsedValues.front().size();

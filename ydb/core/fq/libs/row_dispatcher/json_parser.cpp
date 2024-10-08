@@ -10,7 +10,7 @@ namespace {
 
 using TCallback = NFq::TJsonParser::TCallback;
 TString LogPrefix = "JsonParser: ";
-constexpr ui64 MAX_NUMBER_BUFFERS = 1000;
+constexpr ui64 MAX_NUMBER_BUFFERS = 10;
 
 } // anonymous namespace
 
@@ -26,20 +26,17 @@ TJsonParserBuffer::TJsonParserBuffer()
 
 void TJsonParserBuffer::Reserve(size_t size) {
     Y_ENSURE(!Finished, "Cannot reserve finished buffer");
-
     Values.reserve(2 * (size + simdjson::SIMDJSON_PADDING));
 }
 
 void TJsonParserBuffer::AddValue(const TString& value) {
     Y_ENSURE(!Finished, "Cannot add value into finished buffer");
-
     NumberValues++;
     Values << value;
 }
 
 std::string_view TJsonParserBuffer::AddHolder(std::string_view value) {
     Y_ENSURE(Values.size() + value.size() <= Values.capacity(), "Requested too large holders");
-
     const size_t startPos = Values.size();
     Values << value;
     return std::string_view(Values).substr(startPos, value.length());
@@ -48,7 +45,6 @@ std::string_view TJsonParserBuffer::AddHolder(std::string_view value) {
 std::pair<const char*, size_t> TJsonParserBuffer::Finish() {
     Y_ENSURE(!Finished, "Cannot finish buffer twice");
     Finished = true;
-
     Values << TString(simdjson::SIMDJSON_PADDING, ' ');
     Values.reserve(2 * Values.size());
     return {Values.data(), Values.size()};
@@ -56,7 +52,6 @@ std::pair<const char*, size_t> TJsonParserBuffer::Finish() {
 
 void TJsonParserBuffer::Clear() {
     Y_ENSURE(Finished, "Cannot clear not finished buffer");
-
     Offset = 0;
     NumberValues = 0;
     Finished = false;
@@ -96,17 +91,11 @@ public:
             parsedColumn.reserve(numberValues);
         }
 
-        static int counter = 0;
-
         simdjson::ondemand::parser parser;
         parser.threaded = false;
 
         simdjson::ondemand::document_stream documents = parser.iterate_many(values, size, simdjson::dom::DEFAULT_BATCH_SIZE);
         for (auto document : documents) {
-            counter++;
-            if (counter % 100000 == 0) {
-                Cerr << "---------------------------------- TJsonParser::Push, nuber buffers: " << FreeBuffers.size() + UsedBuffers.size() << ", counter: " << counter << ", has threads: " << parser.threaded << ", time: " << TInstant::Now() << Endl;
-            }
             for (auto item : document.get_object()) {
                 const auto it = ColumnsIndex.find(item.escaped_key().value());
                 if (it == ColumnsIndex.end()) {
@@ -124,10 +113,6 @@ public:
                     ));
                 }
             }
-        }
-
-        if (counter == 2200000) {
-            Cerr << "---------------------------------- Parsing finished, nuber buffers: " << FreeBuffers.size() + UsedBuffers.size() << ", numberInner: " << NumberInner << ", numberOuter: " << NumberOuter << ", time: " << TInstant::Now() << Endl;
         }
 
         Callback(std::move(parsedValues), buffer);
@@ -164,10 +149,8 @@ private:
     std::string_view CreateHolderIfNeeded(const char* dataHolder, size_t size, TJsonParserBuffer::TPtr buffer, std::string_view value) {
         ptrdiff_t diff = value.data() - dataHolder;
         if (0 <= diff && static_cast<size_t>(diff) < size) {
-            NumberInner++;
             return value;
         }
-        NumberOuter++;
         return buffer->AddHolder(value);
     }
 
@@ -178,9 +161,6 @@ private:
 
     TList<TJsonParserBuffer> UsedBuffers;
     TList<TJsonParserBuffer> FreeBuffers;
-
-    inline static int NumberInner = 0;
-    inline static int NumberOuter = 0;
 };
 
 TJsonParser::TJsonParser(const TVector<TString>& columns, const TVector<TString>& types, TCallback callback)

@@ -406,13 +406,6 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvDataParsed::TPtr& ev) {
     Parser->ReleaseBuffer(ev->Get()->Buffer);
 
     Send(SelfId(), new TEvPrivate::TEvDataFiltered(ev->Get()->Offset, ev->Get()->NumberValues));
-
-    if (counter / 100000 > (counter - ev->Get()->NumberValues) / 100000) {
-        Cerr << "---------------------------------- TEvDataParsed, counter: " << counter << ", time: " << TInstant::Now() << Endl;
-    }
-    if (counter == 2200000) {
-        Cerr << "---------------------------------- Filtering finished, time: " << TInstant::Now() << Endl;
-    }
 }
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvDataAfterFilteration::TPtr& ev) {

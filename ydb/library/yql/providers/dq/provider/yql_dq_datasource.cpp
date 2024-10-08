@@ -51,6 +51,7 @@ public:
         , TypeAnnotationTransformer_([] () { return CreateDqsDataSourceTypeAnnotationTransformer(); })
         , ConstraintsTransformer_([] () { return CreateDqDataSourceConstraintTransformer(); })
         , StatisticsTransformer_([this]() { return CreateDqsStatisticsTransformer(State_, TBaseProviderContext::Instance()); })
+        , ExecutionValidator_(MakeHolder<TDqExecutionValidator>(State_))
     { }
 
     TStringBuf GetName() const override {
@@ -262,7 +263,7 @@ public:
     }
 
     bool ValidateExecution(const TExprNode& node, TExprContext& ctx) override {
-        return ValidateDqExecution(node, *State_->TypeCtx, ctx, State_);
+        return ExecutionValidator_->ValidateDqExecution(node, ctx);
     }
 
     bool CanParse(const TExprNode& node) override {
@@ -276,9 +277,14 @@ public:
     void Reset() final {
         if (ExecTransformer_) {
             ExecTransformer_->Rewind();
+        }
+        if (TypeAnnotationTransformer_) {
             TypeAnnotationTransformer_->Rewind();
+        }
+        if (ConstraintsTransformer_) {
             ConstraintsTransformer_->Rewind();
         }
+        ExecutionValidator_->Rewind();
     }
 
 private:
@@ -288,6 +294,7 @@ private:
     TLazyInitHolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
     TLazyInitHolder<IGraphTransformer> ConstraintsTransformer_;
     TLazyInitHolder<IGraphTransformer> StatisticsTransformer_;
+    THolder<TDqExecutionValidator> ExecutionValidator_;
 };
 
 }

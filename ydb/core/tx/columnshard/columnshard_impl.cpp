@@ -81,10 +81,11 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , PeriodicWakeupActivationPeriod(NYDBTest::TControllers::GetColumnShardController()->GetPeriodicWakeupActivationPeriod())
     , StatsReportInterval(NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval())
     , InFlightReadsTracker(StoragesManager, Counters.GetRequestsTracingCounters())
-    , TablesManager(StoragesManager, info->TabletID)
+    , VersionCounts(std::make_shared<NOlap::TVersionCounts>())
+    , TablesManager(StoragesManager, info->TabletID, VersionCounts)
     , Subscribers(std::make_shared<NSubscriber::TManager>(*this))
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
-    , InsertTable(std::make_unique<NOlap::TInsertTable>())
+    , InsertTable(std::make_unique<NOlap::TInsertTable>(VersionCounts))
     , InsertTaskSubscription(NOlap::TInsertColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , CompactTaskSubscription(NOlap::TCompactColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
@@ -292,7 +293,7 @@ void TColumnShard::TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTabl
         writesToAbort.erase(writeId);
     }
     if (!writesToAbort.empty()) {
-        InsertTable->Abort(dbTable, writesToAbort, TablesManager.MutablePrimaryIndex().MutableVersionCounts());
+        InsertTable->Abort(dbTable, writesToAbort);
     }
 }
 
@@ -1240,9 +1241,7 @@ TDuration TColumnShard::GetMaxReadStaleness() {
 void TColumnShard::ExecuteSchemaVersionsCleanup(NIceDb::TNiceDb& db, THashSet<ui64>& removedSchemaVersions) {
     auto table = db.Table<NKikimr::NColumnShard::Schema::SchemaPresetVersionInfo>();
     ui64 lastVersion = TablesManager.MutablePrimaryIndex().LastSchemaVersion();
-    auto* versionCounts = TablesManager.MutablePrimaryIndex().MutableVersionCounts();
-    AFL_VERIFY(versionCounts != nullptr);
-    versionCounts->EnumerateVersionsToErase([&](ui64 version, auto& key) {
+    VersionCounts->EnumerateVersionsToErase([&](ui64 version, auto& key) {
         if (version != lastVersion) {
             LOG_S_DEBUG("Removing schema version from db " << version << " tablet id " << TabletID());
             removedSchemaVersions.insert(version);

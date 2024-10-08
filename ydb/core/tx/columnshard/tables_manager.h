@@ -149,9 +149,10 @@ private:
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     std::unique_ptr<TTableLoadTimeCounters> LoadTimeCounters;
+    std::shared_ptr<NOlap::TVersionCounts> VersionCounts;
     ui64 TabletId = 0;
 public:
-    TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId);
+    TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId, std::shared_ptr<NOlap::TVersionCounts>& versionCounts);
 
     bool TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const ui64 pathId) const;
     bool TryFinalizeDropPathOnComplete(const ui64 pathId);

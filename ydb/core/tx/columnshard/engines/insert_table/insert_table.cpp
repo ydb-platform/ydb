@@ -7,8 +7,8 @@
 
 namespace NKikimr::NOlap {
 
-bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data, TVersionCounts* versionCounts) {
-    if (auto* dataPtr = Summary.AddInserted(std::move(data), false, versionCounts)) {
+bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data) {
+    if (auto* dataPtr = Summary.AddInserted(std::move(data), false, &*VersionCounts)) {
         AddBlobLink(dataPtr->GetBlobRange().BlobId);
         dbTable.Insert(*dataPtr);
         return true;
@@ -57,7 +57,7 @@ TInsertionSummary::TCounters TInsertTable::Commit(
     return counters;
 }
 
-TInsertionSummary::TCounters TInsertTable::CommitEphemeral(IDbWrapper& dbTable, TCommittedData&& data, TVersionCounts* versionCounts) {
+TInsertionSummary::TCounters TInsertTable::CommitEphemeral(IDbWrapper& dbTable, TCommittedData&& data) {
     TInsertionSummary::TCounters counters;
     counters.Rows += data.GetMeta().GetNumRows();
     counters.RawBytes += data.GetMeta().GetRawBytes();
@@ -68,17 +68,17 @@ TInsertionSummary::TCounters TInsertTable::CommitEphemeral(IDbWrapper& dbTable, 
     auto& pathInfo = Summary.GetPathInfoVerified(pathId);
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "commit_insertion")("path_id", pathId)("blob_range", data.GetBlobRange().ToString());
     dbTable.Commit(data);
-    pathInfo.AddCommitted(std::move(data), false, versionCounts);
+    pathInfo.AddCommitted(std::move(data), false, &*VersionCounts);
 
     return counters;
 }
 
-void TInsertTable::Abort(IDbWrapper& dbTable, const THashSet<TInsertWriteId>& writeIds, TVersionCounts* versionCounts) {
+void TInsertTable::Abort(IDbWrapper& dbTable, const THashSet<TInsertWriteId>& writeIds) {
     Y_ABORT_UNLESS(!writeIds.empty());
 
     for (auto writeId : writeIds) {
         // There could be inconsistency with txs and writes in case of bugs. So we could find no record for writeId.
-        if (std::optional<TInsertedData> data = Summary.ExtractInserted(writeId, versionCounts)) {
+        if (std::optional<TInsertedData> data = Summary.ExtractInserted(writeId, &*VersionCounts)) {
             AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "abort_insertion")("path_id", data->GetPathId())(
                 "blob_range", data->GetBlobRange().ToString())("write_id", writeId);
             dbTable.EraseInserted(*data);
@@ -100,8 +100,8 @@ void TInsertTable::EraseCommittedOnExecute(
     }
 }
 
-void TInsertTable::EraseCommittedOnComplete(const TCommittedData& data, TVersionCounts* versionCounts) {
-    if (Summary.EraseCommitted(data), versionCounts) {
+void TInsertTable::EraseCommittedOnComplete(const TCommittedData& data) {
+    if (Summary.EraseCommitted(data), &*VersionCounts) {
         RemoveBlobLinkOnComplete(data.GetBlobRange().BlobId);
     }
 }
@@ -114,8 +114,8 @@ void TInsertTable::EraseAbortedOnExecute(
     }
 }
 
-void TInsertTable::EraseAbortedOnComplete(const TInsertedData& data, TVersionCounts* versionCounts) {
-    if (Summary.EraseAborted(data.GetInsertWriteId(), versionCounts)) {
+void TInsertTable::EraseAbortedOnComplete(const TInsertedData& data) {
+    if (Summary.EraseAborted(data.GetInsertWriteId(), &*VersionCounts)) {
         RemoveBlobLinkOnComplete(data.GetBlobRange().BlobId);
     }
 }

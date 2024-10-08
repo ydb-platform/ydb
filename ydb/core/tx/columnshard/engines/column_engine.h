@@ -295,9 +295,6 @@ public:
     virtual bool ApplyChangesOnExecute(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info) = 0;
     virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema) = 0;
-    virtual TVersionCounts* MutableVersionCounts() {
-        return nullptr;
-    }
 
     virtual bool IsEmpty() const {
         return true;

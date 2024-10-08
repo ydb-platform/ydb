@@ -444,7 +444,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
         // load
         TSnapshot indexSnapshot(1, 1);
-        TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo), NOlap::TVersionCounts::TVersionToKey());
+        std::shared_ptr<NOlap::TVersionCounts> versionCounts = std::make_shared<NOlap::TVersionCounts>();
+        TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo), versionCounts);
         for (auto&& i : paths) {
             engine.RegisterTable(i);
         }
@@ -533,7 +534,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         ui32 step = 1000;
 
         TSnapshot indexSnapshot(1, 1);
-        TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo), NOlap::TVersionCounts::TVersionToKey());
+        std::shared_ptr<NOlap::TVersionCounts> versionCounts = std::make_shared<NOlap::TVersionCounts>();
+        TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo), versionCounts);
         engine.RegisterTable(pathId);
         engine.Load(db);
 
@@ -635,7 +637,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         ui64 planStep = 1;
 
         TSnapshot indexSnapshot(1, 1);
-        TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo), NOlap::TVersionCounts::TVersionToKey());
+        std::shared_ptr<NOlap::TVersionCounts> versionCounts = std::make_shared<NOlap::TVersionCounts>();
+        TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo), versionCounts);
         engine.RegisterTable(pathId);
         engine.Load(db);
 
@@ -660,7 +663,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
 
         { // check it's overloaded after reload
-            TColumnEngineForLogs tmpEngine(0, CommonStoragesManager, TSnapshot::Zero(), TIndexInfo(tableInfo), NOlap::TVersionCounts::TVersionToKey());
+            TColumnEngineForLogs tmpEngine(0, CommonStoragesManager, TSnapshot::Zero(), TIndexInfo(tableInfo), versionCounts);
             tmpEngine.RegisterTable(pathId);
             tmpEngine.Load(db);
         }
@@ -691,7 +694,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
 
         { // check it's not overloaded after reload
-            TColumnEngineForLogs tmpEngine(0, CommonStoragesManager, TSnapshot::Zero(), TIndexInfo(tableInfo), NOlap::TVersionCounts::TVersionToKey());
+            TColumnEngineForLogs tmpEngine(0, CommonStoragesManager, TSnapshot::Zero(), TIndexInfo(tableInfo), versionCounts);
             tmpEngine.RegisterTable(pathId);
             tmpEngine.Load(db);
         }
@@ -710,8 +713,9 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // insert
         ui64 planStep = 1;
         TSnapshot indexSnapshot(1, 1);
+        std::shared_ptr<NOlap::TVersionCounts> versionCounts = std::make_shared<NOlap::TVersionCounts>();
         {
-            TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo), NOlap::TVersionCounts::TVersionToKey());
+            TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo), versionCounts);
             engine.RegisterTable(pathId);
             engine.Load(db);
 
@@ -789,7 +793,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
         {
             // load
-            TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo), NOlap::TVersionCounts::TVersionToKey());
+            TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo), versionCounts);
             engine.RegisterTable(pathId);
             engine.Load(db);
 

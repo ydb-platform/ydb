@@ -96,16 +96,21 @@ class TInsertTable: public TInsertTableAccessor {
 private:
     bool Loaded = false;
     TInsertWriteId LastWriteId = TInsertWriteId{ 0 };
+    std::shared_ptr<NOlap::TVersionCounts> VersionCounts;
 
 public:
+    TInsertTable(std::shared_ptr<NOlap::TVersionCounts>& versionCounts)
+        : VersionCounts(versionCounts)
+    {
+    }
     static constexpr const TDuration WaitCommitDelay = TDuration::Minutes(10);
     static constexpr ui64 CleanupPackageSize = 10000;
 
-    bool Insert(IDbWrapper& dbTable, TInsertedData&& data, TVersionCounts* versionCounts);
+    bool Insert(IDbWrapper& dbTable, TInsertedData&& data);
     TInsertionSummary::TCounters Commit(
         IDbWrapper& dbTable, ui64 planStep, ui64 txId, const THashSet<TInsertWriteId>& writeIds, std::function<bool(ui64)> pathExists);
-    TInsertionSummary::TCounters CommitEphemeral(IDbWrapper& dbTable, TCommittedData&& data, TVersionCounts* versionCounts);
-    void Abort(IDbWrapper& dbTable, const THashSet<TInsertWriteId>& writeIds, TVersionCounts* versionCounts);
+    TInsertionSummary::TCounters CommitEphemeral(IDbWrapper& dbTable, TCommittedData&& data);
+    void Abort(IDbWrapper& dbTable, const THashSet<TInsertWriteId>& writeIds);
     void MarkAsNotAbortable(const TInsertWriteId writeId) {
         Summary.MarkAsNotAbortable(writeId);
     }
@@ -113,10 +118,10 @@ public:
 
     void EraseCommittedOnExecute(
         IDbWrapper& dbTable, const TCommittedData& key, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
-    void EraseCommittedOnComplete(const TCommittedData& key, TVersionCounts* versionCounts);
+    void EraseCommittedOnComplete(const TCommittedData& key);
 
     void EraseAbortedOnExecute(IDbWrapper& dbTable, const TInsertedData& key, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
-    void EraseAbortedOnComplete(const TInsertedData& key, TVersionCounts* versionCounts);
+    void EraseAbortedOnComplete(const TInsertedData& key);
 
     std::vector<TCommittedBlob> Read(ui64 pathId, const std::optional<ui64> lockId, const TSnapshot& reqSnapshot,
         const std::shared_ptr<arrow::Schema>& pkSchema, const TPKRangesFilter* pkRangesFilter) const;
@@ -124,8 +129,8 @@ public:
 
     TInsertWriteId BuildNextWriteId(NTabletFlatExecutor::TTransactionContext& txc);
     TInsertWriteId BuildNextWriteId(NIceDb::TNiceDb& db);
-    void CalcVersionCounts(TVersionCounts* versionCounts) {
-        Summary.CalcVersionCounts(versionCounts);
+    void CalcVersionCounts() {
+        Summary.CalcVersionCounts(&*VersionCounts);
     }
 };
 

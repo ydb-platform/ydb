@@ -89,9 +89,9 @@ public:
     };
 
     TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot,
-        const NKikimrSchemeOp::TColumnTableSchema& schema, NOlap::TVersionCounts::TVersionToKey&& versionToKey);
+        const NKikimrSchemeOp::TColumnTableSchema& schema, std::shared_ptr<TVersionCounts>& versionCounts);
     TColumnEngineForLogs(
-        ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema, NOlap::TVersionCounts::TVersionToKey&& versionToKey);
+        ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema, std::shared_ptr<TVersionCounts>& versionCounts);
 
     virtual void OnTieringModified(
         const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) override;
@@ -196,10 +196,6 @@ public:
     }
     void UpsertPortion(const TPortionInfo& portionInfo, const TPortionInfo* exInfo = nullptr);
 
-    TVersionCounts* MutableVersionCounts() override {
-        return &VersionCounts;
-    }
-
     void RemoveSchemaVersion(ui64 version) {
         VersionedIndex.RemoveVersion(version);
     }
@@ -209,12 +205,12 @@ public:
     }
 
     bool IsEmpty() const override {
-        return VersionCounts.IsEmpty(LastSchemaVersion());
+        return VersionCounts->IsEmpty(LastSchemaVersion());
     }
 
     void EraseSchemaVersion(ui64 version) override {
         RemoveSchemaVersion(version);
-        VersionCounts.VersionsToErase.erase(version);
+        VersionCounts->VersionsToErase.erase(version);
     }
 
 private:
@@ -223,7 +219,7 @@ private:
     TMap<ui64, std::shared_ptr<TColumnEngineStats>> PathStats;   // per path_id stats sorted by path_id
     std::map<TInstant, std::vector<TPortionInfo>> CleanupPortions;
     TColumnEngineStats Counters;
-    TVersionCounts VersionCounts;
+    std::shared_ptr<TVersionCounts> VersionCounts;
     ui64 LastPortion;
     ui64 LastGranule;
     TSnapshot LastSnapshot = TSnapshot::Zero();

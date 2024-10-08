@@ -25,7 +25,7 @@ void TTxInsertTableCleanup::Complete(const TActorContext& /*ctx*/) {
     TMemoryProfileGuard mpg("TTxInsertTableCleanup::Complete");
     auto allAborted = Self->InsertTable->GetAborted();
     for (auto& [abortedWriteId, abortedData] : allAborted) {
-        Self->InsertTable->EraseAbortedOnComplete(abortedData, Self->TablesManager.MutablePrimaryIndex().MutableVersionCounts());
+        Self->InsertTable->EraseAbortedOnComplete(abortedData);
     }
 
     Y_ABORT_UNLESS(BlobsAction);

@@ -110,6 +110,7 @@ def validate_cfg(result):
     for r in result:
         assert r[0] in (
             "in",
+            "in2",
             "out",
             "udf",
             "providers",

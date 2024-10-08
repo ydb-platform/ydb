@@ -14,10 +14,12 @@ TKqpComputeActor::TKqpComputeActor(const TActorId& executerId, ui64 txId, NDqPro
     IDqAsyncIoFactory::TPtr asyncIoFactory,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
     NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings, TComputeActorSchedulingOptions schedulingOptions)
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
+    TComputeActorSchedulingOptions schedulingOptions, NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode)
     : TBase(std::move(schedulingOptions), executerId, txId, task, std::move(asyncIoFactory), AppData()->FunctionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /*taskCounters = */ nullptr, std::move(traceId), std::move(arena), GUCSettings)
     , ComputeCtx(settings.StatsMode)
     , FederatedQuerySetup(federatedQuerySetup)
+    , BlockTrackingMode(mode)
 {
     InitializeTask();
     if (GetTask().GetMeta().Is<NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta>()) {
@@ -227,7 +229,7 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
             }
             case NKikimrDataEvents::FORMAT_ARROW: {
                 if(msg.ArrowBatch != nullptr) {
-                    bytes = ScanData->AddData(NMiniKQL::TBatchDataAccessor(msg.ArrowBatch), {}, TaskRunner->GetHolderFactory());
+                    bytes = ScanData->AddData(NMiniKQL::TBatchDataAccessor(msg.ArrowBatch, BlockTrackingMode), {}, TaskRunner->GetHolderFactory());
                     rowsCount = msg.ArrowBatch->num_rows();
                 }
                 break;
@@ -282,10 +284,11 @@ IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::T
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
     NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
-    const TGUCSettings::TPtr& GUCSettings, TComputeActorSchedulingOptions cpuOptions)
+    const TGUCSettings::TPtr& GUCSettings, TComputeActorSchedulingOptions cpuOptions,
+    NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode)
 {
     return new TKqpComputeActor(executerId, txId, task, std::move(asyncIoFactory),
-        settings, memoryLimits, std::move(traceId), std::move(arena), federatedQuerySetup, GUCSettings, std::move(cpuOptions));
+        settings, memoryLimits, std::move(traceId), std::move(arena), federatedQuerySetup, GUCSettings, std::move(cpuOptions), mode);
 }
 
 } // namespace NKqp

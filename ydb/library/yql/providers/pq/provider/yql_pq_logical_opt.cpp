@@ -1,6 +1,7 @@
 #include "yql_pq_provider_impl.h"
 
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/core/yql_type_helpers.h>
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
@@ -30,22 +31,20 @@ namespace {
         }
     };
 
-std::unordered_set<TString> GetUsedMetadataFields(const TCoExtractMembers& extract) {
-    std::unordered_set<TString> usedMetadataFields;
-    for (const auto extractMember : extract.Members()) {
-        if (FindPqMetaFieldDescriptorBySysColumn(extractMember.StringValue())) {
-            usedMetadataFields.emplace(extractMember.StringValue());
-        }
+std::unordered_set<TString> GetUsedColumnNames(const TCoExtractMembers& extractMembers) {
+    std::unordered_set<TString> usedColumnNames;
+    for (const auto& member : extractMembers.Members()) {
+        usedColumnNames.emplace(member.StringValue());
     }
 
-    return usedMetadataFields;
+    return usedColumnNames;
 }
 
-TVector<TCoNameValueTuple> DropUnusedMetadata(const TPqTopic& pqTopic, const std::unordered_set<TString>& usedMetadataFields) {
+TVector<TCoNameValueTuple> DropUnusedMetadata(const TPqTopic& pqTopic, const std::unordered_set<TString>& usedColumnNames) {
     TVector<TCoNameValueTuple> newSourceMetadata;
     for (auto metadataItem : pqTopic.Metadata()) {
         auto metadataName = metadataItem.Cast<TCoNameValueTuple>().Value().Maybe<TCoAtom>().Cast().StringValue();
-        if (usedMetadataFields.contains(metadataName)) {
+        if (FindPqMetaFieldDescriptorBySysColumn(metadataName) && usedColumnNames.contains(metadataName)) {
             newSourceMetadata.push_back(metadataItem);
         }
     }
@@ -88,10 +87,10 @@ TCoNameValueTupleList DropUnusedMetadataFromDqWrapSettings(
         .Done();
 }
 
-TExprNode::TPtr DropUnusedMetadataFieldsFromRowType(
+TExprNode::TPtr DropUnusedRowItems(
     TPositionHandle position,
     const TStructExprType* oldRowType,
-    const std::unordered_set<TString>& usedMetadataFields,
+    const std::unordered_set<TString>& usedColumnNames,
     TExprContext& ctx)
 {
     TVector<const TItemExprType*> newFields;
@@ -99,7 +98,7 @@ TExprNode::TPtr DropUnusedMetadataFieldsFromRowType(
 
     for (auto itemExprType : oldRowType->GetItems()) {
         const auto columnName = TString(itemExprType->GetName());
-        if (FindPqMetaFieldDescriptorBySysColumn(columnName) && !usedMetadataFields.contains(columnName)) {
+        if (!usedColumnNames.contains(columnName)) {
             continue;
         }
 
@@ -109,14 +108,14 @@ TExprNode::TPtr DropUnusedMetadataFieldsFromRowType(
     return ExpandType(position, *ctx.MakeType<TStructExprType>(newFields), ctx);
 }
 
-TExprNode::TPtr DropUnusedMetadataFieldsFromColumns(
+TExprNode::TPtr DropUnusedColumns(
     TExprBase oldColumns,
-    const std::unordered_set<TString>& usedMetadataFields,
+    const std::unordered_set<TString>& usedColumnNames,
     TExprContext& ctx)
 {
     TExprNode::TListType res;
     for (const auto& column : oldColumns.Cast<TCoAtomList>()) {
-        if (FindPqMetaFieldDescriptorBySysColumn(column.StringValue()) && !usedMetadataFields.contains(column.StringValue())) {
+        if (!usedColumnNames.contains(column.StringValue())) {
             continue;
         }
 
@@ -160,57 +159,68 @@ public:
     }*/
 
     TMaybeNode<TExprBase> ExtractMembersOverDqWrap(TExprBase node, TExprContext& ctx) const {
-        const auto& extract = node.Cast<TCoExtractMembers>();
-        const auto& input = extract.Input();
-        const auto dqSourceWrap = input.Maybe<TDqSourceWrap>();
-        const auto dqPqTopicSource = dqSourceWrap.Input().Maybe<TDqPqTopicSource>();
-        const auto pqTopic = dqPqTopicSource.Topic().Maybe<TPqTopic>();
-        if (!pqTopic) {
+        const auto& extractMembers = node.Cast<TCoExtractMembers>();
+        const auto& extractMembersInput = extractMembers.Input();
+        const auto& maybeDqSourceWrap = extractMembersInput.Maybe<TDqSourceWrap>();
+        if (!maybeDqSourceWrap) {
             return node;
         }
 
-        const auto usedMetadataFields = GetUsedMetadataFields(extract);
-        const auto newSourceMetadata = DropUnusedMetadata(pqTopic.Cast(), usedMetadataFields);
-        if (newSourceMetadata.size() == pqTopic.Metadata().Cast().Size()) {
+        const auto& dqSourceWrap = maybeDqSourceWrap.Cast();
+        if (dqSourceWrap.DataSource().Category() != PqProviderName) {
             return node;
         }
 
-        const auto oldRowType = pqTopic.Ref().GetTypeAnn()
-            ->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        const auto& maybeDqPqTopicSource = dqSourceWrap.Input().Maybe<TDqPqTopicSource>();
+        if (!maybeDqPqTopicSource) {
+            return node;
+        }
 
-        auto newPqTopicSource = Build<TDqPqTopicSource>(ctx, node.Pos())
-            .InitFrom(dqPqTopicSource.Cast())
+        const auto& dqPqTopicSource = maybeDqPqTopicSource.Cast();
+        const auto& pqTopic = dqPqTopicSource.Topic();
+
+        auto usedColumnNames = GetUsedColumnNames(extractMembers);
+        const TStructExprType* inputRowType = pqTopic.RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+        const TStructExprType* outputRowType = node.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        if (outputRowType->GetSize() == 0 && inputRowType->GetSize() > 0) {
+            auto item = GetLightColumn(*inputRowType);
+            YQL_ENSURE(item);
+            YQL_ENSURE(usedColumnNames.insert(TString(item->GetName())).second);
+        }
+
+        const auto oldRowType = pqTopic.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        if (oldRowType->GetSize() == usedColumnNames.size()) {
+            return node;
+        }
+
+        const auto& newSourceMetadata = DropUnusedMetadata(pqTopic, usedColumnNames);
+
+        const TExprNode::TPtr newPqTopicSource = Build<TDqPqTopicSource>(ctx, dqPqTopicSource.Pos())
+            .InitFrom(dqPqTopicSource)
             .Topic<TPqTopic>()
-                .InitFrom(pqTopic.Cast())
+                .InitFrom(pqTopic)
                 .Metadata().Add(newSourceMetadata).Build()
-                .Build();
-
-        if (dqPqTopicSource.Columns()) {
-            auto newColumns = DropUnusedMetadataFieldsFromColumns(
-                dqPqTopicSource.Columns().Cast(),
-                usedMetadataFields,
-                ctx);
-            newPqTopicSource.Columns(newColumns);
-        }
-
-        const auto newDqSourceWrap = Build<TDqSourceWrap>(ctx, node.Pos())
-            .InitFrom(dqSourceWrap.Cast())
-            .Input(newPqTopicSource.Done())
-            .Settings(DropUnusedMetadataFromDqWrapSettings(
-                dqSourceWrap.Cast(),
-                newSourceMetadata,
-                ctx))
-            .RowType(DropUnusedMetadataFieldsFromRowType(
-                node.Pos(),
-                oldRowType,
-                usedMetadataFields,
-                ctx))
+                .RowSpec(DropUnusedRowItems(pqTopic.RowSpec().Pos(), inputRowType, usedColumnNames, ctx))
+                .Build()
+            .Columns(DropUnusedColumns(dqPqTopicSource.Columns(), usedColumnNames, ctx))
             .Done()
             .Ptr();
 
+        const TExprNode::TPtr newDqSourceWrap = Build<TDqSourceWrap>(ctx, dqSourceWrap.Pos())
+            .InitFrom(dqSourceWrap)
+            .Input(newPqTopicSource)
+            .Settings(DropUnusedMetadataFromDqWrapSettings(dqSourceWrap, newSourceMetadata, ctx))
+            .RowType(DropUnusedRowItems(dqSourceWrap.RowType().Pos(), oldRowType, usedColumnNames, ctx))
+            .Done()
+            .Ptr();
+
+        if (outputRowType->GetSize() == usedColumnNames.size()) {
+            return newDqSourceWrap;
+        }
+
         return Build<TCoExtractMembers>(ctx, node.Pos())
-            .InitFrom(extract)
-            .Input(ctx.ReplaceNode(input.Ptr(), dqSourceWrap.Ref(), newDqSourceWrap))
+            .InitFrom(extractMembers)
+            .Input(ctx.ReplaceNode(extractMembersInput.Ptr(), dqSourceWrap.Ref(), newDqSourceWrap))
             .Done();
     }
         

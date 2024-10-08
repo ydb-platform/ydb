@@ -216,6 +216,7 @@ def mute_applier(args):
 
         # checking added lines
         write_to_file('\n'.join(added_lines), added_mute_lines_file)
+        mute_check = YaMuteCheck()
         mute_check.load(added_mute_lines_file)
         added_muted_tests = []
         print("New muted tests captured")
@@ -227,6 +228,7 @@ def mute_applier(args):
 
         # checking removed lines
         write_to_file('\n'.join(removed_lines), removed_mute_lines_file)
+        mute_check = YaMuteCheck()
         mute_check.load(removed_mute_lines_file)
         removed_muted_tests = []
         print("Unmuted tests captured")

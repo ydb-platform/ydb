@@ -348,6 +348,15 @@
             ]
         },
         {
+            "Name": "TYtMaterialize",
+            "Base": "TYtOpBase",
+            "Match": {"Type": "Callable", "Name": "YtMaterialize!"},
+            "Children": [
+                {"Index": 2, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
             "Name": "TYtTouch",
             "Base": "TYtOutputOpBase",
             "Match": {"Type": "Callable", "Name": "YtTouch!"}

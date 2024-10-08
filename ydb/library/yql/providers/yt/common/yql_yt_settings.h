@@ -89,6 +89,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui32, false> InferSchemaTableCountThreshold;
     NCommon::TConfSetting<NSize::TSize, false> DefaultCalcMemoryLimit;
     NCommon::TConfSetting<ui32, false> ParallelOperationsLimit;
+    NCommon::TConfSetting<ui32, false> LocalCalcLimit;
     NCommon::TConfSetting<EQueryCacheMode, false> QueryCacheMode;
     NCommon::TConfSetting<bool, false> QueryCacheIgnoreTableRevision;
     NCommon::TConfSetting<TString, false> QueryCacheSalt;
@@ -196,7 +197,7 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, true> _UseKeyBoundApi;
     NCommon::TConfSetting<TString, true> NetworkProject;
     NCommon::TConfSetting<bool, true> _EnableYtPartitioning;
-    NCommon::TConfSetting<bool, true> _ForceJobSizeAdjuster;
+    NCommon::TConfSetting<bool, true> ForceJobSizeAdjuster;
     NCommon::TConfSetting<bool, true> EnforceJobUtc;
     NCommon::TConfSetting<bool, true> UseRPCReaderInDQ;
     NCommon::TConfSetting<size_t, true> DQRPCReaderInflight;
@@ -281,6 +282,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui16, false> MinColumnGroupSize;
     NCommon::TConfSetting<ui16, false> MaxColumnGroups;
     NCommon::TConfSetting<ui64, false> ExtendedStatsMaxChunkCount;
+    NCommon::TConfSetting<bool, false> _EnableYtDqProcessWriteConstraints;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

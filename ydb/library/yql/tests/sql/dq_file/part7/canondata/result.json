@@ -2834,16 +2834,6 @@
         }
     ],
     "test.test[select-select_all_ordered-default.txt-Results]": [],
-    "test.test[select-unique_distinct_hints--Analyze]": [
-        {
-            "checksum": "9fa7fa98806742f3d0981dbfe8793441",
-            "size": 16307,
-            "uri": "https://{canondata_backend}/1600758/a3a753bb80f9458f9a8a4c3335cab227f87f92b5/resource.tar.gz#test.test_select-unique_distinct_hints--Analyze_/plan.txt"
-        },
-        {
-            "uri": "file://test.test_select-unique_distinct_hints--Analyze_/extracted"
-        }
-    ],
     "test.test[simple_columns-simple_columns_join_coalesce_bug8923-default.txt-Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",

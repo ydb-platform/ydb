@@ -25,11 +25,9 @@ public:
 
     constexpr TTypeInfo(TTypeId typeId)
         : TypeId(typeId)
-        // TODO Remove after parametrized decimal in KQP
-        , DecimalTypeDesc(typeId == NTypeIds::Decimal ? TDecimalType(DECIMAL_PRECISION, DECIMAL_SCALE) : TDecimalType(0, 0))
+        , RawDesc(0)
     {
-        // TODO Uncomment after parametrized decimal in KQP
-        //Y_ABORT_UNLESS(NTypeIds::IsParametrizedType(TypeId))
+        Y_ABORT_UNLESS(!NTypeIds::IsParametrizedType(typeId));
     }
 
     constexpr TTypeInfo(const NKikimr::NPg::ITypeDesc* typeDesc)
@@ -39,8 +37,7 @@ public:
 
     constexpr TTypeInfo(const TDecimalType& decimalType)
         : TypeId(NTypeIds::Decimal)
-        // TODO Remove after parametrized decimal in KQP
-        , DecimalTypeDesc(decimalType.GetPrecision() == 0 && decimalType.GetScale() == 0 ? TDecimalType(DECIMAL_PRECISION, DECIMAL_SCALE) : decimalType)
+        , DecimalTypeDesc(decimalType)
     {}
 
     constexpr bool operator==(const TTypeInfo& other) const {
@@ -70,7 +67,7 @@ public:
         return TypeId != NTypeIds::Pg ? TString{} : NPg::TypeModFromPgTypeName(name);
     }
 
-    constexpr const TDecimalType GetDecimalType() const {
+    constexpr const TDecimalType& GetDecimalType() const {
         Y_ABORT_UNLESS (TypeId == NTypeIds::Decimal);
         return DecimalTypeDesc;
     }

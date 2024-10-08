@@ -312,7 +312,7 @@ namespace NMonitoring {
         EMetricsMergingMode mergingMode,
         TStringBuf metricNameLabel
     ) {
-        Y_ENSURE(!metricNameLabel.Empty(), "metricNameLabel can't be empty");
+        Y_ENSURE(!metricNameLabel.empty(), "metricNameLabel can't be empty");
         return MakeHolder<TEncoderSpackV1>(out, timePrecision, compression, mergingMode, SV1_02, metricNameLabel);
     }
 }

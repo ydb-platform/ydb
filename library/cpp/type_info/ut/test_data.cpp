@@ -25,7 +25,7 @@ std::vector<std::vector<TString>> ParseData(TStringBuf data, int expectedFieldsC
     std::vector<std::vector<TString>> result;
     for (TStringBuf record : StringSplitter(noComments).SplitByString(";;")) {
         record = StripString(record);
-        if (record.Empty()) {
+        if (record.empty()) {
             continue;
         }
         std::vector<TString> fields;
@@ -89,3 +89,4 @@ TEST(TestData, BadTypes) {
             context);
     }
 }
+

@@ -4309,6 +4309,10 @@ private:
 
                 if (transform.CanExecuteInternally() && !testRun) {
                     const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
+                    execCtx->SetNodeExecProgress("Waiting for concurrency limit");
+                    execCtx->Session_->InitLocalCalcSemaphore(execCtx->Options_.Config());
+                    TGuard<TFastSemaphore> guard(*execCtx->Session_->LocalCalcSemaphore_);
+                    execCtx->SetNodeExecProgress("Local run");
                     ExecSafeFill(outYPaths, root, execCtx->GetOutSpec(!useSkiff, nativeTypeCompat), execCtx, entry, builder, alloc, tmpFiles->TmpDir.GetPath() + '/');
                     return MakeFuture();
                 }
@@ -4906,6 +4910,10 @@ private:
             }
 
             if (transform.CanExecuteInternally()) {
+                execCtx->SetNodeExecProgress("Waiting for concurrency limit");
+                execCtx->Session_->InitLocalCalcSemaphore(execCtx->Options_.Config());
+                TGuard<TFastSemaphore> guard(*execCtx->Session_->LocalCalcSemaphore_);
+                execCtx->SetNodeExecProgress("Local run");
                 TExploringNodeVisitor explorer;
                 auto localGraph = builder.BuildLocalGraph(GetGatewayNodeFactory(codecCtx.Get(), nullptr, execCtx->UserFiles_, pathPrefix),
                     execCtx->Options_.UdfValidateMode(), NUdf::EValidatePolicy::Exception,

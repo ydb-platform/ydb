@@ -1564,6 +1564,14 @@ void TAlterTableReplicaCommand::Register(TRegistrar registrar)
             return command->Options.EnableReplicatedTableTracker;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+        "replica_path",
+        [] (TThis* command) -> auto& {
+            return command->Options.ReplicaPath;
+        })
+        .Optional(/*init*/ false);
+
 }
 
 void TAlterTableReplicaCommand::DoExecute(ICommandContextPtr context)

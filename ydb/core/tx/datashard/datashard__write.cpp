@@ -184,7 +184,6 @@ void TDataShard::TTxWrite::Complete(const TActorContext& ctx) {
     }
 
     Self->CheckSplitCanStart(ctx);
-    Self->CheckMvccStateChangeCanStart(ctx);
 }
 
 

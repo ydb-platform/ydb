@@ -826,6 +826,7 @@ void TAsyncHttpMon::Start(TActorSystem* actorSystem) {
         };
         addPort->SslCertificatePem = Config.Certificate;
         addPort->Secure = !Config.Certificate.empty();
+        addPort->MaxRequestsPerSecond = Config.MaxRequestsPerSecond;
         ActorSystem->Send(HttpProxyActorId, addPort.release());
         ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/", HttpMonServiceActorId));
         ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/node", NodeProxyServiceActorId));

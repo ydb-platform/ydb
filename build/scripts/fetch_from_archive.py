@@ -1,3 +1,4 @@
+from __future__ import print_function
 import os
 import sys
 import logging
@@ -30,7 +31,7 @@ if __name__ == '__main__':
         main(args)
     except Exception as e:
         logging.exception(e)
-        print >> sys.stderr, open(args.abs_log_path).read()
+        print(open(args.abs_log_path).read(), file=sys.stderr)
         sys.stderr.flush()
 
         import error

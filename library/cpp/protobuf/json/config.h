@@ -109,6 +109,9 @@ namespace NProtobufJson {
 
         bool WriteNanAsString = false;
 
+        // Sort keys in maps before serialization.
+        bool SortMapKeys = false;
+
         TSelf& SetDoubleNDigits(ui32 ndigits) {
             DoubleNDigits = ndigits;
             return *this;
@@ -186,6 +189,11 @@ namespace NProtobufJson {
 
         TSelf& SetMapAsObject(bool value) {
             MapAsObject = value;
+            return *this;
+        }
+
+        TSelf& SetSortMapKeys(bool value) {
+            SortMapKeys = value;
             return *this;
         }
 

@@ -1,6 +1,7 @@
 #include "mkql_engine_flat_host.h"
 #include "mkql_engine_flat_impl.h"
 #include "mkql_keys.h"
+#include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
@@ -44,12 +45,7 @@ namespace {
         if (type->IsOptional() && !value) {
             return TCell();
         }
-
-        const auto dataType = type->IsOptional()
-            ? AS_TYPE(TDataType, AS_TYPE(TOptionalType, type)->GetItemType()) : AS_TYPE(TDataType, type);
-
-        // TODO: support pg types
-        auto typeInfo = NScheme::TTypeInfo(dataType->GetSchemeType());
+        NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromMiniKQLType(type);
         return MakeCell(typeInfo, value, env);
     }
 

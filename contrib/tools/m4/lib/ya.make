@@ -46,17 +46,11 @@ IF (NOT OS_WINDOWS)
 ENDIF()
 
 SRCS(
-    abitset.c
-    argmatch.c
     asnprintf.c
     basename-lgpl.c
     basename.c
     binary-io.c
     bitrotate.c
-    bitset.c
-    bitset_stats.c
-    bitsetv-print.c
-    bitsetv.c
     c-ctype.c
     c-stack.c
     c-strcasecmp.c
@@ -74,7 +68,6 @@ SRCS(
     dup-safer-flag.c
     dup-safer.c
     dup2.c
-    ebitset.c
     error.c
     execute.c
     exitfail.c
@@ -107,7 +100,6 @@ SRCS(
     isnanf.c
     isnanl.c
     itold.c
-    lbitset.c
     localcharset.c
     lseek.c
     lstat.c
@@ -141,16 +133,13 @@ SRCS(
     spawn-pipe.c
     stat.c
     stpcpy.c
-    strchrnul.c
     strdup.c
     stripslash.c
     tempname.c
-    timevar.c
     tmpdir.c
     unistd.c
     unsetenv.c
     vasnprintf.c
-    vbitset.c
     verror.c
     version-etc-fsf.c
     version-etc.c
@@ -179,7 +168,6 @@ ENDIF()
 IF (NOT OS_LINUX)
     SRCS(
         pipe2.c
-        strverscmp.c
     )
 ENDIF()
 
@@ -194,7 +182,6 @@ IF (OS_WINDOWS)
         frexp.c
         wcrtomb.c
         perror.c
-        strstr.c
         mkstemp.c
         vasprintf.c
         strsignal.c
@@ -221,7 +208,6 @@ IF (OS_WINDOWS)
         spawnattr_setsigmask.c
         spawni.c
         spawnp.c
-        strndup.c
         waitpid.c
         wcwidth.c
         uniwidth/width.c

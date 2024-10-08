@@ -292,10 +292,6 @@ public:
         return DummyAuditLogParts;
     };
 
-    google::protobuf::Message* GetRequestMut() override {
-        return nullptr;
-    };
-
     void SetRuHeader(ui64 ru) override {
         Y_UNUSED(ru);
     };

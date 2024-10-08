@@ -69,7 +69,9 @@ void TryExtractHost(const TOriginAttributes& attributes)
         spanId
     ] = Decode(*attributes.ExtensionData);
 
-    attributes.Host = name;
+    attributes.Host = name
+        ? TStringBuf(name)
+        : TStringBuf{};
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -125,6 +127,7 @@ void UpdateTracingAttributes(TOriginAttributes* attributes, const NTracing::TTra
             .TraceId = tracingAttributes.TraceId,
             .SpanId = tracingAttributes.SpanId,
         }));
+        return;
     }
 
     attributes->ExtensionData.emplace(Encode(TExtensionData{

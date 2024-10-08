@@ -1,12 +1,12 @@
 #include "write_data.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/columnshard/defs.h>
-
 
 namespace NKikimr::NColumnShard {
 
 bool TArrowData::Parse(const NKikimrDataEvents::TEvWrite_TOperation& proto, const NEvWrite::IPayloadReader& payload) {
-    if(proto.GetPayloadFormat() != NKikimrDataEvents::FORMAT_ARROW) {
+    if (proto.GetPayloadFormat() != NKikimrDataEvents::FORMAT_ARROW) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "invalid_payload_format")("payload_format", (ui64)proto.GetPayloadFormat());
         return false;
     }
@@ -48,7 +48,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> TArrowData::ExtractBatch() {
     } else {
         result = NArrow::DeserializeBatch(IncomingData, std::make_shared<arrow::Schema>(BatchSchema->GetSchema()->fields()));
     }
-        
+
     IncomingData = "";
     return result;
 }
@@ -97,4 +97,4 @@ ui64 TProtoArrowData::GetSchemaVersion() const {
     return IndexSchema->GetVersion();
 }
 
-}
+}   // namespace NKikimr::NColumnShard

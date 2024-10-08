@@ -450,6 +450,19 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
             << "SmallQueue: {2 0f 6b}" << Endl
             << "MainQueue: {1 0f 20b}, {3 0f 40b}" << Endl
             << "GhostQueue: "));
+        
+        TPage page42{42, 1};
+        cache.Erase(&page42);
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
+            << "SmallQueue: {2 0f 6b}" << Endl
+            << "MainQueue: {1 0f 20b}, {3 0f 40b}" << Endl
+            << "GhostQueue: "));
+
+        cache.Erase(&page2);
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
+            << "SmallQueue: " << Endl
+            << "MainQueue: {1 0f 20b}, {3 0f 40b}" << Endl
+            << "GhostQueue: "));
     }
 }
 

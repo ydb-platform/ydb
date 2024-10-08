@@ -288,7 +288,7 @@ void TColumnShard::TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTabl
         writesToAbort.erase(writeId);
     }
     if (!writesToAbort.empty()) {
-        InsertTable->Abort(dbTable, writesToAbort);
+        InsertTable->Abort(dbTable, writesToAbort, TablesManager.MutablePrimaryIndex().MutableVersionCounts());
     }
 }
 

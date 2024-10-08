@@ -189,7 +189,7 @@ public:
     bool HasCommitted(const TCommittedData& data);
 
     const TInsertedData* AddInserted(TInsertedData&& data, const bool load = false, TVersionCounts* versionCounts = nullptr);
-    std::optional<TInsertedData> ExtractInserted(const TInsertWriteId id);
+    std::optional<TInsertedData> ExtractInserted(const TInsertWriteId id, TVersionCounts* versionCounts = nullptr);
 
     const TCounters& GetCountersPrepared() const {
         return StatsPrepared;

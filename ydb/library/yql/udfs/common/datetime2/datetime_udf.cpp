@@ -1576,10 +1576,8 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
             }
 
             auto resourceType = builder.Resource(TMResourceName);
-            auto optionalResourceType = builder.Optional()->Item(resourceType).Build();
 
             auto stringType = builder.SimpleType<char*>();
-            auto optionalStringType = builder.Optional()->Item(stringType).Build();
 
             auto boolType = builder.SimpleType<bool>();
             auto optionalBoolType = builder.Optional()->Item(boolType).Build();
@@ -1589,7 +1587,13 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
             args->Add(optionalBoolType).Name("AlwaysWriteFractionalSeconds");
             args->Done();
             builder.OptionalArgs(1);
-            builder.Returns(builder.Callable(1)->Arg(optionalResourceType).Returns(optionalStringType).Build());
+            builder.Returns(
+                builder.Callable(1)
+                    ->Returns(stringType)
+                    .Arg(resourceType)
+                        .Flags(ICallablePayload::TArgumentFlags::AutoMap)
+                .Build()
+            );
 
             if (!typesOnly) {
                 builder.Implementation(new TFormat(builder.GetSourcePosition()));

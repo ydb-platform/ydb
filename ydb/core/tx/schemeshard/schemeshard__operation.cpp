@@ -978,7 +978,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
     return result;
 }
 
-ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::ETxState txState) const {
+ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::ETxState txState, TOperationContext& context) const {
     switch (txType) {
     case TTxState::ETxType::TxMkDir:
         return CreateMkDir(NextPartId(), txState);
@@ -1196,6 +1196,8 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
     }
+
+    Y_UNUSED(context); // TODO(Enjection): will be used by complex operations later
 
     Y_UNREACHABLE();
 }

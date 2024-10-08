@@ -250,6 +250,10 @@ protected:
     virtual TTxState::ETxState NextState(TTxState::ETxState state) const = 0;
     virtual TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) = 0;
 
+    virtual TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state, TOperationContext&) {
+        return SelectStateFunc(state);
+    }
+
     virtual void StateDone(TOperationContext& context) {
         auto state = NextState(GetState());
         SetState(state);
@@ -270,6 +274,11 @@ public:
 
     TTxState::ETxState GetState() const {
         return State;
+    }
+
+    void SetState(TTxState::ETxState state, TOperationContext& context) {
+        State = state;
+        StateFunc = SelectStateFunc(state, context);
     }
 
     void SetState(TTxState::ETxState state) {
@@ -311,6 +320,13 @@ ISubOperation::TPtr MakeSubOperation(const TOperationId& id) {
 template <typename T, typename... Args>
 ISubOperation::TPtr MakeSubOperation(const TOperationId& id, const TTxTransaction& tx, Args&&... args) {
     return new T(id, tx, std::forward<Args>(args)...);
+}
+
+template <typename T, typename... Args>
+ISubOperation::TPtr MakeSubOperation(const TOperationId& id, TTxState::ETxState state, TOperationContext& context, Args&&... args) {
+    auto result = MakeHolder<T>(id, state, std::forward<Args>(args)...);
+    result->SetState(state, context);
+    return result.Release();
 }
 
 template <typename T, typename... Args>

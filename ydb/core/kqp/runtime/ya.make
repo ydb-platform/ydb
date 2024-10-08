@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    kqp_arrow_memory_pool.cpp
     kqp_compute.cpp
     kqp_effects.cpp
     kqp_output_stream.cpp

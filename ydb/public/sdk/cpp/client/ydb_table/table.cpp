@@ -18,6 +18,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/impl/data_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/impl/request_migrator.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/impl/table_client.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/impl/transaction.h>
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 
 #include <google/protobuf/util/time_util.h>
@@ -1987,7 +1988,7 @@ const TString& TSession::GetId() const {
 ////////////////////////////////////////////////////////////////////////////////
 
 TTxControl::TTxControl(const TTransaction& tx)
-    : TxId_(tx.GetId())
+    : Tx_(tx)
 {}
 
 TTxControl::TTxControl(const TTxSettings& begin)
@@ -1997,16 +1998,40 @@ TTxControl::TTxControl(const TTxSettings& begin)
 ////////////////////////////////////////////////////////////////////////////////
 
 TTransaction::TTransaction(const TSession& session, const TString& txId)
-    : Session_(session)
-    , TxId_(txId)
+    : TransactionImpl_(new TTransaction::TImpl(session, txId))
 {}
 
+const TString& TTransaction::GetId() const
+{
+    return TransactionImpl_->GetId();
+}
+
+bool TTransaction::IsActive() const
+{
+    return TransactionImpl_->IsActive();
+}
+
+TAsyncStatus TTransaction::Precommit() const
+{
+    return TransactionImpl_->Precommit();
+}
+
 TAsyncCommitTransactionResult TTransaction::Commit(const TCommitTxSettings& settings) {
-    return Session_.Client_->CommitTransaction(Session_, *this, settings);
+    return TransactionImpl_->Commit(settings);
 }
 
 TAsyncStatus TTransaction::Rollback(const TRollbackTxSettings& settings) {
-    return Session_.Client_->RollbackTransaction(Session_, *this, settings);
+    return TransactionImpl_->Rollback(settings);
+}
+
+TSession TTransaction::GetSession() const
+{
+    return TransactionImpl_->GetSession();
+}
+
+void TTransaction::AddPrecommitCallback(TPrecommitTransactionCallback cb)
+{
+    TransactionImpl_->AddPrecommitCallback(std::move(cb));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

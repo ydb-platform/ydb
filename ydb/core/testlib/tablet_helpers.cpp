@@ -80,22 +80,34 @@ namespace NKikimr {
 
         STFUNC(StateFunc) {
             switch (ev->GetTypeRewrite()) {
-                HFunc(TEvMediatorTimecast::TEvRegisterTablet, Handle);
+                hFunc(TEvMediatorTimecast::TEvRegisterTablet, Handle);
+                hFunc(TEvMediatorTimecast::TEvSubscribeReadStep, Handle);
             }
         }
 
-        void Handle(TEvMediatorTimecast::TEvRegisterTablet::TPtr &ev, const TActorContext &ctx) {
+        void Handle(TEvMediatorTimecast::TEvRegisterTablet::TPtr& ev) {
             const ui64 tabletId = ev->Get()->TabletId;
             auto& entry = Entries[tabletId];
             if (!entry) {
                 entry = new TMediatorTimecastSharedEntry();
             }
 
-            ctx.Send(ev->Sender, new TEvMediatorTimecast::TEvRegisterTabletResult(tabletId, new TMediatorTimecastEntry(entry, entry)));
+            Send(ev->Sender, new TEvMediatorTimecast::TEvRegisterTabletResult(tabletId, new TMediatorTimecastEntry(entry, entry)));
+        }
+
+        void Handle(TEvMediatorTimecast::TEvSubscribeReadStep::TPtr& ev) {
+            const ui64 coordinatorId = ev->Get()->CoordinatorId;
+            auto& entry = ReadSteps[coordinatorId];
+            if (!entry) {
+                entry = new TMediatorTimecastReadStep();
+            }
+
+            Send(ev->Sender, new TEvMediatorTimecast::TEvSubscribeReadStepResult(coordinatorId, 0, entry->Get(), entry));
         }
 
     private:
         THashMap<ui64, TIntrusivePtr<TMediatorTimecastSharedEntry>> Entries;
+        THashMap<ui64, TIntrusivePtr<TMediatorTimecastReadStep>> ReadSteps;
     };
 
     void SetupMediatorTimecastProxy(TTestActorRuntime& runtime, ui32 nodeIndex, bool useFake = false)

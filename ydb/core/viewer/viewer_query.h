@@ -274,6 +274,7 @@ public:
         if (Event->Get()->UserToken) {
             event->Record.SetUserToken(Event->Get()->UserToken);
         }
+        request.SetClientAddress(Event->Get()->Request.GetRemoteAddr());
         if (Action == "execute-script") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
@@ -546,14 +547,8 @@ private:
     void MakeOkReply(NJson::TJsonValue& jsonResponse, NKikimrKqp::TEvQueryResponse& record) {
         const auto& response = record.GetResponse();
 
-        if (response.ResultsSize() > 0 || response.YdbResultsSize() > 0) {
+        if (response.YdbResultsSize() > 0) {
             try {
-                for (const auto& result : response.GetResults()) {
-                    Ydb::ResultSet resultSet;
-                    NKqp::ConvertKqpQueryResultToDbResult(result, &resultSet);
-                    ResultSets.emplace_back().emplace_back(std::move(resultSet));
-                }
-
                 for (const auto& result : response.GetYdbResults()) {
                     ResultSets.emplace_back().emplace_back(result);
                 }

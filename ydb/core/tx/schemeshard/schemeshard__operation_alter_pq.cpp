@@ -529,7 +529,7 @@ public:
                 .IsPQGroup()
                 .NotUnderOperation();
 
-            if (!Transaction.GetAllowAccessToPrivatePaths()) {
+            if (!Transaction.GetAllowAccessToPrivatePaths() && !Transaction.GetInternal()) {
                 checks.IsCommonSensePath();
             }
 

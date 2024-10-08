@@ -1,6 +1,8 @@
 PROGRAM(ydb)
 
-STRIP()
+IF(BUILD_TYPE == RELEASE)
+    STRIP()
+ENDIF()
 
 SRCS(
     main.cpp

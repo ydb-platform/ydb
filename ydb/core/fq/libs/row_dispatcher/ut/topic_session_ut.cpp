@@ -81,7 +81,7 @@ public:
         settings.SetDatabase(GetDefaultPqDatabase());
         settings.AddColumns("dt");
         settings.AddColumns("value");
-        settings.AddColumnTypes("UInt64");
+        settings.AddColumnTypes("Uint64");
         settings.AddColumnTypes("String");
         if (!emptyPredicate) {
             settings.SetPredicate("WHERE true");
@@ -169,6 +169,27 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
         StopSession(ReadActorId1, source);
         StopSession(ReadActorId2, source);
+    }
+
+    Y_UNIT_TEST_F(TwoSessionWithoutPredicate, TFixture) {
+        const TString topicName = "twowithoutpredicate";
+        PQCreateStream(topicName);
+        Init(topicName);
+        auto source1 = BuildSource(topicName, true);
+        auto source2 = BuildSource(topicName, true);
+        StartSession(ReadActorId1, source1);
+        StartSession(ReadActorId2, source2);
+
+        const std::vector<TString> data = { Json1 };
+        PQWrite(data, topicName);
+        ExpectNewDataArrived({ReadActorId1, ReadActorId2});
+        Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
+        Runtime.Send(new IEventHandle(TopicSession, ReadActorId2, new TEvRowDispatcher::TEvGetNextBatch()));
+        ExpectMessageBatch(ReadActorId1, { Json1 });
+        ExpectMessageBatch(ReadActorId2, { Json1 });
+
+        StopSession(ReadActorId1, source1);
+        StopSession(ReadActorId2, source2);
     }
 
     Y_UNIT_TEST_F(SessionWithPredicateAndSessionWithoutPredicate, TFixture) {
@@ -263,7 +284,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         const std::vector<TString> data = { "not json", "noch einmal / nicht json" };
         PQWrite(data, topicName);
 
-        ExpectSessionError(ReadActorId1, "Failed to unwrap empty optional");
+        ExpectSessionError(ReadActorId1, "DB::ParsingException: Cannot parse input: expected '{' before: 'not json': (at row 1)");
         StopSession(ReadActorId1, source);
     }
 

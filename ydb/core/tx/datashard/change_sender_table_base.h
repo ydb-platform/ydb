@@ -2,6 +2,7 @@
 
 #include "change_exchange_helpers.h"
 
+#include <ydb/core/change_exchange/util.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
 
@@ -151,6 +152,11 @@ private:
             return;
         }
 
+        if (AsDerived()->TargetTableVersion && AsDerived()->TargetTableVersion == entry.Self->Info.GetVersion().GetGeneralVersion()) {
+            AsDerived()->CreateSenders();
+            return AsDerived()->Serve();
+        }
+
         AsDerived()->TagMap.clear();
         TVector<NScheme::TTypeInfo> keyColumnTypes;
 
@@ -181,7 +187,6 @@ private:
         );
 
         AsDerived()->SetPartitionResolver(CreateDefaultPartitionResolver(*AsDerived()->KeyDesc.Get()));
-
         AsDerived()->NextState(TStateTag{});
     }
 };
@@ -245,23 +250,11 @@ private:
             return AsDerived()->Retry();
         }
 
-        const bool versionChanged = !AsDerived()->TargetTableVersion || AsDerived()->TargetTableVersion != entry.GeneralVersion;
         AsDerived()->TargetTableVersion = entry.GeneralVersion;
-
         AsDerived()->KeyDesc = std::move(entry.KeyDescription);
-        AsDerived()->CreateSenders(MakePartitionIds(AsDerived()->KeyDesc->GetPartitions()), versionChanged);
+        AsDerived()->CreateSenders(NChangeExchange::MakePartitionIds(AsDerived()->KeyDesc->GetPartitions()));
 
         AsDerived()->NextState(TStateTag{});
-    }
-
-    static TVector<ui64> MakePartitionIds(const TVector<TKeyDesc::TPartitionInfo>& partitions) {
-        TVector<ui64> result(Reserve(partitions.size()));
-
-        for (const auto& partition : partitions) {
-            result.push_back(partition.ShardId); // partition = shard
-        }
-
-        return result;
     }
 };
 

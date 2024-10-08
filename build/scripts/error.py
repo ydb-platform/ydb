@@ -63,13 +63,16 @@ def is_temporary_error(exc):
         logger.debug("Getaddrinfo exception: %s", exc)
         return True
 
-    import urllib2
+    try:
+        import urllib2
+        import httplib
+    except ImportError:
+        import urllib.request as urllib2
+        import http.client as httplib
 
     if isinstance(exc, urllib2.HTTPError) and exc.code in (429,):
         logger.debug("urllib2.HTTPError: %s", exc)
         return True
-
-    import httplib
 
     if isinstance(exc, httplib.IncompleteRead):
         logger.debug("IncompleteRead exception: %s", exc)

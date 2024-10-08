@@ -339,6 +339,10 @@ void FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
             columnDesc.MutableDefaultFromLiteral()->CopyFrom(
                 cMeta.DefaultFromLiteral);
         }
+
+        if (NScheme::NTypeIds::IsParametrizedType(columnIt->second.TypeInfo.GetTypeId())) {
+            ProtoFromTypeInfo(columnIt->second.TypeInfo, columnIt->second.TypeMod, *columnDesc.MutableTypeInfo());
+        }
     }
 
     for (TString& keyColumn : metadata->KeyColumnNames) {
@@ -385,6 +389,11 @@ void FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         columnDesc.SetName(columnIt->second.Name);
         columnDesc.SetType(columnIt->second.Type);
         columnDesc.SetNotNull(columnIt->second.NotNull);
+
+        auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(columnIt->second.TypeInfo, columnIt->second.TypeMod);
+        if (columnType.TypeInfo) {
+            *columnDesc.MutableTypeInfo() = *columnType.TypeInfo;
+        }
     }
 
     for (const auto& keyColumn : metadata.KeyColumnNames) {
@@ -521,6 +530,10 @@ public:
 
     void SetToken(const TString& cluster, const TIntrusiveConstPtr<NACLib::TUserToken>& token) override {
         Gateway->SetToken(cluster, token);
+    }
+
+    void SetClientAddress(const TString& clientAddress) override {
+        Gateway->SetClientAddress(clientAddress);
     }
 
     bool GetDatabaseForLoginOperation(TString& database) {
@@ -1255,6 +1268,7 @@ public:
 
             NMetadata::NModifications::IOperationsManager::TExternalModificationContext context;
             context.SetDatabase(SessionCtx->GetDatabase());
+            context.SetDatabaseId(SessionCtx->GetDatabaseId());
             context.SetActorSystem(ActorSystem);
             if (SessionCtx->GetUserToken()) {
                 context.SetUserToken(*SessionCtx->GetUserToken());

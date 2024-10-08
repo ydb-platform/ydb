@@ -4,10 +4,6 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(1)
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32)
-ENDIF()
-
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
@@ -18,7 +14,6 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    ydb/library/yql/sql/pg_dummy
     ydb/core/testlib
     ydb/core/tx/datashard/ut_common
     ydb/core/tablet_flat

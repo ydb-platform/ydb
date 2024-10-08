@@ -126,7 +126,6 @@ SRCS(
     datashard_split_dst.cpp
     datashard_split_src.cpp
     datashard_subdomain_path_id.cpp
-    datashard_switch_mvcc_state.cpp
     datashard_trans_queue.cpp
     datashard_trans_queue.h
     datashard_txs.h
@@ -259,7 +258,6 @@ PEERDIR(
     ydb/core/formats
     ydb/core/io_formats/ydb_dump
     ydb/core/kqp/runtime
-    ydb/core/persqueue/partition_key_range
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/tablet
@@ -317,6 +315,7 @@ RECURSE_FOR_TESTS(
     ut_kqp
     ut_kqp_errors
     ut_kqp_scan
+    ut_local_kmeans
     ut_locks
     ut_minikql
     ut_minstep
@@ -327,7 +326,9 @@ RECURSE_FOR_TESTS(
     ut_read_table
     ut_reassign
     ut_replication
+    ut_reshuffle_kmeans
     ut_rs
+    ut_sample_k
     ut_sequence
     ut_snapshot
     ut_stats

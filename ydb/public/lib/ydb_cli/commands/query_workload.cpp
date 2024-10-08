@@ -123,12 +123,8 @@ int TCommandQueryWorkloadRun::Run(TConfig& config) {
                     while (!IsInterrupted())
                     {
                         auto streamPart = result.ReadNext().GetValueSync();
-                        if (!streamPart.IsSuccess()) {
-                            if (streamPart.EOS()) {
-                                break;
-                            }
-
-                            ThrowOnError(streamPart);
+                        if (ThrowOnErrorAndCheckEOS(streamPart)) {
+                            break;
                         }
 
                         if (streamPart.GetStats()) {

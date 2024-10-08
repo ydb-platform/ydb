@@ -591,9 +591,11 @@ private:
         QueryId = ReplayDetails["query_id"].GetStringSafe();
 
         TKqpQuerySettings settings(queryType);
+        const auto& database = ReplayDetails["query_database"].GetStringSafe();
         Query = std::make_unique<NKikimr::NKqp::TKqpQueryId>(
             ReplayDetails["query_cluster"].GetStringSafe(),
-            ReplayDetails["query_database"].GetStringSafe(),
+            database,
+            database,
             queryText,
             settings,
             !queryParameterTypes.empty()
@@ -623,7 +625,7 @@ private:
         counters->Counters = new TKqpCounters(c);
         counters->TxProxyMon = new NTxProxy::TTxProxyMon(c);
 
-        Gateway = CreateKikimrIcGateway(Query->Cluster, queryType, Query->Database, std::move(loader),
+        Gateway = CreateKikimrIcGateway(Query->Cluster, queryType, Query->Database, Query->DatabaseId, std::move(loader),
             TlsActivationContext->ExecutorThread.ActorSystem, SelfId().NodeId(), counters);
         auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({HttpGateway, nullptr, nullptr, nullptr, {}, {}, {}, nullptr, nullptr, {}});
         KqpHost = CreateKqpHost(Gateway, Query->Cluster, Query->Database, Config, ModuleResolverState->ModuleResolver,

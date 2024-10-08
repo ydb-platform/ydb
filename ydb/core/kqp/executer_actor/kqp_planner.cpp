@@ -92,6 +92,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , MayRunTasksLocally(args.MayRunTasksLocally)
     , ResourceManager_(args.ResourceManager_)
     , CaFactory_(args.CaFactory_)
+    , BlockTrackingMode(args.BlockTrackingMode)
 {
     if (GUCSettings) {
         SerializedGUCSettings = GUCSettings->SerializeToString();
@@ -235,6 +236,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
 
     request.SetSchedulerGroup(UserRequestContext->PoolId);
     request.SetDatabase(Database);
+    request.SetDatabaseId(UserRequestContext->DatabaseId);
     if (UserRequestContext->PoolConfig.has_value()) {
         request.SetMemoryPoolPercent(UserRequestContext->PoolConfig->QueryMemoryLimitPercentPerNode);
         request.SetPoolMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
@@ -466,6 +468,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .Deadline = Deadline,
         .ShareMailbox = (computeTasksSize <= 1),
         .RlPath = Nothing(),
+        .BlockTrackingMode = BlockTrackingMode
     });
 
     if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&startResult)) {

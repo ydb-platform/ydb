@@ -68,14 +68,14 @@ TEST(TSimpleLruCache, Clear)
 TEST(TMultiLruCache, InsertAndFind)
 {
     TMultiLruCache<TString, int> cache(3);
-    
-    EXPECT_EQ(cache.GetSize(), 0u);
+
+    EXPECT_EQ(cache.GetSize(), 0);
 
     cache.Insert("a", 1);
     cache.Insert("b", 2);
     cache.Insert("a", 3);
 
-    EXPECT_EQ(cache.GetSize(), 3u);
+    EXPECT_EQ(cache.GetSize(), 3);
 
     ASSERT_TRUE(cache.Find("a"));
     ASSERT_TRUE(cache.Find("b"));
@@ -88,7 +88,7 @@ TEST(TMultiLruCache, InsertAndFind)
 
     cache.Insert("b", 4);
 
-    EXPECT_EQ(cache.GetSize(), 3u);
+    EXPECT_EQ(cache.GetSize(), 3);
     ASSERT_TRUE(cache.Find("a"));
     ASSERT_TRUE(cache.Find("b"));
     EXPECT_FALSE(cache.Find("c"));
@@ -102,42 +102,42 @@ TEST(TMultiLruCache, InsertAndFind)
 
     cache.Insert("c", 5);
 
-    EXPECT_EQ(cache.GetSize(), 3u);
+    EXPECT_EQ(cache.GetSize(), 3);
     EXPECT_TRUE(cache.Find("a"));
     EXPECT_TRUE(cache.Find("b"));
     EXPECT_TRUE(cache.Find("c"));
 
     cache.Clear();
-    EXPECT_EQ(cache.GetSize(), 0u);
+    EXPECT_EQ(cache.GetSize(), 0);
 }
 
 TEST(TMultiLruCache, Extract)
 {
     TMultiLruCache<TString, int> cache(3);
-    
+
     cache.Insert("a", 1);
     cache.Insert("b", 2);
     cache.Insert("a", 3);
 
-    EXPECT_FALSE(cache.Extract("c"));
+    EXPECT_FALSE(cache.TryExtract("c"));
 
-    EXPECT_EQ(*cache.Extract("a"), 1);
-    EXPECT_EQ(cache.GetSize(), 2u);
+    EXPECT_EQ(*cache.TryExtract("a"), 1);
+    EXPECT_EQ(cache.GetSize(), 2);
 
     cache.Insert("b", 4);
 
-    EXPECT_EQ(*cache.Extract("a"), 3);
-    EXPECT_EQ(cache.GetSize(), 2u);
+    EXPECT_EQ(*cache.TryExtract("a"), 3);
+    EXPECT_EQ(cache.GetSize(), 2);
 
     cache.Insert("c", 1);
-    
-    EXPECT_TRUE(cache.Find("b"));
-    EXPECT_EQ(*cache.Extract("b"), 4);
-    EXPECT_EQ(cache.GetSize(), 2u);
-    EXPECT_TRUE(cache.Find("b"));
-    EXPECT_EQ(*cache.Extract("b"), 2);
 
-    EXPECT_FALSE(cache.Extract("b"));
+    EXPECT_TRUE(cache.Find("b"));
+    EXPECT_EQ(*cache.TryExtract("b"), 4);
+    EXPECT_EQ(cache.GetSize(), 2);
+    EXPECT_TRUE(cache.Find("b"));
+    EXPECT_EQ(*cache.TryExtract("b"), 2);
+
+    EXPECT_FALSE(cache.TryExtract("b"));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

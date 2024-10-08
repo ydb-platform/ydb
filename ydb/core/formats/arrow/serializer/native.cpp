@@ -19,6 +19,7 @@ arrow::Result<std::shared_ptr<arrow::RecordBatch>> TNativeSerializer::DoDeserial
     arrow::ipc::DictionaryMemo dictMemo;
     auto options = arrow::ipc::IpcReadOptions::Defaults();
     options.use_threads = false;
+    options.memory_pool = Options.memory_pool;
 
     std::shared_ptr<arrow::Buffer> buffer(std::make_shared<TBufferOverString>(data));
     arrow::io::BufferReader readerStream(buffer);
@@ -61,6 +62,7 @@ arrow::Result<std::shared_ptr<arrow::RecordBatch>> TNativeSerializer::DoDeserial
     arrow::ipc::DictionaryMemo dictMemo;
     auto options = arrow::ipc::IpcReadOptions::Defaults();
     options.use_threads = false;
+    options.memory_pool = Options.memory_pool;
 
     std::shared_ptr<arrow::Buffer> buffer(std::make_shared<TBufferOverString>(data));
     arrow::io::BufferReader reader(buffer);

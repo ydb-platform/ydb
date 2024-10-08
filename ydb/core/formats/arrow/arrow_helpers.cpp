@@ -29,22 +29,25 @@
 namespace NKikimr::NArrow {
 
 template <typename TType>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl() {
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl(const NScheme::TTypeInfo& typeInfo) {
+    Y_UNUSED(typeInfo);
     return std::make_shared<TType>();
 }
 
 template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::Decimal128Type>() {
-    return arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE);
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::Decimal128Type>(const NScheme::TTypeInfo& typeInfo) {
+    return arrow::decimal(typeInfo.GetDecimalType().GetPrecision(), typeInfo.GetDecimalType().GetScale());
 }
 
 template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::TimestampType>() {
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::TimestampType>(const NScheme::TTypeInfo& typeInfo) {
+    Y_UNUSED(typeInfo);
     return arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO);
 }
 
 template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::DurationType>() {
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::DurationType>(const NScheme::TTypeInfo& typeInfo) {
+    Y_UNUSED(typeInfo);
     return arrow::duration(arrow::TimeUnit::TimeUnit::MICRO);
 }
 
@@ -52,13 +55,13 @@ arrow::Result<std::shared_ptr<arrow::DataType>> GetArrowType(NScheme::TTypeInfo 
     std::shared_ptr<arrow::DataType> result;
     bool success = SwitchYqlTypeToArrowType(typeInfo, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
         Y_UNUSED(typeHolder);
-        result = CreateEmptyArrowImpl<TType>();
+        result = CreateEmptyArrowImpl<TType>(typeInfo);
         return true;
     });
     if (success) {
         return result;
     }
-    
+
     return arrow::Status::TypeError("unsupported type ", NKikimr::NScheme::TypeName(typeInfo));
 }
 
@@ -223,14 +226,16 @@ std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::Recor
     return DeserializeBatch(SerializeBatch(original, arrow::ipc::IpcWriteOptions::Defaults()), original->schema());
 }
 
-std::shared_ptr<arrow::Table> ReallocateBatch(const std::shared_ptr<arrow::Table>& original) {
+std::shared_ptr<arrow::Table> ReallocateBatch(const std::shared_ptr<arrow::Table>& original, arrow::MemoryPool* pool) {
     if (!original) {
         return original;
     }
+
     auto batches = NArrow::SliceToRecordBatches(original);
+
     for (auto&& i : batches) {
         i = NArrow::TStatusValidator::GetValid(
-            NArrow::NSerialization::TNativeSerializer().Deserialize(NArrow::NSerialization::TNativeSerializer().SerializeFull(i)));
+            NArrow::NSerialization::TNativeSerializer(pool).Deserialize(NArrow::NSerialization::TNativeSerializer(pool).SerializeFull(i)));
     }
     return NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batches));
 }

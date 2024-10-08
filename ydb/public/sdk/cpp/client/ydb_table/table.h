@@ -1274,30 +1274,7 @@ private:
     ETransactionMode Mode_;
 };
 
-class TTxControl {
-    friend class TTableClient;
-
-public:
-    using TSelf = TTxControl;
-
-    static TTxControl Tx(const TTransaction& tx) {
-        return TTxControl(tx);
-    }
-
-    static TTxControl BeginTx(const TTxSettings& settings = TTxSettings()) {
-        return TTxControl(settings);
-    }
-
-    FLUENT_SETTING_FLAG(CommitTx);
-
-private:
-    TTxControl(const TTransaction& tx);
-    TTxControl(const TTxSettings& begin);
-
-private:
-    TMaybe<TString> TxId_;
-    TTxSettings BeginTx_;
-};
+class TTxControl;
 
 enum class EAutoPartitioningPolicy {
     Disabled = 1,
@@ -1692,6 +1669,8 @@ struct TReadTableSettings : public TRequestSettings<TReadTableSettings> {
     FLUENT_SETTING_OPTIONAL(bool, ReturnNotNullAsOptional);
 };
 
+using TPrecommitTransactionCallback = std::function<TAsyncStatus ()>;
+
 //! Represents all session operations
 //! Session is transparent logic representation of connection
 class TSession {
@@ -1829,26 +1808,51 @@ TAsyncStatus TTableClient::RetryOperation(
 class TTransaction {
     friend class TTableClient;
 public:
-    const TString& GetId() const {
-        return TxId_;
-    }
-
-    bool IsActive() const {
-        return !TxId_.empty();
-    }
+    const TString& GetId() const;
+    bool IsActive() const;
 
     TAsyncCommitTransactionResult Commit(const TCommitTxSettings& settings = TCommitTxSettings());
     TAsyncStatus Rollback(const TRollbackTxSettings& settings = TRollbackTxSettings());
 
-    TSession GetSession() const {
-        return Session_;
-    }
+    TSession GetSession() const;
+
+    void AddPrecommitCallback(TPrecommitTransactionCallback cb);
 
 private:
     TTransaction(const TSession& session, const TString& txId);
 
-    TSession Session_;
-    TString TxId_;
+    TAsyncStatus Precommit() const;
+
+    class TImpl;
+
+    std::shared_ptr<TImpl> TransactionImpl_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TTxControl {
+    friend class TTableClient;
+
+public:
+    using TSelf = TTxControl;
+
+    static TTxControl Tx(const TTransaction& tx) {
+        return TTxControl(tx);
+    }
+
+    static TTxControl BeginTx(const TTxSettings& settings = TTxSettings()) {
+        return TTxControl(settings);
+    }
+
+    FLUENT_SETTING_FLAG(CommitTx);
+
+private:
+    TTxControl(const TTransaction& tx);
+    TTxControl(const TTxSettings& begin);
+
+private:
+    TMaybe<TTransaction> Tx_;
+    TTxSettings BeginTx_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

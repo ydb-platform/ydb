@@ -11,13 +11,8 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<NOlap::TPortionInfoConstructor>, PortionInfoConstructor);
     std::shared_ptr<NOlap::TPortionInfo> PortionInfo;
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, PKBatch);
-    THashMap<NOlap::TUnifiedBlobId, TString> Blobs;
 
 public:
-    const THashMap<NOlap::TUnifiedBlobId, TString>& GetBlobs() const {
-        return Blobs;
-    }
-
     const std::shared_ptr<NOlap::TPortionInfo>& GetPortionInfo() const {
         AFL_VERIFY(PortionInfo);
         return PortionInfo;
@@ -25,9 +20,6 @@ public:
     TInsertedPortion(NOlap::TWritePortionInfoWithBlobsResult&& portion, const std::shared_ptr<arrow::RecordBatch>& pkBatch)
         : PortionInfoConstructor(portion.DetachPortionConstructor())
         , PKBatch(pkBatch) {
-        for (auto&& i : portion.GetBlobs()) {
-            AFL_VERIFY(Blobs.emplace(i.GetBlobIdVerified(), i.GetResultBlob()).second);
-        }
         AFL_VERIFY(PKBatch);
     }
 

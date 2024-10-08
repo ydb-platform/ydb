@@ -303,7 +303,7 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
             auto loader = GetIndexInfo().GetColumnLoaderVerified(columnId);
             auto saver = GetIndexInfo().GetColumnSaver(columnId);
             saver.AddSerializerWithBorder(100, NArrow::NSerialization::TNativeSerializer::GetUncompressed());
-            saver.AddSerializerWithBorder(1000, NArrow::NSerialization::TNativeSerializer::GetFast());
+            saver.AddSerializerWithBorder(100000000, NArrow::NSerialization::TNativeSerializer::GetFast());
             const auto& columnFeatures = GetIndexInfo().GetColumnFeaturesVerified(columnId);
             auto accessor = std::make_shared<NArrow::NAccessor::TTrivialArray>(incomingBatch->column(incomingIndex));
             std::shared_ptr<arrow::RecordBatch> rbToWrite =

@@ -90,15 +90,6 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         auto& granule = index.MutableGranuleVerified(op->GetPathId());
         for (auto&& portion : pack.GetPortions()) {
-            THashMap<TString, THashSet<NOlap::TBlobRange>> ranges;
-            portion.GetPortionInfo()->FillBlobRangesByStorage(ranges, Self->GetIndexOptional()->GetVersionedIndex());
-            AFL_VERIFY(ranges.size() == 1);
-            AFL_VERIFY(ranges.begin()->first == NOlap::NBlobOperations::TGlobal::DefaultStorageId);
-            for (auto&& c : ranges.begin()->second) {
-                auto it = portion.GetBlobs().find(c.BlobId);
-                AFL_VERIFY(it != portion.GetBlobs().end());
-                NBlobCache::AddRangeToCache(c, c.GetData(it->second));
-            }
             if (op->GetBehaviour() == EOperationBehaviour::WriteWithLock || op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
                 if (op->GetBehaviour() != EOperationBehaviour::NoTxWrite || Self->GetOperationsManager().HasReadLocks(writeMeta.GetTableId())) {
                     auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(

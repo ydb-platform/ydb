@@ -113,10 +113,16 @@ public:
     private:
         using TBlobChunks = std::vector<TChunkAddress>;
         YDB_READONLY_DEF(TBlobChunks, Chunks);
+        std::optional<TUnifiedBlobId> BlobId;
         const TString ResultBlob;
         YDB_READONLY_DEF(std::shared_ptr<IBlobsStorageOperator>, Operator);
 
     public:
+        const TUnifiedBlobId& GetBlobIdVerified() const {
+            AFL_VERIFY(BlobId);
+            return *BlobId;
+        }
+
         ui64 GetSize() const {
             return ResultBlob.size();
         }
@@ -133,13 +139,17 @@ public:
             return ResultBlob;
         }
 
-        void RegisterBlobId(TWritePortionInfoWithBlobsResult& owner, const TUnifiedBlobId& blobId) const;
+        void RegisterBlobId(TWritePortionInfoWithBlobsResult& owner, const TUnifiedBlobId& blobId);
     };
 private:
     std::optional<TPortionInfoConstructor> PortionConstructor;
     std::optional<TPortionInfo> PortionResult;
     YDB_READONLY_DEF(std::vector<TBlobInfo>, Blobs);
 public:
+    std::vector<TBlobInfo>& MutableBlobs() {
+        return Blobs;
+    }
+
     TWritePortionInfoWithBlobsResult(TWritePortionInfoWithBlobsConstructor&& constructor)
         : PortionConstructor(std::move(constructor.PortionConstructor)) {
         for (auto&& i : constructor.Blobs) {

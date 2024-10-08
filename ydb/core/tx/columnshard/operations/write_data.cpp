@@ -70,11 +70,20 @@ bool TProtoArrowData::ParseFromProto(const NKikimrTxColumnShard::TEvWrite& proto
         }
         ArrowSchema = NArrow::DeserializeSchema(incomingDataScheme);
         if (!ArrowSchema) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_deserialize_data");
             return false;
         }
     }
     OriginalDataSize = IncomingData.size();
-    return !IncomingData.empty() && IncomingData.size() <= NColumnShard::TLimits::GetMaxBlobSize();
+    if (IncomingData.empty()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "empty_data");
+        return false;
+    }
+    if (NColumnShard::TLimits::GetMaxBlobSize() < IncomingData.size() && !AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "too_big_blob");
+        return false;
+    }
+    return true;
 }
 
 TConclusion<std::shared_ptr<arrow::RecordBatch>> TProtoArrowData::ExtractBatch() {

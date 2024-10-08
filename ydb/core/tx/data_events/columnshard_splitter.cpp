@@ -1,6 +1,7 @@
 #include "columnshard_splitter.h"
 
 #include <ydb/core/tx/columnshard/splitter/settings.h>
+#include <ydb/core/base/appdata.h>
 
 namespace NKikimr::NEvWrite {
 
@@ -63,7 +64,9 @@ NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplit
     const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<NSharding::IShardingBase>& sharding) {
     Y_ABORT_UNLESS(batch);
 
-    auto split = sharding->SplitByShards(batch, NOlap::NSplitter::TSplitSettings().GetExpectedPortionSize());
+    auto split = sharding->SplitByShards(batch, AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert()
+                                                    ? NOlap::NSplitter::TSplitSettings().GetExpectedPortionSize()
+                                                    : NColumnShard::TLimits::GetMaxBlobSize() * 0.875);
     if (split.IsFail()) {
         return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, split.GetErrorMessage());
     }

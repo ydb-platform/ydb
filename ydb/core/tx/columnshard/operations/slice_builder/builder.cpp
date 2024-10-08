@@ -99,7 +99,7 @@ public:
         , DataSize(dataSize)
     {
         for (auto&& p : Portions) {
-            for (auto&& b : p.GetPortion().GetBlobs()) {
+            for (auto&& b : p.MutablePortion().MutableBlobs()) {
                 auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.GetResultBlob(), action));
                 b.RegisterBlobId(p.MutablePortion(), task.GetBlobId());
             }

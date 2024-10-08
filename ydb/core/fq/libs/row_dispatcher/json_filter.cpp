@@ -53,7 +53,7 @@ private:
     TVector<NYT::TNode> Schemas;
 };
 
-class TFilterInputConsumer : public NYql::NPureCalc::IConsumer<std::pair<ui64, TVector<TVector<std::string_view>>>> {
+class TFilterInputConsumer : public NYql::NPureCalc::IConsumer<std::pair<ui64, const TVector<TVector<std::string_view>>&>> {
 public:
     TFilterInputConsumer(
         const TFilterInputSpec& spec,
@@ -91,7 +91,7 @@ public:
         }
     }
 
-    void OnObject(std::pair<ui64, TVector<TVector<std::string_view>>> values) override {
+    void OnObject(std::pair<ui64, const TVector<TVector<std::string_view>>&> values) override {
         Y_ENSURE(FieldsPositions.size() == values.second.size());
 
         NKikimr::NMiniKQL::TThrowingBindTerminator bind;
@@ -200,7 +200,7 @@ struct NYql::NPureCalc::TInputSpecTraits<TFilterInputSpec> {
     static constexpr bool IsPartial = false;
     static constexpr bool SupportPushStreamMode = true;
 
-    using TConsumerType = THolder<NYql::NPureCalc::IConsumer<std::pair<ui64, TVector<TVector<std::string_view>>>>>;
+    using TConsumerType = THolder<NYql::NPureCalc::IConsumer<std::pair<ui64, const TVector<TVector<std::string_view>>&>>>;
 
     static TConsumerType MakeConsumer(
         const TFilterInputSpec& spec,
@@ -271,7 +271,7 @@ private:
 
 private:
     THolder<NYql::NPureCalc::TPushStreamProgram<TFilterInputSpec, TFilterOutputSpec>> Program;
-    THolder<NYql::NPureCalc::IConsumer<std::pair<ui64, TVector<TVector<std::string_view>>>>> InputConsumer;
+    THolder<NYql::NPureCalc::IConsumer<std::pair<ui64, const TVector<TVector<std::string_view>>&>>> InputConsumer;
     const TString Sql;
 };
 

@@ -38,6 +38,7 @@ enum ETabletVolatileState {
     TABLET_VOLATILE_STATE_STARTING = 3;
     TABLET_VOLATILE_STATE_RUNNING = 4;
     _TABLET_VOLATILE_STATE_BLOCKED = 5; // deprecated
+    TABLET_VOLATILE_STATE_WAITING = 6;
 }
 
 enum EMigrationState {

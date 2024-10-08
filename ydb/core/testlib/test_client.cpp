@@ -521,7 +521,7 @@ namespace Tests {
         app.AddDomain(domain.Release());
     }
 
-    TVector<ui64> TServer::StartPQTablets(ui32 pqTabletsN) {
+    TVector<ui64> TServer::StartPQTablets(ui32 pqTabletsN, bool wait) {
         auto getChannelBind = [](const TString& storagePool) {
             TChannelBind bind;
             bind.SetStoragePoolName(storagePool);
@@ -556,7 +556,7 @@ namespace Tests {
             UNIT_ASSERT_EQUAL_C(createTabletReply->Record.GetOwner(), tabletId,
                                 createTabletReply->Record.GetOwner() << " != " << tabletId);
             ui64 id = createTabletReply->Record.GetTabletID();
-            while (true) {
+            while (wait) {
                 auto tabletCreationResult =
                     Runtime->GrabEdgeEventRethrow<TEvHive::TEvTabletCreationResult>(handle);
                 UNIT_ASSERT(tabletCreationResult);

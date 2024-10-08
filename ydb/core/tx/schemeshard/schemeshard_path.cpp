@@ -34,6 +34,9 @@ const TPath::TChecker& TPath::TChecker::Fail(EStatus status, const TString& erro
     Error = TStringBuilder() << "Check failed"
         << ": path: '" << Path.PathString() << "'"
         << ", error: " << error
+    // this line included only in debug error
+    // because we do not want to forward information
+    // about our sources to db user
 #ifndef NDEBUG
         << ", source_location: " << NUtil::TrimSourceFileName(Location.file_name()) << ":" << Location.line()
 #endif

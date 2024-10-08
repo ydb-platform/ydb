@@ -15,4 +15,4 @@ TString TrimSourceFileName(const char* fileName) {
     return fileName;
 }
 
-} // namespace NKikimrNUtil
+} // namespace NKikimr::NUtil

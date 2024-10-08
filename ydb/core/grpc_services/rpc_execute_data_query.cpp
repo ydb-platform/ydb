@@ -185,9 +185,8 @@ public:
                     // https://protobuf.dev/reference/cpp/arenas/#swap
                     // Actualy will be copy in case pf remote execution
                     queryResult->mutable_result_sets()->Swap(record.MutableResponse()->MutableYdbResults());
-                } else {
-                    NKqp::ConvertKqpQueryResultsToDbResult(kqpResponse, queryResult);
                 }
+
                 ConvertQueryStats(kqpResponse, queryResult);
                 if (kqpResponse.HasTxMeta()) {
                     queryResult->mutable_tx_meta()->CopyFrom(kqpResponse.GetTxMeta());

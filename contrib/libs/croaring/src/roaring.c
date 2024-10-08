@@ -3319,7 +3319,7 @@ roaring_bitmap_t *roaring_bitmap_portable_deserialize_frozen(const char *buf) {
 
 bool roaring_bitmap_to_bitset(const roaring_bitmap_t *r, bitset_t *bitset) {
     uint32_t max_value = roaring_bitmap_maximum(r);
-    size_t new_array_size = (size_t)(((uint64_t)max_value + 63) / 64);
+    size_t new_array_size = (size_t)(max_value / 64 + 1);
     bool resize_ok = bitset_resize(bitset, new_array_size, true);
     if (!resize_ok) {
         return false;

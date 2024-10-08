@@ -10,6 +10,8 @@ This article describes how to create and configure the necessary set of virtual 
 
 ![AiC_scheme](./_assets/terraform/AiC_scheme.png)
 
+{% include [terraform-alt-way-to-install](./_includes/terraform/terraform-alt-way-to-install.md) %}
+
 The configuration for setting up the VM environment is described in YAML format, and the infrastructure code is written in [HCL](https://github.com/hashicorp/hcl) (Terraform configuration language). The basic logical unit of recording in HCL is a "block". A block consists of a keyword identifying its type, name, and the block's body inside curly brackets. For example, this is what a virtual server control block in AWS might look like:
 
 ```hcl
@@ -111,6 +113,7 @@ provider_installation {
     exclude = ["registry.terraform.io/*/*"]
     exclude = ["terraform.storage.ydb.tech/*/*"]
   }
+}  
 ```
 
 If you already use Terraform providers provided in the [official repository](https://registry.terraform.io/browse/providers), they will continue to work.

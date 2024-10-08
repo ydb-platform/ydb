@@ -8,7 +8,7 @@
 
 ![AiC_scheme](./_assets/terraform/AiC_scheme.png)
 
-{% include [terraform-alt-way-to-install](./_includes/terraform-alt-way-to-install.md) %}
+{% include [terraform-alt-way-to-install](./_includes/terraform/terraform-alt-way-to-install.md) %}
 
 Конфигурация настройки окружения ВМ описывается в YAML-формате, а инфраструктурный код пишется на [HCL](https://github.com/hashicorp/hcl) (язык конфигурации Terraform). Основной логической единицей записи в HCL является «блок». Блок состоит из ключевого слова, идентифицирующего его тип, названия и фигурных скобок, обозначающих тело блока. Например, так может выглядеть блок управления виртуальным сервером в AWS:
 
@@ -114,6 +114,7 @@ provider_installation {
     exclude = ["registry.terraform.io/*/*"]
     exclude = ["terraform.storage.ydb.tech/*/*"]
   }
+}  
 ```
 
 Если уже используются Terraform-провайдеры, представленные в [официальном репозитории](https://registry.terraform.io/browse/providers), они продолжат работать.

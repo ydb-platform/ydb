@@ -1,11 +1,15 @@
 #pragma once
 
+#include <util/generic/string.h>
+
 #if __has_builtin(__builtin_source_location)
 #include <source_location>
 
 namespace NKikimr::NCompat {
 
 using TSourceLocation = std::source_location;
+
+constexpr inline bool HasSourceLocation = true;
 
 } // namespace NCompat
 #else
@@ -28,5 +32,13 @@ struct TSourceLocation {
     }
 };
 
+constexpr inline bool HasSourceLocation = false;
+
 } // namespace NCompat
 #endif
+
+namespace NKikimr::NUtil {
+
+TString TrimSourceFileName(const char* fileName);
+
+} // namespace NKikimrNUtil

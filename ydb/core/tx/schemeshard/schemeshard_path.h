@@ -4,9 +4,7 @@
 #include "schemeshard_info_types.h"
 
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
-#ifndef NDEBUG
 #include <ydb/core/util/source_location.h>
-#endif
 
 #include <util/generic/maybe.h>
 
@@ -26,20 +24,14 @@ public:
         mutable bool Failed;
         mutable EStatus Status;
         mutable TString Error;
-#ifndef NDEBUG
         NCompat::TSourceLocation Location;
-#endif
 
     private:
         TString BasicPathInfo(TPathElement::TPtr element) const;
         const TChecker& Fail(EStatus status, const TString& error) const;
 
     public:
-#ifndef NDEBUG
         explicit TChecker(const TPath& path, const NCompat::TSourceLocation location = NCompat::TSourceLocation::current());
-#else
-        explicit TChecker(const TPath& path);
-#endif
 
         explicit operator bool() const;
         EStatus GetStatus() const;
@@ -131,11 +123,7 @@ public:
     static TPath ResolveWithInactive(TOperationId opId, const TString path, TSchemeShard* ss);
 
     static TPath Init(const TPathId pathId, TSchemeShard* ss);
-#ifndef NDEBUG
     TChecker Check(const NCompat::TSourceLocation location = NCompat::TSourceLocation::current()) const;
-#else
-    TChecker Check() const;
-#endif
     bool IsEmpty() const;
     bool IsResolved() const;
 

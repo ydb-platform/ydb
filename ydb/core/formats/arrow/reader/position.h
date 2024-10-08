@@ -461,6 +461,16 @@ public:
         return Positions.begin();
     }
 
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "[";
+        for (auto&& p : Positions) {
+            sb << p.DebugJson().GetStringRobust() << ";";
+        }
+        sb << "]";
+        return sb;
+    }
+
     std::vector<TIntervalPosition>::const_iterator end() const {
         return Positions.end();
     }

@@ -411,7 +411,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 Cerr << "WAIT_COMPACTION: " << csController->GetCompactionStartedCounter().Val() << Endl;
                 Sleep(TDuration::Seconds(1));
             }
-            AFL_VERIFY(csController->GetCompactionStartedCounter().Val());
+            // important checker for control compactions (<=21) and control indexes constructed (>=21)
+            AFL_VERIFY(csController->GetCompactionStartedCounter().Val() == 21)("count", csController->GetCompactionStartedCounter().Val());
 
             {
                 auto it = tableClient
@@ -460,7 +461,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 CompareYson(result, R"([[1u;]])");
             }
 
-            AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val())
+            AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() * 5 < csController->GetIndexesSkippingOnSelect().Val())
             ("approved", csController->GetIndexesApprovedOnSelect().Val())("skipped", csController->GetIndexesSkippingOnSelect().Val());
         }
     };

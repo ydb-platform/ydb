@@ -4,6 +4,8 @@
 
 #include <yt/yt/core/concurrency/scheduler_api.h>
 
+#include <library/cpp/yt/logging/logger.h>
+
 #include <atomic>
 
 namespace NYT {

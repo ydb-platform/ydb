@@ -22,7 +22,7 @@
 
 1. Скачайте архив:
 
-```bash
+```
 sudo curl -L -o <archive_name>.zip \
 https://hashicorp-releases.yandexcloud.net/terraform/<terraform_version>/ \
 <terraform_version_architecture_and_os>.zip

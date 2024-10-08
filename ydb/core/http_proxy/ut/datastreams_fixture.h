@@ -335,6 +335,26 @@ public:
         return {httpCode, "", ""};
     }
 
+    NJson::TJsonMap CreateQueue(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", request, FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+        if (expectedHttpCode == 200) {
+            UNIT_ASSERT(GetByPath<TString>(json, "QueueUrl").EndsWith(GetByPath<TString>(request, "QueueName")));
+        }
+        return json;
+    }
+
+    NJson::TJsonMap GetQueueAttributes(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto res = SendHttpRequest("/Root", "AmazonSQS.GetQueueAttributes", request, FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        // UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["DelaySeconds"], "1");
+        return json;
+    }
+
 private:
     TMaybe<NYdb::TResultSet> RunYqlDataQuery(TString query) {
         TString endpoint = TStringBuilder() << "localhost:" << KikimrGrpcPort;
@@ -476,7 +496,7 @@ private:
         );
 
         client.MkDir("/Root/SQS", ".FIFO");
-        client.CreateTable("/Root/SQS/.FIFO", 
+        client.CreateTable("/Root/SQS/.FIFO",
            "Name: \"Messages\""
            "Columns { Name: \"QueueIdNumberHash\"     Type: \"Uint64\"}"
            "Columns { Name: \"QueueIdNumber\"         Type: \"Uint64\"}"
@@ -536,7 +556,7 @@ private:
            "KeyColumnNames: [\"Account\", \"QueueName\", \"EventType\"]"
         );
 
-        auto stateTableCommon = 
+        auto stateTableCommon =
            "Name: \"State\""
            "Columns { Name: \"QueueIdNumberHash\"      Type: \"Uint64\"}"
            "Columns { Name: \"QueueIdNumber\"          Type: \"Uint64\"}"
@@ -580,7 +600,7 @@ private:
            "KeyColumnNames: [\"QueueIdNumberAndShardHash\", \"QueueIdNumber\", \"Shard\", \"Offset\"]"
         );
 
-        auto sentTimestampIdxCommonColumns= 
+        auto sentTimestampIdxCommonColumns=
            "Columns { Name: \"QueueIdNumberAndShardHash\"  Type: \"Uint64\"}"
            "Columns { Name: \"QueueIdNumber\"              Type: \"Uint64\"}"
            "Columns { Name: \"Shard\"                      Type: \"Uint32\"}"
@@ -699,7 +719,7 @@ private:
         folderServiceConfig.SetEnable(false);
         actorId = as->Register(NKikimr::NFolderService::CreateFolderServiceActor(folderServiceConfig, "cloud4"));
         as->RegisterLocalService(NFolderService::FolderServiceActorId(), actorId);
-        
+
         actorId = as->Register(NKikimr::NFolderService::CreateFolderServiceActor(folderServiceConfig, "cloud4"));
         as->RegisterLocalService(NSQS::MakeSqsFolderServiceID(), actorId);
 

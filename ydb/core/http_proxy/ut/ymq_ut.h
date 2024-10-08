@@ -25,83 +25,96 @@ extern THttpResult SendHttpRequest(
 Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
     Y_UNIT_TEST_F(TestCreateQueue, THttpProxyTestMock) {
-        auto req = CreateSqsCreateQueueRequest();
-        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(req), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-        NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
-        UNIT_ASSERT(resultQueueUrl.EndsWith("ExampleQueueName"));
+        CreateQueue({{"QueueName", "ExampleQueueName"}});
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithSameNameAndSameParams, THttpProxyTestMock) {
-        auto req = CreateSqsCreateQueueRequest();
-        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(req), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-        NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
-        UNIT_ASSERT(resultQueueUrl.EndsWith("ExampleQueueName"));
-
-        req = CreateSqsCreateQueueRequest();
-        res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(req), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
-        UNIT_ASSERT(resultQueueUrl.EndsWith("ExampleQueueName"));
+        auto req = NJson::TJsonMap{{"QueueName", "ExampleQueueName"}};
+        CreateQueue(req);
+        CreateQueue(req);
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithSameNameAndDifferentParams, THttpProxyTestMock) {
-        auto req = CreateSqsCreateQueueRequest();
-        NJson::TJsonMap attributes = NJson::TJsonMap({std::pair<TString, TString>("MessageRetentionPeriod", "60")});
-        req["Attributes"] = attributes;
-        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(req), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-        NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
-        UNIT_ASSERT(resultQueueUrl.EndsWith("ExampleQueueName"));
+        auto req = NJson::TJsonMap{
+            {"QueueName", "ExampleQueueName"},
+            {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "60"}}}
+        };
+        CreateQueue(req);
 
-        req = CreateSqsCreateQueueRequest();
-        attributes = NJson::TJsonMap({std::pair<TString, TString>("MessageRetentionPeriod", "61")});
-        req["Attributes"] = attributes;
-        res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(req), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        req["Attributes"]["MessageRetentionPeriod"] = "61";
+        auto json = CreateQueue(req, 400);
         TString resultType = GetByPath<TString>(json, "__type");
         UNIT_ASSERT_VALUES_EQUAL(resultType, "ValidationError");
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithBadQueueName, THttpProxyTestMock) {
-        auto req = CreateSqsCreateQueueRequest();
-        req["QueueName"] = "B@d_queue_name";
-        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(req), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
-        NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        auto json = CreateQueue({
+            {"QueueName", "B@d_queue_name"},
+            {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "60"}}}
+        }, 400);
         TString resultType = GetByPath<TString>(json, "__type");
         UNIT_ASSERT_VALUES_EQUAL(resultType, "InvalidParameterValue");
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithEmptyName, THttpProxyTestMock) {
-        NJson::TJsonValue req;
-        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(req), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
-        NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        auto json = CreateQueue({}, 400);
         TString resultType = GetByPath<TString>(json, "__type");
         UNIT_ASSERT_VALUES_EQUAL(resultType, "MissingParameter");
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithWrongBody, THttpProxyTestMock) {
-        NJson::TJsonValue req;
-        req["wrongField"] = "foobar";
-        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(req), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
-        NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        auto json = CreateQueue({{"wrongField", "foobar"}}, 400);
         TString resultType = GetByPath<TString>(json, "__type");
         UNIT_ASSERT_VALUES_EQUAL(resultType, "InvalidArgumentException");
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueWithWrongAttribute, THttpProxyTestMock) {
+        auto json = CreateQueue({
+            {"QueueName", "ExampleQueueName"},
+            {"Attributes", NJson::TJsonMap{
+                {"KmsMasterKeyId", "some-id"},
+                {"KmsDataKeyReusePeriodSeconds", "60"},
+                {"SqsManagedSseEnabled", "true"},
+                {"Policy", "{}"}
+            }}
+        }, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "ValidationError");
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueWithAllAttributes, THttpProxyTestMock) {
+        auto json1 = CreateQueue({{"QueueName", "queue-1.fifo"}, {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}});
+        auto attributes1 = GetQueueAttributes({
+            {"QueueUrl", GetByPath<TString>(json1, "QueueUrl")},
+            {"AttributeNames", NJson::TJsonArray{"QueueArn"}}
+        });
+        auto queueArn1 = GetByPath<TString>(attributes1, "Attributes.QueueArn");
+
+        auto queueName = "ExampleQueueName.fifo";
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{
+                {"DelaySeconds", "60"},
+                {"MaximumMessageSize", "1024"},
+                {"MessageRetentionPeriod", "60"},
+                {"ReceiveMessageWaitTimeSeconds", "10"},
+                {"VisibilityTimeout", "3600"},
+
+                {"RedrivePolicy", TStringBuilder() << "{\"deadLetterTargetArn\":\"" << queueArn1 << "\", \"maxReceiveCount\": 3}"},
+
+                // 2024-10-07: RedriveAllowPolicy not supported yet.
+                // {"RedriveAllowPolicy", TStringBuilder() << "{\"redrivePermission\":\"byQueue\", \"sourceQueueArns\": [\"" << queueArn2 << "\", \"" << queueArn3 << "\"]}"},
+
+                // FIFO queue
+                {"FifoQueue", "true"},
+                {"ContentBasedDeduplication", "true"}
+
+                // High throughput for FIFO queues not supported yet.
+                // {"DeduplicationScope", "messageGroup"},
+                // {"FifoThroughputLimit", "perMessageGroupId"}
+            }}
+        });
+        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
+        UNIT_ASSERT(resultQueueUrl.EndsWith(queueName));
     }
 
     Y_UNIT_TEST_F(TestGetQueueUrlOfNotExistingQueue, THttpProxyTestMock) {

@@ -3,40 +3,20 @@
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/data_sharing/common/transactions/tx_extension.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
+#include <ydb/core/tx/columnshard/operations/events.h>
 #include <ydb/core/tx/data_events/write_data.h>
 
 namespace NKikimr::NColumnShard {
 
-class TInsertedPortion {
-private:
-    NEvWrite::TWriteMeta WriteMeta;
-    YDB_READONLY_DEF(std::shared_ptr<NOlap::TPortionInfoConstructor>, PortionInfoConstructor);
-    YDB_READONLY_DEF(std::shared_ptr<NOlap::TPortionInfo>, PortionInfo);
-    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, PKBatch);
-
-public:
-    const NEvWrite::TWriteMeta& GetWriteMeta() const {
-        return WriteMeta;
-    }
-
-    void Finalize(TColumnShard* shard, NTabletFlatExecutor::TTransactionContext& txc);
-
-    TInsertedPortion(const NEvWrite::TWriteMeta& writeMeta, const std::shared_ptr<NOlap::TPortionInfoConstructor>& portionInfoConstructor,
-        const std::shared_ptr<arrow::RecordBatch>& pkBatch)
-        : WriteMeta(writeMeta)
-        , PortionInfoConstructor(portionInfoConstructor)
-        , PKBatch(pkBatch) {
-        AFL_VERIFY(!WriteMeta.HasLongTxId());
-        AFL_VERIFY(PKBatch);
-    }
-};
+class TColumnShard;
 
 class TTxBlobsWritingFinished: public NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard> {
 private:
     using TBase = NOlap::NDataSharing::TExtendedTransactionBase<TColumnShard>;
     const NKikimrProto::EReplyStatus PutBlobResult;
-    std::vector<TInsertedPortion> Portions;
+    std::vector<TInsertedPortions> Packs;
     const std::shared_ptr<NOlap::IBlobsWritingAction> WritingActions;
     std::optional<NOlap::TSnapshot> CommitSnapshot;
 
@@ -62,7 +42,8 @@ private:
 
 public:
     TTxBlobsWritingFinished(TColumnShard* self, const NKikimrProto::EReplyStatus writeStatus,
-        const std::shared_ptr<NOlap::IBlobsWritingAction>& writingActions, std::vector<TInsertedPortion>&& portions, const std::vector<NEvWrite::TWriteMeta>& metaForReplyOnly);
+        const std::shared_ptr<NOlap::IBlobsWritingAction>& writingActions, std::vector<TInsertedPortions>&& packs,
+        const std::vector<TFailedWrite>& fails);
 
     virtual bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override;
     virtual void DoComplete(const TActorContext& ctx) override;

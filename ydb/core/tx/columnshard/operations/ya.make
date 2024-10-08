@@ -4,6 +4,7 @@ SRCS(
     write.cpp
     write_data.cpp
     manager.cpp
+    events.cpp
 )
 
 PEERDIR(

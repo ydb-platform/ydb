@@ -170,37 +170,6 @@ struct TEvPrivate {
         TEvPingSnapshotsUsage() = default;
     };
 
-    class TEvWritePortionResult: public TEventLocal<TEvWritePortionResult, EvWritePortionResult> {
-    private:
-        YDB_READONLY_DEF(NKikimrProto::EReplyStatus, WriteStatus);
-        YDB_READONLY_DEF(std::shared_ptr<NOlap::IBlobsWritingAction>, WriteAction);
-        std::shared_ptr<NOlap::TPortionInfoConstructor> PortionInfoConstructor;
-        NEvWrite::TWriteMeta WriteMeta;
-        YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, PKBatch);
-        YDB_READONLY(ui64, DataSize, 0);
-
-    public:
-        std::shared_ptr<NOlap::TPortionInfoConstructor>& GetPortionInfoConstructor() {
-            return PortionInfoConstructor;
-        }
-
-        const NEvWrite::TWriteMeta& GetWriteMeta() const {
-            return WriteMeta;
-        }
-
-        TEvWritePortionResult(const NKikimrProto::EReplyStatus writeStatus, const std::shared_ptr<NOlap::IBlobsWritingAction>& writeAction,
-            std::shared_ptr<NOlap::TPortionInfoConstructor>&& portionInfo, const NEvWrite::TWriteMeta& writeMeta,
-            const std::shared_ptr<arrow::RecordBatch>& pkBatch, const ui64 dataSize)
-            : WriteStatus(writeStatus)
-            , WriteAction(writeAction)
-            , PortionInfoConstructor(std::move(portionInfo))
-            , WriteMeta(writeMeta)
-            , PKBatch(pkBatch)
-            , DataSize(dataSize)
-        {
-        }
-    };
-
     class TEvWriteBlobsResult: public TEventLocal<TEvWriteBlobsResult, EvWriteBlobsResult> {
     public:
         enum EErrorClass {

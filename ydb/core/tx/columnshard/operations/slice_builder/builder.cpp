@@ -42,34 +42,67 @@ void TBuildSlicesTask::ReplyError(const TString& message, const NColumnShard::TE
 
 class TPortionWriteController: public NColumnShard::IWriteController,
                                public NColumnShard::TMonitoringObjectsCounter<TIndexedWriteController, true> {
+public:
+    class TInsertPortion {
+    private:
+        TWritePortionInfoWithBlobsResult Portion;
+        std::shared_ptr<arrow::RecordBatch> PKBatch;
+
+    public:
+        TWritePortionInfoWithBlobsResult& MutablePortion() {
+            return Portion;
+        }
+        const TWritePortionInfoWithBlobsResult& GetPortion() const {
+            return Portion;
+        }
+        TWritePortionInfoWithBlobsResult&& ExtractPortion() {
+            return std::move(Portion);
+        }
+        const std::shared_ptr<arrow::RecordBatch>& GetPKBatch() const {
+            return PKBatch;
+        }
+        TInsertPortion(TWritePortionInfoWithBlobsResult&& portion, const std::shared_ptr<arrow::RecordBatch> pkBatch)
+            : Portion(std::move(portion))
+            , PKBatch(pkBatch) {
+            AFL_VERIFY(PKBatch);
+        }
+    };
+
 private:
     const std::shared_ptr<IBlobsWritingAction> Action;
-    TWritePortionInfoWithBlobsResult Portion;
-    std::shared_ptr<arrow::RecordBatch> PKBatch;
+    std::vector<TInsertPortion> Portions;
     NEvWrite::TWriteMeta WriteMeta;
     TActorId DstActor;
     const ui64 DataSize;
     void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override {
-        auto result = std::make_unique<NColumnShard::TEvPrivate::TEvWritePortionResult>(
-            putResult->GetPutStatus(), Action, Portion.DetachPortionConstructor(), WriteMeta, PKBatch, DataSize);
+        std::vector<NColumnShard::TInsertedPortion> portions;
+        std::vector<NColumnShard::TFailedWrite> fails;
+        for (auto&& i : Portions) {
+            portions.emplace_back(i.ExtractPortion(), i.GetPKBatch());
+        }
+        NColumnShard::TInsertedPortions pack(std::move(WriteMeta), std::move(portions), DataSize);
+        std::vector<NColumnShard::TInsertedPortions> packs = { pack };
+        auto result = std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(
+            putResult->GetPutStatus(), Action, std::move(packs), std::move(fails));
         ctx.Send(DstActor, result.release());
     }
     virtual void DoOnStartSending() override {
     }
 
 public:
-    TPortionWriteController(const TActorId& dstActor, const std::shared_ptr<IBlobsWritingAction>& action,
-        TWritePortionInfoWithBlobsResult&& portion, const NEvWrite::TWriteMeta& writeMeta, const std::shared_ptr<arrow::RecordBatch> pkBatch,
-        const ui64 dataSize)
+    TPortionWriteController(const TActorId& dstActor, const std::shared_ptr<IBlobsWritingAction>& action, const NEvWrite::TWriteMeta& writeMeta,
+        std::vector<TInsertPortion>&& portions, const ui64 dataSize)
         : Action(action)
-        , Portion(std::move(portion))
-        , PKBatch(pkBatch)
+        , Portions(std::move(portions))
         , WriteMeta(writeMeta)
         , DstActor(dstActor)
-        , DataSize(dataSize) {
-        for (auto&& b : Portion.GetBlobs()) {
-            auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.GetResultBlob(), action));
-            b.RegisterBlobId(Portion, task.GetBlobId());
+        , DataSize(dataSize)
+    {
+        for (auto&& p : Portions) {
+            for (auto&& b : p.GetPortion().GetBlobs()) {
+                auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.GetResultBlob(), action));
+                b.RegisterBlobId(p.MutablePortion(), task.GetBlobId());
+            }
         }
     }
 };
@@ -85,20 +118,32 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
     }
     if (WriteData.GetWritePortions()) {
         if (OriginalBatch->num_rows() == 0) {
-            auto result = std::make_unique<NColumnShard::TEvPrivate::TEvWritePortionResult>(
-                NKikimrProto::EReplyStatus::OK, nullptr, nullptr, WriteData.GetWriteMeta(), nullptr, 0);
+            std::vector<NColumnShard::TInsertedPortions> portions;
+            std::vector<NColumnShard::TFailedWrite> fails = { NColumnShard::TFailedWrite(WriteData.GetWriteMeta(), WriteData.GetSize()) };
+            auto result = std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(
+                NKikimrProto::EReplyStatus::OK, nullptr, std::move(portions), std::move(fails));
             NActors::TActivationContext::AsActorContext().Send(Context.GetTabletActorId(), result.release());
         } else {
-            auto portionConclusion = Context.GetActualSchema()->PrepareForWrite(Context.GetActualSchema(), WriteData.GetWriteMeta().GetTableId(),
-                OriginalBatch, WriteData.GetWriteMeta().GetModificationType(), Context.GetStoragesManager(), Context.GetSplitterCounters());
-            if (portionConclusion.IsFail()) {
-                ReplyError(portionConclusion.GetErrorMessage(), NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Request);
-                return portionConclusion;
+            auto batches = NArrow::NMerger::TRWSortableBatchPosition::SplitByBordersInIntervalPositions(OriginalBatch,
+                Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->field_names(), WriteData.GetData()->GetSeparationPoints());
+            std::vector<TPortionWriteController::TInsertPortion> portions;
+            for (auto&& batch : batches) {
+                if (!batch) {
+                    continue;
+                }
+                auto portionConclusion =
+                    Context.GetActualSchema()->PrepareForWrite(Context.GetActualSchema(), WriteData.GetWriteMeta().GetTableId(), batch,
+                        WriteData.GetWriteMeta().GetModificationType(), Context.GetStoragesManager(), Context.GetSplitterCounters());
+                if (portionConclusion.IsFail()) {
+                    ReplyError(portionConclusion.GetErrorMessage(), NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Request);
+                    return portionConclusion;
+                }
+                std::shared_ptr<arrow::RecordBatch> pkBatch =
+                    NArrow::TColumnOperator().Extract(batch, Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->fields());
+                portions.emplace_back(portionConclusion.DetachResult(), pkBatch);
             }
-            std::shared_ptr<arrow::RecordBatch> pkBatch =
-                NArrow::TColumnOperator().Extract(OriginalBatch, Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->fields());
-            auto writeController = std::make_shared<NOlap::TPortionWriteController>(Context.GetTabletActorId(), WriteData.GetBlobsAction(),
-                portionConclusion.DetachResult(), WriteData.GetWriteMeta(), pkBatch, WriteData.GetSize());
+            auto writeController = std::make_shared<NOlap::TPortionWriteController>(
+                Context.GetTabletActorId(), WriteData.GetBlobsAction(), WriteData.GetWriteMeta(), std::move(portions), WriteData.GetSize());
             if (WriteData.GetBlobsAction()->NeedDraftTransaction()) {
                 TActorContext::AsActorContext().Send(
                     Context.GetTabletActorId(), std::make_unique<NColumnShard::TEvPrivate::TEvWriteDraft>(writeController));

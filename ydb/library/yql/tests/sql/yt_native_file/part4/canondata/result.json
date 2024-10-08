@@ -581,9 +581,9 @@
     ],
     "test.test[blocks-json_document_type--Peephole]": [
         {
-            "checksum": "a7cd19fa1416b435369188128797921b",
-            "size": 2595,
-            "uri": "https://{canondata_backend}/1917492/e3ceae93b691869b63d950444badb29e6ace4842/resource.tar.gz#test.test_blocks-json_document_type--Peephole_/opt.yql"
+            "checksum": "1536d7c0c5b539ba78f7d43b8ebb5833",
+            "size": 2599,
+            "uri": "https://{canondata_backend}/1946324/6bfca3fdf8ec9efde60e3282ae98ccf726043684/resource.tar.gz#test.test_blocks-json_document_type--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-json_document_type--Plan]": [

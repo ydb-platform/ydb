@@ -250,3 +250,9 @@ message TEvWorkerStatus {
     optional string ErrorDescription = 4;
     optional uint32 LagMilliSeconds = 5;
 }
+
+message TEvWorkerDataEnd {
+    optional uint64 PartitionId = 1;
+    repeated uint64 AdjacentPartitionsIds = 2;
+    repeated uint64 ChildPartitionsIds = 3;
+}

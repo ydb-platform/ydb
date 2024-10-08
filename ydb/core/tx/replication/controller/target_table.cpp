@@ -25,6 +25,10 @@ class TTableWorkerRegistar: public TActorBootstrapped<TTableWorkerRegistar> {
         }
 
         for (const auto& partition : result.GetTopicDescription().GetPartitions()) {
+            if (!partition.GetParentPartitionIds().empty()) {
+                continue;
+            }
+
             auto ev = MakeHolder<TEvService::TEvRunWorker>();
             auto& record = ev->Record;
 

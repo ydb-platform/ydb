@@ -68,6 +68,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvService::TEvStatus, Handle);
         HFunc(TEvService::TEvWorkerStatus, Handle);
         HFunc(TEvService::TEvRunWorker, Handle);
+        HFunc(TEvService::TEvWorkerDataEnd, Handle);
         HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
     default:
         HandleDefaultEvents(ev, SelfId());
@@ -454,6 +455,19 @@ void TController::Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext
     }
 
     ScheduleProcessQueues();
+}
+
+void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+
+    const auto nodeId = ev->Sender.NodeId();
+    if (!Sessions.contains(nodeId)) {
+        return;
+    }
+
+    //auto& session = Sessions[nodeId];
+    //const auto& record = ev->Get()->Record;
+
 }
 
 bool TController::IsValidWorker(const TWorkerId& id) const {

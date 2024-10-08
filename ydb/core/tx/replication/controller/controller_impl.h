@@ -91,6 +91,7 @@ private:
     void Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
 
     void CreateSession(ui32 nodeId, const TActorContext& ctx);

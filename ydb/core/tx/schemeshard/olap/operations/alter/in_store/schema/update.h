@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/update.h>
+#include <ydb/core/tx/schemeshard/operations/abstract/update.h>
 #include <ydb/core/tx/schemeshard/olap/operations/alter/in_store/common/update.h>
 #include <ydb/core/tx/schemeshard/olap/operations/alter/in_store/object.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -13,9 +13,9 @@ private:
     std::optional<TOlapTTLUpdate> AlterTTL;
     std::optional<NKikimrSchemeOp::TColumnTableSchemaPreset> SchemaPreset;
     std::shared_ptr<TInStoreTable> TargetInStoreTable;
-    virtual TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) override;
+    virtual TConclusionStatus DoInitializeImpl(const NOperations::TUpdateInitializationContext& context) override;
 
-    virtual std::shared_ptr<ISSEntity> GetTargetSSEntity() const override {
+    virtual std::shared_ptr<NOperations::ISSEntity> GetTargetSSEntity() const override {
         return TargetInStoreTable;
     }
 

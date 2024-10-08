@@ -10,82 +10,106 @@
 
 namespace NKikimr::NColumnShard {
 
-#ifdef __wip__
-class TListTieringActor: public TSchemeActorBase<TListTieringActor> {
+namespace NTiers {
+
+class TFetchTieringRulesActor: public NKqp::NWorkload::TSchemeActorBase<TFetchTieringRulesActor> {
 private:
-    using TResult = TConclusion<THashMap<TString, NTiers::TTieringRule>>;
-    NThreading::TPromise<TResult> Promise;
+    TActorId Recipient;
+    std::set<TPathId> UnfetchedObjects;
+    THashMap<TString, TTieringRule> Result;
 
 private:
-    THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(const TVector<TVector<TString>>& paths) {
+    void ReplyErrorAndPassAway(const TString& errorMessage) {
+        Send(Recipient, new NTiers::TEvListTieringRulesResult(TConclusionStatus::Fail(errorMessage)));
+        PassAway();
+    }
+
+    void ReplySuccessAndPassAway() {
+        Send(Recipient, new NTiers::TEvListTieringRulesResult(std::move(Result)));
+        PassAway();
+    }
+
+    static THolder<NSchemeCache::TSchemeCacheNavigate> BuildFetchRequest(const std::set<TPathId>& paths) {
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = AppDataVerified().TenantName;
         request->UserToken = MakeIntrusive<NACLib::TUserToken>(NACLib::TSystemUsers::Metadata());
 
-        for (const auto& pathComponents : paths) {
+        for (const auto& pathId : paths) {
             auto& entry = request->ResultSet.emplace_back();
-            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
-            entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
+            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+            entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+            entry.TableId.PathId = pathId;
             entry.ShowPrivatePath = true;
-            entry.Path = pathComponents;
         }
 
         return request;
     }
 
-    void StartListRequest() {
-        auto event = BuildSchemeCacheNavigateRequest({ { NTiers::TTieringRule::GetBehaviour()->GetStorageTablePath() } });
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        const auto& results = ev->Get()->Request->ResultSet;
+        for (const auto& result : results) {
+            switch (result.Status) {
+                case EStatus::PathNotTable:
+                case EStatus::PathNotPath:
+                case EStatus::RootUnknown:
+                case EStatus::AccessDenied:
+                    AFL_VERIFY(false)("status", result.Status)("result", result.ToString());
+                    return;
+                case EStatus::Unknown:
+                case EStatus::RedirectLookupError:
+                case EStatus::LookupError:
+                case EStatus::TableCreationNotComplete:
+                    if (!ScheduleRetry(TStringBuilder() << "Retry error " << result.Status)) {
+                        ReplyErrorAndPassAway("Retry limit exceeded");
+                    }
+                    return;
+                case EStatus::PathErrorUnknown:
+                    OnObjectFetched(std::nullopt, result.TableId.PathId);
+                    return;
+                case EStatus::Ok:
+                    AFL_VERIFY(result.Kind == NSchemeCache::TSchemeCacheNavigate::KindTieringRule)("kind", result.Kind)("result", result.ToString());
+                    OnObjectFetched(result.TieringRuleInfo->Description, result.TableId.PathId);
+                    return;
+            }
+        }
+
+        if (UnfetchedObjects.empty()) {
+            ReplySuccessAndPassAway();
+            return;
+        }
+    }
+
+    void OnObjectFetched(std::optional<NKikimrSchemeOp::TTieringRuleDescription> description, const TPathId& pathId) {
+        if (description) {
+            TTieringRule tieringRule;
+            AFL_VERIFY(tieringRule.DeserializeFromProto(*description));
+            Result.emplace(description->GetName(), std::move(tieringRule));
+        }
+        UnfetchedObjects.erase(pathId);
+    }
+
+protected:
+    void StartRequest() override {
+        auto event = BuildFetchRequest(UnfetchedObjects);
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(event.Release()), IEventHandle::FlagTrackDelivery);
     }
 
-    void OnPathFetched(const TVector<TString> pathComponents, const TPathId& pathId, NSchemeCache::TSchemeCacheNavigate::EKind kind) {
-        switch (kind) {
-            case NSchemeCache::TSchemeCacheNavigate::KindTieringRule:
-                break;
-            default:
-                OnObjectResolutionFailure(pathComponents, NTiers::TBaseEvObjectResolutionFailed::UNEXPECTED_KIND);
-        }
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(pathId), IEventHandle::FlagTrackDelivery);
+    void OnFatalError(Ydb::StatusIds::StatusCode /*status*/, NYql::TIssue issue) override {
+        ReplyErrorAndPassAway(issue.ToString(true));
     }
 
-    void OnPathNotFound(const TVector<TString>& path) {
-        OnObjectResolutionFailure(path, NTiers::TEvTieringRuleResolutionFailed::EReason::NOT_FOUND);
-    }
-
-    void OnLookupError(const TVector<TString>& path) {
-        OnObjectResolutionFailure(path, NTiers::TEvTieringRuleResolutionFailed::EReason::LOOKUP_ERROR);
-    }
-
-    void OnObjectResolutionFailure(const TVector<TString>& pathComponents, const NTiers::TEvTieringRuleResolutionFailed::EReason reason) {
-        const TString path = JoinPath(pathComponents);
-        const TString storageDirectory = TString(ExtractParent(path));
-        const TString objectId = TString(ExtractBase(path));
-        if (IsEqualPaths(storageDirectory, NTiers::TTieringRule::GetBehaviour()->GetStorageTablePath())) {
-            WatchedTieringRules.erase(objectId);
-            Send(Owner, new NTiers::TEvTieringRuleResolutionFailed(objectId, reason));
-        } else {
-            AFL_VERIFY(false)("storage_dir", storageDirectory)("object_id", objectId);
-        }
-    }
-
-    void OnTieringRuleFetched(const TString& name, const NKikimrSchemeOp::TTieringRuleDescription& description) {
-        NTiers::TTieringRule config;
-        AFL_VERIFY(config.DeserializeFromProto(description))("name", name)("proto", description.DebugString());
-        Send(Owner, new NTiers::TEvNotifyTieringRuleUpdated(name, config));
-    }
-
-    void OnConfigsFetched(NSchemeCache::TSchemeCacheNavigate::TListNodeEntry& listResult) {
-
-    }
-
-    void ReplyAndDie(TResult result) {
-        TPassAwayGuard g(this);
-        Promise.SetValue(std::move(result));
+    TString LogPrefix() const override {
+        return "[TFetchTieringRulesActor] ";
     }
 
 public:
-    TListTieringActor(NThreading::TPromise<TConclusion<THashMap<TString, NTiers::TTieringRule>>> promise)
-        : Promise(promise) {
+    TFetchTieringRulesActor(const TActorId& recipient, std::set<TPathId> tieringRules)
+        : Recipient(recipient)
+        , UnfetchedObjects(std::move(tieringRules)) {
+    }
+
+    void DoBootstrap() {
+        Become(&TFetchTieringRulesActor::StateMain);
     }
 
     STATEFN(StateMain) {
@@ -95,60 +119,105 @@ public:
                 StateFuncBase(ev);
         }
     }
+};
 
-    void Bootstrap() {
-        StartListRequest();
-        Become(&TListTieringActor::StateMain);
+class TListTieringRulesActor: public NKqp::NWorkload::TSchemeActorBase<TListTieringRulesActor> {
+private:
+    TActorId Recipient;
+
+private:
+    void ReplyErrorAndPassAway(const TString& errorMessage) {
+        Send(Recipient, new NTiers::TEvListTieringRulesResult(TConclusionStatus::Fail(errorMessage)));
+        PassAway();
+    }
+
+    static THolder<NSchemeCache::TSchemeCacheNavigate> BuildListRequest(const TVector<TString>& pathComponents) {
+        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        request->DatabaseName = AppDataVerified().TenantName;
+        request->UserToken = MakeIntrusive<NACLib::TUserToken>(NACLib::TSystemUsers::Metadata());
+
+        auto& entry = request->ResultSet.emplace_back();
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
+        entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
+        entry.ShowPrivatePath = true;
+        entry.Path = pathComponents;
+
+        return request;
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& results = ev->Get()->Request->ResultSet;
-
+        AFL_VERIFY(results.size() == 1)("size", results.size());
         const auto& result = results[0];
         switch (result.Status) {
-            case EStatus::Unknown:
+            case EStatus::RootUnknown:
+            case EStatus::AccessDenied:
             case EStatus::PathNotTable:
             case EStatus::PathNotPath:
+                AFL_VERIFY(false)("status", result.Status)("result", result.ToString());
+                return;
+            case EStatus::Unknown:
             case EStatus::RedirectLookupError:
-                ReplyAndDie(TResult(Ydb::StatusIds::BAD_REQUEST));
-                return;
-            case EStatus::AccessDenied:
-                ReplyAndDie(TResult(Ydb::StatusIds::UNAUTHORIZED));
-                return;
-            case EStatus::RootUnknown:
-            case EStatus::PathErrorUnknown:
-                ReplyAndDie(TResult(Ydb::StatusIds::NOT_FOUND));
-                return;
             case EStatus::LookupError:
             case EStatus::TableCreationNotComplete:
                 if (!ScheduleRetry(TStringBuilder() << "Retry error " << result.Status)) {
-                    ReplyAndDie(TResult(Ydb::StatusIds::UNAVAILABLE));
+                    ReplyErrorAndPassAway("Retry limit exceeded");
                 }
                 return;
+            case EStatus::PathErrorUnknown:
+                OnObjectsListed({});
+                return;
             case EStatus::Ok:
-                OnConfigsFetched(result.ListNodeEntry);
+                OnObjectsListed(result.ListNodeEntry->Children);
                 return;
         }
     }
 
-    void Handle(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
-    }
-
-    void Handle(NActors::TEvents::TEvPoison::TPtr& /*ev*/) {
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove());
+    void OnObjectsListed(TVector<NSchemeCache::TSchemeCacheNavigate::TListNodeEntry::TChild> nodes) {
+        std::set<TPathId> objects;
+        for (const auto& node : nodes) {
+            objects.insert(node.PathId);
+        }
+        TActivationContext::Register(new TFetchTieringRulesActor(Recipient, std::move(objects)), Recipient);
         PassAway();
     }
 
-    void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-        AFL_ERROR(NKikimrServices::TX_TIERING)("issue", "event_undelivered_to_local_service")("reason", ev->Get()->Reason);
+protected:
+    void StartRequest() override {
+        auto event = BuildListRequest({ NTiers::TTieringRule::GetBehaviour()->GetStorageTablePath() });
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(event.Release()), IEventHandle::FlagTrackDelivery);
+    }
+
+    void OnFatalError(Ydb::StatusIds::StatusCode /*status*/, NYql::TIssue issue) override {
+        ReplyErrorAndPassAway(issue.ToString(true));
+    }
+
+    TString LogPrefix() const override {
+        return "[TListTieringRulesActor] ";
+    }
+
+public:
+    TListTieringRulesActor(const TActorId recipient)
+        : Recipient(recipient) {
+    }
+
+    void DoBootstrap() {
+        Become(&TListTieringRulesActor::StateMain);
+    }
+
+    STATEFN(StateMain) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+            default:
+                StateFuncBase(ev);
+        }
     }
 };
-#endif
+
+}   // namespace NTiers
 
 THolder<IActor> MakeListTieringRulesActor(TActorId recipient) {
-    // Not implemented
-    TActivationContext::ActorSystem()->Send(recipient, new NTiers::TEvListTieringRulesResult(THashMap<TString, NTiers::TTieringRule>()));
-    return {};
+    return MakeHolder<NTiers::TListTieringRulesActor>(recipient);
 }
 
 }   // namespace NKikimr::NColumnShard

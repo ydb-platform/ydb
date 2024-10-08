@@ -27,6 +27,7 @@ private:
     }
 
     void UpdateSnapshot() const {
+        // TODO: validate dependencies?
         Owner->TakeConfigs(TiersSnapshot, TieringRules, SecretsSnapshot);
     }
 
@@ -167,6 +168,7 @@ void TTiersManager::TakeConfigs(
     ALS_INFO(NKikimrServices::TX_TIERING) << "Take configs: " << (tiers ? " tiers" : "") << " snapshots" << (secrets ? " secrets" : "")
                                           << " at tablet " << TabletId;
 
+    // TODO: what is some configs are missing?
     Tiers = tiers;
     TieringRules = tieringRules;
     Secrets = secrets;

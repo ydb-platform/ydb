@@ -54,6 +54,7 @@ public:
 
 private:
     class TActor;
+    friend class TActor;
     using TManagers = std::map<TString, NTiers::TManager>;
 
     ui64 TabletId = 0;
@@ -70,6 +71,7 @@ private:
 
 private:
     bool ValidateDependencies() const;
+    void TakeConfigs(std::shared_ptr<NTiers::TTiersSnapshot> tiers, TTieringRules tieringRules, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
 
 public:
     TTiersManager(const ui64 tabletId, const TActorId& tabletActorId,
@@ -83,7 +85,6 @@ public:
     THashMap<ui64, NOlap::TTiering> GetTiering() const;
     void EnablePathId(const ui64 pathId, const TString& tieringId);
     void DisablePathId(const ui64 pathId);
-    void TakeConfigs(std::shared_ptr<NTiers::TTiersSnapshot> tiers, TTieringRules tieringRules, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
     void OnConfigsUpdated();
     bool IsReady() const {
         return HasCompleteData;

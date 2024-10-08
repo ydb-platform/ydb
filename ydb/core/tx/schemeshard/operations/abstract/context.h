@@ -5,7 +5,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_path.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 
-namespace NKikimr::NSchemeShard::NOlap::NAlter {
+namespace NKikimr::NSchemeShard::NOperations {
 
 class ISSEntity;
 
@@ -30,6 +30,10 @@ private:
 public:
     ui64 GetTxId() const {
         return TxId;
+    }
+
+    bool HasOriginalEntity() const {
+        return !!OriginalEntity;
     }
 
     const ISSEntity& GetOriginalEntity() const {

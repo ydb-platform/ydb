@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/tx/schemeshard/olap/operations/alter/abstract
+    ydb/core/tx/schemeshard/operations/abstract
 )
 
 END()

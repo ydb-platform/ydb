@@ -1,27 +1,27 @@
 #pragma once
-#include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/update.h>
-#include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/context.h>
+#include <ydb/core/tx/schemeshard/operations/abstract/update.h>
+#include <ydb/core/tx/schemeshard/operations/abstract/context.h>
 #include <ydb/core/tx/schemeshard/olap/table/table.h>
 #include <ydb/library/formats/arrow/accessor/common/const.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
-class TColumnTableUpdate: public ISSEntityUpdate {
+class TColumnTableUpdate: public NOperations::ISSEntityUpdate {
 private:
-    using TBase = ISSEntityUpdate;
+    using TBase = NOperations::ISSEntityUpdate;
 
     virtual std::shared_ptr<TColumnTableInfo> GetTargetTableInfo() const = 0;
-    virtual std::shared_ptr<ISSEntity> GetTargetSSEntity() const = 0;
+    virtual std::shared_ptr<NOperations::ISSEntity> GetTargetSSEntity() const = 0;
 
-    virtual TConclusionStatus DoStart(const TUpdateStartContext& context) override final;
-    virtual TConclusionStatus DoFinish(const TUpdateFinishContext& context) override final;
+    virtual TConclusionStatus DoStart(const NOperations::TUpdateStartContext& context) override final;
+    virtual TConclusionStatus DoFinish(const NOperations::TUpdateFinishContext& context) override final;
 
     virtual NKikimrTxColumnShard::ETransactionKind GetShardTransactionKind() const override {
         return NKikimrTxColumnShard::ETransactionKind::TX_KIND_SCHEMA;
     }
-    virtual TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) = 0;
+    virtual TConclusionStatus DoInitializeImpl(const NOperations::TUpdateInitializationContext& context) = 0;
 
-    bool IsAlterCompression(const TUpdateInitializationContext& context) const {
+    bool IsAlterCompression(const NOperations::TUpdateInitializationContext& context) const {
         for (const auto& alterColumn : context.GetModification()->GetAlterColumnTable().GetAlterSchema().GetAlterColumns()) {
             if (alterColumn.HasSerializer()) {
                 return true;
@@ -31,13 +31,13 @@ private:
     }
 
 protected:
-    virtual TConclusionStatus DoStartImpl(const TUpdateStartContext& /*context*/) {
+    virtual TConclusionStatus DoStartImpl(const NOperations::TUpdateStartContext& /*context*/) {
         return TConclusionStatus::Success();
     }
-    virtual TConclusionStatus DoFinishImpl(const TUpdateFinishContext& /*context*/) {
+    virtual TConclusionStatus DoFinishImpl(const NOperations::TUpdateFinishContext& /*context*/) {
         return TConclusionStatus::Success();
     }
-    virtual TConclusionStatus DoInitialize(const TUpdateInitializationContext& context) override final {
+    virtual TConclusionStatus DoInitialize(const NOperations::TUpdateInitializationContext& context) override final {
         if (!AppData()->FeatureFlags.GetEnableOlapCompression() && IsAlterCompression(context)) {
             return TConclusionStatus::Fail("Compression is disabled for OLAP tables");
         }
@@ -60,7 +60,7 @@ protected:
         return *resultPtr;
     }
 
-    std::shared_ptr<ISSEntity> GetTargetEntityVerified() const {
+    std::shared_ptr<NOperations::ISSEntity> GetTargetEntityVerified() const {
         auto result = GetTargetSSEntity();
         AFL_VERIFY(!!result);
         return result;
@@ -78,7 +78,7 @@ protected:
     }
 
     static bool ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttl, const TOlapSchema& schema,
-        const TUpdateInitializationContext& context, IErrorCollector& errors);
+        const NOperations::TUpdateInitializationContext& context, IErrorCollector& errors);
 
 public:
 };

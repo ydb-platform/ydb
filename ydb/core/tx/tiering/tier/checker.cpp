@@ -67,29 +67,28 @@ void TTierPreparationActor::StartSSFetcher() {
 
 void TTierPreparationActor::AdvanceCheckerState() {
     switch (State) {
-        case INITIAL: {
+        case INITIAL:
             Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
                 new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>()));
             Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
                 new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TTierSnapshotConstructor>()));
             Register(MakeListTieringRulesActor(SelfId()).Release());
             State = FETCH_TIERING;
-        }
-        case FETCH_TIERING: {
+            break;
+        case FETCH_TIERING:
             if (Tiers && TieringRules) {
                 StartSSFetcher();
                 State = CHECK_PERMISSIONS;
             }
-        }
-        case CHECK_PERMISSIONS: {
+            break;
+        case CHECK_PERMISSIONS:
             if (Tiers && Secrets && SSCheckResult && TieringRules) {
                 StartChecker();
                 State = MAKE_RESULT;
             }
-        }
-        case MAKE_RESULT: {
+            break;
+        case MAKE_RESULT:
             AFL_VERIFY(false);
-        }
     }
 }
 

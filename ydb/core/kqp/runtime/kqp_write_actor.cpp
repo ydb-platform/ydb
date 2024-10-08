@@ -169,7 +169,8 @@ public:
         const bool inconsistentTx,
         const NMiniKQL::TTypeEnvironment& typeEnv,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-        const IKqpTransactionManagerPtr& txManager)
+        const IKqpTransactionManagerPtr& txManager,
+        const TActorId sessionActorId)
         : TypeEnv(typeEnv)
         , Alloc(alloc)
         , TableId(tableId)
@@ -180,6 +181,7 @@ public:
         , Callbacks(callbacks)
         , TxManager(txManager ? txManager : CreateKqpTransactionManager(/* collectOnly= */ true))
     {
+        LogPrefix = TStringBuilder() << "SessionActorId: " << sessionActorId;
         try {
             ShardedWriteController = CreateShardedWriteController(
                 TShardedWriteControllerSettings {
@@ -955,7 +957,8 @@ public:
             Settings.GetInconsistentTx(),
             TypeEnv,
             Alloc,
-            nullptr);
+            nullptr,
+            TActorId{});
 
         WriteTableActorId = RegisterWithSameMailbox(WriteTableActor);
 
@@ -1202,7 +1205,7 @@ public:
     }
 
     void Bootstrap() {
-        LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
+        LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", SessionActorId: " << SessionActorId << ", " << LogPrefix;
         Become(&TKqpBufferWriteActor::StateWrite);
     }
 
@@ -1255,7 +1258,8 @@ public:
                     InconsistentTx,
                     TypeEnv,
                     Alloc,
-                    TxManager);
+                    TxManager,
+                    SessionActorId);
                 writeInfo.WriteTableActorId = RegisterWithSameMailbox(writeInfo.WriteTableActor);
                 CA_LOG_D("Create new TableWriteActor for table `" << settings.TablePath << "` (" << settings.TableId << "). lockId=" << LockTxId << " " << writeInfo.WriteTableActorId);
             }
@@ -1359,10 +1363,9 @@ public:
             || State == EState::ROLLINGBACK;
 
         if (needToFlush) {
+            CA_LOG_D("DO FLUSH");
             for (auto& [_, info] : WriteInfos) {
-                CA_LOG_D("FLUSH TEST");
                 if (info.WriteTableActor->IsReady()) {
-                    CA_LOG_D("FLUSH READY");
                     info.WriteTableActor->Flush();
                 }
             }

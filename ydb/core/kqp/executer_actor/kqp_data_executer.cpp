@@ -305,11 +305,12 @@ public:
             MakeResponseAndPassAway();
             return;
         } else {
-            auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
-            event->ExecuterActorId = SelfId();
+            //auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
+            //event->ExecuterActorId = SelfId();
             Become(&TKqpDataExecuter::FinalizeState);
             LOG_D("SEND BUFFER FLUSH " << BufferActorId);
-            Send(BufferActorId, event.release());
+            //Send(BufferActorId, event.release());
+            MakeResponseAndPassAway();
             return;
         }
     }

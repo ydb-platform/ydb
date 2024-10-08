@@ -352,11 +352,6 @@ public:
             return false;
         }
 
-        if (TxCtx->HasOlapTable) {
-            // HTAP/OLAP transactions always use separate commit.
-            return false;
-        }
-
         if (TxCtx->HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
             if (tx && tx->GetHasEffects()) {
                 YQL_ENSURE(tx->ResultsSize() == 0);
@@ -417,9 +412,12 @@ public:
         const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
         auto tx = PreparedQuery->GetPhyTxOrEmpty(CurrentTx);
 
-        if (TxCtx->CanDeferEffects()) {
+        //Cerr << ">>> CURRENT " << CurrentTx << Endl;
+
+        if (TxCtx->CanDeferEffects()) { 
+            //Cerr << ">>> DEFER " << (tx != nullptr) << " " << (tx && tx->GetHasEffects()) << " " << !TxCtx->HasOlapTable << Endl;
             // At current time sinks require separate tnx with commit.
-            while (tx && tx->GetHasEffects()/* && !TxCtx->HasOlapTable*/) {
+            while (tx && tx->GetHasEffects() && !TxCtx->HasOlapTable) {
                 QueryData->CreateKqpValueMap(tx);
                 bool success = TxCtx->AddDeferredEffect(tx, QueryData);
                 YQL_ENSURE(success);
@@ -435,40 +433,6 @@ public:
 
         return tx;
     }
-
-    /*bool HasOnlyInonsistentSinkInStage(const ::NKqpProto::TKqpPhyStage& stage) const {
-        for (const auto& sink : stage.GetSinks()) {
-            if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
-                NKikimrKqp::TKqpTableSinkSettings settings;
-                YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
-                if (!settings.GetInconsistentTx()) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    bool HasTxSink() const {
-        const auto& query = PreparedQuery->GetPhysicalQuery();
-        for (auto& tx : query.GetTransactions()) {
-            for (const auto& stage : tx.GetStages()) {
-                if (HasTxSinkInStage(stage)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    bool HasTxSinkInTx(const TKqpPhyTxHolder::TConstPtr& tx) const {
-        for (const auto& stage : tx->GetStages()) {
-            if (HasTxSinkInStage(stage)) {
-                return true;
-            }
-        }
-        return false;
-    }*/
 
     bool HasTxControl() const {
         return RequestEv->HasTxControl();

@@ -287,69 +287,111 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestGetQueueAttributes, THttpProxyTestMock) {
-        auto createQueueReq = CreateSqsCreateQueueRequest();
-        NJson::TJsonValue attributes;
-        attributes["DelaySeconds"] = "1";
-        createQueueReq["Attributes"] = attributes;
+        auto json1 = CreateQueue({{"QueueName", "queue-1.fifo"}, {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}});
+        auto attributes1 = GetQueueAttributes({
+            {"QueueUrl", GetByPath<TString>(json1, "QueueUrl")},
+            {"AttributeNames", NJson::TJsonArray{"QueueArn"}}
+        });
+        auto queueArn1 = GetByPath<TString>(attributes1, "Attributes.QueueArn");
 
-        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-        NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        auto queueName = "ExampleQueueName.fifo";
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{
+                {"DelaySeconds", "1"},
+                {"FifoQueue", "true"},
+                {"ContentBasedDeduplication", "true"},
+                {"RedrivePolicy", TStringBuilder() << "{\"deadLetterTargetArn\":\"" << queueArn1 << "\", \"maxReceiveCount\": 3}"}
+            }}
+        });
+
         TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
-        UNIT_ASSERT(resultQueueUrl.EndsWith("ExampleQueueName"));
+        UNIT_ASSERT(resultQueueUrl.EndsWith(queueName));
+
+        GetQueueAttributes({{"wrong-field", "some-value"}}, 400);
+        GetQueueAttributes({{"QueueUrl", "invalid-url"}}, 400);
 
         {
-            NJson::TJsonValue getQueueAttributes;
-            getQueueAttributes["QueueUrl"] = resultQueueUrl;
-            NJson::TJsonArray attributeNames = {"DelaySeconds"};
-            getQueueAttributes["AttributeNames"] = attributeNames;
-
-            res = SendHttpRequest("/Root", "AmazonSQS.GetQueueAttributes", std::move(getQueueAttributes), FormAuthorizationStr("ru-central1"));
-            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-            NJson::TJsonValue resultJson;
-            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &resultJson));
-            UNIT_ASSERT_VALUES_EQUAL(resultJson["Attributes"]["DelaySeconds"], "1");
+            auto json = GetQueueAttributes({
+                {"QueueUrl", resultQueueUrl},
+            });
+            UNIT_ASSERT(json.GetMapSafe().empty());
         }
 
         {
-            NJson::TJsonValue getQueueAttributes;
-            getQueueAttributes["QueueUrl"] = resultQueueUrl;
-            NJson::TJsonArray attributeNames = {
-                "ApproximateNumberOfMessages",
-                "ApproximateNumberOfMessagesDelayed",
-                "ApproximateNumberOfMessagesNotVisible",
-                "CreatedTimestamp",
-                "DelaySeconds",
-                "MaximumMessageSize",
-                "MessageRetentionPeriod",
-                "ReceiveMessageWaitTimeSeconds",
-                "RedrivePolicy",
-                "VisibilityTimeout",
-                "FifoQueue",
-                "ContentBasedDeduplication",
-                "QueueArn"
-            };
-            getQueueAttributes["AttributeNames"] = attributeNames;
-
-            res = SendHttpRequest("/Root", "AmazonSQS.GetQueueAttributes", std::move(getQueueAttributes), FormAuthorizationStr("ru-central1"));
-            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-            NJson::TJsonValue resultJson;
-            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &resultJson));
-            UNIT_ASSERT_VALUES_EQUAL(resultJson["Attributes"]["DelaySeconds"], "1");
+            auto json = GetQueueAttributes({
+                {"QueueUrl", resultQueueUrl},
+                {"AttributeNames", NJson::TJsonArray{}}
+            });
+            UNIT_ASSERT(json.GetMapSafe().empty());
         }
 
         {
-            NJson::TJsonValue getQueueAttributes;
-            getQueueAttributes["QueueUrl"] = resultQueueUrl;
-            NJson::TJsonArray attributeNames = {"All"};
-            getQueueAttributes["AttributeNames"] = attributeNames;
+            auto json = GetQueueAttributes({
+                {"QueueUrl", resultQueueUrl},
+                {"AttributeNames", NJson::TJsonArray{"All"}}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["DelaySeconds"], "1");
+            UNIT_ASSERT_GT(json["Attributes"].GetMapSafe().size(), 5);
+        }
 
-            res = SendHttpRequest("/Root", "AmazonSQS.GetQueueAttributes", std::move(getQueueAttributes), FormAuthorizationStr("ru-central1"));
-            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-            NJson::TJsonValue resultJson;
-            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &resultJson));
-            UNIT_ASSERT_VALUES_EQUAL(resultJson["Attributes"]["DelaySeconds"], "1");
+        {
+            auto json = GetQueueAttributes({
+                {"QueueUrl", resultQueueUrl},
+                {"AttributeNames", NJson::TJsonArray{"All", "DelaySeconds"}}
+            });
+            UNIT_ASSERT_GT(json["Attributes"].GetMapSafe().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["DelaySeconds"], "1");
+        }
+
+        {
+            auto json = GetQueueAttributes({
+                {"QueueUrl", resultQueueUrl},
+                {"AttributeNames", NJson::TJsonArray{"DelaySeconds"}}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"].GetMapSafe().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["DelaySeconds"], "1");
+        }
+
+        GetQueueAttributes({
+            {"QueueUrl", resultQueueUrl},
+            {"AttributeNames", NJson::TJsonArray{"UnknownAttribute"}}
+        }, 400);
+
+        GetQueueAttributes({
+            {"QueueUrl", resultQueueUrl},
+            {"AttributeNames", NJson::TJsonArray{"All", "UnknownAttribute"}}
+        }, 400);
+
+        GetQueueAttributes({
+            {"QueueUrl", resultQueueUrl},
+            {"AttributeNames", NJson::TJsonArray{"DelaySeconds", "UnknownAttribute"}}
+        }, 400);
+
+        {
+            auto json = GetQueueAttributes({
+                {"QueueUrl", resultQueueUrl},
+                {"AttributeNames", NJson::TJsonArray{
+                    "ApproximateNumberOfMessages",
+                    "ApproximateNumberOfMessagesDelayed",
+                    "ApproximateNumberOfMessagesNotVisible",
+                    "CreatedTimestamp",
+                    "DelaySeconds",
+                    "LastModifiedTimestamp",
+                    "MaximumMessageSize",
+                    "MessageRetentionPeriod",
+                    "QueueArn",
+                    "ReceiveMessageWaitTimeSeconds",
+                    "VisibilityTimeout",
+
+                    "RedrivePolicy",
+
+                    "FifoQueue",
+                    "ContentBasedDeduplication",
+                }}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["DelaySeconds"], "1");
+            UNIT_ASSERT_GT(json["Attributes"].GetMapSafe().size(), 5);
         }
     }
 

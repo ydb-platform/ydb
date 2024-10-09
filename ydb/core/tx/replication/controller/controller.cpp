@@ -9,6 +9,8 @@ namespace NKikimr::NReplication {
 
 namespace NController {
 
+extern const TString ReplicationConsumerName;
+
 TController::TController(const TActorId& tablet, TTabletStorageInfo* info)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
@@ -478,6 +480,7 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
         const auto* target = replication->FindTarget(id.TargetId());
         if (!target) {
             Y_VERIFY_DEBUG(target);
+            CLOG_T(ctx, "Unknown target " <<  id.TargetId() << ": " << ev->Get()->ToString());
             return;
         }
         for (auto partitionId: record.GetChildPartitionsIds()) {
@@ -493,7 +496,7 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
             readerSettings.MutableConnectionParams()->CopyFrom(replication->GetConfig().GetSrcConnectionParams());
             readerSettings.SetTopicPath(target->GetSrcPath());
             readerSettings.SetTopicPartitionId(partitionId);
-            readerSettings.SetConsumerName("TODO" /*ReplicationConsumerName*/);
+            readerSettings.SetConsumerName(ReplicationConsumerName);
 
             auto& writerSettings = *record.MutableCommand()->MutableLocalTableWriter();
             PathIdFromPathId(target->GetDstPathId(), writerSettings.MutablePathId());

@@ -360,42 +360,14 @@ public:
             resSelectivity = tmpSelectivity;
         } else if (auto notNode = input.Maybe<TKqpOlapNot>()) {
             resSelectivity = 1 - Compute(notNode.Cast().Value());
-        } else if (input.Maybe<TCoAtomList>() && input.Ptr()->ChildrenSize() >= 1) {
-            auto listPtr = input.Maybe<TCoAtomList>().Cast().Ptr()->Child(1);
-            size_t listSize = listPtr->ChildrenSize();
-
-            if (listSize == 3) {
-                TString compSign = TString(listPtr->Child(0)->Content());
-                TString attr = TString(listPtr->Child(1)->Content());
-
-                TExprContext dummyCtx;
-                TPositionHandle dummyPos;
-
-                auto rowArg = 
-                    Build<TCoArgument>(dummyCtx, dummyPos)
-                        .Name("row")
-                    .Done();
-
-                auto member = 
-                        Build<TCoMember>(dummyCtx, dummyPos)
-                            .Struct(rowArg)
-                            .Name().Build(attr)
-                        .Done();
-
-                auto value = TExprBase(listPtr->ChildPtr(2));
-                if (listPtr->ChildPtr(2)->ChildrenSize() >= 2 && listPtr->ChildPtr(2)->ChildPtr(0)->Content() == "just") {
-                    value = TExprBase(listPtr->ChildPtr(2)->ChildPtr(1));
-                }
-                if (OlapCompSigns.contains(compSign)) {
-                    resSelectivity = this->ComputeComparisonSelectivity(member, value);
-                } else if (compSign == "eq") {
-                    resSelectivity = this->ComputeEqualitySelectivity(member, value);
-                } else if (compSign == "neq") {
-                    resSelectivity = 1 - this->ComputeEqualitySelectivity(member, value);
-                } else if (RegexpSigns.contains(compSign)) {
-                    return 0.5;
-                }
+        } else if (input.Maybe<TCoAtomList>()) {
+            auto list = input.Maybe<TCoAtomList>().Cast().Ptr();
+            resSelectivity = ComputeListSelectivity(list);
+            
+            if (!resSelectivity.has_value() && list->ChildrenSize() >= 1) {
+                resSelectivity = ComputeListSelectivity(list->Child(1));
             }
+            
         }
 
         if (!resSelectivity.has_value()) {
@@ -408,6 +380,46 @@ public:
     }
 
 private:
+    std::optional<double> ComputeListSelectivity(const TExprNode::TPtr& listPtr) {
+        std::optional<double> resSelectivity;
+
+        size_t listSize = listPtr->ChildrenSize();
+        if (listSize == 3) {
+            TString compSign = TString(listPtr->Child(0)->Content());
+            TString attr = TString(listPtr->Child(1)->Content());
+
+            TExprContext dummyCtx;
+            TPositionHandle dummyPos;
+
+            auto rowArg = 
+                Build<TCoArgument>(dummyCtx, dummyPos)
+                    .Name("row")
+                .Done();
+
+            auto member = 
+                    Build<TCoMember>(dummyCtx, dummyPos)
+                        .Struct(rowArg)
+                        .Name().Build(attr)
+                    .Done();
+
+            auto value = TExprBase(listPtr->ChildPtr(2));
+            if (listPtr->ChildPtr(2)->ChildrenSize() >= 2 && listPtr->ChildPtr(2)->ChildPtr(0)->Content() == "just") {
+                value = TExprBase(listPtr->ChildPtr(2)->ChildPtr(1));
+            }
+            if (OlapCompSigns.contains(compSign)) {
+                resSelectivity = this->ComputeComparisonSelectivity(member, value);
+            } else if (compSign == "eq") {
+                resSelectivity = this->ComputeEqualitySelectivity(member, value);
+            } else if (compSign == "neq") {
+                resSelectivity = 1 - this->ComputeEqualitySelectivity(member, value);
+            } else if (RegexpSigns.contains(compSign)) {
+                return 0.5;
+            }
+        }
+
+        return resSelectivity;
+    }
+
     THashSet<TString> OlapCompSigns = {
         {"lt"},
         {"lte"},

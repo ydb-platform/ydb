@@ -341,7 +341,7 @@ FLATTEN LIST BY keys AS key
    kubectl delete database.ydb.tech database-kind-sample
    ```
 
-   Чтобы удалить кластер{{ ydb-short-name }}, выполните следующие команды (все данные будут потеряны):
+   Чтобы удалить кластер {{ ydb-short-name }}, выполните следующие команды (все данные будут потеряны):
 
    ```bash
    kubectl delete storage.ydb.tech storage-kind-sample

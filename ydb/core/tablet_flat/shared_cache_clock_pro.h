@@ -109,8 +109,13 @@ public:
     }
 
     void UpdateLimit(ui64 limit) override {
-        Limit = limit;
-        ColdTarget = Min(ColdTarget, Limit);
+        if (ColdTarget == Limit) {
+            Limit = limit;
+            ColdTarget = limit;
+        } else {
+            Limit = limit;
+            ColdTarget = Min(ColdTarget, Limit);
+        }
     }
 
     TString Dump() const {

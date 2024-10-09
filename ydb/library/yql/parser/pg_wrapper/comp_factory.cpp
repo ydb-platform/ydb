@@ -1546,7 +1546,7 @@ private:
                 if (isNull) {
                     return NUdf::TUnboxedValuePod();
                 } else {
-                    const auto& desc = StructType ? StructTypeDesc[index] : RetTypeDesc;
+                    const auto& desc = StructType ? StructTypeDesc[StructIndicies[index]] : RetTypeDesc;
                     if (desc.PassByValue) {
                         return ScalarDatumToPod(datum);
                     } else if (desc.TypeLen == -1) {

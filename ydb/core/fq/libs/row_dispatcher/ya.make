@@ -13,6 +13,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/fmt
+    contrib/libs/simdjson
     ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/config/protos
     ydb/core/fq/libs/control_plane_storage
@@ -34,6 +35,8 @@ YQL_LAST_ABI_VERSION()
 
 END()
 
-RECURSE_FOR_TESTS(
-    ut
-)
+IF(NOT EXPORT_CMAKE)
+    RECURSE_FOR_TESTS(
+        ut
+    )
+ENDIF()

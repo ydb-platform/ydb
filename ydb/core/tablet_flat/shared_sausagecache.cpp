@@ -303,11 +303,14 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         THashSet<TCollection*> recheck;
         while (GetStatAllBytes() > MemLimitBytes
                 || GetStatAllBytes() > Config->LimitBytes.value_or(Max<ui64>()) && StatActiveBytes > configActiveReservedBytes) {
-            auto page = Cache->EvictNext();
-            if (!page) {
+            TIntrusiveList<TPage> pages = Cache->EvictNext();
+            if (pages.Empty()) {
                 break;
             }
-            EvictNow(page, recheck);
+            while (!pages.Empty()) {
+                TPage* page = pages.PopFront();
+                EvictNow(page, recheck);
+            }
         }
         if (recheck) {
             CheckExpiredCollections(std::move(recheck));
@@ -355,12 +358,15 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         Cache.Swap(oldCache);
         ActualizeCacheSizeLimit();
 
-        while (auto page = oldCache->EvictNext()) {
-            page->EnsureNoCacheFlags();
-            
-            // touch each page multiple times to make it warm
-            for (ui32 touchTimes = 0; touchTimes < 3; touchTimes++) {
-                Evict(Cache->Touch(page));
+        while (auto pages = oldCache->EvictNext()) {
+            while (!pages.Empty()) {
+                TPage* page = pages.PopFront();
+                page->EnsureNoCacheFlags();
+                
+                // touch each page multiple times to make it warm
+                for (ui32 touchTimes = 0; touchTimes < 3; touchTimes++) {
+                    Evict(Cache->Touch(page));
+                }
             }
         }
 

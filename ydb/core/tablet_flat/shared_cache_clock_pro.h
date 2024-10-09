@@ -59,26 +59,24 @@ class TClockProCache : public ICacheCache<TPage> {
 
 public:
     TClockProCache(ui64 limit)
-        : MaxSize(limit)
+        : Limit(limit)
         , ColdTarget(limit)
     {}
 
-    TPage* EvictNext() override {
-        // if (SmallQueue.Queue.Empty() && MainQueue.Queue.Empty()) {
-        //     return nullptr;
-        // }
+    TIntrusiveList<TPage> EvictNext() override {
+        if (SizeHot + SizeCold == 0) {
+            return {};
+        }
 
-        // // TODO: account passive pages inside the cache
-        // TLimit savedLimit = std::exchange(Limit, TLimit(SmallQueue.Size + MainQueue.Size - 1));
+        ui64 savedLimit = std::exchange(Limit, SizeHot + SizeCold - 1);
+        ui64 savedColdTarget = std::exchange(ColdTarget, Min(ColdTarget, Limit));
 
-        // TPage* evictedPage = EvictOneIfFull();
-        // Y_DEBUG_ABORT_UNLESS(evictedPage);
-        
-        // Limit = savedLimit;
+        TIntrusiveList<TPage> evictedList = EvictWhileFull();
 
-        // return evictedPage;
+        Limit = savedLimit;
+        ColdTarget = savedColdTarget;
 
-        return {};
+        return evictedList;
     }
 
     TIntrusiveList<TPage> Touch(TPage* page) override {
@@ -111,8 +109,8 @@ public:
     }
 
     void UpdateLimit(ui64 limit) override {
-        MaxSize = limit;
-        ColdTarget = Min(ColdTarget, MaxSize);
+        Limit = limit;
+        ColdTarget = Min(ColdTarget, Limit);
     }
 
     TString Dump() const {
@@ -160,7 +158,7 @@ public:
             }
             result << entry->Size << "b}";
 
-            ptr = ptr->Next();
+            Advance(ptr);
             if (ptr == HandHot) break;
         }
         
@@ -214,7 +212,7 @@ private:
         
         LinkEntry(entry);
 
-        ColdTarget = Min(ColdTarget + entry->Size, MaxSize);
+        ColdTarget = Min(ColdTarget + entry->Size, Limit);
 
         return EvictWhileFull();
     }
@@ -222,7 +220,7 @@ private:
     TIntrusiveList<TPage> EvictWhileFull() {
         TIntrusiveList<TPage> evictedList;
         
-        while (SizeHot + SizeCold > MaxSize) {
+        while (SizeHot + SizeCold > Limit) {
             RunHandCold(evictedList);
         }
 
@@ -243,7 +241,6 @@ private:
                 SizeCold -= entry->Size;
 
                 TPageTraits::SetLocation(entry->Page, EClockProPageLocation::Hot);
-
                 SizeHot += entry->Size;
             } else {
                 Y_ABORT_UNLESS(SizeCold >= entry->Size);
@@ -255,15 +252,15 @@ private:
 
                 SizeTest += entry->Size;
 
-                while (SizeTest > MaxSize) {
+                while (SizeTest > Limit) {
                     RunHandTest(evictedList);
                 }
             }
         }
 
-        HandCold = HandCold->Next();
+        Advance(HandCold);
 
-        while (SizeHot > MaxSize - ColdTarget) {
+        while (SizeHot > Limit - ColdTarget) {
             RunHandHot(evictedList);
         }
 
@@ -283,6 +280,7 @@ private:
         }
 
         TPageEntry* entry = HandHot->Node();
+
         if (IsHot(entry)) {
             if (TPageTraits::GetReferenced(entry->Page)) {
                 TPageTraits::SetReferenced(entry->Page, false);
@@ -296,7 +294,7 @@ private:
             }
         }
 
-        HandHot = HandHot->Next();
+        Advance(HandHot);
 
         Cerr << "}RunHandHot  " << Dump() << Endl;
     }
@@ -314,6 +312,7 @@ private:
         }
 
         TPageEntry* entry = HandTest->Node();
+
         if (IsTest(entry)) {
             Y_ABORT_UNLESS(SizeTest >= entry->Size);
             SizeTest -= entry->Size;
@@ -328,7 +327,7 @@ private:
             Entries.erase(it);
         }
 
-        HandTest = HandTest->Next();
+        Advance(HandTest);
 
         Cerr << "}RunHandTest " << Dump() << Endl;
     }
@@ -388,20 +387,26 @@ private:
         UnlinkEntry(entry);
     }
 
-    bool IsHot(TPageEntry* entry) {
+    bool IsHot(TPageEntry* entry) const {
         return entry->Page && TPageTraits::GetLocation(entry->Page) == EClockProPageLocation::Hot;
     }
 
-    bool IsCold(TPageEntry* entry) {
+    bool IsCold(TPageEntry* entry) const {
         return entry->Page && TPageTraits::GetLocation(entry->Page) == EClockProPageLocation::Cold;
     }
 
-    bool IsTest(TPageEntry* entry) {
+    bool IsTest(TPageEntry* entry) const {
         return entry->Page == nullptr;
     }
 
+    void Advance(TIntrusiveListItem<TPageEntry>*& ptr) const {
+        if (ptr) {
+            ptr = ptr->Next();
+        }
+    } 
+
 private:
-    ui64 MaxSize;
+    ui64 Limit;
     ui64 ColdTarget;
 
     // TODO: unify this with TPageMap

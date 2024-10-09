@@ -1,6 +1,5 @@
 #include "logical_type.h"
 #include "schema.h"
-#include "yt/yt/client/table_client/row_base.h"
 
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/chunk_meta.pb.h>
 

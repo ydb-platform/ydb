@@ -451,12 +451,24 @@ class TIntervalPositions {
 private:
     std::vector<TIntervalPosition> Positions;
 public:
+    using const_iterator = std::vector<TIntervalPosition>::const_iterator;
+
     bool IsEmpty() const {
         return Positions.empty();
     }
 
     std::vector<TIntervalPosition>::const_iterator begin() const {
         return Positions.begin();
+    }
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "[";
+        for (auto&& p : Positions) {
+            sb << p.DebugJson().GetStringRobust() << ";";
+        }
+        sb << "]";
+        return sb;
     }
 
     std::vector<TIntervalPosition>::const_iterator end() const {
@@ -662,6 +674,35 @@ public:
         return SplitByBorders(batch, columnNames, it);
     }
 
+    class TIntervalPointsIterator {
+    private:
+        typename TIntervalPositions::const_iterator Current;
+        typename TIntervalPositions::const_iterator End;
+
+    public:
+        TIntervalPointsIterator(const TIntervalPositions& container)
+            : Current(container.begin())
+            , End(container.end()) {
+        }
+
+        bool IsValid() const {
+            return Current != End;
+        }
+
+        void Next() {
+            ++Current;
+        }
+
+        const auto& CurrentPosition() const {
+            return Current->GetPosition();
+        }
+    };
+
+    static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBordersInIntervalPositions(
+        const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columnNames, const TIntervalPositions& container) {
+        TIntervalPointsIterator it(container);
+        return SplitByBorders(batch, columnNames, it);
+    }
 };
 
 }

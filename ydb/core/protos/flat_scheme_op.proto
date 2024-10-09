@@ -1757,6 +1757,43 @@ message TAlterShards {
     }
 }
 
+message TBackupCollectionProperties {
+    message TBackupEntry {
+        enum EType {
+            ETypeInvalid = 0;
+            ETypeTable = 1;
+        }
+
+        optional EType Type = 1;
+        optional string Path = 2;
+    }
+
+    message TExplicitEntryList {
+        repeated TBackupEntry Entries = 1;
+    }
+
+    message TIncrementalBackupConfig {
+
+    }
+
+    oneof Entries {
+        google.protobuf.NullValue Database = 1;
+        TExplicitEntryList ExplicitEntryList = 2;
+    }
+
+    // non-empty enables data-collection
+    optional TIncrementalBackupConfig IncrementalBackupConfig = 3;
+
+    oneof Storage {
+        google.protobuf.NullValue Cluster = 4;
+    }
+}
+
+message TBackupCollection {
+    optional string Name = 1;
+    optional TBackupCollectionProperties Properties = 2;
+}
+
 // Request for scheme modification
 // Has only one of the operations
 message TModifyScheme {
@@ -1917,6 +1954,7 @@ enum EPathType {
     EPathTypeExternalDataSource = 19;
     EPathTypeView = 20;
     EPathTypeResourcePool = 21;
+    EPathTypeBackupCollection = 22;
 }
 
 enum EPathSubType {
@@ -1973,6 +2011,7 @@ message TPathVersion {
     optional uint64 ExternalDataSourceVersion = 28;
     optional uint64 ViewVersion = 29;
     optional uint64 ResourcePoolVersion = 30;
+    optional uint64 BackupCollectionVersion = 31;
 }
 
 // Describes single path
@@ -2062,6 +2101,7 @@ message TPathDescription {
     optional TExternalDataSourceDescription ExternalDataSourceDescription = 28;
     optional TViewDescription ViewDescription = 29;
     optional TResourcePoolDescription ResourcePoolDescription = 30;
+    optional TBackupCollectionDescription BackupCollectionDescription = 31;
 }
 
 // For persisting AlterTable Tx description in Schemeshard internal DB
@@ -2201,4 +2241,11 @@ message TResourcePoolDescription {
     optional NKikimrProto.TPathID PathId = 2;
     optional uint64 Version = 3;
     optional TResourcePoolProperties Properties = 4;
+}
+
+message TBackupCollectionDescription {
+    optional string Name = 1;
+    optional NKikimrProto.TPathID PathId = 2;
+    optional uint64 Version = 3;
+    optional TBackupCollectionProperties Properties = 4;
 }

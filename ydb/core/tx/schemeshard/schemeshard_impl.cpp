@@ -2998,6 +2998,26 @@ void TSchemeShard::PersistRemoveResourcePool(NIceDb::TNiceDb& db, TPathId pathId
     db.Table<Schema::ResourcePool>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
 }
 
+void TSchemeShard::PersistBackupCollection(NIceDb::TNiceDb& db, TPathId pathId, const TBackupCollectionInfo::TPtr backupCollection) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+
+    db.Table<Schema::BackupCollection>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::BackupCollection::AlterVersion>{backupCollection->AlterVersion},
+        NIceDb::TUpdate<Schema::BackupCollection::Properties>{backupCollection->Properties.SerializeAsString()}
+    );
+}
+
+void TSchemeShard::PersistRemoveBackupCollection(NIceDb::TNiceDb& db, TPathId pathId)
+{
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+    if (BackupCollections.contains(pathId)) {
+        BackupCollections.erase(pathId);
+        DecrementPathDbRefCount(pathId);
+    }
+
+    db.Table<Schema::BackupCollection>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+}
+
 void TSchemeShard::PersistRemoveRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
@@ -4246,6 +4266,13 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 generalVersion += result.GetResourcePoolVersion();
                 break;
             }
+            case NKikimrSchemeOp::EPathType::EPathTypeBackupCollection: {
+                auto it = BackupCollections.find(pathId);
+                Y_ABORT_UNLESS(it != BackupCollections.end());
+                result.SetBackupCollectionVersion(it->second->AlterVersion);
+                generalVersion += result.GetBackupCollectionVersion();
+                break;
+            }
 
             case NKikimrSchemeOp::EPathType::EPathTypeInvalid: {
                 Y_UNREACHABLE();
@@ -5061,6 +5088,9 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
         break;
     case TPathElement::EPathType::EPathTypeResourcePool:
         TabletCounters->Simple()[COUNTER_RESOURCE_POOL_COUNT].Sub(1);
+        break;
+    case TPathElement::EPathType::EPathTypeBackupCollection:
+        TabletCounters->Simple()[COUNTER_BACKUP_COLLECTION_COUNT].Sub(1);
         break;
     case TPathElement::EPathType::EPathTypeInvalid:
         Y_ABORT("impossible path type");

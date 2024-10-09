@@ -475,7 +475,31 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
     });
 
     if (allEnded) {
-        id.ReplicationId();
+        const auto* target = replication->FindTarget(id.TargetId());
+        if (!target) {
+            Y_VERIFY_DEBUG(target);
+            return;
+        }
+        for (auto partitionId: record.GetChildPartitionsIds()) {
+            auto ev = MakeHolder<TEvService::TEvRunWorker>();
+            auto& record = ev->Record;
+
+            auto& worker = *record.MutableWorker();
+            worker.SetReplicationId(replication->GetId());
+            worker.SetTargetId(replication->GetNextTargetId());
+            worker.SetWorkerId(partitionId);
+
+            auto& readerSettings = *record.MutableCommand()->MutableRemoteTopicReader();
+            readerSettings.MutableConnectionParams()->CopyFrom(replication->GetConfig().GetSrcConnectionParams());
+            readerSettings.SetTopicPath(target->GetSrcPath());
+            readerSettings.SetTopicPartitionId(partitionId);
+            readerSettings.SetConsumerName("TODO" /*ReplicationConsumerName*/);
+
+            auto& writerSettings = *record.MutableCommand()->MutableLocalTableWriter();
+            PathIdFromPathId(target->GetDstPathId(), writerSettings.MutablePathId());
+
+            Send(SelfId(), std::move(ev));
+        }
     }
 }
 

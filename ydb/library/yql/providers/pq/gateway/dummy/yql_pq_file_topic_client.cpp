@@ -231,7 +231,7 @@ std::shared_ptr<NYdb::NTopic::IReadSession> TFileTopicClient::CreateReadSession(
         if (fsPath.Exists() && topicsIt->second.PartitionsCount == 1) {
             filePath = *path;
         } else {
-            filePath = TStringBuilder() << *path << "_" << ToString(partitionId);
+            filePath = TStringBuilder() << *path << "_" << partitionId;
         }
     }
 

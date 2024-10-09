@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from __future__ import print_function
 import sys
 import os
 import platform
@@ -8,7 +9,7 @@ from subprocess import call
 
 def symlink():
     if len(sys.argv) < 3:
-        print >> sys.stderr, "Usage: symlink.py <source> <target>"
+        print("Usage: symlink.py <source> <target>", file=sys.stderr)
         sys.exit(1)
 
     source = sys.argv[1]

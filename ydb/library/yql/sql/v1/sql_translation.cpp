@@ -756,7 +756,7 @@ bool TSqlTranslation::CreateIndexSettings(const TRule_with_index_settings& setti
 
 template<typename T>
 std::tuple<bool, T, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
-    T value;
+    T value{};
     // id_or_type
     if (node.HasAlt_index_setting_value1()) {
         const TString stringValue = to_lower(IdEx(node.GetAlt_index_setting_value1().GetRule_id_or_type1(), *this).Name);
@@ -785,7 +785,7 @@ template<>
 std::tuple<bool, ui64, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
     const auto& intNode = node.GetAlt_index_setting_value3().GetRule_integer1();
     const TString stringValue = Token(intNode.GetToken1());
-    ui64 value;
+    ui64 value = 0;
     TString suffix;
     if (!ParseNumbers(Ctx, stringValue, value, suffix)) {
         return {false, value, stringValue};
@@ -795,7 +795,7 @@ std::tuple<bool, ui64, TString> TSqlTranslation::GetIndexSettingValue(const TRul
 
 template<>
 std::tuple<bool, bool, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
-    bool value;
+    bool value = false;
     const TString stringValue = to_lower(Token(node.GetAlt_index_setting_value4().GetRule_bool_value1().GetToken1()));;
     if (!TryFromString<bool>(stringValue, value)) {
         return {false, value, stringValue};

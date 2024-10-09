@@ -11,6 +11,7 @@ namespace NYql::NCommon {
 namespace {
 
 const TString UdfResolver_LoadMetadata = "UdfResolver_LoadMetadata";
+const TString UdfResolver_ContainsModule = "UdfResolver_ContainsModule";
 
 TString MakeHash(const TString& str) {
     SHA256_CTX sha;
@@ -30,10 +31,10 @@ public:
 
     TMaybe<TFilePathWithMd5> GetSystemModulePath(const TStringBuf& moduleName) const final {
         if (QContext_.CanRead()) {
-            ythrow yexception() << "can't replay GetSystemModulePath";
+            return MakeMaybe<TFilePathWithMd5>("", "");
         }
 
-        return Inner_-> GetSystemModulePath(moduleName);
+        return Inner_->GetSystemModulePath(moduleName);
     }
 
     bool LoadMetadata(const TVector<TImport*>& imports,
@@ -67,7 +68,7 @@ public:
 
     TResolveResult LoadRichMetadata(const TVector<TImport>& imports) const final {
         if (QContext_.CanRead()) {
-            ythrow yexception() << "can't replay LoadRichMetadata";
+            ythrow yexception() << "Can't replay LoadRichMetadata";
         }
 
         return Inner_->LoadRichMetadata(imports);
@@ -75,10 +76,20 @@ public:
 
     bool ContainsModule(const TStringBuf& moduleName) const final {
         if (QContext_.CanRead()) {
-            ythrow yexception() << "can't replay ContainsModule";
+            auto res = QContext_.GetReader()->Get({UdfResolver_ContainsModule, TString(moduleName)}).GetValueSync();
+            if (!res) {
+                ythrow yexception() << "Missing replay data";
+            }
+
+            return res->Value == "1";
         }
 
-        return Inner_->ContainsModule(moduleName);
+        auto ret = Inner_->ContainsModule(moduleName);
+        if (QContext_.CanWrite()) {
+            QContext_.GetWriter()->Put({UdfResolver_ContainsModule, TString(moduleName)}, ret ? "1" : "0").GetValueSync();
+        }
+
+        return ret;
     }
 
 private:

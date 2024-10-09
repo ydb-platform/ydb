@@ -184,14 +184,14 @@ std::variant<ArrowFields, TString> InferCsvTypes(std::shared_ptr<arrow::io::Rand
     .Value(&reader);
 
     if (!readerStatus.ok()) {
-        return TString{TStringBuilder{} << "couldn't open csv/tsv file, check format and compression params: " << readerStatus.ToString()};
+        return TString{TStringBuilder{} << "couldn't open csv/tsv file, check format and compression parameters: " << readerStatus.ToString()};
     }
 
     std::shared_ptr<arrow::Table> table;
     auto tableRes = reader->Read().Value(&table);
 
     if (!tableRes.ok()) {
-        return TStringBuilder{} << "couldn't parse csv/tsv file, check format and compression params: " << tableRes.ToString();
+        return TStringBuilder{} << "couldn't parse csv/tsv file, check format and compression parameters: " << tableRes.ToString();
     }
 
     return table->fields();
@@ -202,19 +202,19 @@ std::variant<ArrowFields, TString> InferParquetTypes(std::shared_ptr<arrow::io::
     builder.properties(parquet::ArrowReaderProperties(false));
     auto openStatus = builder.Open(std::move(file));
     if (!openStatus.ok()) {
-        return TStringBuilder{} << "couldn't open parquet file, check format params: " << openStatus.ToString();
+        return TStringBuilder{} << "couldn't open parquet file, check format parameters: " << openStatus.ToString();
     }
 
     std::unique_ptr<parquet::arrow::FileReader> reader;
     auto readerStatus = builder.Build(&reader);
     if (!readerStatus.ok()) {
-        return TStringBuilder{} << "couldn't read parquet file, check format params: " << readerStatus.ToString();
+        return TStringBuilder{} << "couldn't read parquet file, check format parameters: " << readerStatus.ToString();
     }
 
     std::shared_ptr<arrow::Schema> schema;
     auto schemaRes = reader->GetSchema(&schema);
     if (!schemaRes.ok()) {
-        return TStringBuilder{} << "couldn't parse parquet file, check format params: " << schemaRes.ToString();
+        return TStringBuilder{} << "couldn't parse parquet file, check format parameters: " << schemaRes.ToString();
     }
 
     return schema->fields();
@@ -235,14 +235,14 @@ std::variant<ArrowFields, TString> InferJsonTypes(std::shared_ptr<arrow::io::Ran
     ).Value(&reader);
 
     if (!readerStatus.ok()) {
-        return TString{TStringBuilder{} << "couldn't open json file, check format and compression params: " << readerStatus.ToString()};
+        return TString{TStringBuilder{} << "couldn't open json file, check format and compression parameters: " << readerStatus.ToString()};
     }
 
     std::shared_ptr<arrow::Table> table;
     auto tableRes = reader->Read().Value(&table);
 
     if (!tableRes.ok()) {
-        return TString{TStringBuilder{} << "couldn't parse json file, check format and compression params: " << tableRes.ToString()};
+        return TString{TStringBuilder{} << "couldn't parse json file, check format and compression parameters: " << tableRes.ToString()};
     }
 
     return table->fields();

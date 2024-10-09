@@ -50,6 +50,7 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& e
     if (traceId) {
         Span = {TComponentTracingLevels::THttp::TopLevel, std::move(traceId), handlerName ? "http " + handlerName : "http viewer", NWilson::EFlags::AUTO_END};
         Span.Attribute("request_type", TString(Event->Get()->Request.GetUri().Before('?')));
+        Span.Attribute("request_params", TString(Event->Get()->Request.GetUri().After('?')));
     }
 }
 

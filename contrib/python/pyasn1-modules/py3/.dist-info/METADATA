@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pyasn1_modules
-Version: 0.4.0
+Version: 0.4.1
 Summary: A collection of ASN.1-based protocols modules
 Home-page: https://github.com/pyasn1/pyasn1-modules
 Author: Ilya Etingof
@@ -28,6 +28,7 @@ Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Topic :: Communications

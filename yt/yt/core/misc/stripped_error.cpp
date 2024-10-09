@@ -797,7 +797,21 @@ void AppendError(TStringBuilderBase* builder, const TError& error, int indent)
 
     for (const auto& [key, value] : error.Attributes().ListPairs()) {
         TTokenizer tokenizer(value.AsStringBuf());
-        YT_VERIFY(tokenizer.ParseNext());
+        // TODO(arkady-e1ppa): Remove this once failed verifies have been dealt with.
+        [[unlikely]] if (!tokenizer.ParseNext()) {
+            Cerr <<
+                NYT::Format(
+                    "%v *** Empty toke encountered while formatting TError attribute (Key: %v, Value: %v"
+                    "(BuilderAccumulatedData: %v)",
+                    TInstant::Now(),
+                    key,
+                    value.AsStringBuf(),
+                    builder->GetBuffer())
+                << '\n';
+            Flush(Cerr);
+            YT_ABORT();
+        }
+        // YT_VERIFY(tokenizer.ParseNext());
         switch (tokenizer.GetCurrentType()) {
             case ETokenType::String:
                 AppendAttribute(builder, key, TString(tokenizer.CurrentToken().GetStringValue()), indent);

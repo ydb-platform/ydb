@@ -107,6 +107,13 @@ public:
 
     void WriteSchema(NYson::IYsonConsumer* consumer) const;
 
+    // always returns |true| for itself
+    // else always returns |false| if one of the fields
+    // is not equality comparable.
+    // See templated operator== for explanation why it was not
+    // a member method.
+    bool IsEqual(const TYsonStructBase& rhs) const;
+
 private:
     template <class TValue>
     friend class TYsonStructParameter;
@@ -372,6 +379,18 @@ template <class TSrc, class TDst>
 void UpdateYsonStructField(TDst& dst, const std::optional<TSrc>& src);
 template <class TSrc, class TDst>
 void UpdateYsonStructField(TIntrusivePtr<TDst>& dst, const TIntrusivePtr<TSrc>& src);
+
+// NB(arkady-e1ppa): Double templated parameter is chosen so that
+// templated constrained free function with 1 parameter
+// (which is the sanest use case) would always win over this one.
+// Specific overloads (for concrete type) would also win obviously.
+// Overloads which come from bases would always lose.
+// Because some people actually try using equality comparable bases
+// with trivial comparisons overload below is a free function and not
+// a member method of the TYsonStructBase.
+template <CYsonStructDerived T, CYsonStructDerived U>
+    requires std::same_as<T, U>
+bool operator==(const T& lhs, const U& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 

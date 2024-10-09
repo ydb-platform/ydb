@@ -60,6 +60,8 @@ std::shared_ptr<FormatConfig> MakeFormatConfig(const THashMap<TString, TString>&
     EFileFormat format;
     if (auto formatPtr = params.FindPtr("format"); formatPtr) {
         format = ConvertFileFormat(*formatPtr);
+    } else {
+        throw yexception() << "format unspecified, use format parameter with type inferring";
     }
     
     if (auto delimiter = params.FindPtr("csvdelimiter"); delimiter) {

@@ -93,7 +93,7 @@ You can read more about Yatool options in the [YDB documentation](https://ydb.te
 
 ## Build using CMake
 
-You can use CMake build for various arcitectures and operating systems.
+You can use CMake to build YDB for various architectures and operating systems.
 
 YDB server can be built for Ubuntu 18.04, 20.04 and 22.04. Other Linux distributions are likely to work, but additional effort may be required.
 

@@ -67,13 +67,22 @@ void TDbWrapper::WritePortion(const NOlap::TPortionInfo& portion) {
     NIceDb::TNiceDb db(Database);
     auto metaProto = portion.GetMeta().SerializeToProto();
     using IndexPortions = NColumnShard::Schema::IndexPortions;
-    auto removeSnapshot = portion.GetRemoveSnapshotOptional();
-    db.Table<IndexPortions>().Key(portion.GetPathId(), portion.GetPortion()).Update(
-        NIceDb::TUpdate<IndexPortions::SchemaVersion>(portion.GetSchemaVersionVerified()),
-        NIceDb::TUpdate<IndexPortions::ShardingVersion>(portion.GetShardingVersionDef(0)),
-        NIceDb::TUpdate<IndexPortions::XPlanStep>(removeSnapshot ? removeSnapshot->GetPlanStep() : 0),
-        NIceDb::TUpdate<IndexPortions::XTxId>(removeSnapshot ? removeSnapshot->GetTxId() : 0),
-        NIceDb::TUpdate<IndexPortions::Metadata>(metaProto.SerializeAsString()));
+    const auto removeSnapshot = portion.GetRemoveSnapshotOptional();
+    const auto commitSnapshot = portion.GetCommitSnapshotOptional();
+    const auto insertWriteId = portion.GetInsertWriteIdOptional();
+    const auto minSnapshotDeprecated = portion.GetMinSnapshotDeprecated();
+    db.Table<IndexPortions>()
+        .Key(portion.GetPathId(), portion.GetPortion())
+        .Update(NIceDb::TUpdate<IndexPortions::SchemaVersion>(portion.GetSchemaVersionVerified()),
+            NIceDb::TUpdate<IndexPortions::ShardingVersion>(portion.GetShardingVersionDef(0)),
+            NIceDb::TUpdate<IndexPortions::CommitPlanStep>(commitSnapshot ? commitSnapshot->GetPlanStep() : 0),
+            NIceDb::TUpdate<IndexPortions::CommitTxId>(commitSnapshot ? commitSnapshot->GetTxId() : 0),
+            NIceDb::TUpdate<IndexPortions::InsertWriteId>((ui64)insertWriteId.value_or(TInsertWriteId(0))),
+            NIceDb::TUpdate<IndexPortions::XPlanStep>(removeSnapshot ? removeSnapshot->GetPlanStep() : 0),
+            NIceDb::TUpdate<IndexPortions::XTxId>(removeSnapshot ? removeSnapshot->GetTxId() : 0),
+            NIceDb::TUpdate<IndexPortions::MinSnapshotPlanStep>(minSnapshotDeprecated.GetPlanStep()),
+            NIceDb::TUpdate<IndexPortions::MinSnapshotTxId>(minSnapshotDeprecated.GetTxId()),
+            NIceDb::TUpdate<IndexPortions::Metadata>(metaProto.SerializeAsString()));
 }
 
 void TDbWrapper::ErasePortion(const NOlap::TPortionInfo& portion) {
@@ -130,6 +139,21 @@ bool TDbWrapper::LoadPortions(const std::function<void(NOlap::TPortionInfoConstr
             portion.SetShardingVersion(rowset.GetValue<IndexPortions::ShardingVersion>());
         }
         portion.SetRemoveSnapshot(rowset.GetValue<IndexPortions::XPlanStep>(), rowset.GetValue<IndexPortions::XTxId>());
+        if (rowset.GetValue<IndexPortions::MinSnapshotPlanStep>()) {
+            portion.SetMinSnapshotDeprecated(
+                TSnapshot(rowset.GetValue<IndexPortions::MinSnapshotPlanStep>(), rowset.GetValue<IndexPortions::MinSnapshotTxId>()));
+        }
+
+        if (rowset.GetValueOrDefault<IndexPortions::InsertWriteId>(0)) {
+            portion.SetInsertWriteId((TInsertWriteId)rowset.GetValue<IndexPortions::InsertWriteId>());
+        }
+        if (rowset.GetValueOrDefault<IndexPortions::CommitPlanStep>(0)) {
+            AFL_VERIFY(rowset.GetValueOrDefault<IndexPortions::CommitTxId>(0));
+            portion.SetCommitSnapshot(
+                TSnapshot(rowset.GetValue<IndexPortions::CommitPlanStep>(), rowset.GetValue<IndexPortions::CommitTxId>()));
+        } else {
+            AFL_VERIFY(!rowset.GetValueOrDefault<IndexPortions::CommitTxId>(0));
+        }
 
         NKikimrTxColumnShard::TIndexPortionMeta metaProto;
         const TString metadata = rowset.template GetValue<NColumnShard::Schema::IndexPortions::Metadata>();

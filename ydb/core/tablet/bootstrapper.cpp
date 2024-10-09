@@ -20,6 +20,8 @@ class TBootstrapper : public TActorBootstrapped<TBootstrapper> {
     const TIntrusivePtr<TTabletStorageInfo> TabletInfo;
     const TIntrusivePtr<TBootstrapperInfo> BootstrapperInfo;
     bool ModeStandby;
+    TVector<ui32> OtherNodes;
+    THashMap<ui32, size_t> OtherNodesIndex;
 
     TActorId KnownLeaderPipe;
 
@@ -63,10 +65,12 @@ private:
 
         TVector<TAlien> Aliens;
         TVector<TWatcher> Watchers;
+        size_t Waiting;
 
         explicit TRound(size_t count)
             : Aliens(count)
             , Watchers(count)
+            , Waiting(count)
         {}
     };
 
@@ -134,10 +138,22 @@ private:
         return NKikimrBootstrapper::TEvWatchResult::EState_Name(state).c_str();
     }
 
+    void BuildOtherNodes() {
+        ui32 selfNodeId = SelfId().NodeId();
+        for (ui32 nodeId : BootstrapperInfo->Nodes) {
+            if (nodeId != selfNodeId && !OtherNodesIndex.contains(nodeId)) {
+                size_t index = OtherNodes.size();
+                OtherNodes.push_back(nodeId);
+                OtherNodesIndex[nodeId] = index;
+            }
+        }
+    }
+
     size_t AlienIndex(ui32 alienNodeId) {
-        for (size_t i = 0, e = BootstrapperInfo->OtherNodes.size(); i != e; ++i)
-            if (BootstrapperInfo->OtherNodes[i] == alienNodeId)
-                return i;
+        auto it = OtherNodesIndex.find(alienNodeId);
+        if (it != OtherNodesIndex.end()) {
+            return it->second;
+        }
         return Max<size_t>();
     }
 
@@ -300,7 +316,7 @@ private:
         // Note: make sure notifications from previous states don't interfere
         ++RoundCounter;
 
-        if (BootstrapperInfo->OtherNodes.empty()) {
+        if (OtherNodes.empty()) {
             return Boot();
         }
 
@@ -311,8 +327,8 @@ private:
 
         const ui64 tabletId = TabletInfo->TabletID;
 
-        Round.emplace(BootstrapperInfo->OtherNodes.size());
-        for (ui32 alienNode : BootstrapperInfo->OtherNodes) {
+        Round.emplace(OtherNodes.size());
+        for (ui32 alienNode : OtherNodes) {
             Send(MakeBootstrapperID(tabletId, alienNode),
                 new TEvBootstrapper::TEvWatch(tabletId, SelfSeed, RoundCounter),
                 IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
@@ -407,6 +423,10 @@ private:
             "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
             << ", apply alien " << alien.NodeId() << " state: " << GetStateName(state));
 
+        if (alienEntry.State == TRound::EAlienState::Wait) {
+            Y_ABORT_UNLESS(Round->Waiting-- > 0);
+        }
+
         alienEntry.Seed = seed;
 
         switch (state) {
@@ -434,17 +454,22 @@ private:
     }
 
     void CheckRoundCompletion() {
+        auto& round = Round.value();
+        if (round.Waiting > 0) {
+            return;
+        }
+
         ui64 winnerSeed = SelfSeed;
         ui32 winner = SelfId().NodeId();
 
         size_t undelivered = 0;
         size_t disconnected = 0;
-        auto& round = Round.value();
         for (size_t i = 0, e = round.Aliens.size(); i != e; ++i) {
             const auto& alien = round.Aliens[i];
-            const ui32 node = BootstrapperInfo->OtherNodes.at(i);
+            const ui32 node = OtherNodes.at(i);
             switch (alien.State) {
                 case TRound::EAlienState::Wait:
+                    Y_DEBUG_ABORT("Unexpected Wait state");
                     return;
                 case TRound::EAlienState::Unknown:
                     break;
@@ -485,7 +510,7 @@ private:
 
     bool CheckBootPermitted(size_t undelivered, size_t disconnected) {
         // Total number of nodes that participate in tablet booting
-        size_t total = 1 + BootstrapperInfo->OtherNodes.size();
+        size_t total = 1 + OtherNodes.size();
         Y_DEBUG_ABORT_UNLESS(total >= 1 + undelivered + disconnected);
 
         // Ignore nodes that don't have bootstrapper running
@@ -785,7 +810,7 @@ private:
     }
 
     void PassAway() override {
-        for (ui32 nodeId : BootstrapperInfo->OtherNodes) {
+        for (ui32 nodeId : OtherNodes) {
             Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe);
         }
         NotifyWatchers();
@@ -806,6 +831,7 @@ public:
     }
 
     void Bootstrap() {
+        BuildOtherNodes();
         if (ModeStandby) {
             Become(&TThis::StateStandBy);
         } else {

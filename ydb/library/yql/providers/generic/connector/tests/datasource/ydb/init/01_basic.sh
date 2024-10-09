@@ -162,6 +162,10 @@ set -ex
       (2, @@{ "TODO": "unicode" }@@, CAST(@@{ "TODO": "unicode" }@@AS Json)),
       (3, @@{ }@@, NULL);
     COMMIT;
+    CREATE TABLE dummy_table (name String, cnt Uint64, PRIMARY KEY(name));
+    COMMIT;
+    INSERT INTO dummy_table (name, cnt) SELECT "json", COUNT(*) FROM json;
+    COMMIT;
   '
 
 echo $(date +"%T.%6N") "SUCCESS"

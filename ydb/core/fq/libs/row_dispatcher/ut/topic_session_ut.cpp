@@ -81,7 +81,7 @@ public:
         settings.SetDatabase(GetDefaultPqDatabase());
         settings.AddColumns("dt");
         settings.AddColumns("value");
-        settings.AddColumnTypes("UInt64");
+        settings.AddColumnTypes("Uint64");
         settings.AddColumnTypes("String");
         if (!emptyPredicate) {
             settings.SetPredicate("WHERE true");
@@ -99,20 +99,20 @@ public:
     void ExpectMessageBatch(NActors::TActorId readActorId, const std::vector<TString>& expected) {
         auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvMessageBatch>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
-        UNIT_ASSERT(eventHolder->Get()->ReadActorId == readActorId);
-        UNIT_ASSERT(expected.size() == eventHolder->Get()->Record.MessagesSize());
+        UNIT_ASSERT_VALUES_EQUAL(eventHolder->Get()->ReadActorId, readActorId);
+        UNIT_ASSERT_VALUES_EQUAL(expected.size(), eventHolder->Get()->Record.MessagesSize());
         for (size_t i = 0; i < expected.size(); ++i) {
             NFq::NRowDispatcherProto::TEvMessage message = eventHolder->Get()->Record.GetMessages(i);
             std::cerr << "message.GetJson() " << message.GetJson() << std::endl;    
-            UNIT_ASSERT(expected[i] == message.GetJson());
+            UNIT_ASSERT_VALUES_EQUAL(expected[i], message.GetJson());
         }
     }
 
     void ExpectSessionError(NActors::TActorId readActorId, TString message) {
         auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvSessionError>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
-        UNIT_ASSERT(eventHolder->Get()->ReadActorId == readActorId);
-        UNIT_ASSERT(TString(eventHolder->Get()->Record.GetMessage()).Contains(message));
+        UNIT_ASSERT_VALUES_EQUAL(eventHolder->Get()->ReadActorId, readActorId);
+        UNIT_ASSERT_STRING_CONTAINS(TString(eventHolder->Get()->Record.GetMessage()), message);
     }
 
     void ExpectNewDataArrived(TSet<NActors::TActorId> readActorIds) {
@@ -129,7 +129,7 @@ public:
         Runtime.Send(new IEventHandle(TopicSession, readActorId, new TEvRowDispatcher::TEvGetNextBatch()));
         auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvMessageBatch>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
-        UNIT_ASSERT(eventHolder->Get()->ReadActorId == readActorId);
+        UNIT_ASSERT_VALUES_EQUAL(eventHolder->Get()->ReadActorId, readActorId);
         return eventHolder->Get()->Record.MessagesSize();
     }
 
@@ -169,6 +169,27 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
         StopSession(ReadActorId1, source);
         StopSession(ReadActorId2, source);
+    }
+
+    Y_UNIT_TEST_F(TwoSessionWithoutPredicate, TFixture) {
+        const TString topicName = "twowithoutpredicate";
+        PQCreateStream(topicName);
+        Init(topicName);
+        auto source1 = BuildSource(topicName, true);
+        auto source2 = BuildSource(topicName, true);
+        StartSession(ReadActorId1, source1);
+        StartSession(ReadActorId2, source2);
+
+        const std::vector<TString> data = { Json1 };
+        PQWrite(data, topicName);
+        ExpectNewDataArrived({ReadActorId1, ReadActorId2});
+        Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
+        Runtime.Send(new IEventHandle(TopicSession, ReadActorId2, new TEvRowDispatcher::TEvGetNextBatch()));
+        ExpectMessageBatch(ReadActorId1, { Json1 });
+        ExpectMessageBatch(ReadActorId2, { Json1 });
+
+        StopSession(ReadActorId1, source1);
+        StopSession(ReadActorId2, source2);
     }
 
     Y_UNIT_TEST_F(SessionWithPredicateAndSessionWithoutPredicate, TFixture) {
@@ -263,7 +284,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         const std::vector<TString> data = { "not json", "noch einmal / nicht json" };
         PQWrite(data, topicName);
 
-        ExpectSessionError(ReadActorId1, "Failed to unwrap empty optional");
+        ExpectSessionError(ReadActorId1, "INCORRECT_TYPE: The JSON element does not have the requested type.");
         StopSession(ReadActorId1, source);
     }
 

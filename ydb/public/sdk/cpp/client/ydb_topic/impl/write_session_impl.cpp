@@ -13,7 +13,6 @@
 #include <util/stream/buffer.h>
 #include <util/generic/guid.h>
 
-
 namespace NYdb::NTopic {
 
 const TDuration UPDATE_TOKEN_PERIOD = TDuration::Hours(1);
@@ -533,6 +532,8 @@ void TWriteSessionImpl::TrySubscribeOnTransactionCommit(TTransaction* tx)
 
     auto callback = [txInfo]() {
         with_lock(txInfo->Lock) {
+            Y_ABORT_UNLESS(!txInfo->CommitCalled);
+
             txInfo->CommitCalled = true;
 
             if (txInfo->WriteCount == txInfo->AckCount) {
@@ -558,7 +559,7 @@ void TWriteSessionImpl::TrySignalAllAcksReceived(ui64 seqNo)
     auto p = WrittenInTx.find(seqNo);
     if (p == WrittenInTx.end()) {
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
-                 LogPrefix() << "OnAck: seqno=" << seqNo << ", txId=?");
+                 LogPrefix() << "OnAck: seqNo=" << seqNo << ", txId=?");
         return;
     }
 
@@ -604,11 +605,13 @@ void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
         if (message.GetTxPtr()) {
             const auto& txId = MakeTransactionId(*message.GetTxPtr());
             TTransactionInfoPtr txInfo = GetOrCreateTxInfo(txId);
-            ++txInfo->WriteCount;
-            WrittenInTx[seqNo] = txId;
+            with_lock(txInfo->Lock) {
+                ++txInfo->WriteCount;
 
-            LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
-                     LogPrefix() << "OnWrite: seqNo=" << seqNo << ", txId=" << GetTxId(txId) << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
+                LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
+                         LogPrefix() << "OnWrite: seqNo=" << seqNo << ", txId=" << GetTxId(txId) << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
+            }
+            WrittenInTx[seqNo] = txId;
         }
 
         CurrentBatch.Add(
@@ -1663,9 +1666,11 @@ void TWriteSessionImpl::AbortImpl() {
 void TWriteSessionImpl::CancelTransactions()
 {
     for (auto& [_, txInfo] : Txs) {
-        txInfo->IsActive = false;
-        if (txInfo->WriteCount != txInfo->AckCount) {
-            txInfo->AllAcksReceived.SetValue(MakeSessionExpiredError());
+        with_lock(txInfo->Lock) {
+            txInfo->IsActive = false;
+            if (txInfo->WriteCount != txInfo->AckCount) {
+                txInfo->AllAcksReceived.SetValue(MakeSessionExpiredError());
+            }
         }
     }
 

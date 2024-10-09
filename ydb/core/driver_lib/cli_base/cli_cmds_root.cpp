@@ -184,6 +184,7 @@ public:
             throw TMisuseException() << message;
         }
         ParseCaCerts(config);
+        ParseClientCert(config);
         config.Address = Address;
 
         if (!hostname) {
@@ -193,6 +194,10 @@ public:
         if (config.EnableSsl) {
             CommandConfig.ClientConfig.EnableSsl = config.EnableSsl;
             CommandConfig.ClientConfig.SslCredentials.pem_root_certs = config.CaCerts;
+            if (config.ClientCert) {
+                CommandConfig.ClientConfig.SslCredentials.pem_cert_chain = config.ClientCert;
+                CommandConfig.ClientConfig.SslCredentials.pem_private_key = config.ClientCertPrivateKey;
+            }
         }
     }
 

@@ -105,7 +105,7 @@ def save_pullrequest(cfg, event):
         "html_url": pr["html_url"],
         "number": pr["number"],
         "user_login": pr["user"]["login"],
-        "labels": [l['name'] for l in pr["labels"]],
+        "labels": [l["name"] for l in pr["labels"]],
         "head_sha": pr["head"]["sha"],
         "head_ref": pr["head"]["ref"],
         "base_sha": pr["base"]["sha"],
@@ -192,9 +192,6 @@ def main():
             "CH_PASSWORD": os.environ.get("CH_PASSWORD"),
             "GH_WEBHOOK_SECRET": os.environ["GH_WEBHOOK_SECRET"].encode("utf8"),
         }
-    )
-    logger.info(
-        "port=%s, ch_fqdns=%s, ch_database=%s", port, flask_app.config["CH_FQDNS"], flask_app.config["CH_DATABASE"]
     )
     # https://docs.gunicorn.org/en/stable/settings.html
     config = {

@@ -172,14 +172,15 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
         return result;
     }
 
-    std::optional<ui32> EvictNext(auto& cache) {
+    TVector<ui32> EvictNext(auto& cache) {
         auto evicted = cache.EvictNext();
-        if (evicted) {
-            UNIT_ASSERT_VALUES_EQUAL(evicted->CacheFlags1, 0);
-            UNIT_ASSERT_VALUES_EQUAL(evicted->CacheFlags2, 0);
-            return evicted->Id;
+        TVector<ui32> result;
+        for (auto& p : evicted) {
+            UNIT_ASSERT_VALUES_EQUAL(p.CacheFlags1, 0);
+            UNIT_ASSERT_VALUES_EQUAL(p.CacheFlags2, 0);
+            result.push_back(p.Id);
         }
-        return {};
+        return result;
     }
 
     Y_UNIT_TEST(Touch) {
@@ -324,31 +325,31 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
             << "MainQueue: {2 0f 30b}, {1 1f 20b}, {3 0f 40b}" << Endl
             << "GhostQueue: "));
         
-        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), 4);
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{4});
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
             << "SmallQueue: " << Endl
             << "MainQueue: {2 0f 30b}, {1 1f 20b}, {3 0f 40b}" << Endl
             << "GhostQueue: {4 10b}"));
         
-        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), 2);
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{2});
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
             << "SmallQueue: " << Endl
             << "MainQueue: {1 1f 20b}, {3 0f 40b}" << Endl
             << "GhostQueue: {4 10b}"));
         
-        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), 3);
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{3});
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
             << "SmallQueue: " << Endl
             << "MainQueue: {1 0f 20b}" << Endl
             << "GhostQueue: {4 10b}"));
 
-        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), 1);
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{1});
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
             << "SmallQueue: " << Endl
             << "MainQueue: " << Endl
             << "GhostQueue: {4 10b}"));
 
-        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), std::optional<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
             << "SmallQueue: " << Endl
             << "MainQueue: " << Endl

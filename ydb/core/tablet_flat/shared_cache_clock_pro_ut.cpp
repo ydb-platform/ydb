@@ -84,14 +84,15 @@ Y_UNIT_TEST_SUITE(TClockProCache) {
         return result;
     }
 
-    std::optional<ui32> EvictNext(auto& cache) {
+    TVector<ui32> EvictNext(auto& cache) {
         auto evicted = cache.EvictNext();
-        if (evicted) {
-            UNIT_ASSERT_VALUES_EQUAL(evicted->CacheFlags1, 0);
-            UNIT_ASSERT_VALUES_EQUAL(evicted->CacheFlags2, 0);
-            return evicted->Id;
+        TVector<ui32> result;
+        for (auto& p : evicted) {
+            UNIT_ASSERT_VALUES_EQUAL(p.CacheFlags1, 0);
+            UNIT_ASSERT_VALUES_EQUAL(p.CacheFlags2, 0);
+            result.push_back(p.Id);
         }
-        return {};
+        return result;
     }
 
     Y_UNIT_TEST(Touch) {
@@ -160,13 +161,64 @@ Y_UNIT_TEST_SUITE(TClockProCache) {
     }
 
     Y_UNIT_TEST(EvictNext) {
-        
+        TClockProCache<TPage, TPageTraits> cache(10);
 
-        // UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), std::optional<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "ColdTarget: 10");
+
+        TPage page1{1, 1};
+        TPage page2{2, 2};
+        TPage page3{3, 3};
+        TPage page4{4, 4};
+        TPage page5{5, 5};
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{1 C 0r 1b}, Cold>{2 C 0r 2b}, {3 C 0r 3b}, {4 C 0r 4b}; ColdTarget: 10");
+
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{1 C 0r 1b}, Cold>{2 C 1r 2b}, {3 C 0r 3b}, {4 C 0r 4b}; ColdTarget: 10");
+
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page5), (TVector<ui32>{3, 4}));
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{3 T 3b}, {4 T 4b}, Cold>{5 C 0r 5b}, {1 C 0r 1b}, {2 C 0r 2b}; ColdTarget: 10");
+
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), (TVector<ui32>{5}));
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{5 T 5b}, Cold>{1 C 0r 1b}, {3 H 0r 3b}, {2 C 0r 2b}; ColdTarget: 6");
+
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{1});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>{2 C 0r 2b}, Test>{1 T 1b}, Cold>{3 H 0r 3b}; ColdTarget: 6");
+
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{2});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{2 T 2b}, Cold>{3 C 0r 3b}; ColdTarget: 6");
+
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{3});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "ColdTarget: 6");
+
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "ColdTarget: 6");
     }
 
     Y_UNIT_TEST(UpdateLimit) {
+        TClockProCache<TPage, TPageTraits> cache(10);
         
+        TPage page1{1, 1};
+        TPage page2{2, 2};
+        TPage page3{3, 3};
+        TPage page4{4, 4};
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{1 C 0r 1b}, Cold>{2 C 0r 2b}, {3 C 0r 3b}, {4 C 0r 4b}; ColdTarget: 10");
+
+        cache.UpdateLimit(5);
+        TPage page5{5, 1};
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page5), (TVector<ui32>{2, 3, 4}));
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>{1 C 0r 1b}, Test>{4 T 4b}, Cold>{5 C 0r 1b}; ColdTarget: 0");
+
+        cache.UpdateLimit(0);
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), (TVector<ui32>{5, 1, 2}));
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "ColdTarget: 0");
     }
 
     Y_UNIT_TEST(Erase) {

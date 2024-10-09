@@ -111,31 +111,31 @@ Y_UNIT_TEST_SUITE(TCacheCacheTest) {
         UNIT_ASSERT_VALUES_EQUAL(warm->Val(), 2ULL);
         UNIT_ASSERT_VALUES_EQUAL(staging->Val(), 2ULL);
 
-        UNIT_ASSERT_VALUES_EQUAL(cache.EvictNext(), &pages[2]);
+        UNIT_ASSERT_VALUES_EQUAL(cache.EvictNext().Front(), &pages[2]);
         UNIT_ASSERT(pages[2].CacheGeneration == ECacheCacheGeneration::None);
         UNIT_ASSERT_VALUES_EQUAL(staging->Val(), 1ULL);
 
-        UNIT_ASSERT_VALUES_EQUAL(cache.EvictNext(), &pages[3]);
+        UNIT_ASSERT_VALUES_EQUAL(cache.EvictNext().Front(), &pages[3]);
         UNIT_ASSERT(pages[3].CacheGeneration == ECacheCacheGeneration::None);
         UNIT_ASSERT_VALUES_EQUAL(staging->Val(), 0ULL);
 
-        UNIT_ASSERT_VALUES_EQUAL(cache.EvictNext(), &pages[4]);
+        UNIT_ASSERT_VALUES_EQUAL(cache.EvictNext().Front(), &pages[4]);
         UNIT_ASSERT(pages[4].CacheGeneration == ECacheCacheGeneration::None);
         UNIT_ASSERT_VALUES_EQUAL(fresh->Val(), 1ULL);
 
-        UNIT_ASSERT_VALUES_EQUAL(cache.EvictNext(), &pages[5]);
+        UNIT_ASSERT_VALUES_EQUAL(cache.EvictNext().Front(), &pages[5]);
         UNIT_ASSERT(pages[5].CacheGeneration == ECacheCacheGeneration::None);
         UNIT_ASSERT_VALUES_EQUAL(fresh->Val(), 0ULL);
 
-        UNIT_ASSERT_VALUES_EQUAL(cache.EvictNext(), &pages[0]);
+        UNIT_ASSERT_VALUES_EQUAL(cache.EvictNext().Front(), &pages[0]);
         UNIT_ASSERT(pages[0].CacheGeneration == ECacheCacheGeneration::None);
         UNIT_ASSERT_VALUES_EQUAL(warm->Val(), 1ULL);
 
-        UNIT_ASSERT_VALUES_EQUAL(cache.EvictNext(), &pages[1]);
+        UNIT_ASSERT_VALUES_EQUAL(cache.EvictNext().Front(), &pages[1]);
         UNIT_ASSERT(pages[1].CacheGeneration == ECacheCacheGeneration::None);
         UNIT_ASSERT_VALUES_EQUAL(warm->Val(), 0ULL);
 
-        UNIT_ASSERT_VALUES_EQUAL(cache.EvictNext(), nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(cache.EvictNext().Empty(), nullptr);
     }
 }
 

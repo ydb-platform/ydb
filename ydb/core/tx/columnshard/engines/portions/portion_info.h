@@ -63,10 +63,14 @@ public:
 private:
     friend class TPortionInfoConstructor;
     TPortionInfo(TPortionMeta&& meta)
-        : Meta(std::move(meta))
-    {
-
+        : Meta(std::move(meta)) {
+        if (HasInsertWriteId()) {
+            AFL_VERIFY(!Meta.GetTierName());
+        }
     }
+    std::optional<TSnapshot> CommitSnapshot;
+    std::optional<TInsertWriteId> InsertWriteId;
+
     ui64 PathId = 0;
     ui64 Portion = 0;   // Id of independent (overlayed by PK) portion of data in pathId
     TSnapshot MinSnapshotDeprecated = TSnapshot::Zero();  // {PlanStep, TxId} is min snapshot for {Granule, Portion}
@@ -127,8 +131,38 @@ public:
 
     bool NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) const;
 
+    NSplitter::TEntityGroups GetEntityGroupsByStorageId(
+        const TString& specialTier, const IStoragesManager& storages, const TIndexInfo& indexInfo) const;
+
     const std::optional<ui64>& GetShardingVersionOptional() const {
         return ShardingVersion;
+    }
+
+    bool HasCommitSnapshot() const {
+        return !!CommitSnapshot;
+    }
+    bool HasInsertWriteId() const {
+        return !!InsertWriteId;
+    }
+    const TSnapshot& GetCommitSnapshotVerified() const {
+        AFL_VERIFY(!!CommitSnapshot);
+        return *CommitSnapshot;
+    }
+    TInsertWriteId GetInsertWriteIdVerified() const {
+        AFL_VERIFY(InsertWriteId);
+        return *InsertWriteId;
+    }
+    const std::optional<TSnapshot>& GetCommitSnapshotOptional() const {
+        return CommitSnapshot;
+    }
+    const std::optional<TInsertWriteId>& GetInsertWriteIdOptional() const {
+        return InsertWriteId;
+    }
+    void SetCommitSnapshot(const TSnapshot& value) {
+        AFL_VERIFY(!!InsertWriteId);
+        AFL_VERIFY(!CommitSnapshot);
+        AFL_VERIFY(value.Valid());
+        CommitSnapshot = value;
     }
 
     bool CrossSSWith(const TPortionInfo& p) const {
@@ -218,6 +252,7 @@ public:
     THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TIndexInfo& indexInfo) const;
 
     const TString& GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const;
+    const TString& GetIndexStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const;
     const TString& GetEntityStorageId(const ui32 entityId, const TIndexInfo& indexInfo) const;
 
     ui64 GetTxVolume() const; // fake-correct method for determ volume on rewrite this portion in transaction progress
@@ -367,14 +402,7 @@ public:
         return false;
     }
 
-    bool Empty() const { return Records.empty(); }
-    bool Produced() const { return Meta.GetProduced() != TPortionMeta::EProduced::UNSPECIFIED; }
-    bool Valid() const { return ValidSnapshotInfo() && !Empty() && Produced(); }
     bool ValidSnapshotInfo() const { return MinSnapshotDeprecated.Valid() && PathId && Portion; }
-    bool IsInserted() const { return Meta.GetProduced() == TPortionMeta::EProduced::INSERTED; }
-    bool IsEvicted() const { return Meta.GetProduced() == TPortionMeta::EProduced::EVICTED; }
-    bool CanHaveDups() const { return !Produced(); /* || IsInserted(); */ }
-    bool CanIntersectOthers() const { return !Valid() || IsInserted() || IsEvicted(); }
     size_t NumChunks() const { return Records.size(); }
 
     TString DebugString(const bool withDetails = false) const;
@@ -446,12 +474,9 @@ public:
         return SchemaVersion;
     }
 
-    bool IsVisible(const TSnapshot& snapshot) const {
-        if (Empty()) {
-            return false;
-        }
-
-        const bool visible = (Meta.RecordSnapshotMin <= snapshot) && (!RemoveSnapshot.Valid() || snapshot < RemoveSnapshot);
+    bool IsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot = true) const {
+        const bool visible = (Meta.RecordSnapshotMin <= snapshot) && (!RemoveSnapshot.Valid() || snapshot < RemoveSnapshot) &&
+                             (!checkCommitSnapshot || !CommitSnapshot || *CommitSnapshot <= snapshot);
 
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "IsVisible")("analyze_portion", DebugString())("visible", visible)("snapshot", snapshot.DebugString());
         return visible;
@@ -467,12 +492,30 @@ public:
         return Meta.IndexKeyEnd;
     }
 
-    const TSnapshot& RecordSnapshotMin() const {
-        return Meta.RecordSnapshotMin;
+    const TSnapshot& RecordSnapshotMin(const std::optional<TSnapshot>& snapshotDefault = std::nullopt) const {
+        if (InsertWriteId) {
+            if (CommitSnapshot) {
+                return *CommitSnapshot;
+            } else {
+                AFL_VERIFY(snapshotDefault);
+                return *snapshotDefault;
+            }
+        } else {
+            return Meta.RecordSnapshotMin;
+        }
     }
 
-    const TSnapshot& RecordSnapshotMax() const {
-        return Meta.RecordSnapshotMax;
+    const TSnapshot& RecordSnapshotMax(const std::optional<TSnapshot>& snapshotDefault = std::nullopt) const {
+        if (InsertWriteId) {
+            if (CommitSnapshot) {
+                return *CommitSnapshot;
+            } else {
+                AFL_VERIFY(snapshotDefault);
+                return *snapshotDefault;
+            }
+        } else {
+            return Meta.RecordSnapshotMax;
+        }
     }
 
 
@@ -569,6 +612,7 @@ public:
         ui32 DefaultRowsCount = 0;
         std::shared_ptr<arrow::Scalar> DefaultValue;
         TString Data;
+        const bool NeedCache = true;
     public:
         ui32 GetExpectedRowsCountVerified() const {
             AFL_VERIFY(ExpectedRowsCount);
@@ -583,9 +627,10 @@ public:
             }
         }
 
-        TAssembleBlobInfo(const ui32 rowsCount, const std::shared_ptr<arrow::Scalar>& defValue)
+        TAssembleBlobInfo(const ui32 rowsCount, const std::shared_ptr<arrow::Scalar>& defValue, const bool needCache = true)
             : DefaultRowsCount(rowsCount)
             , DefaultValue(defValue)
+            , NeedCache(needCache)
         {
             AFL_VERIFY(DefaultRowsCount);
         }
@@ -745,8 +790,10 @@ public:
         }
     };
 
-    TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TString>& blobsData) const;
-    TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData) const;
+    TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
+        THashMap<TChunkAddress, TString>& blobsData, const std::optional<TSnapshot>& defaultSnapshot = std::nullopt) const;
+    TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
+        THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData, const std::optional<TSnapshot>& defaultSnapshot = std::nullopt) const;
 
     friend IOutputStream& operator << (IOutputStream& out, const TPortionInfo& info) {
         out << info.DebugString();

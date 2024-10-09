@@ -34,7 +34,6 @@ void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     THashMap<TString, THashSet<TBlobRange>> blobRanges;
     auto& index = self.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
     for (const auto& p : SwitchedPortions) {
-        Y_ABORT_UNLESS(!p.Empty());
         p.FillBlobRangesByStorage(blobRanges, index);
     }
 

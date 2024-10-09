@@ -963,11 +963,18 @@ public:
 
 class TPortionBuckets {
 private:
+
+    struct TReverseComparator {
+        bool operator()(const i64 l, const i64 r) const {
+            return r < l;
+        }
+    };
+
     const std::shared_ptr<arrow::Schema> PrimaryKeysSchema;
     const std::shared_ptr<IStoragesManager> StoragesManager;
     std::shared_ptr<TPortionsBucket> LeftBucket;
     std::map<NArrow::TReplaceKey, std::shared_ptr<TPortionsBucket>> Buckets;
-    std::map<i64, THashSet<TPortionsBucket*>> BucketsByWeight;
+    std::map<i64, THashSet<TPortionsBucket*>, TReverseComparator> BucketsByWeight;
     std::shared_ptr<TCounters> Counters;
     std::vector<std::shared_ptr<TPortionsBucket>> GetAffectedBuckets(const NArrow::TReplaceKey& fromInclude, const NArrow::TReplaceKey& toInclude) {
         std::vector<std::shared_ptr<TPortionsBucket>> result;
@@ -1073,8 +1080,8 @@ public:
         if (BucketsByWeight.empty()) {
             return false;
         }
-        AFL_VERIFY(BucketsByWeight.rbegin()->second.size());
-        const TPortionsBucket* bucketForOptimization = *BucketsByWeight.rbegin()->second.begin();
+        AFL_VERIFY(BucketsByWeight.begin()->second.size());
+        const TPortionsBucket* bucketForOptimization = *BucketsByWeight.begin()->second.begin();
         return bucketForOptimization->IsLocked(dataLocksManager);
     }
 
@@ -1103,7 +1110,7 @@ public:
 
     i64 GetWeight() const {
         AFL_VERIFY(BucketsByWeight.size());
-        return BucketsByWeight.rbegin()->first;
+        return BucketsByWeight.begin()->first;
     }
 
     void RemovePortion(const std::shared_ptr<TPortionInfo>& portion) {
@@ -1117,11 +1124,11 @@ public:
 
     std::shared_ptr<TColumnEngineChanges> BuildOptimizationTask(std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
         AFL_VERIFY(BucketsByWeight.size());
-        if (!BucketsByWeight.rbegin()->first) {
+        if (!BucketsByWeight.begin()->first) {
             return nullptr;
         }
-        AFL_VERIFY(BucketsByWeight.rbegin()->second.size());
-        const TPortionsBucket* bucketForOptimization = *BucketsByWeight.rbegin()->second.begin();
+        AFL_VERIFY(BucketsByWeight.begin()->second.size());
+        const TPortionsBucket* bucketForOptimization = *BucketsByWeight.begin()->second.begin();
         if (bucketForOptimization == LeftBucket.get()) {
             if (Buckets.size()) {
                 return bucketForOptimization->BuildOptimizationTask(granule, locksManager, &Buckets.begin()->first, PrimaryKeysSchema, StoragesManager);
@@ -1189,10 +1196,6 @@ public:
         for (auto&& i : Buckets) {
             AFL_VERIFY(i.second->GetStartPos());
             result.AddPosition(*i.second->GetStartPos(), false);
-        }
-        if (Buckets.size() && Buckets.rbegin()->second->GetPortion()->GetRecordsCount() > 1) {
-            NArrow::NMerger::TSortableBatchPosition pos(Buckets.rbegin()->second->GetPortion()->IndexKeyEnd().ToBatch(PrimaryKeysSchema), 0, PrimaryKeysSchema->field_names(), {}, false);
-            result.AddPosition(std::move(pos), false);
         }
         return result;
     }

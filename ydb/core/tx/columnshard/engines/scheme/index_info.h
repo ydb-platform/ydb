@@ -24,7 +24,7 @@ class Schema;
 }   // namespace arrow
 
 namespace NKikimr::NOlap {
-
+class TPortionInfo;
 namespace NIndexes::NMax {
 class TIndexMeta;
 }
@@ -106,6 +106,7 @@ public:
 struct TIndexInfo: public IIndexInfo {
 private:
     using TColumns = THashMap<ui32, NTable::TColumn>;
+    friend class TPortionInfo;
 
     class TNameInfo {
     private:
@@ -163,7 +164,32 @@ private:
     std::shared_ptr<TColumnFeatures> BuildDefaultColumnFeatures(
         const ui32 columnId, const THashMap<ui32, NTable::TColumn>& columns, const std::shared_ptr<IStoragesManager>& operators) const;
 
+    const TString& GetIndexStorageId(const ui32 indexId) const {
+        auto it = Indexes.find(indexId);
+        AFL_VERIFY(it != Indexes.end());
+        return it->second->GetStorageId();
+    }
+
+    const TString& GetColumnStorageId(const ui32 columnId, const TString& specialTier) const {
+        if (specialTier && specialTier != IStoragesManager::DefaultStorageId) {
+            return specialTier;
+        } else {
+            return GetColumnFeaturesVerified(columnId).GetOperator()->GetStorageId();
+        }
+    }
+
+    const TString& GetEntityStorageId(const ui32 entityId, const TString& specialTier) const {
+        auto it = Indexes.find(entityId);
+        if (it != Indexes.end()) {
+            return it->second->GetStorageId();
+        }
+        return GetColumnStorageId(entityId, specialTier);
+    }
+
+    void SetAllKeys(const std::shared_ptr<IStoragesManager>& operators, const THashMap<ui32, NTable::TColumn>& columns);
+
 public:
+    NSplitter::TEntityGroups GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages) const;
     std::optional<ui32> GetPKColumnIndexByIndexVerified(const ui32 columnIndex) const {
         AFL_VERIFY(columnIndex < ColumnFeatures.size());
         return ColumnFeatures[columnIndex]->GetPKColumnIndex();
@@ -200,8 +226,6 @@ public:
         }
     }
 
-    NSplitter::TEntityGroups GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages) const;
-
     bool GetSchemeNeedActualization() const {
         return SchemeNeedActualization;
     }
@@ -222,28 +246,6 @@ public:
         return Indexes;
     }
 
-    const TString& GetIndexStorageId(const ui32 indexId) const {
-        auto it = Indexes.find(indexId);
-        AFL_VERIFY(it != Indexes.end());
-        return it->second->GetStorageId();
-    }
-
-    const TString& GetColumnStorageId(const ui32 columnId, const TString& specialTier) const {
-        if (specialTier && specialTier != IStoragesManager::DefaultStorageId) {
-            return specialTier;
-        } else {
-            return GetColumnFeaturesVerified(columnId).GetOperator()->GetStorageId();
-        }
-    }
-
-    const TString& GetEntityStorageId(const ui32 entityId, const TString& specialTier) const {
-        auto it = Indexes.find(entityId);
-        if (it != Indexes.end()) {
-            return it->second->GetStorageId();
-        }
-        return GetColumnStorageId(entityId, specialTier);
-    }
-
     TString DebugString() const {
         TStringBuilder sb;
         sb << "("
@@ -256,9 +258,6 @@ public:
         return sb;
     }
 
-    void SetAllKeys(const std::shared_ptr<IStoragesManager>& operators, const THashMap<ui32, NTable::TColumn>& columns);
-
-public:
     static TIndexInfo BuildDefault() {
         TIndexInfo result("dummy");
         return result;

@@ -26,7 +26,6 @@ PEERDIR(
     ydb/public/lib/yson_value
     ydb/public/sdk/cpp/client/ydb_scheme
     ydb/public/sdk/cpp/client/ydb_table
-    ydb/library/yql/sql/pg_dummy
 )
 
 YQL_LAST_ABI_VERSION()

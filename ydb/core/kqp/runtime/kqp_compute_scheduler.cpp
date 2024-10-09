@@ -734,11 +734,11 @@ void TComputeScheduler::SetCapacity(ui64 cores) {
 
 
 struct TEvPingPool : public TEventLocal<TEvPingPool, TKqpComputeSchedulerEvents::EvPingPool> {
-    TString Database;
+    TString DatabaseId;
     TString Pool;
 
-    TEvPingPool(TString database, TString pool)
-        : Database(database)
+    TEvPingPool(TString databaseId, TString pool)
+        : DatabaseId(databaseId)
         , Pool(pool)
     {
     }
@@ -805,11 +805,11 @@ public:
     }
 
     void Handle(TEvSchedulerNewPool::TPtr& ev) {
-        Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(ev->Get()->Database, ev->Get()->Pool));
+        Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(ev->Get()->DatabaseId, ev->Get()->Pool));
     }
 
     void Handle(TEvPingPool::TPtr& ev) {
-        Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(ev->Get()->Database, ev->Get()->Pool));
+        Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(ev->Get()->DatabaseId, ev->Get()->Pool));
     }
 
     void Handle(NWorkload::TEvUpdatePoolInfo::TPtr& ev) {

@@ -182,6 +182,7 @@ private:
             TString rawMsg;
             TVector<TMessage> msgs;
             size_t size = 0;
+            ui64 maxBatchRowSize = 100;
 
             ui64 maxBatchRowSize = 100;
             while (size_t read = fi.ReadLine(rawMsg)) {

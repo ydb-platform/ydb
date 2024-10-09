@@ -357,6 +357,31 @@ void TYsonStructMeta::FinishInitialization(const std::type_info& structType)
         });
 }
 
+bool TYsonStructMeta::CompareStructs(
+    const TYsonStructBase* lhs,
+    const TYsonStructBase* rhs) const
+{
+    YT_VERIFY(lhs->Meta_ == this);
+
+    if (lhs == rhs) {
+        return true;
+    }
+
+    if (rhs->Meta_ != lhs->Meta_) {
+        return false;
+    }
+
+    // Equal Meta implies equal struct types.
+    // Thus structs must be instances of the same class.
+    for (const auto& [_, parameter] : SortedParameters_) {
+        if (!parameter->CompareParameter(lhs, rhs)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NYTree

@@ -124,17 +124,9 @@ public:
 
             const auto token = "cluster:default_" + clusterName;
 
-            auto rowSchema = pqReadTopic.Topic().RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-            TExprNode::TListType colTypes;
-            const auto& typeItems = rowSchema->GetItems();
-            colTypes.reserve(typeItems.size());
-            const auto pos = read->Pos(); // TODO
-            std::transform(typeItems.cbegin(), typeItems.cend(), std::back_inserter(colTypes),
-                [&](const TItemExprType* item) {
-                    return ctx.NewAtom(pos, FormatType(item->GetItemType()));
-                });
-            auto columnTypes = ctx.NewList(pos, std::move(colTypes));
-            
+            const auto& typeItems = pqReadTopic.Topic().RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>()->GetItems();
+            const auto pos = read->Pos();
+ 
             TExprNode::TListType colNames;
             colNames.reserve(typeItems.size());
             std::transform(typeItems.cbegin(), typeItems.cend(), std::back_inserter(colNames),
@@ -142,7 +134,7 @@ public:
                     return ctx.NewAtom(pos, item->GetName());
                 });
             auto columnNames = ctx.NewList(pos, std::move(colNames));
-    
+
             auto row = Build<TCoArgument>(ctx, read->Pos())
                 .Name("row")
                 .Done();
@@ -153,7 +145,6 @@ public:
                     .Build()
                 .Done().Ptr();
 
-
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TDqPqTopicSource>()
                     .Topic(pqReadTopic.Topic())
@@ -163,7 +154,6 @@ public:
                         .Name().Build(token)
                         .Build()
                     .FilterPredicate(emptyPredicate)
-                    .ColumnTypes(std::move(columnTypes))
                     .Build()
                 .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
                 .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>())
@@ -263,19 +253,18 @@ public:
                     srcDesc.AddMetadataFields(metadata.Value().Maybe<TCoAtom>().Cast().StringValue());
                 }
 
-                for (const auto& column : topicSource.Columns().Cast<TCoAtomList>()) {
-                    srcDesc.AddColumns(column.StringValue());
+                const auto rowSchema = topic.RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                for (const auto& item : rowSchema->GetItems()) {
+                    srcDesc.AddColumns(TString(item->GetName()));
+                    srcDesc.AddColumnTypes(FormatType(item->GetItemType()));
                 }
 
-                for (const auto& columnTypes : topicSource.ColumnTypes().Cast<TCoAtomList>()) {
-                    srcDesc.AddColumnTypes(columnTypes.StringValue());
-                }
-            
                 NYql::NConnector::NApi::TPredicate predicateProto;
                 if (auto predicate = topicSource.FilterPredicate(); !NYql::IsEmptyFilterPredicate(predicate)) {
                     TStringBuilder err;
                     if (!NYql::SerializeFilterPredicate(predicate, &predicateProto, err)) {
-                        ythrow yexception() << "Failed to serialize filter predicate for source: " << err;
+                        ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
+                        predicateProto.Clear();
                     }
                 }
 

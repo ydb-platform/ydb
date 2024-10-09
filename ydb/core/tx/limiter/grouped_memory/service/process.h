@@ -2,11 +2,13 @@
 #include "group.h"
 #include "ids.h"
 
+#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
+
 #include <ydb/library/accessor/validator.h>
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
-class TProcessMemoryScope {
+class TProcessMemoryScope: public NColumnShard::TMonitoringObjectsCounter<TProcessMemoryScope> {
 private:
     const ui64 ExternalProcessId;
     const ui64 ExternalScopeId;
@@ -63,6 +65,8 @@ public:
         }
         GroupIds.Clear();
         AllocationInfo.clear();
+        AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "scope_cleaned")("process_id", ExternalProcessId)(
+            "external_scope_id", ExternalScopeId);
         return true;
     }
 
@@ -106,7 +110,11 @@ public:
     bool UnregisterAllocation(const ui64 allocationId) {
         ui64 memoryAllocated = 0;
         auto it = AllocationInfo.find(allocationId);
-        AFL_VERIFY(it != AllocationInfo.end());
+        if (it == AllocationInfo.end()) {
+            AFL_WARN(NKikimrServices::GROUPED_MEMORY_LIMITER)("reason", "allocation_cleaned_in_previous_scope_id_live")(
+                "allocation_id", allocationId)("process_id", ExternalProcessId)("external_scope_id", ExternalScopeId);
+            return true;
+        }
         bool waitFlag = false;
         const ui64 internalGroupId = it->second->GetAllocationInternalGroupId();
         switch (it->second->GetAllocationStatus()) {
@@ -144,7 +152,7 @@ public:
     }
 };
 
-class TProcessMemory {
+class TProcessMemory: public NColumnShard::TMonitoringObjectsCounter<TProcessMemory> {
 private:
     const ui64 ExternalProcessId;
 
@@ -217,7 +225,6 @@ public:
         if (it->second->Unregister()) {
             AllocationScopes.erase(it);
         }
-        
     }
 
     void RegisterScope(const ui64 externalScopeId) {
@@ -227,7 +234,6 @@ public:
         } else {
             it->second->Register();
         }
-        
     }
 
     void SetPriorityProcess() {

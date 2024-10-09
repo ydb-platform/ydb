@@ -273,7 +273,6 @@ PEERDIR(
     ydb/library/minsketch
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/public/api/protos
-    ydb/public/lib/deprecated/kicli
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/services/lib/sharding
@@ -315,6 +314,7 @@ RECURSE_FOR_TESTS(
     ut_kqp
     ut_kqp_errors
     ut_kqp_scan
+    ut_local_kmeans
     ut_locks
     ut_minikql
     ut_minstep
@@ -325,7 +325,9 @@ RECURSE_FOR_TESTS(
     ut_read_table
     ut_reassign
     ut_replication
+    ut_reshuffle_kmeans
     ut_rs
+    ut_sample_k
     ut_sequence
     ut_snapshot
     ut_stats

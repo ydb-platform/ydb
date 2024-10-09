@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/fetcher.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
+#include <ydb/core/kqp/workload_service/actors/actors.h>
 #include <ydb/core/kqp/workload_service/ut/common/kqp_workload_service_ut_common.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
@@ -2293,6 +2294,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             );)", tableName.c_str(), precision, scale);
             auto createResult = session.ExecuteSchemeQuery(createQuery).GetValueSync();
 
+            if (precision == 0) {
+                UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::GENERIC_ERROR, createResult.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToString(), "Invalid decimal precision");
+                return;
+            }
+            if (precision == 33) {
+                UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::GENERIC_ERROR, createResult.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToString(), "Invalid decimal parameters");
+                return;
+            }
             if (precision == 36) {
                 UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::GENERIC_ERROR, createResult.GetIssues().ToString());
                 UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToString(), "Invalid decimal precision");
@@ -2323,10 +2334,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(decimalType.Scale, scale);
         };
 
+        createAndCheck(0, 0);
+        createAndCheck(1, 0);
         createAndCheck(2, 1);
         createAndCheck(22, 9);
-        createAndCheck(35, 9);
+        createAndCheck(35, 10);
         createAndCheck(22, 20);
+        createAndCheck(33, 34);
         createAndCheck(36, 35);
         createAndCheck(999, 99);
     }
@@ -2968,6 +2982,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )", tableName.c_str(), columnName.c_str(), precision, scale);
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
 
+            if (precision == 0) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid decimal precision");
+                return;
+            }
+            if (precision == 33) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid decimal parameters");
+                return;
+            }
             if (precision == 36) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
                 UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid decimal precision");
@@ -2982,10 +3006,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         };
 
+        addColumn(0, 0);
+        addColumn(1, 0);
         addColumn(2, 1);
         addColumn(22, 9);
-        addColumn(35, 9);
+        addColumn(35, 10);
         addColumn(22, 20);
+        addColumn(33, 34);
         addColumn(36, 35);
         addColumn(999, 99);
 
@@ -2993,7 +3020,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
         auto tableDesc = describe.GetTableDescription();
         TVector<TTableColumn> columns = tableDesc.GetTableColumns();
-        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 7);
 
         auto checkColumn = [&] (ui64 columnIdx, ui32 precision, ui32 scale) {
             TType valueType = columns[columnIdx].Type;
@@ -3002,16 +3029,17 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_EQUAL(optionalKind, TTypeParser::ETypeKind::Optional);
             parser.OpenOptional();
             auto kind = parser.GetKind();
-            UNIT_ASSERT_EQUAL(kind, TTypeParser::ETypeKind::Decimal);
+            UNIT_ASSERT_VALUES_EQUAL(kind, TTypeParser::ETypeKind::Decimal);
             TDecimalType decimalType = parser.GetDecimal();
             UNIT_ASSERT_VALUES_EQUAL(decimalType.Precision, precision);
             UNIT_ASSERT_VALUES_EQUAL(decimalType.Scale, scale);
         };
 
-        checkColumn(2, 2, 1);
-        checkColumn(3, 22, 9);
-        checkColumn(4, 35,9);
-        checkColumn(5, 22, 20);
+        checkColumn(0,22, 20);
+        checkColumn(3, 1, 0);
+        checkColumn(4, 2, 1);
+        checkColumn(5, 22,9);
+        checkColumn(6, 35, 10);
     }
 
     Y_UNIT_TEST(CreateUserWithPassword) {
@@ -7008,7 +7036,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // DROP RESOURCE POOL CLASSIFIER
         checkQuery("DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier;",
             EStatus::GENERIC_ERROR,
-            "Classifier with name MyResourcePoolClassifier not found in database /Root");
+            "Classifier with name MyResourcePoolClassifier not found in database with id /Root");
     }
 
     Y_UNIT_TEST(DisableResourcePoolClassifiersOnServerless) {
@@ -7189,14 +7217,17 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "The rank could not be set automatically, the maximum rank of the resource pool classifier is too high: 9223372036854775807");
     }
 
-    TString FetchResourcePoolClassifiers(TKikimrRunner& kikimr) {
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-        const TActorId edgeActor = runtime.AllocateEdgeActor();
-        runtime.Send(NMetadata::NProvider::MakeServiceId(runtime.GetNodeId()), edgeActor, new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TResourcePoolClassifierSnapshotsFetcher>()));
+    TString FetchResourcePoolClassifiers(TTestActorRuntime& runtime, ui32 nodeIndex) {
+        const TActorId edgeActor = runtime.AllocateEdgeActor(nodeIndex);
+        runtime.Send(NMetadata::NProvider::MakeServiceId(runtime.GetNodeId(nodeIndex)), edgeActor, new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TResourcePoolClassifierSnapshotsFetcher>()), nodeIndex);
 
         const auto response = runtime.GrabEdgeEvent<NMetadata::NProvider::TEvRefreshSubscriberData>(edgeActor);
         UNIT_ASSERT(response);
         return response->Get()->GetSnapshotAs<TResourcePoolClassifierSnapshot>()->SerializeToString();
+    }
+
+    TString FetchResourcePoolClassifiers(TKikimrRunner& kikimr) {
+        return FetchResourcePoolClassifiers(*kikimr.GetTestServer().GetRuntime(), 0);
     }
 
     Y_UNIT_TEST(CreateResourcePoolClassifier) {
@@ -7230,6 +7261,31 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"config\":{\"member_name\":\"test@user\",\"resource_pool\":\"test_pool\"},\"database\":\"\\/Root\"},{\"rank\":1020,\"name\":\"AnotherResourcePoolClassifier\",\"config\":{\"member_name\":\"another@user\",\"resource_pool\":\"test_pool\"},\"database\":\"\\/Root\"}]}");
+    }
+
+    Y_UNIT_TEST(CreateResourcePoolClassifierOnServerless) {
+        auto ydb = NWorkload::TYdbSetupSettings()
+            .CreateSampleTenants(true)
+            .EnableResourcePoolsOnServerless(true)
+            .Create();
+
+        const auto& serverlessTenant = ydb->GetSettings().GetServerlessTenantName();
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(R"(
+            CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                RANK=20,
+                RESOURCE_POOL="test_pool"
+            );)",
+            NWorkload::TQueryRunnerSettings()
+                .PoolId("")
+                .Database(serverlessTenant)
+                .NodeIndex(1)
+        ));
+
+        const auto pathId = ydb->FetchDatabase(serverlessTenant)->Get()->PathId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            FetchResourcePoolClassifiers(*ydb->GetRuntime(), 1),
+            TStringBuilder() << "{\"resource_pool_classifiers\":[{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"config\":{\"resource_pool\":\"test_pool\"},\"database\":\"" << pathId.OwnerId << ":" << pathId.LocalPathId << ":\\/Root\\/test-serverless\"}]}"
+        );
     }
 
     Y_UNIT_TEST(DoubleCreateResourcePoolClassifier) {
@@ -7341,7 +7397,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Classifier with name MyResourcePoolClassifier not found in database /Root");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Classifier with name MyResourcePoolClassifier not found in database with id /Root");
     }
 
     Y_UNIT_TEST(DropResourcePoolClassifier) {
@@ -7388,7 +7444,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto query = "DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier;";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Classifier with name MyResourcePoolClassifier not found in database /Root");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Classifier with name MyResourcePoolClassifier not found in database with id /Root");
     }
 
     Y_UNIT_TEST(DisableMetadataObjectsOnServerless) {
@@ -7574,11 +7630,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             tableInserter.AddRow().Add(1).Add(1).Add(7).Add((TInstant::Now() - TDuration::Days(30)).MilliSeconds());
             tableInserter.AddRow().Add(1).Add(2).Add(7).Add((TInstant::Now() - TDuration::Days(30)).MilliSeconds());
             testHelper.BulkUpsert(testTable, tableInserter);
-        }
-
-        while (csController->GetInsertFinishedCounter().Val() == 0) {
-            Cout << "Wait indexation..." << Endl;
-            Sleep(TDuration::Seconds(2));
         }
 
         // const auto ruleName = testHelper.CreateTieringRule("tier1", "created_att");

@@ -789,6 +789,10 @@ TYPED_TEST(TRpcTest, RequestQueueSizeLimit)
 {
     MaybeInitLatch();
 
+    auto testId = TGuid::Create();
+
+    Cerr << Format("Start of the RequestQueueSizeLimit test (Id: %v)", testId) << '\n';
+
     std::vector<TFuture<void>> futures;
     std::vector<TTestProxy> proxies;
 
@@ -801,7 +805,9 @@ TYPED_TEST(TRpcTest, RequestQueueSizeLimit)
 
     for (int i = 0; i <= 30; ++i) {
         auto req = proxies[i].LatchedCall();
-        futures.push_back(req->Invoke().AsVoid());
+        futures.push_back(req->Invoke().AsVoid().Apply(BIND([i, testId] (const TError& error) {
+            Cerr << NYT::Format("Request %v finished (Id: %v, Error: %v)", i, testId, error) << '\n';
+        })));
     }
 
     Sleep(TDuration::MilliSeconds(400));
@@ -816,6 +822,8 @@ TYPED_TEST(TRpcTest, RequestQueueSizeLimit)
     EXPECT_TRUE(AllSucceeded(std::move(futures)).Get().IsOK());
 
     ResetLatch();
+
+    Cerr << Format("End of the RequestQueueSizeLimit test (Id: %v)", testId) << '\n';
 }
 
 TYPED_TEST(TNotGrpcTest, RequesMemoryPressureException)

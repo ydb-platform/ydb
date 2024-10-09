@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) Daniel Stenberg, <daniel.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -86,6 +86,7 @@ struct curl_easyoption Curl_easyopts[] = {
   {"DOH_SSL_VERIFYPEER", CURLOPT_DOH_SSL_VERIFYPEER, CURLOT_LONG, 0},
   {"DOH_SSL_VERIFYSTATUS", CURLOPT_DOH_SSL_VERIFYSTATUS, CURLOT_LONG, 0},
   {"DOH_URL", CURLOPT_DOH_URL, CURLOT_STRING, 0},
+  {"ECH", CURLOPT_ECH, CURLOT_STRING, 0},
   {"EGDSOCKET", CURLOPT_EGDSOCKET, CURLOT_STRING, 0},
   {"ENCODING", CURLOPT_ACCEPT_ENCODING, CURLOT_STRING, CURLOT_FLAG_ALIAS},
   {"ERRORBUFFER", CURLOPT_ERRORBUFFER, CURLOT_OBJECT, 0},
@@ -274,6 +275,8 @@ struct curl_easyoption Curl_easyopts[] = {
   {"SEEKFUNCTION", CURLOPT_SEEKFUNCTION, CURLOT_FUNCTION, 0},
   {"SERVER_RESPONSE_TIMEOUT", CURLOPT_SERVER_RESPONSE_TIMEOUT,
    CURLOT_LONG, 0},
+  {"SERVER_RESPONSE_TIMEOUT_MS", CURLOPT_SERVER_RESPONSE_TIMEOUT_MS,
+   CURLOT_LONG, 0},
   {"SERVICE_NAME", CURLOPT_SERVICE_NAME, CURLOT_STRING, 0},
   {"SHARE", CURLOPT_SHARE, CURLOT_OBJECT, 0},
   {"SOCKOPTDATA", CURLOPT_SOCKOPTDATA, CURLOT_CBPTR, 0},
@@ -325,6 +328,7 @@ struct curl_easyoption Curl_easyopts[] = {
    CURLOT_LONG, 0},
   {"TCP_FASTOPEN", CURLOPT_TCP_FASTOPEN, CURLOT_LONG, 0},
   {"TCP_KEEPALIVE", CURLOPT_TCP_KEEPALIVE, CURLOT_LONG, 0},
+  {"TCP_KEEPCNT", CURLOPT_TCP_KEEPCNT, CURLOT_LONG, 0},
   {"TCP_KEEPIDLE", CURLOPT_TCP_KEEPIDLE, CURLOT_LONG, 0},
   {"TCP_KEEPINTVL", CURLOPT_TCP_KEEPINTVL, CURLOT_LONG, 0},
   {"TCP_NODELAY", CURLOPT_TCP_NODELAY, CURLOT_LONG, 0},
@@ -373,6 +377,6 @@ struct curl_easyoption Curl_easyopts[] = {
  */
 int Curl_easyopts_check(void)
 {
-  return ((CURLOPT_LASTENTRY%10000) != (323 + 1));
+  return ((CURLOPT_LASTENTRY%10000) != (326 + 1));
 }
 #endif

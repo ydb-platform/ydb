@@ -35,8 +35,7 @@ public:
         IMetricsRegistryPtr metricsRegistry,
         const std::function<IActor*(void)>& metricsPusherFactory,
         bool withSpilling,
-        const NFq::NConfig::TConfig& fqConfig,
-        const NYql::IPqGateway::TPtr& pqGateway)
+        TVector<std::pair<TActorId, TActorSetupCmd>>&& additionalLocalServices)
         : MetricsRegistry(metricsRegistry
             ? metricsRegistry
             : CreateMetricsRegistry(GetSensorsGroupFor(NSensorComponent::kDq))
@@ -93,6 +92,9 @@ public:
             ServiceNode->AddLocalService(
                 NDq::MakeDqLocalFileSpillingServiceID(nodeId),
                 TActorSetupCmd(spillingActor, TMailboxType::Simple, 0));
+        }
+        for (auto& [actorId, setupCmd] : additionalLocalServices) {
+            ServiceNode->AddLocalService(actorId, std::move(setupCmd));
         }
 
         if (fqConfig.GetRowDispatcher().GetEnabled()) {
@@ -278,8 +280,7 @@ THolder<TLocalServiceHolder> CreateLocalServiceHolder(const NKikimr::NMiniKQL::I
     NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, int threads,
     IMetricsRegistryPtr metricsRegistry,
     const std::function<IActor*(void)>& metricsPusherFactory, bool withSpilling,
-    const NFq::NConfig::TConfig& fqConfig,
-    const NYql::IPqGateway::TPtr& pqGateway)
+    TVector<std::pair<TActorId, TActorSetupCmd>>&& additionalLocalServices)
 {
     return MakeHolder<TLocalServiceHolder>(functionRegistry,
         compFactory,
@@ -292,8 +293,7 @@ THolder<TLocalServiceHolder> CreateLocalServiceHolder(const NKikimr::NMiniKQL::I
         metricsRegistry,
         metricsPusherFactory,
         withSpilling,
-        fqConfig,
-        pqGateway);
+        std::move(additionalLocalServices));
 }
 
 TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
@@ -302,8 +302,7 @@ TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctio
     bool withSpilling, NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, int threads,
     IMetricsRegistryPtr metricsRegistry,
     const std::function<IActor*(void)>& metricsPusherFactory,
-    const NFq::NConfig::TConfig& fqConfig,
-    const NYql::IPqGateway::TPtr& pqGateway)
+    TVector<std::pair<TActorId, TActorSetupCmd>>&& additionalLocalServices)
 {
     int startPort = 31337;
     TRangeWalker<int> portWalker(startPort, startPort+100);
@@ -323,8 +322,7 @@ TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctio
             metricsRegistry,
             metricsPusherFactory,
             withSpilling,
-            fqConfig,
-            pqGateway),
+            std::move(additionalLocalServices)),
         CreateDqGateway("[::1]", grpcPort.Addr.GetPort()));
 }
 

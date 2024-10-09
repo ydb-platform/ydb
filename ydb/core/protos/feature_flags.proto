@@ -165,4 +165,5 @@ message TFeatureFlags {
     optional bool EnableImmediateWritingOnBulkUpsert = 146 [default = false];
     optional bool EnableInsertWriteIdSpecialColumnCompatibility = 147 [default = false];
     optional bool EnableTopicAutopartitioningForCDC = 148 [default = false];
+    optional bool EnableWritePortionsOnInsert = 149 [default = false];
 }

@@ -9,6 +9,7 @@
 #include <ydb/core/change_exchange/util.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/persqueue/writer/writer.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -329,8 +330,8 @@ private:
 
 class TBoundaryPartitionResolver final: public NChangeExchange::TBasePartitionResolver {
 public:
-    TBoundaryPartitionResolver(const NKikimrSchemeOp::TPersQueueGroupDescription& config) {
-        Chooser = NPQ::CreatePartitionChooser(config);
+    TBoundaryPartitionResolver(const std::shared_ptr<NPQ::IPartitionChooser>& chooser) {
+        Chooser = chooser;
     }
 
     void Visit(const TChangeRecord& record) override {
@@ -585,7 +586,8 @@ class TCdcChangeSenderMain
         KeyDesc->Partitioning = std::make_shared<TVector<NKikimr::TKeyDesc::TPartitionInfo>>(entry.PQGroupInfo->Partitioning);
 
         if (topicAutoPartitioning) {
-            SetPartitionResolver(new TBoundaryPartitionResolver(pqDesc));
+            Y_ABORT_UNLESS(entry.PQGroupInfo->PartitionChooser);
+            SetPartitionResolver(new TBoundaryPartitionResolver(entry.PQGroupInfo->PartitionChooser));
         } else if (NKikimrSchemeOp::ECdcStreamFormatProto == Stream.Format) {
             SetPartitionResolver(CreateDefaultPartitionResolver(*KeyDesc.Get()));
         } else {

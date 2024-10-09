@@ -2,11 +2,14 @@
 
 #include "defs.h"
 #include "vdisk_events.h"
-#include <ydb/core/protos/blobstorage.pb.h>
-#include <ydb/core/base/blobstorage.h>
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
+
 
 namespace NKikimr {
+
+    namespace NPDisk {
+        struct TEvChunkRead;
+        struct TEvChunkWrite;
+    }
 
     ////////////////////////////////////////////////////////////////////////////
     // TCostModel -- estimate complexity of incoming request

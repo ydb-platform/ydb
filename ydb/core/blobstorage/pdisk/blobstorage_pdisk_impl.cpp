@@ -25,7 +25,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
-    : PCtx(std::move(pCtx)) //std::make_shared<TPDiskCtx>())
+    : PCtx(std::move(pCtx))
     , Mon(counters, cfg->PDiskId, cfg.Get())
     , DriveModel(cfg->DriveModelSeekTimeNs,
             cfg->DriveModelSpeedBps,
@@ -47,7 +47,7 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     , BlockDevice(CreateRealBlockDevice(cfg->GetDevicePath(), Mon,
                     HPCyclesMs(ReorderingMs), DriveModel.SeekTimeNs(), cfg->DeviceInFlight,
                     TDeviceMode::LockFile | (cfg->UseSpdkNvmeDriver ? TDeviceMode::UseSpdk : 0),
-                    cfg->MaxQueuedCompletionActions, cfg->SectorMap, this))
+                    cfg->MaxQueuedCompletionActions, cfg->CompletionThreadsCount, cfg->SectorMap, this))
     , Cfg(cfg)
     , CreationTime(TInstant::Now())
     , ExpectedSlotCount(cfg->ExpectedSlotCount)

@@ -50,6 +50,7 @@ public:
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         SetAuthToken(ev, *Request_);
         SetDatabase(ev, *Request_);
+        ev->Record.MutableRequest()->SetClientAddress(Request_->GetPeerName());
 
         if (traceId) {
             ev->Record.SetTraceId(traceId.GetRef());

@@ -267,6 +267,7 @@ public:
         TString Erasure;
         TErasureType::EErasureSpecies ErasureSpecies = TErasureType::ErasureNone;
         TString State;
+        ui32 StateSortKey = 0;
         ui32 EncryptionMode = 0;
         ui64 AllocationUnits = 0;
         float Usage = 0;
@@ -290,11 +291,13 @@ public:
             TString result;
             result += ::ToString(failedDomains.size());
             result += '(';
+            bool was_domains = false;
             for (ui8 domains : failedDomains) {
-                if (!result.empty()) {
+                if (was_domains) {
                     result += ',';
                 }
                 result += ::ToString(domains);
+                was_domains = true;
             }
             result += ')';
             return result;
@@ -377,14 +380,17 @@ public:
             if (MissingDisks == 0) {
                 Overall = NKikimrViewer::EFlag::Green;
                 State = "ok";
+                StateSortKey = 0;
             } else {
                 if (ErasureSpecies == TErasureType::ErasureNone) {
                     TString state;
                     Overall = NKikimrViewer::EFlag::Red;
                     if (MissingDisks == startingDisks) {
                         state = "starting";
+                        StateSortKey = 10;
                     } else {
                         state = "dead";
+                        StateSortKey = 100;
                     }
                     State = TStringBuilder() << state << ':' << MissingDisks;
                 } else if (ErasureSpecies == TErasureType::Erasure4Plus2Block) {
@@ -392,20 +398,25 @@ public:
                     if (MissingDisks > 2) {
                         Overall = NKikimrViewer::EFlag::Red;
                         state = "dead";
+                        StateSortKey = 100;
                     } else if (MissingDisks == 2) {
                         Overall = NKikimrViewer::EFlag::Orange;
                         state = "degraded";
+                        StateSortKey = 50 + MissingDisks;
                     } else if (MissingDisks == 1) {
                         if (MissingDisks == replicatingDisks + startingDisks) {
                             Overall = NKikimrViewer::EFlag::Blue;
                             if (replicatingDisks) {
                                 state = "replicating";
+                                StateSortKey = 20;
                             } else {
                                 state = "starting";
+                                StateSortKey = 10;
                             }
                         } else {
                             Overall = NKikimrViewer::EFlag::Yellow;
                             state = "degraded";
+                            StateSortKey = 50 + MissingDisks;
                         }
                     }
                     State = TStringBuilder() << state << ':' << MissingDisks;
@@ -418,20 +429,25 @@ public:
                     if (failedDomainsPerRealm.size() > 2 || (failedDomainsPerRealm.size() == 2 && failedDomainsPerRealm[1] > 1)) {
                         Overall = NKikimrViewer::EFlag::Red;
                         state = "dead";
+                        StateSortKey = 100;
                     } else if (failedDomainsPerRealm.size() == 2) {
                         Overall = NKikimrViewer::EFlag::Orange;
                         state = "degraded";
+                        StateSortKey = 50 + failedDomainsPerRealm.size() * 10 + MissingDisks;
                     } else if (failedDomainsPerRealm.size()) {
                         if (MissingDisks == replicatingDisks + startingDisks) {
                             Overall = NKikimrViewer::EFlag::Blue;
                             if (replicatingDisks > startingDisks) {
                                 state = "replicating";
+                                StateSortKey = 20;
                             } else {
                                 state = "starting";
+                                StateSortKey = 10;
                             }
                         } else {
                             Overall = NKikimrViewer::EFlag::Yellow;
                             state = "degraded";
+                            StateSortKey = 50 + failedDomainsPerRealm.size() * 10 + MissingDisks;
                         }
                     }
                     State = TStringBuilder() << state << ':' << PrintDomains(failedDomainsPerRealm);
@@ -533,8 +549,9 @@ public:
                 case EGroupFields::PoolName:
                 case EGroupFields::Kind:
                 case EGroupFields::MediaType:
-                case EGroupFields::State:
                     return GetGroupName(groupBy);
+                case EGroupFields::State:
+                    return StateSortKey;
                 case EGroupFields::Usage:
                     return Usage;
                 case EGroupFields::DiskSpaceUsage:
@@ -1091,11 +1108,11 @@ public:
                 case EGroupFields::Kind:
                 case EGroupFields::Encryption:
                 case EGroupFields::MediaType:
-                case EGroupFields::State:
                     GroupCollection();
                     SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.SortKey; });
                     NeedGroup = false;
                     break;
+                case EGroupFields::State:
                 case EGroupFields::Usage:
                 case EGroupFields::DiskSpaceUsage:
                 case EGroupFields::MissingDisks:
@@ -1169,7 +1186,7 @@ public:
                     SortCollection(GroupView, [](const TGroup* group) { return group->Write; }, ReverseSort);
                     break;
                 case EGroupFields::State:
-                    SortCollection(GroupView, [](const TGroup* group) { return group->State; }, ReverseSort);
+                    SortCollection(GroupView, [](const TGroup* group) { return group->StateSortKey; }, ReverseSort);
                     break;
                 case EGroupFields::Latency:
                     SortCollection(GroupView, [](const TGroup* group) { return group->GetLatencyForSort(); }, ReverseSort);
@@ -1207,8 +1224,10 @@ public:
         ApplyLimit();
     }
 
+    bool CollectedHiveData = false;
+
     void CollectHiveData() {
-        if (FieldsNeeded(FieldsHive)) {
+        if (!CollectedHiveData) {
             if (!GroupView.empty()) {
                 ui64 hiveId = AppData()->DomainsInfo->GetHive();
                 if (hiveId != TDomainsInfo::BadTabletId) {
@@ -1226,6 +1245,7 @@ public:
                     ++NavigateKeySetInFlight;
                 }
             }
+            CollectedHiveData = true;
         }
     }
 
@@ -1341,7 +1361,6 @@ public:
                 }
                 FieldsAvailable |= FieldsBsPools;
                 ApplyEverything();
-                CollectHiveData();
             } else {
                 AddProblem("bsc-storage-pools-no-data");
             }
@@ -1427,6 +1446,9 @@ public:
             }
         }
         if (AreBSControllerRequestsDone()) {
+            if (FieldsNeeded(FieldsHive) && !CollectedHiveData) {
+                CollectHiveData();
+            }
             if (FieldsAvailable.test(+EGroupFields::GroupId) && FieldsNeeded(FieldsHive) && NavigateKeySetInFlight == 0 && HiveStorageStatsInFlight == 0) {
                 if (GroupsByGroupId.empty()) {
                     RebuildGroupsByGroupId();
@@ -2076,8 +2098,16 @@ public:
                 if (FieldsAvailable.test(+EGroupFields::PoolName)) {
                     jsonGroup.SetPoolName(group->PoolName);
                 }
-                for (const TVDisk& vdisk : group->VDisks) {
-                    RenderVDisk(*jsonGroup.AddVDisks(), vdisk);
+                std::vector<const TVDisk*> vdisks;
+                vdisks.resize(group->VDisks.size());
+                for (size_t idx = 0; idx < group->VDisks.size(); ++idx) {
+                    vdisks[idx] = &group->VDisks[idx];
+                }
+                std::sort(vdisks.begin(), vdisks.end(), [](const TVDisk* a, const TVDisk* b) {
+                    return a->VDiskId < b->VDiskId;
+                });
+                for (const TVDisk* vdisk : vdisks) {
+                    RenderVDisk(*jsonGroup.AddVDisks(), *vdisk);
                 }
                 if (FieldsAvailable.test(+EGroupFields::Encryption)) {
                     jsonGroup.SetEncryption(group->EncryptionMode);

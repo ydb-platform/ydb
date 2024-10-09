@@ -7218,11 +7218,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             testHelper.BulkUpsert(testTable, tableInserter);
         }
 
-        while (csController->GetInsertFinishedCounter().Val() == 0) {
-            Cout << "Wait indexation..." << Endl;
-            Sleep(TDuration::Seconds(2));
-        }
-
         // const auto ruleName = testHelper.CreateTieringRule("tier1", "created_att");
         const auto ruleName = testHelper.CreateTieringRule("tier1", "created_at");
         testHelper.SetTiering(tableName, ruleName);

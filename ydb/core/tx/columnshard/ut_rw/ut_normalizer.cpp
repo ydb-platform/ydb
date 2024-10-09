@@ -315,11 +315,6 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         {
             auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(11, txId), schema);
             UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 20048);
-            while (!csControllerGuard->GetInsertFinishedCounter().Val()) {
-                Cerr << csControllerGuard->GetInsertStartedCounter().Val() << Endl;
-                Wakeup(runtime, writer.GetSender(), TTestTxConfig::TxTablet0);
-                runtime.SimulateSleep(TDuration::Seconds(1));
-            }
         }
         RebootTablet(runtime, TTestTxConfig::TxTablet0, writer.GetSender());
 

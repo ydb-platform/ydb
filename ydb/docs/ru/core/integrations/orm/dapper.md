@@ -102,7 +102,7 @@ Console.WriteLine(await ydbCommand.ExecuteScalarAsync());
 
 Для создания клиентской транзакции используйте метод `ydbConnection.BeginTransaction()`.
 
-Есть две сигнатуры этого метода с единственным параметром уровня изоляции: 
+Есть две сигнатуры этого метода с единственным параметром уровня изоляции:
 
 - `BeginTransaction(TxMode txMode)`<br>
    Параметр `Ydb.Sdk.Services.Query.TxMode` - это {{ ydb-short-name }} специфичный уровень изоляции, ознакомиться поподробнее можно [здесь](../../concepts/transactions.md).

@@ -102,7 +102,7 @@ This example demonstrates how to run the `Hello, World!` query and output its re
 
 To create a client transaction, use the `ydbConnection.BeginTransaction()` method.
 
-There are two signatures of this method with a single isolation level parameter: 
+There are two signatures of this method with a single isolation level parameter:
 
 - `BeginTransaction(TxMode txMode)`
   The `Ydb.Sdk.Services.Query.TxMode` is a  {{ ydb-short-name }} specific isolation level, you can read more about it [here](../../concepts/transactions.md).

@@ -11,4 +11,6 @@ For more information about casting rules, see [here](../../../types/cast.md).
 
 ### Examples
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 {% include [cast_examples](../../../_includes/cast_examples.md) %}

@@ -1,6 +1,6 @@
 # Using Dapper
 
-[Dapper](https://dappertutorial.net/) is a micro ORM (Object-Relational Mapping) tool that provides a simple and flexible way to interact with databases. It operates on top of the [ADO.NET](https://learn.microsoft.com/en-us/dotnet/framework/data/adonet/) standard and offers various features that simplify database operations.
+[Dapper](https://www.learndapper.com/) is a micro ORM (Object-Relational Mapping) tool that provides a simple and flexible way to interact with databases. It operates on top of the [ADO.NET](https://learn.microsoft.com/en-us/dotnet/framework/data/adonet/) standard and offers various features that simplify database operations.
 
 ## ADO.NET
 
@@ -8,9 +8,13 @@ ADO.NET is a set of classes that provide developers with data access using the [
 
 The [{{ ydb-short-name }} SDK for C#](https://github.com/ydb-platform/ydb-dotnet-sdk) offers a set of classes that implement the ADO.NET standard.
 
-### Installation
+### Installation {#install}
 
-The ADO.NET implementation for {{ ydb-short-name }} is available via NuGet.
+The ADO.NET implementation for {{ ydb-short-name }} is available via [NuGet](https://www.nuget.org/packages/Ydb.Sdk/).
+
+```dotnet
+dotnet add package Ydb.Sdk
+```
 
 ### Creating a connection
 
@@ -29,7 +33,7 @@ A connection to {{ ydb-short-name }} is established using `YdbConnection`.
 
 2. **Using the constructor with a connection string**:
 
-   In the following example, a connection is created using a connection string:
+   In the following example, a connection is created using a [connection string in ADO.NET](https://learn.microsoft.com/en-us/dotnet/framework/data/adonet/connection-strings):
 
    ```c#
    await using var ydbConnection = new YdbConnection(
@@ -61,23 +65,23 @@ All available connection parameters are defined as properties in the `YdbConnect
 
 Here is a list of parameters that can be specified in the connection string:
 
-| Parameter         | Description                                                                                         | Default value |
-|-------------------|-----------------------------------------------------------------------------------------------------|---------------|
-| `Host`            | Specifies the {{ ydb-short-name }} server host                                                                           | `localhost`   |
-| `Port`            | Specifies the {{ ydb-short-name }}  server port                                                                           | `2136`        |
-| `Database`        | Specifies the database name                                                                             | `/local`      |
-| `User`            | Specifies the username                                                                              | Not defined   |
-| `Password`        | Specifies the user password                                                                         | Not defined   |
-| `UseTls`          | Indicates whether to use the TLS protocol (`grpcs` or `grpc`)                                           | `false`       |
-| `MaxSessionPool`  | Specifies the maximum session pool size                                                             | `100`         |
-| `RootCertificate` | Specifies the path to the trusted server TLS certificate. If this parameter is set, `UseTls` will be true | Not defined   |
+| Parameter         | Description                                                                                                 | Default value |
+|-------------------|-------------------------------------------------------------------------------------------------------------|---------------|
+| `Host`            | Specifies the {{ ydb-short-name }} server host                                                              | `localhost`   |
+| `Port`            | Specifies the {{ ydb-short-name }}  server port                                                             | `2136`        |
+| `Database`        | Specifies the database name                                                                                 | `/local`      |
+| `User`            | Specifies the username                                                                                      | Not defined   |
+| `Password`        | Specifies the user password                                                                                 | Not defined   |
+| `UseTls`          | Indicates whether to use the TLS protocol (`grpcs` or `grpc`)                                               | `false`       |
+| `MaxSessionPool`  | Specifies the maximum session pool size                                                                     | `100`         |
+| `RootCertificate` | Specifies the path to the trusted server TLS certificate. If this parameter is set, `UseTls` will be `true` | Not defined   |
 
 There are also additional parameters that do not participate in forming the connection string. These can only be specified using `YdbConnectionStringBuilder`:
 
-| Parameter             | Description                                                     | Default value |
-|-----------------------|-----------------------------------------------------------------|---------------|
-| `LoggerFactory`       | This parameter serves as a factory for creating logging classes | Not defined   |
-| `CredentialsProvider` | Authenticates the user using an external IAM provider           | Not defined   |
+| Parameter             | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Default value |
+|-----------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------|
+| `LoggerFactory`       | This parameter accepts an instance that implements the [ILoggerFactory](https://learn.microsoft.com/en-us/dotnet/api/microsoft.extensions.logging.iloggerfactory) interface. The `ILoggerFactory` is a standard interface for logging factories in .NET. It is possible to use popular logging frameworks such as [NLog](https://github.com/NLog/NLog), [serilog](https://github.com/serilog/serilog), [log4net](https://github.com/apache/logging-log4net)                                                                                                                    | Not defined   |
+| `CredentialsProvider` | An authentication provider that implements the `Ydb.Sdk.Auth.ICredentialsProvider`. [YDB SDK](#install) provides several standard ways for authentication: <br> 1) `Ydb.Sdk.Auth.AnonymousProvider`. Anonymous YDB access, mainly for tests purposes. <br> 2) `Ydb.Sdk.Auth.TokenProvider`. Token authentication for OAuth-like tokens. <br> 3) `Ydb.Sdk.Auth.StaticCredentialsProvider`. Username and password based authentication. <br> For Yandex.Cloud specific authentication methods, consider using **[ydb-dotnet-yc](https://github.com/ydb-platform/ydb-dotnet-yc)** | Not defined   |
 
 ### Usage
 
@@ -98,14 +102,15 @@ This example demonstrates how to run the `Hello, World!` query and output its re
 
 To create a client transaction, use the `ydbConnection.BeginTransaction()` method.
 
-Optionally, this method can accept a parameter of type `IsolationLevel`, which specifies the transaction isolation level. The following isolation levels are supported:
+There are two signatures of this method with a single isolation level parameter: 
 
-- `Serializable`: Provides full transaction isolation using optimistic locks.
-- `Unspecified`: Allows the database to determine the most appropriate isolation level.
+- `BeginTransaction(TxMode txMode)`
+  The `Ydb.Sdk.Services.Query.TxMode` is a  {{ ydb-short-name }} specific isolation level, you can read more about it [here](../../concepts/transactions.md).
 
-You can also specify the `TxMode` parameter. For YDB-specific isolation levels, you can learn more [here](../../concepts/transactions.md).
+- `BeginTransaction(IsolationLevel isolationLevel)`
+  The `System.Data.IsolationLevel` parameter from the standard ADO.NET. The following isolation levels are supported: `Serializable` and `Unspecified`. Both are equivalent to the `TxMode.SerializableRW`.
 
-Using the `Serializable` isolation level with the `TxMode.SerializableRW` parameter is equivalent to calling `BeginTransaction()` without parameters.
+Calling `BeginTransaction()` without parameters opens a transaction with level the `TxMode.SerializableRW`.
 
 Consider the following example of using a transaction:
 
@@ -146,15 +151,18 @@ await connection.OpenAsync();
 
 var ydbCommand = connection.CreateCommand();
 ydbCommand.CommandText = """
+                         DECLARE $series_id AS Uint64;
+                         DECLARE $season_id AS Uint64;
+                         DECLARE $limit_size AS Uint64;
+                         
                          SELECT series_id, season_id, episode_id, air_date, title
-                         FROM episodes
-                         WHERE series_id = @series_id AND season_id > @season_id
-                         ORDER BY series_id, season_id, episode_id
-                         LIMIT @limit_size;
+                         FROM episodes WHERE series_id = $series_id AND season_id > $season_id
+                         ORDER BY $series_id, $season_id, $episode_id
+                         LIMIT $limit_size;
                          """;
-ydbCommand.Parameters.Add(new YdbParameter("series_id", DbType.UInt64, 1U));
-ydbCommand.Parameters.Add(new YdbParameter("season_id", DbType.UInt64, 1U));
-ydbCommand.Parameters.Add(new YdbParameter("limit_size", DbType.UInt64, 3U));
+ydbCommand.Parameters.Add(new YdbParameter("$series_id", DbType.UInt64, 1U));
+ydbCommand.Parameters.Add(new YdbParameter("$season_id", DbType.UInt64, 1U));
+ydbCommand.Parameters.Add(new YdbParameter("$limit_size", DbType.UInt64, 3U));
 
 var ydbDataReader = await ydbCommand.ExecuteReaderAsync();
 
@@ -182,13 +190,16 @@ ydbCommand.CommandText = """
                          ORDER BY series_id, season_id, episode_id
                          LIMIT @limit_size;
                          """;
+ydbCommand.Parameters.Add(new YdbParameter("series_id", DbType.UInt64, 1U));
+ydbCommand.Parameters.Add(new YdbParameter("season_id", DbType.UInt64, 1U));
+ydbCommand.Parameters.Add(new YdbParameter("limit_size", DbType.UInt64, 3U));                         
 ```
 
 ADO.NET will prepare the query for you so that the variables conform to the YQL standard. The type will be determined according to the `DbType` or the `System.Type` of the value itself.
 
 ### Type mapping table for writing
 
-| {{ ydb-short-name }} type      | DbType                                                                                    | .NET type                   |
+| {{ ydb-short-name }} type  | DbType                                                                                    | .NET type                    |
 |----------------------------|-------------------------------------------------------------------------------------------|------------------------------|
 | `Bool`                     | `Boolean`                                                                                 | `bool`                       |
 | `Text` (synonym `Utf8`)    | `String`, `AnsiString`, `AnsiStringFixedLength`, `StringFixedLength`                      | `string`                     |
@@ -279,7 +290,7 @@ internal class User
 }
 ```
 
-For more information, refer to the official [documentation](https://dappertutorial.net/).
+For more information, refer to the official [documentation](https://www.learndapper.com/).
 
 ### Important aspects
 

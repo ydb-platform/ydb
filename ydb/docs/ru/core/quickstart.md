@@ -158,7 +158,7 @@
       helm upgrade --install ydb-operator deploy/ydb-operator --set metrics.enabled=false
       ```
 
-   6. Примените манифест для создания кластера {{ ydb-short-name }}:
+   6. Примените манифест для создания хранилища данных {{ ydb-short-name }}:
 
       ```bash
       kubectl apply -f samples/kind/storage.yaml

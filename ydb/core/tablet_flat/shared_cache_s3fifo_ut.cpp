@@ -451,6 +451,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
             << "MainQueue: {1 0f 20b}, {3 0f 40b}" << Endl
             << "GhostQueue: "));
         
+        // Erase non-existing:
         TPage page42{42, 1};
         cache.Erase(&page42);
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
@@ -458,6 +459,7 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
             << "MainQueue: {1 0f 20b}, {3 0f 40b}" << Endl
             << "GhostQueue: "));
 
+        // Erase from Small Queue:
         cache.Erase(&page2);
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
             << "SmallQueue: " << Endl

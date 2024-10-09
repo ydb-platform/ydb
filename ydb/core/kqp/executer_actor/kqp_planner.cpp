@@ -236,6 +236,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
 
     request.SetSchedulerGroup(UserRequestContext->PoolId);
     request.SetDatabase(Database);
+    request.SetDatabaseId(UserRequestContext->DatabaseId);
     if (UserRequestContext->PoolConfig.has_value()) {
         request.SetMemoryPoolPercent(UserRequestContext->PoolConfig->QueryMemoryLimitPercentPerNode);
         request.SetMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);

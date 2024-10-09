@@ -387,11 +387,11 @@ void TComputeScheduler::UpdateMaxShare(TString group, double share, TMonotonic n
 
 
 struct TEvPingPool : public TEventLocal<TEvPingPool, TKqpComputeSchedulerEvents::EvPingPool> {
-    TString Database;
+    TString DatabaseId;
     TString Pool;
 
-    TEvPingPool(TString database, TString pool)
-        : Database(database)
+    TEvPingPool(TString databaseId, TString pool)
+        : DatabaseId(databaseId)
         , Pool(pool)
     {
     }
@@ -448,12 +448,12 @@ public:
     }
 
     void Handle(TEvSchedulerNewPool::TPtr& ev) {
-        Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(ev->Get()->Database, ev->Get()->Pool));
+        Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(ev->Get()->DatabaseId, ev->Get()->Pool));
         Opts.Scheduler->UpdateMaxShare(ev->Get()->Pool, ev->Get()->MaxShare, TlsActivationContext->Monotonic());
     }
 
     void Handle(TEvPingPool::TPtr& ev) {
-        Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(ev->Get()->Database, ev->Get()->Pool));
+        Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(ev->Get()->DatabaseId, ev->Get()->Pool));
     }
 
     void Handle(NWorkload::TEvUpdatePoolInfo::TPtr& ev) {
@@ -461,7 +461,7 @@ public:
             Opts.Scheduler->UpdateMaxShare(ev->Get()->PoolId, ev->Get()->Config->TotalCpuLimitPercentPerNode / 100.0, TlsActivationContext->Monotonic());
         } else {
             if (!Opts.Scheduler->Disable(ev->Get()->PoolId, TlsActivationContext->Monotonic())) {
-                Schedule(Opts.ActivePoolPollingTimeout.ToDeadLine(), new TEvPingPool(ev->Get()->Database, ev->Get()->PoolId));
+                Schedule(Opts.ActivePoolPollingTimeout.ToDeadLine(), new TEvPingPool(ev->Get()->DatabaseId, ev->Get()->PoolId));
             }
         }
     }

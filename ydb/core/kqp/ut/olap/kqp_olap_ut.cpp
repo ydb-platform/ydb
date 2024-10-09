@@ -1433,6 +1433,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         Tests::TServer::TPtr server = new Tests::TServer(settings);
 
         auto runtime = server->GetRuntime();
+        runtime->SetScheduledLimit(1000000);
+
         auto sender = runtime->AllocateEdgeActor();
 
         InitRoot(server, sender);

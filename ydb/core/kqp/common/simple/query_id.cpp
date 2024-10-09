@@ -9,11 +9,12 @@
 
 namespace NKikimr::NKqp {
 
-TKqpQueryId::TKqpQueryId(const TString& cluster, const TString& database, const TString& text,
+TKqpQueryId::TKqpQueryId(const TString& cluster, const TString& database, const TString& databaseId, const TString& text,
     const TKqpQuerySettings& settings, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameterTypes,
     const TGUCSettings& gUCSettings)
     : Cluster(cluster)
     , Database(database)
+    , DatabaseId(databaseId)
     , Text(text)
     , Settings(settings)
     , QueryParameterTypes(queryParameterTypes)
@@ -41,6 +42,7 @@ bool TKqpQueryId::IsSql() const {
 bool TKqpQueryId::operator==(const TKqpQueryId& other) const {
     if (!(Cluster == other.Cluster &&
         Database == other.Database &&
+        DatabaseId == other.DatabaseId &&
         UserSid == other.UserSid &&
         Text == other.Text &&
         Settings == other.Settings &&

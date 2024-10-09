@@ -228,7 +228,7 @@ private:
                 auto share = msg.GetMaxCpuShare();
                 if (share > 0) {
                     Scheduler->UpdateMaxShare(group, share, schedulerNow);
-                    Send(SchedulerActorId, new TEvSchedulerNewPool(msg.GetDatabase(), group, share));
+                    Send(SchedulerActorId, new TEvSchedulerNewPool(msg.GetDatabaseId(), group, share));
                 } else {
                     schedulingTaskOptions.NoThrottle = true;
                 }

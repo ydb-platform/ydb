@@ -228,8 +228,6 @@ private:
     }
 
     void RunHandCold(TIntrusiveList<TPage>& evictedList) {
-        Cerr << "{RunHandCold " << Dump() << Endl;
-
         Y_ABORT_UNLESS(HandCold);
         TPageEntry* entry = HandCold->Node();
 
@@ -263,13 +261,9 @@ private:
         while (SizeHot > Limit - ColdTarget) {
             RunHandHot(evictedList);
         }
-
-        Cerr << "}RunHandCold " << Dump() << Endl;
     }
 
     void RunHandHot(TIntrusiveList<TPage>& evictedList) {
-        Cerr << "{RunHandHot  " << Dump() << Endl;
-        
         Y_ABORT_UNLESS(HandHot);
 
         if (HandHot == HandTest) {
@@ -295,13 +289,9 @@ private:
         }
 
         Advance(HandHot);
-
-        Cerr << "}RunHandHot  " << Dump() << Endl;
     }
 
     void RunHandTest(TIntrusiveList<TPage>& evictedList) {
-        Cerr << "{RunHandTest " << Dump() << Endl;
-        
         Y_ABORT_UNLESS(HandTest);
 
         if (HandTest == HandCold) {
@@ -328,8 +318,6 @@ private:
         }
 
         Advance(HandTest);
-
-        Cerr << "}RunHandTest " << Dump() << Endl;
     }
 
     void LinkEntry(TPageEntry* entry) {

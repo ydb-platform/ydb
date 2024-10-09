@@ -1,6 +1,7 @@
 #include "schemeshard_xxport__tx_base.h"
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_export_flow_proposals.h"
+#include "schemeshard_export_metadata_uploader.h"
 #include "schemeshard_export_helpers.h"
 #include "schemeshard_export.h"
 #include "schemeshard_audit_log.h"
@@ -230,6 +231,7 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     ui64 Id;
     TEvTxAllocatorClient::TEvAllocateResult::TPtr AllocateResult = nullptr;
     TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult = nullptr;
+    TEvPrivate::TEvExportMetadataUploaded::TPtr MetadataUploadResult = nullptr;
     TTxId CompletedTxId = InvalidTxId;
 
     explicit TTxProgress(TSelf* self, ui64 id)
@@ -247,6 +249,12 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     explicit TTxProgress(TSelf* self, TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev)
         : TXxport::TTxBase(self)
         , ModifyResult(ev)
+    {
+    }
+
+    explicit TTxProgress(TSelf* self, TEvPrivate::TEvExportMetadataUploaded::TPtr& ev)
+        : TXxport::TTxBase(self)
+        , MetadataUploadResult(ev)
     {
     }
 
@@ -269,6 +277,8 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
             OnModifyResult(txc, ctx);
         } else if (CompletedTxId) {
             OnNotifyResult(txc, ctx);
+        } else if (MetadataUploadResult) {
+            OnMetadataUpload(txc, ctx);
         } else {
             Resume(txc, ctx);
         }
@@ -404,6 +414,17 @@ private:
 
         Y_ABORT_UNLESS(item.WaitTxId != InvalidTxId);
         SubscribeTx(item.WaitTxId);
+    }
+
+    void UploadMetadata(TExportInfo::TPtr exportInfo, ui32 itemIdx, const TActorContext& ctx) {
+        Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
+        const auto& item = exportInfo->Items.at(itemIdx);
+
+        LOG_I("TExport::TTxProgress: Upload metadata"
+            << ": info# " << exportInfo->ToString()
+            << ", item# " << item.ToString(itemIdx));
+
+        ctx.RegisterWithSameMailbox(CreateMetadataUploader(Self->SelfId(), exportInfo, itemIdx));
     }
 
     static TPathId ItemPathId(TSchemeShard* ss, TExportInfo::TPtr exportInfo, ui32 itemIdx) {
@@ -870,7 +891,7 @@ private:
         SubscribeTx(txId);
     }
 
-    void OnNotifyResult(TTransactionContext& txc, const TActorContext&) {
+    void OnNotifyResult(TTransactionContext& txc, const TActorContext& ctx) {
         Y_ABORT_UNLESS(CompletedTxId);
         LOG_D("TExport::TTxProgress: OnNotifyResult"
             << ": txId# " << CompletedTxId);
@@ -887,20 +908,20 @@ private:
             ui32 itemIdx;
             std::tie(id, itemIdx) = Self->TxIdToExport.at(txId);
 
-            OnNotifyResult(txId, id, itemIdx, txc);
+            OnNotifyResult(txId, id, itemIdx, txc, ctx);
             Self->TxIdToExport.erase(txId);
         }
 
         if (Self->TxIdToDependentExport.contains(txId)) {
             for (const auto id : Self->TxIdToDependentExport.at(txId)) {
-                OnNotifyResult(txId, id, Max<ui32>(), txc);
+                OnNotifyResult(txId, id, Max<ui32>(), txc, ctx);
             }
 
             Self->TxIdToDependentExport.erase(txId);
         }
     }
 
-    void OnNotifyResult(TTxId txId, ui64 id, ui32 itemIdx, TTransactionContext& txc) {
+    void OnNotifyResult(TTxId txId, ui64 id, ui32 itemIdx, TTransactionContext& txc, const TActorContext& ctx) {
         LOG_D("TExport::TTxProgress: OnNotifyResult"
             << ": txId# " << txId
             << ", id# " << id
@@ -945,16 +966,29 @@ private:
             Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
             auto& item = exportInfo->Items.at(itemIdx);
 
-            item.State = EState::Done;
-            item.WaitTxId = InvalidTxId;
+            switch (exportInfo->Kind) {
+            case TExportInfo::EKind::YT:
+                item.State = EState::Done;
+                item.WaitTxId = InvalidTxId;
+                break;
+            case TExportInfo::EKind::S3:
+                break; // not done yet, need upload metadata
+            }
 
             if (const auto issue = GetIssues(ItemPathId(Self, exportInfo, itemIdx), txId)) {
                 item.Issue = *issue;
                 Cancel(exportInfo, itemIdx, "issues during backing up");
             } else {
-                if (AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                    exportInfo->State = EState::Done;
-                    exportInfo->EndTime = TAppData::TimeProvider->Now();
+                switch (exportInfo->Kind) {
+                case TExportInfo::EKind::YT:
+                    if (AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
+                        exportInfo->State = EState::Done;
+                        exportInfo->EndTime = TAppData::TimeProvider->Now();
+                    }
+                    break;
+                case TExportInfo::EKind::S3:
+                    UploadMetadata(exportInfo, itemIdx, ctx);
+                    break;
                 }
             }
 
@@ -998,6 +1032,66 @@ private:
         }
     }
 
+    void OnMetadataUpload(TTransactionContext& txc, const TActorContext&) {
+        Y_ABORT_UNLESS(MetadataUploadResult);
+        const auto& msg = *MetadataUploadResult->Get();
+        
+        LOG_D("TExport::TTxProgress: OnMetadataUpload"
+            << ": id# " << msg.ExportId
+            << ", itemIdx# " << msg.ItemIdx
+            << ", success# " << msg.Success
+            << ", error# " << msg.Error);
+
+        if (!Self->Exports.contains(msg.ExportId)) {
+            LOG_E("TImport::TTxProgress: OnMetadataUpload received unknown id"
+                << ": id# " << msg.ExportId);
+            return;
+        }
+
+        TExportInfo::TPtr exportInfo = Self->Exports.at(msg.ExportId);
+        if (msg.ItemIdx >= exportInfo->Items.size()) {
+            LOG_E("TImport::TTxProgress: OnMetadataUpload received unknown item"
+                << ": id# " << msg.ExportId
+                << ", item# " << msg.ItemIdx);
+            return;
+        }
+
+        auto& item = exportInfo->Items.at(msg.ItemIdx);
+        NIceDb::TNiceDb db(txc.DB);
+
+        if (!msg.Success) {
+            item.Issue = msg.Error;
+            Self->PersistExportItemState(db, exportInfo, msg.ItemIdx);
+
+            if (exportInfo->State != EState::Transferring) {
+                return;
+            }
+
+            Cancel(exportInfo, msg.ItemIdx, "cannot upload metadata");
+            Self->PersistExportState(db, exportInfo);
+
+            SendNotificationsIfFinished(exportInfo);
+            if (exportInfo->IsFinished()) {
+                AuditLogExportEnd(*exportInfo.Get(), Self);
+            }
+            return;
+        }
+
+        item.State = EState::Done;
+        item.WaitTxId = InvalidTxId;
+        Self->PersistExportItemState(db, exportInfo, msg.ItemIdx);
+
+        if (AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
+            exportInfo->State = EState::Done;
+            exportInfo->EndTime = TAppData::TimeProvider->Now();
+            Self->PersistExportState(db, exportInfo);
+        }
+
+        SendNotificationsIfFinished(exportInfo);
+        if (exportInfo->IsFinished()) {
+            AuditLogExportEnd(*exportInfo.Get(), Self);
+        }
+    }
 }; // TTxProgress
 
 ITransaction* TSchemeShard::CreateTxCreateExport(TEvExport::TEvCreateExportRequest::TPtr& ev) {
@@ -1018,6 +1112,10 @@ ITransaction* TSchemeShard::CreateTxProgressExport(TEvSchemeShard::TEvModifySche
 
 ITransaction* TSchemeShard::CreateTxProgressExport(TTxId completedTxId) {
     return new TExport::TTxProgress(this, completedTxId);
+}
+
+ITransaction* TSchemeShard::CreateTxProgressExport(TEvPrivate::TEvExportMetadataUploaded::TPtr& ev) {
+    return new TExport::TTxProgress(this, ev);
 }
 
 } // NSchemeShard

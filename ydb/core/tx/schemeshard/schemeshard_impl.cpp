@@ -4690,6 +4690,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvExport::TEvCancelExportRequest, Handle);
         HFuncTraced(TEvExport::TEvForgetExportRequest, Handle);
         HFuncTraced(TEvExport::TEvListExportsRequest, Handle);
+        HFuncTraced(TEvPrivate::TEvExportMetadataUploaded, Handle);
         // } // NExport
         HFuncTraced(NBackground::TEvListRequest, Handle);
 

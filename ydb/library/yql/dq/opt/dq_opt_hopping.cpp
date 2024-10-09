@@ -18,8 +18,6 @@
 
 #include <util/generic/bitmap.h>
 
-namespace NYql::NDq::NHopping {
-
 using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NHopping;
@@ -95,7 +93,7 @@ TMaybe<bool> BuildWatermarkMode(
     return enableWatermarks;
 }
 
-TMaybeNode<TExprBase> RewriteAsHoppingWindow(
+TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
     const TExprBase node,
     TExprContext& ctx,
     const TDqConnection& input,
@@ -128,6 +126,7 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindow(
                     .Lambda(keysDescription.BuildPickleLambda(ctx, pos))
                     .Input(input)
                 .Build()
+                .Settings(RemoveSetting(aggregate.Settings().Ref(), "output_columns", ctx))
             .Build()
             .Done();
     }
@@ -227,5 +226,34 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindow(
     }
 }
 
+} // namespace
+
+namespace NYql::NDq::NHopping {
+
+TMaybeNode<TExprBase> RewriteAsHoppingWindow(
+    const TExprBase node,
+    TExprContext& ctx,
+    const TDqConnection& input,
+    bool analyticsMode,
+    TDuration lateArrivalDelay,
+    bool defaultWatermarksMode,
+    bool syncActor)
+{
+    auto result = RewriteAsHoppingWindowFullOutput(node, ctx, input, analyticsMode, lateArrivalDelay, defaultWatermarksMode, syncActor);
+    if (!result) {
+        return result;
+    }
+
+    const auto aggregate = node.Cast<TCoAggregate>();
+    auto outputColumnSetting = GetSetting(aggregate.Settings().Ref(), "output_columns");
+    if (!outputColumnSetting) {
+        return result;
+    }
+
+    return Build<TCoExtractMembers>(ctx, node.Pos())
+        .Input(result.Cast())
+        .Members(outputColumnSetting->ChildPtr(1))
+        .Done();
+}
 
 } // NYql::NDq::NHopping

@@ -12,7 +12,6 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
     THashSet<ui64> usedPortionIds;
     auto schemaPtr = context.EngineLogs.GetVersionedIndex().GetLastSchema();
     for (auto& [_, portionInfo] : PortionsToRemove) {
-        Y_ABORT_UNLESS(!portionInfo.Empty());
         Y_ABORT_UNLESS(portionInfo.HasRemoveSnapshot());
         AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
         portionInfo.SaveToDatabase(context.DBWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);

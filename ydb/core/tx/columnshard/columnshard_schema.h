@@ -503,9 +503,15 @@ struct Schema : NIceDb::Schema {
         struct XTxId: Column<5, NScheme::NTypeIds::Uint64> {};
         struct Metadata: Column<6, NScheme::NTypeIds::String> {}; // NKikimrTxColumnShard.TIndexColumnMeta
         struct ShardingVersion: Column<7, NScheme::NTypeIds::Uint64> {};
+        struct MinSnapshotPlanStep: Column<8, NScheme::NTypeIds::Uint64> {};
+        struct MinSnapshotTxId: Column<9, NScheme::NTypeIds::Uint64> {};
+        struct CommitPlanStep: Column<10, NScheme::NTypeIds::Uint64> {};
+        struct CommitTxId: Column<11, NScheme::NTypeIds::Uint64> {};
+        struct InsertWriteId: Column<12, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PathId, PortionId>;
-        using TColumns = TableColumns<PathId, PortionId, SchemaVersion, XPlanStep, XTxId, Metadata, ShardingVersion>;
+        using TColumns = TableColumns<PathId, PortionId, SchemaVersion, XPlanStep, XTxId, Metadata, ShardingVersion, 
+            MinSnapshotPlanStep, MinSnapshotTxId, CommitPlanStep, CommitTxId, InsertWriteId>;
     };
 
     struct BackgroundSessions: Table<BackgroundSessionsTableId> {

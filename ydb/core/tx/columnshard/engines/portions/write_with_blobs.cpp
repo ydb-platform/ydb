@@ -17,7 +17,9 @@ void TWritePortionInfoWithBlobsConstructor::TBlobInfo::AddChunk(TWritePortionInf
     chunk->AddIntoPortionBeforeBlob(bRange, owner.GetPortionConstructor());
 }
 
-void TWritePortionInfoWithBlobsResult::TBlobInfo::RegisterBlobId(TWritePortionInfoWithBlobsResult& owner, const TUnifiedBlobId& blobId) const {
+void TWritePortionInfoWithBlobsResult::TBlobInfo::RegisterBlobId(TWritePortionInfoWithBlobsResult& owner, const TUnifiedBlobId& blobId) {
+    AFL_VERIFY(!BlobId);
+    BlobId = blobId;
     const TBlobRangeLink16::TLinkId idx = owner.GetPortionConstructor().RegisterBlobId(blobId);
     for (auto&& i : Chunks) {
         owner.GetPortionConstructor().RegisterBlobIdx(i, idx);

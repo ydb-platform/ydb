@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    control.cpp
     kqp_event_ids.h
     kqp_event_impl.cpp
     kqp_lwtrace_probes.cpp

@@ -684,9 +684,9 @@ Pear,15,33'''
         )
 
         fruits = '''[
-    { "date" : "0", "datetime" : "0", "timestamp" : "0", "interval" : "0", "date32" : "0", "datetime64" : "0", "timestamp64" : "0", "interval64" : "0", "tzDate" : "0", "tzDateTime" : "0", "tzTimestamp" : "0" },
-    { "date" : "0", "datetime" : "0", "timestamp" : "0", "interval" : "0", "date32" : "0", "datetime64" : "0", "timestamp64" : "0", "interval64" : "0", "tzDate" : "0", "tzDateTime" : "0", "tzTimestamp" : "0" },
-    { "date" : "0", "datetime" : "0", "timestamp" : "0", "interval" : "0", "date32" : "0", "datetime64" : "0", "timestamp64" : "0", "interval64" : "0", "tzDate" : "0", "tzDateTime" : "0", "tzTimestamp" : "0" }
+    { "date" : "", "datetime" : "", "timestamp" : "", "interval" : "", "date32" : "", "datetime64" : "", "timestamp64" : "", "interval64" : "", "tzDate" : "", "tzDateTime" : "", "tzTimestamp" : "" },
+    { "date" : "", "datetime" : "", "timestamp" : "", "interval" : "", "date32" : "", "datetime64" : "", "timestamp64" : "", "interval64" : "", "tzDate" : "", "tzDateTime" : "", "tzTimestamp" : "" },
+    { "date" : "", "datetime" : "", "timestamp" : "", "interval" : "", "date32" : "", "datetime64" : "", "timestamp64" : "", "interval64" : "", "tzDate" : "", "tzDateTime" : "", "tzTimestamp" : "" }
 ]'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='timestamp.json', ContentType='text/plain')
 

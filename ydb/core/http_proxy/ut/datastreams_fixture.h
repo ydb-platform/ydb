@@ -386,6 +386,14 @@ public:
         return json;
     }
 
+    NJson::TJsonMap GetQueueUrl(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto res = SendHttpRequest("/Root", "AmazonSQS.GetQueueUrl", request, FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        return json;
+    }
+
 private:
     TMaybe<NYdb::TResultSet> RunYqlDataQuery(TString query) {
         TString endpoint = TStringBuilder() << "localhost:" << KikimrGrpcPort;

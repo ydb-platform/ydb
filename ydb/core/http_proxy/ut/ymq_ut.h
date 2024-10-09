@@ -117,14 +117,30 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT(resultQueueUrl.EndsWith(queueName));
     }
 
-    Y_UNIT_TEST_F(TestGetQueueUrlOfNotExistingQueue, THttpProxyTestMock) {
-        auto req = CreateSqsGetQueueUrlRequest();
-        req["QueueName"] = "not-existing-queue";
-        auto res = SendHttpRequest("/Root", "AmazonSQS.GetQueueUrl", std::move(req), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+    Y_UNIT_TEST_F(TestGetQueueUrl, THttpProxyTestMock) {
+        auto json = GetQueueUrl({}, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "MissingParameter");
 
-        NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        json = CreateQueue({{"QueueName", ""}}, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "MissingParameter");
+
+        auto queueName = "ExampleQueueName";
+        json = CreateQueue({{"QueueName", queueName}});
+
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+        json = GetQueueUrl({{"QueueName", queueName}});
+        UNIT_ASSERT_VALUES_EQUAL(queueUrl, GetByPath<TString>(json, "QueueUrl"));
+
+        // We ignore QueueOwnerAWSAccountId parameter.
+        json = GetQueueUrl({{"QueueName", queueName}, {"QueueOwnerAWSAccountId", "some-account-id"}});
+        UNIT_ASSERT_VALUES_EQUAL(queueUrl, GetByPath<TString>(json, "QueueUrl"));
+
+        json = GetQueueUrl({{"QueueName", queueName}, {"WrongParameter", "some-value"}}, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "InvalidArgumentException");
+    }
+
+    Y_UNIT_TEST_F(TestGetQueueUrlOfNotExistingQueue, THttpProxyTestMock) {
+        auto json = GetQueueUrl({{"QueueName", "not-existing-queue"}}, 400);
         TString resultType = GetByPath<TString>(json, "__type");
         UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
         TString resultMessage = GetByPath<TString>(json, "message");
@@ -146,24 +162,16 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestSendMessage, THttpProxyTestMock) {
-        auto createQueueReq = CreateSqsCreateQueueRequest();
-        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-        NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
-        UNIT_ASSERT(resultQueueUrl.EndsWith("ExampleQueueName"));
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
 
-        NJson::TJsonValue sendMessageReq;
-        sendMessageReq["QueueUrl"] = resultQueueUrl;
         auto body = "MessageBody-0";
-        sendMessageReq["MessageBody"] = body;
-        sendMessageReq["MessageDeduplicationId"] = "MessageDeduplicationId-0";
-        sendMessageReq["MessageGroupId"] = "MessageGroupId-0";
-
-        res = SendHttpRequest("/Root", "AmazonSQS.SendMessage", std::move(sendMessageReq), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        json = SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", body},
+            {"MessageDeduplicationId", "MessageDeduplicationId-0"},
+            {"MessageGroupId", "MessageGroupId-0"}
+        });
         UNIT_ASSERT(!GetByPath<TString>(json, "SequenceNumber").empty());
         UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
         UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
@@ -377,7 +385,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
                     "ApproximateNumberOfMessagesNotVisible",
                     "CreatedTimestamp",
                     "DelaySeconds",
-                    "LastModifiedTimestamp",
+                    // "LastModifiedTimestamp",  // Not supported at this moment.
                     "MaximumMessageSize",
                     "MessageRetentionPeriod",
                     "QueueArn",

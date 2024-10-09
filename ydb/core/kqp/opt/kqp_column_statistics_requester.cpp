@@ -1,5 +1,6 @@
 #include "kqp_column_statistics_requester.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/core/statistics/service/service.h>
 #include <ydb/core/statistics/events.h>

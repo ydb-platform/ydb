@@ -5,7 +5,10 @@
 #include "wb_filter.h"
 #include "wb_group.h"
 #include "wb_merge.h"
+#include <ydb/core/base/nameservice.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+
+#include <library/cpp/time_provider/time_provider.h>
 
 namespace NKikimr::NViewer {
 

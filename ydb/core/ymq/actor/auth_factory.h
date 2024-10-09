@@ -5,7 +5,7 @@
 #include <ydb/core/ymq/base/action.h>
 #include <ydb/core/ymq/base/counters.h>
 #include <ydb/library/http_proxy/authorization/signature.h>
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
 
 namespace NKikimr::NSQS {

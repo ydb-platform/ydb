@@ -1,5 +1,6 @@
 #pragma once
 
+#include "flat_bio_eggs.h"
 #include "flat_table_subset.h"
 #include "flat_scan_iface.h"
 #include "flat_executor_misc.h"

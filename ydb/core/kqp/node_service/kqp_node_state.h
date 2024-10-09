@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/util/tuples.h>
@@ -9,6 +9,8 @@
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 
 #include <ydb/library/actors/core/actorid.h>
+
+#include <library/cpp/time_provider/time_provider.h>
 
 #include <util/str_stl.h>
 

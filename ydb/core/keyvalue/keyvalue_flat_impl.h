@@ -18,8 +18,9 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/json/json_writer.h>
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/library/services/services.pb.h>

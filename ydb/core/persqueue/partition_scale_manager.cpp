@@ -2,6 +2,7 @@
 
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 
+#include <util/stream/format.h>
 namespace NKikimr {
 namespace NPQ {
 

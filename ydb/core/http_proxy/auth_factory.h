@@ -2,7 +2,7 @@
 
 #include "http_req.h"
 #include <ydb/library/http_proxy/authorization/signature.h>
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 
 namespace NKikimr::NHttpProxy {
 

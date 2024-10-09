@@ -1,6 +1,7 @@
 #include "kqp_compute_actor_factory.h"
 #include "kqp_compute_actor.h"
 
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
 

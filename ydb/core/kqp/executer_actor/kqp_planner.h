@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>

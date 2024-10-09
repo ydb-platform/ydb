@@ -3,7 +3,7 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/local_grpc/local_grpc.h>
 
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 
 #include <library/cpp/threading/future/future.h>
 

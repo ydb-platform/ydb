@@ -14,7 +14,7 @@
 #include "channel_balancer.h"
 #include <util/generic/set.h>
 #include <util/generic/hash_multi_map.h>
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_metrics.h>

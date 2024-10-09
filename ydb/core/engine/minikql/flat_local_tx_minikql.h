@@ -5,11 +5,13 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
+#include <ydb/core/engine/minikql/flat_local_minikql_program.h>
+#include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/core/client/minikql_compile/yql_expr_minikql.h>
 #include <ydb/core/client/minikql_compile/compile_context.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

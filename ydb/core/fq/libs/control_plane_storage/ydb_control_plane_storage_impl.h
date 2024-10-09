@@ -24,7 +24,6 @@
 #include <ydb/library/db_pool/db_pool.h>
 #include <ydb/library/security/util.h>
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/mon/mon.h>
 
 #include <ydb/core/fq/libs/common/cache.h>

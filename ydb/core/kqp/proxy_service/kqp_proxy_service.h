@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actorid.h>
 
 #include <util/datetime/base.h>
@@ -61,7 +61,7 @@ TSimpleResourceStats CalcPeerStats(
 
 TPeerStats CalcPeerStats(const TVector<NKikimrKqp::TKqpProxyNodeResources>& data, const TString& selfDataCenterId);
 
-IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
+NActors::IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     TVector<NKikimrKqp::TKqpSetting>&& settings,

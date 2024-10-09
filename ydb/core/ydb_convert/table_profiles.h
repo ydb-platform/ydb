@@ -1,11 +1,18 @@
 #pragma once
 
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <util/generic/hash.h>
+
+namespace NKikimrSchemeOp {
+    class TTableDescription;
+    class TPartitionConfig;
+    class TFamilyDescription;
+    class TStorageConfig;
+}
 
 namespace NKikimr {
 

@@ -3,6 +3,7 @@
 #include "json_pipe_req.h"
 #include "log.h"
 #include "viewer_helper.h"
+#include <ydb/core/base/nameservice.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 

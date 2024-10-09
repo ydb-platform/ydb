@@ -1,5 +1,7 @@
 #include "kqp_finalize_script_actor.h"
 
+#include <ydb/core/base/appdata.h>
+
 #include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/events/events.h>
 

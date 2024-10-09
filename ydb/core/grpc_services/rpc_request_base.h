@@ -2,7 +2,7 @@
 
 #include "grpc_request_proxy.h"
 #include <ydb/core/grpc_services/base/base.h>
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>

@@ -1,5 +1,6 @@
 #include "distconf.h"
 #include "node_warden_impl.h"
+#include <ydb/core/base/nameservice.h>
 #include <ydb/core/mind/dynamic_nameserver.h>
 
 namespace NKikimr::NStorage {

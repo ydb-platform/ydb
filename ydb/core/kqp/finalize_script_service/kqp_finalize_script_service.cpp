@@ -3,6 +3,7 @@
 
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 
 #include <ydb/core/protos/config.pb.h>
@@ -11,7 +12,7 @@ namespace NKikimr::NKqp {
 
 namespace {
 
-class TKqpFinalizeScriptService : public TActorBootstrapped<TKqpFinalizeScriptService> {
+class TKqpFinalizeScriptService : public NActors::TActorBootstrapped<TKqpFinalizeScriptService> {
 public:
     TKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
         IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory,

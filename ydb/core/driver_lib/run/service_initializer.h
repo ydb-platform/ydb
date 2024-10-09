@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/library/actors/core/actorsystem.h>
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 
 #include <util/generic/list.h>
 #include <util/generic/ptr.h>

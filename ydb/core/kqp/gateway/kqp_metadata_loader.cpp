@@ -1,6 +1,7 @@
 #include "kqp_metadata_loader.h"
 #include "actors/kqp_ic_gateway_actors.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>

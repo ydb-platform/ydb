@@ -1,5 +1,5 @@
 #pragma once
-#include "appdata.h"
+#include "appdata_fwd.h"
 #include "feature_flags.h"
 
 #include <util/system/datetime.h>

@@ -3,6 +3,7 @@
 #include "kesus_quoter_proxy.h"
 #include "probes.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/mon/mon.h>

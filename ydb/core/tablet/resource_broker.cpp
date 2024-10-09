@@ -1,5 +1,6 @@
 #include "resource_broker_impl.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 

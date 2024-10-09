@@ -5,9 +5,10 @@
 #include "partition_id.h"
 
 #include <ydb/core/tablet/tablet_counters.h>
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/persqueue/events/internal.h>
 
+#include <library/cpp/time_provider/time_provider.h>
 namespace NKikimr {
 namespace NPQ {
 

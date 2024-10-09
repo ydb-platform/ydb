@@ -10,7 +10,7 @@ namespace NKikimrConfig {
 
 namespace NKikimr::NKqp {
 
-IActor* CreateKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
+NActors::IActor* CreateKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory,
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory);
 

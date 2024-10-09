@@ -1,5 +1,7 @@
 #include "kafka_read_session_actor.h"
 
+#include <library/cpp/random_provider/random_provider.h>
+
 namespace NKafka {
 static constexpr TDuration WAKEUP_INTERVAL = TDuration::Seconds(1);
 static constexpr TDuration LOCK_PARTITION_DELAY = TDuration::Seconds(3);

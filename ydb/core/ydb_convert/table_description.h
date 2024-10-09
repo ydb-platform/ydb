@@ -8,6 +8,14 @@
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
+namespace NKikimrSchemeOp {
+    class TTableDescription;
+    class TColumnTableDescription;
+    class TIndexedTableCreationConfig;
+    class TCdcStreamDescription;
+    class TSequenceDescription;
+}
+
 namespace NKikimr {
 
 enum class EAlterOperationKind {

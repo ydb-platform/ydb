@@ -918,7 +918,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 .DiskSize = 16_MB,
                 .SmallDisk = true,
             });
-            
+
             UNIT_ASSERT(false);
         } catch (const yexception &e) {
             UNIT_ASSERT_STRING_CONTAINS(e.what(), "Total chunks# 0, System chunks needed# 1, cant run with < 3 free chunks!");
@@ -1005,7 +1005,7 @@ Y_UNIT_TEST_SUITE(PDiskCompatibilityInfo) {
 
     void TestMajorVerionMigration(TCurrent oldInfo, TCurrent intermediateInfo, TCurrent newInfo) {
         TCompatibilityInfoTest::Reset(&oldInfo);
-    
+
         TActorTestContext testCtx({
             .IsBad = false,
             .SuppressCompatibilityCheck = false,

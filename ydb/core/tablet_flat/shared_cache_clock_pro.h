@@ -82,16 +82,18 @@ public:
     }
 
     TIntrusiveList<TPage> Touch(TPage* page) override {
-        if (auto it = Entries.find(TPageTraits::GetKey(page)); it != Entries.end()) {
+        if (TPageTraits::GetLocation(page) != EClockProPageLocation::None) {
+            // touch a 'Cold resident' or a 'Hot' page:
+            TPageTraits::SetReferenced(page, true);
+            return {};
+        } else if (auto it = Entries.find(TPageTraits::GetKey(page)); it != Entries.end()) {
+            // transforms a 'Cold non-resident' ('Test') page to a 'Hot' page:
             TPageEntry* entry = it->Get();
-            if (entry->Page) {
-                TouchFast(entry);
-                return {};
-            } else {
-                return Fill(entry, page);
-            }
+            Y_ABORT_UNLESS(!entry->Page);
+            return Fill(entry, page);
         } else {
-            return Insert(page);
+            // adds a 'Cold resident' page
+            return Add(page);
         }
     }
 
@@ -179,16 +181,8 @@ public:
     }
 
 private:
-    // sets the referenced flag for a 'Cold resident' or a 'Hot' page
-    void TouchFast(TPageEntry* entry) {
-        Y_DEBUG_ABORT_UNLESS(entry->Page);
-        Y_ABORT_UNLESS(TPageTraits::GetLocation(entry->Page) != EClockProPageLocation::None);
-        TPageTraits::SetReferenced(entry->Page, true);
-    }
-
-    // adds a 'Cold resident' page
-    TIntrusiveList<TPage> Insert(TPage* page) {
-        Y_ABORT_UNLESS(TPageTraits::GetLocation(page) == EClockProPageLocation::None);
+    TIntrusiveList<TPage> Add(TPage* page) {
+        Y_DEBUG_ABORT_UNLESS(TPageTraits::GetLocation(page) == EClockProPageLocation::None);
 
         auto entry_ = MakeHolder<TPageEntry>(TPageTraits::GetKey(page), page, TPageTraits::GetSize(page));
         auto inserted = Entries.emplace(std::move(entry_));
@@ -203,22 +197,22 @@ private:
         return EvictWhileFull();
     }
 
-    // transforms a 'Cold non-resident' ('Test') page to a 'Hot' page
     TIntrusiveList<TPage> Fill(TPageEntry* entry, TPage* page) {
         Y_DEBUG_ABORT_UNLESS(!entry->Page);
-        Y_ABORT_UNLESS(TPageTraits::GetLocation(page) == EClockProPageLocation::None);
+        Y_DEBUG_ABORT_UNLESS(TPageTraits::GetLocation(page) == EClockProPageLocation::None);
         Y_ABORT_UNLESS(!TPageTraits::GetReferenced(page));
-        Y_ABORT_UNLESS(entry->Size == TPageTraits::GetSize(page));
+        Y_ABORT_UNLESS(TPageTraits::GetSize(page) == entry->Size);
 
         Y_ABORT_UNLESS(SizeTest >= entry->Size);
         SizeTest -= entry->Size;
 
         UnlinkEntry(entry);
-        entry->Page = page;
-        LinkEntry(entry);
 
+        entry->Page = page;
         TPageTraits::SetLocation(page, EClockProPageLocation::Hot);
         SizeHot += entry->Size;
+        
+        LinkEntry(entry);
 
         ColdTarget = Min(ColdTarget + entry->Size, MaxSize);
 

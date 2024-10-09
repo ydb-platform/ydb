@@ -467,6 +467,30 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
             << "MainQueue: {1 0f 20b}, {3 0f 40b}" << Endl
             << "GhostQueue: "));
     }
+
+    Y_UNIT_TEST(Random) {
+        TS3FIFOCache<TPage, TPageTraits> cache(100);
+
+        TVector<THolder<TPage>> pages;
+        for (ui32 pageId : xrange(500)) {
+            pages.push_back(MakeHolder<TPage>(pageId, 1));
+        }
+
+        ui32 hits = 0, misses = 0;
+
+        for (ui32 i = 0; i < 100000; i++) {
+            ui32 pageId = std::sqrt(RandomNumber<ui32>(pages.size() * pages.size()));
+            TPage* page = pages[pageId].Get();
+            if (TPageTraits::GetLocation(page) != ES3FIFOPageLocation::None) {
+                hits++;
+            } else {
+                misses++;
+            }
+            cache.Touch(page);
+        }
+
+        Cerr << 1.0 * hits / (hits + misses) << Endl;
+    }
 }
 
 }

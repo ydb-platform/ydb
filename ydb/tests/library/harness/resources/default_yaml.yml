@@ -134,7 +134,6 @@ grpc_config:
   host: "{ydb_grpc_host}"
   services:
   - "legacy"
-  - "tablet_service"
   - "yql"
   - "discovery"
   - "cms"
@@ -162,14 +161,8 @@ feature_flags:
   enable_mvcc_snapshot_reads: true
 kqpconfig:
   settings:
-  - name: "_ResultRowsLimit"
-    value: "{ydb_result_rows_limit}"
-  - name: "_KqpYqlSyntaxVersion"
-    value: "{ydb_yql_syntax_version}"
   - name: "_KqpAllowNewEngine"
     value: "true"
-  - name: "_KqpForceNewEngine"
-    value: "{ydb_force_new_engine}"
 interconnect_config:
   start_tcp: true
 sqs_config:
@@ -262,3 +255,5 @@ federated_query_config:
       uri: ""
   pinger:
     ping_period: "30s"
+column_shard_config:
+  disabled_on_scheme_shard: false

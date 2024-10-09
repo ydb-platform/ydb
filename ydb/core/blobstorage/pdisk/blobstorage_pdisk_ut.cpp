@@ -956,6 +956,61 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             chunk1, 0, parts, nullptr, false, 0),
             NKikimrProto::ERROR);
     }
+
+    Y_UNIT_TEST(AllRequestsAreAnsweredOnPDiskRestart) {
+        TActorTestContext testCtx({ false });
+        TVDiskMock vdisk(&testCtx);
+
+        vdisk.InitFull();
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        UNIT_ASSERT(vdisk.Chunks[EChunkState::COMMITTED].size() == 1);
+        auto chunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
+
+        ui32 logBuffSize = 250;
+        ui32 chunkBuffSize = 128_KB;
+
+        for (ui32 testCase = 0; testCase < 2; testCase++) {
+            vdisk.InitFull();
+            for (ui32 i = 0; i < 100; ++i) {
+                testCtx.Send(new NPDisk::TEvLog(
+                    vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 0, TRcBuf(PrepareData(logBuffSize)), vdisk.GetLsnSeg(), nullptr));
+                auto data = PrepareData(chunkBuffSize);
+                auto parts = MakeIntrusive<NPDisk::TEvChunkWrite::TStrokaBackedUpParts>(data);
+                testCtx.Send(new NPDisk::TEvChunkWrite(
+                    vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                    chunk, 0, parts, nullptr, false, 0));
+                testCtx.Send(new NPDisk::TEvChunkRead(
+                    vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                    chunk, 0, chunkBuffSize, 0, nullptr));
+            }
+
+            if (testCase & 1) {
+                Cerr << "restart" << Endl;
+                testCtx.RestartPDiskSync();
+            }
+
+            for (ui32 i = 0; i < 100; ++i) {
+                auto read = testCtx.Recv<NPDisk::TEvChunkReadResult>();
+            }
+            Cerr << "all chunk reads are received" << Endl;
+
+            for (ui32 i = 0; i < 100; ++i) {
+                auto write = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
+            }
+            Cerr << "all chunk writes are received" << Endl;
+
+            for (ui32 i = 0; i < 100;) {
+                auto result = testCtx.Recv<NPDisk::TEvLogResult>();
+                if (result->Status == NKikimrProto::OK) {
+                    i += result->Results.size();
+                } else {
+                    ++i;
+                }
+            }
+            Cerr << "all log writes are received" << Endl;
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(PDiskCompatibilityInfo) {

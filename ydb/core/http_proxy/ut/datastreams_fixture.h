@@ -36,6 +36,7 @@
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/core/ymq/actor/serviceid.h>
 
+#include <thread>
 
 using TJMap = NJson::TJsonValue::TMapType;
 using TJVector = NJson::TJsonValue::TArray;
@@ -400,6 +401,32 @@ public:
         NJson::TJsonMap json;
         UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
         return json;
+    }
+
+    NJson::TJsonMap PurgeQueue(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto res = SendHttpRequest("/Root", "AmazonSQS.PurgeQueue", request, FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        return json;
+    }
+
+    bool WaitQueueAttributes(TString queueUrl, size_t retries, std::function<bool (NJson::TJsonMap json)> predicate) {
+        for (size_t i = 0; i < retries; ++i) {
+            auto json = GetQueueAttributes({
+                {"QueueUrl", queueUrl},
+                {"AttributeNames", NJson::TJsonArray{"All"}}
+            });
+
+            if (predicate(json)) {
+                return true;
+            }
+
+            if (i + 1 < retries) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            }
+        }
+        return false;
     }
 
 private:

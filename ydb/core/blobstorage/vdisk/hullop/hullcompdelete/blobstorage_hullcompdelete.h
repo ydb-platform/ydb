@@ -4,7 +4,6 @@
 
 #include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge.h>
 #include <library/cpp/monlib/service/pages/templates.h>
-#include <ydb/core/base/blobstorage.h>
 
 #include <util/generic/queue.h>
 

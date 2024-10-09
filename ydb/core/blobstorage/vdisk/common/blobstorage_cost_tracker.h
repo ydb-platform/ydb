@@ -10,7 +10,6 @@
 #include <library/cpp/bucket_quoter/bucket_quoter.h>
 #include <ydb/library/lockfree_bucket/lockfree_bucket.h>
 #include <util/system/compiler.h>
-#include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/util/light.h>
 

@@ -4,7 +4,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mongroups.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_signature.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
 namespace NKikimr {
     namespace NLocRecovery {
@@ -270,7 +270,7 @@ namespace NKikimr {
         void OutputHtml(IOutputStream &str) const;
         TString ToString() const;
         void SetStartingPoint(TLogSignature signature, ui64 lsn);
-        void HandleReadLogResult(const TVector<NPDisk::TLogRecord> &results);
+        void HandleReadLogResult(const NPDisk::TEvReadLogResult::TResults &results);
         void SetRecoveredLogStartLsn(ui64 lsn);
         void CheckConsistency();
         // finish dispatching

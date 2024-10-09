@@ -94,39 +94,4 @@ public:
 
 static_assert(sizeof(TLogSignature) == 1, "for compatibility");
 
-namespace NPDisk {
-    class TLogRecord {
-    public:
-        TLogSignature Signature;
-        TRcBuf Data;
-        ui64 Lsn;
-
-        TLogRecord(TLogSignature signature, const TRcBuf &data, ui64 lsn)
-            : Signature(signature)
-            , Data(data)
-            , Lsn(lsn)
-        {}
-
-        TLogRecord()
-            : Signature(0)
-            , Lsn(0)
-        {}
-
-        void Verify() const {
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&Signature, sizeof(Signature));
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(Data.Data(), Data.size());
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&Lsn, sizeof(Lsn));
-        }
-
-        TString ToString() const {
-            TStringStream str;
-            str << "{TLogRecord Signature# " << Signature.ToString();
-            str << " Data.Size()# " << Data.size();
-            str << " Lsn# " << Lsn;
-            str << "}";
-            return str.Str();
-        }
-    };
-}
-
 }

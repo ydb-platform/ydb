@@ -10,7 +10,6 @@
 #include <ydb/core/protos/blobstorage_pdisk_config.pb.h>
 #include <ydb/core/protos/blobstorage_disk_color.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
-// #include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/pdisk_io/drivedata.h>
 #include <ydb/library/pdisk_io/file_params.h>

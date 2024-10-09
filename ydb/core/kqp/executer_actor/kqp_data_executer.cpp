@@ -286,30 +286,38 @@ public:
         if (!BufferActorId || (ReadOnlyTx && Request.LocksOp != ELocksOp::Rollback)) {
             Become(&TKqpDataExecuter::FinalizeState);
             LOG_D("DON'T SEND ANYTHING " << BufferActorId);
+
             MakeResponseAndPassAway();
             return;
         }  else if (Request.LocksOp == ELocksOp::Commit && !ReadOnlyTx) {
+            Become(&TKqpDataExecuter::FinalizeState);
+            LOG_D("SEND BUFFER COMMIT " << BufferActorId);
+
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
             event->ExecuterActorId = SelfId();
             event->TxId = TxId;
-            LOG_D("SEND BUFFER COMMIT " << BufferActorId);
-            Become(&TKqpDataExecuter::FinalizeState);
             Send(BufferActorId, event.release());
             return;
         } else if (Request.LocksOp == ELocksOp::Rollback) {
-            auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvRollback>();
-            event->ExecuterActorId = SelfId();
             Become(&TKqpDataExecuter::FinalizeState);
             LOG_D("SEND BUFFER ROLLBACK " << BufferActorId);
+
+            auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvRollback>();
+            event->ExecuterActorId = SelfId();
             Send(BufferActorId, event.release());
             MakeResponseAndPassAway();
             return;
-        } else {
-            //auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
-            //event->ExecuterActorId = SelfId();
+        } else if (Request.UseImmediateEffects) {
             Become(&TKqpDataExecuter::FinalizeState);
             LOG_D("SEND BUFFER FLUSH " << BufferActorId);
-            //Send(BufferActorId, event.release());
+
+            auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
+            event->ExecuterActorId = SelfId();
+            Send(BufferActorId, event.release());
+            return;
+        } else {
+            Become(&TKqpDataExecuter::FinalizeState);
+            LOG_D("SEND BUFFER SKIP FLUSH " << BufferActorId);
             MakeResponseAndPassAway();
             return;
         }

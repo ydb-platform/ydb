@@ -228,9 +228,9 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxDropBackupCollection = 181         [(CounterOpts) = {Name: "InFlightOps/DropBackupCollection"}];
 
     COUNTER_TIERING_RULE_COUNT = 182                      [(CounterOpts) = {Name: "TieringRuleCount"}];
-    COUNTER_IN_FLIGHT_OPS_TxCreateTieringRule = 183       [(CounterOpts) = {Name: "InFlightOps/CreateTieringRule"}];
-    COUNTER_IN_FLIGHT_OPS_TxDropTieringRule = 184         [(CounterOpts) = {Name: "InFlightOps/DropTieringRule"}];
-    COUNTER_IN_FLIGHT_OPS_TxAlterTieringRule = 185        [(CounterOpts) = {Name: "InFlightOps/AlterTieringRule"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateMetadataObject = 183    [(CounterOpts) = {Name: "InFlightOps/CreateMetadataObject"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropMetadataObject = 184      [(CounterOpts) = {Name: "InFlightOps/DropMetadataObject"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterMetadataObject = 185     [(CounterOpts) = {Name: "InFlightOps/AlterMetadataObject"}];
 }
 
 enum ECumulativeCounters {
@@ -369,9 +369,9 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxAlterBackupCollection = 108          [(CounterOpts) = {Name: "FinishedOps/AlterBackupCollection"}];
     COUNTER_FINISHED_OPS_TxDropBackupCollection = 109           [(CounterOpts) = {Name: "FinishedOps/DropBackupCollection"}];
 
-    COUNTER_FINISHED_OPS_TxCreateTieringRule = 110        [(CounterOpts) = {Name: "FinishedOps/CreateTieringRule"}];
-    COUNTER_FINISHED_OPS_TxDropTieringRule = 111          [(CounterOpts) = {Name: "FinishedOps/DropTieringRule"}];
-    COUNTER_FINISHED_OPS_TxAlterTieringRule = 112         [(CounterOpts) = {Name: "FinishedOps/AlterTieringRule"}];
+    COUNTER_FINISHED_OPS_TxCreateMetadataObject = 110     [(CounterOpts) = {Name: "FinishedOps/CreateMetadataObject"}];
+    COUNTER_FINISHED_OPS_TxDropMetadataObject = 111       [(CounterOpts) = {Name: "FinishedOps/DropMetadataObject"}];
+    COUNTER_FINISHED_OPS_TxAlterMetadataObject = 112      [(CounterOpts) = {Name: "FinishedOps/AlterMetadataObject"}];
 }
 
 enum EPercentileCounters {

@@ -193,7 +193,36 @@ ydbCommand.Parameters.Add(new YdbParameter("$season_id", DbType.UInt64, 1U));
 ydbCommand.Parameters.Add(new YdbParameter("$limit_size", DbType.UInt64, 3U));                         
 ```
 
-ADO.NET за вас подготовит запрос, чтобы переменные были стандарта SQL. А тип будет определен согласно `DbType` или `System.Type` самого значения.
+ADO.NET за вас подготовит запрос, чтобы переменные соответствовали [YQL](../../yql/reference/index.md). А тип будет определен согласно [DbType](https://learn.microsoft.com/en-us/dotnet/api/system.data.dbtype) или .NET тип самого значения.
+
+### Таблица сопоставления типов на чтение
+
+Ниже показаны сопоставления, используемые при чтении значений.
+
+Возвращаемый тип при использовании `YdbCommand.ExecuteScalarAsync()`, `YdbDataReader.GetValue()` и подобные методы.
+
+| {{ ydb-short-name }} type  | .NET type  |
+|----------------------------|------------|
+| `Bool`                     | `bool`     |
+| `Text` (synonym `Utf8`)    | `string`   |
+| `Bytes` (synonym `String`) | `byte[]`   |
+| `Uint8`                    | `byte`     |
+| `Uint16`                   | `ushort`   |
+| `Uint32`                   | `uint`     |
+| `Uint64`                   | `ulong`    |
+| `Int8`                     | `sbyte`    |
+| `Int16`                    | `short`    |
+| `Int32`                    | `int`      |
+| `Int64`                    | `long`     |
+| `Float`                    | `float`    |
+| `Double`                   | `double`   |
+| `Date`                     | `DateTime` |
+| `Datetime`                 | `DateTime` |
+| `Timestamp`                | `DateTime` |
+| `Decimal(22,9)`            | `Decimal`  |
+| `Json`                     | `string`   |
+| `JsonDocument`             | `string`   |
+| `Yson`                     | `byte[]`   |
 
 ### Таблица сопоставления типов на запись
 
@@ -242,7 +271,7 @@ catch (YdbException e)
 }
 ```
 
-### Свойства исключения YdbException
+### Свойства исключения `YdbException`
 
 Исключение `YdbException` содержит следующие свойства, которые помогут вам более точно обработать ошибку:
 
@@ -252,6 +281,12 @@ catch (YdbException e)
 
 - `StatusCode`: Содержит код ошибки базы данных, который может быть полезен для логирования и детального анализа проблемы.
 
+{% note warning %}
+
+Обратите внимание, что ADO.NET не выполняет автоматических попыток повторения, и вам нужно реализовать повтор попытки в своем коде.
+
+{% endnote %}
+
 ## Интеграция YDB и Dapper
 
 Чтобы начать работу требуется дополнительная зависимость [Dapper](https://www.nuget.org/packages/Dapper/).
@@ -259,6 +294,9 @@ catch (YdbException e)
 Рассмотрим полный пример:
 
 ```c#
+using Dapper;
+using Ydb.Sdk.Ado;
+
 await using var connection = await new YdbDataSource().OpenConnectionAsync();
 
 await connection.ExecuteAsync("""

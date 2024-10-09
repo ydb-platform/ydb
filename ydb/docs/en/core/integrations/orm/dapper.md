@@ -195,7 +195,36 @@ ydbCommand.Parameters.Add(new YdbParameter("season_id", DbType.UInt64, 1U));
 ydbCommand.Parameters.Add(new YdbParameter("limit_size", DbType.UInt64, 3U));                         
 ```
 
-ADO.NET will prepare the query for you so that the variables conform to the YQL standard. The type will be determined according to the `DbType` or the `System.Type` of the value itself.
+ADO.NET the query will be prepared for you so that the variables match [YQL](../../yql/reference/index.md). The type will be determined according to the [DbType](https://learn.microsoft.com/en-us/dotnet/api/system.data.dbtype) or the .NET type of the value itself.
+
+### Type mapping table for reading
+
+The following shows the mappings used when reading values.
+
+The return type when using  `YdbCommand.ExecuteScalarAsync()`, `YdbDataReader.GetValue()` and similar methods.
+
+| {{ ydb-short-name }} type  | .NET type  |
+|----------------------------|------------|
+| `Bool`                     | `bool`     |
+| `Text` (synonym `Utf8`)    | `string`   |
+| `Bytes` (synonym `String`) | `byte[]`   |
+| `Uint8`                    | `byte`     |
+| `Uint16`                   | `ushort`   |
+| `Uint32`                   | `uint`     |
+| `Uint64`                   | `ulong`    |
+| `Int8`                     | `sbyte`    |
+| `Int16`                    | `short`    |
+| `Int32`                    | `int`      |
+| `Int64`                    | `long`     |
+| `Float`                    | `float`    |
+| `Double`                   | `double`   |
+| `Date`                     | `DateTime` |
+| `Datetime`                 | `DateTime` |
+| `Timestamp`                | `DateTime` |
+| `Decimal(22,9)`            | `Decimal`  |
+| `Json`                     | `string`   |
+| `JsonDocument`             | `string`   |
+| `Yson`                     | `byte[]`   |
 
 ### Type mapping table for writing
 
@@ -249,8 +278,16 @@ catch (YdbException e)
 The `YdbException` exception has the following properties, which can help you handle errors properly:
 
 - `IsTransient` returns `true` if the error is temporary and can be resolved by retrying. For example, this might occur in cases of a transaction lock violation when the transaction fails to complete its commit.
+
 - `IsTransientWhenIdempotent` returns `true` if the error is temporary and can be resolved by retrying the operation, provided that the database operation is idempotent.
+
 - `StatusCode` contains the database error code, which is helpful for logging and detailed analysis of the issue.
+
+{% note warning %}
+
+Please note that ADO.NET does not automatically retry failed operations, and you must implement retry logic in your code.
+
+{% endnote %}
 
 ## Integration of {{ ydb-short-name }} and Dapper
 
@@ -259,6 +296,9 @@ To get started, you need an additional dependency [Dapper](https://www.nuget.org
 Let's consider a complete example:
 
 ```c#
+using Dapper;
+using Ydb.Sdk.Ado;
+
 await using var connection = await new YdbDataSource().OpenConnectionAsync();
 
 await connection.ExecuteAsync("""

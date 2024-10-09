@@ -29,6 +29,11 @@ items:
   include:
     mode: link
     path: ydb-sdk/toc_p.yaml
+- name: Languages and APIs
+  href: languages-and-apis/index.md
+  include:
+    mode: link
+    path: languages-and-apis/toc_p.yaml
 - name: Kafka API
   href: kafka-api/index.md
   include:
@@ -44,11 +49,6 @@ items:
   include:
     mode: link
     path: ydbops/toc_p.yaml
-- name: Languages and APIs
-  href: languages-and-apis/index.md
-  include:
-    mode: link
-    path: languages-and-apis/toc_p.yaml
 - name: Observability
   href: observability/index.md
   include:

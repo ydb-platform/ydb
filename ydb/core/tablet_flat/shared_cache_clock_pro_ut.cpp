@@ -1,4 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/random/mersenne.h>
 #include "shared_cache_clock_pro.h"
 
 namespace NKikimr::NCache {
@@ -250,6 +251,30 @@ Y_UNIT_TEST_SUITE(TClockProCache) {
         
         cache.Erase(&page3);
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "ColdTarget: 10");
+    }
+
+    Y_UNIT_TEST(Random) {
+        TClockProCache<TPage, TPageTraits> cache(100);
+
+        TVector<THolder<TPage>> pages;
+        for (ui32 pageId : xrange(500)) {
+            pages.push_back(MakeHolder<TPage>(pageId, 1));
+        }
+
+        ui32 hits = 0, misses = 0;
+
+        for (ui32 i = 0; i < 100000; i++) {
+            ui32 pageId = std::sqrt(RandomNumber<ui32>(pages.size() * pages.size()));
+            TPage* page = pages[pageId].Get();
+            if (TPageTraits::GetLocation(page) != EClockProPageLocation::None) {
+                hits++;
+            } else {
+                misses++;
+            }
+            cache.Touch(page);
+        }
+
+        Cerr << 1.0 * hits / (hits + misses) << Endl;
     }
 }
 

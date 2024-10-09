@@ -1,5 +1,6 @@
 #include "cache_cache.h"
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/xrange.h>
 
 namespace NKikimr::NCache {
 
@@ -135,7 +136,33 @@ Y_UNIT_TEST_SUITE(TCacheCacheTest) {
         UNIT_ASSERT(pages[1].CacheGeneration == ECacheCacheGeneration::None);
         UNIT_ASSERT_VALUES_EQUAL(warm->Val(), 0ULL);
 
-        UNIT_ASSERT_VALUES_EQUAL(cache.EvictNext().Empty(), nullptr);
+        UNIT_ASSERT(cache.EvictNext().Empty());
+    }
+
+    Y_UNIT_TEST(Random) {
+        TCacheCacheConfig::TCounterPtr fresh = new NMonitoring::TCounterForPtr;
+        TCacheCacheConfig::TCounterPtr staging = new NMonitoring::TCounterForPtr;
+        TCacheCacheConfig::TCounterPtr warm = new NMonitoring::TCounterForPtr;
+        
+        TCacheCacheConfig config(100, fresh, staging, warm);
+        TCacheCache<TPage, TCacheCachePageTraits> cache(config);
+
+        TVector<TPage> pages(500);
+        
+        ui32 hits = 0, misses = 0;
+
+        for (ui32 i = 0; i < 100000; i++) {
+            ui32 pageId = std::sqrt(RandomNumber<ui32>(pages.size() * pages.size()));
+            TPage* page = &pages[pageId];
+            if (page->CacheGeneration != ECacheCacheGeneration::None) {
+                hits++;
+            } else {
+                misses++;
+            }
+            cache.Touch(page);
+        }
+
+        Cerr << 1.0 * hits / (hits + misses) << Endl;
     }
 }
 

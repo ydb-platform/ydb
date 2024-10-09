@@ -299,8 +299,8 @@ void TRowDispatcher::Handle(TEvPrivate::TEvCoordinatorPing::TPtr&) {
     if (!CoordinatorActorId) {
         return;
     }
-    LOG_ROW_DISPATCHER_DEBUG("Send ping to " << *CoordinatorActorId);
-    Send(*CoordinatorActorId, new NActors::TEvents::TEvPing(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+    LOG_ROW_DISPATCHER_TRACE("Send ping to " << *CoordinatorActorId);
+    Send(*CoordinatorActorId, new NActors::TEvents::TEvPing());
 }
 
 void TRowDispatcher::Handle(NActors::TEvents::TEvPong::TPtr&) {

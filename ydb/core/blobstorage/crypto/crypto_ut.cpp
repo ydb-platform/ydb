@@ -120,7 +120,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageCrypto) {
 
     Y_UNIT_TEST(PerfTestStreamCypher) {
         TStreamCypher cypher1;
-        constexpr size_t BUF_SIZE = 10 << 20;
+        constexpr size_t BUF_SIZE = 256 << 10;
         constexpr size_t BUF_ALIGN = 32;
         constexpr size_t REPETITIONS = 16;
 
@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageCrypto) {
     }
 
     Y_UNIT_TEST(PerfTestStreamCypherAES128) {
-        constexpr size_t BUF_SIZE = 10 << 20;
+        constexpr size_t BUF_SIZE = 256 << 10;
         constexpr size_t BUF_ALIGN = 32;
         constexpr size_t REPETITIONS = 16;
 
@@ -197,7 +197,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageCrypto) {
                 }
                 std::vector<ui8> key(16, 123);
                 std::vector<ui8> iv(16, 100);
-                
+
                 cypher1.SetKeyAndIV(key, iv);
 
                 size_t realLen = size - inShift;

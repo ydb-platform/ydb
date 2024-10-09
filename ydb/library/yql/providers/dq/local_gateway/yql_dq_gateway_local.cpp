@@ -97,30 +97,6 @@ public:
             ServiceNode->AddLocalService(actorId, std::move(setupCmd));
         }
 
-        if (fqConfig.GetRowDispatcher().GetEnabled()) {
-            NFq::IYqSharedResources::TPtr iSharedResources = NFq::CreateYqSharedResources(
-                fqConfig,
-                NKikimr::CreateYdbCredentialsProviderFactory,
-                MakeIntrusive<NMonitoring::TDynamicCounters>());
-            NFq::TYqSharedResources::TPtr yqSharedResources = NFq::TYqSharedResources::Cast(iSharedResources);
-            ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
-
-            NConfig::TCommonConfig commonConfig;
-            auto rowDispatcher = NFq::NewRowDispatcherService(
-                fqConfig.GetRowDispatcher(),
-                commonConfig,
-                NKikimr::CreateYdbCredentialsProviderFactory,
-                yqSharedResources,
-                credentialsFactory,
-                "/tenant",
-                MakeIntrusive<NMonitoring::TDynamicCounters>(),
-                pqGateway);
-
-            ServiceNode->AddLocalService(
-                NFq::RowDispatcherServiceActorId(),
-                TActorSetupCmd(rowDispatcher.release(), TMailboxType::Simple, 0));
-        }
-
         auto statsCollector = CreateStatsCollector(1, *ServiceNode->GetSetup(), MetricsRegistry->GetSensors());
 
         auto actorSystem = ServiceNode->StartActorSystem();

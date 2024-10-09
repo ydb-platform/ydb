@@ -41,13 +41,13 @@ public:
                    NYdbGrpc::IQueueClientContextProvider* provider = nullptr)
     {
         const TString& requestName = request.GetDescriptor()->name();
-        BLOG_GRPC_D(Prefix() << "Request " << requestName << " " << Trim(request.ShortDebugString()));
+        BLOG_GRPC_D(Prefix() << "Request " << requestName);
         NActors::TActorSystem* actorSystem = NActors::TlsActivationContext->ActorSystem();
         THPTimer timer;
         NYdbGrpc::TResponseCallback<TResponse> cb =
                 [actorSystem, requestName, host = host, timer = std::move(timer), prefix = Prefix(), callback = std::move(callback)](NYdbGrpc::TGrpcStatus&& status, TResponse&& response) -> void {
             if (status.Ok()) {
-                BLOG_GRPC_DC(*actorSystem, prefix << "Response " << response.GetDescriptor()->name() << " " << Trim(response.ShortDebugString()));
+                BLOG_GRPC_DC(*actorSystem, prefix << "Response " << response.GetDescriptor()->name());
             } else {
                 BLOG_GRPC_DC(*actorSystem, prefix << "Status " << status.GRpcStatusCode << " " << status.Msg);
             }

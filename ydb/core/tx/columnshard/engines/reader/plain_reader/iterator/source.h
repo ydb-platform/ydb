@@ -361,7 +361,7 @@ public:
                     selectedInMem.emplace(i);
                 }
             }
-            result = Portion->GetMinMemoryForReadColumns(selectedSeq) + Portion->GetColumnBlobBytes(selectedSeq) +
+            result = Portion->GetMinMemoryForReadColumns(selectedSeq) + Portion->GetColumnBlobBytes(selectedSeq, false) +
                    Portion->GetColumnRawBytes(selectedInMem, false);
         } else {
             result = Portion->GetColumnRawBytes(columnsIds, false);

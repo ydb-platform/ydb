@@ -224,9 +224,9 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxRestoreIncrementalBackupAtTable = 177   [(CounterOpts) = {Name: "InFlightOps/RestoreIncrementalBackupAtTable"}];
 
     COUNTER_TIERING_RULE_COUNT = 178                      [(CounterOpts) = {Name: "TieringRuleCount"}];
-    COUNTER_IN_FLIGHT_OPS_TxCreateTieringRule = 179       [(CounterOpts) = {Name: "InFlightOps/CreateTieringRule"}];
-    COUNTER_IN_FLIGHT_OPS_TxDropTieringRule = 180         [(CounterOpts) = {Name: "InFlightOps/DropTieringRule"}];
-    COUNTER_IN_FLIGHT_OPS_TxAlterTieringRule = 181        [(CounterOpts) = {Name: "InFlightOps/AlterTieringRule"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateMetadataObject = 179    [(CounterOpts) = {Name: "InFlightOps/CreateMetadataObject"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropMetadataObject = 180      [(CounterOpts) = {Name: "InFlightOps/DropMetadataObject"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterMetadataObject = 181     [(CounterOpts) = {Name: "InFlightOps/AlterMetadataObject"}];
 }
 
 enum ECumulativeCounters {
@@ -361,9 +361,9 @@ enum ECumulativeCounters {
 
     COUNTER_FINISHED_OPS_TxRestoreIncrementalBackupAtTable = 106   [(CounterOpts) = {Name: "FinishedOps/RestoreIncrementalBackupAtTable"}];
 
-    COUNTER_FINISHED_OPS_TxCreateTieringRule = 107        [(CounterOpts) = {Name: "FinishedOps/CreateTieringRule"}];
-    COUNTER_FINISHED_OPS_TxDropTieringRule = 108          [(CounterOpts) = {Name: "FinishedOps/DropTieringRule"}];
-    COUNTER_FINISHED_OPS_TxAlterTieringRule = 109         [(CounterOpts) = {Name: "FinishedOps/AlterTieringRule"}];
+    COUNTER_FINISHED_OPS_TxCreateMetadataObject = 107     [(CounterOpts) = {Name: "FinishedOps/CreateMetadataObject"}];
+    COUNTER_FINISHED_OPS_TxDropMetadataObject = 108       [(CounterOpts) = {Name: "FinishedOps/DropMetadataObject"}];
+    COUNTER_FINISHED_OPS_TxAlterMetadataObject = 109      [(CounterOpts) = {Name: "FinishedOps/AlterMetadataObject"}];
 }
 
 enum EPercentileCounters {

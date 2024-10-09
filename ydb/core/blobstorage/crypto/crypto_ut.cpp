@@ -164,7 +164,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageCrypto) {
         }
     }
 
-    Y_UNIT_TEST(PerfTestStreamCypherAes) {
+    Y_UNIT_TEST(PerfTestStreamCypherAES128) {
         constexpr size_t BUF_SIZE = 10 << 20;
         constexpr size_t BUF_ALIGN = 32;
         constexpr size_t REPETITIONS = 16;
@@ -197,23 +197,20 @@ Y_UNIT_TEST_SUITE(TBlobStorageCrypto) {
                 }
                 std::vector<ui8> key(16, 123);
                 std::vector<ui8> iv(16, 100);
-                //ui64 nonce = 1;
-                cypher1.SetKey(key);
-                cypher1.SetIV(iv);
-
-                ui8 tag[16];
+                
+                cypher1.SetKeyAndIV(key, iv);
 
                 size_t realLen = size - inShift;
 
                 TSimpleTimer timer;
-                size_t ctSz = cypher1.Encrypt(in, out, tag, realLen);
+                size_t ctSz = cypher1.Encrypt(in, out, realLen);
                 encTimes.push_back(timer.Get());
 
                 TAlignedBuf decBuf(BUF_SIZE * 2, BUF_ALIGN);
                 ui8* dec = decBuf.Data();
 
                 timer.Reset();
-                cypher1.Decrypt(out, dec, tag, ctSz);
+                cypher1.Decrypt(out, dec, ctSz);
                 decTimes.push_back(timer.Get());
 
                 UNIT_ASSERT_ARRAYS_EQUAL(dec, in, ctSz);

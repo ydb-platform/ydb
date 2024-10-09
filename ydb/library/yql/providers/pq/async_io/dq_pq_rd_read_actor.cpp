@@ -598,7 +598,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
         return;
     }
 
-    Metrics.InFlyGetNextBatch->Dec();
+    Metrics.InFlyGetNextBatch->Set(0);
     auto& sessionInfo = it->second;
     if (!sessionInfo.EventsQueue.OnEventReceived(ev)) {
         SRC_LOG_W("Wrong seq num ignore message, seqNo " << meta.GetSeqNo());

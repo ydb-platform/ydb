@@ -105,9 +105,8 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
                     TStringBuilder() << "Can't get statistics aggregator ID.", {}
                 )
             );
+            this->Die(ctx);
         }
-
-        this->Die(ctx);
         return;
     }
     

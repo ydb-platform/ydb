@@ -42,17 +42,21 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
 ## Ограничения {#restrictions}
 
 * TTL-колонка должна быть одного из следующих типов:
+
   * `Date`;
   * `Datetime`;
   * `Timestamp`;
   * `Uint32`;
   * `Uint64`;
   * `DyNumber`.
+
 * Значение TTL-колонки с числовым типом (`Uint32`, `Uint64`, `DyNumber`) интерпретируется как величина от [Unix-эпохи]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Unix_time){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Unix-время){% endif %}. Поддерживаемые единицы измерения (задаются в настройках TTL):
+
   * секунды;
   * миллисекунды;
   * микросекунды;
   * наносекунды.
+
 * Нельзя указать несколько TTL-колонок.
 * Нельзя удалить TTL-колонку. Если это все же требуется, сначала нужно [выключить TTL](#disable) на таблице.
 

@@ -26,19 +26,20 @@ TConclusionStatus TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*t
             "cannot extract incoming batch: " + batchConclusion.GetErrorMessage(), NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
         return TConclusionStatus::Fail("cannot extract incoming batch: " + batchConclusion.GetErrorMessage());
     }
+    WritingCounters->OnIncomingData(NArrow::GetBatchDataSize(*batchConclusion));
 
     auto preparedConclusion =
         ActualSchema->PrepareForModification(batchConclusion.DetachResult(), WriteData.GetWriteMeta().GetModificationType());
     if (preparedConclusion.IsFail()) {
         ReplyError("cannot prepare incoming batch: " + preparedConclusion.GetErrorMessage(),
-            NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
+            NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Request);
         return TConclusionStatus::Fail("cannot prepare incoming batch: " + preparedConclusion.GetErrorMessage());
     }
     auto batch = preparedConclusion.DetachResult();
-    const std::vector<std::shared_ptr<arrow::Field>> defaultFields = ActualSchema->GetAbsentFields(batch->schema());
     std::shared_ptr<IMerger> merger;
     switch (WriteData.GetWriteMeta().GetModificationType()) {
         case NEvWrite::EModificationType::Upsert: {
+            const std::vector<std::shared_ptr<arrow::Field>> defaultFields = ActualSchema->GetAbsentFields(batch->schema());
             if (defaultFields.empty()) {
                 std::shared_ptr<NConveyor::ITask> task =
                     std::make_shared<NOlap::TBuildSlicesTask>(TabletId, ParentActorId, BufferActorId, std::move(WriteData), batch, ActualSchema);

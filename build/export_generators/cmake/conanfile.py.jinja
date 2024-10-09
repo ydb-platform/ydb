@@ -2,8 +2,11 @@ from conan import ConanFile
 
 {%- if use_conan2 %}
 
+import os
+
 from conan.tools.files import copy
 from conan.tools.cmake import CMakeToolchain, CMakeDeps, cmake_layout
+from conan.tools.env import Environment
 
 {%- endif %}
 
@@ -12,7 +15,7 @@ class App(ConanFile):
 
     settings = "os", "compiler", "build_type", "arch"
 
-    options = {
+    default_options = {
 {%- for conan_option in conan.options -%}
 {%-     set option_and_value = rsplit(conan_option, "=", 2) %}"{{ option_and_value[0] }}": "{{ option_and_value[1] }}"
 {%-     if not loop.last -%}, {% endif -%}

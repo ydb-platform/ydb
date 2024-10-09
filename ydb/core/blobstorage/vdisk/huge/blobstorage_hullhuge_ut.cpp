@@ -34,8 +34,6 @@ namespace NKikimr {
                         overhead, freeChunksReservation, logf));
 
             state->LogPos = THullHugeRecoveryLogPos(0, 0, 100500, 50000, 70000, 56789, 39482);
-            NHuge::THugeSlot hugeSlot(453, 0, 234);
-            state->AllocatedSlots.insert(hugeSlot);
 
             TString serialized(state->Serialize());
             UNIT_ASSERT(THullHugeKeeperPersState::CheckEntryPoint(serialized));

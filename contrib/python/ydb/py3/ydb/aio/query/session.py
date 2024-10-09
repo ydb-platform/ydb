@@ -5,9 +5,10 @@ from typing import (
 )
 
 from .base import AsyncResponseContextIterator
-from .transaction import QueryTxContextAsync
+from .transaction import QueryTxContext
 from .. import _utilities
 from ... import issues
+from ...settings import BaseRequestSettings
 from ..._grpc.grpcwrapper import common_utils
 from ..._grpc.grpcwrapper import ydb_query_public_types as _ydb_query_public
 
@@ -18,7 +19,7 @@ from ...query.session import (
 )
 
 
-class QuerySessionAsync(BaseQuerySession):
+class QuerySession(BaseQuerySession):
     """Session object for Query Service. It is not recommended to control
     session's lifecycle manually - use a QuerySessionPool is always a better choise.
     """
@@ -32,7 +33,7 @@ class QuerySessionAsync(BaseQuerySession):
         settings: Optional[base.QueryClientSettings] = None,
         loop: asyncio.AbstractEventLoop = None,
     ):
-        super(QuerySessionAsync, self).__init__(driver, settings)
+        super(QuerySession, self).__init__(driver, settings)
         self._loop = loop if loop is not None else asyncio.get_running_loop()
 
     async def _attach(self) -> None:
@@ -62,10 +63,8 @@ class QuerySessionAsync(BaseQuerySession):
                 self._state.reset()
                 self._state._change_state(QuerySessionStateEnum.CLOSED)
 
-    async def delete(self) -> None:
-        """WARNING: This API is experimental and could be changed.
-
-        Deletes a Session of Query Service on server side and releases resources.
+    async def delete(self, settings: Optional[BaseRequestSettings] = None) -> None:
+        """Deletes a Session of Query Service on server side and releases resources.
 
         :return: None
         """
@@ -73,30 +72,28 @@ class QuerySessionAsync(BaseQuerySession):
             return
 
         self._state._check_invalid_transition(QuerySessionStateEnum.CLOSED)
-        await self._delete_call()
+        await self._delete_call(settings=settings)
         self._stream.cancel()
 
-    async def create(self) -> "QuerySessionAsync":
-        """WARNING: This API is experimental and could be changed.
+    async def create(self, settings: Optional[BaseRequestSettings] = None) -> "QuerySession":
+        """Creates a Session of Query Service on server side and attaches it.
 
-        Creates a Session of Query Service on server side and attaches it.
-
-        :return: QuerySessionSync object.
+        :return: QuerySession object.
         """
         if self._state._already_in(QuerySessionStateEnum.CREATED):
             return
 
         self._state._check_invalid_transition(QuerySessionStateEnum.CREATED)
-        await self._create_call()
+        await self._create_call(settings=settings)
         await self._attach()
 
         return self
 
-    def transaction(self, tx_mode=None) -> QueryTxContextAsync:
+    def transaction(self, tx_mode=None) -> QueryTxContext:
         self._state._check_session_ready_to_use()
         tx_mode = tx_mode if tx_mode else _ydb_query_public.QuerySerializableReadWrite()
 
-        return QueryTxContextAsync(
+        return QueryTxContext(
             self._driver,
             self._state,
             self,
@@ -110,10 +107,10 @@ class QuerySessionAsync(BaseQuerySession):
         syntax: base.QuerySyntax = None,
         exec_mode: base.QueryExecMode = None,
         concurrent_result_sets: bool = False,
+        settings: Optional[BaseRequestSettings] = None,
     ) -> AsyncResponseContextIterator:
-        """WARNING: This API is experimental and could be changed.
+        """Sends a query to Query Service
 
-        Sends a query to Query Service
         :param query: (YQL or SQL text) to be executed.
         :param syntax: Syntax of the query, which is a one from the following choises:
          1) QuerySyntax.YQL_V1, which is default;
@@ -132,6 +129,7 @@ class QuerySessionAsync(BaseQuerySession):
             exec_mode=exec_mode,
             parameters=parameters,
             concurrent_result_sets=concurrent_result_sets,
+            settings=settings,
         )
 
         return AsyncResponseContextIterator(
@@ -139,6 +137,7 @@ class QuerySessionAsync(BaseQuerySession):
             lambda resp: base.wrap_execute_query_response(
                 rpc_state=None,
                 response_pb=resp,
+                session_state=self._state,
                 settings=self._settings,
             ),
         )

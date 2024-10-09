@@ -13,7 +13,7 @@ using namespace NResourcePool;
 
 NMetadata::NInternal::TTableRecord GetResourcePoolClassifierRecord(const NYql::TObjectSettingsImpl& settings, const NMetadata::NModifications::IOperationsManager::TInternalModificationContext& context) {
     NMetadata::NInternal::TTableRecord result;
-    result.SetColumn(TResourcePoolClassifierConfig::TDecoder::Database, NMetadata::NInternal::TYDBValue::Utf8(CanonizePath(context.GetExternalData().GetDatabase())));
+    result.SetColumn(TResourcePoolClassifierConfig::TDecoder::Database, NMetadata::NInternal::TYDBValue::Utf8(context.GetExternalData().GetDatabaseId()));
     result.SetColumn(TResourcePoolClassifierConfig::TDecoder::Name, NMetadata::NInternal::TYDBValue::Utf8(settings.GetObjectId()));
     return result;
 }
@@ -53,7 +53,11 @@ NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManage
             } catch (...) {
                 throw yexception() << "Failed to parse property " << property << ": " << CurrentExceptionMessage();
             }
-        } else if (!featuresExtractor.ExtractResetFeature(property)) {
+        } else if (featuresExtractor.ExtractResetFeature(property)) {
+            if (property == "resource_pool") {
+                ythrow yexception() << "Cannot reset required property resource_pool";
+            }
+        } else {
             continue;
         }
 
@@ -64,6 +68,19 @@ NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManage
             configJson.InsertValue(property, value);
         }
     }
+
+    if (context.GetActivityType() == EActivityType::Create) {
+        if (!configJson.GetMap().contains("resource_pool")) {
+            ythrow yexception() << "Missing required property resource_pool";
+        }
+
+        static const TString extraPathSymbolsAllowed = "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~";
+        const auto& name = settings.GetObjectId();
+        if (const auto brokenAt = PathPartBrokenAt(name, extraPathSymbolsAllowed); brokenAt != name.end()) {
+            ythrow yexception() << "Symbol '" << *brokenAt << "'" << " is not allowed in the resource pool classifier name '" << name << "'";
+        }
+    }
+    resourcePoolClassifierSettings.Validate();
 
     NJsonWriter::TBuf writer;
     writer.WriteJsonValue(&configJson);

@@ -1,6 +1,6 @@
 # Overview of testing with load actors
 
-Testing system performance is an important stage of adding changes to the {{ ydb-short-name }} core. With [load testing]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Нагрузочное_тестирование){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Load_testing){% endif %}, you can:
+Testing system performance is an important stage of adding changes to the {{ ydb-short-name }} core. With [load testing](https://en.wikipedia.org/wiki/Load_testing), you can:
 
 * Determine the performance metrics and compare them to the values before the changes.
 * Test how the system runs under high or peak loads.
@@ -9,11 +9,7 @@ The task to load a high-performance distributed system is non-trivial. A softwar
 
 With load actors, you can test both the entire system and its individual components:
 
-<center>
-
 ![load-actors](../_assets/load-actors.svg)
-
-</center>
 
 For example, you can generate a [load on Distributed Storage](load-actors-storage.md) without using tablet and Query Processor layers. This lets you test different system layers separately and find bottlenecks in an efficient way. By combining a variety of actor types, you can run different types of load.
 
@@ -111,6 +107,7 @@ The use case described below shows how to create and run the KqpLoad actor. The 
     ```
 
     `NodeId`: ID of the node to start the actor on. To specify multiple nodes, list them in separate lines:
+
     ```proto
     NodeId: 1
     NodeId: 2
@@ -119,6 +116,7 @@ The use case described below shows how to create and run the KqpLoad actor. The 
     Event: {
     ...
     ```
+
     `Event`: Actor configuration.
 
   2. Start the actor:

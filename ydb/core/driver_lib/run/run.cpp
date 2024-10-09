@@ -57,6 +57,11 @@
 #include <ydb/core/protos/alloc.pb.h>
 #include <ydb/core/protos/http_config.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/node_broker.pb.h>
+#include <ydb/core/protos/bootstrap.pb.h>
+#include <ydb/core/protos/stream.pb.h>
+#include <ydb/core/protos/cms.pb.h>
+#include <ydb/core/protos/replication.pb.h>
 
 #include <ydb/core/mind/local.h>
 #include <ydb/core/mind/tenant_pool.h>
@@ -434,6 +439,7 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         monConfig.Threads = appConfig.GetMonitoringConfig().GetMonitoringThreads();
         monConfig.Address = appConfig.GetMonitoringConfig().GetMonitoringAddress();
         monConfig.Certificate = appConfig.GetMonitoringConfig().GetMonitoringCertificate();
+        monConfig.MaxRequestsPerSecond = appConfig.GetMonitoringConfig().GetMaxRequestsPerSecond();
         if (appConfig.GetMonitoringConfig().HasMonitoringCertificateFile()) {
             monConfig.Certificate = TUnbufferedFileInput(appConfig.GetMonitoringConfig().GetMonitoringCertificateFile()).ReadAll();
         }
@@ -497,8 +503,11 @@ static TString ReadFile(const TString& fileName) {
 }
 
 void TKikimrRunner::InitializeGracefulShutdown(const TKikimrRunConfig& runConfig) {
-    Y_UNUSED(runConfig);
     GracefulShutdownSupported = true;
+    const auto& config = runConfig.AppConfig.GetShutdownConfig();
+    if (config.HasMinDelayBeforeShutdownSeconds()) {
+        MinDelayBeforeShutdown = TDuration::Seconds(config.GetMinDelayBeforeShutdownSeconds());
+    }
 }
 
 void TKikimrRunner::InitializeKqpController(const TKikimrRunConfig& runConfig) {
@@ -780,7 +789,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
 
         if (hasKesus) {
             server.AddService(new NKesus::TKesusGRpcService(ActorSystem.Get(), Counters,
-                grpcRequestProxies[0], hasKesus.IsRlAllowed()));
+                AppData->InFlightLimiterRegistry, grpcRequestProxies[0], hasKesus.IsRlAllowed()));
         }
 
         if (hasPQ) {
@@ -1676,6 +1685,12 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TGraphServiceInitializer(runConfig));
     }
 
+#ifndef KIKIMR_DISABLE_S3_OPS
+    if (serviceMask.EnableAwsService) {
+        sil->AddServiceInitializer(new TAwsApiInitializer(*this));
+    }
+#endif
+
     return sil;
 }
 
@@ -1723,6 +1738,7 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         ActorSystem->Send(new IEventHandle(NGRpcService::CreateGrpcPublisherServiceActorId(), {}, new TEvents::TEvPoisonPill));
     }
 
+    THPTimer timer;
     TIntrusivePtr<TDrainProgress> drainProgress(new TDrainProgress());
     if (AppData->FeatureFlags.GetEnableDrainOnShutdown() && GracefulShutdownSupported && ActorSystem) {
         drainProgress->OnSend();
@@ -1754,6 +1770,12 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         if (stillOnline > 0) {
             Cerr << "Drain completed, but " << *stillOnline << " tablet(s) are online." << Endl;
         }
+    }
+
+    // Wait for a minimum delay to make sure that clients forget about this node
+    auto passedTime = TDuration::Seconds(timer.Passed());
+    if (MinDelayBeforeShutdown > passedTime) {
+        Sleep(MinDelayBeforeShutdown - passedTime);
     }
 
     if (ActorSystem) {

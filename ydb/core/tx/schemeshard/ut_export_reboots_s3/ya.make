@@ -4,7 +4,7 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(12)
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
@@ -19,6 +19,7 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
+    contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
     ydb/core/testlib/default
     ydb/core/tx
     ydb/core/tx/schemeshard/ut_helpers

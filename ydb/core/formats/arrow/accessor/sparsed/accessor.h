@@ -1,8 +1,8 @@
 #pragma once
-#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
@@ -151,6 +151,11 @@ public:
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const override {
         auto& chunk = GetSparsedChunk(index);
         return chunk.GetScalar(index - chunk.GetStartPosition());
+    }
+
+    std::shared_ptr<arrow::RecordBatch> GetRecordBatchVerified() const {
+        AFL_VERIFY(Records.size() == 1)("size", Records.size());
+        return Records.front().GetRecords();
     }
 
     const TSparsedArrayChunk& GetSparsedChunk(const ui64 position) const {

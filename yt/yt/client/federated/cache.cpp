@@ -16,21 +16,6 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// TODO(ignat): move this function to yt/yt/core/
-template<class T>
-TIntrusivePtr<T> CopyConfig(const TIntrusivePtr<T>& config)
-{
-    auto newConfig = New<T>();
-    newConfig->Load(
-        ConvertToNode(config),
-        /*postprocess*/ false,
-        /*setDefaults*/ false,
-        /*path*/ "");
-    return newConfig;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TClientsCache
     : public NCache::TClientsCacheBase
 {
@@ -124,7 +109,7 @@ IClientsCachePtr CreateFederatedClientsCache(
     TString clusterSeparator)
 {
     auto clientsCacheConfig = New<TClientsCacheConfig>();
-    clientsCacheConfig->DefaultConfig = CopyConfig(cacheConfig);
+    clientsCacheConfig->DefaultConfig = CloneYsonStruct(cacheConfig, /*postprocess*/ false, /*setDefaults*/ false);
 
     return NYT::New<TClientsCache>(
         std::move(clientsCacheConfig),

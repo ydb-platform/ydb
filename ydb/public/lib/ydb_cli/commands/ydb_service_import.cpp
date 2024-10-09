@@ -95,14 +95,17 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->AddLongOption("use-virtual-addressing", "S3 bucket virtual addressing")
         .RequiredArgument("BOOL").StoreResult<bool>(&UseVirtualAddressing).DefaultValue("true");
 
+    config.Opts->AddLongOption("no-acl", "Prevent importing of ACL and owner")
+        .RequiredArgument("BOOL").StoreTrue(&NoACL).DefaultValue("false");
+
     AddDeprecatedJsonOption(config);
-    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+    AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
 }
 
 void TCommandImportFromS3::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParseFormats();
+    ParseOutputFormats();
 
     ParseAwsProfile(config, "aws-profile");
     ParseAwsAccessKey(config, "access-key");
@@ -128,12 +131,14 @@ int TCommandImportFromS3::Run(TConfig& config) {
     settings.Bucket(AwsBucket);
     settings.AccessKey(AwsAccessKey);
     settings.SecretKey(AwsSecretKey);
+    settings.UseVirtualAddressing(UseVirtualAddressing);
 
     if (Description) {
         settings.Description(Description);
     }
 
     settings.NumberOfRetries(NumberOfRetries);
+    settings.NoACL(NoACL);
 #if defined(_win32_)
     for (const auto& item : Items) {
         settings.AppendItem({item.Source, item.Destination});
@@ -265,7 +270,7 @@ void TCommandImportFromCsv::Config(TConfig& config) {
     config.Opts->AddLongOption("newline-delimited",
             "No newline characters inside records, enables some import optimizations (see docs)")
         .StoreTrue(&NewlineDelimited);
-    if (InputFormat == EOutputFormat::Csv) {
+    if (InputFormat == EDataFormat::Csv) {
         config.Opts->AddLongOption("delimiter", "Field delimiter in rows")
             .RequiredArgument("STRING").StoreResult(&Delimiter).DefaultValue(Delimiter);
     }
@@ -307,22 +312,20 @@ int TCommandImportFromCsv::Run(TConfig& config) {
 void TCommandImportFromJson::Config(TConfig& config) {
     TCommandImportFileBase::Config(config);
 
-    AddInputFormats(config, {
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonBase64
-    });
+    AddLegacyJsonInputFormats(config);
 }
 
 void TCommandImportFromJson::Parse(TConfig& config) {
     TCommandImportFileBase::Parse(config);
 
-    ParseFormats();
+    ParseInputFormats();
 }
 
 int TCommandImportFromJson::Run(TConfig& config) {
     TImportFileSettings settings;
     settings.OperationTimeout(OperationTimeout);
-    settings.Format(InputFormat);
+    settings.Format(EDataFormat::Json);
+    settings.BinaryStringsEncoding(InputBinaryStringEncoding);
     settings.MaxInFlightRequests(MaxInFlightRequests);
     settings.BytesPerRequest(NYdb::SizeFromString(BytesPerRequest));
     settings.Threads(Threads);

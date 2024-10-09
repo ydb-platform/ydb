@@ -666,7 +666,7 @@ public:
         WaitFor(BIND(std::forward<F>(func)).AsyncVia(invoker).Run()).ThrowOnError();
     }
 
-    auto GetSensors(TString json)
+    auto GetSensors(std::string json)
     {
         auto yson = NYson::TYsonString(NJson2Yson::SerializeJsonValueAsYson(NJson::ReadJsonFastTree(json)));
 

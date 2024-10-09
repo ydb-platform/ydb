@@ -188,6 +188,7 @@ set_yunittest_property="skip"
 copy_file="skip"
 configure_file="skip"
 run_antlr="skip"
+run_antlr4="skip"
 set_property="skip"
 add_jar="skip"
 set_property_escaped="skip"
@@ -270,9 +271,14 @@ copy=["cmake/FindJNITarget.cmake"]
 add_values=[{attr="includes", values=["cmake/FindJNITarget.cmake"]}]
 
 [[rules]]
-attrs=["run_antlr"]
+attrs=["target_commands-macro=run_antlr"]
 copy=["cmake/antlr.cmake"]
 add_values=[{attr="includes", values=["cmake/antlr.cmake"]}]
+
+[[rules]]
+attrs=["target_commands-macro=run_antlr4"]
+copy=["cmake/antlr4.cmake"]
+add_values=[{attr="includes", values=["cmake/antlr4.cmake"]}]
 
 [[rules]]
 attrs=[
@@ -398,6 +404,24 @@ copy=[
     "build/scripts/gather_swig_java.cmake"
 ]
 add_values=[{attr="includes", values=["cmake/swig.cmake"]}]
+
+[[rules]]
+attrs=[
+    "packages-name=IDN",
+]
+copy=[
+    "cmake/FindIDN.cmake",
+]
+add_values=[{attr="includes", values=["cmake/FindIDN.cmake"]}]
+
+[[rules]]
+attrs=[
+    "packages-name=AIO",
+]
+copy=[
+    "cmake/FindAIO.cmake",
+]
+add_values=[{attr="includes", values=["cmake/FindAIO.cmake"]}]
 
 # Conan profiles for platforms
 [[rules]]

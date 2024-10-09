@@ -4,9 +4,9 @@ Tests the read/write performance to and from Distributed Storage. The load is ge
 
 You can generate three types of load:
 
-* _Continuous_: The actor ensures that the specified number of requests are running concurrently. To generate a continuous load, set a zero interval between requests (e.g., `WriteIntervals: { Weight: 1.0 Uniform: { MinUs: 0 MaxUs: 0 } }`), while keeping the `MaxInFlightWriteRequests` parameter value different from zero and omit the `WriteHardRateDispatcher` parameter.
-* _Interval_: The actor runs requests at specific intervals. To generate an interval load, set a non-zero interval between requests, e.g., `WriteIntervals: { Weight: 1.0 Uniform: { MinUs: 50000 MaxUs: 50000 } }` and don't set the `WriteHardRateDispatcher` parameter. The maximum number of in-flight requests is set by the `InFlightWrites` parameter (0 means unlimited).
-* _Hard rate_: The actor runs requests at certain intervals, but the interval length is adjusted to maintain a configured request rate per second. If the duration of the load is limited by `LoadDuration` than the request rate may differ between start and finish of the workload and will adjust gradually throughout all the main load cycle. To generate a load of this type, set the [parameters of hard rate load](#hard-rate-dispatcher) (parameter `WriteHardRateDispatcher`). Note that if this parameter is set, the hard rate type of load will be launched, regardless the value of the `WriteIntervals` parameter. The maximum number of in-flight requests is set by the `InFlightWrites` parameter (0 means unlimited).
+* **Continuous:** The actor ensures that the specified number of requests are running concurrently. To generate a continuous load, set a zero interval between requests (e.g., `WriteIntervals: { Weight: 1.0 Uniform: { MinUs: 0 MaxUs: 0 } }`), while keeping the `MaxInFlightWriteRequests` parameter value different from zero and omit the `WriteHardRateDispatcher` parameter.
+* **Interval:** The actor runs requests at specific intervals. To generate an interval load, set a non-zero interval between requests, e.g., `WriteIntervals: { Weight: 1.0 Uniform: { MinUs: 50000 MaxUs: 50000 } }` and don't set the `WriteHardRateDispatcher` parameter. The maximum number of in-flight requests is set by the `InFlightWrites` parameter (0 means unlimited).
+* **Hard rate:** The actor runs requests at certain intervals, but the interval length is adjusted to maintain a configured request rate per second. If the duration of the load is limited by `LoadDuration` than the request rate may differ between start and finish of the workload and will adjust gradually throughout all the main load cycle. To generate a load of this type, set the [parameters of hard rate load](#hard-rate-dispatcher) (parameter `WriteHardRateDispatcher`). Note that if this parameter is set, the hard rate type of load will be launched, regardless the value of the `WriteIntervals` parameter. The maximum number of in-flight requests is set by the `InFlightWrites` parameter (0 means unlimited).
 
 ## Actor parameters {#options}
 
@@ -30,6 +30,7 @@ You can generate three types of load:
 | `Initial allocation` |  Setting up the [parameters for initial data allocation](#initial-allocation). It defines the amount of data to be written before the start of the main load cycle. This data can be read by read requests along with the data written in the main load cycle.  |
 
 ### Write requests class {#write-class}
+
 | Class | Description |
 --- | ---
 | `TabletLog` | The highest priority of write operation. |
@@ -37,6 +38,7 @@ You can generate three types of load:
 | `UserData` | Used for writing user data as separate blobs. |
 
 ### Read requests class {#read-class}
+
 | Class | Description |
 --- | ---
 | `AsyncRead` | Used for reading compacted tablets' data. |
@@ -146,4 +148,5 @@ StorageLoad: {
     }
 }
 ```
+
 Calculated percentiles will only represent the requests of the main load cycle and won't include write requests sent during the initial data allocation. The [graphs in Monitoring](../reference/observability/metrics/grafana-dashboards.md) should be of interest, for example, they allow to trace the request latency degradation caused by the increasing load.

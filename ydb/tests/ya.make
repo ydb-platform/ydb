@@ -6,6 +6,7 @@ RECURSE(
     olap
     oss
     perf
+    postgres_integrations
     stability
     supp
     tools

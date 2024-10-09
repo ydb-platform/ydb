@@ -471,17 +471,25 @@ TFuture<void> TClient::AlterTableReplica(
     if (options.Enabled) {
         req->set_enabled(*options.Enabled);
     }
+
     if (options.Mode) {
         req->set_mode(static_cast<NProto::ETableReplicaMode>(*options.Mode));
     }
+
     if (options.PreserveTimestamps) {
         req->set_preserve_timestamps(*options.PreserveTimestamps);
     }
+
     if (options.Atomicity) {
         req->set_atomicity(static_cast<NProto::EAtomicity>(*options.Atomicity));
     }
+
     if (options.EnableReplicatedTableTracker) {
         req->set_enable_replicated_table_tracker(*options.EnableReplicatedTableTracker);
+    }
+
+    if (options.ReplicaPath) {
+        req->set_replica_path(*options.ReplicaPath);
     }
 
     ToProto(req->mutable_mutating_options(), options);
@@ -2406,6 +2414,7 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryTrackerInfoPtr& rsp) {
         return TGetQueryTrackerInfoResult{
+            .QueryTrackerStage = rsp->query_tracker_stage(),
             .ClusterName = rsp->cluster_name(),
             .SupportedFeatures = TYsonString(rsp->supported_features()),
             .AccessControlObjects = FromProto<std::vector<TString>>(rsp->access_control_objects()),
@@ -2627,6 +2636,37 @@ TFuture<TGetFlowViewResult> TClient::GetFlowView(
     }));
 }
 
+TFuture<TShuffleHandlePtr> TClient::StartShuffle(
+    const TString& /*account*/,
+    int /*partitionCount*/,
+    const TStartShuffleOptions& /*options*/)
+{
+    YT_UNIMPLEMENTED();
+}
+
+TFuture<void> TClient::FinishShuffle(
+    const TShuffleHandlePtr& /*shuffleHandle*/,
+    const TFinishShuffleOptions& /*options*/)
+{
+    YT_UNIMPLEMENTED();
+}
+
+TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
+    const TShuffleHandlePtr& /*shuffleHandle*/,
+    int /*partitionIndex*/,
+    const TTableReaderConfigPtr& /*config*/)
+{
+    YT_UNIMPLEMENTED();
+}
+
+TFuture<IRowBatchWriterPtr> TClient::CreateShuffleWriter(
+    const TShuffleHandlePtr& /*shuffleHandle*/,
+    const TString& /*partitionColumn*/,
+    const TTableWriterConfigPtr& /*config*/)
+{
+    YT_UNIMPLEMENTED();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NRpcProxy
+} // namespace NYT::NApi::NRpcProxy

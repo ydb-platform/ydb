@@ -1,3 +1,4 @@
+#include <ydb/public/api/protos/draft/ydb_maintenance.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_monitoring.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -41,4 +42,16 @@ Y_DECLARE_OUT_SPEC(, Ydb::Table::VectorIndexSettings::Similarity, stream, value)
 
 Y_DECLARE_OUT_SPEC(, Ydb::Table::VectorIndexSettings::VectorType, stream, value) {
     stream << Ydb::Table::VectorIndexSettings::VectorType_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, Ydb::Table::IndexBuildState_State, stream, value) {
+    stream << IndexBuildState_State_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, Ydb::Maintenance::ActionState::ActionStatus, stream, value) {
+    stream << Ydb::Maintenance::ActionState::ActionStatus_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, Ydb::Maintenance::ActionState::ActionReason, stream, value) {
+    stream << Ydb::Maintenance::ActionState::ActionReason_Name(value);
 }

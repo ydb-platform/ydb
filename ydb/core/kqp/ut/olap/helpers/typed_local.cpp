@@ -40,7 +40,7 @@ TString TTypedLocalHelper::GetMultiColumnTestTableSchema(ui32 reps) const {
 }
 
 void TTypedLocalHelper::CreateMultiColumnOlapTableWithStore(ui32 reps,  ui32 storeShardsCount, ui32 tableShardsCount) {
-    CreateSchemaOlapTableWithStore(GetMultiColumnTestTableSchema(reps), TableName, "olapStore", storeShardsCount, tableShardsCount);
+    CreateSchemaOlapTablesWithStore(GetMultiColumnTestTableSchema(reps), {TableName}, "olapStore", storeShardsCount, tableShardsCount);
 }
 
 void TTypedLocalHelper::ExecuteSchemeQuery(const TString& alterQuery, const NYdb::EStatus expectedStatus /*= EStatus::SUCCESS*/) const {

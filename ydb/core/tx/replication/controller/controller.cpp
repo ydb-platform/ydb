@@ -1,6 +1,7 @@
 #include "controller.h"
 #include "controller_impl.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/discovery/discovery.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 
@@ -60,6 +61,8 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvProcessQueues, Handle);
         HFunc(TEvPrivate::TEvRemoveWorker, Handle);
         HFunc(TEvPrivate::TEvDescribeTargetsResult, Handle);
+        HFunc(TEvPrivate::TEvRequestCreateStream, Handle);
+        HFunc(TEvPrivate::TEvRequestDropStream, Handle);
         HFunc(TEvDiscovery::TEvDiscoveryData, Handle);
         HFunc(TEvDiscovery::TEvError, Handle);
         HFunc(TEvService::TEvStatus, Handle);
@@ -148,13 +151,53 @@ void TController::Handle(TEvPrivate::TEvAssignStreamName::TPtr& ev, const TActor
     RunTxAssignStreamName(ev, ctx);
 }
 
+template <typename TEvent>
+void ProcessLimiterQueue(TDeque<TActorId>& requested, THashSet<TActorId>& inflight, ui32 limit, const TActorContext& ctx) {
+    while (!requested.empty() && inflight.size() < limit) {
+        const auto& actorId = requested.front();
+        ctx.Send(actorId, new TEvent());
+        inflight.insert(actorId);
+        requested.pop_front();
+    }
+}
+
+void TController::ProcessCreateStreamQueue(const TActorContext& ctx) {
+    const auto& limits = AppData()->ReplicationConfig.GetSchemeOperationLimits();
+    ProcessLimiterQueue<TEvPrivate::TEvAllowCreateStream>(RequestedCreateStream, InflightCreateStream, limits.GetInflightCreateStreamLimit(), ctx);
+}
+
+void TController::ProcessDropStreamQueue(const TActorContext& ctx) {
+    const auto& limits = AppData()->ReplicationConfig.GetSchemeOperationLimits();
+    ProcessLimiterQueue<TEvPrivate::TEvAllowDropStream>(RequestedDropStream, InflightDropStream, limits.GetInflightDropStreamLimit(), ctx);
+}
+
+void TController::Handle(TEvPrivate::TEvRequestCreateStream::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+
+    RequestedCreateStream.push_back(ev->Sender);
+    ProcessCreateStreamQueue(ctx);
+}
+
 void TController::Handle(TEvPrivate::TEvCreateStreamResult::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+
+    InflightCreateStream.erase(ev->Sender);
+    ProcessCreateStreamQueue(ctx);
     RunTxCreateStreamResult(ev, ctx);
+}
+
+void TController::Handle(TEvPrivate::TEvRequestDropStream::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+
+    RequestedDropStream.push_back(ev->Sender);
+    ProcessDropStreamQueue(ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+
+    InflightDropStream.erase(ev->Sender);
+    ProcessDropStreamQueue(ctx);
     RunTxDropStreamResult(ev, ctx);
 }
 

@@ -3,6 +3,8 @@
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
 
+#include <ydb/library/actors/http/http.h>
+
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/export.pb.h>
 #include <ydb/core/protos/import.pb.h>
@@ -383,6 +385,7 @@ void AuditLogLogin(const NKikimrScheme::TEvLogin& request, const NKikimrScheme::
     TPath databasePath = TPath::Root(SS);
     auto peerName = NKikimr::NAddressClassifier::ExtractAddress(request.GetPeerName());
 
+    // NOTE: audit field set here must be in sync with ydb/core/security/login_page.cpp, AuditLogWebUILogout()
     AUDIT_LOG(
         AUDIT_PART("component", SchemeshardComponentName)
         AUDIT_PART("remote_address", (!peerName.empty() ? peerName : EmptyValue))

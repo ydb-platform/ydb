@@ -11,6 +11,7 @@ import "ydb/core/protos/filestore_config.proto";
 import "ydb/core/protos/channel_purpose.proto";
 import "ydb/core/protos/follower_group.proto";
 import "ydb/core/protos/blob_depot_config.proto";
+import "ydb/core/protos/yql_translation_settings.proto";
 import "ydb/public/api/protos/ydb_coordination.proto";
 import "ydb/public/api/protos/ydb_export.proto";
 import "ydb/public/api/protos/ydb_table.proto";
@@ -20,9 +21,8 @@ import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/core/protos/index_builder.proto";
 import "ydb/core/tx/columnshard/engines/scheme/defaults/protos/data.proto";
 import "ydb/core/tx/columnshard/common/protos/snapshot.proto";
-import "ydb/core/formats/arrow/protos/accessor.proto";
+import "ydb/library/formats/arrow/protos/accessor.proto";
 
-import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
 
 package NKikimrSchemeOp;
@@ -34,7 +34,7 @@ message TMkDir {
 
 enum EDropWaitPolicy {
     EDropFailOnChanges = 0;
-    EDropAbortChanges = 1; //depricated
+    EDropAbortChanges = 1; //deprecated
     EDropWaitChanges = 2;
 }
 
@@ -961,6 +961,10 @@ message TCreateCdcStream {
     optional TCdcStreamDescription StreamDescription = 2;
     optional uint64 RetentionPeriodSeconds = 3 [default = 86400]; // 1d by default
     optional uint32 TopicPartitions = 4;
+
+    // Topic autopartitioning settings
+    optional bool TopicAutoPartitioning = 5 [default = false]; // we always can split and merge of topic partitions
+    optional uint32 MaxPartitionCount = 6;
 }
 
 message TAlterCdcStream {
@@ -1015,7 +1019,10 @@ message TDropContinuousBackup {
 
 message TRestoreIncrementalBackup {
     optional string SrcTableName = 1;
+    optional NKikimrProto.TPathID SrcPathId = 3;
+
     optional string DstTableName = 2;
+    optional NKikimrProto.TPathID DstPathId = 4;
 }
 
 enum EIndexType {
@@ -1661,6 +1668,7 @@ enum EOperationType {
     ESchemeOpAlterResourcePool = 102;
 
     ESchemeOpRestoreIncrementalBackup = 103;
+    ESchemeOpRestoreIncrementalBackupAtTable = 104;
 }
 
 message TApplyIf {
@@ -1931,6 +1939,7 @@ enum EPathState {
     EPathStateMigrated = 9;
     EPathStateRestore = 10;
     EPathStateMoving = 11;
+    EPathStateOutgoingIncrementalRestore = 12;
 }
 
 message TPathVersion {
@@ -2180,6 +2189,7 @@ message TViewDescription {
     optional NKikimrProto.TPathID PathId = 2;
     optional uint64 Version = 3;
     optional string QueryText = 4;
+    optional NYql.NProto.TTranslationSettings CapturedContext = 5;
 }
 
 message TResourcePoolProperties {

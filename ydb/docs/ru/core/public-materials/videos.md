@@ -10,7 +10,13 @@
 
 - 2024
 
+  {% include [Saint_HighLoad](./_includes/conferences/2024/Saint_HighLoad.md) %}
+
+  {% include [Ya_Tech](./_includes/conferences/2024/Yandex_Infrastructure.md) %}
+
   {% include [True_Tech](./_includes/conferences/2024/True_Tech.md) %}
+
+  {% include [Heisenbug](./_includes/conferences/2024/Heisenbug.md) %}
 
 - 2023
 

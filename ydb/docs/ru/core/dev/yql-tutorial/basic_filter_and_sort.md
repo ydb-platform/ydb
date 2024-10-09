@@ -4,7 +4,7 @@
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
-```sql
+```yql
 SELECT
    series_id,
    season_id,
@@ -25,6 +25,4 @@ ORDER BY              -- Сортировка результатов.
 LIMIT 3               -- LIMIT N после ORDER BY означает
                       -- «получить первые N» или «последние N» результатов
 ;                     -- в зависимости от порядка сортировки.
-
-COMMIT;
 ```

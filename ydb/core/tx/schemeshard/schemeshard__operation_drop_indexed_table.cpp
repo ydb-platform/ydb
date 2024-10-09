@@ -396,11 +396,10 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
     auto dropOperation = tx.GetDrop();
 
     const TString parentPathStr = tx.GetWorkingDir();
-    const TString name = dropOperation.GetName();
 
     TPath table = dropOperation.HasId()
         ? TPath::Init(TPathId(context.SS->TabletID(), dropOperation.GetId()), context.SS)
-        : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        : TPath::Resolve(parentPathStr, context.SS).Dive(dropOperation.GetName());
 
     {
         TPath::TChecker checks = table.Check();
@@ -425,8 +424,10 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
                 checks
                     .IsTable()
                     .NotUnderDeleting()
-                    .NotUnderOperation()
-                    .IsCommonSensePath();
+                    .NotUnderOperation();
+                if (!table.Parent()->IsTableIndex() || !NTableIndex::IsBuildImplTable(table.LeafName())) {
+                    checks.IsCommonSensePath();                    
+                }
             }
         }
 

@@ -4,17 +4,18 @@
 
 В выражениях между `SELECT STREAM` и `FROM` можно указывать имена столбцов из источника (через запятую). Специальный символ `*` в этой позиции обозначает «все столбцы».
 
-**Примеры:**
-``` yql
+## Примеры
+
+```yql
 SELECT STREAM key FROM my_stream;
 ```
 
-``` yql
+```yql
 SELECT STREAM * FROM
   (SELECT STREAM value FROM my_stream);
 ```
 
-``` yql
+```yql
 $stream_name = "my_" || "stream";
 SELECT STREAM * FROM $stream_name;
 ```
@@ -23,8 +24,9 @@ SELECT STREAM * FROM $stream_name;
 
 Фильтрация строк в результате `SELECT STREAM` по условию.
 
-**Примеры:**
-``` yql
+### Примеры
+
+```yql
 SELECT STREAM key FROM my_stream
 WHERE value > 0;
 ```
@@ -35,8 +37,9 @@ WHERE value > 0;
 
 {% include [union all rules](../_includes/select/union_all_rules.md) %}
 
-**Примеры:**
-``` yql
+### Примеры
+
+```yql
 SELECT STREAM x FROM my_stream_1
 UNION ALL
 SELECT STREAM y FROM my_stream_2

@@ -25,6 +25,7 @@ namespace NYT::NPhoenix2::NDetail {
 #undef PHOENIX_DEFINE_TYPE
 #undef PHOENIX_DEFINE_TEMPLATE_TYPE
 #undef PHOENIX_DEFINE_OPAQUE_TYPE
+#undef PHOENIX_REGISTER_FIELD
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -105,6 +106,9 @@ namespace NYT::NPhoenix2::NDetail {
     { \
         [[maybe_unused]] static inline const void* Dummy = &::NYT::NPhoenix2::NDetail::RegisterOpaqueTypeDescriptorImpl<type>(); \
     }
+
+#define PHOENIX_REGISTER_FIELD(fieldTag, fieldName) \
+    registrar.template Field<fieldTag, &TThis::fieldName>(#fieldName)
 
 ////////////////////////////////////////////////////////////////////////////////
 

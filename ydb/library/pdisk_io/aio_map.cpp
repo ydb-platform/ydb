@@ -218,6 +218,8 @@ class TAsyncIoContextMap : public IAsyncIoContext {
 
     TSpinLock SpinLock;
     IAsyncIoOperation* LastOngoingAsyncIoOperation = nullptr;
+    std::atomic<ui64> GlobalCounter = 0;
+
 public:
 
     TAsyncIoContextMap(const TString &path, ui32 pDiskId, TIntrusivePtr<TSectorMap> sectorMap)
@@ -248,6 +250,25 @@ public:
         return EIoResult::Ok;
     }
 
+    EIoResult GenerateResultForOperaion(IAsyncIoOperation::EType type) {
+        auto result = EIoResult::Ok;
+
+        auto globalIdx = GlobalCounter++;
+        if (auto everyNth = SectorMap->IoErrorEveryNthRequests.load()) {
+            if (globalIdx % everyNth == everyNth - 1) {
+                result = EIoResult::FakeError;
+            }
+        }
+        if (type == IAsyncIoOperation::EType::PRead) {
+            if (auto everyNth = SectorMap->ReadIoErrorEveryNthRequests.load()) {
+                if (globalIdx % everyNth == everyNth - 1) {
+                    result = EIoResult::FakeError;
+                }
+            }
+        }
+        return result;
+    }
+
     i64 GetEvents(ui64 minEvents, ui64 maxEvents, TAsyncIoOperationResult *events, TDuration timeout) override {
         ui64 outputIdx = 0;
         TInstant startTime = TInstant::Now();
@@ -258,14 +279,8 @@ public:
                 for (TAtomicBase idx = 0; idx < size; ++idx) {
                     TAsyncIoOperationMap *op = static_cast<TAsyncIoOperationMap*>(CompleteQueue.Pop());
                     events[outputIdx].Operation = op;
-                    events[outputIdx].Result = (RandomNumber<double>() <
-                            SectorMap->ImitateIoErrorProbability.load())
-                        ? EIoResult::FakeError
-                        : EIoResult::Ok;
-                    if (op->GetType() == IAsyncIoOperation::EType::PRead &&
-                            RandomNumber<double>() < SectorMap->ImitateReadIoErrorProbability.load()) {
-                        events[outputIdx].Result = EIoResult::FakeError;
-                    }
+
+                    events[outputIdx].Result = GenerateResultForOperaion(op->GetType());
                     events[outputIdx].Operation->ExecCallback(&events[outputIdx]);
                     ++outputIdx;
                     if (outputIdx == maxEvents) {

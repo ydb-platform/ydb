@@ -33,11 +33,18 @@ namespace NYT::NYTree {
 template <class T>
 NYson::TYsonProducer ConvertToProducer(T&& value);
 
+// COMPAT(omgronny): There are two different functions for creating a builder
+// due to UDFs that depend on this code.
 template <class T>
 INodePtr ConvertToNode(
     const T& value,
-    INodeFactory* factory = GetEphemeralNodeFactory(),
-    int treeSizeLimit = std::numeric_limits<int>::max());
+    int treeSizeLimit,
+    INodeFactory* factory = GetEphemeralNodeFactory());
+
+template <class T>
+INodePtr ConvertToNode(
+    const T& value,
+    INodeFactory* factory = GetEphemeralNodeFactory());
 
 template <class T>
 IAttributeDictionaryPtr ConvertToAttributes(const T& value);

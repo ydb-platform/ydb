@@ -18,26 +18,8 @@ public:
 
     TOperationGet(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : TBase(viewer, ev)
-    {}
-
-    void Bootstrap() override {
-        if (Event->Get()->Request.GetMethod() != HTTP_METHOD_GET) {
-            return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Only GET method is allowed"));
-        }
-        const auto& params(Event->Get()->Request.GetParams());
-        if (params.Has("database")) {
-            Database = params.Get("database");
-        } else {
-            return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'database' is required"));
-        }
-
-        if (params.Has("id")) {
-            Request.set_id(params.Get("id"));
-        } else {
-            return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'id' is required"));
-        }
-
-        TBase::Bootstrap();
+    {
+        AllowedMethods = {HTTP_METHOD_GET};
     }
 
     static YAML::Node GetSwagger() {

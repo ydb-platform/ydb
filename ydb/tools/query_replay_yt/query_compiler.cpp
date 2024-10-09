@@ -225,7 +225,7 @@ public:
 class TReplayCompileActor: public TActorBootstrapped<TReplayCompileActor> {
 public:
     TReplayCompileActor(TIntrusivePtr<TModuleResolverState> moduleResolverState, const NMiniKQL::IFunctionRegistry* functionRegistry,
-        NYql::IHTTPGateway::TPtr httpGateway)
+        NYql::IHTTPGateway::TPtr httpGateway, bool enableAntlr4Parser)
         : ModuleResolverState(moduleResolverState)
         , KqpSettings()
         , Config(MakeIntrusive<TKikimrConfiguration>())
@@ -234,6 +234,7 @@ public:
     {
         Config->EnableKqpScanQueryStreamLookup = true;
         Config->EnablePreparedDdl = true;
+        Config->EnableAntlr4Parser = enableAntlr4Parser;
     }
 
     void Bootstrap() {
@@ -590,9 +591,11 @@ private:
         QueryId = ReplayDetails["query_id"].GetStringSafe();
 
         TKqpQuerySettings settings(queryType);
+        const auto& database = ReplayDetails["query_database"].GetStringSafe();
         Query = std::make_unique<NKikimr::NKqp::TKqpQueryId>(
             ReplayDetails["query_cluster"].GetStringSafe(),
-            ReplayDetails["query_database"].GetStringSafe(),
+            database,
+            database,
             queryText,
             settings,
             !queryParameterTypes.empty()
@@ -622,7 +625,7 @@ private:
         counters->Counters = new TKqpCounters(c);
         counters->TxProxyMon = new NTxProxy::TTxProxyMon(c);
 
-        Gateway = CreateKikimrIcGateway(Query->Cluster, queryType, Query->Database, std::move(loader),
+        Gateway = CreateKikimrIcGateway(Query->Cluster, queryType, Query->Database, Query->DatabaseId, std::move(loader),
             TlsActivationContext->ExecutorThread.ActorSystem, SelfId().NodeId(), counters);
         auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({HttpGateway, nullptr, nullptr, nullptr, {}, {}, {}, nullptr, nullptr, {}});
         KqpHost = CreateKqpHost(Gateway, Query->Cluster, Query->Database, Config, ModuleResolverState->ModuleResolver,
@@ -631,7 +634,7 @@ private:
         StartCompilation();
         Continue();
 
-        Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
+        Schedule(TDuration::Seconds(300), new TEvents::TEvWakeup());
         Become(&TThis::StateCompile);
     }
 
@@ -679,7 +682,7 @@ private:
 };
 
 IActor* CreateQueryCompiler(TIntrusivePtr<TModuleResolverState> moduleResolverState,
-    const NMiniKQL::IFunctionRegistry* functionRegistry, NYql::IHTTPGateway::TPtr httpGateway)
+    const NMiniKQL::IFunctionRegistry* functionRegistry, NYql::IHTTPGateway::TPtr httpGateway, bool enableAntlr4Parser)
 {
-    return new TReplayCompileActor(moduleResolverState, functionRegistry, httpGateway);
+    return new TReplayCompileActor(moduleResolverState, functionRegistry, httpGateway, enableAntlr4Parser);
 }

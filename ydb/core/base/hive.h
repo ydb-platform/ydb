@@ -49,6 +49,7 @@ namespace NKikimr {
             EvUpdateTabletsObject,
             EvUpdateDomain,
             EvRequestTabletDistribution,
+            EvRequestScaleRecommendation,
 
             // replies
             EvBootTabletReply = EvBootTablet + 512,
@@ -84,6 +85,7 @@ namespace NKikimr {
             EvUpdateTabletsObjectReply,
             EvUpdateDomainReply,
             EvResponseTabletDistribution,
+            EvResponseScaleRecommendation,
 
             EvEnd
         };
@@ -876,6 +878,12 @@ namespace NKikimr {
 
         struct TEvResponseTabletDistribution : TEventPB<TEvResponseTabletDistribution,
             NKikimrHive::TEvResponseTabletDistribution, EvResponseTabletDistribution> {};
+
+        struct TEvRequestScaleRecommendation : TEventPB<TEvRequestScaleRecommendation,
+            NKikimrHive::TEvRequestScaleRecommendation, EvRequestScaleRecommendation> {};
+        
+        struct TEvResponseScaleRecommendation : TEventPB<TEvResponseScaleRecommendation,
+            NKikimrHive::TEvResponseScaleRecommendation, EvResponseScaleRecommendation> {};
     };
 
     IActor* CreateDefaultHive(const TActorId &tablet, TTabletStorageInfo *info);

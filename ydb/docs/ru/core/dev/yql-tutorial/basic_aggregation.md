@@ -4,7 +4,7 @@
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
-```sql
+```yql
 SELECT
     series_id,
     season_id,
@@ -27,6 +27,4 @@ ORDER BY
     series_id,
     season_id
 ;
-
-COMMIT;
 ```

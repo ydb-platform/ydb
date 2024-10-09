@@ -14,6 +14,7 @@ class LoadSuiteBase:
     workload_type: WorkloadType = None
     timeout: float = 1800.
     refference: str = ''
+    check_canonical = False
 
     @property
     def suite(self) -> str:
@@ -22,24 +23,28 @@ class LoadSuiteBase:
             return result[4:]
         return result
 
-    def run_workload_test(self, path: str, query_num: int) -> None:
+    @classmethod
+    def _test_name(cls, query_num: int) -> str:
+        return f'Query{query_num:02d}'
+
+    def process_query_result(self, result: YdbCliHelper.WorkloadRunResult, query_num: int, iterations: int, upload: bool):
         def _get_duraton(stats, field):
             if stats is None:
                 return None
             result = stats.get(field)
             return float(result) / 1e3 if result is not None else None
 
-        test = f'Query{query_num:02d}'
-        allure_test_description(self.suite, test, refference_set=self.refference)
-        allure_listener = next(filter(lambda x: isinstance(x, AllureListener), plugin_manager.get_plugin_manager().get_plugins()))
-        allure_test_result = allure_listener.allure_logger.get_test(None)
-        query_num_param = next(filter(lambda x: x.name == 'query_num', allure_test_result.parameters), None)
-        if query_num_param:
-            query_num_param.mode = allure.parameter_mode.HIDDEN.value
+        def _attach_plans(plan: YdbCliHelper.QueryPlan) -> None:
+            if plan.plan is not None:
+                allure.attach(json.dumps(plan.plan), 'Plan json', attachment_type=allure.attachment_type.JSON)
+            if plan.table is not None:
+                allure.attach(plan.table, 'Plan table', attachment_type=allure.attachment_type.TEXT)
+            if plan.ast is not None:
+                allure.attach(plan.ast, 'Plan ast', attachment_type=allure.attachment_type.TEXT)
+            if plan.svg is not None:
+                allure.attach(plan.svg, 'Plan svg', attachment_type=allure.attachment_type.SVG)
 
-        result = YdbCliHelper.workload_run(
-            path=path, query_num=query_num, iterations=self.iterations, type=self.workload_type, timeout=self.timeout
-        )
+        test = self._test_name(query_num)
         stats = result.stats.get(test)
         if stats is not None:
             allure.attach(json.dumps(stats, indent=2), 'Stats', attachment_type=allure.attachment_type.JSON)
@@ -47,15 +52,20 @@ class LoadSuiteBase:
             stats = {}
         if result.query_out is not None:
             allure.attach(result.query_out, 'Query output', attachment_type=allure.attachment_type.TEXT)
-        if result.plan is not None:
-            if result.plan.plan is not None:
-                allure.attach(json.dumps(result.plan.plan), 'Plan json', attachment_type=allure.attachment_type.JSON)
-            if result.plan.table is not None:
-                allure.attach(result.plan.table, 'Plan table', attachment_type=allure.attachment_type.TEXT)
-            if result.plan.ast is not None:
-                allure.attach(result.plan.ast, 'Plan ast', attachment_type=allure.attachment_type.TEXT)
-            if result.plan.svg is not None:
-                allure.attach(result.plan.svg, 'Plan svg', attachment_type=allure.attachment_type.SVG)
+
+        if result.explain_plan is not None:
+            with allure.step('Explain'):
+                _attach_plans(result.explain_plan)
+
+        if result.plans is not None:
+            for i in range(iterations):
+                try:
+                    with allure.step(f'Iteration {i}'):
+                        _attach_plans(result.plans[i])
+                        if i in result.errors_by_iter:
+                            pytest.fail(result.errors_by_iter[i])
+                except BaseException:
+                    pass
 
         if result.stdout is not None:
             allure.attach(result.stdout, 'Stdout', attachment_type=allure.attachment_type.TEXT)
@@ -84,17 +94,39 @@ class LoadSuiteBase:
         elif stats.get('FailsCount', 0) != 0:
             success = False
             error_message = 'There are fail attemps'
-        ResultsProcessor.upload_results(
-            kind='Load',
-            suite=self.suite,
-            test=test,
-            timestamp=time(),
-            is_successful=success,
-            min_duration=_get_duraton(stats, 'Min'),
-            max_duration=_get_duraton(stats, 'Max'),
-            mean_duration=_get_duraton(stats, 'Mean'),
-            median_duration=_get_duraton(stats, 'Median'),
-            statistics=stats,
-        )
+        if upload:
+            ResultsProcessor.upload_results(
+                kind='Load',
+                suite=self.suite,
+                test=test,
+                timestamp=time(),
+                is_successful=success,
+                min_duration=_get_duraton(stats, 'Min'),
+                max_duration=_get_duraton(stats, 'Max'),
+                mean_duration=_get_duraton(stats, 'Mean'),
+                median_duration=_get_duraton(stats, 'Median'),
+                statistics=stats,
+            )
         if not success:
-            pytest.fail(error_message)
+            exc = pytest.fail.Exception(error_message)
+            if result.traceback is not None:
+                exc = exc.with_traceback(result.traceback)
+            raise exc
+
+    def run_workload_test(self, path: str, query_num: int) -> None:
+        allure_listener = next(filter(lambda x: isinstance(x, AllureListener), plugin_manager.get_plugin_manager().get_plugins()))
+        allure_test_result = allure_listener.allure_logger.get_test(None)
+        query_num_param = next(filter(lambda x: x.name == 'query_num', allure_test_result.parameters), None)
+        if query_num_param:
+            query_num_param.mode = allure.parameter_mode.HIDDEN.value
+        start_time = time()
+        result = YdbCliHelper.workload_run(
+            path=path,
+            query_num=query_num,
+            iterations=self.iterations,
+            workload_type=self.workload_type,
+            timeout=self.timeout,
+            check_canonical=self.check_canonical
+        )
+        allure_test_description(self.suite, self._test_name(query_num), refference_set=self.refference, start_time=start_time, end_time=time())
+        self.process_query_result(result, query_num, self.iterations, True)

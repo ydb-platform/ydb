@@ -28,6 +28,9 @@ struct _
 //! Defines a Phoenix-enabled opaque class.
 #define PHOENIX_DEFINE_OPAQUE_TYPE(type, typeTagValue)
 
+//! A handy helper for registering Phoenix fields.
+#define PHOENIX_REGISTER_FIELD(fieldTag, fieldName)
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NPhoenix2

@@ -1,5 +1,7 @@
 # Example app in Go
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 This page provides a detailed description of the code for a [test app](https://github.com/ydb-platform/ydb-go-examples/tree/master/basic) that uses the {{ ydb-short-name }} [Go SDK](https://github.com/ydb-platform/ydb-go-sdk/v3).
 
 ## Downloading and starting {#download}
@@ -18,7 +20,7 @@ Next, from the same working directory, run the following command to start the te
 
 {% include [init.md](../_includes/steps/01_init.md) %}
 
-To work with `YDB` in `Go`, import the `ydb-go-sdk` driver package:
+To work with {{ ydb-short-name }} in `Go`, import the `ydb-go-sdk` driver package:
 
 ```go
 import (

@@ -53,6 +53,8 @@ const TString ParametersLabel = "Parameters";
 const TString TranslationLabel = "Translation";
 const TString StaticUserFilesLabel = "UserFiles";
 const TString DynamicUserFilesLabel = "DynamicUserFiles";
+const TString StaticCredentialsLabel = "Credentials";
+const TString DynamicCredentialsLabel = "DynamicCredentials";
 
 class TUrlLoader : public IUrlLoader {
 public:
@@ -297,8 +299,33 @@ TProgram::TProgram(
         SessionId_ = CreateGuidAsString();
     }
 
+    if (QContext_.CanWrite()) {
+        NYT::TNode credListNode = NYT::TNode::CreateList();
+        Credentials_->ForEach([&](const TString name, const TCredential& cred) {
+            credListNode.Add(NYT::TNode()
+                ("Name", name)
+                ("Category", cred.Category)
+                ("Subcategory", cred.Subcategory));
+        });
+
+        auto credList = NYT::NodeToYsonString(credListNode, NYT::NYson::EYsonFormat::Binary);
+        QContext_.GetWriter()->Put({FacadeComponent, StaticCredentialsLabel}, credList).GetValueSync();
+    } else if (QContext_.CanRead()) {
+        Credentials_ = MakeIntrusive<TCredentials>();
+        for (const auto& label : {StaticCredentialsLabel, DynamicCredentialsLabel}) {
+            auto item = QContext_.GetReader()->Get({FacadeComponent, label}).GetValueSync();
+            if (item) {
+                auto node = NYT::NodeFromYsonString(item->Value);
+                for (const auto& c : node.AsList()) {
+                    Credentials_->AddCredential(c["Name"].AsString(), TCredential(
+                        c["Category"].AsString(),c["Subcategory"].AsString(),"REPLAY"));
+                }
+            }
+        }
+    }
+
     if (QContext_.CanWrite() && !SavedUserDataTable_.empty()) {
-        NYT::TNode userFilesNode;
+        NYT::TNode userFilesNode = NYT::TNode::CreateList();
         for (const auto& p : SavedUserDataTable_) {
             userFilesNode.Add(p.first.Alias());
         }
@@ -508,6 +535,19 @@ TString TProgram::GetSessionId() const {
 
 void TProgram::AddCredentials(const TVector<std::pair<TString, TCredential>>& credentials) {
     Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+
+    if (QContext_.CanWrite()) {
+        NYT::TNode credListNode = NYT::TNode::CreateList();
+        for (const auto& c : credentials) {
+            credListNode.Add(NYT::TNode()
+                ("Name", c.first)
+                ("Category", c.second.Category)
+                ("Subcategory", c.second.Subcategory));
+        }
+
+        auto credList = NYT::NodeToYsonString(credListNode, NYT::NYson::EYsonFormat::Binary);
+        QContext_.GetWriter()->Put({FacadeComponent, DynamicCredentialsLabel}, credList).GetValueSync();
+    }
 
     for (const auto& credential : credentials) {
         Credentials_->AddCredential(credential.first, credential.second);
@@ -808,6 +848,7 @@ TProgram::TFutureStatus TProgram::LineageAsync(const TString& username, IOutputS
         .AddTypeAnnotation()
         .AddPostTypeAnnotation()
         .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
+        .AddCheckExecution(false)
         .AddLineageOptimization(LineageStr_)
         .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
         .Build();
@@ -1073,6 +1114,7 @@ TProgram::TFutureStatus TProgram::LineageAsyncWithConfig(
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
+    pipeline.AddCheckExecution(false);
     pipeline.AddLineageOptimization(LineageStr_);
 
     Transformer_ = pipeline.Build();

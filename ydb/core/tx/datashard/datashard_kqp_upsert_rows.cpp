@@ -75,7 +75,7 @@ public:
                             "Malformed value for type: " << NUdf::GetDataTypeInfo(slot).Name << ", " << value);
                     } else {
                         Y_UNUSED(
-                            NYql::NCommon::PgValueToNativeBinary(value, NPg::PgTypeIdFromTypeDesc(type.GetTypeDesc()))
+                            NYql::NCommon::PgValueToNativeBinary(value, NPg::PgTypeIdFromTypeDesc(type.GetPgTypeDesc()))
                         );
                     }
                 }
@@ -203,23 +203,21 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
     for (ui32 i = 0; i < rowTypes.size(); ++i) {
         const auto& name = rowType->GetMemberName(i);
         MKQL_ENSURE_S(inputIndex.emplace(name, i).second);
+        const NScheme::TTypeInfo typeInfo = NKqp::UnwrapTypeInfoFromStruct(*rowType, i);
+        rowTypes[i] = typeInfo;
 
-        if (NKqp::StructHoldsPgType(*rowType, i)) {
-            rowTypes[i] = NKqp::UnwrapPgTypeFromStruct(*rowType, i);
-
+        if (typeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
             auto itColumnId = columnIds.find(name);
             MKQL_ENSURE_S(itColumnId != columnIds.end());
             auto itColumnInfo = tableInfo->Columns.find(itColumnId->second);
             MKQL_ENSURE_S(itColumnInfo != tableInfo->Columns.end());
             const auto& typeMod = itColumnInfo->second.TypeMod;
             if (!typeMod.empty()) {
-                auto result = NPg::BinaryTypeModFromTextTypeMod(typeMod, rowTypes[i].GetTypeDesc());
+                auto result = NPg::BinaryTypeModFromTextTypeMod(typeMod, typeInfo.GetPgTypeDesc());
                 MKQL_ENSURE_S(!result.Error, "invalid type mod");
                 rowTypeMods[i] = result.Typmod;
             }
-        } else {
-            rowTypes[i] = NScheme::TTypeInfo(NKqp::UnwrapDataTypeFromStruct(*rowType, i));
-        }
+        } 
     }
 
     TVector<ui32> keyIndices(tableInfo->KeyColumnIds.size());
@@ -228,16 +226,8 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
 
         auto it = inputIndex.find(columnInfo.Name);
         MKQL_ENSURE_S(it != inputIndex.end());
-        if (NKqp::StructHoldsPgType(*rowType, it->second)) {
-            auto typeInfo = NKqp::UnwrapPgTypeFromStruct(*rowType, it->second);
-            MKQL_ENSURE_S(
-                NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc()) == NPg::PgTypeIdFromTypeDesc(columnInfo.Type.GetTypeDesc()),
-                "row key type mismatch with table key type"
-            );
-        } else {
-            auto typeId = NKqp::UnwrapDataTypeFromStruct(*rowType, it->second);
-            MKQL_ENSURE_S(typeId == columnInfo.Type.GetTypeId(), "row key type mismatch with table key type");
-        }
+        const NScheme::TTypeInfo typeInfo = NKqp::UnwrapTypeInfoFromStruct(*rowType, it->second);
+        MKQL_ENSURE_S(typeInfo == columnInfo.Type, "row key type mismatch with table key type");
         keyIndices[i] = it->second;
     }
 

@@ -19,7 +19,7 @@ public:
 
     void ExecuteQueryAsync(const TRequestOptions& query) const;
 
-    void WaitAsyncQueries() const;
+    void FinalizeRunner() const;
 
     bool FetchScriptResults();
 

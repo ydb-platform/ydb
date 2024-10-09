@@ -4,7 +4,7 @@
 
 The arguments are optional and work same as [RANDOM](../../basic.md#random).
 
-**Examples**
+### Examples
 
 ```yql
 SELECT CurrentUtcDate();

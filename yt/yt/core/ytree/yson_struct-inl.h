@@ -282,18 +282,25 @@ void Deserialize(T& value, TSource source, bool postprocess, bool setDefaults)
 }
 
 template <class T>
-TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<const T>& obj)
+TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<const T>& obj, bool postprocess, bool setDefaults)
 {
     if (!obj) {
         return nullptr;
     }
-    return ConvertTo<TIntrusivePtr<T>>(NYson::ConvertToYsonString(*obj));
+    if constexpr(std::derived_from<T, TYsonStructBase>) {
+        auto node = ConvertToNode(NYson::ConvertToYsonString(*obj));
+        auto cloneObj = New<T>();
+        cloneObj->Load(node, postprocess, setDefaults);
+        return cloneObj;
+    } else {
+        return ConvertTo<TIntrusivePtr<T>>(NYson::ConvertToYsonString(*obj));
+    }
 }
 
 template <class T>
-TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<T>& obj)
+TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<T>& obj, bool postprocess, bool setDefaults)
 {
-    return CloneYsonStruct(ConstPointerCast<const T>(obj));
+    return CloneYsonStruct(ConstPointerCast<const T>(obj), postprocess, setDefaults);
 }
 
 template <class T>

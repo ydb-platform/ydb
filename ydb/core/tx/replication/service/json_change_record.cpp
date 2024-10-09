@@ -31,10 +31,6 @@ NChangeExchange::IChangeRecord::EKind TChangeRecord::GetKind() const {
         : EKind::CdcDataChange;
 }
 
-TString TChangeRecord::GetSourceId() const {
-    return SourceId;
-}
-
 static bool ParseKey(TVector<TCell>& cells,
         const NJson::TJsonValue::TArray& key, TLightweightSchema::TCPtr schema, TMemoryPool& pool, TString& error)
 {
@@ -69,8 +65,7 @@ static bool ParseValue(TVector<NTable::TTag>& tags, TVector<TCell>& cells,
     return true;
 }
 
-void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TChange& record, TSerializationContext& ctx) const {
-    auto& pool = ctx.MemoryPool;
+void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TChange& record, TMemoryPool& pool) const {
     pool.Clear();
     record.SetSourceOffset(GetOrder());
     // TODO: fill WriteTxId
@@ -131,6 +126,10 @@ TConstArrayRef<TCell> TChangeRecord::GetKey(TMemoryPool& pool) const {
 TConstArrayRef<TCell> TChangeRecord::GetKey() const {
     TMemoryPool pool(256);
     return GetKey(pool);
+}
+
+void TChangeRecord::Accept(NChangeExchange::IVisitor& visitor) const {
+    return visitor.Visit(*this);
 }
 
 }

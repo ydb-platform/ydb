@@ -10,7 +10,7 @@ Only use pure expressions inside the lambda body (those might also be other lamb
 
 One or more of the last lambda parameters can be marked with a question mark as optional: if they haven't been specified when calling lambda, they are assigned the `NULL` value.
 
-**Examples**
+### Examples
 
 ```yql
 $f = ($y) -> {

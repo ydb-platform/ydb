@@ -42,8 +42,8 @@ protected:
     /**
      * Signal tablet as active and ready to process requests (from pipes).
      */
-    void SignalTabletActive(const TActorIdentity &id);
-    void SignalTabletActive(const TActorContext &ctx);
+    void SignalTabletActive(const TActorIdentity &id, TString &&versionInfo = {});
+    void SignalTabletActive(const TActorContext &ctx, TString &&versionInfo = {});
 
     /**
      * Must be overriden as an empty method. Previously default implementation

@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(100)
+SPLIT_FACTOR(200)
 
 IF (WITH_VALGRIND)
     TIMEOUT(3600)
@@ -25,12 +25,13 @@ SRCS(
     write_ut.cpp
     sparsed_ut.cpp
     tiering_ut.cpp
+    decimal_ut.cpp
+    compression_ut.cpp
 )
 
 PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
-    ydb/library/yql/sql/pg_dummy
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/tx/columnshard/test_helper
     ydb/core/tx/columnshard

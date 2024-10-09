@@ -1129,9 +1129,12 @@
     ],
     "test.test[join-bush_dis_in_in_in--Analyze]": [
         {
-            "checksum": "2d475c2bf128e54a59b1d58ccaaa7602",
-            "size": 12537,
-            "uri": "https://{canondata_backend}/1936997/93899b3de50fae3f9677baacc98094a7a629590a/resource.tar.gz#test.test_join-bush_dis_in_in_in--Analyze_/plan.txt"
+            "checksum": "1f9e9fbd4a622eb553797e0e9bb953e9",
+            "size": 13947,
+            "uri": "https://{canondata_backend}/1597364/8c3e86bd1d9a6577c911775a64d51195a61e9b9e/resource.tar.gz#test.test_join-bush_dis_in_in_in--Analyze_/plan.txt"
+        },
+        {
+            "uri": "file://test.test_join-bush_dis_in_in_in--Analyze_/extracted"
         }
     ],
     "test.test[join-bush_dis_in_in_in--Debug]": [
@@ -1151,9 +1154,12 @@
     "test.test[join-bush_dis_in_in_in--Results]": [],
     "test.test[join-bush_dis_in_in_in-off-Analyze]": [
         {
-            "checksum": "3986d7eadb3e8af5158a5bf744651959",
-            "size": 12901,
-            "uri": "https://{canondata_backend}/1936997/93899b3de50fae3f9677baacc98094a7a629590a/resource.tar.gz#test.test_join-bush_dis_in_in_in-off-Analyze_/plan.txt"
+            "checksum": "1f9e9fbd4a622eb553797e0e9bb953e9",
+            "size": 13947,
+            "uri": "https://{canondata_backend}/1597364/8c3e86bd1d9a6577c911775a64d51195a61e9b9e/resource.tar.gz#test.test_join-bush_dis_in_in_in-off-Analyze_/plan.txt"
+        },
+        {
+            "uri": "file://test.test_join-bush_dis_in_in_in-off-Analyze_/extracted"
         }
     ],
     "test.test[join-bush_dis_in_in_in-off-Debug]": [
@@ -1458,9 +1464,12 @@
     "test.test[join-star_join--Results]": [],
     "test.test[join-star_join_multi--Analyze]": [
         {
-            "checksum": "e2440d8387d440bf54cd9c5858504e51",
-            "size": 21633,
-            "uri": "https://{canondata_backend}/1936997/93899b3de50fae3f9677baacc98094a7a629590a/resource.tar.gz#test.test_join-star_join_multi--Analyze_/plan.txt"
+            "checksum": "ea99b78aab83998e9c6951deb21bac9b",
+            "size": 18026,
+            "uri": "https://{canondata_backend}/1597364/8c3e86bd1d9a6577c911775a64d51195a61e9b9e/resource.tar.gz#test.test_join-star_join_multi--Analyze_/plan.txt"
+        },
+        {
+            "uri": "file://test.test_join-star_join_multi--Analyze_/extracted"
         }
     ],
     "test.test[join-star_join_multi--Debug]": [
@@ -1480,9 +1489,12 @@
     "test.test[join-star_join_multi--Results]": [],
     "test.test[join-yql-10654_pullup_with_sys_columns-off-Analyze]": [
         {
-            "checksum": "1127141cf9513e875de4f6e8faf02c9d",
-            "size": 5685,
-            "uri": "https://{canondata_backend}/1936997/93899b3de50fae3f9677baacc98094a7a629590a/resource.tar.gz#test.test_join-yql-10654_pullup_with_sys_columns-off-Analyze_/plan.txt"
+            "checksum": "b701347b6c319c16d4b45286aad7f038",
+            "size": 7254,
+            "uri": "https://{canondata_backend}/1597364/8c3e86bd1d9a6577c911775a64d51195a61e9b9e/resource.tar.gz#test.test_join-yql-10654_pullup_with_sys_columns-off-Analyze_/plan.txt"
+        },
+        {
+            "uri": "file://test.test_join-yql-10654_pullup_with_sys_columns-off-Analyze_/extracted"
         }
     ],
     "test.test[join-yql-10654_pullup_with_sys_columns-off-Debug]": [
@@ -2489,9 +2501,12 @@
     ],
     "test.test[sampling-subquery_mapjoin-default.txt-Analyze]": [
         {
-            "checksum": "4590776d3aa581b3798d0c0726b3fc25",
-            "size": 4675,
-            "uri": "https://{canondata_backend}/1936997/93899b3de50fae3f9677baacc98094a7a629590a/resource.tar.gz#test.test_sampling-subquery_mapjoin-default.txt-Analyze_/plan.txt"
+            "checksum": "a43940df97c754a291292d0ab3e10d71",
+            "size": 4758,
+            "uri": "https://{canondata_backend}/1597364/8c3e86bd1d9a6577c911775a64d51195a61e9b9e/resource.tar.gz#test.test_sampling-subquery_mapjoin-default.txt-Analyze_/plan.txt"
+        },
+        {
+            "uri": "file://test.test_sampling-subquery_mapjoin-default.txt-Analyze_/extracted"
         }
     ],
     "test.test[sampling-subquery_mapjoin-default.txt-Debug]": [

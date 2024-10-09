@@ -1,4 +1,4 @@
-# App in Node.js
+# Example app in Node.js
 
 This page contains a detailed description of the code of
 [basic-example-v2-with-query-service](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/master/examples/basic-example-v2-with-query-service)

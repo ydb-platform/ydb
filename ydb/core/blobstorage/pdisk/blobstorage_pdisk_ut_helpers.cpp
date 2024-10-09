@@ -12,9 +12,20 @@
 namespace NKikimr {
 
 TString PrepareData(ui32 size, ui32 flavor) {
+    constexpr size_t buffSize = 512;
+    // this buffer + memcpy speeds up large allocations x10 on plain execution and x30 under thread sanitizer
+    char buff[buffSize];
+    for (ui32 i = 0; i < std::min<ui32>(size, buffSize); ++i) {
+        buff[i] = 'a' + (i + size + flavor) % 16;
+    }
     TString data = TString::Uninitialized(size);
-    for (ui32 i = 0; i < size; ++i) {
-        data[i] = '0' + (i + size + flavor) % 8;
+
+    ui32 remainingSize = size;
+    ui8 *rawData = (ui8*)data.Detach();
+    for (ui32 i = 0; i < (size + buffSize - 1) / buffSize; ++i) {
+        memcpy(rawData, buff, std::min<ui32>(buffSize, remainingSize));
+        remainingSize -= buffSize;
+        rawData += buffSize;
     }
     return data;
 }

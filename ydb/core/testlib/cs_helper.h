@@ -32,10 +32,15 @@ protected:
 private:
     bool WithSomeNulls_ = false;
 protected:
-    void CreateSchemaOlapTableWithStore(const TString tableSchema, TString tableName = "olapTable", TString storeName = "olapStore",
+    void CreateSchemaOlapTablesWithStore(const TString tableSchema, TVector<TString> tableName = {"olapTable"}, TString storeName = "olapStore",
         ui32 storeShardsCount = 4, ui32 tableShardsCount = 3);
-    void CreateOlapTableWithStore(TString tableName = "olapTable", TString storeName = "olapStore",
+    void CreateOlapTablesWithStore(TVector<TString> tableName = {"olapTable"}, TString storeName = "olapStore",
         ui32 storeShardsCount = 4, ui32 tableShardsCount = 3);
+
+    void CreateSchemaOlapTables(const TString tableSchema, TVector<TString> tableNames = {"olapTable"},
+        ui32 tableShardsCount = 3);
+    void CreateOlapTables(TVector<TString> tableName = {"olapTable"}, ui32 tableShardsCount = 3);
+
 public:
     using TBase::TBase;
 

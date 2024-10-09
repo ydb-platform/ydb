@@ -10,7 +10,7 @@
 #include <ydb/core/kqp/runtime/kqp_sequencer_factory.h>
 #include <ydb/core/kqp/runtime/kqp_stream_lookup_factory.h>
 #include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
-#include <ydb/core/formats/arrow/protos/ssa.pb.h>
+#include <ydb/library/formats/arrow/protos/ssa.pb.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 
 
@@ -134,9 +134,11 @@ using namespace NYql::NDqProto;
 IActor* CreateKqpScanComputeActor(const TActorId& executerId, ui64 txId, TMaybe<ui64> lockTxId, ui32 lockNodeId,
     TDqTask* task, IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NYql::NDq::TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
-    TIntrusivePtr<NActors::TProtoArenaHolder> arena, TComputeActorSchedulingOptions schedulingOptions) {
+    TIntrusivePtr<NActors::TProtoArenaHolder> arena, TComputeActorSchedulingOptions schedulingOptions,
+    NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode)
+{
     return new NScanPrivate::TKqpScanComputeActor(std::move(schedulingOptions), executerId, txId, lockTxId, lockNodeId, task, std::move(asyncIoFactory),
-        settings, memoryLimits, std::move(traceId), std::move(arena));
+        settings, memoryLimits, std::move(traceId), std::move(arena), mode);
 }
 
 IActor* CreateKqpScanFetcher(const NKikimrKqp::TKqpSnapshot& snapshot, std::vector<NActors::TActorId>&& computeActors,

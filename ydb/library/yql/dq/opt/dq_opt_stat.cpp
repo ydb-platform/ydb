@@ -393,7 +393,7 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
             inputStats->StorageType);
 
         outputStats.Labels = inputStats->Labels;
-        outputStats.Selectivity *= selectivity;
+        outputStats.Selectivity *= (inputStats->Selectivity * selectivity);
 
         typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(std::move(outputStats)) );
     }
@@ -445,7 +445,7 @@ void InferStatisticsForFilter(const TExprNode::TPtr& input, TTypeAnnotationConte
         inputStats->ColumnStatistics,
         inputStats->StorageType);
 
-    outputStats.Selectivity *= selectivity;
+    outputStats.Selectivity *= (selectivity * inputStats->Selectivity);
     outputStats.Labels = inputStats->Labels;
 
     typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(std::move(outputStats)) );
@@ -600,7 +600,13 @@ void PropagateStatisticsToLambdaArgument(const TExprNode::TPtr& input, TTypeAnno
             if (!inputStats) {
                 return;
             }
-
+            
+            // We have a special case of Olap tables, where statistics is computed before lambda, but
+            // is finalized after visiting labda (which may contain a filter)
+            if (typeCtx->GetStats(input.Get())){
+                inputStats = typeCtx->GetStats(input.Get());
+            }
+            
             typeCtx->SetStats( lambda.Args().Arg(0).Raw(), inputStats );
         }
     }

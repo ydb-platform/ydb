@@ -2,7 +2,7 @@
 
 First of all, you'll need to obtain access to a {{ ydb-short-name }} cluster. Follow the [quickstart instructions](../quickstart.md) to get a basic local instance. Later on, you can work with your DevOps team to [build a production-ready cluster](../devops/index.md) or leverage one of the cloud service providers that offer a managed {{ ydb-short-name }} service.
 
-The second step is designing a data schema for an application you will build from scratch or adapt the schema of an existing application if you're migrating from another database management system. Work with your DBA on this, or refer to the documentation [for DBA](../dev/index.md) yourself if you don't have one on your team.
+The second step is designing a data schema for an application you will build from scratch or adapt the schema of an existing application if you're migrating from another database management system.
 
 In parallel with designing the schema, you need to set up your development environment for interaction with {{ ydb-short-name }}. There are a few main aspects to it, explored below.
 
@@ -21,7 +21,7 @@ Choose the specific programming language you'll be using. [Install the respectiv
 
 Additionally, you'd want to set up at least one of the available ways to run ad-hoc queries for debugging purposes. Choose at least one according to your preferences:
 
-* [YDB CLI](../reference/ydb-cli/install.md)
+* [{{ ydb-short-name }} CLI](../reference/ydb-cli/install.md)
 * [Embedded UI](../reference/embedded-ui/index.md)
 * Any SQL IDE that supports [JDBC](https://github.com/ydb-platform/ydb-jdbc-driver)
 * [psql](https://www.postgresql.org/docs/14/app-psql.html) or [pgAdmin](https://www.pgadmin.org/) for the PostgreSQL-compatible route.

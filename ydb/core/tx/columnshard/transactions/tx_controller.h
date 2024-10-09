@@ -381,6 +381,9 @@ public:
             DoOnTabletInit(owner);
         }
     };
+    TTxProgressCounters& GetCounters() {
+        return Counters;
+    }
 
 private:
     const TDuration MaxCommitTxDelay = TDuration::Seconds(30);
@@ -441,10 +444,9 @@ public:
 
     [[nodiscard]] std::shared_ptr<TTxController::ITransactionOperator> StartProposeOnExecute(
         const TTxController::TTxInfo& txInfo, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc);
-    void StartProposeOnComplete(const ui64 txId, const TActorContext& ctx);
-
+    void StartProposeOnComplete(ITransactionOperator& txOperator, const TActorContext& ctx);
     void FinishProposeOnExecute(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
-
+    void FinishProposeOnComplete(ITransactionOperator& txOperator, const TActorContext& ctx);
     void FinishProposeOnComplete(const ui64 txId, const TActorContext& ctx);
 
     void WriteTxOperatorInfo(NTabletFlatExecutor::TTransactionContext& txc, const ui64 txId, const TString& data) {
@@ -456,8 +458,8 @@ public:
 
     std::optional<TTxInfo> GetFirstPlannedTx() const;
     std::optional<TTxInfo> PopFirstPlannedTx();
-    void FinishPlannedTx(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
-    void CompleteRunningTx(const TPlanQueueItem& tx);
+    void ProgressOnExecute(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
+    void ProgressOnComplete(const TPlanQueueItem& tx);
 
     std::optional<TPlanQueueItem> GetPlannedTx() const;
     TPlanQueueItem GetFrontTx() const;

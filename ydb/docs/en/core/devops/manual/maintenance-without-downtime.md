@@ -1,6 +1,7 @@
 # Maintenance without downtime
 
 A {{ ydb-short-name }} cluster periodically needs maintenance, such as upgrading its version or replacing broken disks. Maintenance can cause a cluster or its databases to become unavailable due to:
+
 - Going beyond the expectations of the affected [storage groups](../../concepts/glossary.md#storage-groups) failure model.
 - Going beyond the expectations of the [State Storage](../../deploy/configuration/config.md#domains-state) failure model.
 - Lack of computational resources due to stopping too many [dynamic nodes](../../concepts/cluster/common_scheme_ydb.md#nodes).
@@ -18,6 +19,7 @@ During maintenance activities whose safety is guaranteed by the CMS, failures un
 A *maintenance task* is a set of *actions* that the user asks the CMS to perform for safe maintenance.
 
 Supported actions:
+
 - Acquiring an exclusive lock on a cluster component (node or host).
 
 Actions in a task are divided into groups. Actions from the same group are performed atomically. Currently, groups can consist of only one action.
@@ -48,7 +50,7 @@ In a maintenance task, you need to specify the cluster's availability mode to co
   - For affected storage groups with the [block-4-2](../../deploy/configuration/config.md#reliability) scheme, no more than two unavailable VDisks are allowed.
   - For affected storage groups with the [mirror-3-dc](../../deploy/configuration/config.md#reliability) scheme, up to four unavailable VDisks are allowed, three of which must be in the same data center.
   - No more than `(nto_select - 1) / 2` unavailable State Storage rings are allowed.
-  -
+
 - **Force**: a forced mode, the failure model is ignored. *Not recommended for use.*
 
 ### Priority {#priority}
@@ -66,6 +68,7 @@ By default, each database and the cluster as a whole are allowed to have no more
 ## Checking algorithm {#checking-algorithm}
 
 To check if the actions of a maintenance task can be performed, the CMS sequentially goes through each action group in the task and checks the action from the group:
+
 - If the action's object is a host, the CMS checks whether the action can be performed with all nodes running on the host.
 - If the action's object is a node, the CMS checks:
 
@@ -84,9 +87,11 @@ The [ydbops](https://github.com/ydb-platform/ydbops) utility tool uses CMS for c
 ### Rolling restart {##rolling-restart}
 
 To perform a rolling restart of the entire cluster, you can use the command:
-```
+
+```bash
 $ ydbops restart --endpoint grpc://<cluster-fqdn> --availability-mode strong
 ```
+
 If your systemd unit name is different from the default one, you may need to override it with `--systemd-unit` flag.
 
 The `ydbops` utility will automatically create a maintenance task to restart the entire cluster using the given availability mode. As it progresses, the `ydbops` will refresh the maintenance task and acquire exclusive locks on the nodes in the CMS until all nodes are restarted.

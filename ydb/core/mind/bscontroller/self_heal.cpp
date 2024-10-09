@@ -43,6 +43,7 @@ namespace NKikimr::NBsController {
         std::shared_ptr<TBlobStorageGroupInfo::TTopology> Topology;
         TBlobStorageGroupInfo::TGroupVDisks FailedGroupDisks;
         const bool IsSelfHealReasonDecommit;
+        const bool IgnoreDegradedGroupsChecks;
         const bool DonorMode;
         THashSet<TVDiskID> PendingVDisks;
         THashMap<TActorId, TVDiskID> ActorToDiskMap;
@@ -51,7 +52,7 @@ namespace NKikimr::NBsController {
     public:
         TReassignerActor(TActorId controllerId, TGroupId groupId, TEvControllerUpdateSelfHealInfo::TGroupContent group,
                 std::optional<TVDiskID> vdiskToReplace, std::shared_ptr<TBlobStorageGroupInfo::TTopology> topology,
-                bool isSelfHealReasonDecommit, bool donorMode)
+                bool isSelfHealReasonDecommit, bool ignoreDegradedGroupsChecks, bool donorMode)
             : ControllerId(controllerId)
             , GroupId(groupId)
             , Group(std::move(group))
@@ -59,6 +60,7 @@ namespace NKikimr::NBsController {
             , Topology(std::move(topology))
             , FailedGroupDisks(Topology.get())
             , IsSelfHealReasonDecommit(isSelfHealReasonDecommit)
+            , IgnoreDegradedGroupsChecks(ignoreDegradedGroupsChecks)
             , DonorMode(donorMode)
         {}
 
@@ -166,6 +168,9 @@ namespace NKikimr::NBsController {
             request->SetIgnoreGroupReserve(true);
             request->SetSettleOnlyOnOperationalDisks(true);
             request->SetIsSelfHealReasonDecommit(IsSelfHealReasonDecommit);
+            if (IgnoreDegradedGroupsChecks) {
+                request->SetIgnoreDegradedGroupsChecks(IgnoreDegradedGroupsChecks);
+            }
             request->SetAllowUnusableDisks(true);
             if (VDiskToReplace) {
                 ev->SelfHeal = true;
@@ -278,6 +283,7 @@ namespace NKikimr::NBsController {
         bool AllowMultipleRealmsOccupation;
         bool DonorMode;
         THostRecordMap HostRecords;
+        std::shared_ptr<TControlWrapper> EnableSelfHealWithDegraded;
 
         using TTopologyDescr = std::tuple<TBlobStorageGroupType::EErasureSpecies, ui32, ui32, ui32>;
         THashMap<TTopologyDescr, std::shared_ptr<TBlobStorageGroupInfo::TTopology>> Topologies;
@@ -289,13 +295,15 @@ namespace NKikimr::NBsController {
 
     public:
         TSelfHealActor(ui64 tabletId, std::shared_ptr<std::atomic_uint64_t> unreassignableGroups, THostRecordMap hostRecords,
-                bool groupLayoutSanitizerEnabled, bool allowMultipleRealmsOccupation, bool donorMode)
+                bool groupLayoutSanitizerEnabled, bool allowMultipleRealmsOccupation, bool donorMode,
+                std::shared_ptr<TControlWrapper> enableSelfHealWithDegraded)
             : TabletId(tabletId)
             , UnreassignableGroups(std::move(unreassignableGroups))
             , GroupLayoutSanitizerEnabled(groupLayoutSanitizerEnabled)
             , AllowMultipleRealmsOccupation(allowMultipleRealmsOccupation)
             , DonorMode(donorMode)
             , HostRecords(std::move(hostRecords))
+            , EnableSelfHealWithDegraded(std::move(enableSelfHealWithDegraded))
         {}
 
         void Bootstrap(const TActorId& parentId) {
@@ -427,9 +435,11 @@ namespace NKikimr::NBsController {
 
                 // check if it is possible to move anything out
                 bool isSelfHealReasonDecommit;
-                if (const auto v = FindVDiskToReplace(group.Content, now, group.Topology.get(), &isSelfHealReasonDecommit)) {
+                bool ignoreDegradedGroupsChecks;
+                if (const auto v = FindVDiskToReplace(group.Content, now, group.Topology.get(), &isSelfHealReasonDecommit,
+                        &ignoreDegradedGroupsChecks)) {
                     group.ReassignerActorId = Register(new TReassignerActor(ControllerId, group.GroupId, group.Content,
-                        *v, group.Topology, isSelfHealReasonDecommit, DonorMode));
+                        *v, group.Topology, isSelfHealReasonDecommit, ignoreDegradedGroupsChecks, DonorMode));
                 } else {
                     ++counter; // this group can't be reassigned right now
 
@@ -484,7 +494,8 @@ namespace NKikimr::NBsController {
                         ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(GroupLayoutSanitizerOperationLog,
                                 "Start sanitizing GroupId# " << group.GroupId << " GroupGeneration# " << group.Content.Generation);
                         group.ReassignerActorId = Register(new TReassignerActor(ControllerId, group.GroupId, group.Content,
-                            std::nullopt, group.Topology, false /*isSelfHealReasonDecommit*/, DonorMode));
+                            std::nullopt, group.Topology, false /*isSelfHealReasonDecommit*/,
+                            false /*ignoreDegradedGroupsChecks*/, DonorMode));
                     }
                 }
             }
@@ -534,7 +545,8 @@ namespace NKikimr::NBsController {
         }
 
         std::optional<TVDiskID> FindVDiskToReplace(const TEvControllerUpdateSelfHealInfo::TGroupContent& content,
-                TMonotonic now, TBlobStorageGroupInfo::TTopology *topology, bool *isSelfHealReasonDecommit) {
+                TMonotonic now, TBlobStorageGroupInfo::TTopology *topology, bool *isSelfHealReasonDecommit,
+                bool *ignoreDegradedGroupsChecks) {
             // main idea of selfhealing is step-by-step healing of bad group; we can allow healing of group with more
             // than one disk missing, but we should not move next faulty disk until previous one is replicated, at least
             // partially (meaning only phantoms left)
@@ -553,7 +565,7 @@ namespace NKikimr::NBsController {
                         }
                         [[fallthrough]];
                     case NKikimrBlobStorage::EVDiskStatus::INIT_PENDING:
-                        return std::nullopt; // don't touch group with replicating disks
+                        return std::nullopt; // don't touch group with replicating or starting disks
 
                     default:
                         break;
@@ -579,6 +591,7 @@ namespace NKikimr::NBsController {
                         continue; // this group will become degraded when applying self-heal logic, skip disk
                     }
                     *isSelfHealReasonDecommit = vdisk.IsSelfHealReasonDecommit;
+                    *ignoreDegradedGroupsChecks = checker.IsDegraded(failedByReadiness) && *EnableSelfHealWithDegraded;
                     return vdiskId;
                 }
             }
@@ -886,7 +899,7 @@ namespace NKikimr::NBsController {
     IActor *TBlobStorageController::CreateSelfHealActor() {
         Y_ABORT_UNLESS(HostRecords);
         return new TSelfHealActor(TabletID(), SelfHealUnreassignableGroups, HostRecords, GroupLayoutSanitizerEnabled,
-            AllowMultipleRealmsOccupation, DonorMode);
+            AllowMultipleRealmsOccupation, DonorMode, EnableSelfHealWithDegraded);
     }
 
     void TBlobStorageController::InitializeSelfHealState() {

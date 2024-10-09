@@ -250,6 +250,10 @@ protected:
     virtual TTxState::ETxState NextState(TTxState::ETxState state) const = 0;
     virtual TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) = 0;
 
+    virtual TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state, TOperationContext&) {
+        return SelectStateFunc(state);
+    }
+
     virtual void StateDone(TOperationContext& context) {
         auto state = NextState(GetState());
         SetState(state);
@@ -272,13 +276,18 @@ public:
         return State;
     }
 
+    void SetState(TTxState::ETxState state, TOperationContext& context) {
+        State = state;
+        StateFunc = SelectStateFunc(state, context);
+    }
+
     void SetState(TTxState::ETxState state) {
         State = state;
         StateFunc = SelectStateFunc(state);
     }
 
     bool ProgressState(TOperationContext& context) override {
-        return Progress(context, &ISubOperationState::ProgressState, context);
+        return Progress(context, &ISubOperationState::ProgressState);
     }
 
     #define DefaultHandleReply(TEvType, ...) \
@@ -292,9 +301,9 @@ private:
     using TFunc = bool(ISubOperationState::*)(Args...);
 
     template <typename... Args>
-    bool Progress(TOperationContext& context, TFunc<Args...> func, Args&&... args) {
+    bool Progress(TOperationContext& context, TFunc<Args..., TOperationContext&> func, Args&&... args) {
         Y_ABORT_UNLESS(StateFunc);
-        const bool isDone = std::invoke(func, StateFunc.Get(), std::forward<Args>(args)...);
+        const bool isDone = std::invoke(func, StateFunc.Get(), std::forward<Args>(args)..., context);
         if (isDone) {
             StateDone(context);
         }
@@ -311,6 +320,13 @@ ISubOperation::TPtr MakeSubOperation(const TOperationId& id) {
 template <typename T, typename... Args>
 ISubOperation::TPtr MakeSubOperation(const TOperationId& id, const TTxTransaction& tx, Args&&... args) {
     return new T(id, tx, std::forward<Args>(args)...);
+}
+
+template <typename T, typename... Args>
+ISubOperation::TPtr MakeSubOperation(const TOperationId& id, TTxState::ETxState state, TOperationContext& context, Args&&... args) {
+    auto result = MakeHolder<T>(id, state, std::forward<Args>(args)...);
+    result->SetState(state, context);
+    return result.Release();
 }
 
 template <typename T, typename... Args>
@@ -493,7 +509,7 @@ ISubOperation::TPtr CreateAlterSubDomain(TOperationId id, const TTxTransaction& 
 ISubOperation::TPtr CreateAlterSubDomain(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateCompatibleSubdomainDrop(TSchemeShard* ss, TOperationId id, const TTxTransaction& tx);
-ISubOperation::TPtr CreateCompatibleSubdomainAlter(TSchemeShard* ss, TOperationId id, const TTxTransaction& tx);
+TVector<ISubOperation::TPtr> CreateCompatibleSubdomainAlter(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateUpgradeSubDomain(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateUpgradeSubDomain(TOperationId id, TTxState::ETxState state);
@@ -514,10 +530,10 @@ ISubOperation::TPtr CreateExtSubDomain(TOperationId id, TTxState::ETxState state
 
 // Alter
 TVector<ISubOperation::TPtr> CreateCompatibleAlterExtSubDomain(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
-ISubOperation::TPtr CreateAlterExtSubDomain(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAlterExtSubDomain(TOperationId id, TTxState::ETxState state);
-ISubOperation::TPtr CreateAlterExtSubDomainCreateHive(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAlterExtSubDomainCreateHive(TOperationId id, TTxState::ETxState state);
+//NOTE: no variants to construct individual suboperations directly from TTxTransaction --
+// -- it should be possible only through CreateCompatibleAlterExtSubDomain
 
 // Drop
 ISubOperation::TPtr CreateForceDropExtSubDomain(TOperationId id, const TTxTransaction& tx);
@@ -620,6 +636,9 @@ ISubOperation::TPtr CreateAlterResourcePool(TOperationId id, TTxState::ETxState 
 // Drop
 ISubOperation::TPtr CreateDropResourcePool(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropResourcePool(TOperationId id, TTxState::ETxState state);
+
+ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, TTxState::ETxState state);
 
 // returns Reject in case of error, nullptr otherwise
 ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table);

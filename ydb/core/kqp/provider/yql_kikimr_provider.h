@@ -125,6 +125,8 @@ struct TKikimrQueryContext : TThrRefBase {
     // we do not want add extra life time for query context here
     std::shared_ptr<NKikimr::NGRpcService::IRequestCtxMtSafe> RpcCtx;
 
+    NSQLTranslation::TTranslationSettings TranslationSettings;
+
     void Reset() {
         PrepareOnly = false;
         SuppressDdlChecks = false;
@@ -143,6 +145,7 @@ struct TKikimrQueryContext : TThrRefBase {
 
         RlPath.Clear();
         RpcCtx.reset();
+        TranslationSettings = NSQLTranslation::TTranslationSettings();
     }
 };
 
@@ -325,7 +328,6 @@ public:
 
         for (const auto& info : tableInfos) {
             tableInfoMap.emplace(info.GetTableName(), &info);
-
             TKikimrPathId pathId(info.GetTableId().GetOwnerId(), info.GetTableId().GetTableId());
             TableByIdMap.emplace(pathId, info.GetTableName());
         }
@@ -491,6 +493,10 @@ public:
         return Database;
     }
 
+    TString GetDatabaseId() const {
+        return DatabaseId;
+    }
+
     const TString& GetSessionId() const {
         return SessionId;
     }
@@ -501,6 +507,10 @@ public:
 
     void SetDatabase(const TString& database) {
         Database = database;
+    }
+
+    void SetDatabaseId(const TString& databaseId) {
+        DatabaseId = databaseId;
     }
 
     void SetSessionId(const TString& sessionId) {
@@ -541,6 +551,7 @@ private:
     TString UserName;
     TString Cluster;
     TString Database;
+    TString DatabaseId;
     TString SessionId;
     TKikimrConfiguration::TPtr Configuration;
     TIntrusivePtr<TKikimrTablesData> TablesData;
@@ -569,3 +580,10 @@ TIntrusivePtr<IDataProvider> CreateKikimrDataSink(
     TIntrusivePtr<IKikimrQueryExecutor> queryExecutor);
 
 } // namespace NYql
+
+namespace NSQLTranslation {
+
+void Serialize(const TTranslationSettings& settings, NYql::NProto::TTranslationSettings& serializedSettings);
+void Deserialize(const NYql::NProto::TTranslationSettings& serializedSettings, TTranslationSettings& settings);
+
+}

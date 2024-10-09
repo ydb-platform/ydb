@@ -1,10 +1,9 @@
 #pragma once
-#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/permutations.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
-#include <ydb/core/formats/arrow/switch/compare.h>
 #include <ydb/core/formats/arrow/common/container.h>
 
+#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
 

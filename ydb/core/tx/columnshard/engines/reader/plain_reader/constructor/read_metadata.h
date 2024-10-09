@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
-#include <ydb/core/formats/arrow/replace_key.h>
+#include <ydb/library/formats/arrow/replace_key.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/stats.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 
@@ -45,7 +45,7 @@ private:
     };
 
     THashMap<ui64, std::shared_ptr<TAtomicCounter>> LockConflictCounters;
-    THashMap<TWriteId, TWriteIdInfo> ConflictedWriteIds;
+    THashMap<TInsertWriteId, TWriteIdInfo> ConflictedWriteIds;
 
     virtual void DoOnReadFinished(NColumnShard::TColumnShard& owner) const override;
     virtual void DoOnBeforeStartReading(NColumnShard::TColumnShard& owner) const override;
@@ -73,13 +73,13 @@ public:
         return it->second->Val();
     }
 
-    bool IsWriteConflictable(const TWriteId writeId) const {
+    bool IsWriteConflictable(const TInsertWriteId writeId) const {
         auto it = ConflictedWriteIds.find(writeId);
         AFL_VERIFY(it != ConflictedWriteIds.end());
         return it->second.IsConflictable();
     }
 
-    void AddWriteIdToCheck(const TWriteId writeId, const ui64 lockId) {
+    void AddWriteIdToCheck(const TInsertWriteId writeId, const ui64 lockId) {
         auto it = LockConflictCounters.find(lockId);
         if (it == LockConflictCounters.end()) {
             it = LockConflictCounters.emplace(lockId, std::make_shared<TAtomicCounter>()).first;
@@ -87,9 +87,9 @@ public:
         AFL_VERIFY(ConflictedWriteIds.emplace(writeId, TWriteIdInfo(lockId, it->second)).second);
     }
 
-    [[nodiscard]] bool IsMyUncommitted(const TWriteId writeId) const;
+    [[nodiscard]] bool IsMyUncommitted(const TInsertWriteId writeId) const;
 
-    void SetConflictedWriteId(const TWriteId writeId) const {
+    void SetConflictedWriteId(const TInsertWriteId writeId) const {
         auto it = ConflictedWriteIds.find(writeId);
         AFL_VERIFY(it != ConflictedWriteIds.end());
         it->second.MarkAsConflictable();
@@ -104,6 +104,10 @@ public:
 
     bool HasProcessingColumnIds() const {
         return GetProgram().HasProcessingColumnIds();
+    }
+
+    ui64 GetPathId() const {
+        return PathId;
     }
 
     std::shared_ptr<TSelectInfo> SelectInfo;

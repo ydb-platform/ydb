@@ -209,6 +209,10 @@ XCODE_TOOLS_RESOURCE = 'XCODE_TOOLS_ROOT_RESOURCE_GLOBAL'
 WINE_TOOL = 'WINE_TOOL_RESOURCE_GLOBAL'
 WINE32_TOOL = 'WINE32_TOOL_RESOURCE_GLOBAL'
 
+DEFAULT_CRASHED_STATUS_COMMENT = "Test crashed"
+
+DOCKER_LINK_RE = re.compile(r"(docker:\/\/)(\S+?)(\/\S*)?\@sha\d+:(\w+)")
+
 
 class Enum(object):
     @classmethod

@@ -14,14 +14,17 @@
 
   Данная переменная окружения включает встроенный в `ydb-go-sdk` логгер (синхронный, неблочный) с выводом в стандартный поток вывода.
   Выставить переменную окружения можно так:
+
   ```shell
   export YDB_LOG_SEVERITY_LEVEL=info
   ```
+
   (доступные значения `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `quiet`, по умолчанию `quiet`).
 
   {% endcut %}
 
   {% cut "Подключить сторонний логгер `go.uber.org/zap`" %}
+
   ```go
   package main
 
@@ -54,9 +57,11 @@
     ...
   }
   ```
+
   {% endcut %}
 
   {% cut "Подключить сторонний логгер `github.com/rs/zerolog`" %}
+
   ```go
   package main
 
@@ -89,11 +94,13 @@
     ...
   }
   ```
+
   {% endcut %}
 
   {% include [overlay](_includes/debug-logs-go-appendix.md) %}
 
   {% cut "Подключить собственную имплементацию логгера `github.com/ydb-platform/ydb-go-sdk/v3/log.Logger`" %}
+
   ```go
   package main
 
@@ -124,6 +131,7 @@
     ...
   }
   ```
+
   {% endcut %}
 
   {% cut "Реализовать собственный пакет логирования" %}
@@ -140,14 +148,17 @@
 
   Данная переменная окружения включает встроенный в `ydb-go-sdk` логгер (синхронный, неблочный) с выводом в стандартный поток вывода.
   Выставить переменную окружения можно так:
+
   ```shell
   export YDB_LOG_SEVERITY_LEVEL=info
   ```
+
   (доступные значения `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `quiet`, по умолчанию `quiet`).
 
   {% endcut %}
 
   {% cut "Подключить сторонний логгер `go.uber.org/zap`" %}
+
   ```go
   package main
 
@@ -190,9 +201,11 @@
     ...
   }
   ```
+
   {% endcut %}
 
   {% cut "Подключить сторонний логгер `github.com/rs/zerolog`" %}
+
   ```go
   package main
 
@@ -235,11 +248,13 @@
     ...
   }
   ```
+
   {% endcut %}
 
   {% include [overlay](_includes/debug-logs-go-sql-appendix.md) %}
 
   {% cut "Подключить собственную имплементацию логгера `github.com/ydb-platform/ydb-go-sdk/v3/log.Logger`" %}
+
   ```go
   package main
 
@@ -280,6 +295,7 @@
     ...
   }
   ```
+
   {% endcut %}
 
   {% cut "Реализовать собственный пакет логирования" %}
@@ -295,13 +311,9 @@
   * Логгер `tech.ydb.core.grpc` предоставляет информацию о внутренней реализации grpc протокола
   * уровень `debug` логирует все операции по протоколу grpc, рекомедуется использовать только для отладки
   * уровень `info` рекомендуется использовать по умолчанию
-
   * Логгер `tech.ydb.table.impl` на уровне `debug` позволяет отслеживать внутреннее состояние драйвера ydb, в частности работу пула сессий.
-
   * Логгер `tech.ydb.table.SessionRetryContext` на уровне `debug` будет информировать о количестве ретраев, результатах выполненных запросов, времени выполнения отдельных ретраев и общем времени выполнения всей операции
-
   * Логгер `tech.ydb.table.Session` на уровне `debug` предоставляет информацию о тексте запроса, статусе ответа и времени выполнения для различных операций сессии
-
 
   Включение и настройка логгеров Java SDK зависит от используемой реализации `slf4j-api`.
   Здесь приведен пример конфигурации `log4j2` для библиотеки `log4j-slf4j-impl`
@@ -345,10 +357,12 @@
 
   В YDB PHP SDK для логирования вам нужно использовать класс, который реализует `\Psr\Log\LoggerInterface`.
   В YDB-PHP-SDK встроены логгеры в пространстве имен `YdbPlatform\Ydb\Logger`:
+
   * `NullLogger` - по умолчанию, который ничего не выводит
   * `SimpleStdLogger($level)` - логгер, который выводит логи в stderr.
 
   Пример использования:
+
   ```php
   $config = [
     'logger' => new \YdbPlatform\Ydb\Logger\SimpleStdLogger(\YdbPlatform\Ydb\Logger\SimpleStdLogger::INFO)

@@ -265,6 +265,7 @@ TYtConfiguration::TYtConfiguration()
         })
         ;
     REGISTER_SETTING(*this, ParallelOperationsLimit).Lower(1);
+    REGISTER_SETTING(*this, LocalCalcLimit).Lower(1);
     REGISTER_SETTING(*this, DefaultCalcMemoryLimit);
     REGISTER_SETTING(*this, LayerPaths).NonEmpty()
         .ValueSetter([this](const TString& cluster, const TVector<TString>& value) {
@@ -444,7 +445,7 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, _EnableYtPartitioning);
     REGISTER_SETTING(*this, UseAggPhases);
     REGISTER_SETTING(*this, UsePartitionsByKeysForFinalAgg);
-    REGISTER_SETTING(*this, _ForceJobSizeAdjuster);
+    REGISTER_SETTING(*this, ForceJobSizeAdjuster);
     REGISTER_SETTING(*this, _EnableWriteReorder);
     REGISTER_SETTING(*this, EnforceJobUtc);
     REGISTER_SETTING(*this, UseRPCReaderInDQ);
@@ -484,6 +485,8 @@ TYtConfiguration::TYtConfiguration()
         });
     REGISTER_SETTING(*this, MinColumnGroupSize).Lower(2);
     REGISTER_SETTING(*this, MaxColumnGroups);
+    REGISTER_SETTING(*this, ExtendedStatsMaxChunkCount);
+    REGISTER_SETTING(*this, _EnableYtDqProcessWriteConstraints);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

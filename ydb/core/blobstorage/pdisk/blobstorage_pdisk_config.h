@@ -123,9 +123,9 @@ struct TPDiskConfig : public TThrRefBase {
     ui64 CostLimitNs;
 
     // AsyncBlockDevice settings
-    ui32 BufferPoolBufferSizeBytes = 512 << 10;
-    ui32 BufferPoolBufferCount = 256;
-    ui32 MaxQueuedCompletionActions = 128; // BufferPoolBufferCount / 2;
+    ui32 BufferPoolBufferSizeBytes;
+    ui32 BufferPoolBufferCount;
+    ui32 MaxQueuedCompletionActions;
     bool UseSpdkNvmeDriver;
 
     ui64 ExpectedSlotCount = 0;
@@ -155,6 +155,8 @@ struct TPDiskConfig : public TThrRefBase {
     ui32 MaxMetadataMegabytes = 32; // maximum size of raw metadata (in megabytes)
 
     NKikimrBlobStorage::TPDiskSpaceColor::E SpaceColorBorder = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
+
+    ui32 CompletionThreadsCount = 1;
 
     bool MetadataOnly = false;
 
@@ -210,6 +212,10 @@ struct TPDiskConfig : public TThrRefBase {
         const ui64 hddInFlight = FeatureFlags.GetEnablePDiskHighHDDInFlight() ? 32 : 4;
         DeviceInFlight = choose(128, 4, hddInFlight);
         CostLimitNs = choose(500'000ull, 20'000'000ull, 50'000'000ull);
+
+        BufferPoolBufferSizeBytes = choose(128 << 10, 256 << 10, 512 << 10);
+        BufferPoolBufferCount = choose(1024, 512, 256);
+        MaxQueuedCompletionActions = BufferPoolBufferCount / 2;
 
         UseSpdkNvmeDriver = Path.StartsWith("PCIe:");
         Y_ABORT_UNLESS(!UseSpdkNvmeDriver || deviceType == NPDisk::DEVICE_TYPE_NVME,
@@ -304,6 +310,9 @@ struct TPDiskConfig : public TThrRefBase {
         str << " OrangeLogChunksMultiplier# " << OrangeLogChunksMultiplier << x;
         str << " WarningLogChunksMultiplier# " << WarningLogChunksMultiplier << x;
         str << " YellowLogChunksMultiplier# " << YellowLogChunksMultiplier << x;
+        str << " MaxMetadataMegabytes# " << MaxMetadataMegabytes << x;
+        str << " SpaceColorBorder# " << SpaceColorBorder << x;
+        str << " CompletionThreadsCount# " << CompletionThreadsCount << x;
         str << "}";
         return str.Str();
     }
@@ -388,8 +397,11 @@ struct TPDiskConfig : public TThrRefBase {
             limit = Max<ui32>(13, limit);
             ChunkBaseLimit = limit;
         }
+
+        if (cfg->HasCompletionThreadsCount()) {
+            CompletionThreadsCount = cfg->GetCompletionThreadsCount();
+        }
     }
 };
 
 } // NKikimr
-

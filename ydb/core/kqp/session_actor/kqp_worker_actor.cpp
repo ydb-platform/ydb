@@ -188,13 +188,14 @@ public:
 
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(
             Settings.Cluster, TlsActivationContext->ActorSystem(), Config, false, nullptr);
-        Gateway = CreateKikimrIcGateway(Settings.Cluster, QueryState->RequestEv->GetType(), Settings.Database, std::move(loader),
+        Gateway = CreateKikimrIcGateway(Settings.Cluster, QueryState->RequestEv->GetType(), Settings.Database, QueryState->RequestEv->GetDatabaseId(), std::move(loader),
             ctx.ExecutorThread.ActorSystem, ctx.SelfID.NodeId(), RequestCounters, QueryServiceConfig);
 
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 
         KqpHost = CreateKqpHost(Gateway, Settings.Cluster, Settings.Database, Config, ModuleResolverState->ModuleResolver, FederatedQuerySetup,
-            QueryState->RequestEv->GetUserToken(), GUCSettings, QueryServiceConfig, Settings.ApplicationName, AppData(ctx)->FunctionRegistry, !Settings.LongSession, false, nullptr, nullptr, nullptr);
+            QueryState->RequestEv->GetUserToken(), GUCSettings, QueryServiceConfig, Settings.ApplicationName, AppData(ctx)->FunctionRegistry,
+            !Settings.LongSession, false, nullptr, nullptr, nullptr, QueryState->RequestEv->GetUserRequestContext());
 
         auto& queryRequest = QueryState->RequestEv;
         QueryState->ProxyRequestId = proxyRequestId;
@@ -958,7 +959,7 @@ private:
                 // If we have result it must be allocated on protobuf arena
                 Y_ASSERT(result->GetArena());
                 Y_ASSERT(resp->GetArena() == result->GetArena());
-                resp->AddResults()->Swap(result);
+                resp->AddYdbResults()->Swap(result);
             }
         } else {
             auto resp = ev.MutableResponse();

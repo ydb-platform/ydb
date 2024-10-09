@@ -1,10 +1,12 @@
 # Example app in Python
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb-python-sdk/tree/master/examples/basic_example_v2) that is available as part of the {{ ydb-short-name }} [Python SDK](https://github.com/ydb-platform/ydb-python-sdk).
 
 ## Downloading and starting {#download}
 
-The following execution scenario is based on [git](https://git-scm.com/downloads) and [Python3](https://www.python.org/downloads/). Be sure to install the [YDB Python SDK](../../../reference/ydb-sdk/install.md).
+The following execution scenario is based on [git](https://git-scm.com/downloads) and [Python3](https://www.python.org/downloads/). Be sure to install the [{{ ydb-short-name }} Python SDK](../../../reference/ydb-sdk/install.md).
 
 Create a working directory and use it to run from the command line the command to clone the GitHub repository and install the necessary Python packages:
 
@@ -75,7 +77,7 @@ App code snippet for session pool initialization:
 - Asynchronous
 
    ```python
-   async with ydb.aio.QuerySessionPoolAsync(driver) as pool:
+   async with ydb.aio.QuerySessionPool(driver) as pool:
        pass  # operations with pool here
    ```
 
@@ -87,12 +89,14 @@ App code snippet for session pool initialization:
 There are two primary methods for executing queries, each with different properties and use cases:
 
 * `pool.execute_with_retries`:
+
   * Buffers the entire result set in client memory.
   * Automatically retries execution in case of retriable issues.
   * Does not allow specifying a transaction execution mode.
   * Recommended for one-off queries that are expected to produce small result sets.
 
 * `tx.execute`:
+
   * Returns an iterator over the query results, allowing processing of results that may not fit into client memory.
   * Retries must be handled manually via `pool.retry_operation_sync`.
   * Allows specifying a transaction execution mode.
@@ -153,7 +157,7 @@ To execute `CREATE TABLE` queries, use the `pool.execute_with_retries()` method:
 - Asynchronous
 
    ```python
-   async def create_tables(pool: ydb.aio.QuerySessionPoolAsync):
+   async def create_tables(pool: ydb.aio.QuerySessionPool):
        print("\nCreating table series...")
        await pool.execute_with_retries(
            """
@@ -219,7 +223,7 @@ Code snippet for data insert/update:
 - Asynchronous
 
    ```python
-   async def upsert_simple(pool: ydb.aio.QuerySessionPoolAsync):
+   async def upsert_simple(pool: ydb.aio.QuerySessionPool):
        print("\nPerforming UPSERT into episodes...")
        await pool.execute_with_retries(
            """
@@ -267,7 +271,7 @@ To execute YQL queries, the `pool.execute_with_retries()` method is often suffic
 - Asynchronous
 
    ```python
-   async def select_simple(pool: ydb.aio.QuerySessionPoolAsync):
+   async def select_simple(pool: ydb.aio.QuerySessionPool):
        print("\nCheck series table...")
        result_sets = await pool.execute_with_retries(
            """
@@ -365,7 +369,7 @@ A code snippet demonstrating the parameterized query execution:
 - Asynchronous
 
    ```python
-   async def select_with_parameters(pool: ydb.aio.QuerySessionPoolAsync, series_id, season_id, episode_id):
+   async def select_with_parameters(pool: ydb.aio.QuerySessionPool, series_id, season_id, episode_id):
        result_sets = await pool.execute_with_retries(
            """
            DECLARE $seriesId AS Int64;
@@ -407,6 +411,7 @@ The code snippet above outputs the following text to the console:
 The `session.transaction().execute()` method can also be used to execute YQL queries. Unlike `pool.execute_with_retries`, this method allows explicit control of transaction execution by configuring the desired transaction mode using the `TxControl` class.
 
 Available transaction modes:
+
 * `ydb.QuerySerializableReadWrite()` (default);
 * `ydb.QueryOnlineReadOnly(allow_inconsistent_reads=False)`;
 * `ydb.QuerySnapshotReadOnly()`;
@@ -442,7 +447,7 @@ The code snippet below demonstrates the explicit use of `transaction().begin()` 
 
    ```python
    def explicit_transaction_control(pool: ydb.QuerySessionPool, series_id, season_id, episode_id):
-       def callee(session: ydb.QuerySessionSync):
+       def callee(session: ydb.QuerySession):
            query = """
            DECLARE $seriesId AS Int64;
            DECLARE $seasonId AS Int64;
@@ -480,9 +485,9 @@ The code snippet below demonstrates the explicit use of `transaction().begin()` 
 
    ```python
    async def explicit_transaction_control(
-       pool: ydb.aio.QuerySessionPoolAsync, series_id, season_id, episode_id
+       pool: ydb.aio.QuerySessionPool, series_id, season_id, episode_id
    ):
-       async def callee(session: ydb.aio.QuerySessionAsync):
+       async def callee(session: ydb.aio.QuerySession):
            query = """
            DECLARE $seriesId AS Int64;
            DECLARE $seasonId AS Int64;
@@ -532,7 +537,7 @@ Example of a `SELECT` with unlimited data and implicit transaction control:
 
    ```python
    def huge_select(pool: ydb.QuerySessionPool):
-       def callee(session: ydb.QuerySessionSync):
+       def callee(session: ydb.QuerySession):
            query = """SELECT * from episodes;"""
 
            with session.transaction(ydb.QuerySnapshotReadOnly()).execute(
@@ -550,8 +555,8 @@ Example of a `SELECT` with unlimited data and implicit transaction control:
 - Asynchronous
 
    ```python
-   async def huge_select(pool: ydb.aio.QuerySessionPoolAsync):
-       async def callee(session: ydb.aio.QuerySessionAsync):
+   async def huge_select(pool: ydb.aio.QuerySessionPool):
+       async def callee(session: ydb.aio.QuerySession):
            query = """SELECT * from episodes;"""
 
            async with await session.transaction(ydb.QuerySnapshotReadOnly()).execute(

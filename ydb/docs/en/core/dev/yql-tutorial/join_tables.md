@@ -4,7 +4,7 @@ Merge the columns of the source tables `seasons` and `series`, then output all t
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
-```sql
+```yql
 SELECT
     sa.title AS season_title,    -- sa and sr are "join names",
     sr.title AS series_title,    -- table aliases declared below using AS.

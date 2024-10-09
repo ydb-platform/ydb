@@ -1,3 +1,5 @@
+<!-- markdownlint-disable blanks-around-fences -->
+
 # Аутентификация при помощи логина и пароля
 
 {% include [work in progress message](_includes/addition.md) %}

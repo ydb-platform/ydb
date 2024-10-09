@@ -1,7 +1,8 @@
 ## CORRELATION и COVARIANCE {#correlation-covariance}
 
-**Сигнатура**
-```
+### Сигнатура
+
+```yql
 CORRELATION(Double?, Double?)->Double?
 COVARIANCE(Double?, Double?)->Double?
 COVARIANCE_SAMPLE(Double?, Double?)->Double?
@@ -16,15 +17,16 @@ COVARIANCE_POPULATION(Double?, Double?)->Double?
 
 При использовании [фабрики агрегационной функции](../../basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](../../aggregation.md#aggregateby) передается `Tuple` из двух значений.
 
-**Примеры**
-``` yql
+### Примеры
+
+```yql
 SELECT
   CORRELATION(numeric_column, another_numeric_column),
   COVARIANCE(numeric_column, another_numeric_column)
 FROM my_table;
 ```
 
-``` yql
+```yql
 $corr_factory = AggregationFactory("CORRELATION");
 
 SELECT

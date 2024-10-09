@@ -2,6 +2,8 @@
 
 LIBRARY()
 
+BUILD_ONLY_IF(OS_WINDOWS)
+
 LICENSE(
     Apache-2.0 AND
     Apache-2.0 WITH LLVM-exception AND

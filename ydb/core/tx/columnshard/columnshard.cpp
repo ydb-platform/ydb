@@ -301,7 +301,7 @@ void TColumnShard::UpdateIndexCounters() {
 
 ui64 TColumnShard::MemoryUsage() const {
     ui64 memory = ProgressTxController->GetMemoryUsage() + ScanTxInFlight.size() * (sizeof(ui64) + sizeof(TInstant)) +
-                  LongTxWrites.size() * (sizeof(TWriteId) + sizeof(TLongTxWriteInfo)) +
+                  LongTxWrites.size() * (sizeof(TInsertWriteId) + sizeof(TLongTxWriteInfo)) +
                   LongTxWritesByUniqueId.size() * (sizeof(TULID) + sizeof(void*)) +
                   (WaitingScans.size()) * (sizeof(NOlap::TSnapshot) + sizeof(void*)) +
                   Counters.GetTabletCounters()->GetValue(COUNTER_PREPARED_RECORDS) * sizeof(NOlap::TInsertedData) +

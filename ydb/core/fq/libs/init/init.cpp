@@ -219,7 +219,7 @@ void Init(
         }
 
         RegisterDqInputTransformLookupActorFactory(*asyncIoFactory);
-        
+
         NYql::TPqGatewayServices pqServices(
             yqSharedResources->UserSpaceYdbDriver,
             pqCmConnections,

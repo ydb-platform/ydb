@@ -252,6 +252,10 @@ public:
                                     << int(VDiskId.FailDomain) << '-'
                                     << int(VDiskId.VDisk);
         }
+
+        bool operator <(const TVDisk& vdisk) const {
+            return VDiskId < vdisk.VDiskId;
+        }
     };
 
     struct TGroup {
@@ -2067,7 +2071,7 @@ public:
             json.AddProblems(problem);
         }
         if (GroupGroups.empty()) {
-            for (const TGroup* group : GroupView) {
+            for (TGroup* group : GroupView) {
                 NKikimrViewer::TStorageGroupInfo& jsonGroup = *json.AddStorageGroups();
                 jsonGroup.SetGroupId(::ToString(group->GroupId));
                 if (group->GroupGeneration) {
@@ -2076,6 +2080,7 @@ public:
                 if (FieldsAvailable.test(+EGroupFields::PoolName)) {
                     jsonGroup.SetPoolName(group->PoolName);
                 }
+                std::sort(group->VDisks.begin(), group->VDisks.end());
                 for (const TVDisk& vdisk : group->VDisks) {
                     RenderVDisk(*jsonGroup.AddVDisks(), vdisk);
                 }

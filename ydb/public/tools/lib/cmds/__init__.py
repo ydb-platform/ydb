@@ -8,6 +8,7 @@ import random
 import string
 import typing  # noqa: F401
 import sys
+import yaml
 from six.moves.urllib.parse import urlparse
 
 from ydb.library.yql.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
@@ -310,6 +311,29 @@ def enable_pqcd(arguments):
     return (getattr(arguments, 'enable_pqcd', False) or os.getenv('YDB_ENABLE_PQCD') == 'true')
 
 
+def get_yaml_config(arguments, path):
+    if arguments.ydb_working_dir:
+        with open(os.path.join(arguments.ydb_working_dir, path)) as fh:
+            yaml_config = yaml.load(fh, Loader=yaml.FullLoader)
+    else:
+        raise Exception("No working directory")
+
+    return yaml_config
+
+
+def get_pdsiks_name(configuration):
+    pdisks = []
+    for i in range(len(configuration.yaml_config["blob_storage_config"]["service_set"]["pdisks"])):
+        pdisks.append(configuration.yaml_config["blob_storage_config"]["service_set"]["pdisks"][i]["path"])
+
+    return pdisks
+
+
+def insert_pdsiks_name(configuration, pdisks):
+    for i in range(len(pdisks)):
+        configuration.yaml_config["blob_storage_config"]["service_set"]["pdisks"][i]["path"] = pdisks[i]
+
+
 def deploy(arguments):
     initialize_working_dir(arguments)
     recipe = Recipe(arguments)
@@ -373,6 +397,11 @@ def deploy(arguments):
         generic_connector_config=generic_connector_config(),
         **optionals
     )
+
+    if os.path.exists(os.path.join(arguments.ydb_working_dir, "kikimr_configs/config.yaml")):
+        pdisks = get_pdsiks_name(configuration)
+        configuration.yaml_config = get_yaml_config(arguments, "kikimr_configs/config.yaml")
+        insert_pdsiks_name(configuration, pdisks)
 
     cluster = kikimr_cluster_factory(configuration)
     cluster.start()

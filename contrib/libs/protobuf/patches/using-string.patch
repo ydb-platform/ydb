@@ -1,0 +1,255 @@
+--- a/src/google/protobuf/stubs/port.h	(index)
++++ b/src/google/protobuf/stubs/port.h	(working tree)
+@@ -119,6 +119,8 @@
+ #error "Protobuf requires at least C++11."
+ #endif
+
++using TProtoStringType = TString;
++
+ namespace google {
+ namespace protobuf {
+
+--- a/src/google/protobuf/map_field.h       (index)
++++ b/src/google/protobuf/map_field.h       (working tree)
+@@ -36,6 +36,7 @@
+ #include <type_traits>
+ 
+ #include "google/protobuf/arena.h"
++#include <google/protobuf/stubs/port.h>
+ #include "google/protobuf/port.h"
+ #include "absl/synchronization/mutex.h"
+ #include "google/protobuf/descriptor.h"
+--- a/src/google/protobuf/generated_message_util.cc (index)
++++ b/src/google/protobuf/generated_message_util.cc (working tree)
+@@ -62,7 +62,7 @@ void DestroyMessage(const void* message) {
+   static_cast<const MessageLite*>(message)->~MessageLite();
+ }
+ void DestroyString(const void* s) {
+-  static_cast<const TProtoStringType*>(s)->~basic_string();
++  static_cast<const TProtoStringType*>(s)->~TBasicString();
+ }
+
+ PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+
+--- a/src/google/protobuf/util/type_resolver_util.h	(index)
++++ b/src/google/protobuf/util/type_resolver_util.h	(working tree)
+@@ -35,6 +35,8 @@
+ 
+ #include "absl/strings/string_view.h"
+ 
++#include <google/protobuf/stubs/port.h>
++
+ // Must be included last.
+ #include "google/protobuf/port_def.inc"
+ 
+--- a/src/google/protobuf/compiler/cpp/options.h	(index)
++++ b/src/google/protobuf/compiler/cpp/options.h	(working tree)
+@@ -37,6 +37,8 @@
+ 
+ #include "absl/container/flat_hash_set.h"
+ 
++#include <google/protobuf/stubs/port.h>
++
+ namespace google {
+ namespace protobuf {
+ namespace compiler {
+--- a/src/google/protobuf/compiler/command_line_interface.cc
++++ b/src/google/protobuf/compiler/command_line_interface.cc
+@@ -1174,10 +1174,10 @@ bool CommandLineInterface::ExpandArgumentFile(const string& file,
+   if (!file_stream.is_open()) {
+     return false;
+   }
+-  TProtoStringType argument;
++  std::string argument;
+   // We don't support any kind of shell expansion right now.
+   while (std::getline(file_stream, argument)) {
+-    arguments->push_back(argument);
++    arguments->emplace_back(argument);
+   }
+   return true;
+ }
+--- a/src/google/protobuf/compiler/plugin.h	(index)
++++ b/src/google/protobuf/compiler/plugin.h	(working tree)
+@@ -63,6 +63,7 @@
+ #define GOOGLE_PROTOBUF_COMPILER_PLUGIN_H__
+ 
+ #include <string>
++#include <google/protobuf/stubs/port.h>
+ 
+ // Must be included last.
+ #include <google/protobuf/port_def.inc>
+--- a/src/google/protobuf/compiler/objectivec/helpers.cc
++++ b/src/google/protobuf/compiler/objectivec/helpers.cc
+@@ -43,6 +43,7 @@
+ #include "google/protobuf/compiler/objectivec/names.h"
+ #include "google/protobuf/io/strtod.h"
+ #include "google/protobuf/stubs/common.h"
++#include <google/protobuf/stubs/port.h>
+ 
+ // NOTE: src/google/protobuf/compiler/plugin.cc makes use of cerr for some
+ // error cases, so it seems to be ok to use as a back door for errors.
+--- a/src/google/protobuf/compiler/php/php_generator.cc
++++ b/src/google/protobuf/compiler/php/php_generator.cc
+@@ -49,6 +49,9 @@
+ #include "google/protobuf/descriptor.pb.h"
+ #include "google/protobuf/io/printer.h"
+ #include "google/protobuf/io/zero_copy_stream.h"
++#include <google/protobuf/stubs/port.h>
++
++#include <util/string/cast.h>
+ 
+ constexpr absl::string_view kDescriptorFile =
+     "google/protobuf/descriptor.proto";
+@@ -289,7 +292,7 @@ TProtoStringType GeneratedMetadataFileName(const FileDescriptor* file,
+         file->options().php_metadata_namespace();
+     if (!php_metadata_namespace.empty() && php_metadata_namespace != "\\") {
+       absl::StrAppend(&result, php_metadata_namespace);
+-      std::replace(result.begin(), result.end(), '\\', '/');
++      std::replace(result.begin(), result.vend(), '\\', '/');
+       if (result.at(result.size() - 1) != '/') {
+         absl::StrAppend(&result, "/");
+       }
+--- a/src/google/protobuf/compiler/ruby/ruby_generator.cc
++++ b/src/google/protobuf/compiler/ruby/ruby_generator.cc
+@@ -64,7 +64,7 @@ template<class numeric_type>
+ TProtoStringType NumberToString(numeric_type value) {
+   std::ostringstream os;
+   os << value;
+-  return os.str();
++  return TProtoStringType{os.str()};
+ }
+ 
+ TProtoStringType GetRequireName(const TProtoStringType& proto_file) {
+@@ -163,7 +163,7 @@ TProtoStringType DefaultValueForField(const FieldDescriptor* field) {
+         os << "\".force_encoding(\"ASCII-8BIT\")";
+       }
+ 
+-      return os.str();
++      return TProtoStringType{os.str()};
+     }
+     default: assert(false); return "";
+   }
+--- a/src/google/protobuf/compiler/php/php_generator.cc
++++ b/src/google/protobuf/compiler/php/php_generator.cc
+@@ -433,7 +434,7 @@ TProtoStringType GeneratedServiceFileName(const ServiceDescriptor* service,
+ TProtoStringType IntToString(int32 value) {
+   std::ostringstream os;
+   os << value;
+-  return os.str();
++  return TProtoStringType{os.str()};
+ }
+ 
+ TProtoStringType LabelForField(const FieldDescriptor* field) {
+@@ -1919,7 +1920,7 @@ void GenerateCEnum(const EnumDescriptor* desc, io::Printer* printer) {
+         "                                   strlen(\"$name$\"), $num$);\n",
+         "c_name", c_name,
+         "name", value->name(),
+-        "num", std::to_string(value->number()));
++        "num", ToString(value->number()));
+   }
+ 
+   printer->Print(
+@@ -2140,7 +2141,7 @@ void GenerateCWellKnownTypes(const std::vector<const FileDescriptor*>& files,
+         "filename", file->name(),
+         "c_name", c_name,
+         "metadata_c_name", metadata_c_name,
+-        "size", std::to_string(serialized.size()));
++        "size", ToString(serialized.size()));
+ 
+     for (size_t i = 0; i < serialized.size();) {
+       for (size_t j = 0; j < 25 && i < serialized.size(); ++i, ++j) {
+--- a/src/google/protobuf/io/io_win32.cc	(index)
++++ b/src/google/protobuf/io/io_win32.cc	(working tree)
+@@ -77,7 +77,7 @@ namespace io {
+ namespace win32 {
+ namespace {
+ 
+-using TProtoStringType;
++using string = TProtoStringType;
+ using std::wstring;
+ 
+ template <typename char_type>
+--- a/src/google/protobuf/io/io_win32.h
++++ b/src/google/protobuf/io/io_win32.h
+@@ -52,6 +52,7 @@
+ #include <functional>
+ #include <string>
+ 
++#include <google/protobuf/stubs/port.h>
+ #include "google/protobuf/port.h"
+ 
+ // Must be included last.
+
+diff --git a/src/google/protobuf/compiler/objectivec/objectivec_generator.cc b/src/google/protobuf/compiler/objectivec/objectivec_generator.cc
+index 16dd7b9..371234a 100644
+--- a/src/google/protobuf/compiler/objectivec/generator.cc
++++ b/src/google/protobuf/compiler/objectivec/generator.cc
+@@ -183,9 +183,9 @@ bool ObjectiveCGenerator::GenerateAll(
+   if (getenv("GPB_OBJC_SKIP_IMPLS_FILE") != NULL) {
+     std::ifstream skip_file(getenv("GPB_OBJC_SKIP_IMPLS_FILE"));
+     if (skip_file.is_open()) {
+-      TProtoStringType line;
++      std::string line;
+       while (std::getline(skip_file, line)) {
+-        skip_impls.insert(line);
++        skip_impls.insert(line.c_str());
+       }
+     } else {
+       *error = "error: Failed to open GPB_OBJC_SKIP_IMPLS_FILE file";
+
+--- a/src/google/protobuf/arenaz_sampler.h
++++ b/src/google/protobuf/arenaz_sampler.h
+@@ -37,6 +37,7 @@
+ #include <cstdint>
+ #include <utility>
+ 
++#include <google/protobuf/stubs/port.h>
+ 
+ // Must be included last.
+ #include "google/protobuf/port_def.inc"
+--- a/src/google/protobuf/io/printer.h	(index)
++++ b/src/google/protobuf/io/printer.h	(working tree)
+@@ -50,6 +50,7 @@
+ #include "absl/functional/function_ref.h"
+ #include "absl/log/absl_check.h"
+ #include "absl/meta/type_traits.h"
++#include "absl/strings/str_cat.h"
+ #include "absl/strings/str_format.h"
+ #include "absl/strings/string_view.h"
+ #include "absl/types/optional.h"
+--- a/src/google/protobuf/io/strtod.h	(index)
++++ b/src/google/protobuf/io/strtod.h	(working tree)
+@@ -35,11 +35,13 @@
+ #ifndef GOOGLE_PROTOBUF_IO_STRTOD_H__
+ #define GOOGLE_PROTOBUF_IO_STRTOD_H__
+ 
+-#include <string>
++#include <util/generic/string.h>
+ 
+ // Must be included last.
+ #include "google/protobuf/port_def.inc"
+ 
++using TProtoStringType = TString;
++
+ namespace google {
+ namespace protobuf {
+ namespace io {
+--- a/src/google/protobuf/port.h	(index)
++++ b/src/google/protobuf/port.h	(working tree)
+@@ -40,7 +40,7 @@
+ #include <cstddef>
+ #include <cstdint>
+ #include <new>
+-#include <string>
++#include <util/generic/string.h>
+ #include <type_traits>
+ 
+ #if PROTOBUF_RTTI
+@@ -55,6 +55,7 @@
+ // must be last
+ #include "google/protobuf/port_def.inc"
+ 
++using TProtoStringType = TString;
+ 
+ namespace google {
+ namespace protobuf {

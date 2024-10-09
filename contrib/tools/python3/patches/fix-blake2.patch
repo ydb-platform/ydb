@@ -1,0 +1,11 @@
+--- contrib/tools/python3/Modules/_blake2/blake2module.h	(index)
++++ contrib/tools/python3/Modules/_blake2/blake2module.h	(working tree)
+@@ -2,7 +2,7 @@
+ #define Py_BLAKE2MODULE_H
+ 
+ #ifdef HAVE_LIBB2
+-#include <blake2.h>
++#error #include <blake2.h>
+ 
+ #else
+ // use vendored copy of blake2

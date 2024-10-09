@@ -1,6 +1,6 @@
 #include "config.h"
 
-#include <yt/yt/client/table_client/helpers.h>
+#include "helpers.h"
 
 #include <yt/yt/client/tablet_client/config.h>
 #include <yt/yt/client/tablet_client/helpers.h>

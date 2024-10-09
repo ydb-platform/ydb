@@ -1,0 +1,102 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4f69198d68548caef8c50fb4646f2739
+BELONGS ya.make
+    License text:
+           Copyright (C) 2013-2024 Free Software Foundation, Inc.
+           Written by Ian Lance Taylor, Google.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        atomic.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 89987ec1024c9f4d65e939d586271b9f
+BELONGS ya.make
+    License text:
+        \# Copyright (C) 2012-2016 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9d441f897facb23890579094470bd947
+BELONGS ya.make
+    License text:
+           Copyright (C) 2012-2024 Free Software Foundation, Inc.
+           Written by Ian Lance Taylor, Google.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        backtrace-supported.h [2:3]
+        backtrace.c [2:3]
+        backtrace.h [2:3]
+        dwarf.c [2:3]
+        elf.c [2:3]
+        fileline.c [2:3]
+        internal.h [2:3]
+        mmap.c [2:3]
+        mmapio.c [2:3]
+        posix.c [2:3]
+        print.c [2:3]
+        simple.c [2:3]
+        sort.c [2:3]
+        state.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cc5dd31c1484abddecff8fc275f5c9cc
+BELONGS ya.make
+    License text:
+           Copyright (C) 2020-2024 Free Software Foundation, Inc.
+           Written by Ian Lance Taylor, Google.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        macho.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ed42dfc770f5954f5d7da31d293c2a5e
+BELONGS ya.make
+    License text:
+           Copyright (C) 2012-2018 Free Software Foundation, Inc.
+           Written by Ian Lance Taylor, Google.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        filenames.h [2:3]

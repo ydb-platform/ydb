@@ -12,4 +12,3 @@ For more information about casting rules, see [here](../../../types/cast.md).
 ### Examples
 
 {% include [cast_examples](../../../_includes/cast_examples.md) %}
-

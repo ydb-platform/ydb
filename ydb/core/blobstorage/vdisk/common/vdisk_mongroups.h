@@ -2,7 +2,7 @@
 
 #include "defs.h"
 
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
 
 namespace NKikimr {
@@ -29,11 +29,7 @@ namespace NKikimr {
             TIntrusivePtr<::NMonitoring::TDynamicCounters> GroupCounters;
         };
 
-        static bool IsExtendedVDiskCounters() {
-            return NActors::TlsActivationContext
-                && NActors::TlsActivationContext->ExecutorThread.ActorSystem
-                && AppData()->FeatureFlags.GetExtendedVDiskCounters();
-        }
+        bool IsExtendedVDiskCounters();
 
 #define COUNTER_DEF(name)                                                                   \
 protected:                                                                                  \

@@ -899,8 +899,9 @@ namespace NTypeAnnImpl {
             }
             else if (optionName == "join_algo") {
                 // do nothing
-            }
-            else {
+            } else if (optionName == "compact") {
+                // do nothing
+            } else {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() <<
                     "Unknown option name: " << optionName));
                 return IGraphTransformer::TStatus::Error;

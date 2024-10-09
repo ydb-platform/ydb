@@ -1152,7 +1152,7 @@ TYtSection SectionApplyAdditionalSort(const TYtSection& section, const TYtEquiJo
 
 bool RewriteYtMergeJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoinNodeOp& op,
     const TYtJoinNodeLeaf& leftLeaf, const TYtJoinNodeLeaf& rightLeaf, const TYtState::TPtr& state, TExprContext& ctx,
-    bool swapTables, bool joinReduce, bool tryFirstAsPrimary, bool joinReduceForSecond,
+    bool swapTables, bool joinReduce, bool compactJoin, bool tryFirstAsPrimary, bool joinReduceForSecond,
     const TMergeJoinSortInfo sortInfo, bool& skipped)
 {
     skipped = false;
@@ -1389,6 +1389,15 @@ bool RewriteYtMergeJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoin
                     .Value(ToString(EYtSettingType::JoinReduce), TNodeFlags::Default)
                 .Build()
             .Build();
+
+        if (compactJoin) {
+            settingsBuilder
+            .Add()
+                .Name()
+                    .Value(ToString(EYtSettingType::CompactJoin), TNodeFlags::Default)
+                .Build()
+            .Build();
+        }
     }
 
     if (tryFirstAsPrimary) {
@@ -3363,7 +3372,7 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
         if (!RewriteYtMergeJoin(equiJoin, labels, op,
                                 swapTables ? rightLeaf : leftLeaf,
                                 swapTables ? leftLeaf : rightLeaf,
-                                state, ctx, swapTables, useJoinReduce, tryFirstAsPrimary, useJoinReduceForSecond,
+                                state, ctx, swapTables, useJoinReduce, linkSettings.Compact, tryFirstAsPrimary, useJoinReduceForSecond,
                                 swapTables ? Invert(sortInfo) : sortInfo,
                                 skipped))
         {

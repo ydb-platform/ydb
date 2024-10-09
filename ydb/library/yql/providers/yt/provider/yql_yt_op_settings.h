@@ -92,6 +92,7 @@ enum class EYtSettingType: ui64 {
     CombineChunks            /* "combineChunks" */,
     JobCount                 /* "jobCount" */,                 // hybrid supported
     JoinReduce               /* "joinReduce" */,               // hybrid supported
+    CompactJoin              /* "compactJoin" */,
     FirstAsPrimary           /* "firstAsPrimary" */,           // hybrid supported
     Flow                     /* "flow" */,                     // hybrid supported
     KeepSorted               /* "keepSorted" */,               // hybrid supported

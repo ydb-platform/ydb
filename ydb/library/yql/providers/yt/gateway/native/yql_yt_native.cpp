@@ -3500,6 +3500,7 @@ private:
     static TFuture<void> ExecReduce(const TVector<std::pair<TString, bool>>& reduceBy,
         const TVector<std::pair<TString, bool>>& sortBy,
         bool joinReduce,
+        bool compactJoin,
         const TMaybe<ui64>& maxDataSizePerJob,
         bool useFirstAsPrimary,
         const TMaybe<ui64>& limit,
@@ -3511,7 +3512,7 @@ private:
     ) {
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
-        return ret.Apply([reduceBy, sortBy, joinReduce, maxDataSizePerJob, useFirstAsPrimary, limit,
+        return ret.Apply([reduceBy, sortBy, joinReduce, compactJoin, maxDataSizePerJob, useFirstAsPrimary, limit,
                           sortLimitBy, reduceLambda, inputType, extraUsage, execCtx, testRun]
                          (const auto& f) mutable
         {
@@ -3586,7 +3587,11 @@ private:
 
             if (joinReduce) {
                 reduceOpSpec.JoinBy(ToYTSortColumns(reduceBy));
-                reduceOpSpec.EnableKeyGuarantee(false);
+                if (compactJoin) {
+                    reduceOpSpec.ReduceBy(ToYTSortColumns(reduceBy));
+                } else {
+                    reduceOpSpec.EnableKeyGuarantee(false);
+                }
             } else {
                 reduceOpSpec.ReduceBy(ToYTSortColumns(reduceBy));
             }
@@ -3674,6 +3679,7 @@ private:
         auto reduceBy = NYql::GetSettingAsColumnPairList(reduce.Settings().Ref(), EYtSettingType::ReduceBy);
         auto sortBy = NYql::GetSettingAsColumnPairList(reduce.Settings().Ref(), EYtSettingType::SortBy);
         bool joinReduce = NYql::HasSetting(reduce.Settings().Ref(), EYtSettingType::JoinReduce);
+        bool compactJoin = NYql::HasSetting(reduce.Settings().Ref(), EYtSettingType::CompactJoin);
         auto maxDataSizePerJob = NYql::GetMaxJobSizeForFirstAsPrimary(reduce.Settings().Ref());
         bool useFirstAsPrimary = NYql::HasSetting(reduce.Settings().Ref(), EYtSettingType::FirstAsPrimary);
 
@@ -3698,10 +3704,10 @@ private:
             : GetSequenceItemType(reduce.Reducer().Args().Arg(0), true)
         );
 
-        return execCtx->Session_->Queue_->Async([reduceBy, sortBy, joinReduce, maxDataSizePerJob, useFirstAsPrimary, limit, sortLimitBy, reduceLambda, inputType, extraUsage, execCtx]() {
+        return execCtx->Session_->Queue_->Async([reduceBy, sortBy, joinReduce, compactJoin, maxDataSizePerJob, useFirstAsPrimary, limit, sortLimitBy, reduceLambda, inputType, extraUsage, execCtx]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
-            return ExecReduce(reduceBy, sortBy, joinReduce, maxDataSizePerJob, useFirstAsPrimary, limit,
+            return ExecReduce(reduceBy, sortBy, joinReduce, compactJoin, maxDataSizePerJob, useFirstAsPrimary, limit,
                               sortLimitBy, reduceLambda, inputType, extraUsage, execCtx);
         });
     }

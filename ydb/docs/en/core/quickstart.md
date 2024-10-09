@@ -159,7 +159,7 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
       helm upgrade --install ydb-operator deploy/ydb-operator --set metrics.enabled=false
       ```
 
-   6. Apply the manifest for creating a {{ ydb-short-name }} cluster:
+   6. Apply the manifest for creating a storage:
 
       ```bash
       kubectl apply -f samples/kind/storage.yaml

@@ -33,6 +33,7 @@ public:
         ui64 inputIndex,
         NUdf::TUnboxedValue inputFlow,
         NActors::TActorId computeActorId,
+        ::NMonitoring::TDynamicCounterPtr taskCounters,
         IDqAsyncIoFactory* factory,
         NDqProto::TDqInputTransformLookupSettings&& settings,
         TVector<size_t>&& lookupInputIndexes,
@@ -51,6 +52,7 @@ public:
         , InputIndex(inputIndex)
         , InputFlow(std::move(inputFlow))
         , ComputeActorId(std::move(computeActorId))
+        , TaskCounters(taskCounters)
         , Factory(factory)
         , Settings(std::move(settings))
         , LookupInputIndexes(std::move(lookupInputIndexes))
@@ -74,6 +76,7 @@ public:
             Y_DEBUG_ABORT_UNLESS(OtherInputIndexes[i] < InputRowType->GetElementsCount());
         }
         Y_DEBUG_ABORT_UNLESS(LookupInputIndexes.size() == LookupKeyType->GetMembersCount());
+        InitMonCounters(taskCounters);
     }
 
     void Bootstrap() {
@@ -227,6 +230,9 @@ private: //IDqComputeActorAsyncInput
         return AwaitingQueue.size();
     }
 
+    void InitMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
+    }
+
     TMaybe<google::protobuf::Any> ExtraData() override {
         google::protobuf::Any result;
         //TODO fill me
@@ -258,6 +264,7 @@ protected:
     ui64 InputIndex; // NYql::NDq::IDqComputeActorAsyncInput
     NUdf::TUnboxedValue InputFlow;
     const NActors::TActorId ComputeActorId;
+    ::NMonitoring::TDynamicCounterPtr TaskCounters;
     IDqAsyncIoFactory::TPtr Factory;
     NDqProto::TDqInputTransformLookupSettings Settings;
 protected:
@@ -527,6 +534,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             args.InputIndex,
             args.TransformInput,
             args.ComputeActorId,
+            args.TaskCounters,
             factory,
             std::move(settings),
             std::move(lookupKeyInputIndexes),
@@ -546,6 +554,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             args.InputIndex,
             args.TransformInput,
             args.ComputeActorId,
+            args.TaskCounters,
             factory,
             std::move(settings),
             std::move(lookupKeyInputIndexes),

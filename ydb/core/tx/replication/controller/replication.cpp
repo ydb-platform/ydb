@@ -362,6 +362,14 @@ const TMaybe<TDuration> TReplication::GetLag() const {
     return Impl->GetLag();
 }
 
+void TReplication::SetPartitionEnded(ui64 partitionId) {
+    EndedPartitions.insert(partitionId);
+}
+
+bool TReplication::IsPartitionEnded(ui64 partitionId) const {
+    return EndedPartitions.contains(partitionId);
+}
+
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrReplication::TReplicationConfig::TargetCase, stream, value) {

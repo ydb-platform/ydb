@@ -465,9 +465,18 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
         return;
     }
 
-    //auto& session = Sessions[nodeId];
-    //const auto& record = ev->Get()->Record;
+    const auto& record = ev->Get()->Record;
+    const auto id = TWorkerId::Parse(record.GetWorker());
+    auto replication = Replications.at(id.ReplicationId());
 
+    replication->SetPartitionEnded(record.GetPartitionId());
+    auto allEnded = std::all_of(record.GetAdjacentPartitionsIds().begin(), record.GetAdjacentPartitionsIds().end(), [&](auto id) {
+        return replication->IsPartitionEnded(id);
+    });
+
+    if (allEnded) {
+        id.ReplicationId();
+    }
 }
 
 bool TController::IsValidWorker(const TWorkerId& id) const {

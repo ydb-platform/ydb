@@ -137,10 +137,14 @@ public:
     void SetDropOp(const TActorId& sender, const std::pair<ui64, ui32>& opId);
     const std::optional<TDropOp>& GetDropOp() const;
 
+    void SetPartitionEnded(ui64 partitionId);
+    bool IsPartitionEnded(ui64 partitionId) const;
+
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl;
     std::optional<TDropOp> DropOp;
+    std::unordered_set<ui64> EndedPartitions;
 
 }; // TReplication
 

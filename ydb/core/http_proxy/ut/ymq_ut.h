@@ -404,22 +404,39 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestListQueues, THttpProxyTestMock) {
-        auto createQueueReq = CreateSqsCreateQueueRequest();
-        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-        NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
-        UNIT_ASSERT(resultQueueUrl.EndsWith("ExampleQueueName"));
+        auto json = ListQueues({});
 
-        NJson::TJsonValue listQueuesReq;
-        listQueuesReq["QueueNamePrefix"] = "Ex";
-        res = SendHttpRequest("/Root", "AmazonSQS.ListQueues", std::move(listQueuesReq), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-        NJson::TJsonArray result;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &result));
-        UNIT_ASSERT_VALUES_EQUAL(result["QueueUrls"].GetArray().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(result["QueueUrls"][0], resultQueueUrl);
+        size_t numOfExampleQueues = 10;
+        TVector<TString> queueUrls;
+        for (size_t i = 0; i < numOfExampleQueues; ++i) {
+            auto json = CreateQueue({{"QueueName", TStringBuilder() << "ExampleQueue-" << i}});
+            queueUrls.push_back(GetByPath<TString>(json, "QueueUrl"));
+        }
+
+        json = CreateQueue({{"QueueName", "AnotherQueue"}});
+        auto anotherQueueUrl = GetByPath<TString>(json, "QueueUrl");
+        queueUrls.push_back(anotherQueueUrl);
+
+        json = ListQueues({});
+        UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"].GetArray().size(), numOfExampleQueues + 1);
+
+        json = ListQueues({{"QueueNamePrefix", ""}});
+        UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"].GetArray().size(), numOfExampleQueues + 1);
+
+        json = ListQueues({{"QueueNamePrefix", "BadPrefix"}});
+        UNIT_ASSERT(json["QueueUrls"].GetArray().empty());
+
+        json = ListQueues({{"QueueNamePrefix", "Another"}});
+        UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"][0], anotherQueueUrl);
+
+        json = ListQueues({{"QueueNamePrefix", "Ex"}});
+        UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"].GetArray().size(), numOfExampleQueues);
+        UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"][0], queueUrls[0]);
+
+        // MaxResults and NextToken query parameters are currently ignored.
+        json = ListQueues({{"MaxResults", 1}, {"NextToken", "unknown-next-token"}});
+        UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"].GetArray().size(), numOfExampleQueues + 1);
     }
 
     Y_UNIT_TEST_F(TestDeleteMessage, THttpProxyTestMock) {

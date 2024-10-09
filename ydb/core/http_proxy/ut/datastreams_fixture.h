@@ -411,6 +411,14 @@ public:
         return json;
     }
 
+    NJson::TJsonMap SetQueueAttributes(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto res = SendHttpRequest("/Root", "AmazonSQS.SetQueueAttributes", request, FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        return json;
+    }
+
     bool WaitQueueAttributes(TString queueUrl, size_t retries, std::function<bool (NJson::TJsonMap json)> predicate) {
         for (size_t i = 0; i < retries; ++i) {
             auto json = GetQueueAttributes({

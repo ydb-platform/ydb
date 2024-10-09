@@ -1,0 +1,4 @@
+requirements:
+  - library/python/resource
+mark_as_sources:
+  - setuptools/command/test.py

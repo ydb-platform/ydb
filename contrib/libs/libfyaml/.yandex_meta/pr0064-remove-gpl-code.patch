@@ -1,0 +1,1551 @@
+From fc516556e68b95d672bf146616a0967dd697a9a8 Mon Sep 17 00:00:00 2001
+From: Innokentii Mokin <innokentii@yandex-team.ru>
+Date: Tue, 20 Dec 2022 21:07:50 +0300
+Subject: [PATCH 1/3] replace fy-list with MIT one
+
+---
+ src/lib/fy-accel.h    |   2 +-
+ src/lib/fy-composer.c |   2 +-
+ src/lib/fy-diag.h     |   2 +-
+ src/lib/fy-doc.c      |   2 +-
+ src/lib/fy-doc.h      |  10 +-
+ src/lib/fy-emit.c     |   2 +-
+ src/lib/fy-event.c    |   6 +-
+ src/lib/fy-event.h    |   2 +-
+ src/lib/fy-input.h    |   2 +-
+ src/lib/fy-list.h     | 714 +++---------------------------------------
+ src/lib/fy-parse.c    |   4 +-
+ src/lib/fy-parse.h    |   8 +-
+ src/lib/fy-path.h     |   4 +-
+ src/lib/fy-token.h    |   2 +-
+ src/lib/fy-typelist.h |  42 +--
+ src/lib/fy-types.h    |   2 +-
+ src/lib/fy-walk.c     |   2 +-
+ src/lib/fy-walk.h     |   4 +-
+ 18 files changed, 94 insertions(+), 718 deletions(-)
+
+diff --git a/src/lib/fy-accel.h b/src/lib/fy-accel.h
+index 1531e8c..2e917ce 100644
+--- a/src/lib/fy-accel.h
++++ b/src/lib/fy-accel.h
+@@ -20,7 +20,7 @@
+ #include "fy-typelist.h"
+ 
+ struct fy_accel_entry {
+-	struct list_head node;
++	struct fy_list_head node;
+ 	const void *key;
+ 	const void *value;
+ 	uint8_t hash[0];
+diff --git a/src/lib/fy-composer.c b/src/lib/fy-composer.c
+index 3e19017..2202497 100644
+--- a/src/lib/fy-composer.c
++++ b/src/lib/fy-composer.c
+@@ -83,7 +83,7 @@ fy_composer_process_event_private(struct fy_composer *fyc, struct fy_event *fye,
+ 	assert(fye);
+ 	assert(fypp);
+ 
+-	fyep = container_of(fye, struct fy_eventp, e);
++	fyep = fy_container_of(fye, struct fy_eventp, e);
+ 
+ 	ops = fyc->cfg.ops;
+ 	assert(ops);
+diff --git a/src/lib/fy-diag.h b/src/lib/fy-diag.h
+index f19861d..2171509 100644
+--- a/src/lib/fy-diag.h
++++ b/src/lib/fy-diag.h
+@@ -73,7 +73,7 @@ struct fy_diag_report_ctx {
+ 
+ FY_TYPE_FWD_DECL_LIST(diag_errorp);
+ struct fy_diag_errorp {
+-	struct list_head node;
++	struct fy_list_head node;
+ 	char *space;
+ 	struct fy_diag_error e;
+ };
+diff --git a/src/lib/fy-doc.c b/src/lib/fy-doc.c
+index 602264b..31a99c7 100644
+--- a/src/lib/fy-doc.c
++++ b/src/lib/fy-doc.c
+@@ -5951,7 +5951,7 @@ struct flow_reader_container {
+ 
+ static struct fy_diag *flow_reader_get_diag(struct fy_reader *fyr)
+ {
+-	struct flow_reader_container *frc = container_of(fyr, struct flow_reader_container, reader);
++	struct flow_reader_container *frc = fy_container_of(fyr, struct flow_reader_container, reader);
+ 	return frc->cfg ? frc->cfg->diag : NULL;
+ }
+ 
+diff --git a/src/lib/fy-doc.h b/src/lib/fy-doc.h
+index 6c15024..205e604 100644
+--- a/src/lib/fy-doc.h
++++ b/src/lib/fy-doc.h
+@@ -44,7 +44,7 @@ FY_TYPE_FWD_DECL_LIST(document);
+ struct fy_node;
+ 
+ struct fy_node_pair {
+-	struct list_head node;
++	struct fy_list_head node;
+ 	struct fy_node *key;
+ 	struct fy_node *value;
+ 	struct fy_document *fyd;
+@@ -55,7 +55,7 @@ FY_TYPE_DECL_LIST(node_pair);
+ 
+ FY_TYPE_FWD_DECL_LIST(node);
+ struct fy_node {
+-	struct list_head node;
++	struct fy_list_head node;
+ 	struct fy_token *tag;
+ 	enum fy_node_style style;
+ 	struct fy_node *parent;
+@@ -93,7 +93,7 @@ void fy_node_detach_and_free(struct fy_node *fyn);
+ void fy_node_pair_detach_and_free(struct fy_node_pair *fynp);
+ 
+ struct fy_anchor {
+-	struct list_head node;
++	struct fy_list_head node;
+ 	struct fy_node *fyn;
+ 	struct fy_token *anchor;
+ 	bool multiple : 1;
+@@ -102,7 +102,7 @@ FY_TYPE_FWD_DECL_LIST(anchor);
+ FY_TYPE_DECL_LIST(anchor);
+ 
+ struct fy_document {
+-	struct list_head node;
++	struct fy_list_head node;
+ 	struct fy_anchor_list anchors;
+ 	struct fy_accel *axl;		/* name -> anchor access accelerator */
+ 	struct fy_accel *naxl;		/* node -> anchor access accelerator */
+@@ -187,7 +187,7 @@ struct fy_node *fy_node_collection_iterate(struct fy_node *fyn, void **prevp);
+ /* indirect node */
+ FY_TYPE_FWD_DECL_LIST(ptr_node);
+ struct fy_ptr_node {
+-	struct list_head node;
++	struct fy_list_head node;
+ 	struct fy_node *fyn;
+ };
+ FY_TYPE_DECL_LIST(ptr_node);
+diff --git a/src/lib/fy-emit.c b/src/lib/fy-emit.c
+index 36d8d8e..5b9b5f1 100644
+--- a/src/lib/fy-emit.c
++++ b/src/lib/fy-emit.c
+@@ -3311,7 +3311,7 @@ int fy_emit_event_from_parser(struct fy_emitter *emit, struct fy_parser *fyp, st
+ 	if (emit->state == FYES_NONE)
+ 		emit->state = FYES_STREAM_START;
+ 
+-	fyep = container_of(fye, struct fy_eventp, e);
++	fyep = fy_container_of(fye, struct fy_eventp, e);
+ 
+ 	fy_eventp_list_add_tail(&emit->queued_events, fyep);
+ 
+diff --git a/src/lib/fy-event.c b/src/lib/fy-event.c
+index a359063..0e049b4 100644
+--- a/src/lib/fy-event.c
++++ b/src/lib/fy-event.c
+@@ -169,7 +169,7 @@ void fy_parser_event_free(struct fy_parser *fyp, struct fy_event *fye)
+ 	if (!fyp || !fye)
+ 		return;
+ 
+-	fyep = container_of(fye, struct fy_eventp, e);
++	fyep = fy_container_of(fye, struct fy_eventp, e);
+ 
+ 	fy_parse_eventp_recycle(fyp, fyep);
+ }
+@@ -195,7 +195,7 @@ void fy_emit_event_free(struct fy_emitter *emit, struct fy_event *fye)
+ 	if (!emit || !fye)
+ 		return;
+ 
+-	fyep = container_of(fye, struct fy_eventp, e);
++	fyep = fy_container_of(fye, struct fy_eventp, e);
+ 
+ 	fy_emit_eventp_recycle(emit, fyep);
+ }
+@@ -908,7 +908,7 @@ void fy_document_iterator_event_free(struct fy_document_iterator *fydi, struct f
+ 	if (!fydi || !fye)
+ 		return;
+ 
+-	fyep = container_of(fye, struct fy_eventp, e);
++	fyep = fy_container_of(fye, struct fy_eventp, e);
+ 
+ 	fy_document_iterator_eventp_recycle(fydi, fyep);
+ }
+diff --git a/src/lib/fy-event.h b/src/lib/fy-event.h
+index 75f20fb..4da3c8f 100644
+--- a/src/lib/fy-event.h
++++ b/src/lib/fy-event.h
+@@ -22,7 +22,7 @@
+ /* private event type */
+ FY_TYPE_FWD_DECL_LIST(eventp);
+ struct fy_eventp {
+-	struct list_head node;
++	struct fy_list_head node;
+ 	struct fy_event e;
+ };
+ FY_TYPE_DECL_LIST(eventp);
+diff --git a/src/lib/fy-input.h b/src/lib/fy-input.h
+index 6634fab..59b7888 100644
+--- a/src/lib/fy-input.h
++++ b/src/lib/fy-input.h
+@@ -78,7 +78,7 @@ enum fy_input_state {
+ 
+ FY_TYPE_FWD_DECL_LIST(input);
+ struct fy_input {
+-	struct list_head node;
++	struct fy_list_head node;
+ 	enum fy_input_state state;
+ 	struct fy_input_cfg cfg;
+ 	int refs;		/* number of referers */
+diff --git a/src/lib/fy-list.h b/src/lib/fy-list.h
+index 1a0b5f9..65e17f9 100644
+--- a/src/lib/fy-list.h
++++ b/src/lib/fy-list.h
+@@ -1,705 +1,81 @@
+ /*
+- * fy-list.h - slightly modified Linux kernel list.h
++ * fy-list.h - simple doubly linked list implementation
+  *
+- * All copyrights owned by their respective holders.
++ * Copyright (c) 2022 Innokentii Mokin <iam@justregular.dev>
+  *
+- * SPDX-License-Identifier: GPL-2.0
++ * SPDX-License-Identifier: MIT
+  */
+-#ifndef _FY_LIST_H
+-#define _FY_LIST_H
++#ifndef FY_LIST_H
++#define FY_LIST_H
+ 
+ #include <stddef.h>
+ 
+-/**
+- * container_of - cast a member of a structure out to the containing structure
+- * @ptr:        the pointer to the member.
+- * @type:       the type of the container struct this is embedded in.
+- * @member:     the name of the member within the struct.
+- *
+- */
+-#define container_of(ptr, type, member) ({                      \
+-        const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
+-        (type *)( (char *)__mptr - offsetof(type,member) );})
+-
+-#define LIST_POISON1	NULL
+-#define LIST_POISON2	NULL
+-
+-#ifndef ARCH_HAS_PREFETCH
+-#define ARCH_HAS_PREFETCH
+-static inline void prefetch(const void *x) {;}
+-#endif
+-
+-/*
+- * Simple doubly linked list implementation.
+- *
+- * Some of the internal functions ("__xxx") are useful when
+- * manipulating whole lists rather than single entries, as
+- * sometimes we already know the next/prev entries and we can
+- * generate better code by using them directly rather than
+- * using the generic single-entry routines.
+- */
++#define fy_container_of(pointer, type, member) ({ \
++		const typeof(((type *)NULL)->member) *__## member ## _ptr = (pointer); \
++		(type *) ((char *)__ ## member ## _ptr - offsetof(type, member)); \
++	} \
++)
+ 
+-struct list_head {
+-	struct list_head *next, *prev;
++struct fy_list_head {
++	struct fy_list_head *prev;
++	struct fy_list_head *next;
+ };
+ 
+-#define LIST_HEAD_INIT(name) { &(name), &(name) }
+-
+-#define LIST_HEAD(name) \
+-	struct list_head name = LIST_HEAD_INIT(name)
+-
+-static inline void INIT_LIST_HEAD(struct list_head *list)
+-{
+-	list->next = list;
+-	list->prev = list;
+-}
+-
+-/*
+- * Insert a new entry between two known consecutive entries.
+- *
+- * This is only for internal list manipulation where we know
+- * the prev/next entries already!
+- */
+-static inline void __list_add(struct list_head *new,
+-			      struct list_head *prev,
+-			      struct list_head *next)
+-{
+-	next->prev = new;
+-	new->next = next;
+-	new->prev = prev;
+-	prev->next = new;
+-}
+-
+-/**
+- * list_add - add a new entry
+- * @new: new entry to be added
+- * @head: list head to add it after
+- *
+- * Insert a new entry after the specified head.
+- * This is good for implementing stacks.
+- */
+-static inline void list_add(struct list_head *new, struct list_head *head)
+-{
+-	__list_add(new, head, head->next);
+-}
+-
+-/**
+- * list_add_tail - add a new entry
+- * @new: new entry to be added
+- * @head: list head to add it before
+- *
+- * Insert a new entry before the specified head.
+- * This is useful for implementing queues.
+- */
+-static inline void list_add_tail(struct list_head *new, struct list_head *head)
++static inline void fy_list_init_head(struct fy_list_head *lh) 
+ {
+-	__list_add(new, head->prev, head);
++	lh->prev = lh;
++	lh->next = lh;
+ }
+ 
+-/*
+- * Delete a list entry by making the prev/next entries
+- * point to each other.
+- *
+- * This is only for internal list manipulation where we know
+- * the prev/next entries already!
+- */
+-static inline void __list_del(struct list_head *prev, struct list_head *next)
++static inline void fy_list_add_head(struct fy_list_head *ln, struct fy_list_head *lh)
+ {
+-	next->prev = prev;
+-	prev->next = next;
+-}
++	struct fy_list_head *second = lh->next;
+ 
+-/**
+- * list_del - deletes entry from list.
+- * @entry: the element to delete from the list.
+- * Note: list_empty() on entry does not return true after this, the entry is
+- * in an undefined state.
+- */
+-static inline void list_del(struct list_head *entry)
+-{
+-	__list_del(entry->prev, entry->next);
+-	entry->next = LIST_POISON1;
+-	entry->prev = LIST_POISON2;
++	second->prev = ln;
++	ln->next = second;
++	lh->next = ln;
++	ln->prev = lh;
+ }
+ 
+-/**
+- * list_replace - replace old entry by new one
+- * @old : the element to be replaced
+- * @new : the new element to insert
+- *
+- * If @old was empty, it will be overwritten.
+- */
+-static inline void list_replace(struct list_head *old,
+-				struct list_head *new)
++static inline void fy_list_add_tail(struct fy_list_head *ln, struct fy_list_head *lh)
+ {
+-	new->next = old->next;
+-	new->next->prev = new;
+-	new->prev = old->prev;
+-	new->prev->next = new;
+-}
++	struct fy_list_head *tail = lh->prev;
+ 
+-static inline void list_replace_init(struct list_head *old,
+-					struct list_head *new)
+-{
+-	list_replace(old, new);
+-	INIT_LIST_HEAD(old);
++	lh->prev = ln;
++	ln->next = lh;
++	tail->next = ln;
++	ln->prev = tail;
+ }
+ 
+-/**
+- * list_del_init - deletes entry from list and reinitialize it.
+- * @entry: the element to delete from the list.
+- */
+-static inline void list_del_init(struct list_head *entry)
++static inline bool fy_list_is_empty(struct fy_list_head *lh)
+ {
+-	__list_del(entry->prev, entry->next);
+-	INIT_LIST_HEAD(entry);
++	return lh == lh->next;
+ }
+ 
+-/**
+- * list_move - delete from one list and add as another's head
+- * @list: the entry to move
+- * @head: the head that will precede our entry
+- */
+-static inline void list_move(struct list_head *list, struct list_head *head)
++static inline bool fy_list_is_singular(struct fy_list_head *lh)
+ {
+-	__list_del(list->prev, list->next);
+-	list_add(list, head);
++	return lh != lh->next && lh == lh->next->next;
+ }
+ 
+-/**
+- * list_move_tail - delete from one list and add as another's tail
+- * @list: the entry to move
+- * @head: the head that will follow our entry
+- */
+-static inline void list_move_tail(struct list_head *list,
+-				  struct list_head *head)
+-{
+-	__list_del(list->prev, list->next);
+-	list_add_tail(list, head);
++static inline void fy_list_del(struct fy_list_head *ln) {
++	ln->prev->next = ln->next;
++	ln->next->prev = ln->prev;
++	ln->prev = NULL;
++	ln->next = NULL;
+ }
+ 
+-/**
+- * list_is_last - tests whether @list is the last entry in list @head
+- * @list: the entry to test
+- * @head: the head of the list
+- */
+-static inline int list_is_last(const struct list_head *list,
+-				const struct list_head *head)
+-{
+-	return list->next == head;
+-}
++static inline void fy_list_splice(struct fy_list_head *nlh, struct fy_list_head *lh) {
++	struct fy_list_head *prev = lh, *next = lh->next,
++						*head = nlh->next, *tail = nlh->prev;
+ 
+-/**
+- * list_empty - tests whether a list is empty
+- * @head: the list to test.
+- */
+-static inline int list_empty(const struct list_head *head)
+-{
+-	return head->next == head;
+-}
+-
+-/**
+- * list_empty_careful - tests whether a list is empty and not being modified
+- * @head: the list to test
+- *
+- * Description:
+- * tests whether a list is empty _and_ checks that no other CPU might be
+- * in the process of modifying either member (next or prev)
+- *
+- * NOTE: using list_empty_careful() without synchronization
+- * can only be safe if the only activity that can happen
+- * to the list entry is list_del_init(). Eg. it cannot be used
+- * if another CPU could re-list_add() it.
+- */
+-static inline int list_empty_careful(const struct list_head *head)
+-{
+-	struct list_head *next = head->next;
+-	return (next == head) && (next == head->prev);
+-}
+-
+-/**
+- * list_is_singular - tests whether a list has just one entry.
+- * @head: the list to test.
+- */
+-static inline int list_is_singular(const struct list_head *head)
+-{
+-	return !list_empty(head) && (head->next == head->prev);
+-}
+-
+-static inline void __list_cut_position(struct list_head *list,
+-		struct list_head *head, struct list_head *entry)
+-{
+-	struct list_head *new_first = entry->next;
+-	list->next = head->next;
+-	list->next->prev = list;
+-	list->prev = entry;
+-	entry->next = list;
+-	head->next = new_first;
+-	new_first->prev = head;
+-}
+-
+-/**
+- * list_cut_position - cut a list into two
+- * @list: a new list to add all removed entries
+- * @head: a list with entries
+- * @entry: an entry within head, could be the head itself
+- *	and if so we won't cut the list
+- *
+- * This helper moves the initial part of @head, up to and
+- * including @entry, from @head to @list. You should
+- * pass on @entry an element you know is on @head. @list
+- * should be an empty list or a list you do not care about
+- * losing its data.
+- *
+- */
+-static inline void list_cut_position(struct list_head *list,
+-		struct list_head *head, struct list_head *entry)
+-{
+-	if (list_empty(head))
+-		return;
+-	if (list_is_singular(head) &&
+-		(head->next != entry && head != entry))
++	if (nlh == nlh->next) {
+ 		return;
+-	if (entry == head)
+-		INIT_LIST_HEAD(list);
+-	else
+-		__list_cut_position(list, head, entry);
+-}
+-
+-static inline void __list_splice(const struct list_head *list,
+-				 struct list_head *prev,
+-				 struct list_head *next)
+-{
+-	struct list_head *first = list->next;
+-	struct list_head *last = list->prev;
+-
+-	first->prev = prev;
+-	prev->next = first;
+-
+-	last->next = next;
+-	next->prev = last;
+-}
+-
+-/**
+- * list_splice - join two lists, this is designed for stacks
+- * @list: the new list to add.
+- * @head: the place to add it in the first list.
+- */
+-static inline void list_splice(const struct list_head *list,
+-				struct list_head *head)
+-{
+-	if (!list_empty(list))
+-		__list_splice(list, head, head->next);
+-}
+-
+-/**
+- * list_splice_tail - join two lists, each list being a queue
+- * @list: the new list to add.
+- * @head: the place to add it in the first list.
+- */
+-static inline void list_splice_tail(struct list_head *list,
+-				struct list_head *head)
+-{
+-	if (!list_empty(list))
+-		__list_splice(list, head->prev, head);
+-}
+-
+-/**
+- * list_splice_init - join two lists and reinitialise the emptied list.
+- * @list: the new list to add.
+- * @head: the place to add it in the first list.
+- *
+- * The list at @list is reinitialised
+- */
+-static inline void list_splice_init(struct list_head *list,
+-				    struct list_head *head)
+-{
+-	if (!list_empty(list)) {
+-		__list_splice(list, head, head->next);
+-		INIT_LIST_HEAD(list);
+-	}
+-}
+-
+-/**
+- * list_splice_tail_init - join two lists and reinitialise the emptied list
+- * @list: the new list to add.
+- * @head: the place to add it in the first list.
+- *
+- * Each of the lists is a queue.
+- * The list at @list is reinitialised
+- */
+-static inline void list_splice_tail_init(struct list_head *list,
+-					 struct list_head *head)
+-{
+-	if (!list_empty(list)) {
+-		__list_splice(list, head->prev, head);
+-		INIT_LIST_HEAD(list);
+-	}
+-}
+-
+-/**
+- * list_entry - get the struct for this entry
+- * @ptr:	the &struct list_head pointer.
+- * @type:	the type of the struct this is embedded in.
+- * @member:	the name of the list_struct within the struct.
+- */
+-#define list_entry(ptr, type, member) \
+-	container_of(ptr, type, member)
+-
+-/**
+- * list_first_entry - get the first element from a list
+- * @ptr:	the list head to take the element from.
+- * @type:	the type of the struct this is embedded in.
+- * @member:	the name of the list_struct within the struct.
+- *
+- * Note, that list is expected to be not empty.
+- */
+-#define list_first_entry(ptr, type, member) \
+-	list_entry((ptr)->next, type, member)
+-
+-/**
+- * list_last_entry - get the last element from a list
+- * @ptr:	the list head to take the element from.
+- * @type:	the type of the struct this is embedded in.
+- * @member:	the name of the list_struct within the struct.
+- *
+- * Note, that list is expected to be not empty.
+- */
+-#define list_last_entry(ptr, type, member) \
+-	list_entry((ptr)->prev, type, member)
+-
+-/**
+- * list_for_each	-	iterate over a list
+- * @pos:	the &struct list_head to use as a loop cursor.
+- * @head:	the head for your list.
+- */
+-#define list_for_each(pos, head) \
+-	for (pos = (head)->next; prefetch(pos->next), pos != (head); \
+-		pos = pos->next)
+-
+-/**
+- * __list_for_each	-	iterate over a list
+- * @pos:	the &struct list_head to use as a loop cursor.
+- * @head:	the head for your list.
+- *
+- * This variant differs from list_for_each() in that it's the
+- * simplest possible list iteration code, no prefetching is done.
+- * Use this for code that knows the list to be very short (empty
+- * or 1 entry) most of the time.
+- */
+-#define __list_for_each(pos, head) \
+-	for (pos = (head)->next; pos != (head); pos = pos->next)
+-
+-/**
+- * list_for_each_prev	-	iterate over a list backwards
+- * @pos:	the &struct list_head to use as a loop cursor.
+- * @head:	the head for your list.
+- */
+-#define list_for_each_prev(pos, head) \
+-	for (pos = (head)->prev; prefetch(pos->prev), pos != (head); \
+-		pos = pos->prev)
+-
+-/**
+- * list_for_each_safe - iterate over a list safe against removal of list entry
+- * @pos:	the &struct list_head to use as a loop cursor.
+- * @n:		another &struct list_head to use as temporary storage
+- * @head:	the head for your list.
+- */
+-#define list_for_each_safe(pos, n, head) \
+-	for (pos = (head)->next, n = pos->next; pos != (head); \
+-		pos = n, n = pos->next)
+-
+-/**
+- * list_for_each_prev_safe - iterate over a list backwards safe against removal of list entry
+- * @pos:	the &struct list_head to use as a loop cursor.
+- * @n:		another &struct list_head to use as temporary storage
+- * @head:	the head for your list.
+- */
+-#define list_for_each_prev_safe(pos, n, head) \
+-	for (pos = (head)->prev, n = pos->prev; \
+-	     prefetch(pos->prev), pos != (head); \
+-	     pos = n, n = pos->prev)
+-
+-/**
+- * list_for_each_entry	-	iterate over list of given type
+- * @pos:	the type * to use as a loop cursor.
+- * @head:	the head for your list.
+- * @member:	the name of the list_struct within the struct.
+- */
+-#define list_for_each_entry(pos, head, member)				\
+-	for (pos = list_entry((head)->next, typeof(*pos), member);	\
+-	     prefetch(pos->member.next), &pos->member != (head);	\
+-	     pos = list_entry(pos->member.next, typeof(*pos), member))
+-
+-/**
+- * list_for_each_entry_reverse - iterate backwards over list of given type.
+- * @pos:	the type * to use as a loop cursor.
+- * @head:	the head for your list.
+- * @member:	the name of the list_struct within the struct.
+- */
+-#define list_for_each_entry_reverse(pos, head, member)			\
+-	for (pos = list_entry((head)->prev, typeof(*pos), member);	\
+-	     prefetch(pos->member.prev), &pos->member != (head);	\
+-	     pos = list_entry(pos->member.prev, typeof(*pos), member))
+-
+-/**
+- * list_prepare_entry - prepare a pos entry for use in list_for_each_entry_continue()
+- * @pos:	the type * to use as a start point
+- * @head:	the head of the list
+- * @member:	the name of the list_struct within the struct.
+- *
+- * Prepares a pos entry for use as a start point in list_for_each_entry_continue().
+- */
+-#define list_prepare_entry(pos, head, member) \
+-	((pos) ? : list_entry(head, typeof(*pos), member))
+-
+-/**
+- * list_for_each_entry_continue - continue iteration over list of given type
+- * @pos:	the type * to use as a loop cursor.
+- * @head:	the head for your list.
+- * @member:	the name of the list_struct within the struct.
+- *
+- * Continue to iterate over list of given type, continuing after
+- * the current position.
+- */
+-#define list_for_each_entry_continue(pos, head, member) 		\
+-	for (pos = list_entry(pos->member.next, typeof(*pos), member);	\
+-	     prefetch(pos->member.next), &pos->member != (head);	\
+-	     pos = list_entry(pos->member.next, typeof(*pos), member))
+-
+-/**
+- * list_for_each_entry_continue_reverse - iterate backwards from the given point
+- * @pos:	the type * to use as a loop cursor.
+- * @head:	the head for your list.
+- * @member:	the name of the list_struct within the struct.
+- *
+- * Start to iterate over list of given type backwards, continuing after
+- * the current position.
+- */
+-#define list_for_each_entry_continue_reverse(pos, head, member)		\
+-	for (pos = list_entry(pos->member.prev, typeof(*pos), member);	\
+-	     prefetch(pos->member.prev), &pos->member != (head);	\
+-	     pos = list_entry(pos->member.prev, typeof(*pos), member))
+-
+-/**
+- * list_for_each_entry_from - iterate over list of given type from the current point
+- * @pos:	the type * to use as a loop cursor.
+- * @head:	the head for your list.
+- * @member:	the name of the list_struct within the struct.
+- *
+- * Iterate over list of given type, continuing from current position.
+- */
+-#define list_for_each_entry_from(pos, head, member)			\
+-	for (; prefetch(pos->member.next), &pos->member != (head);	\
+-	     pos = list_entry(pos->member.next, typeof(*pos), member))
+-
+-/**
+- * list_for_each_entry_safe - iterate over list of given type safe against removal of list entry
+- * @pos:	the type * to use as a loop cursor.
+- * @n:		another type * to use as temporary storage
+- * @head:	the head for your list.
+- * @member:	the name of the list_struct within the struct.
+- */
+-#define list_for_each_entry_safe(pos, n, head, member)			\
+-	for (pos = list_entry((head)->next, typeof(*pos), member),	\
+-		n = list_entry(pos->member.next, typeof(*pos), member);	\
+-	     &pos->member != (head);					\
+-	     pos = n, n = list_entry(n->member.next, typeof(*n), member))
+-
+-/**
+- * list_for_each_entry_safe_continue
+- * @pos:	the type * to use as a loop cursor.
+- * @n:		another type * to use as temporary storage
+- * @head:	the head for your list.
+- * @member:	the name of the list_struct within the struct.
+- *
+- * Iterate over list of given type, continuing after current point,
+- * safe against removal of list entry.
+- */
+-#define list_for_each_entry_safe_continue(pos, n, head, member) 		\
+-	for (pos = list_entry(pos->member.next, typeof(*pos), member),		\
+-		n = list_entry(pos->member.next, typeof(*pos), member);		\
+-	     &pos->member != (head);						\
+-	     pos = n, n = list_entry(n->member.next, typeof(*n), member))
+-
+-/**
+- * list_for_each_entry_safe_from
+- * @pos:	the type * to use as a loop cursor.
+- * @n:		another type * to use as temporary storage
+- * @head:	the head for your list.
+- * @member:	the name of the list_struct within the struct.
+- *
+- * Iterate over list of given type from current point, safe against
+- * removal of list entry.
+- */
+-#define list_for_each_entry_safe_from(pos, n, head, member)			\
+-	for (n = list_entry(pos->member.next, typeof(*pos), member);		\
+-	     &pos->member != (head);						\
+-	     pos = n, n = list_entry(n->member.next, typeof(*n), member))
+-
+-/**
+- * list_for_each_entry_safe_reverse
+- * @pos:	the type * to use as a loop cursor.
+- * @n:		another type * to use as temporary storage
+- * @head:	the head for your list.
+- * @member:	the name of the list_struct within the struct.
+- *
+- * Iterate backwards over list of given type, safe against removal
+- * of list entry.
+- */
+-#define list_for_each_entry_safe_reverse(pos, n, head, member)		\
+-	for (pos = list_entry((head)->prev, typeof(*pos), member),	\
+-		n = list_entry(pos->member.prev, typeof(*pos), member);	\
+-	     &pos->member != (head);					\
+-	     pos = n, n = list_entry(n->member.prev, typeof(*n), member))
+-
+-/*
+- * Double linked lists with a single pointer list head.
+- * Mostly useful for hash tables where the two pointer list head is
+- * too wasteful.
+- * You lose the ability to access the tail in O(1).
+- */
+-
+-struct hlist_head {
+-	struct hlist_node *first;
+-};
+-
+-struct hlist_node {
+-	struct hlist_node *next, **pprev;
+-};
+-
+-#define HLIST_HEAD_INIT { .first = NULL }
+-#define HLIST_HEAD(name) struct hlist_head name = {  .first = NULL }
+-#define INIT_HLIST_HEAD(ptr) ((ptr)->first = NULL)
+-static inline void INIT_HLIST_NODE(struct hlist_node *h)
+-{
+-	h->next = NULL;
+-	h->pprev = NULL;
+-}
+-
+-static inline int hlist_unhashed(const struct hlist_node *h)
+-{
+-	return !h->pprev;
+-}
+-
+-static inline int hlist_empty(const struct hlist_head *h)
+-{
+-	return !h->first;
+-}
+-
+-static inline void __hlist_del(struct hlist_node *n)
+-{
+-	struct hlist_node *next = n->next;
+-	struct hlist_node **pprev = n->pprev;
+-	*pprev = next;
+-	if (next)
+-		next->pprev = pprev;
+-}
+-
+-static inline void hlist_del(struct hlist_node *n)
+-{
+-	__hlist_del(n);
+-	n->next = LIST_POISON1;
+-	n->pprev = LIST_POISON2;
+-}
+-
+-static inline void hlist_del_init(struct hlist_node *n)
+-{
+-	if (!hlist_unhashed(n)) {
+-		__hlist_del(n);
+-		INIT_HLIST_NODE(n);
+ 	}
+-}
+-
+-static inline void hlist_add_head(struct hlist_node *n, struct hlist_head *h)
+-{
+-	struct hlist_node *first = h->first;
+-	n->next = first;
+-	if (first)
+-		first->pprev = &n->next;
+-	h->first = n;
+-	n->pprev = &h->first;
+-}
+-
+-/* next must be != NULL */
+-static inline void hlist_add_before(struct hlist_node *n,
+-					struct hlist_node *next)
+-{
+-	n->pprev = next->pprev;
+-	n->next = next;
+-	next->pprev = &n->next;
+-	*(n->pprev) = n;
+-}
+-
+-static inline void hlist_add_after(struct hlist_node *n,
+-					struct hlist_node *next)
+-{
+-	next->next = n->next;
+-	n->next = next;
+-	next->pprev = &n->next;
+ 
+-	if(next->next)
+-		next->next->pprev  = &next->next;
++	head->prev = prev;
++	tail->next = next;
++	prev->next = head;
++	next->prev = tail;
+ }
+ 
+-#define hlist_entry(ptr, type, member) container_of(ptr,type,member)
+-
+-#define hlist_for_each(pos, head) \
+-	for (pos = (head)->first; pos && ({ prefetch(pos->next); 1; }); \
+-	     pos = pos->next)
+-
+-#define hlist_for_each_safe(pos, n, head) \
+-	for (pos = (head)->first; pos && ({ n = pos->next; 1; }); \
+-	     pos = n)
+-
+-/**
+- * hlist_for_each_entry	- iterate over list of given type
+- * @tpos:	the type * to use as a loop cursor.
+- * @pos:	the &struct hlist_node to use as a loop cursor.
+- * @head:	the head for your list.
+- * @member:	the name of the hlist_node within the struct.
+- */
+-#define hlist_for_each_entry(tpos, pos, head, member)			 \
+-	for (pos = (head)->first;					 \
+-	     pos && ({ prefetch(pos->next); 1;}) &&			 \
+-		({ tpos = hlist_entry(pos, typeof(*tpos), member); 1;}); \
+-	     pos = pos->next)
+-
+-/**
+- * hlist_for_each_entry_continue - iterate over a hlist continuing after current point
+- * @tpos:	the type * to use as a loop cursor.
+- * @pos:	the &struct hlist_node to use as a loop cursor.
+- * @member:	the name of the hlist_node within the struct.
+- */
+-#define hlist_for_each_entry_continue(tpos, pos, member)		 \
+-	for (pos = (pos)->next;						 \
+-	     pos && ({ prefetch(pos->next); 1;}) &&			 \
+-		({ tpos = hlist_entry(pos, typeof(*tpos), member); 1;}); \
+-	     pos = pos->next)
+-
+-/**
+- * hlist_for_each_entry_from - iterate over a hlist continuing from current point
+- * @tpos:	the type * to use as a loop cursor.
+- * @pos:	the &struct hlist_node to use as a loop cursor.
+- * @member:	the name of the hlist_node within the struct.
+- */
+-#define hlist_for_each_entry_from(tpos, pos, member)			 \
+-	for (; pos && ({ prefetch(pos->next); 1;}) &&			 \
+-		({ tpos = hlist_entry(pos, typeof(*tpos), member); 1;}); \
+-	     pos = pos->next)
+-
+-/**
+- * hlist_for_each_entry_safe - iterate over list of given type safe against removal of list entry
+- * @tpos:	the type * to use as a loop cursor.
+- * @pos:	the &struct hlist_node to use as a loop cursor.
+- * @n:		another &struct hlist_node to use as temporary storage
+- * @head:	the head for your list.
+- * @member:	the name of the hlist_node within the struct.
+- */
+-#define hlist_for_each_entry_safe(tpos, pos, n, head, member)		 \
+-	for (pos = (head)->first;					 \
+-	     pos && ({ n = pos->next; 1; }) &&				 \
+-		({ tpos = hlist_entry(pos, typeof(*tpos), member); 1;}); \
+-	     pos = n)
+-
+ #endif
+diff --git a/src/lib/fy-parse.c b/src/lib/fy-parse.c
+index 16ce784..0cacdbc 100644
+--- a/src/lib/fy-parse.c
++++ b/src/lib/fy-parse.c
+@@ -646,13 +646,13 @@ static const struct fy_parse_cfg default_parse_cfg = {
+ 
+ static struct fy_diag *fy_parser_reader_get_diag(struct fy_reader *fyr)
+ {
+-	struct fy_parser *fyp = container_of(fyr, struct fy_parser, builtin_reader);
++	struct fy_parser *fyp = fy_container_of(fyr, struct fy_parser, builtin_reader);
+ 	return fyp->diag;
+ }
+ 
+ static int fy_parser_reader_file_open(struct fy_reader *fyr, const char *name)
+ {
+-	struct fy_parser *fyp = container_of(fyr, struct fy_parser, builtin_reader);
++	struct fy_parser *fyp = fy_container_of(fyr, struct fy_parser, builtin_reader);
+ 	char *sp, *s, *e, *t, *newp;
+ 	size_t len, maxlen;
+ 	int fd;
+diff --git a/src/lib/fy-parse.h b/src/lib/fy-parse.h
+index 11e71bf..dc43911 100644
+--- a/src/lib/fy-parse.h
++++ b/src/lib/fy-parse.h
+@@ -49,7 +49,7 @@ enum fy_flow_type {
+ };
+ 
+ struct fy_flow {
+-	struct list_head node;
++	struct fy_list_head node;
+ 	enum fy_flow_type flow;
+ 	int pending_complex_key_column;
+ 	struct fy_mark pending_complex_key_mark;
+@@ -58,7 +58,7 @@ struct fy_flow {
+ FY_PARSE_TYPE_DECL(flow);
+ 
+ struct fy_indent {
+-	struct list_head node;
++	struct fy_list_head node;
+ 	int indent;
+ 	int indent_line;
+ 	bool generated_block_map : 1;
+@@ -68,7 +68,7 @@ FY_PARSE_TYPE_DECL(indent);
+ struct fy_token;
+ 
+ struct fy_simple_key {
+-	struct list_head node;
++	struct fy_list_head node;
+ 	struct fy_mark mark;
+ 	struct fy_mark end_mark;
+ 	struct fy_token *token;	/* associated token */
+@@ -132,7 +132,7 @@ enum fy_parser_state {
+ };
+ 
+ struct fy_parse_state_log {
+-	struct list_head node;
++	struct fy_list_head node;
+ 	enum fy_parser_state state;
+ };
+ FY_PARSE_TYPE_DECL(parse_state_log);
+diff --git a/src/lib/fy-path.h b/src/lib/fy-path.h
+index 22dde9c..e551d5a 100644
+--- a/src/lib/fy-path.h
++++ b/src/lib/fy-path.h
+@@ -57,7 +57,7 @@ struct fy_path_sequence_state {
+ };
+ 
+ struct fy_path_component {
+-	struct list_head node;
++	struct fy_list_head node;
+ 	enum fy_path_component_type type;
+ 	union {
+ 		struct fy_path_mapping_state map;
+@@ -87,7 +87,7 @@ fy_path_component_is_collection_root(struct fy_path_component *fypc)
+ 
+ FY_TYPE_FWD_DECL_LIST(path);
+ struct fy_path {
+-	struct list_head node;
++	struct fy_list_head node;
+ 	struct fy_path_component_list recycled_component;
+ 	struct fy_path_component_list components;
+ 	struct fy_document_builder *fydb;	/* for complex keys */
+diff --git a/src/lib/fy-token.h b/src/lib/fy-token.h
+index a464955..8436e10 100644
+--- a/src/lib/fy-token.h
++++ b/src/lib/fy-token.h
+@@ -81,7 +81,7 @@ static inline bool fy_token_type_is_mapping_marker(enum fy_token_type type)
+ 
+ FY_TYPE_FWD_DECL_LIST(token);
+ struct fy_token {
+-	struct list_head node;
++	struct fy_list_head node;
+ 	enum fy_token_type type;
+ 	int refs;		/* when on document, we switch to reference counting */
+ 	int analyze_flags;	/* cache of the analysis flags */
+diff --git a/src/lib/fy-typelist.h b/src/lib/fy-typelist.h
+index 7fd9148..12acd2d 100644
+--- a/src/lib/fy-typelist.h
++++ b/src/lib/fy-typelist.h
+@@ -24,24 +24,24 @@
+ 
+ #define FY_TYPE_FWD_DECL_LIST(_type) \
+ /* type safe list wrapper */ \
+-struct fy_ ## _type ## _list { struct list_head _lh; }; \
++struct fy_ ## _type ## _list { struct fy_list_head _lh; }; \
+ \
+ struct __useless_struct_to_allow_semicolon
+ 
+ #define FY_TYPE_DECL_LIST(_type) \
+ static inline void fy_ ## _type ## _list_init(struct fy_ ## _type ## _list *_l) \
+ { \
+-	INIT_LIST_HEAD(&_l->_lh); \
++	fy_list_init_head(&_l->_lh); \
+ } \
+ static inline void fy_ ## _type ## _list_add(struct fy_ ## _type ## _list *_l, struct fy_ ## _type *_n) \
+ { \
+ 	if (_l && _n) \
+-		list_add(&_n->node, &_l->_lh); \
++		fy_list_add_head(&_n->node, &_l->_lh); \
+ } \
+ static inline void fy_ ## _type ## _list_add_tail(struct fy_ ## _type ## _list *_l, struct fy_ ## _type *_n) \
+ { \
+ 	if (_l && _n) \
+-		list_add_tail(&_n->node, &_l->_lh); \
++		fy_list_add_tail(&_n->node, &_l->_lh); \
+ } \
+ static inline void fy_ ## _type ## _list_push(struct fy_ ## _type ## _list *_l, struct fy_ ## _type *_n) \
+ { \
+@@ -55,38 +55,38 @@ static inline void fy_ ## _type ## _list_push_tail(struct fy_ ## _type ## _list
+ } \
+ static inline bool fy_ ## _type ## _list_empty(struct fy_ ## _type ## _list *_l) \
+ { \
+-	return _l ? list_empty(&_l->_lh) : true; \
++	return _l ? fy_list_is_empty(&_l->_lh) : true; \
+ } \
+ static inline bool fy_ ## _type ## _list_is_singular(struct fy_ ## _type ## _list *_l) \
+ { \
+-	return _l ? list_is_singular(&_l->_lh) : true; \
++	return _l ? fy_list_is_singular(&_l->_lh) : true; \
+ } \
+ static inline void fy_ ## _type ## _list_del(struct fy_ ## _type ## _list *_l, struct fy_ ## _type *_n) \
+ { \
+ 	if (_l && _n) { \
+-		list_del(&_n->node); \
+-		INIT_LIST_HEAD(&_n->node); \
++		fy_list_del(&_n->node); \
++		fy_list_init_head(&_n->node); \
+ 	} \
+ } \
+ static inline void fy_ ## _type ## _list_insert_after(struct fy_ ## _type ## _list *_l, \
+ 		struct fy_ ## _type *_p, struct fy_ ## _type *_n) \
+ { \
+ 	if (_l && _p && _n) \
+-		list_add(&_n->node, &_p->node); \
++		fy_list_add_head(&_n->node, &_p->node); \
+ } \
+ static inline void fy_ ## _type ## _list_insert_before(struct fy_ ## _type ## _list *_l, \
+ 		struct fy_ ## _type *_p, struct fy_ ## _type *_n) \
+ { \
+ 	if (_l && _p && _n) \
+-		list_add_tail(&_n->node, &_p->node); \
++		fy_list_add_tail(&_n->node, &_p->node); \
+ } \
+ static inline struct fy_ ## _type *fy_ ## _type ## _list_head(struct fy_ ## _type ## _list *_l) \
+ { \
+-	return !fy_ ## _type ## _list_empty(_l) ? list_first_entry(&_l->_lh, struct fy_ ## _type, node) : NULL; \
++	return !fy_ ## _type ## _list_empty(_l) ? fy_container_of(_l->_lh.next, struct fy_ ## _type, node) : NULL; \
+ } \
+ static inline struct fy_ ## _type *fy_ ## _type ## _list_tail(struct fy_ ## _type ## _list *_l) \
+ { \
+-	return !fy_ ## _type ## _list_empty(_l) ? list_last_entry(&_l->_lh, struct fy_ ## _type, node) : NULL; \
++	return !fy_ ## _type ## _list_empty(_l) ? fy_container_of(_l->_lh.prev, struct fy_ ## _type, node) : NULL; \
+ } \
+ static inline struct fy_ ## _type *fy_ ## _type ## _list_first(struct fy_ ## _type ## _list *_l) \
+ { \
+@@ -120,13 +120,13 @@ static inline struct fy_ ## _type *fy_ ## _type ## _next(struct fy_ ## _type ##
+ { \
+ 	if (!_n || !_l || _n->node.next == &_l->_lh) \
+ 		return NULL; \
+-	return list_entry(_n->node.next, struct fy_ ## _type, node); \
++	return fy_container_of(_n->node.next, struct fy_ ## _type, node); \
+ } \
+ static inline struct fy_ ## _type *fy_ ## _type ## _prev(struct fy_ ## _type ## _list *_l, struct fy_ ## _type *_n) \
+ { \
+ 	if (!_n || !_l || _n->node.prev == &_l->_lh) \
+ 		return NULL; \
+-	return list_entry(_n->node.prev, struct fy_ ## _type, node); \
++	return fy_container_of(_n->node.prev, struct fy_ ## _type, node); \
+ } \
+ static inline void fy_ ## _type ## _lists_splice( \
+ 		struct fy_ ## _type ## _list *_l, \
+@@ -134,9 +134,9 @@ static inline void fy_ ## _type ## _lists_splice( \
+ { \
+ 	/* check arguments for sanity and lists are not empty */ \
+ 	if (!_l || !_lfrom || \
+-	    fy_ ## _type ## _list_empty(_lfrom)) \
++		fy_ ## _type ## _list_empty(_lfrom)) \
+ 		return; \
+-	list_splice(&_lfrom->_lh, &_l->_lh); \
++	fy_list_splice(&_lfrom->_lh, &_l->_lh); \
+ } \
+ static inline void fy_ ## _type ## _list_splice_after( \
+ 		struct fy_ ## _type ## _list *_l, struct fy_ ## _type *_n, \
+@@ -144,19 +144,19 @@ static inline void fy_ ## _type ## _list_splice_after( \
+ { \
+ 	/* check arguments for sanity and lists are not empty */ \
+ 	if (!_l || !_n || !_lfrom || \
+-	    fy_ ## _type ## _list_empty(_lfrom)) \
++		fy_ ## _type ## _list_empty(_lfrom)) \
+ 		return; \
+-	list_splice(&_lfrom->_lh, &_n->node); \
++	fy_list_splice(&_lfrom->_lh, &_n->node); \
+ } \
+ static inline void fy_ ## _type ## _list_splice_before( \
+ 		struct fy_ ## _type ## _list *_l, struct fy_ ## _type *_n, \
+ 		struct fy_ ## _type ## _list *_lfrom) \
+ { \
+ 	/* check arguments for sanity and lists are not empty */ \
+-	if (!_l || !_n || !_lfrom || \
+-	    fy_ ## _type ## _list_empty(_lfrom)) \
++	 if (!_l || !_n || !_lfrom || \
++		fy_ ## _type ## _list_empty(_lfrom)) \
+ 		return; \
+-	list_splice(&_lfrom->_lh, _n->node.prev); \
++	fy_list_splice(&_lfrom->_lh, _n->node.prev); \
+ } \
+ struct __useless_struct_to_allow_semicolon
+ 
+diff --git a/src/lib/fy-types.h b/src/lib/fy-types.h
+index 6bddda3..889f2dc 100644
+--- a/src/lib/fy-types.h
++++ b/src/lib/fy-types.h
+@@ -35,7 +35,7 @@ struct fy_ ## _type *fy_ ## _type ## _alloc_simple_internal( \
+ 		return _n; \
+ 	_n = malloc(sizeof(*_n)); \
+ 	if (_n) \
+-		INIT_LIST_HEAD(&_n->node); \
++        fy_list_init_head(&_n->node); \
+ 	return _n; \
+ } \
+ \
+diff --git a/src/lib/fy-walk.c b/src/lib/fy-walk.c
+index 736704d..8cd2ee6 100644
+--- a/src/lib/fy-walk.c
++++ b/src/lib/fy-walk.c
+@@ -717,7 +717,7 @@ const char *fy_expr_mode_txt[FYEM_COUNT] = {
+ 
+ static struct fy_diag *fy_path_parser_reader_get_diag(struct fy_reader *fyr)
+ {
+-	struct fy_path_parser *fypp = container_of(fyr, struct fy_path_parser, reader);
++	struct fy_path_parser *fypp = fy_container_of(fyr, struct fy_path_parser, reader);
+ 	return fypp->cfg.diag;
+ }
+ 
+diff --git a/src/lib/fy-walk.h b/src/lib/fy-walk.h
+index e42a76f..bc200f6 100644
+--- a/src/lib/fy-walk.h
++++ b/src/lib/fy-walk.h
+@@ -49,7 +49,7 @@ struct fy_path_exec;
+ 
+ FY_TYPE_FWD_DECL_LIST(walk_result);
+ struct fy_walk_result {
+-	struct list_head node;
++	struct fy_list_head node;
+ 	struct fy_path_exec *fypx;
+ 	enum fy_walk_result_type type;
+ 	union {
+@@ -264,7 +264,7 @@ struct fy_method {
+ 
+ FY_TYPE_FWD_DECL_LIST(path_expr);
+ struct fy_path_expr {
+-	struct list_head node;
++	struct fy_list_head node;
+ 	struct fy_path_expr *parent;
+ 	enum fy_path_expr_type type;
+ 	struct fy_token *fyt;
+
+From 834d53848206ca9bf9caf92c4499b45ca8531acb Mon Sep 17 00:00:00 2001
+From: Innokentii Mokin <innokentii@yandex-team.ru>
+Date: Wed, 21 Dec 2022 17:38:37 +0300
+Subject: [PATCH 2/3] add tests for list implementation
+
+---
+ test/libfyaml-test-private.c | 265 +++++++++++++++++++++++++++++++++++
+ 1 file changed, 265 insertions(+)
+
+diff --git a/test/libfyaml-test-private.c b/test/libfyaml-test-private.c
+index c428682..a233eb1 100644
+--- a/test/libfyaml-test-private.c
++++ b/test/libfyaml-test-private.c
+@@ -152,6 +152,268 @@ START_TEST(parse_simple)
+ }
+ END_TEST
+ 
++struct fy_test_struct_foo {
++	int foo;
++};
++
++struct fy_test_struct_bar {
++	int frooz;
++};
++
++struct fy_test_struct_baz {
++	int one;
++	struct fy_test_struct_bar two;
++	struct fy_test_struct_foo three;
++};
++
++START_TEST(container_of)
++{
++	struct fy_test_struct_baz ftsbaz;
++	struct fy_test_struct_bar *ftsbar;
++	struct fy_test_struct_baz *ftsbazp;
++	ftsbar = &ftsbaz.two;
++	ftsbazp = fy_container_of(ftsbar, struct fy_test_struct_baz, two);
++	ck_assert_ptr_eq(&ftsbaz, ftsbazp);
++}
++END_TEST
++
++START_TEST(list)
++{
++	struct fy_list_head head, other_head, one, two, three, four, five, six;
++	bool ret;
++
++	/* add head */
++	fy_list_init_head(&head);
++	ret = fy_list_is_empty(&head);
++	ck_assert(ret == true);
++	ret = fy_list_is_singular(&head);
++	ck_assert(ret == false);
++	ck_assert_ptr_eq(head.prev, &head);
++	ck_assert_ptr_eq(head.next, &head);
++
++	fy_list_add_head(&one, &head);
++	ret = fy_list_is_singular(&head);
++	ck_assert(ret == true);
++	ret = fy_list_is_empty(&head);
++	ck_assert(ret == false);
++	ck_assert_ptr_eq(head.next, &one);
++	ck_assert_ptr_eq(head.next->next, &head);
++	ck_assert_ptr_eq(head.prev, &one);
++	ck_assert_ptr_eq(head.prev->prev, &head);
++
++	fy_list_add_head(&two, &head);
++	ret = fy_list_is_singular(&head);
++	ck_assert(ret == false);
++	ret = fy_list_is_empty(&head);
++	ck_assert(ret == false);
++	ck_assert_ptr_eq(head.next, &two);
++	ck_assert_ptr_eq(head.next->next, &one);
++	ck_assert_ptr_eq(head.next->next->next, &head);
++	ck_assert_ptr_eq(head.prev, &one);
++	ck_assert_ptr_eq(head.prev->prev, &two);
++	ck_assert_ptr_eq(head.prev->prev->prev, &head);
++
++	fy_list_add_head(&three, &head);
++	ret = fy_list_is_singular(&head);
++	ck_assert(ret == false);
++	ret = fy_list_is_empty(&head);
++	ck_assert(ret == false);
++	ck_assert_ptr_eq(head.next, &three);
++	ck_assert_ptr_eq(head.next->next, &two);
++	ck_assert_ptr_eq(head.next->next->next, &one);
++	ck_assert_ptr_eq(head.next->next->next->next, &head);
++	ck_assert_ptr_eq(head.prev, &one);
++	ck_assert_ptr_eq(head.prev->prev, &two);
++	ck_assert_ptr_eq(head.prev->prev->prev, &three);
++	ck_assert_ptr_eq(head.prev->prev->prev->prev, &head);
++
++	/* add tail */
++	fy_list_init_head(&head);
++	ret = fy_list_is_empty(&head);
++	ck_assert(ret == true);
++	ret = fy_list_is_singular(&head);
++	ck_assert(ret == false);
++	ck_assert_ptr_eq(head.prev, &head);
++	ck_assert_ptr_eq(head.next, &head);
++
++	fy_list_add_tail(&one, &head);
++	ret = fy_list_is_singular(&head);
++	ck_assert(ret == true);
++	ret = fy_list_is_empty(&head);
++	ck_assert(ret == false);
++	ck_assert_ptr_eq(head.next, &one);
++	ck_assert_ptr_eq(head.next->next, &head);
++	ck_assert_ptr_eq(head.prev, &one);
++	ck_assert_ptr_eq(head.prev->prev, &head);
++
++	fy_list_add_tail(&two, &head);
++	ret = fy_list_is_singular(&head);
++	ck_assert(ret == false);
++	ret = fy_list_is_empty(&head);
++	ck_assert(ret == false);
++	ck_assert_ptr_eq(head.next, &one);
++	ck_assert_ptr_eq(head.next->next, &two);
++	ck_assert_ptr_eq(head.next->next->next, &head);
++	ck_assert_ptr_eq(head.prev, &two);
++	ck_assert_ptr_eq(head.prev->prev, &one);
++	ck_assert_ptr_eq(head.prev->prev->prev, &head);
++
++	fy_list_add_tail(&three, &head);
++	ret = fy_list_is_singular(&head);
++	ck_assert(ret == false);
++	ret = fy_list_is_empty(&head);
++	ck_assert(ret == false);
++	ck_assert_ptr_eq(head.next, &one);
++	ck_assert_ptr_eq(head.next->next, &two);
++	ck_assert_ptr_eq(head.next->next->next, &three);
++	ck_assert_ptr_eq(head.next->next->next->next, &head);
++	ck_assert_ptr_eq(head.prev, &three);
++	ck_assert_ptr_eq(head.prev->prev, &two);
++	ck_assert_ptr_eq(head.prev->prev->prev, &one);
++	ck_assert_ptr_eq(head.prev->prev->prev->prev, &head);
++
++	/* delete */
++	fy_list_init_head(&head);
++	fy_list_add_head(&one, &head);
++	fy_list_del(&one);
++	ret = fy_list_is_empty(&head);
++	ck_assert(ret == true);
++	ret = fy_list_is_singular(&head);
++	ck_assert(ret == false);
++	ck_assert_ptr_eq(head.next, &head);
++	ck_assert_ptr_eq(head.prev, &head);
++
++	fy_list_init_head(&head);
++	fy_list_add_head(&one, &head);
++	fy_list_add_head(&two, &head);
++	fy_list_del(&one);
++	ret = fy_list_is_singular(&head);
++	ck_assert(ret == true);
++	ret = fy_list_is_empty(&head);
++	ck_assert(ret == false);
++	ck_assert_ptr_eq(head.next, &two);
++	ck_assert_ptr_eq(head.next->next, &head);
++	ck_assert_ptr_eq(head.prev, &two);
++	ck_assert_ptr_eq(head.prev->prev, &head);
++
++	fy_list_init_head(&head);
++	fy_list_add_head(&one, &head);
++	fy_list_add_head(&two, &head);
++	fy_list_del(&two);
++	ret = fy_list_is_singular(&head);
++	ck_assert(ret == true);
++	ret = fy_list_is_empty(&head);
++	ck_assert(ret == false);
++	ck_assert_ptr_eq(head.next, &one);
++	ck_assert_ptr_eq(head.next->next, &head);
++	ck_assert_ptr_eq(head.prev, &one);
++	ck_assert_ptr_eq(head.prev->prev, &head);
++
++	fy_list_init_head(&head);
++	fy_list_add_head(&one, &head);
++	fy_list_add_head(&two, &head);
++	fy_list_add_head(&three, &head);
++	fy_list_del(&two);
++	ret = fy_list_is_singular(&head);
++	ck_assert(ret == false);
++	ret = fy_list_is_empty(&head);
++	ck_assert(ret == false);
++	ck_assert_ptr_eq(head.next, &three);
++	ck_assert_ptr_eq(head.next->next, &one);
++	ck_assert_ptr_eq(head.next->next->next, &head);
++	ck_assert_ptr_eq(head.prev, &one);
++	ck_assert_ptr_eq(head.prev->prev, &three);
++	ck_assert_ptr_eq(head.prev->prev->prev, &head);
++
++	/* splice */
++	fy_list_init_head(&head);
++	fy_list_init_head(&other_head);
++	fy_list_splice(&other_head, &one);
++	ret = fy_list_is_singular(&head);
++	ck_assert(ret == false);
++	ret = fy_list_is_empty(&head);
++	ck_assert(ret == true);
++	ck_assert_ptr_eq(head.next, &head);
++	ck_assert_ptr_eq(head.prev, &head);
++
++	fy_list_init_head(&head);
++	fy_list_add_head(&one, &head);
++	fy_list_init_head(&other_head);
++	fy_list_splice(&other_head, &one);
++	ret = fy_list_is_singular(&head);
++	ck_assert(ret == true);
++	ret = fy_list_is_empty(&head);
++	ck_assert(ret == false);
++	ck_assert_ptr_eq(head.next, &one);
++	ck_assert_ptr_eq(head.next->next, &head);
++	ck_assert_ptr_eq(head.prev, &one);
++	ck_assert_ptr_eq(head.prev->prev, &head);
++
++	fy_list_init_head(&head);
++	fy_list_init_head(&other_head);
++	fy_list_add_head(&four, &head);
++	fy_list_splice(&other_head, &one);
++	ret = fy_list_is_singular(&head);
++	ck_assert(ret == true);
++	ret = fy_list_is_empty(&head);
++	ck_assert(ret == false);
++	ck_assert_ptr_eq(head.next, &four);
++	ck_assert_ptr_eq(head.next->next, &head);
++	ck_assert_ptr_eq(head.prev, &four);
++	ck_assert_ptr_eq(head.prev->prev, &head);
++
++	fy_list_init_head(&head);
++	fy_list_add_head(&one, &head);
++	fy_list_add_head(&two, &head);
++	fy_list_init_head(&other_head);
++	fy_list_add_head(&four, &other_head);
++	fy_list_add_head(&five, &other_head);
++	fy_list_splice(&other_head, &two);
++	ret = fy_list_is_singular(&head);
++	ck_assert(ret == false);
++	ret = fy_list_is_empty(&head);
++	ck_assert(ret == false);
++	ck_assert_ptr_eq(head.next, &two);
++	ck_assert_ptr_eq(head.next->next, &five);
++	ck_assert_ptr_eq(head.next->next->next, &four);
++	ck_assert_ptr_eq(head.next->next->next->next, &one);
++	ck_assert_ptr_eq(head.next->next->next->next->next, &head);
++	ck_assert_ptr_eq(head.prev, &one);
++	ck_assert_ptr_eq(head.prev->prev, &four);
++	ck_assert_ptr_eq(head.prev->prev->prev, &five);
++	ck_assert_ptr_eq(head.prev->prev->prev->prev, &two);
++	ck_assert_ptr_eq(head.prev->prev->prev->prev->prev, &head);
++
++	fy_list_init_head(&head);
++	fy_list_add_head(&one, &head);
++	fy_list_add_head(&two, &head);
++	fy_list_add_head(&three, &head);
++	fy_list_init_head(&other_head);
++	fy_list_add_head(&four, &other_head);
++	fy_list_add_head(&five, &other_head);
++	fy_list_add_head(&six, &other_head);
++	fy_list_splice(&other_head, &two);
++	ret = fy_list_is_singular(&head);
++	ck_assert(ret == false);
++	ret = fy_list_is_empty(&head);
++	ck_assert(ret == false);
++	ck_assert_ptr_eq(head.next, &three);
++	ck_assert_ptr_eq(head.next->next, &two);
++	ck_assert_ptr_eq(head.next->next->next, &six);
++	ck_assert_ptr_eq(head.next->next->next->next, &five);
++	ck_assert_ptr_eq(head.next->next->next->next->next, &four);
++	ck_assert_ptr_eq(head.next->next->next->next->next->next, &one);
++	ck_assert_ptr_eq(head.next->next->next->next->next->next->next, &head);
++	ck_assert_ptr_eq(head.prev, &one);
++	ck_assert_ptr_eq(head.prev->prev, &four);
++	ck_assert_ptr_eq(head.prev->prev->prev, &five);
++	ck_assert_ptr_eq(head.prev->prev->prev->prev, &six);
++	ck_assert_ptr_eq(head.prev->prev->prev->prev->prev, &two);
++	ck_assert_ptr_eq(head.prev->prev->prev->prev->prev->prev, &three);
++	ck_assert_ptr_eq(head.prev->prev->prev->prev->prev->prev->prev, &head);
++}
++END_TEST
++
+ TCase *libfyaml_case_private(void)
+ {
+ 	TCase *tc;
+@@ -162,5 +424,8 @@ TCase *libfyaml_case_private(void)
+ 	tcase_add_test(tc, scan_simple);
+ 	tcase_add_test(tc, parse_simple);
+ 
++	tcase_add_test(tc, container_of);
++	tcase_add_test(tc, list);
++
+ 	return tc;
+ }
+
+From c157c9428b37eed6650cd8f2cce61d7978cbed31 Mon Sep 17 00:00:00 2001
+From: Innokentii Mokin <innokentii@yandex-team.ru>
+Date: Sun, 29 Jan 2023 00:27:22 +0300
+Subject: [PATCH 3/3] replace unportable gcc extensions
+
+---
+ src/lib/fy-list.h | 8 +++-----
+ 1 file changed, 3 insertions(+), 5 deletions(-)
+
+diff --git a/src/lib/fy-list.h b/src/lib/fy-list.h
+index 65e17f9..df35cb2 100644
+--- a/src/lib/fy-list.h
++++ b/src/lib/fy-list.h
+@@ -10,11 +10,9 @@
+ 
+ #include <stddef.h>
+ 
+-#define fy_container_of(pointer, type, member) ({ \
+-		const typeof(((type *)NULL)->member) *__## member ## _ptr = (pointer); \
+-		(type *) ((char *)__ ## member ## _ptr - offsetof(type, member)); \
+-	} \
+-)
++#define fy_container_of(ptr, type, member) \
++    ( (void)sizeof(0 ? (ptr) : &((type *)0)->member), \
++      (type *)((char*)(ptr) - offsetof(type, member)) )
+ 
+ struct fy_list_head {
+ 	struct fy_list_head *prev;
+
+

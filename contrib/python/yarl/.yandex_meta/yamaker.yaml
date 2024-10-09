@@ -1,0 +1,2 @@
+mark_as_cython_c:
+  - yarl/_quoting_c.pyx

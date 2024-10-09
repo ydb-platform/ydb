@@ -1,0 +1,50 @@
+--- contrib/python/click/py2/click/formatting.py	(index)
++++ contrib/python/click/py2/click/formatting.py	(working tree)
+@@ -219,7 +219,7 @@ class HelpFormatter(object):
+             lines = wrapped_text.splitlines()
+ 
+             if lines:
+-                self.write("{}\n".format(lines[0]))
++                self.write(u"{}\n".format(lines[0]))
+ 
+                 for line in lines[1:]:
+                     self.write(
+--- contrib/python/click/py2/tests/test_arguments.py	(index)
++++ contrib/python/click/py2/tests/test_arguments.py	(working tree)
+@@ -78,6 +78,7 @@ def test_nargs_err(runner):
+     assert "Got unexpected extra argument (bar)" in result.output
+ 
+ 
++@pytest.mark.skip(reason="Can't monkeypatch sys.stdin.encoding in Arcadia Python")
+ def test_bytes_args(runner, monkeypatch):
+     @click.command()
+     @click.argument("arg")
+--- contrib/python/click/py2/tests/test_imports.py	(index)
++++ contrib/python/click/py2/tests/test_imports.py	(working tree)
+@@ -1,3 +1,4 @@
++import os
+ import json
+ import subprocess
+ import sys
+@@ -56,8 +57,10 @@ if WIN:
+ 
+ 
+ def test_light_imports():
++    env = os.environ.copy()
++    env["Y_PYTHON_ENTRY_POINT"] = ":main"
+     c = subprocess.Popen(
+-        [sys.executable, "-"], stdin=subprocess.PIPE, stdout=subprocess.PIPE
++        [sys.executable, "-"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=env,
+     )
+     rv = c.communicate(IMPORT_TEST)[0]
+ 
+--- contrib/python/click/py2/tests/test_termui.py	(index)
++++ contrib/python/click/py2/tests/test_termui.py	(working tree)
+@@ -238,6 +238,7 @@ def test_choices_list_in_prompt(runner, monkeypatch):
+     assert "(none, day, week, month)" not in result.output
+ 
+ 
++@pytest.mark.skip
+ @pytest.mark.parametrize(
+     "file_kwargs", [{"mode": "rt"}, {"mode": "rb"}, {"lazy": True}]
+ )

@@ -64,8 +64,12 @@ public:
 
 private:
     void StartRequest() {
-        auto event = NTableCreator::BuildSchemeCacheNavigateRequest({ {} }, Database ? Database : AppData()->TenantName,
-            MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{}));
+        auto event = NTableCreator::BuildSchemeCacheNavigateRequest(
+            {{}},
+            Database ? Database : AppData()->TenantName,
+            MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{})
+        );
+        event->ResultSet[0].Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(event.Release()), IEventHandle::FlagTrackDelivery);
     }
 
@@ -90,29 +94,6 @@ private:
     void Reply(const std::optional<TString>& errorMessage = std::nullopt) {
         Send(Owner, new TEvFetchDatabaseResponse(Serverless, errorMessage));
         PassAway();
-    }
-
-    static THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigate(const std::vector<TVector<TString>>& localPaths,
-        const TString database, TIntrusivePtr<NACLib::TUserToken> userToken,
-        NSchemeCache::TSchemeCacheNavigate::EOp operation = NSchemeCache::TSchemeCacheNavigate::OpTable) {
-        auto databasePath = SplitPath(database);
-
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        request->DatabaseName = CanonizePath(databasePath);
-        if (userToken && !userToken->GetSerializedToken().empty()) {
-            request->UserToken = userToken;
-        }
-
-        for (const auto& path : localPaths) {
-            auto& entry = request->ResultSet.emplace_back();
-            entry.Operation = operation;
-            entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
-            entry.ShowPrivatePath = true;
-            entry.Path = databasePath;
-            entry.Path.insert(entry.Path.end(), path.begin(), path.end());
-        }
-
-        return request;
     }
 
 private:

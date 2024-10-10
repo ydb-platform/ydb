@@ -45,9 +45,6 @@ struct TTopicSessionMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
 };
 
-using TJson = TVector<std::string_view>;
-using TJsonBatch = TVector<TJson>;
-
 struct TEvPrivate {
     // Event ids
     enum EEv : ui32 {
@@ -750,10 +747,6 @@ void TTopicSession::UpdateParser() {
     }
 
     try {
-        // if (ReadSession && LastParsedMessageOffset != LastReceivedMessageOffset) { //
-        //     LOG_ROW_DISPATCHER_INFO("Inflate parsing data (" << (LastReceivedMessageOffset - LastParsedMessageOffset) << "), restart topic session");
-        //     StopReadSession();
-        // }
         UpdateParserSchema(namesWithTypes);
 
         TVector<TString> names;
@@ -765,8 +758,6 @@ void TTopicSession::UpdateParser() {
 
         LOG_ROW_DISPATCHER_TRACE("Init JsonParser with columns: " << JoinSeq(',', names));
         Parser = NewJsonParser(names, types);
-      //  CurrentParserTypes = std::make_pair(GetVector(sourceParams.GetColumns()), GetVector(sourceParams.GetColumnTypes()));
-       // Parser = NewJsonParser(GetVector(sourceParams.GetColumns()), GetVector(sourceParams.GetColumnTypes()));
     } catch (const NYql::NPureCalc::TCompileError& e) {
         FatalError(e.GetIssues());
     }

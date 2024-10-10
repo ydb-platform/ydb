@@ -142,7 +142,7 @@ Depending on the rowMode parameter, the data can be retrieved in javascript form
           fn: async (session) => {
               const {resultSets} =
                   await session.execute({
-                      // rowMode: RowType.Native, // Result set cols and rows returned as native javascript values. It's default behaviour
+                      // rowMode: RowType.Native, // Result set columns and rows are returned as native JavaScript values. This is the default behavior.
                       text: `
                           SELECT series_id,
                                  title,

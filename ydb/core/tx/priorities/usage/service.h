@@ -23,29 +23,29 @@ public:
     static void RegisterClient(const ui64 clientId) {
         auto& context = NActors::TActorContext::AsActorContext();
         if (TSelf::IsEnabled()) {
-            context.Send(MakeServiceId(context.SelfID.NodeId()), new TEvExecution::TEvRegisterClient(clientId));
+            context.Send(MakeServiceId(), new TEvExecution::TEvRegisterClient(clientId));
         }
     }
     static void UnregisterClient(const ui64 clientId) {
         auto& context = NActors::TActorContext::AsActorContext();
         if (TSelf::IsEnabled()) {
-            context.Send(MakeServiceId(context.SelfID.NodeId()), new TEvExecution::TEvUnregisterClient(clientId));
+            context.Send(MakeServiceId(), new TEvExecution::TEvUnregisterClient(clientId));
         }
     }
     static void Ask(const ui64 clientId, const ui64 priority, const std::shared_ptr<IRequest>& request, const ui32 count = 1) {
         AFL_VERIFY(request);
         auto& context = NActors::TActorContext::AsActorContext();
         if (TSelf::IsEnabled()) {
-            context.Send(MakeServiceId(context.SelfID.NodeId()), new TEvExecution::TEvAsk(clientId, count, request, priority));
+            context.Send(MakeServiceId(), new TEvExecution::TEvAsk(clientId, count, request, priority));
         } else {
-            request->OnAllocated();
+            request->OnAllocated(std::make_shared<TAllocationGuard>(clientId, count));
         }
     }
     static bool IsEnabled() {
         return Singleton<TSelf>()->IsEnabledFlag;
     }
-    static NActors::TActorId MakeServiceId(const ui32 nodeId) {
-        return NActors::TActorId(nodeId, "SrvcPrqe" + GetQueueName());
+    static NActors::TActorId MakeServiceId() {
+        return NActors::TActorId(NActors::TActorContext::AsActorContext().SelfID.NodeId(), "SrvcPrqe" + GetQueueName());
     }
     static NActors::IActor* CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> queueSignals) {
         Register(config);

@@ -65,25 +65,6 @@ struct TEvExecution {
         }
     };
 
-    class TAllocationGuard {
-    private:
-        const NActors::TActorId ServiceActorId;
-        const ui64 ClientId;
-        const ui32 Count;
-        bool Released = false;
-
-    public:
-        TAllocationGuard(const NActors::TActorId& serviceActorId, const ui64 clientId, const ui32 count)
-            : ServiceActorId(serviceActorId)
-            , ClientId(clientId)
-            , Count(count) {
-        }
-
-        ~TAllocationGuard();
-
-        void Release();
-    };
-
     class TEvAllocated: public NActors::TEventLocal<TEvAllocated, EvAllocated> {
     private:
         YDB_READONLY(ui64, RequestId, 0);

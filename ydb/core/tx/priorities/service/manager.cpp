@@ -1,5 +1,6 @@
 #include "manager.h"
 
+#include <ydb/core/tx/priorities/usage/abstract.h>
 #include <ydb/core/tx/priorities/usage/events.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -13,7 +14,7 @@ void TManager::AllocateNext() {
         AFL_VERIFY(it != Clients.end());
         UsedCount += waitRequest.GetSize();
         it->second.MutableCount() += waitRequest.GetSize();
-        waitRequest.GetRequest()->OnAllocated();
+        waitRequest.GetRequest()->OnAllocated(std::make_shared<TAllocationGuard>(waitRequest.GetClientId(), waitRequest.GetSize()));
         WaitingQueue.erase(WaitingQueue.begin());
     }
     Counters->QueueSize->Set(WaitingQueue.size());
@@ -29,9 +30,12 @@ void TManager::RemoveFromQueue(const TClientStatus& client) {
 }
 
 void TManager::Free(const ui64 clientId, const ui32 count) {
-    Counters->Free->Inc();
     auto it = Clients.find(clientId);
-    AFL_VERIFY(it != Clients.end());
+    if (it == Clients.end()) {
+        Counters->FreeNoClient->Inc();
+        return;
+    }
+    Counters->Free->Inc();
     AFL_VERIFY(it->second.GetCount() <= UsedCount);
     AFL_VERIFY(count <= it->second.GetCount());
     it->second.MutableCount() -= count;

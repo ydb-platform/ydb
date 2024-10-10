@@ -1,14 +1,34 @@
 #pragma once
+#include <ydb/library/actors/core/actorid.h>
 
 namespace NKikimr::NPrioritiesQueue {
 
-class IRequest {
-protected:
-    virtual void DoOnAllocated() = 0;
+class TAllocationGuard {
+private:
+    const ui64 ClientId;
+    const ui32 Count;
+    bool Released = false;
 
 public:
-    void OnAllocated() {
-        return DoOnAllocated();
+    TAllocationGuard(const ui64 clientId, const ui32 count)
+        : ClientId(clientId)
+        , Count(count) {
+    }
+
+    ~TAllocationGuard();
+
+    void Release(const NActors::TActorId& serviceActorId);
+};
+
+class IRequest {
+protected:
+    virtual void DoOnAllocated(const std::shared_ptr<TAllocationGuard>& guard) = 0;
+
+public:
+    virtual ~IRequest() = default;
+
+    void OnAllocated(const std::shared_ptr<TAllocationGuard>& guard) {
+        return DoOnAllocated(guard);
     }
 };
 

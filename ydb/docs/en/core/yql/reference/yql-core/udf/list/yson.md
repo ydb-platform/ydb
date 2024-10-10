@@ -269,7 +269,7 @@ Yson::SerializeJson(Resource<'Yson2.Node'>{Flags:AutoMap}, [Resource<'Yson2.Opti
 
 * `SkipMapEntity` serializes `#` values in dictionaries. The value of attributes is not affected by the flag. By default, `false`.
 * `EncodeUtf8` responsible for escaping non-ASCII characters. By default, `false`.
-* `WriteNanAsString` allows serializing `NaN` and `Inf` values as a string. By default, `false`.
+* `WriteNanAsString` allows serializing `NaN` and `Inf` values as strings. By default, `false`.
 
 The `Yson` and `Json` data types returned by serialization functions are special cases of a string that is known to contain data in the given format (Yson/Json).
 

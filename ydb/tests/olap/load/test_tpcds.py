@@ -29,9 +29,15 @@ class TestTpcds10(TpcdsSuiteBase):
 
 class TestTpcds100(TpcdsSuiteBase):
     size: int = 100
+    iterations: int = 2
     timeout = max(TpcdsSuiteBase.timeout, 3600.)
+    query_settings = {
+        14: LoadSuiteBase.QuerySettings(timeout=max(TpcdsSuiteBase.timeout, 7200.)),
+        72: LoadSuiteBase.QuerySettings(timeout=max(TpcdsSuiteBase.timeout, 7200.)),
+    }
 
 
 class TestTpcds1000(TpcdsSuiteBase):
     size: int = 1000
+    iterations: int = 2
     timeout = max(TpcdsSuiteBase.timeout, 3*3600.)

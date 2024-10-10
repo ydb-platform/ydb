@@ -25,7 +25,7 @@
 * [SAMPLE](sample.md)
 * [TABLESAMPLE](sample.md)
 
-{% if feature_map_reduce %}
+{% if feature_mapreduce %}
 
 * [FOLDER](folder.md)
 * [WalkFolders](walk_folders.md)

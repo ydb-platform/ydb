@@ -1,5 +1,6 @@
 #include "core_ydb.h"
 #include "core_ydb_impl.h"
+#include "mvp_tokens.h"
 
 #include <ydb/library/actors/http/http_cache.h>
 
@@ -407,4 +408,11 @@ TString GetAuthHeaderValue(const TString& tokenName) {
         authHeaderValue = TYdbLocation::GetUserToken();
     }
     return authHeaderValue;
+}
+
+void SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config) {
+    config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIME_MS] = 20000;
+    config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIMEOUT_MS] = 10000;
+    config.IntChannelParams[GRPC_ARG_HTTP2_MAX_PINGS_WITHOUT_DATA] = 0;
+    config.IntChannelParams[GRPC_ARG_KEEPALIVE_PERMIT_WITHOUT_CALLS] = 1;
 }

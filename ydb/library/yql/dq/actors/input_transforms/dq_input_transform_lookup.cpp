@@ -85,6 +85,7 @@ public:
             .Alloc = Alloc,
             .KeyTypeHelper = KeyTypeHelper,
             .ParentId = SelfId(),
+            .TaskCounters = TaskCounters,
             .LookupSource = Settings.GetRightSource().GetLookupSource(),
             .KeyType = LookupKeyType,
             .PayloadType = LookupPayloadType,

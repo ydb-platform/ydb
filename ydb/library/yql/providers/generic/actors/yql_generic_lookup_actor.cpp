@@ -64,6 +64,7 @@ namespace NYql::NDq {
             NConnector::IClient::TPtr connectorClient,
             TGenericTokenProvider::TPtr tokenProvider,
             NActors::TActorId&& parentId,
+            ::NMonitoring::TDynamicCounterPtr taskCounters,
             std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
             std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
             NYql::Generic::TLookupSource&& lookupSource,
@@ -85,6 +86,7 @@ namespace NYql::NDq {
             , ColumnDestinations(CreateColumnDestination())
             , MaxKeysInRequest(maxKeysInRequest)
         {
+            InitMonCounters(taskCounters);
         }
 
         ~TGenericLookupActor() {
@@ -96,6 +98,17 @@ namespace NYql::NDq {
             auto guard = Guard(*Alloc);
             Request.reset();
             KeyTypeHelper.reset();
+        }
+        void InitMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
+            if (taskCounters) {
+                Count = taskCounters->GetCounter("GenericLookupCount");
+                Keys = taskCounters->GetCounter("GenericLookupKeys");
+                ResultChunks = taskCounters->GetCounter("GenericLookupResultChunks");
+                ResultRows = taskCounters->GetCounter("GenericLookupResultRows");
+                ResultBytes = taskCounters->GetCounter("GenericLookupResultBytes");
+                AnswerTime = taskCounters->GetCounter("GenericLookupAnswerTimeMs");
+                CpuTime = taskCounters->GetCounter("GenericLookupCpuTimeUs");
+            }
         }
     public:
 
@@ -209,12 +222,23 @@ namespace NYql::NDq {
         }
 
     private:
+        static TDuration GetCpuTimeDelta(ui64 StartCycleCount) {
+            return TDuration::Seconds(NHPTimer::GetSeconds(GetCycleCountFast() - StartCycleCount));
+        }
+
         void CreateRequest(std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> request) {
             if (!request) {
                 return;
             }
+            auto StartCycleCount = GetCycleCountFast();
+            SentTime = TInstant::Now();
             YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " Got LookupRequest for " << request->size() << " keys";
             Y_ABORT_IF(request->size() == 0 || request->size() > MaxKeysInRequest);
+
+            if (Count) {
+                Count->Inc();
+                Keys->Add(request->size());
+            }
 
             Request = std::move(request);
             NConnector::NApi::TListSplitsRequest splitRequest;
@@ -237,6 +261,8 @@ namespace NYql::NDq {
                     SendError(actorSystem, selfId, result.Status);
                 }
             });
+            if (CpuTime)
+                CpuTime->Add(GetCpuTimeDelta(StartCycleCount).MicroSeconds());
         }
 
         void ReadNextData() {
@@ -264,7 +290,15 @@ namespace NYql::NDq {
         }
 
         void ProcessReceivedData(const NConnector::NApi::TReadSplitsResponse& resp) {
+            auto StartCycleCount = GetCycleCountFast();
             Y_ABORT_UNLESS(resp.payload_case() == NConnector::NApi::TReadSplitsResponse::PayloadCase::kArrowIpcStreaming);
+            if (ResultChunks) {
+                ResultChunks->Inc();
+                if (resp.has_stats()) {
+                    ResultRows->Add(resp.stats().rows());
+                    ResultBytes->Add(resp.stats().bytes());
+                }
+            }
             auto guard = Guard(*Alloc);
             NKikimr::NArrow::NSerialization::TSerializerContainer deser = NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer(); // todo move to class' member
             const auto& data = deser->Deserialize(resp.arrow_ipc_streaming());
@@ -290,12 +324,16 @@ namespace NYql::NDq {
                     *v = std::move(output); // duplicates will be overwritten
                 }
             }
+            if (CpuTime)
+                CpuTime->Add(GetCpuTimeDelta(StartCycleCount).MicroSeconds());
         }
 
         void FinalizeRequest() {
             YQL_CLOG(DEBUG, ProviderGeneric) << "Sending lookup results for " << Request->size() << " keys";
             auto guard = Guard(*Alloc);
             auto ev = new IDqAsyncLookupSource::TEvLookupResult(Request);
+            if (AnswerTime)
+                AnswerTime->Add((TInstant::Now() - SentTime).MilliSeconds());
             Request.reset();
             TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
             LookupResult = {};
@@ -398,12 +436,21 @@ namespace NYql::NDq {
         std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> Request;
         NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator; // TODO move me to TEvReadSplitsPart
         NKikimr::NMiniKQL::TKeyPayloadPairVector LookupResult;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Count;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Keys;
+        ::NMonitoring::TDynamicCounters::TCounterPtr ResultRows;
+        ::NMonitoring::TDynamicCounters::TCounterPtr ResultBytes;
+        ::NMonitoring::TDynamicCounters::TCounterPtr ResultChunks;
+        ::NMonitoring::TDynamicCounters::TCounterPtr AnswerTime;
+        ::NMonitoring::TDynamicCounters::TCounterPtr CpuTime;
+        TInstant SentTime;
     };
 
     std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateGenericLookupActor(
         NConnector::IClient::TPtr connectorClient,
         ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         NActors::TActorId parentId,
+        ::NMonitoring::TDynamicCounterPtr taskCounters,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
         NYql::Generic::TLookupSource&& lookupSource,
@@ -419,6 +466,7 @@ namespace NYql::NDq {
             connectorClient,
             std::move(tokenProvider),
             std::move(parentId),
+            taskCounters,
             alloc,
             keyTypeHelper,
             std::move(lookupSource),

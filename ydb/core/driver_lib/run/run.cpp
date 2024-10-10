@@ -931,6 +931,10 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             opts.SetKeepAliveEnable(false);
         }
 
+        if (grpcConfig.HasEndpointId()) {
+            opts.SetEndpointId(grpcConfig.GetEndpointId());
+        }
+
         NConsole::SetGRpcLibraryFunction();
 
 #define GET_PATH_TO_FILE(GRPC_CONFIG, PRIMARY_FIELD, SECONDARY_FIELD) \
@@ -972,6 +976,10 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                 if (ex.GetHost())
                     xopts.SetHost(ex.GetHost());
 
+                if (ex.HasEndpointId()) {
+                    xopts.SetEndpointId(ex.GetEndpointId());
+                }
+
                 GRpcServers.push_back({ "grpc", new NYdbGrpc::TGRpcServer(xopts) });
                 fillFn(ex, *GRpcServers.back().second, xopts);
             }
@@ -980,6 +988,9 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                 NYdbGrpc::TServerOptions xopts = opts;
                 xopts.SetPort(ex.GetSslPort());
 
+                if (ex.HasEndpointId()) {
+                    xopts.SetEndpointId(ex.GetEndpointId());
+                }
 
                 NYdbGrpc::TSslData sslData;
 

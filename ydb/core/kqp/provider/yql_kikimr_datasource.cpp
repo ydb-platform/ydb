@@ -762,8 +762,8 @@ public:
                     .Repeat(TExprStep::LoadTablesMetadata)
                     .Repeat(TExprStep::RewriteIO);
 
-                const auto& query = tableDesc.Metadata->ViewPersistedData.QueryText;
-                return RewriteReadFromView(node, ctx, query, cluster, Types.Modules);
+                const auto& viewData = tableDesc.Metadata->ViewPersistedData;
+                return RewriteReadFromView(node, ctx, SessionCtx->Query().TranslationSettings, Types.Modules, viewData);
             }
         }
 

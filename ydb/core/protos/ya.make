@@ -138,6 +138,7 @@ SRCS(
     scheme_board.proto
     scheme_board_mon.proto
     sys_view.proto
+    yql_translation_settings.proto
 )
 
 GENERATE_ENUM_SERIALIZATION(blobstorage_pdisk_config.pb.h)

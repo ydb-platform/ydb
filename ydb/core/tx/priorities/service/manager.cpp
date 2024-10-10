@@ -14,7 +14,8 @@ void TManager::AllocateNext() {
         AFL_VERIFY(it != Clients.end());
         UsedCount += waitRequest.GetSize();
         it->second.MutableCount() += waitRequest.GetSize();
-        waitRequest.GetRequest()->OnAllocated(std::make_shared<TAllocationGuard>(waitRequest.GetClientId(), waitRequest.GetSize()));
+        it->second.SetLastPriority(std::nullopt);
+        waitRequest.GetRequest()->OnAllocated(std::make_shared<TAllocationGuard>(ServiceActorId, waitRequest.GetClientId(), waitRequest.GetSize()));
         WaitingQueue.erase(WaitingQueue.begin());
     }
     Counters->QueueSize->Set(WaitingQueue.size());
@@ -74,9 +75,10 @@ void TManager::UnregisterClient(const ui64 clientId) {
     Counters->Clients->Set(Clients.size());
 }
 
-TManager::TManager(const std::shared_ptr<TCounters>& counters, const TConfig& config)
+TManager::TManager(const std::shared_ptr<TCounters>& counters, const TConfig& config, const NActors::TActorId& serviceActorId)
     : Counters(counters)
-    , Config(config) {
+    , Config(config)
+    , ServiceActorId(serviceActorId) {
     AFL_VERIFY(Counters);
 }
 

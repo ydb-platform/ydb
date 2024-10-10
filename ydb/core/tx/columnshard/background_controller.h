@@ -25,7 +25,6 @@ public:
     TBackgroundController(std::shared_ptr<TBackgroundControllerCounters> counters)
         : Counters(std::move(counters)) {
     }
-
     THashSet<NOlap::TPortionAddress> GetConflictTTLPortions() const;
     THashSet<NOlap::TPortionAddress> GetConflictCompactionPortions() const;
 
@@ -34,7 +33,11 @@ public:
 
     bool StartCompaction(const NOlap::TPlanCompactionInfo& info);
     void FinishCompaction(const NOlap::TPlanCompactionInfo& info) {
-        Y_ABORT_UNLESS(ActiveCompactionInfo.erase(info.GetIdentifier()));
+        auto it = ActiveCompactionInfo.find(info.GetPathId());
+        AFL_VERIFY(it != ActiveCompactionInfo.end());
+        if (it->second.Finish()) {
+            ActiveCompactionInfo.erase(it);
+        }
         Counters->OnCompactionFinish(info.GetPathId());
     }
     ui32 GetCompactionsCount() const {

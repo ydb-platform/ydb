@@ -20,11 +20,14 @@ private:
         return TQueuePolicy::Name;
     }
 public:
-    static void RegisterClient(const ui64 clientId) {
-        auto& context = NActors::TActorContext::AsActorContext();
+    [[nodiscard]] static ui64 RegisterClient() {
+        static TAtomicCounter Counter = 0;
+        const ui64 id = Counter.Inc();
         if (TSelf::IsEnabled()) {
-            context.Send(MakeServiceId(), new TEvExecution::TEvRegisterClient(clientId));
+            auto& context = NActors::TActorContext::AsActorContext();
+            context.Send(MakeServiceId(), new TEvExecution::TEvRegisterClient(id));
         }
+        return id;
     }
     static void UnregisterClient(const ui64 clientId) {
         auto& context = NActors::TActorContext::AsActorContext();
@@ -34,11 +37,10 @@ public:
     }
     static void Ask(const ui64 clientId, const ui64 priority, const std::shared_ptr<IRequest>& request, const ui32 count = 1) {
         AFL_VERIFY(request);
-        auto& context = NActors::TActorContext::AsActorContext();
         if (TSelf::IsEnabled()) {
-            context.Send(MakeServiceId(), new TEvExecution::TEvAsk(clientId, count, request, priority));
+            NActors::TActorContext::AsActorContext().Send(MakeServiceId(), new TEvExecution::TEvAsk(clientId, count, request, priority));
         } else {
-            request->OnAllocated(std::make_shared<TAllocationGuard>(clientId, count));
+            request->OnAllocated(std::make_shared<TAllocationGuard>(NActors::TActorId(), clientId, count));
         }
     }
     static bool IsEnabled() {
@@ -46,6 +48,9 @@ public:
     }
     static NActors::TActorId MakeServiceId() {
         return NActors::TActorId(NActors::TActorContext::AsActorContext().SelfID.NodeId(), "SrvcPrqe" + GetQueueName());
+    }
+    static NActors::TActorId MakeServiceId(const ui64 nodeId) {
+        return NActors::TActorId(nodeId, "SrvcPrqe" + GetQueueName());
     }
     static NActors::IActor* CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> queueSignals) {
         Register(config);

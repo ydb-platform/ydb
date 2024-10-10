@@ -736,7 +736,7 @@ void TColumnShard::SetupCompaction() {
     BackgroundController.CheckDeadlines();
     const ui64 priority = TablesManager.MutablePrimaryIndex().GetCompactionPriority(DataLocksManager);
     if (priority) {
-        NPrioritiesQueue::TCompServiceOperator::Ask(TabletID(), priority, std::make_shared<TCompactionAllocated>(SelfId()));
+        NPrioritiesQueue::TCompServiceOperator::Ask(PrioritizationClientId, priority, std::make_shared<TCompactionAllocated>(SelfId()));
     }
 }
 
@@ -745,7 +745,6 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
 
     auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(DataLocksManager);
     if (!indexChanges) {
-        guard->Release(NPrioritiesQueue::TCompServiceOperator::MakeServiceId());
         LOG_S_DEBUG("Compaction not started: cannot prepare compaction at tablet " << TabletID());
         return;
     }

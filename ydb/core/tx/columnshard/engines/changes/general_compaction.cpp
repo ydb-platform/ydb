@@ -231,10 +231,6 @@ std::shared_ptr<TGeneralCompactColumnEngineChanges::IMemoryPredictor> TGeneralCo
     return std::make_shared<TMemoryPredictorChunkedPolicy>();
 }
 
-TGeneralCompactColumnEngineChanges::~TGeneralCompactColumnEngineChanges() {
-    PrioritiesAllocationGuard->Release(NPrioritiesQueue::TCompServiceOperator::MakeServiceId());
-}
-
 ui64 TGeneralCompactColumnEngineChanges::TMemoryPredictorChunkedPolicy::AddPortion(const TPortionInfo& portionInfo) {
     SumMemoryFix += portionInfo.GetRecordsCount() * (2 * sizeof(ui64) + sizeof(ui32) + sizeof(ui16));
     ++PortionsCount;

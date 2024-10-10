@@ -14,22 +14,22 @@ private:
     std::shared_ptr<TCounters> Counters;
     const TString QueueName = "common";
     const TConfig Config;
-    TManager Manager;
+    std::unique_ptr<TManager> Manager;
 
     void Handle(TEvExecution::TEvRegisterClient::TPtr& ev) {
-        Manager.RegisterClient(ev->Get()->GetClientId());
+        Manager->RegisterClient(ev->Get()->GetClientId());
     }
 
     void Handle(TEvExecution::TEvUnregisterClient::TPtr& ev) {
-        Manager.UnregisterClient(ev->Get()->GetClientId());
+        Manager->UnregisterClient(ev->Get()->GetClientId());
     }
 
     void Handle(TEvExecution::TEvAsk::TPtr& ev) {
-        Manager.Ask(ev->Get()->GetClientId(), ev->Get()->GetCount(), ev->Get()->GetRequest(), ev->Get()->GetPriority());
+        Manager->Ask(ev->Get()->GetClientId(), ev->Get()->GetCount(), ev->Get()->GetRequest(), ev->Get()->GetPriority());
     }
 
     void Handle(TEvExecution::TEvFree::TPtr& ev) {
-        Manager.Free(ev->Get()->GetClientId(), ev->Get()->GetCount());
+        Manager->Free(ev->Get()->GetClientId(), ev->Get()->GetCount());
     }
 
 public:

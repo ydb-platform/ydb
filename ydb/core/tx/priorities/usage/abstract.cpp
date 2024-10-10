@@ -7,13 +7,15 @@
 namespace NKikimr::NPrioritiesQueue {
 
 TAllocationGuard::~TAllocationGuard() {
-    AFL_VERIFY(Released);
+    if (!Released) {
+        Release();
+    }
 }
 
-void TAllocationGuard::Release(const NActors::TActorId& serviceActorId) {
+void TAllocationGuard::Release() {
     AFL_VERIFY(!Released);
     auto& context = NActors::TActorContext::AsActorContext();
-    context.Send(serviceActorId, new TEvExecution::TEvFree(ClientId, Count));
+    context.Send(ServiceActorId, new TEvExecution::TEvFree(ClientId, Count));
     Released = true;
 }
 

@@ -2218,7 +2218,7 @@ void TCompPrioritiesInitializer::InitializeServices(NActors::TActorSystemSetup* 
         auto service = NPrioritiesQueue::TCompServiceOperator::CreateService(serviceConfig, conveyorGroup);
 
         setup->LocalServices.push_back(std::make_pair(
-            NPrioritiesQueue::TCompServiceOperator::MakeServiceId(),
+            NPrioritiesQueue::TCompServiceOperator::MakeServiceId(NodeId),
             TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
     }
 }

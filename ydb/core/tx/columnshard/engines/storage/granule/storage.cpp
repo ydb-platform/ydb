@@ -6,11 +6,12 @@ namespace NKikimr::NOlap {
 
 std::optional<NStorageOptimizer::TOptimizationPriority> TGranulesStorage::GetCompactionPriority(
     const std::shared_ptr<NDataLocks::TManager>& dataLocksManager,
-    std::map<NStorageOptimizer::TOptimizationPriority, std::shared_ptr<TGranuleMeta>>* granulesResult) const {
+    std::shared_ptr<TGranuleMeta>* granuleResult) const {
     const TInstant now = HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now();
     std::map<NStorageOptimizer::TOptimizationPriority, std::shared_ptr<TGranuleMeta>> granulesSorted;
     ui32 countChecker = 0;
     std::optional<NStorageOptimizer::TOptimizationPriority> priorityChecker;
+    std::shared_ptr<TGranuleMeta> maxPriorityGranule;
     const TDuration actualizationLag = NYDBTest::TControllers::GetColumnShardController()->GetCompactionActualizationLag();
     for (auto&& i : Tables) {
         //        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("path_id", i.first);
@@ -24,40 +25,37 @@ std::optional<NStorageOptimizer::TOptimizationPriority> TGranulesStorage::GetCom
             for (auto&& it = granulesSorted.rbegin(); it != granulesSorted.rend(); ++it) {
                 if (!it->second->IsLockedOptimizer(dataLocksManager)) {
                     priorityChecker = it->first;
+                    maxPriorityGranule = it->second;
                     break;
                 }
             }
+            granulesSorted.clear();
         }
     }
-    if (granulesResult) {
-        *granulesResult = std::move(granulesSorted);
+    for (auto&& it = granulesSorted.rbegin(); it != granulesSorted.rend(); ++it) {
+        if (!it->second->IsLockedOptimizer(dataLocksManager)) {
+            priorityChecker = it->first;
+            maxPriorityGranule = it->second;
+            break;
+        }
+    }
+    if (granuleResult) {
+        *granuleResult = maxPriorityGranule;
     }
     return priorityChecker;
 }
 
 std::shared_ptr<TGranuleMeta> TGranulesStorage::GetGranuleForCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
-    std::map<NStorageOptimizer::TOptimizationPriority, std::shared_ptr<TGranuleMeta>> granulesSorted;
-    std::optional<NStorageOptimizer::TOptimizationPriority> priorityChecker = GetCompactionPriority(dataLocksManager, &granulesSorted);
-    if (granulesSorted.empty()) {
+    std::shared_ptr<TGranuleMeta> granuleMaxPriority;
+    std::optional<NStorageOptimizer::TOptimizationPriority> priorityChecker = GetCompactionPriority(dataLocksManager, &granuleMaxPriority);
+    if (!granuleMaxPriority) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "no_granules");
         return nullptr;
     }
-    for (auto&& it = granulesSorted.rbegin(); it != granulesSorted.rend(); ++it) {
-        if (priorityChecker && it->first < *priorityChecker) {
-            continue;
-        }
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("path_id", it->second->GetPathId());
-        if (it->second->IsLockedOptimizer(dataLocksManager)) {
-            Counters.OnGranuleOptimizerLocked();
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_optimizer_throught_lock")("priority", it->first.DebugString());
-        } else {
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "granule_compaction_weight")("priority", it->first.DebugString());
-            return it->second;
-        }
-    }
-
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "all_significant_granules_locked")("count", granulesSorted.size());
-    return nullptr;
+    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("path_id", granuleMaxPriority->GetPathId());
+    AFL_VERIFY(!granuleMaxPriority->IsLockedOptimizer(dataLocksManager));
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "granule_compaction_weight")("priority", priorityChecker->DebugString());
+    return granuleMaxPriority;
 }
 
 }   // namespace NKikimr::NOlap

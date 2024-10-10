@@ -41,7 +41,6 @@ protected:
     }
 
 public:
-    ~TGeneralCompactColumnEngineChanges();
     void SetQueueGuard(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& g) {
         PrioritiesAllocationGuard = g;
     }

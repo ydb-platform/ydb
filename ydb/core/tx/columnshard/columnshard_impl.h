@@ -432,6 +432,8 @@ private:
     std::shared_ptr<NOlap::NBackground::TSessionsManager> BackgroundSessionsManager;
     std::shared_ptr<NOlap::NDataLocks::TManager> DataLocksManager;
 
+    ui64 PrioritizationClientId = 0;
+
     using TSchemaPreset = TSchemaPreset;
     using TTableInfo = TTableInfo;
 

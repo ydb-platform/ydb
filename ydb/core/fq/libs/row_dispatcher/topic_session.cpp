@@ -207,7 +207,7 @@ private:
 
     void PrintInternalState();
     void SendSessionError(NActors::TActorId readActorId, const TString& message);
-    TVector<TVector<std::string_view>> RebuildJson(const ClientsInfo& info, const TVector<TVector<std::string_view>>& jsonBatch);
+    TVector<TVector<std::string_view>> RebuildJson(const ClientsInfo& info, const TVector<TVector<std::string_view>>& parsedValues);
     void UpdateParserSchema(const TParserInputType& inputType);
     void UpdateFieldsIds(ClientsInfo& clientInfo);
 
@@ -372,15 +372,15 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&) {
     CreateTopicSession();
 }
 
-TVector<TVector<std::string_view>> TTopicSession::RebuildJson(const ClientsInfo& info, const TVector<TVector<std::string_view>>& jsonBatch) {
+TVector<TVector<std::string_view>> TTopicSession::RebuildJson(const ClientsInfo& info, const TVector<TVector<std::string_view>>& parsedValues) {
     TVector<TVector<std::string_view>> result;
     const auto& offsets = ParserSchema.FieldsMap;
     result.reserve(info.FieldsIds.size());
     for (auto fieldId : info.FieldsIds) {
         Y_ENSURE(fieldId < offsets.size(), "fieldId " << fieldId << ", offsets.size() " << offsets.size());
         auto offset = offsets[fieldId];
-        Y_ENSURE(offset < jsonBatch.size(), "offset " << offset << ", jsonBatch.size() " << jsonBatch.size());
-        result.push_back(jsonBatch[offset]); 
+        Y_ENSURE(offset < parsedValues.size(), "offset " << offset << ", jsonBatch.size() " << parsedValues.size());
+        result.push_back(parsedValues[offset]); 
     }
     return result;
 }

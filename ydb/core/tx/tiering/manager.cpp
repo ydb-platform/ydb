@@ -1,12 +1,14 @@
 #include "common.h"
 #include "manager.h"
 
-#include <ydb/core/tx/tiering/external_data.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/tiering/external_data.h>
 #include <ydb/core/tx/tiering/fetcher/watch.h>
 
 #include <ydb/library/table_creator/table_creator.h>
 #include <ydb/services/metadata/secret/fetcher.h>
+
+#include <util/string/vector.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -27,11 +29,11 @@ private:
     }
 
     void UpdateSnapshot() const {
-        // TODO: validate dependencies?
         Owner->TakeConfigs(TiersSnapshot, TieringRules, SecretsSnapshot);
     }
 
     void ScheduleRetryWatchObjects(std::unique_ptr<NTiers::TEvWatchTieringRules> ev) const {
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiers_manager")("event", "retry_watch_objects");
         constexpr static const TDuration RetryInterval = TDuration::Seconds(1);
         ActorContext().Schedule(RetryInterval, std::make_unique<IEventHandle>(SelfId(), SchemeTieringFetcher, ev.release()));
     }
@@ -69,6 +71,7 @@ private:
     }
 
     void Handle(NTiers::TEvNotifyTieringRuleUpdated::TPtr& ev) {
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_manager")("event", "object_updated")("name", ev->Get()->GetId())("type", "TIERING_RULE");
         TieringRules.emplace(ev->Get()->GetId(), ev->Get()->GetConfig());
         UpdateSnapshot();
     }
@@ -109,6 +112,8 @@ public:
     }
 
     void WatchTieringRules(std::vector<TString> names) {
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiers_manager")("event", "start_watching")("type", "tiering_rule")(
+            "names", JoinStrings(names.begin(), names.end(), ","));
         Send(SchemeTieringFetcher, new NTiers::TEvWatchTieringRules(std::move(names)));
     }
 
@@ -163,15 +168,20 @@ NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSch
 }
 }
 
-void TTiersManager::TakeConfigs(
-    std::shared_ptr<NTiers::TTiersSnapshot> tiers, TTieringRules tieringRules, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
-    ALS_INFO(NKikimrServices::TX_TIERING) << "Take configs: " << (tiers ? " tiers" : "") << " snapshots" << (secrets ? " secrets" : "")
-                                          << " at tablet " << TabletId;
+void TTiersManager::TakeConfigs(std::shared_ptr<NTiers::TTiersSnapshot> tiers, std::optional<TTieringRules> tieringRules,
+    std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
+    ALS_INFO(NKikimrServices::TX_TIERING) << "Take configs: " << (tiers ? " tiers" : "") << (tieringRules ? " tieringRules" : "")
+                                          << (secrets ? " secrets" : "") << " at tablet " << TabletId;
 
-    // TODO: what is some configs are missing?
-    Tiers = tiers;
-    TieringRules = tieringRules;
-    Secrets = secrets;
+    if (tiers) {
+        Tiers = tiers;
+    }
+    if (tieringRules) {
+        TieringRules = std::move(*tieringRules);
+    }
+    if (secrets) {
+        Secrets = secrets;
+    }
 
     OnConfigsUpdated();
 }

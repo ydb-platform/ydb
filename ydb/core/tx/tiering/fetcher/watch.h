@@ -8,6 +8,8 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
+#include <util/string/vector.h>
+
 namespace NKikimr::NColumnShard {
 
 namespace NTiers {
@@ -119,6 +121,7 @@ private:
     }
 
     void OnPathFetched(const TVector<TString> pathComponents, const TPathId& pathId, NSchemeCache::TSchemeCacheNavigate::EKind kind) {
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_watcher")("event", "path_fetched")("path", JoinPath(pathComponents));
         switch (kind) {
             case NSchemeCache::TSchemeCacheNavigate::KindTieringRule:
                 break;
@@ -129,10 +132,12 @@ private:
     }
 
     void OnPathNotFound(const TVector<TString>& path) {
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_watcher")("event", "path_not_found")("path", JoinPath(path));
         OnObjectResolutionFailure(path, NTiers::TEvTieringRuleResolutionFailed::EReason::NOT_FOUND);
     }
 
     void OnLookupError(const TVector<TString>& path) {
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_watcher")("event", "lookup_error")("path", JoinPath(path));
         OnObjectResolutionFailure(path, NTiers::TEvTieringRuleResolutionFailed::EReason::LOOKUP_ERROR);
     }
 
@@ -210,6 +215,7 @@ public:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev) {
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_watcher")("event", "object_fetched")("path", ev->Get()->Path);
         const auto& describeResult = *ev->Get()->Result;
         const auto& pathDescription = describeResult.GetPathDescription();
         const TString& name = pathDescription.GetSelf().GetName();
@@ -227,6 +233,7 @@ public:
         const auto& record = ev->Get();
         const TString name = TString(ExtractBase(record->Path));
         const TString storageDir = TString(ExtractParent(record->Path));
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_watcher")("event", "object_deleted")("path", record->Path);
         if (IsEqualPaths(record->Path, NTiers::TTieringRule::GetBehaviour()->GetStorageTablePath())) {
             WatchedTieringRules.erase(name);
             Send(Owner, new NTiers::TEvNotifyTieringRuleDeleted(name));
@@ -237,10 +244,12 @@ public:
 
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable::TPtr& ev) {
         const auto& record = ev->Get();
-        AFL_WARN(NKikimrServices::TX_TIERING)("event", "scheme object is unavailable")("path", record->Path);
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_watcher")("event", "object_unavailable")("path", record->Path);
     }
 
     void Handle(NTiers::TEvWatchTieringRules::TPtr& ev) {
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_watcher")("event", "watch_tiering_rules")(
+            "names", JoinStrings(ev->Get()->GetNames().begin(), ev->Get()->GetNames().end(), ","));
         WatchTieringRules(ev->Get()->GetNames());
     }
 
@@ -250,7 +259,7 @@ public:
     }
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-        AFL_ERROR(NKikimrServices::TX_TIERING)("event", "event undelivered to local service")("reason", ev->Get()->Reason);
+        AFL_VERIFY(false)("error", "event_undelivered_to_scheme_cache")("reason", ev->Get()->Reason);
     }
 };
 

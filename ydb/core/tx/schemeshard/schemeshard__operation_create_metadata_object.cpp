@@ -170,7 +170,7 @@ public:
             }
         }
 
-        NOperations::TUpdateInitializationContext initializationContext(originalEntity.get(), &context, &Transaction, OperationId.GetTxId().GetValue());
+        NOperations::TUpdateInitializationContext initializationContext(&context, &Transaction, OperationId.GetTxId().GetValue(), originalEntity.get());
         if (auto status = update->Initialize(initializationContext); status.IsFail()) {
             result->SetError(NKikimrScheme::StatusSchemeError, status.GetErrorMessage());
             return result;

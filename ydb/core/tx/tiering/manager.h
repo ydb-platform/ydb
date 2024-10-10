@@ -64,14 +64,14 @@ private:
     TManagers Managers;
 
     std::unordered_map<ui64, TString> PathIdTiering;
-    std::shared_ptr<NMetadata::NSecret::TSnapshot> Secrets;
+    YDB_ACCESSOR_DEF(std::shared_ptr<NMetadata::NSecret::TSnapshot>, Secrets);
     YDB_ACCESSOR_DEF(std::shared_ptr<NTiers::TTiersSnapshot>, Tiers);
     YDB_ACCESSOR_DEF(TTieringRules, TieringRules);
     bool HasCompleteData = true;
 
 private:
     bool ValidateDependencies() const;
-    void TakeConfigs(std::shared_ptr<NTiers::TTiersSnapshot> tiers, TTieringRules tieringRules, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
+    void TakeConfigs(std::shared_ptr<NTiers::TTiersSnapshot> tiers, std::optional<TTieringRules> tieringRules, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
 
 public:
     TTiersManager(const ui64 tabletId, const TActorId& tabletActorId,
@@ -79,6 +79,8 @@ public:
         : TabletId(tabletId)
         , TabletActorId(tabletActorId)
         , ShardCallback(shardCallback)
+        , Secrets(std::make_shared<NMetadata::NSecret::TSnapshot>(TInstant::Zero()))
+        , Tiers(std::make_shared<NTiers::TTiersSnapshot>(TInstant::Zero()))
     {
     }
     TActorId GetActorId() const;

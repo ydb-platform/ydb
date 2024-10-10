@@ -1,6 +1,6 @@
 # Приложение на Node.js
 
-На этой странице подробно разбирается код тестового приложения
+На этой странице представлено подробное описание кода тестового приложения
 [basic-example-v2-with-query-service](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/master/examples/basic-example-v2-with-query-service),
 доступого в составе [Node.js SDK](https://github.com/ydb-platform/ydb-nodejs-sdk) {{ ydb-short-name }}.
 
@@ -18,7 +18,7 @@
   const driver = new Driver({connectionString, authService});
   const timeout = 10000;
   if (!await driver.ready(timeout)) {
-      logger.fatal(`Driver has not become ready in ${timeout}ms!`);
+      logger.fatal(`Driver did not become ready within ${timeout}ms!`);
       process.exit(1);
   }
   ```
@@ -31,7 +31,7 @@
   const driver = new Driver({endpoint, database, authService});
   const timeout = 10000;
   if (!await driver.ready(timeout)) {
-      logger.fatal(`Driver has not become ready in ${timeout}ms!`);
+      logger.fatal(`Driver did not become ready within ${timeout}ms!`);
       process.exit(1);
   }
   ```
@@ -54,7 +54,7 @@
 
   ```ts
   async function createTables(driver: Driver, logger: Logger) {
-      logger.info('Dropping old tables and create new ones...');
+      logger.info('Dropping old tables and creating new ones...');
       await driver.queryClient.do({
           fn: async (session) => {
 

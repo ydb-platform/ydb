@@ -18,7 +18,7 @@ App code snippet for driver initialization:
   const driver = new Driver({connectionString, authService});
   const timeout = 10000;
   if (!await driver.ready(timeout)) {
-      logger.fatal(`Driver has not become ready in ${timeout}ms!`);
+      logger.fatal(`Driver did not become ready within ${timeout}ms!`);
       process.exit(1);
   }
   ```

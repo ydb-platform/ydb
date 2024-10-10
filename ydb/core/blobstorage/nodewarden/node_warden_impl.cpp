@@ -2,6 +2,7 @@
 #include "node_warden_events.h"
 #include "node_warden_impl.h"
 
+#include <google/protobuf/util/message_differencer.h>
 #include <ydb/core/blobstorage/crypto/secured_block.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_request_reporting.h>

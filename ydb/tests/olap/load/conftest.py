@@ -22,7 +22,7 @@ class LoadSuiteBase:
     timeout: float = 1800.
     refference: str = ''
     check_canonical: bool = False
-    query_settings: dict[int, LoadSuiteBase.QuerySettings]
+    query_settings: dict[int, LoadSuiteBase.QuerySettings] = {}
 
     @property
     def suite(self) -> str:

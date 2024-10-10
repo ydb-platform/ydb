@@ -17,23 +17,25 @@ private:
     YDB_READONLY_DEF(TString, TierName);
     YDB_READONLY(ui32, DeletionsCount, 0);
     friend class TPortionMetaConstructor;
+    friend class TPortionInfo;
     TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& min, const TSnapshot& max)
         : ReplaceKeyEdges(pk)
-        , IndexKeyStart(pk.GetFirst())
-        , IndexKeyEnd(pk.GetLast())
         , RecordSnapshotMin(min)
         , RecordSnapshotMax(max)
+        , IndexKeyStart(pk.GetFirst())
+        , IndexKeyEnd(pk.GetLast())
     {
         AFL_VERIFY(IndexKeyStart <= IndexKeyEnd)("start", IndexKeyStart.DebugString())("end", IndexKeyEnd.DebugString());
     }
+    TSnapshot RecordSnapshotMin;
+    TSnapshot RecordSnapshotMax;
+
 public:
     using EProduced = NPortion::EProduced;
 
     NArrow::TReplaceKey IndexKeyStart;
     NArrow::TReplaceKey IndexKeyEnd;
 
-    TSnapshot RecordSnapshotMin;
-    TSnapshot RecordSnapshotMax;
     EProduced Produced = EProduced::UNSPECIFIED;
 
     std::optional<TString> GetTierNameOptional() const;

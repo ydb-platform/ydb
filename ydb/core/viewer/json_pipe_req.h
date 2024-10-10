@@ -36,7 +36,7 @@ public:
 protected:
     bool Followers = true;
     bool Metrics = true;
-    bool WithRetry = true;
+    bool WithRetry = false;
     TString Database;
     TString SharedDatabase;
     bool Direct = false;

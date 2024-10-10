@@ -99,20 +99,20 @@ public:
     void ExpectMessageBatch(NActors::TActorId readActorId, const std::vector<TString>& expected) {
         auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvMessageBatch>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
-        UNIT_ASSERT(eventHolder->Get()->ReadActorId == readActorId);
-        UNIT_ASSERT(expected.size() == eventHolder->Get()->Record.MessagesSize());
+        UNIT_ASSERT_VALUES_EQUAL(eventHolder->Get()->ReadActorId, readActorId);
+        UNIT_ASSERT_VALUES_EQUAL(expected.size(), eventHolder->Get()->Record.MessagesSize());
         for (size_t i = 0; i < expected.size(); ++i) {
             NFq::NRowDispatcherProto::TEvMessage message = eventHolder->Get()->Record.GetMessages(i);
             std::cerr << "message.GetJson() " << message.GetJson() << std::endl;    
-            UNIT_ASSERT(expected[i] == message.GetJson());
+            UNIT_ASSERT_VALUES_EQUAL(expected[i], message.GetJson());
         }
     }
 
     void ExpectSessionError(NActors::TActorId readActorId, TString message) {
         auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvSessionError>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
-        UNIT_ASSERT(eventHolder->Get()->ReadActorId == readActorId);
-        UNIT_ASSERT(TString(eventHolder->Get()->Record.GetMessage()).Contains(message));
+        UNIT_ASSERT_VALUES_EQUAL(eventHolder->Get()->ReadActorId, readActorId);
+        UNIT_ASSERT_STRING_CONTAINS(TString(eventHolder->Get()->Record.GetMessage()), message);
     }
 
     void ExpectNewDataArrived(TSet<NActors::TActorId> readActorIds) {
@@ -129,7 +129,7 @@ public:
         Runtime.Send(new IEventHandle(TopicSession, readActorId, new TEvRowDispatcher::TEvGetNextBatch()));
         auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvMessageBatch>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
-        UNIT_ASSERT(eventHolder->Get()->ReadActorId == readActorId);
+        UNIT_ASSERT_VALUES_EQUAL(eventHolder->Get()->ReadActorId, readActorId);
         return eventHolder->Get()->Record.MessagesSize();
     }
 
@@ -284,7 +284,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         const std::vector<TString> data = { "not json", "noch einmal / nicht json" };
         PQWrite(data, topicName);
 
-        ExpectSessionError(ReadActorId1, "DB::ParsingException: Cannot parse input: expected '{' before: 'not json': (at row 1)");
+        ExpectSessionError(ReadActorId1, "INCORRECT_TYPE: The JSON element does not have the requested type.");
         StopSession(ReadActorId1, source);
     }
 

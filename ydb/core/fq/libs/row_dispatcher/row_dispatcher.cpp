@@ -108,7 +108,6 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
 
     NConfig::TRowDispatcherConfig Config;
-    NConfig::TCommonConfig CommonConfig;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     TYqSharedResources::TPtr YqSharedResources;
     TMaybe<TActorId> CoordinatorActorId;
@@ -171,7 +170,6 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 public:
     explicit TRowDispatcher(
         const NConfig::TRowDispatcherConfig& config,
-        const NConfig::TCommonConfig& commonConfig,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const TYqSharedResources::TPtr& yqSharedResources,
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
@@ -234,7 +232,6 @@ public:
 
 TRowDispatcher::TRowDispatcher(
     const NConfig::TRowDispatcherConfig& config,
-    const NConfig::TCommonConfig& commonConfig,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
@@ -242,7 +239,6 @@ TRowDispatcher::TRowDispatcher(
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters)
     : Config(config)
-    , CommonConfig(commonConfig)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , YqSharedResources(yqSharedResources)
     , CredentialsFactory(credentialsFactory)
@@ -303,8 +299,8 @@ void TRowDispatcher::Handle(TEvPrivate::TEvCoordinatorPing::TPtr&) {
     if (!CoordinatorActorId) {
         return;
     }
-    LOG_ROW_DISPATCHER_DEBUG("Send ping to " << *CoordinatorActorId);
-    Send(*CoordinatorActorId, new NActors::TEvents::TEvPing(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+    LOG_ROW_DISPATCHER_TRACE("Send ping to " << *CoordinatorActorId);
+    Send(*CoordinatorActorId, new NActors::TEvents::TEvPing());
 }
 
 void TRowDispatcher::Handle(NActors::TEvents::TEvPong::TPtr&) {
@@ -586,7 +582,6 @@ void TRowDispatcher::Handle(NFq::TEvPrivate::TEvPrintState::TPtr&) {
 
 std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const NConfig::TRowDispatcherConfig& config,
-    const NConfig::TCommonConfig& commonConfig,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
@@ -596,7 +591,6 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
 {
     return std::unique_ptr<NActors::IActor>(new TRowDispatcher(
         config,
-        commonConfig,
         credentialsProviderFactory,
         yqSharedResources,
         credentialsFactory,

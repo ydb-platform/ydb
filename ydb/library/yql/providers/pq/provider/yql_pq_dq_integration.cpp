@@ -263,7 +263,8 @@ public:
                 if (auto predicate = topicSource.FilterPredicate(); !NYql::IsEmptyFilterPredicate(predicate)) {
                     TStringBuilder err;
                     if (!NYql::SerializeFilterPredicate(predicate, &predicateProto, err)) {
-                        ythrow yexception() << "Failed to serialize filter predicate for source: " << err;
+                        ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
+                        predicateProto.Clear();
                     }
                 }
 

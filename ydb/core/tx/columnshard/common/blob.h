@@ -21,8 +21,6 @@ public:
     virtual ui32 GetGroup(const TLogoBlobID& blobId) const = 0;
 };
 
-class TUnifiedBlobId;
-
 class TUnifiedBlobId {
     // Id of a blob in YDB distributed storage
     struct TDsBlobId {
@@ -190,6 +188,8 @@ struct TBlobRange {
     TUnifiedBlobId BlobId;
     ui32 Offset;
     ui32 Size;
+
+    TString GetData(const TString& blobData) const;
 
     bool operator<(const TBlobRange& br) const {
         if (BlobId != br.BlobId) {

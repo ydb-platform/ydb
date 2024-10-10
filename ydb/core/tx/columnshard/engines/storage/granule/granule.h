@@ -107,14 +107,14 @@ public:
         }
 
         void AddPortion(const TPortionInfo& info) {
-            if (info.IsInserted()) {
+            if (info.GetMeta().GetProduced() == NPortion::EProduced::INSERTED) {
                 Owner.Inserted.AddPortion(info);
             } else {
                 Owner.Compacted.AddPortion(info);
             }
         }
         void RemovePortion(const TPortionInfo& info) {
-            if (info.IsInserted()) {
+            if (info.GetMeta().GetProduced() == NPortion::EProduced::INSERTED) {
                 Owner.Inserted.RemovePortion(info);
             } else {
                 Owner.Compacted.RemovePortion(info);
@@ -140,6 +140,7 @@ public:
 private:
     TMonotonic ModificationLastTime = TMonotonic::Now();
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
+    THashMap<TInsertWriteId, std::shared_ptr<TPortionInfo>> InsertedPortions;
     mutable std::optional<TGranuleAdditiveSummary> AdditiveSummaryCache;
 
     void RebuildHardMetrics() const;
@@ -167,6 +168,45 @@ public:
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
         ActualizationIndex->RefreshTiering(tiering, context);
     }
+
+    void InsertPortionOnExecute(
+        NTabletFlatExecutor::TTransactionContext& txc, const std::shared_ptr<TPortionInfo>& portion) const {
+        AFL_VERIFY(!InsertedPortions.contains(portion->GetInsertWriteIdVerified()));
+        TDbWrapper wrapper(txc.DB, nullptr);
+        portion->SaveToDatabase(wrapper, 0, false);
+    }
+
+    void InsertPortionOnComplete(const std::shared_ptr<TPortionInfo>& portion) {
+        AFL_VERIFY(InsertedPortions.emplace(portion->GetInsertWriteIdVerified(), portion).second);
+    }
+
+    void CommitPortionOnExecute(
+        NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId, const TSnapshot& snapshot) const {
+        auto it = InsertedPortions.find(insertWriteId);
+        AFL_VERIFY(it != InsertedPortions.end());
+        it->second->SetCommitSnapshot(snapshot);
+        TDbWrapper wrapper(txc.DB, nullptr);
+        it->second->SaveToDatabase(wrapper, 0, true);
+    }
+
+    void CommitPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine);
+
+    void AbortPortionOnExecute(
+        NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId) const {
+        auto it = InsertedPortions.find(insertWriteId);
+        AFL_VERIFY(it != InsertedPortions.end());
+        TDbWrapper wrapper(txc.DB, nullptr);
+        it->second->RemoveFromDatabase(wrapper);
+    }
+
+    void AbortPortionOnComplete(const TInsertWriteId insertWriteId) {
+        AFL_VERIFY(InsertedPortions.erase(insertWriteId));
+    }
+
+    void CommitImmediateOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TSnapshot& snapshot,
+        const std::shared_ptr<TPortionInfo>& portion) const;
+
+    void CommitImmediateOnComplete(const std::shared_ptr<TPortionInfo> portion, IColumnEngine& engine);
 
     std::vector<NStorageOptimizer::TTaskDescription> GetOptimizerTasksDescription() const {
         return OptimizerPlanner->GetTasksDescription();
@@ -283,6 +323,10 @@ public:
 
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
         return Portions;
+    }
+
+    const THashMap<TInsertWriteId, std::shared_ptr<TPortionInfo>>& GetInsertedPortions() const {
+        return InsertedPortions;
     }
 
     std::vector<std::shared_ptr<TPortionInfo>> GetPortionsVector() const {

@@ -229,7 +229,6 @@ private: //IDqComputeActorAsyncInput
                 LruMiss->Add(AwaitingQueue.size());
             }
             if (!KeysForLookup->empty()) {
-                LastLookupTime = now;
                 Send(LookupSourceId, new IDqAsyncLookupSource::TEvLookupRequest(KeysForLookup));
             } else {
                 KeysForLookup.reset();
@@ -318,7 +317,6 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr LruMiss;
     ::NMonitoring::TDynamicCounters::TCounterPtr CpuTimeMs;
     ::NMonitoring::TDynamicCounters::TCounterPtr Batches;
-    std::chrono::steady_clock::time_point LastLookupTime {};
     TDuration CpuTime {};
 };
 

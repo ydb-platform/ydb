@@ -32,6 +32,10 @@ private:
     }
 
 public:
+    ui64 GetGeneralPriority() const {
+        return Level << 56 + InternalLevelWeight;
+    }
+
     bool operator<(const TOptimizationPriority& item) const {
         return std::tie(Level, InternalLevelWeight) < std::tie(item.Level, item.InternalLevelWeight);
     }

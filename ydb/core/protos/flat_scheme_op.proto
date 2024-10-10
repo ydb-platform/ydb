@@ -1669,6 +1669,11 @@ enum EOperationType {
 
     ESchemeOpRestoreIncrementalBackup = 103;
     ESchemeOpRestoreIncrementalBackupAtTable = 104;
+
+    // BackupCollection
+    ESchemeOpCreateBackupCollection = 105;
+    ESchemeOpAlterBackupCollection = 106;
+    ESchemeOpDropBackupCollection = 107;
 }
 
 message TApplyIf {
@@ -1889,6 +1894,10 @@ message TModifyScheme {
     optional TResourcePoolDescription CreateResourcePool = 72;
 
     optional TRestoreIncrementalBackup RestoreIncrementalBackup = 73;
+
+    optional TBackupCollection CreateBackupCollection = 74;
+    optional TBackupCollection AlterBackupCollection = 75;
+    optional TBackupCollection DropBackupCollection = 76;
 }
 
 message TCopySequence {

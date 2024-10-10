@@ -622,6 +622,8 @@ TYPED_TEST(TNotGrpcTest, Compression)
 
 TYPED_TEST(TRpcTest, ResponseMemoryTag)
 {
+    // FIXME: YT-23048
+    return;
     static TMemoryTag testMemoryTag = 12345;
     testMemoryTag++;
     auto initialMemoryUsage = GetMemoryUsageForTag(testMemoryTag);

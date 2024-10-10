@@ -750,6 +750,8 @@ void TTopicSession::UpdateParser() {
 
         TVector<TString> names;
         TVector<TString> types;
+        names.reserve(namesWithTypes.size());
+        types.reserve(namesWithTypes.size());
         for (const auto& [name, type] : namesWithTypes) {
             names.push_back(name);
             types.push_back(type);

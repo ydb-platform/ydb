@@ -265,7 +265,7 @@ async function selectWithParametrs(driver: Driver, data: ThreeIds[], logger: Log
               const {value: resultSet} = await resultSets.next();
               const {value: row} = await resultSet.rows.next();
               await opFinished;
-              logger.info(`Select prepared query ${JSON.stringify(row, null, 2)}`);
+              logger.info(`Parametrized select query ${JSON.stringify(row, null, 2)}`);
           }
       }
   });

@@ -24,6 +24,7 @@
 "jsonb_path_query_first_tz",
 "jsonb_typeof",
 
+"pg_show_all_settings",//pgadmin
 "pg_is_in_recovery",//pgadmin
 "pg_is_wal_replay_paused",//pgadmin
 "has_database_privilege",//pgadmin

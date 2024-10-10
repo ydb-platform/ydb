@@ -11,6 +11,7 @@
 
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/adapter/adapter.h>
+#include <ydb/core/tx/priorities/usage/service.h>
 #include <ydb/core/tx/tiering/manager.h>
 
 namespace NKikimr {
@@ -29,6 +30,7 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     }
     ctx.Send(ResourceSubscribeActor, new TEvents::TEvPoisonPill);
     ctx.Send(BufferizationWriteActorId, new TEvents::TEvPoisonPill);
+    NPrioritiesQueue::TCompServiceOperator::UnregisterClient(TabletID());
     for (auto&& i : ActorsToStop) {
         ctx.Send(i, new TEvents::TEvPoisonPill);
     }
@@ -69,6 +71,7 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
     ctx.Send(SelfId(), new NActors::TEvents::TEvWakeup());
     ctx.Send(SelfId(), new TEvPrivate::TEvPeriodicWakeup());
     ctx.Send(SelfId(), new TEvPrivate::TEvPingSnapshotsUsage());
+    NPrioritiesQueue::TCompServiceOperator::RegisterClient(TabletID());
     NYDBTest::TControllers::GetColumnShardController()->OnSwitchToWork(TabletID());
     AFL_VERIFY(!!StartInstant);
     Counters.GetCSCounters().Initialization.OnSwitchToWork(TMonotonic::Now() - *StartInstant, TMonotonic::Now() - CreateInstant);

@@ -920,6 +920,12 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropResourcePool, NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropResourcePool, NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool)
 
+    // tiering rule
+    GENERIC_HELPERS(CreateTieringRule, NKikimrSchemeOp::EOperationType::ESchemeOpCreateTieringRule, &NKikimrSchemeOp::TModifyScheme::MutableCreateTieringRule)
+    GENERIC_HELPERS(AlterTieringRule, NKikimrSchemeOp::EOperationType::ESchemeOpAlterTieringRule, &NKikimrSchemeOp::TModifyScheme::MutableCreateTieringRule)
+    GENERIC_HELPERS(DropTieringRule, NKikimrSchemeOp::EOperationType::ESchemeOpDropTieringRule, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    DROP_BY_PATH_ID_HELPERS(DropTieringRule, NKikimrSchemeOp::EOperationType::ESchemeOpDropTieringRule)
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS

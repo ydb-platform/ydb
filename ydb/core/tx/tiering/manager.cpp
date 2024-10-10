@@ -109,7 +109,7 @@ public:
     }
 
     void Bootstrap() {
-        SchemeTieringFetcher = Register(new TTieringFetcher(SelfId()));
+        SchemeTieringFetcher = Register(new TTieringWatcher(SelfId()));
         Become(&TThis::StateMain);
         AFL_INFO(NKikimrServices::TX_TIERING)("event", "start_subscribing_metadata");
         Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvSubscribeExternal(SecretsFetcher));

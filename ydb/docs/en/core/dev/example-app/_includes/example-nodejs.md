@@ -53,7 +53,7 @@ App code snippet for creating a session:
 
   ```ts
   async function createTables(driver: Driver, logger: Logger) {
-      logger.info('Dropping old tables and create new ones...');
+      logger.info('Dropping old tables and creating new ones...');
       await driver.queryClient.do({
           fn: async (session) => {
 

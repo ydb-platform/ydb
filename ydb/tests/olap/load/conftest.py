@@ -5,6 +5,7 @@ import json
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType
 from ydb.tests.olap.lib.allure_utils import allure_test_description
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
+from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
 from time import time
 from typing import Optional
 from allure_commons._core import plugin_manager
@@ -44,6 +45,24 @@ class LoadSuiteBase:
     @classmethod
     def _test_name(cls, query_num: int) -> str:
         return f'Query{query_num:02d}'
+
+    @allure.step('check tables size')
+    def check_tables_size(self, folder: Optional[str], tables: dict[str, int]):
+        sth = ScenarioTestHelper(None)
+        errors: list[str] = []
+        for table, expected_size in tables.items():
+            if folder is None:
+                table_full = table
+            elif folder.endswith('/') or table.startswith('/'):
+                table_full = f'{folder}{table}'
+            else:
+                table_full = f'{folder}/{table}'
+            size = sth.get_table_rows_count(table_full)
+            if size != expected_size:
+                errors.append(f'table `{table}`: expect {expected_size}, but actually is {size};')
+        if len(errors) > 0:
+            msg = "\n".join(errors)
+            pytest.fail(f'Unexpected tables size in `{folder}`:\n {msg}')
 
     def process_query_result(self, result: YdbCliHelper.WorkloadRunResult, query_num: int, iterations: int, upload: bool):
         def _get_duraton(stats, field):

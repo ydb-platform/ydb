@@ -8,6 +8,7 @@ IF (NOT OS_WINDOWS AND NOT ARCH_ARM64)
         poly1305.cpp
         chacha_vec.cpp
         chacha_512.cpp
+        aes128.cpp
         poly1305_vec.cpp
         secured_block.cpp
     )
@@ -22,6 +23,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    contrib/libs/openssl
     contrib/libs/t1ha
     library/cpp/sse
     ydb/library/actors/util

@@ -122,7 +122,7 @@
   Например, `YDB_ACCESS_TOKEN_CREDENTIALS`.
   Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../concepts/auth.md).
 
-  Для корректной работы важно работу с драйвером выполнять в блоке `try / finally` и завершать работу с 
+  Для корректной работы важно работу с драйвером выполнять в блоке `try / finally` и завершать работу с
   драйвером `await db.destroy()`.  Прим.: использование конструкции TypeScript `using` будет доступно в будущих версиях SDK.
 
 {% endlist %}
@@ -295,7 +295,7 @@
   При изменении топика в параметрах метода `alterTopic` нужно указать путь топика и параметры, которые будут изменяться.
 
   Полный список настроек можно посмотреть [в коде SDK](https://github-link.vercel.app/api?ghUrl=https://github.com/ydb-platform/ydb-nodejs-sdk/blob/main/src/topic/topic-client.ts&q=type%20IAlterTopicArgs).
- 
+
   ```ts
   await db.topic.alterTopic({
       path: 'demoTopic',
@@ -533,7 +533,7 @@
   Запись в топик начинается с создания писателя методом `db.topic.createWriter()`.
 
   Полный список параметров смотри [в заголовочном файле](https://github-link.vercel.app/api?ghUrl=https://github.com/ydb-platform/ydb-nodejs-sdk/blob/main/src/topic/topic-client.ts&q=type%20ICreateWriterArgs).
- 
+
   ```ts
   const writer = await db.topic.createWriter({
     path: 'demoTopic',
@@ -679,7 +679,7 @@
   }
   ```
 
-- Node.js  
+- Node.js
 
   Для этого достаточно использовать метод метода без ожидания его завершения.
 
@@ -1330,7 +1330,7 @@
 
 - Node.js
 
-  Для создания читателя надо указать, из каких топиков (`topicsReadSettings`), и название консьюмера (`topicsReadSettings`), которое 
+  Для создания читателя надо указать, из каких топиков (`topicsReadSettings`), и название консьюмера (`topicsReadSettings`), которое
   должно быть указано при создании топиков.
 
   А так же максимальный размер сообщений которые могут одновременно находится в очереди на обработку на клиенте (`receiveBufferSizeInBytes`).
@@ -1355,7 +1355,7 @@
   }).ctx, ...);
   ```
 
-  Если нужен читатель с возможностью прекращения его работы по cancel() или donе(): 
+  Если нужен читатель с возможностью прекращения его работы по cancel() или donе():
 
   ```ts
   ctx .wrap({ ... }, (ctx, cancel, done) => {

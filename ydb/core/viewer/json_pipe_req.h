@@ -14,11 +14,13 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/wilson_ids/wilson.h>
+#include <library/cpp/protobuf/json/proto2json.h>
 
 namespace NKikimr::NViewer {
 
 using namespace NKikimr;
 using namespace NSchemeCache;
+using namespace NProtobufJson;
 using NNodeWhiteboard::TNodeId;
 using NNodeWhiteboard::TTabletId;
 
@@ -46,6 +48,7 @@ protected:
     IViewer* Viewer = nullptr;
     NMon::TEvHttpInfo::TPtr Event;
     TJsonSettings JsonSettings;
+    TProto2JsonConfig Proto2JsonConfig;
     TDuration Timeout = TDuration::Seconds(10);
 
     struct TPipeInfo {

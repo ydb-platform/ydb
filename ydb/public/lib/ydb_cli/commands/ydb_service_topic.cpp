@@ -46,7 +46,7 @@ namespace NYdb::NConsoleClient {
             std::pair<TString, NTopic::EAutoPartitioningStrategy>("disabled", NTopic::EAutoPartitioningStrategy::Disabled),
             std::pair<TString, NTopic::EAutoPartitioningStrategy>("up", NTopic::EAutoPartitioningStrategy::ScaleUp),
             std::pair<TString, NTopic::EAutoPartitioningStrategy>("up-and-down", NTopic::EAutoPartitioningStrategy::ScaleUpAndDown),
-            std::pair<TString, NTopic::EAutoPartitioningStrategy>("puased", NTopic::EAutoPartitioningStrategy::Paused),
+            std::pair<TString, NTopic::EAutoPartitioningStrategy>("paused", NTopic::EAutoPartitioningStrategy::Paused),
         };
 
         THashMap<NTopic::EAutoPartitioningStrategy, TString> AutoscaleStrategiesDescriptions = {
@@ -325,8 +325,8 @@ namespace {
         auto autoscaleSettings = NTopic::TAutoPartitioningSettings(
         GetAutoPartitioningStrategy() ? *GetAutoPartitioningStrategy() : NTopic::EAutoPartitioningStrategy::Disabled,
         GetAutoPartitioningStabilizationWindowSeconds() ? TDuration::Seconds(*GetAutoPartitioningStabilizationWindowSeconds()) : TDuration::Seconds(0),
-        GetAutoPartitioningUpUtilizationPercent() ? *GetAutoPartitioningUpUtilizationPercent() : 0,
-        GetAutoPartitioninDownUtilizationPercent() ? *GetAutoPartitioninDownUtilizationPercent() : 0);
+        GetAutoPartitioninDownUtilizationPercent() ? *GetAutoPartitioninDownUtilizationPercent() : 0,
+        GetAutoPartitioningUpUtilizationPercent() ? *GetAutoPartitioningUpUtilizationPercent() : 0);
 
         ui32 finalMaxActivePartitions = MaxActivePartitions_.Defined() ? *MaxActivePartitions_
                                       : autoscaleSettings.GetStrategy() != NTopic::EAutoPartitioningStrategy::Disabled ? MinActivePartitions_ + 50
@@ -393,7 +393,7 @@ namespace {
     NYdb::NTopic::TAlterTopicSettings TCommandTopicAlter::PrepareAlterSettings(
         NYdb::NTopic::TDescribeTopicResult& describeResult) {
         auto settings = NYdb::NTopic::TAlterTopicSettings();
-        auto partitioningSettings = settings.BeginAlterPartitioningSettings();
+        auto& partitioningSettings = settings.BeginAlterPartitioningSettings();
 
         if (MinActivePartitions_.Defined() && (*MinActivePartitions_ != describeResult.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions())) {
             partitioningSettings.MinActivePartitions(*MinActivePartitions_);
@@ -616,7 +616,7 @@ namespace {
 
     void TCommandTopicConsumerDescribe::Parse(TConfig& config) {
         TYdbCommand::Parse(config);
-        ParseFormats();
+        ParseOutputFormats();
         ParseTopicName(config, 0);
     }
 
@@ -846,7 +846,7 @@ namespace {
     void TCommandTopicRead::ValidateConfig() {
         // TODO(shmel1k@): add more formats.
         if (!IsStreamingFormat(MessagingFormat) && (Limit_.Defined() && (Limit_ <= 0 || Limit_ > 500))) {
-            throw TMisuseException() << "OutputFormat " << OutputFormat << " is not compatible with "
+            throw TMisuseException() << "OutputFormat " << MessagingFormat << " is not compatible with "
                                      << "limit less and equal '0' or more than '500': '" << *Limit_ << "' was given";
         }
     }

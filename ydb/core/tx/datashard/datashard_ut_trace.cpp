@@ -371,7 +371,6 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
                                     "Tablet.Transaction.Enqueued",
                                     ExpectedSpan("Tablet.Transaction.Execute",
                                         Repeat("Datashard.Unit", 2)),
-                                    ExpectedSpan("Tablet.WriteLog", "Tablet.WriteLog.LogEntry"),
                                     "Tablet.Transaction.Complete"),
                                 "Datashard.SendWithConfirmedReadOnlyLease"),
                             2))),
@@ -418,6 +417,9 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
             std::move(traceId)
         );
 
+        // A small delay so the full trace is flushed
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
         UNIT_ASSERT(uploader->BuildTraceTrees());
         UNIT_ASSERT_VALUES_EQUAL(1, uploader->Traces.size());
 
@@ -443,7 +445,6 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
                                 ExpectedSpan("Tablet.Transaction",
                                     ExpectedSpan("Tablet.Transaction.Execute",
                                         Repeat("Datashard.Unit", 4)),
-                                    ExpectedSpan("Tablet.WriteLog", "Tablet.WriteLog.LogEntry"),
                                     "Tablet.Transaction.Complete"),
                                 "Datashard.SendWithConfirmedReadOnlyLease"),
                             2))),

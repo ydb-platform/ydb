@@ -636,6 +636,7 @@ namespace NKikimr {
         friend class TIntQueueClass;
 
         TVDiskContextPtr VCtx;
+        TPDiskErrorState PDiskErrorState;
         TIntrusivePtr<TVDiskConfig> Config;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
@@ -934,7 +935,7 @@ namespace NKikimr {
                                         TABLED() {str << "Error Details";}
                                         TABLED() {
                                             str << "PDisk reported error: "
-                                                << TPDiskErrorState::StateToString(VCtx->GetPDiskErrorState());
+                                                << PDiskErrorState.ToString();
                                         }
                                     }
                                 } else if (VCtx->LocalRecoveryErrorStr) {
@@ -1663,11 +1664,14 @@ namespace NKikimr {
         }
 
         void Handle(TEvPDiskErrorStateChange::TPtr &ev, const TActorContext &ctx) {
+            auto errorStateChange = ev->Get();
+            
+            PDiskErrorState.Set(errorStateChange->Status, errorStateChange->PDiskFlags, errorStateChange->ErrorReason);
+
             LOG_ERROR_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
                     << "SkeletonFront: got TEvPDiskErrorStateChange;"
-                    << " state# " << TPDiskErrorState::StateToString(ev->Get()->State)
+                    << PDiskErrorState.ToString()
                     << " Marker# BSVSF03");
-
 
             // switch skeleton state to PDiskError
             SkeletonFrontGroup->ResetCounters();

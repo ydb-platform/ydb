@@ -90,6 +90,7 @@ public:
     std::shared_ptr<TSingleMetric> InputBytes;
     std::shared_ptr<TSingleMetric> InputRows;
     std::vector<std::string> KeyColumns;
+    std::vector<std::string> SortColumns;
     bool CteConnection = false;
     ui32 CteIndentX = 0;
     ui32 CteOffsetY = 0;
@@ -143,8 +144,8 @@ public:
 
 struct TColorPalette {
     TColorPalette();
-    TString StageDark;
-    TString StageLight;
+    TString StageMain;
+    TString StageClone;
     TString StageText;
     TString StageTextHighlight;
     TString StageGrid;
@@ -166,6 +167,7 @@ struct TColorPalette {
     TString ConnectionText;
     TString MinMaxLine;
     TString TextLight;
+    TString TextInverted;
     TString TextSummary;
     TString SpillingBytesDark;
     TString SpillingBytesMedium;

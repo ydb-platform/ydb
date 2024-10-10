@@ -10,6 +10,7 @@
 namespace NKikimr::NChangeExchange {
 
 void TChangeSender::LazyCreateSender(THashMap<ui64, TSender>& senders, ui64 partitionId) {
+    ++UninitSenders;
     auto res = senders.emplace(partitionId, TSender{});
     Y_ABORT_UNLESS(res.second);
 
@@ -27,6 +28,7 @@ void TChangeSender::RegisterSender(ui64 partitionId) {
 
     Y_ABORT_UNLESS(!sender.ActorId);
     sender.ActorId = ActorOps->RegisterWithSameMailbox(SenderFactory->CreateSender(partitionId));
+    --UninitSenders;
 }
 
 void TChangeSender::CreateMissingSenders(const TVector<ui64>& partitionIds) {
@@ -59,8 +61,8 @@ void TChangeSender::RecreateSenders(const TVector<ui64>& partitionIds) {
     }
 }
 
-void TChangeSender::CreateSenders(const TVector<ui64>& partitionIds, bool partitioningChanged) {
-    if (partitioningChanged) {
+void TChangeSender::CreateSendersImpl(const TVector<ui64>& partitionIds) {
+    if (partitionIds) {
         CreateMissingSenders(partitionIds);
     } else {
         RecreateSenders(GonePartitions);
@@ -71,6 +73,15 @@ void TChangeSender::CreateSenders(const TVector<ui64>& partitionIds, bool partit
     if (!Enqueued || !RequestRecords()) {
         SendRecords();
     }
+}
+
+void TChangeSender::CreateSenders(const TVector<ui64>& partitionIds) {
+    Y_ABORT_UNLESS(partitionIds);
+    CreateSendersImpl(partitionIds);
+}
+
+void TChangeSender::CreateSenders() {
+    CreateSendersImpl({});
 }
 
 void TChangeSender::KillSenders() {
@@ -301,6 +312,7 @@ void TChangeSender::OnGone(ui64 partitionId) {
     if (it->second.Ready) {
         --ReadySenders;
     }
+
     Senders.erase(it);
     GonePartitions.push_back(partitionId);
 

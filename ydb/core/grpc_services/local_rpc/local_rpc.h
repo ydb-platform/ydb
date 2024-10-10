@@ -196,10 +196,6 @@ public:
         return &Request;
     }
 
-    google::protobuf::Message* GetRequestMut() override {
-        return &Request;
-    }
-
     void SetFinishAction(std::function<void()>&&) override {}
 
     bool IsClientLost() const override { return false; }
@@ -417,10 +413,6 @@ protected:
         return GetBaseRequest().GetRequest();
     }
 
-    NProtoBuf::Message* GetRequestMut() override {
-        return GetBaseRequest().GetRequestMut();
-    }
-
     TAsyncFinishResult GetFinishFuture() override {
         return FinishPromise.GetFuture();
     }
@@ -511,27 +503,29 @@ private:
 template <typename TResponsePart>
 using TStreamReadProcessorPtr = TIntrusivePtr<TStreamReadProcessor<TResponsePart>>;
 
-using TFacilityProviderPtr = std::shared_ptr<NGRpcService::IFacilityProvider>;
-TFacilityProviderPtr CreateFacilityProviderSameMailbox(TActorContext actorContext, ui64 channelBufferSize);
-
-using TRpcActorCreator = std::function<void((std::unique_ptr<NGRpcService::IRequestNoOpCtx> p, const NGRpcService::IFacilityProvider& f))>;
-
-template <typename TRpc>
-TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(typename TRpc::TRequest&& proto, const TString& database, const TMaybe<TString>& token, const TMaybe<TString>& requestType, TFacilityProviderPtr facilityProvider, TRpcActorCreator actorCreator, bool internalCall = false) {
+template <typename TRpc, typename... TRpcActorArgs>
+TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(typename TRpc::TRequest&& proto,
+    const TString& database, const TMaybe<TString>& token, const TMaybe<TString>& requestType,
+    const TActorContext& ctx, bool internalCall, TRpcActorArgs... args)
+{
     using TCbWrapper = std::function<void(const typename TRpc::TResponse&)>;
     using TLocalRpcStreamCtx = TStreamReadProcessor<typename TRpc::TResponse>;
 
     auto localRpcCtx = std::make_shared<TLocalRpcCtx<TRpc, TCbWrapper>>(std::move(proto), [](const typename TRpc::TResponse&) {}, database, token, requestType, internalCall);
     auto localRpcStreamCtx = MakeIntrusive<TLocalRpcStreamCtx>(std::move(localRpcCtx));
     auto localRpcRequest = std::make_unique<TRpc>(localRpcStreamCtx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
-    actorCreator(std::move(localRpcRequest), *facilityProvider);
+    auto actor = TRpc::CreateRpcActor(localRpcRequest.release(), args...);
+    ctx.RegisterWithSameMailbox(actor);
 
     return localRpcStreamCtx;
 }
 
-template <typename TRpc>
-TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(typename TRpc::TRequest&& proto, const TString& database, const TMaybe<TString>& token, TFacilityProviderPtr facilityProvider, TRpcActorCreator actorCreator, bool internalCall = false) {
-    return DoLocalRpcStreamSameMailbox<TRpc>(std::move(proto), database, token, Nothing(), std::move(facilityProvider), std::move(actorCreator), internalCall);
+template <typename TRpc, typename... TRpcActorArgs>
+TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(typename TRpc::TRequest&& proto,
+    const TString& database, const TMaybe<TString>& token, const TActorContext& ctx, bool internalCall,
+    TRpcActorArgs... args)
+{
+    return DoLocalRpcStreamSameMailbox<TRpc>(std::move(proto), database, token, Nothing(), ctx, internalCall, args...);
 }
 
 } // namespace NRpcService

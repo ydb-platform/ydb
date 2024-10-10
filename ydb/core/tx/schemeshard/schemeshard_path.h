@@ -4,6 +4,7 @@
 #include "schemeshard_info_types.h"
 
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/util/source_location.h>
 
 #include <util/generic/maybe.h>
 
@@ -19,18 +20,18 @@ class TPath {
 public:
     class TChecker {
         using EStatus = NKikimrScheme::EStatus;
-
         const TPath& Path;
         mutable bool Failed;
         mutable EStatus Status;
         mutable TString Error;
+        NCompat::TSourceLocation Location;
 
     private:
         TString BasicPathInfo(TPathElement::TPtr element) const;
         const TChecker& Fail(EStatus status, const TString& error) const;
 
     public:
-        explicit TChecker(const TPath& path);
+        explicit TChecker(const TPath& path, const NCompat::TSourceLocation location = NCompat::TSourceLocation::current());
 
         explicit operator bool() const;
         EStatus GetStatus() const;
@@ -122,8 +123,7 @@ public:
     static TPath ResolveWithInactive(TOperationId opId, const TString path, TSchemeShard* ss);
 
     static TPath Init(const TPathId pathId, TSchemeShard* ss);
-
-    TChecker Check() const;
+    TChecker Check(const NCompat::TSourceLocation location = NCompat::TSourceLocation::current()) const;
     bool IsEmpty() const;
     bool IsResolved() const;
 
@@ -155,6 +155,7 @@ public:
     bool IsUnderRestoring() const;
     bool IsUnderDeleting() const;
     bool IsUnderMoving() const;
+    bool IsUnderOutgoingIncrementalRestore() const;
     TPath& RiseUntilOlapStore();
     TPath FindOlapStore() const;
     bool IsCommonSensePath() const;

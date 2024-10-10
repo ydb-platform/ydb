@@ -206,10 +206,10 @@ struct TPDiskMon {
             }
         }
 
-        void UpdateEnded() {
+        float UpdateEnded() {
             NHPTimer::STime updateEndedAt = HPNow();
+            float entireUpdateMs = HPMilliSecondsFloat(updateEndedAt - BeginUpdateAt);
             if (IsLwProbeEnabled) {
-                float entireUpdateMs = HPMilliSecondsFloat(updateEndedAt - BeginUpdateAt);
                 float inputQueueMs = HPMilliSecondsFloat(SchedulingStartAt - BeginUpdateAt);
                 float schedulingMs = HPMilliSecondsFloat(ProcessingStartAt - SchedulingStartAt);
                 float processingMs = HPMilliSecondsFloat(WaitingStartAt - ProcessingStartAt);
@@ -218,6 +218,7 @@ struct TPDiskMon {
                         schedulingMs, processingMs, waitingMs);
             }
             BeginUpdateAt = updateEndedAt;
+            return entireUpdateMs;
         }
     };
 

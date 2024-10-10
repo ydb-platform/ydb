@@ -3,8 +3,8 @@ LIBRARY()
 PEERDIR(
     library/cpp/charset
     library/cpp/enumbitset
-    library/cpp/yson/node
     library/cpp/json
+    library/cpp/yson/node
     ydb/library/yql/minikql
     ydb/library/yql/public/udf
     ydb/library/yql/sql/settings

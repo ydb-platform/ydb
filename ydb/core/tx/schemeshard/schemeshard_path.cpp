@@ -8,10 +8,11 @@
 
 namespace NKikimr::NSchemeShard {
 
-TPath::TChecker::TChecker(const TPath& path)
+TPath::TChecker::TChecker(const TPath& path, const NCompat::TSourceLocation location)
     : Path(path)
     , Failed(false)
     , Status(EStatus::StatusSuccess)
+    , Location(location)
 {
 }
 
@@ -32,7 +33,14 @@ const TPath::TChecker& TPath::TChecker::Fail(EStatus status, const TString& erro
     Status = status;
     Error = TStringBuilder() << "Check failed"
         << ": path: '" << Path.PathString() << "'"
-        << ", error: " << error;
+        << ", error: " << error
+    // this line included only in debug error
+    // because we do not want to forward information
+    // about our sources to db user
+#ifndef NDEBUG
+        << ", source_location: " << NUtil::TrimSourceFileName(Location.file_name()) << ":" << Location.line()
+#endif
+        ;
 
     return *this;
 }
@@ -1102,8 +1110,8 @@ TPath::TPath(TVector<TPathElement::TPtr>&& elements, TSchemeShard* ss)
     Y_ABORT_UNLESS(IsResolved());
 }
 
-TPath::TChecker TPath::Check() const {
-    return TChecker(*this);
+TPath::TChecker TPath::Check(const NCompat::TSourceLocation location) const {
+    return TChecker(*this, location);
 }
 
 bool TPath::IsEmpty() const {
@@ -1405,7 +1413,8 @@ bool TPath::IsUnderOperation() const {
             + (ui32)IsUnderRestoring()
             + (ui32)IsUnderDeleting()
             + (ui32)IsUnderDomainUpgrade()
-            + (ui32)IsUnderMoving();
+            + (ui32)IsUnderMoving()
+            + (ui32)IsUnderOutgoingIncrementalRestore();
         Y_VERIFY_S(sum == 1,
                    "only one operation at the time"
                        << " pathId: " << Base()->PathId
@@ -1491,6 +1500,12 @@ bool TPath::IsUnderMoving() const {
     Y_ABORT_UNLESS(IsResolved());
 
     return Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateMoving;
+}
+
+bool TPath::IsUnderOutgoingIncrementalRestore() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    return Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateOutgoingIncrementalRestore;
 }
 
 TPath& TPath::RiseUntilOlapStore() {

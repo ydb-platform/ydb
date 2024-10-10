@@ -306,8 +306,29 @@ message TBlobStorageConfig {
         repeated TVDiskPerformanceConfig VDiskTypes = 1;
     };
 
+    message TVDiskBalancingConfig {
+        optional bool EnableSend = 1 [default=false];
+        optional bool EnableDelete = 2 [default=false];
+
+        optional bool BalanceOnlyHugeBlobs = 3 [default=true];
+        optional uint64 JobGranularityUs = 4 [default=1000];
+
+        optional uint64 BatchSize = 5 [default=32];
+        optional uint64 MaxToSendPerEpoch = 6 [default=1000];
+        optional uint64 MaxToDeletePerEpoch = 7 [default=1000];
+
+        optional uint64 ReadBatchTimeoutMs = 8 [default=10000];
+        optional uint64 SendBatchTimeoutMs = 9 [default=10000];
+        optional uint64 RequestBlobsOnMainTimeoutMs = 10 [default=10000];
+        optional uint64 DeleteBatchTimeoutMs = 11 [default=10000];
+        optional uint64 EpochTimeoutMs = 12 [default=60000];
+
+        optional uint64 SecondsToSleepIfNothingToDo = 13 [default=600];
+    }
+
     reserved 7;  // TCostMetricsSettings, moved to ICB
     optional TVDiskPerformanceSettings VDiskPerformanceSettings = 8;
+    optional TVDiskBalancingConfig VDiskBalancingConfig = 9;
  }
 
 message TBlobStorageFormatConfig {
@@ -514,6 +535,7 @@ message TMonitoringConfig {
     optional string MonitoringCertificate = 14;
     optional string MonitoringCertificateFile = 15;
     optional string MemAllocDumpPathPrefix = 16;
+    optional uint32 MaxRequestsPerSecond = 17 [default = 0];
 }
 
 message TRestartsCountConfig {
@@ -1158,6 +1180,17 @@ message TImmediateControlsConfig {
             Description: "Enables debug printing of change records",
             MinValue: 0,
             MaxValue: 1,
+            DefaultValue: 0 }];
+
+        optional uint64 IncrementalRestoreReadAheadLo = 17 [(ControlOptions) = {
+            Description: "Override for incremental restore readahead (low watermark)",
+            MinValue: 0,
+            MaxValue: 67108864,
+            DefaultValue: 0 }];
+        optional uint64 IncrementalRestoreReadAheadHi = 18 [(ControlOptions) = {
+            Description: "Override for incremental restore readahead (high watermark)",
+            MinValue: 0,
+            MaxValue: 134217728,
             DefaultValue: 0 }];
     }
 
@@ -1905,6 +1938,10 @@ message TMetadataCacheConfig {
     optional uint64 RefreshPeriodMs = 1 [default = 15000];
 }
 
+message TShutdownConfig {
+    optional uint32 MinDelayBeforeShutdownSeconds = 1;
+}
+
 message TLabel {
     optional string Name = 1;
     optional string Value = 2;
@@ -1989,6 +2026,7 @@ message TAppConfig {
     optional TMemoryControllerConfig MemoryControllerConfig = 81;
 	optional TGroupedMemoryLimiterConfig GroupedMemoryLimiterConfig = 82;
     optional NKikimrReplication.TReplicationDefaults ReplicationConfig = 83;
+    optional TShutdownConfig ShutdownConfig = 84;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

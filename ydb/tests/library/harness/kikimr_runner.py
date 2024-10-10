@@ -87,7 +87,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 }
 
         daemon.Daemon.__init__(self, self.command, cwd=self.cwd, timeout=180, stderr_on_error_lines=240, **kwargs)
-        self.__binary_path = None
 
     @property
     def cwd(self):
@@ -107,9 +106,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
     @property
     def binary_path(self):
-        if self.__binary_path:
-            return self.__binary_path
-        return self.__configurator.binary_path
+        return self.__binary_path
 
     @property
     def command(self):
@@ -243,6 +240,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._slots = {}
         self.__server = 'localhost'
         self.__client = None
+        self.__kv_client = None
+        self.__scheme_client = None
         self.__storage_pool_id_allocator = itertools.count(1)
         self.__config_path = None
         self._slot_index_allocator = itertools.count(1)
@@ -272,7 +271,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
     def __call_kikimr_new_cli(self, cmd, connect_to_server=True):
         server = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
-        full_command = [self.__configurator.binary_path]
+        binary_path = self.__configurator.get_binary_path(0)
+        full_command = [binary_path]
         if connect_to_server:
             full_command += ["--server={server}".format(server=server)]
         full_command += cmd
@@ -310,6 +310,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
         self.__initialy_prepared = True
         self.__client = None
+        self.__kv_client = None
+        self.__scheme_client = None
         self.__instantiate_udfs_dir()
         self.__write_configs()
         for _ in self.__configurator.all_node_ids():
@@ -372,6 +374,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             configurator=self.__configurator,
             udfs_dir=self.__common_udfs_dir,
             tenant_affiliation=self.__configurator.yq_tenant,
+            binary_path=self.__configurator.get_binary_path(node_index),
             data_center=data_center,
         )
         return self._nodes[node_index]
@@ -402,6 +405,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             node_broker_port=node_broker_port,
             tenant_affiliation=tenant_affiliation if tenant_affiliation is not None else 'dynamic',
             encryption_key=encryption_key,
+            binary_path=self.__configurator.get_binary_path(slot_index),
         )
         return self._slots[slot_index]
 

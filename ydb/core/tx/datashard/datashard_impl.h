@@ -1,29 +1,30 @@
 #pragma once
 
 #include "datashard.h"
-#include "datashard_trans_queue.h"
-#include "datashard_outreadset.h"
-#include "datashard_pipeline.h"
-#include "datashard_schema_snapshots.h"
-#include "datashard_snapshots.h"
-#include "datashard_s3_downloads.h"
-#include "datashard_s3_uploads.h"
-#include "datashard_user_table.h"
-#include "datashard_repl_offsets.h"
-#include "datashard_repl_offsets_client.h"
-#include "datashard_repl_offsets_server.h"
-#include "datashard_write.h"
 #include "cdc_stream_heartbeat.h"
 #include "cdc_stream_scan.h"
 #include "change_exchange.h"
 #include "change_record.h"
 #include "change_record_cdc_serializer.h"
+#include "conflicts_cache.h"
+#include "datashard_outreadset.h"
+#include "datashard_pipeline.h"
+#include "datashard_repl_offsets.h"
+#include "datashard_repl_offsets_client.h"
+#include "datashard_repl_offsets_server.h"
+#include "datashard_s3_downloads.h"
+#include "datashard_s3_uploads.h"
+#include "datashard_schema_snapshots.h"
+#include "datashard_snapshots.h"
+#include "datashard_trans_queue.h"
+#include "datashard_user_table.h"
+#include "datashard_write.h"
+#include "incr_restore_scan.h"
 #include "progress_queue.h"
 #include "read_iterator.h"
-#include "volatile_tx.h"
-#include "conflicts_cache.h"
 #include "reject_reason.h"
 #include "scan_common.h"
+#include "volatile_tx.h"
 
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
@@ -106,14 +107,12 @@ public:
                           TRowVersion completeEdge = TRowVersion::Min(),
                           TRowVersion incompleteEdge = TRowVersion::Min(),
                           TRowVersion immediateWriteEdge = TRowVersion::Min(),
-                          TRowVersion lowWatermark = TRowVersion::Min(),
-                          bool performedUnprotectedReads = false)
+                          TRowVersion lowWatermark = TRowVersion::Min())
         : TxId(txId)
         , CompleteEdge(completeEdge)
         , IncompleteEdge(incompleteEdge)
         , ImmediateWriteEdge(immediateWriteEdge)
         , LowWatermark(lowWatermark)
-        , PerformedUnprotectedReads(performedUnprotectedReads)
         , Tables(tables)
     {}
 
@@ -126,7 +125,6 @@ public:
     TRowVersion IncompleteEdge;
     TRowVersion ImmediateWriteEdge;
     TRowVersion LowWatermark;
-    bool PerformedUnprotectedReads;
 
 private:
     TVector<ui32> Tables;
@@ -151,12 +149,6 @@ struct TReadWriteVersions {
 
     const TRowVersion ReadVersion;
     const TRowVersion WriteVersion;
-};
-
-enum class TSwitchState {
-    READY,
-    SWITCHING,
-    DONE
 };
 
 class TDataShardEngineHost;
@@ -227,7 +219,6 @@ class TDataShard
     class TTxStoreS3DownloadInfo;
     class TTxS3UploadRows;
     class TTxObjectStorageListing;
-    class TTxExecuteMvccStateChange;
     class TTxGetRemovedRowVersions;
     class TTxCompactBorrowed;
     class TTxCompactTable;
@@ -254,6 +245,7 @@ class TDataShard
     class TTxHandleSafeBuildIndexScan;
     class TTxHandleSafeSampleKScan;
     class TTxHandleSafeLocalKMeansScan;
+    class TTxHandleSafeReshuffleKMeansScan;
     class TTxHandleSafeStatisticsScan;
 
     class TTxMediatorStateRestored;
@@ -316,13 +308,11 @@ class TDataShard
     friend class TS3DownloadsManager;
     friend class TS3Downloader;
     template <typename T> friend class TBackupRestoreUnitBase;
+    friend class TCreateIncrementalRestoreSrcUnit;
     friend struct TSetupSysLocks;
     friend class TDataShardLocksDb;
 
-    friend class TTxStartMvccStateChange;
-    friend class TTxExecuteMvccStateChange;
-
-    friend class TBaseChangeSenderShard;
+    friend class TTableChangeSenderShard;
 
     class TTxPersistSubDomainPathId;
     class TTxPersistSubDomainOutOfSpace;
@@ -1325,6 +1315,8 @@ class TDataShard
     void HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx);
@@ -1393,6 +1385,8 @@ class TDataShard
     void Handle(TEvPrivate::TEvPlanPredictedTxs::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvRemoveSchemaSnapshots::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev, const TActorContext& ctx);
 
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
@@ -1464,7 +1458,6 @@ class TDataShard
     NTabletFlatExecutor::ITransaction* CreateTxInitiateBorrowedPartsReturn();
     NTabletFlatExecutor::ITransaction* CreateTxCheckInReadSets();
     NTabletFlatExecutor::ITransaction* CreateTxRemoveOldInReadSets();
-    NTabletFlatExecutor::ITransaction* CreateTxExecuteMvccStateChange();
 
     TReadWriteVersions GetLocalReadWriteVersions() const;
 
@@ -1713,6 +1706,14 @@ public:
         return TtlReadAheadHi;
     }
 
+    ui64 GetIncrementalRestoreReadAheadLoOverride() const {
+        return IncrementalRestoreReadAheadLo;
+    }
+
+    ui64 GetIncrementalRestoreReadAheadHiOverride() const {
+        return IncrementalRestoreReadAheadHi;
+    }
+
     bool GetEnableLockedWrites() const {
         ui64 value = EnableLockedWrites;
         return value != 0;
@@ -1801,10 +1802,8 @@ public:
     void CheckInitiateBorrowedPartsReturn(const TActorContext& ctx);
     void CheckStateChange(const TActorContext& ctx);
     void CheckSplitCanStart(const TActorContext& ctx);
-    void CheckMvccStateChangeCanStart(const TActorContext& ctx);
 
     ui32 GetState() const { return State; }
-    TSwitchState GetMvccSwitchState() { return MvccSwitchState; }
     void SetPersistState(ui32 state, TTransactionContext &txc)
     {
         NIceDb::TNiceDb db(txc.DB);
@@ -1812,6 +1811,9 @@ public:
 
         State = state;
     }
+
+    void PersistUnprotectedReadsEnabled(NIceDb::TNiceDb& db);
+    void PersistUnprotectedReadsEnabled(TTransactionContext& txc);
 
     bool IsStopping() const { return Stopping; }
 
@@ -1928,7 +1930,7 @@ public:
     void RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order);
     // TODO(ilnaz): remove 'afterMove' after #6541
     void EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records, ui64 cookie = 0, bool afterMove = false);
-    ui32 GetFreeChangeQueueCapacity(ui64 cookie);
+    ui32 GetFreeChangeQueueCapacity(ui64 cookie) const;
     ui64 ReserveChangeQueueCapacity(ui32 capacity);
     void UpdateChangeExchangeLag(TInstant now);
     void CreateChangeSender(const TActorContext& ctx);
@@ -1981,9 +1983,6 @@ public:
     }
 
     TScanManager& GetScanManager() { return ScanManager; }
-
-    // Returns true when datashard is working in mvcc mode
-    bool IsMvccEnabled() const;
 
     // Calculates current follower read edge
     std::tuple<TRowVersion, bool, ui64> CalculateFollowerReadEdge() const;
@@ -2047,6 +2046,7 @@ public:
         NWilson::TTraceId traceId = {});
     void SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorContext& ctx);
 
+    bool NeedMediatorStateRestored() const;
     void CheckMediatorStateRestored();
     void FinishMediatorStateRestore(TTransactionContext&, ui64, ui64);
 
@@ -2069,7 +2069,6 @@ public:
     void StartWatchingSubDomainPathId();
 
     bool WaitPlanStep(ui64 step);
-    bool CheckTxNeedWait() const;
     bool CheckTxNeedWait(const TRowVersion& mvccSnapshot) const;
     bool CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr& ev) const;
     bool CheckTxNeedWait(const NEvents::TDataEvents::TEvWrite::TPtr& ev) const;
@@ -2626,7 +2625,6 @@ private:
     TLoanReturnTracker LoanReturnTracker;
     TFollowerState FollowerState;
 
-    TSwitchState MvccSwitchState;
     bool SplitSnapshotStarted;      // Non-persistent flag that is used to restart snapshot in case of datashard restart
     TSplitSrcSnapshotSender SplitSrcSnapshotSender;
     // TODO: make this persitent
@@ -2741,6 +2739,9 @@ private:
 
     TControlWrapper TtlReadAheadLo;
     TControlWrapper TtlReadAheadHi;
+
+    TControlWrapper IncrementalRestoreReadAheadLo;
+    TControlWrapper IncrementalRestoreReadAheadHi;
 
     TControlWrapper EnableLockedWrites;
     TControlWrapper MaxLockedWritesPerKey;
@@ -3117,6 +3118,7 @@ protected:
             HFunc(TEvDataShard::TEvDiscardVolatileSnapshotRequest, Handle);
             HFuncTraced(TEvDataShard::TEvBuildIndexCreateRequest, Handle);
             HFunc(TEvDataShard::TEvSampleKRequest, Handle);
+            HFunc(TEvDataShard::TEvReshuffleKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvLocalKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvCdcStreamScanRequest, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanRegistered, Handle);
@@ -3157,6 +3159,7 @@ protected:
             HFunc(NStat::TEvStatistics::TEvStatisticsRequest, Handle);
             HFunc(TEvPrivate::TEvStatisticsScanFinished, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
+            HFunc(TEvIncrementalRestoreScan::TEvFinished, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWork unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
@@ -3179,7 +3182,6 @@ protected:
             HFuncTraced(TEvDataShard::TEvReadContinue, Handle);
             HFuncTraced(TEvDataShard::TEvReadAck, Handle);
             HFuncTraced(TEvDataShard::TEvReadCancel, Handle);
-            HFuncTraced(NEvents::TDataEvents::TEvWrite, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWorkAsFollower unhandled event type: " << ev->GetTypeRewrite()

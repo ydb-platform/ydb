@@ -24,13 +24,16 @@
 #include <ydb/core/jaeger_tracing/request_discriminator.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
-#include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/util/ulid.h>
 
 #include <ydb/library/actors/wilson/wilson_span.h>
 
 #include <util/stream/str.h>
+
+namespace NKikimrScheme {
+    class TEvDescribeSchemeResult;
+}
 
 namespace NKikimr {
 
@@ -356,7 +359,7 @@ public:
 
 struct TRequestAuxSettings {
     TRateLimiterMode RlMode = TRateLimiterMode::Off;
-    void (*CustomAttributeProcessor)(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, ICheckerIface*) = nullptr;
+    void (*CustomAttributeProcessor)(const NKikimrScheme::TEvDescribeSchemeResult& schemeData, ICheckerIface*) = nullptr;
     TAuditMode AuditMode = TAuditMode::Off;
     NJaegerTracing::ERequestType RequestType = NJaegerTracing::ERequestType::UNSPECIFIED;
 };
@@ -416,7 +419,7 @@ public:
     virtual void SetRespHook(TRespHook&& hook) = 0;
     virtual void SetRlPath(TMaybe<NRpcService::TRlPath>&& path) = 0;
     virtual TRateLimiterMode GetRlMode() const = 0;
-    virtual bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
+    virtual bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult& schemeData,
         ICheckerIface* iface) = 0;
 
     // Pass request for next processing
@@ -439,7 +442,6 @@ class IRequestCtx
     friend class TProtoResponseHelper;
 public:
     using EStreamCtrl = NYdbGrpc::IRequestContextBase::EStreamCtrl;
-    virtual google::protobuf::Message* GetRequestMut() = 0;
 
     virtual void SetRuHeader(ui64 ru) = 0;
     virtual void AddServerHint(const TString& hint) = 0;
@@ -666,7 +668,7 @@ public:
         return TRateLimiterMode::Off;
     }
 
-    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface*) override {
+    bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult&, ICheckerIface*) override {
         return false;
     }
 
@@ -764,7 +766,7 @@ public:
         return RlAllowed_ ? RateLimitMode : TRateLimiterMode::Off;
     }
 
-    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface*) override {
+    bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult&, ICheckerIface*) override {
         return false;
     }
 
@@ -1166,13 +1168,6 @@ public:
         return request;
     }
 
-    template <typename T>
-    static TRequest* GetProtoRequestMut(const T& req) {
-        auto request = dynamic_cast<TRequest*>(req->GetRequestMut());
-        Y_ABORT_UNLESS(request != nullptr, "Wrong using of TGRpcRequestWrapper");
-        return request;
-    }
-
     const TRequest* GetProtoRequest() const {
         return GetProtoRequest(this);
     }
@@ -1270,10 +1265,6 @@ public:
 
     const google::protobuf::Message* GetRequest() const override {
         return Ctx_->GetRequest();
-    }
-
-    google::protobuf::Message* GetRequestMut() override {
-        return Ctx_->GetRequestMut();
     }
 
     void SetRespHook(TRespHook&& hook) override {
@@ -1388,7 +1379,6 @@ private:
 template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived>
 class TGRpcRequestValidationWrapperImpl : public TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived> {
 public:
-    static IActor* CreateRpcActor(typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type* msg);
 
     TGRpcRequestValidationWrapperImpl(NYdbGrpc::IRequestContextBase* ctx)
         : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived>(ctx)
@@ -1427,7 +1417,11 @@ class TGrpcRequestCall
     using TRequestIface = typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type;
 
 public:
+    template<typename TOptionalArg>
+    static IActor* CreateRpcActor(TRequestIface* msg, TOptionalArg arg);
+
     static IActor* CreateRpcActor(TRequestIface* msg);
+
     static constexpr bool IsOp = IsOperation;
 
     using TBase = std::conditional_t<TProtoHasValidate<TReq>::Value,
@@ -1456,7 +1450,7 @@ public:
         return AuxSettings.RlMode;
     }
 
-    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
+    bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult& schemeData,
         ICheckerIface* iface) override
     {
         if (!AuxSettings.CustomAttributeProcessor) {
@@ -1497,7 +1491,6 @@ class TGRpcRequestWrapper
         TGRpcRequestWrapper<TRpcId, TReq, TResp, IsOperation, RlMode>>
 {
 public:
-    static IActor* CreateRpcActor(typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type* msg);
     static constexpr bool IsOp = IsOperation;
     static constexpr TRateLimiterMode RateLimitMode = RlMode;
 
@@ -1510,7 +1503,7 @@ public:
         return RateLimitMode;
     }
 
-    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface*) override {
+    bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult&, ICheckerIface*) override {
         return false;
     }
 };
@@ -1534,7 +1527,7 @@ public:
         return RateLimitMode;
     }
 
-    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface*) override {
+    bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult&, ICheckerIface*) override {
         return false;
     }
 
@@ -1550,7 +1543,6 @@ class TGRpcRequestValidationWrapper
         TGRpcRequestValidationWrapper<TRpcId, TReq, TResp, IsOperation, RlMode>>
 {
 public:
-    static IActor* CreateRpcActor(typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type* msg);
     static constexpr bool IsOp = IsOperation;
     static constexpr TRateLimiterMode RateLimitMode = RlMode;
 
@@ -1564,7 +1556,7 @@ public:
         return RlAllowed ? RateLimitMode : TRateLimiterMode::Off;
     }
 
-    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface*) override {
+    bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult&, ICheckerIface*) override {
         return false;
     }
 
@@ -1713,7 +1705,7 @@ public:
         return TRateLimiterMode::Rps;
     }
 
-    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult& /*schemeData*/, ICheckerIface* /*iface*/) override {
+    bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult& /*schemeData*/, ICheckerIface* /*iface*/) override {
         return false;
     }
 

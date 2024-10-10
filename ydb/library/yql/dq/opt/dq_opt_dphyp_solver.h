@@ -81,6 +81,8 @@ private:
         const std::shared_ptr<IBaseOptimizerNode>& left,
         const std::shared_ptr<IBaseOptimizerNode>& right,
         EJoinKind joinKind,
+        bool leftAny,
+        bool rightAny,
         bool isCommutative,
         const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
         const std::set<std::pair<TJoinColumn, TJoinColumn>>& reversedJoinConditions,
@@ -409,6 +411,8 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
     const std::shared_ptr<IBaseOptimizerNode>& left,
     const std::shared_ptr<IBaseOptimizerNode>& right,
     EJoinKind joinKind,
+    bool leftAny,
+    bool rightAny,
     bool isCommutative,
     const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
     const std::set<std::pair<TJoinColumn, TJoinColumn>>& reversedJoinConditions,
@@ -416,19 +420,20 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
     const TVector<TString>& rightJoinKeys,
     IProviderContext& ctx,
     TCardinalityHints::TCardinalityHint* maybeCardHint,
-    TJoinAlgoHints::TJoinAlgoHint* maybeJoinHint
+    TJoinAlgoHints::TJoinAlgoHint* maybeJoinAlgoHint
 ) {
+    if (maybeJoinAlgoHint) {
+        maybeJoinAlgoHint->Applied = true;
+        return MakeJoinInternal(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinKind, maybeJoinAlgoHint->Algo, leftAny, rightAny, ctx, maybeCardHint);
+    }
+
     double bestCost = std::numeric_limits<double>::infinity();
-    EJoinAlgoType bestAlgo{};
+    EJoinAlgoType bestAlgo = EJoinAlgoType::Undefined;
     bool bestJoinIsReversed = false;
 
     for (auto joinAlgo : AllJoinAlgos) {
         if (ctx.IsJoinApplicable(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind)){
             auto cost = ctx.ComputeJoinStats(*left->Stats, *right->Stats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeCardHint).Cost;
-            if (maybeJoinHint && joinAlgo == maybeJoinHint->JoinHint) {
-                cost = -1;
-                maybeJoinHint->Applied = true;
-            }
             if (cost < bestCost) {
                 bestCost = cost;
                 bestAlgo = joinAlgo;
@@ -439,10 +444,6 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
         if (isCommutative) {
             if (ctx.IsJoinApplicable(right, left, reversedJoinConditions, rightJoinKeys, leftJoinKeys, joinAlgo, joinKind)){
                 auto cost = ctx.ComputeJoinStats(*right->Stats, *left->Stats,  rightJoinKeys, leftJoinKeys, joinAlgo, joinKind, maybeCardHint).Cost;
-                if (maybeJoinHint && joinAlgo == maybeJoinHint->JoinHint) {
-                    cost = -1;
-                    maybeJoinHint->Applied = true;
-                }
                 if (cost < bestCost) {
                     bestCost = cost;
                     bestAlgo = joinAlgo;
@@ -452,13 +453,13 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
         }
     }
 
-    Y_ENSURE(bestCost != std::numeric_limits<double>::infinity(), "No join was chosen!");
+    Y_ENSURE(bestAlgo != EJoinAlgoType::Undefined, "No join was chosen!");
 
     if (bestJoinIsReversed) {
-        return MakeJoinInternal(right, left, reversedJoinConditions, rightJoinKeys, leftJoinKeys, joinKind, bestAlgo, ctx, maybeCardHint);
+        return MakeJoinInternal(right, left, reversedJoinConditions, rightJoinKeys, leftJoinKeys, joinKind, bestAlgo, rightAny, leftAny, ctx, maybeCardHint);
     }
     
-    return MakeJoinInternal(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinKind, bestAlgo, ctx, maybeCardHint);
+    return MakeJoinInternal(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinKind, bestAlgo, leftAny, rightAny, ctx, maybeCardHint);
 }
 
 /* 
@@ -489,6 +490,8 @@ template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeS
         leftNodes,
         rightNodes,
         csgCmpEdge->JoinKind,
+        csgCmpEdge->LeftAny,
+        csgCmpEdge->RightAny,
         csgCmpEdge->IsCommutative,
         csgCmpEdge->JoinConditions,
         reversedEdge->JoinConditions,

@@ -257,7 +257,7 @@ public:
         const TArrayRef<const TRuntimeNode>& args, TType* returnType);
     TRuntimeNode BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode dict,
         EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns,
-        const TArrayRef<const ui32>& leftKeyDrops = {});
+        const TArrayRef<const ui32>& leftKeyDrops, TType* returnType);
 
     //-- logical functions
     TRuntimeNode BlockNot(TRuntimeNode data);

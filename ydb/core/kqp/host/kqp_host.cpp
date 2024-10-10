@@ -288,8 +288,8 @@ public:
 
         for (auto& resultStr : ResultProviderConfig.CommittedResults) {
             queryResult.Results.emplace_back(
-                google::protobuf::Arena::CreateMessage<NKikimrMiniKQL::TResult>(queryResult.ProtobufArenaPtr.get()));
-            NKikimrMiniKQL::TResult* result = queryResult.Results.back();
+                google::protobuf::Arena::CreateMessage<Ydb::ResultSet>(queryResult.ProtobufArenaPtr.get()));
+            Ydb::ResultSet* result = queryResult.Results.back();
 
             if (!result->ParseFromArray(resultStr.data(), resultStr.size())) {
                 queryResult = ResultFromError<TResult>("Failed to parse run result.");
@@ -1063,6 +1063,7 @@ public:
         }
 
         SessionCtx->SetDatabase(database);
+        SessionCtx->SetDatabaseId(Gateway->GetDatabaseId());
         SessionCtx->SetCluster(cluster);
         if (tempTablesState) {
             SessionCtx->SetSessionId(tempTablesState->SessionId);

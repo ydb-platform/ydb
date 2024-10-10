@@ -467,6 +467,8 @@ void TChunkWriterOptions::Register(TRegistrar registrar)
 
     registrar.Parameter("schema_modification", &TThis::SchemaModification)
         .Default(ETableSchemaModification::None);
+    registrar.Parameter("versioned_write_options", &TThis::VersionedWriteOptions)
+        .Default();
     registrar.Parameter("max_heavy_columns", &TThis::MaxHeavyColumns)
         .Default(0);
 

@@ -21,7 +21,7 @@ TViewerPipeClient::TViewerPipeClient(NWilson::TTraceId traceId) {
     }
 }
 
-TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev, const TString& handlerName)
     : Viewer(viewer)
     , Event(ev)
 {
@@ -48,8 +48,9 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& e
         traceId = NWilson::TTraceId::NewTraceId(verbosity, ttl);
     }
     if (traceId) {
-        Span = {TComponentTracingLevels::THttp::TopLevel, std::move(traceId), "http", NWilson::EFlags::AUTO_END};
+        Span = {TComponentTracingLevels::THttp::TopLevel, std::move(traceId), handlerName ? "http " + handlerName : "http viewer", NWilson::EFlags::AUTO_END};
         Span.Attribute("request_type", TString(Event->Get()->Request.GetUri().Before('?')));
+        Span.Attribute("request_params", TString(Event->Get()->Request.GetUri().After('?')));
     }
 }
 
@@ -599,6 +600,9 @@ void TViewerPipeClient::InitConfig(const TCgiParameters& params) {
         Database = params.Get("tenant");
     }
     Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
+    JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
+    JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), true);
+    Timeout = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("timeout"), Timeout.MilliSeconds()));
 }
 
 void TViewerPipeClient::InitConfig(const TRequestSettings& settings) {
@@ -655,6 +659,12 @@ TString TViewerPipeClient::GetHTTPOKJSON(const NJson::TJsonValue& response, TIns
     return GetHTTPOKJSON(NJson::WriteJson(response, false), lastModified);
 }
 
+TString TViewerPipeClient::GetHTTPOKJSON(const google::protobuf::Message& response, TInstant lastModified) {
+    TStringStream json;
+    TProtoToJson::ProtoToJson(json, response, JsonSettings);
+    return GetHTTPOKJSON(json.Str(), lastModified);
+}
+
 TString TViewerPipeClient::GetHTTPGATEWAYTIMEOUT(TString contentType, TString response) {
     return Viewer->GetHTTPGATEWAYTIMEOUT(GetRequest(), std::move(contentType), std::move(response));
 }
@@ -696,41 +706,47 @@ void TViewerPipeClient::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
 }
 
 void TViewerPipeClient::HandleResolveResource(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-    ResourceNavigateResponse->Set(std::move(ev));
-    if (ResourceNavigateResponse->IsOk()) {
-        TSchemeCacheNavigate::TEntry& entry(ResourceNavigateResponse->Get()->Request->ResultSet.front());
-        SharedDatabase = CanonizePath(entry.Path);
-        if (SharedDatabase == AppData()->TenantName) {
-            Direct = true;
-            return Bootstrap(); // retry bootstrap without redirect this time
+    if (ResourceNavigateResponse) {
+        ResourceNavigateResponse->Set(std::move(ev));
+        if (ResourceNavigateResponse->IsOk()) {
+            TSchemeCacheNavigate::TEntry& entry(ResourceNavigateResponse->Get()->Request->ResultSet.front());
+            SharedDatabase = CanonizePath(entry.Path);
+            if (SharedDatabase == AppData()->TenantName) {
+                Direct = true;
+                return Bootstrap(); // retry bootstrap without redirect this time
+            }
+            DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(SharedDatabase);
+        } else {
+            ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - shared database not found"));
         }
-        DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(SharedDatabase);
-    } else {
-        ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - shared database not found"));
     }
 }
 
 void TViewerPipeClient::HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-    DatabaseNavigateResponse->Set(std::move(ev));
-    if (DatabaseNavigateResponse->IsOk()) {
-        TSchemeCacheNavigate::TEntry& entry(DatabaseNavigateResponse->Get()->Request->ResultSet.front());
-        if (entry.DomainInfo && entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
-            ResourceNavigateResponse = MakeRequestSchemeCacheNavigate(TPathId(entry.DomainInfo->ResourcesDomainKey));
-            Become(&TViewerPipeClient::StateResolveResource);
-            return;
+    if (DatabaseNavigateResponse) {
+        DatabaseNavigateResponse->Set(std::move(ev));
+        if (DatabaseNavigateResponse->IsOk()) {
+            TSchemeCacheNavigate::TEntry& entry(DatabaseNavigateResponse->Get()->Request->ResultSet.front());
+            if (entry.DomainInfo && entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
+                ResourceNavigateResponse = MakeRequestSchemeCacheNavigate(TPathId(entry.DomainInfo->ResourcesDomainKey));
+                Become(&TViewerPipeClient::StateResolveResource);
+                return;
+            }
+            DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(CanonizePath(entry.Path));
+        } else {
+            ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - not found"));
         }
-        DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(CanonizePath(entry.Path));
-    } else {
-        ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - not found"));
     }
 }
 
 void TViewerPipeClient::HandleResolve(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-    DatabaseBoardInfoResponse->Set(std::move(ev));
-    if (DatabaseBoardInfoResponse->IsOk()) {
-        ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef())));
-    } else {
-        ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - no nodes found"));
+    if (DatabaseBoardInfoResponse) {
+        DatabaseBoardInfoResponse->Set(std::move(ev));
+        if (DatabaseBoardInfoResponse->IsOk()) {
+            ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef())));
+        } else {
+            ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - no nodes found"));
+        }
     }
 }
 
@@ -760,11 +776,13 @@ void TViewerPipeClient::RedirectToDatabase(const TString& database) {
 }
 
 bool TViewerPipeClient::NeedToRedirect() {
-    Direct |= !Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
-    Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
-    if (Database && !Direct) {
-        RedirectToDatabase(Database); // to find some dynamic node and redirect query there
-        return true;
+    if (Event) {
+        Direct |= !Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
+        Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
+        if (Database && !Direct) {
+            RedirectToDatabase(Database); // to find some dynamic node and redirect query there
+            return true;
+        }
     }
     return false;
 }

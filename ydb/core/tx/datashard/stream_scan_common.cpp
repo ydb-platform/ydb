@@ -18,7 +18,7 @@ TVector<TRawTypeValue> MakeKey(TArrayRef<const TCell> cells, const TVector<NSche
 
     Y_ABORT_UNLESS(cells.size() == keyColumnTypes.size());
     for (TPos pos = 0; pos < cells.size(); ++pos) {
-        key.emplace_back(cells.at(pos).AsRef(), keyColumnTypes.at(pos));
+        key.emplace_back(cells.at(pos).AsRef(), keyColumnTypes.at(pos).GetTypeId());
     }
 
     return key;

@@ -77,7 +77,7 @@ static int PrintDescription(TCommand* self, EDataFormat format, const TValue& va
     return EXIT_SUCCESS;
 }
 
-class TCommandDescribe : public TYdbOperationCommand, public TCommandWithPath, public TCommandWithFormat {
+class TCommandDescribe : public TYdbOperationCommand, public TCommandWithPath, public TCommandWithOutput {
 public:
     TCommandDescribe();
     virtual void Config(TConfig& config) override;
@@ -126,9 +126,10 @@ private:
     bool ShowKeyShardBoundaries = false;
     bool ShowStats = false;
     bool ShowPartitionStats = false;
+    TString Database;
 };
 
-class TCommandList : public TYdbOperationCommand, public TCommandWithPath, public TCommandWithFormat {
+class TCommandList : public TYdbOperationCommand, public TCommandWithPath, public TCommandWithOutput {
 public:
     TCommandList();
     virtual void Config(TConfig& config) override;

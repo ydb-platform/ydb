@@ -66,39 +66,47 @@ WITH (
 
 - Создание строковой таблицы
 
-{% if feature_column_container_type %}
+  {% if feature_column_container_type %}
 
-```yql
-  CREATE TABLE <table_name> (
-    a Uint64,
-    b Uint64,
-    c Float,
-    d "List<List<Int32>>"
-    PRIMARY KEY (a, b)
-  );
-  ```
+  ```yql
+    CREATE TABLE <table_name> (
+      a Uint64,
+      b Uint64,
+      c Float,
+      d "List<List<Int32>>"
+      PRIMARY KEY (a, b)
+    );
+    ```
 
-{% else %}
+  {% else %}
 
-```yql
-  CREATE TABLE <table_name> (
-    a Uint64,
-    b Uint64,
-    c Float,
-    PRIMARY KEY (a, b)
-  );
-  ```
+  ```yql
+    CREATE TABLE <table_name> (
+      a Uint64,
+      b Uint64,
+      c Float,
+      PRIMARY KEY (a, b)
+    );
+    ```
 
-{% endif %}
+  {% endif %}
 
 
   {% if feature_column_container_type == true %}
 
-  Для неключевых колонок допускаются любые типы данных, для ключевых - только [примитивные](../../types/primitive.md). При указании сложных типов (например, `List<String>`) тип заключается в двойные кавычки.
-
+  Для неключевых колонок допускаются любые типы данных{% if feature_serial %} , кроме [серийных](../../types/serial.md) {% endif %}, для ключевых - только [примитивные](../../types/primitive.md){% if feature_serial %} и [серийные](../../types/serial.md){% endif %}. При указании сложных типов (например, `List<String>`) тип заключается в двойные кавычки.
+  
   {% else %}
 
+  {% if feature_serial %}
+
+  Для ключевых колонок допускаются только [примитивные](../../types/primitive.md) и [серийные](../../types/serial.md) типы данных, для неключевых колонок допускаются только [примитивные](../../types/primitive.md).
+
+  {% else %}
+  
   Для ключевых и неключевых колонок допускаются только [примитивные](../../types/primitive.md) типы данных.
+
+  {% endif %}
 
   {% endif %}
 
@@ -230,7 +238,7 @@ CREATE TABLE <table_name> (
 
 {% endif %}
 
-{% if backend_name == "YDB" %}
+{% if backend_name == "YDB" and oss == true %}
 
 При создании строковых таблиц возможно задать:
 

@@ -18,6 +18,8 @@ public:
 
     int MaxRedirectCount;
 
+    bool IgnoreContinueResponses;
+
     TDuration ConnectionIdleTimeout;
 
     TDuration HeaderReadTimeout;

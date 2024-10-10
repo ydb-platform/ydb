@@ -36,7 +36,7 @@ public:
 protected:
     bool Followers = true;
     bool Metrics = true;
-    bool WithRetry = true;
+    bool WithRetry = false;
     TString Database;
     TString SharedDatabase;
     bool Direct = false;
@@ -45,6 +45,8 @@ protected:
     NWilson::TSpan Span;
     IViewer* Viewer = nullptr;
     NMon::TEvHttpInfo::TPtr Event;
+    TJsonSettings JsonSettings;
+    TDuration Timeout = TDuration::Seconds(10);
 
     struct TPipeInfo {
         TActorId PipeClient;
@@ -85,8 +87,8 @@ protected:
             }
             if (!IsDone()) {
                 Span.EndOk();
+                Response = std::move(response);
             }
-            Response = std::move(response);
         }
 
         void Set(TAutoPtr<TEventHandle<T>>&& response) {
@@ -170,7 +172,7 @@ protected:
     ~TViewerPipeClient();
     TViewerPipeClient();
     TViewerPipeClient(NWilson::TTraceId traceId);
-    TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev);
+    TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev, const TString& handlerName = {});
     TActorId ConnectTabletPipe(TTabletId tabletId);
     void SendEvent(std::unique_ptr<IEventHandle> event);
     void SendRequest(TActorId recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {});
@@ -289,6 +291,7 @@ protected:
     TString GetHTTPOK(TString contentType = {}, TString response = {}, TInstant lastModified = {});
     TString GetHTTPOKJSON(TString response = {}, TInstant lastModified = {});
     TString GetHTTPOKJSON(const NJson::TJsonValue& response, TInstant lastModified = {});
+    TString GetHTTPOKJSON(const google::protobuf::Message& response, TInstant lastModified = {});
     TString GetHTTPGATEWAYTIMEOUT(TString contentType = {}, TString response = {});
     TString GetHTTPBADREQUEST(TString contentType = {}, TString response = {});
     TString GetHTTPINTERNALERROR(TString contentType = {}, TString response = {});

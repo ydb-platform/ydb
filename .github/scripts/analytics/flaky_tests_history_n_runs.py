@@ -185,6 +185,7 @@ def main():
                                     '{branch}' as  branch
                                 from  `test_results/analytics/testowners` as t1
                                 where  run_timestamp_last >= Date('{date}') - 3*Interval("P1D") 
+                                and run_timestamp_last <= Date('{date}') + Interval("P1D")
                             ) as test_and_date
                         left JOIN (
                             select * from (

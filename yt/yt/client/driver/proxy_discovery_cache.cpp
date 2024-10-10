@@ -133,7 +133,7 @@ private:
                     continue;
                 }
 
-                if (proxyNode->Attributes().Get<TString>(RoleAttributeName, DefaultRpcProxyRole) != request.Role) {
+                if (proxyNode->Attributes().Get<std::string>(RoleAttributeName, DefaultRpcProxyRole) != request.Role) {
                     continue;
                 }
 

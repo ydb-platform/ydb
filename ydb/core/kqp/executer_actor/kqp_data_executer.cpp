@@ -18,6 +18,7 @@
 #include <ydb/core/kqp/runtime/kqp_transport.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/data_events/common/error_codes.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
@@ -136,6 +137,7 @@ public:
         , FederatedQuerySetup(federatedQuerySetup)
         , GUCSettings(GUCSettings)
         , ShardIdToTableInfo(shardIdToTableInfo)
+        , BlockTrackingMode(tableServiceConfig.GetBlockTrackingMode())
     {
         Target = creator;
 
@@ -480,7 +482,7 @@ private:
             }()
             << ", Cookie=" << ev->Cookie
             << ", error=" << issues.ToString());
-    
+
         if (Stats) {
             Stats->AddDatashardPrepareStats(std::move(*res->Record.MutableTxStats()));
         }
@@ -862,37 +864,12 @@ private:
     void ShardError(const NKikimrDataEvents::TEvWriteResult& result) {
         NYql::TIssues issues;
         NYql::IssuesFromMessage(result.GetIssues(), issues);
-
-        switch (result.GetStatus()) {
-            case NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED:
-            case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED:
-            case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED: {
-                YQL_ENSURE(false);
-            }
-            case NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED: {
-                return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, issues);
-            }
-            case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_SPACE_EXHAUSTED:
-            case NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR: {
-                return ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, issues);
-            }
-            case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
-                return ReplyErrorAndDie(Ydb::StatusIds::OVERLOADED, issues);
-            }
-            case NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED: {
-                return ReplyErrorAndDie(Ydb::StatusIds::CANCELLED, issues);
-            }
-            case NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST: {
-                return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, issues);
-            }
-            case NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED: {
-                return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, issues);
-            }
-            case NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN: {
-                issues.AddIssue(NYql::YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, "Transaction locks invalidated."));
-                return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, issues);
-            }
+        auto statusConclusion = NEvWrite::NErrorCodes::TOperator::GetStatusInfo(result.GetStatus());
+        AFL_ENSURE(statusConclusion.IsSuccess())("error", statusConclusion.GetErrorMessage());
+        if (result.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN) {
+            issues.AddIssue(NYql::YqlIssue({}, statusConclusion->GetIssueCode(), statusConclusion->GetIssueGeneralText()));
         }
+        return ReplyErrorAndDie(statusConclusion->GetYdbStatusCode(), issues);
     }
 
     void PQTabletError(const NKikimrPQ::TEvProposeTransactionResult& result) {
@@ -1882,6 +1859,7 @@ private:
         size_t sourceScanPartitionsCount = 0;
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions[txIdx];
+            auto scheduledTaskCount = ScheduleByCost(tx, ResourceSnapshot);
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 auto& stage = tx.Body->GetStages(stageIdx);
                 auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
@@ -1927,8 +1905,10 @@ private:
                                 UnknownAffectedShardCount = true;
                             }
                             break;
-                        case NKqpProto::TKqpSource::kExternalSource:
-                            BuildReadTasksFromSource(stageInfo, ResourceSnapshot);
+                        case NKqpProto::TKqpSource::kExternalSource: {
+                            auto it = scheduledTaskCount.find(stageIdx);
+                            BuildReadTasksFromSource(stageInfo, ResourceSnapshot, it != scheduledTaskCount.end() ? it->second.TaskCount : 0);
+                        }
                             break;
                         default:
                             YQL_ENSURE(false, "unknown source type");
@@ -2339,7 +2319,7 @@ private:
             // Volatile transactions must always use generic readsets
             VolatileTx ||
             // Transactions with topics must always use generic readsets
-            !topicTxs.empty() || 
+            !topicTxs.empty() ||
             // HTAP transactions always use generic readsets
             !evWriteTxs.empty());
 
@@ -2594,7 +2574,8 @@ private:
             .GUCSettings = GUCSettings,
             .MayRunTasksLocally = mayRunTasksLocally,
             .ResourceManager_ = Request.ResourceManager_,
-            .CaFactory_ = Request.CaFactory_
+            .CaFactory_ = Request.CaFactory_,
+            .BlockTrackingMode = BlockTrackingMode
         });
 
         auto err = Planner->PlanExecution();
@@ -2901,6 +2882,8 @@ private:
     // Lock handle for a newly acquired lock
     TLockHandle LockHandle;
     ui64 LastShard = 0;
+
+    NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
 };
 
 } // namespace

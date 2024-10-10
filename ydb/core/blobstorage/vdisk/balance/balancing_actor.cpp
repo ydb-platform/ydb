@@ -82,6 +82,7 @@ namespace NBalancing {
         TBatchManager BatchManager;
 
         TInstant StartTime;
+        bool AquiredReplToken = false;
 
         ///////////////////////////////////////////////////////////////////////////////////////////
         //  Init logic
@@ -220,6 +221,8 @@ namespace NBalancing {
         }
 
         void ScheduleJobQuant() {
+            Y_DEBUG_ABORT_UNLESS(!AquiredReplToken);
+            AquiredReplToken = true;
             Ctx->MonGroup.ReplTokenAquired()++;
 
             // once repl token received, start balancing - waking up sender and deleter
@@ -240,13 +243,14 @@ namespace NBalancing {
 
             if (StartTime + Ctx->Cfg.EpochTimeout < TlsActivationContext->Now()) {
                 Ctx->MonGroup.EpochTimeouts()++;
-                Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
                 STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB04, VDISKP(Ctx->VCtx, "Epoch timeout"));
                 Stop(TDuration::Seconds(0));
                 return;
             }
 
             if (BatchManager.IsBatchCompleted()) {
+                Y_DEBUG_ABORT_UNLESS(AquiredReplToken);
+                AquiredReplToken = false;
                 Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
 
                 ContinueBalancing();
@@ -319,6 +323,10 @@ namespace NBalancing {
 
         void Stop(TDuration timeoutBeforeNextLaunch) {
             STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB12, VDISKP(Ctx->VCtx, "Stop balancing"), (SendOnMainParts, SendOnMainParts.Data.size()), (TryDeleteParts, TryDeleteParts.Data.size()), (SecondsBeforeNextLaunch, timeoutBeforeNextLaunch.Seconds()));
+
+            if (AquiredReplToken) {
+                Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
+            }
 
             Send(BatchManager.SenderId, new NActors::TEvents::TEvPoison);
             Send(BatchManager.DeleterId, new NActors::TEvents::TEvPoison);

@@ -532,6 +532,10 @@ public:
         Gateway->SetToken(cluster, token);
     }
 
+    void SetClientAddress(const TString& clientAddress) override {
+        Gateway->SetClientAddress(clientAddress);
+    }
+
     bool GetDatabaseForLoginOperation(TString& database) {
         return NSchemeHelpers::SetDatabaseForLoginOperation(database, GetDomainLoginOnly(), GetDomainName(), GetDatabase());
     }
@@ -1264,6 +1268,7 @@ public:
 
             NMetadata::NModifications::IOperationsManager::TExternalModificationContext context;
             context.SetDatabase(SessionCtx->GetDatabase());
+            context.SetDatabaseId(SessionCtx->GetDatabaseId());
             context.SetActorSystem(ActorSystem);
             if (SessionCtx->GetUserToken()) {
                 context.SetUserToken(*SessionCtx->GetUserToken());

@@ -69,7 +69,9 @@ void TryExtractHost(const TOriginAttributes& attributes)
         spanId
     ] = Decode(*attributes.ExtensionData);
 
-    attributes.Host = name;
+    attributes.Host = name
+        ? TStringBuf(name)
+        : TStringBuf{};
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -125,6 +127,7 @@ void UpdateTracingAttributes(TOriginAttributes* attributes, const NTracing::TTra
             .TraceId = tracingAttributes.TraceId,
             .SpanId = tracingAttributes.SpanId,
         }));
+        return;
     }
 
     attributes->ExtensionData.emplace(Encode(TExtensionData{
@@ -172,14 +175,16 @@ TOriginAttributes ExtractFromDictionaryOverride(const NYTree::IAttributeDictiona
 
     TExtensionData ext;
 
-    static const TString FidKey("fid");
-    ext.Fid = attributes->GetAndRemove<NConcurrency::TFiberId>(FidKey, NConcurrency::InvalidFiberId);
+    if (attributes) {
+        static const TString FidKey("fid");
+        ext.Fid = attributes->GetAndRemove<NConcurrency::TFiberId>(FidKey, NConcurrency::InvalidFiberId);
 
-    static const TString TraceIdKey("trace_id");
-    ext.TraceId = attributes->GetAndRemove<NTracing::TTraceId>(TraceIdKey, NTracing::InvalidTraceId);
+        static const TString TraceIdKey("trace_id");
+        ext.TraceId = attributes->GetAndRemove<NTracing::TTraceId>(TraceIdKey, NTracing::InvalidTraceId);
 
-    static const TString SpanIdKey("span_id");
-    ext.SpanId = attributes->GetAndRemove<NTracing::TSpanId>(SpanIdKey, NTracing::InvalidSpanId);
+        static const TString SpanIdKey("span_id");
+        ext.SpanId = attributes->GetAndRemove<NTracing::TSpanId>(SpanIdKey, NTracing::InvalidSpanId);
+    }
 
     result.ExtensionData = Encode(ext);
     return result;

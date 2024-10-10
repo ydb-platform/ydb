@@ -51,8 +51,9 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
                 {
                     auto it = entityStorages.find(r->GetColumnId());
                     if (it == entityStorages.end()) {
-                        it = entityStorages.emplace(r->GetColumnId(),
-                            portionSchema->GetIndexInfo().GetEntityStorageId(r->GetColumnId(), portion.GetMeta().GetTierName())).first;
+                        it =
+                            entityStorages.emplace(r->GetColumnId(), portion.GetEntityStorageId(r->GetColumnId(), portionSchema->GetIndexInfo()))
+                                .first;
                     }
                     lastTierName = it->second.GetView();
                 }
@@ -106,7 +107,7 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
                 NArrow::Append<arrow::UInt64Type>(*builders[11], bData->size());
             }
             NArrow::Append<arrow::UInt8Type>(*builders[12], activity);
-            const auto tierName = portionSchema->GetIndexInfo().GetEntityStorageId(r->GetIndexId(), portion.GetMeta().GetTierName());
+            const auto tierName = portion.GetEntityStorageId(r->GetIndexId(), portionSchema->GetIndexInfo());
             std::string strTierName(tierName.data(), tierName.size());
             NArrow::Append<arrow::StringType>(*builders[13], strTierName);
             NArrow::Append<arrow::StringType>(*builders[14], ConstantEntityIsIndexView);

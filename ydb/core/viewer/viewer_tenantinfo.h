@@ -261,25 +261,17 @@ public:
 
     void SendWhiteboardSystemStateRequest(const TNodeId nodeId) {
         Subscribers.insert(nodeId);
-        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
         if (SystemStateResponse.count(nodeId) == 0) {
-            SystemStateResponse.emplace(nodeId, MakeRequest<TEvWhiteboard::TEvSystemStateResponse>(whiteboardServiceId,
-                new TEvWhiteboard::TEvSystemStateRequest(),
-                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-                nodeId));
+            SystemStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, new TEvWhiteboard::TEvSystemStateRequest()));
         }
     }
 
     void SendWhiteboardTabletStateRequest(const TNodeId nodeId) {
         Subscribers.insert(nodeId);
-        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
         if (TabletStateResponse.count(nodeId) == 0) {
             auto request = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest>();
             request->Record.SetFormat("packed5");
-            TabletStateResponse.emplace(nodeId, MakeRequest<TEvWhiteboard::TEvTabletStateResponse>(whiteboardServiceId,
-                request.release(),
-                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-                nodeId));
+            TabletStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, request.release()));
         }
     }
 
@@ -533,7 +525,7 @@ public:
     }
 
     void ReplyAndPassAway() override {
-        Result.SetVersion(2);
+        Result.SetVersion(Viewer->GetCapabilityVersion("/viewer/tenantinfo"));
         THashMap<TString, NKikimrViewer::EFlag> OverallByDomainId;
         std::unordered_map<TNodeId, const NKikimrWhiteboard::TSystemStateInfo*> nodeSystemStateInfo;
 

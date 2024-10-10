@@ -439,6 +439,7 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         monConfig.Threads = appConfig.GetMonitoringConfig().GetMonitoringThreads();
         monConfig.Address = appConfig.GetMonitoringConfig().GetMonitoringAddress();
         monConfig.Certificate = appConfig.GetMonitoringConfig().GetMonitoringCertificate();
+        monConfig.MaxRequestsPerSecond = appConfig.GetMonitoringConfig().GetMaxRequestsPerSecond();
         if (appConfig.GetMonitoringConfig().HasMonitoringCertificateFile()) {
             monConfig.Certificate = TUnbufferedFileInput(appConfig.GetMonitoringConfig().GetMonitoringCertificateFile()).ReadAll();
         }

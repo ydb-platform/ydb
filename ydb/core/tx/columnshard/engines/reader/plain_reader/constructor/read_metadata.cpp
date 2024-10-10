@@ -44,7 +44,19 @@ TConclusionStatus TReadMetadata::Init(
         }
     }
 
-    SelectInfo = dataAccessor.Select(readDescription);
+    SelectInfo = dataAccessor.Select(readDescription, !!LockId);
+    if (LockId) {
+        for (auto&& i : SelectInfo->PortionsOrderedPK) {
+            if (i->HasInsertWriteId() && !i->HasCommitSnapshot()) {
+                if (owner->HasLongTxWrites(i->GetInsertWriteIdVerified())) {
+                } else {
+                    auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(i->GetInsertWriteIdVerified());
+                    AddWriteIdToCheck(i->GetInsertWriteIdVerified(), op->GetLockId());
+                }
+            }
+        }
+    }
+
     StatsMode = readDescription.StatsMode;
     return TConclusionStatus::Success();
 }

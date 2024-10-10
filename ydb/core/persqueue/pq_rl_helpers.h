@@ -3,6 +3,7 @@
 #include <ydb/core/grpc_services/local_rate_limiter.h>
 #include <ydb/core/metering/stream_ru_calculator.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/tx/scheme_board/events.h>
 
 #include <util/datetime/base.h>
 

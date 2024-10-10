@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "fresh_segment.h"
 
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_logoblob.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob.h>

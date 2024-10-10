@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/core/user_data/yql_user_data.h>
 #include <ydb/library/yql/core/file_storage/defs/downloader.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
 #include <yt/cpp/mapreduce/interface/logging/logger.h>
 
@@ -60,6 +61,7 @@ namespace NYql {
             TString UdfResolverBinary_;
             TString UdfsDir_;
             bool PreloadUdfs_ = false; // used when UdfResolverBinary_ is specified, if UdfResolverBinary_ is empty it is considered equal to true
+            TVector<NPg::TExtensionDesc> PgExtensions_;
             TVector<NUserData::TUserData> UserData_;
 
             ELogPriority LogLevel_ = TLOG_ERR;

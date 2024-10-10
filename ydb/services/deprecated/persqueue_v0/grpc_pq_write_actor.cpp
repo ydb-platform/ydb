@@ -351,6 +351,8 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
         return;
     }
     PQInfo = entry.PQGroupInfo;
+    Y_ABORT_UNLESS(PQInfo->PartitionChooser);
+    Y_ABORT_UNLESS(PQInfo->PartitionGraph);
     Config = std::move(PQInfo->Description);
     //const TString topicName = description.GetName();
 
@@ -457,7 +459,7 @@ void TWriteSessionActor::DiscoverPartition(const NActors::TActorContext& ctx) {
     }
 
     std::optional<ui32> preferedPartition = PreferedPartition == Max<ui32>() ? std::nullopt : std::optional(PreferedPartition);
-    PartitionChooser = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionChooserActor(ctx.SelfID, Config, FullConverter, SourceId, preferedPartition));
+    PartitionChooser = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionChooserActor(ctx.SelfID, Config, PQInfo->PartitionChooser, PQInfo->PartitionGraph, FullConverter, SourceId, preferedPartition));
 }
 
 void TWriteSessionActor::Handle(NPQ::TEvPartitionChooser::TEvChooseResult::TPtr& ev, const NActors::TActorContext& ctx) {

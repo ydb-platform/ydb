@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import sys
+from collections.abc import Generator
+
+if sys.version_info < (3, 11):
+    from exceptiongroup import BaseExceptionGroup
+
 
 class BrokenResourceError(Exception):
     """
@@ -71,3 +77,13 @@ class TypedAttributeLookupError(LookupError):
 
 class WouldBlock(Exception):
     """Raised by ``X_nowait`` functions if ``X()`` would block."""
+
+
+def iterate_exceptions(
+    exception: BaseException,
+) -> Generator[BaseException, None, None]:
+    if isinstance(exception, BaseExceptionGroup):
+        for exc in exception.exceptions:
+            yield from iterate_exceptions(exc)
+    else:
+        yield exception

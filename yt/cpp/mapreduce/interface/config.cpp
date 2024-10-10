@@ -200,7 +200,6 @@ void TConfig::Reset()
 
     GlobalTxId = GetEnv("YT_TRANSACTION", "");
 
-    UseAsyncTxPinger = true;
     AsyncHttpClientThreads = 1;
     AsyncTxPingerPoolThreads = 1;
 

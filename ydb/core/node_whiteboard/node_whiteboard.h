@@ -12,6 +12,7 @@
 #include <ydb/library/actors/interconnect/events_local.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/base/tracing.h>
+#include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
 
 namespace NKikimr {
 

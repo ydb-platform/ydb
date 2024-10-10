@@ -322,29 +322,26 @@ namespace NKikimr::NYmq::V1 {
             for (const auto& srcMessage: GetResponse(resp).GetMessages()) {
                 Ydb::Ymq::V1::Message dstMessage;
 
-                for (TString& attributeName : AttributesNames) {
-                    if (attributeName == APPROXIMATE_RECEIVE_COUNT) {
-                        dstMessage.Mutableattributes()->at(attributeName)
-                            .assign(srcMessage.GetApproximateReceiveCount());
-                    } else if (attributeName == APPROXIMATE_FIRST_RECEIVE_TIMESTAMP) {
-                        dstMessage.Mutableattributes()->at(attributeName)
-                            .assign(srcMessage.GetApproximateFirstReceiveTimestamp());
-                    } else if (attributeName == MESSAGE_DEDUPLICATION_ID) {
-                        dstMessage.Mutableattributes()->at(attributeName)
-                            .assign(srcMessage.GetMessageDeduplicationId());
-                    } else if (attributeName == MESSAGE_GROUP_ID) {
-                        dstMessage.Mutableattributes()->at(attributeName)
-                            .assign(srcMessage.GetMessageGroupId());
-                    } else if (attributeName == SENDER_ID) {
-                        dstMessage.Mutableattributes()->at(attributeName)
-                            .assign(srcMessage.GetSenderId());
-                    } else if (attributeName == SENT_TIMESTAMP) {
-                        dstMessage.Mutableattributes()->at(attributeName)
-                            .assign(srcMessage.GetSentTimestamp());
-                    } else if (attributeName == SEQUENCE_NUMBER) {
-                        dstMessage.Mutableattributes()->at(attributeName)
-                            .assign(srcMessage.GetSequenceNumber());
-                    }
+                if (srcMessage.HasApproximateReceiveCount()) {
+                    dstMessage.Mutableattributes()->insert({APPROXIMATE_RECEIVE_COUNT, std::to_string(srcMessage.GetApproximateReceiveCount())});
+                }
+                if (srcMessage.HasApproximateFirstReceiveTimestamp()) {
+                    dstMessage.Mutableattributes()->insert({APPROXIMATE_FIRST_RECEIVE_TIMESTAMP, std::to_string(srcMessage.GetApproximateFirstReceiveTimestamp())});
+                }
+                if (srcMessage.HasMessageDeduplicationId()) {
+                    dstMessage.Mutableattributes()->insert({MESSAGE_DEDUPLICATION_ID, srcMessage.GetMessageDeduplicationId()});
+                }
+                if (srcMessage.HasMessageGroupId()) {
+                    dstMessage.Mutableattributes()->insert({MESSAGE_GROUP_ID, srcMessage.GetMessageGroupId()});
+                }
+                if (srcMessage.HasSenderId()) {
+                    dstMessage.Mutableattributes()->insert({SENDER_ID, srcMessage.GetSenderId()});
+                }
+                if (srcMessage.HasSentTimestamp()) {
+                    dstMessage.Mutableattributes()->insert({SENT_TIMESTAMP, std::to_string(srcMessage.GetSentTimestamp())});
+                }
+                if (srcMessage.HasSequenceNumber()) {
+                    dstMessage.Mutableattributes()->insert({SEQUENCE_NUMBER, std::to_string(srcMessage.GetSequenceNumber())});
                 }
 
                 dstMessage.set_body(srcMessage.GetData());
@@ -392,17 +389,17 @@ namespace NKikimr::NYmq::V1 {
             // because AttributeNames is deprecated in favour of SystemAttributeNames
             if (systemAttributeNames.size() > 0) {
                 for (int i = 0; i < systemAttributeNames.size(); i++) {
-                    result->SetAttributeName(i, systemAttributeNames[i]);
+                    result->AddAttributeName(systemAttributeNames[i]);
                 }
             } else {
                 auto attributeNames = GetProtoRequest()->Getattribute_names();
                 for (int i = 0; i < attributeNames.size(); i++) {
-                    result->SetAttributeName(i, attributeNames[i]);
+                    result->AddAttributeName(attributeNames[i]);
                 }
             }
 
             for (int i = 0; i < GetProtoRequest()->Getmessage_attribute_names().size(); i++) {
-                result->SetMessageAttributeName(i, GetProtoRequest()->Getmessage_attribute_names()[i]);
+                result->AddMessageAttributeName(GetProtoRequest()->Getmessage_attribute_names()[i]);
             }
 
             return result;

@@ -54,7 +54,6 @@ struct TEvPrivate {
         EvPqEventsReady = EvBegin + 10,
         EvCreateSession,
         EvStatus,
-        EvDataParsed,
         EvDataAfterFilteration,
         EvDataFiltered,
         EvPrintState,
@@ -67,22 +66,25 @@ struct TEvPrivate {
     struct TEvCreateSession : public NActors::TEventLocal<TEvCreateSession, EvCreateSession> {};
     struct TEvPrintState : public NActors::TEventLocal<TEvPrintState, EvPrintState> {};
     struct TEvStatus : public NActors::TEventLocal<TEvStatus, EvStatus> {};
-    struct TEvDataParsed : public NActors::TEventLocal<TEvDataParsed, EvDataParsed> {
-        TEvDataParsed(ui64 offset, TJson&& value, ui64 cookie) 
-            : Offset(offset)
-            , Value(std::move(value))
-            , Cookie(cookie)
-        {}
-        ui64 Offset; 
-        TJson Value;
-        ui64 Cookie;
-    };
+    // struct TEvDataParsed : public NActors::TEventLocal<TEvDataParsed, EvDataParsed> {
+    //     TEvDataParsed(ui64 offset, TJson&& value, ui64 cookie) 
+    //         : Offset(offset)
+    //         , Value(std::move(value))
+    //         , Cookie(cookie)
+    //     {}
+    //     ui64 Offset; 
+    //     TJson Value;
+    //     ui64 Cookie;
+    // };
 
     struct TEvDataFiltered : public NActors::TEventLocal<TEvDataFiltered, EvDataFiltered> {
-        TEvDataFiltered(ui64 offset) 
+        TEvDataFiltered(ui64 offset, ui64 numberValues) 
             : Offset(offset)
+            , NumberValues(numberValues)
         {}
-        ui64 Offset = 0; 
+
+        const ui64 Offset; 
+        const ui64 NumberValues;
     };
 
     struct TEvDataAfterFilteration : public NActors::TEventLocal<TEvDataAfterFilteration, EvDataAfterFilteration> {
@@ -158,8 +160,9 @@ private:
     const i64 BufferSize;
     TString LogPrefix;
     NYql::NDq::TDqAsyncStats IngressStats;
-    ui64 LastReceivedMessageOffset = 0;
-    ui64 LastParsedMessageOffset = 0;
+    ui64 LastMessageOffset = 0;
+   // ui64 LastReceivedMessageOffset = 0;
+   // ui64 LastParsedMessageOffset = 0;  // TODO: ? нужно
     bool IsWaitingEvents = false;
     THashMap<NActors::TActorId, ClientsInfo> Clients;
     THashSet<NActors::TActorId> ClientsWithoutPredicate;
@@ -168,7 +171,6 @@ private:
     ui64 UsedSize = 0;
     const ::NMonitoring::TDynamicCounterPtr Counters;
     TTopicSessionMetrics Metrics;
-    ui64 ParserCookie = 0;
     TParserSchema ParserSchema;
     THashMap<TString, ui64> FieldsIndexes;
 
@@ -194,7 +196,8 @@ private:
     void CreateTopicSession();
     void CloseTopicSession();
     void SubscribeOnNextEvent();
-    void SendToParsing(ui64 offset, const TString& message);
+    void SendToParsing(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
+    void SendToFiltering(ui64 offset, const TVector<TVector<std::string_view>>& parsedValues);
     void SendData(ClientsInfo& info);
     void UpdateParser();
     void FatalError(const TString& message, const std::unique_ptr<TJsonFilter>* filter = nullptr);
@@ -209,7 +212,6 @@ private:
 
     void Handle(NFq::TEvPrivate::TEvPqEventsReady::TPtr&);
     void Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&);
-    void Handle(NFq::TEvPrivate::TEvDataParsed::TPtr&);
     void Handle(NFq::TEvPrivate::TEvDataAfterFilteration::TPtr&);
     void Handle(NFq::TEvPrivate::TEvStatus::TPtr&);
     void Handle(NFq::TEvPrivate::TEvDataFiltered::TPtr&);
@@ -230,7 +232,6 @@ private:
     STRICT_STFUNC_EXC(StateFunc,
         hFunc(NFq::TEvPrivate::TEvPqEventsReady, Handle);
         hFunc(NFq::TEvPrivate::TEvCreateSession, Handle);
-        hFunc(NFq::TEvPrivate::TEvDataParsed, Handle);
         hFunc(NFq::TEvPrivate::TEvDataAfterFilteration, Handle);
         hFunc(NFq::TEvPrivate::TEvStatus, Handle);
         hFunc(NFq::TEvPrivate::TEvDataFiltered, Handle);
@@ -246,7 +247,6 @@ private:
         cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
         IgnoreFunc(NFq::TEvPrivate::TEvPqEventsReady);
         IgnoreFunc(NFq::TEvPrivate::TEvCreateSession);
-        IgnoreFunc(NFq::TEvPrivate::TEvDataParsed);
         IgnoreFunc(NFq::TEvPrivate::TEvDataAfterFilteration);
         IgnoreFunc(NFq::TEvPrivate::TEvStatus);
         IgnoreFunc(NFq::TEvPrivate::TEvDataFiltered);
@@ -403,33 +403,33 @@ TJson TTopicSession::RebuildJson(const ClientsInfo& info, const TJson& json) {
     return result;
 }
 
-void TTopicSession::Handle(NFq::TEvPrivate::TEvDataParsed::TPtr& ev) {
-    LOG_ROW_DISPATCHER_TRACE("TEvDataParsed, offset " << ev->Get()->Offset << ", cookie " << ev->Get()->Cookie);
+// void TTopicSession::Handle(NFq::TEvPrivate::TEvDataParsed::TPtr& ev) {
+//     LOG_ROW_DISPATCHER_TRACE("TEvDataParsed, offset " << ev->Get()->Offset << ", cookie " << ev->Get()->Cookie);
 
-    LastParsedMessageOffset = ev->Get()->Offset;
-    if (ev->Get()->Cookie < ParserCookie) {
-        LOG_ROW_DISPATCHER_TRACE("Ignore message");
-        return;
-    }
+//     LastParsedMessageOffset = ev->Get()->Offset;
+//     if (ev->Get()->Cookie < ParserCookie) {
+//         LOG_ROW_DISPATCHER_TRACE("Ignore message");
+//         return;
+//     }
 
-    for (auto v: ev->Get()->Value) {
-        LOG_ROW_DISPATCHER_TRACE("v " << v);
-    }
+//     for (auto v: ev->Get()->Value) {
+//         LOG_ROW_DISPATCHER_TRACE("v " << v);
+//     }
 
-    for (auto& [actorId, info] : Clients) {
-        try {
-            if (!info.Filter) {
-                continue;
-            }
-            auto json = RebuildJson(info, ev->Get()->Value);
-            info.Filter->Push(ev->Get()->Offset, json);
-        } catch (const std::exception& e) {
-            FatalError(e.what(), &info.Filter);
-        }
-    }
-    auto event = std::make_unique<TEvPrivate::TEvDataFiltered>(ev->Get()->Offset);
-    Send(SelfId(), event.release());
-}
+//     for (auto& [actorId, info] : Clients) {
+//         try {
+//             if (!info.Filter) {
+//                 continue;
+//             }
+//             auto json = RebuildJson(info, ev->Get()->Value);
+//             info.Filter->Push(ev->Get()->Offset, json);
+//         } catch (const std::exception& e) {
+//             FatalError(e.what(), &info.Filter);
+//         }
+//     }
+//     auto event = std::make_unique<TEvPrivate::TEvDataFiltered>(ev->Get()->Offset);
+//     Send(SelfId(), event.release());
+// }
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvDataAfterFilteration::TPtr& ev) {
     LOG_ROW_DISPATCHER_TRACE("TEvDataAfterFilteration, read actor id " << ev->Get()->ReadActorId.ToString() << ", " << ev->Get()->Json);
@@ -462,11 +462,11 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvStatus::TPtr&) {
 }
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvDataFiltered::TPtr& ev) {
-    LOG_ROW_DISPATCHER_TRACE("TEvDataFiltered, offset " << ev->Get()->Offset);
+    LOG_ROW_DISPATCHER_TRACE("TEvDataFiltered, offset " << ev->Get()->Offset << ", number values " << ev->Get()->NumberValues);
+    const ui64 offset = ev->Get()->Offset + ev->Get()->NumberValues;
     for (auto& [actorId, info] : Clients) {
-        if (!info.NextMessageOffset
-            || *info.NextMessageOffset < ev->Get()->Offset + 1) {
-            info.NextMessageOffset = ev->Get()->Offset + 1;
+        if (!info.NextMessageOffset || *info.NextMessageOffset < offset) {
+            info.NextMessageOffset = offset;
         }
     }
 }
@@ -512,14 +512,14 @@ void TTopicSession::CloseTopicSession() {
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
     Self.Metrics.RowsRead->Add(event.GetMessages().size());
     for (const auto& message : event.GetMessages()) {
-        const TString& data = message.GetData();
-        Self.IngressStats.Bytes += data.size();
         LOG_ROW_DISPATCHER_TRACE("Data received: " << message.DebugString(true));
 
-        TString item = message.GetData();
-        Self.SendToParsing(message.GetOffset(), item);
-        Self.LastReceivedMessageOffset = message.GetOffset();
+        Self.IngressStats.Bytes += message.GetData().size();
+        Self.LastMessageOffset = message.GetOffset();
+        //Self.LastReceivedMessageOffset = message.GetOffset();
     }
+
+    Self.SendToParsing(event.GetMessages());
 }
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TSessionClosedEvent& ev) {
@@ -568,29 +568,59 @@ TString TTopicSession::GetSessionId() const {
     return ReadSession ? ReadSession->GetSessionId() : TString{"empty"};
 }
 
-void TTopicSession::SendToParsing(ui64 offset, const TString& message) {
-    LOG_ROW_DISPATCHER_TRACE("SendToParsing, message " << message);
+void TTopicSession::SendToParsing(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) {
+    size_t valuesSize = 0;
+    for (const auto& message : messages) {
+        const auto& data = message.GetData();
+        valuesSize += data.size();
 
-    for (auto& readActorId : ClientsWithoutPredicate) {
-        auto it = Clients.find(readActorId);
-        Y_ENSURE(it != Clients.end(), "Internal error: unknown client");
-        auto& info = it->second;
-        if (!info.Filter) {
-            LOG_ROW_DISPATCHER_TRACE("Send message to client without parsing/filtering");
-            AddDataToClient(info, offset, message);
+        for (const auto& readActorId : ClientsWithoutPredicate) {
+            const auto it = Clients.find(readActorId);
+            Y_ENSURE(it != Clients.end(), "Internal error: unknown client");
+            if (auto& info = it->second; !info.Filter) {
+                LOG_ROW_DISPATCHER_TRACE("Send message to client without parsing/filtering");
+                AddDataToClient(info, message.GetOffset(), data);
+            }
         }
     }
 
-    if (ClientsWithoutPredicate.size() == Clients.size()) {
-        LastParsedMessageOffset = offset;
+    if (ClientsWithoutPredicate.size() == Clients.size() || messages.empty()) {
+ //       LastParsedMessageOffset = offset;
         return;
     }
 
+    TJsonParserBuffer& buffer = Parser->GetBuffer();
+    buffer.Reserve(valuesSize);
+    for (const auto& message : messages) {
+        buffer.AddValue(message.GetData());
+    }
+
+    const ui64 offset = messages.front().GetOffset();
+    LOG_ROW_DISPATCHER_TRACE("SendToParsing, buffer with offset " << offset << " and size " << buffer.GetNumberValues());
+
     try {
-        Parser->Push(offset, message);
+        const auto& parsedValues = Parser->Parse();
+        SendToFiltering(offset, parsedValues);
     } catch (const std::exception& e) {
         FatalError(e.what());
     }
+}
+
+void TTopicSession::SendToFiltering(ui64 offset, const TVector<TVector<std::string_view>>& parsedValues) {
+    Y_ENSURE(parsedValues, "Expected non empty schema");
+    LOG_ROW_DISPATCHER_TRACE("TEvDataParsed, offset " << offset << ", data:\n" << Parser->GetDebugString(parsedValues));
+
+    for (auto& [actorId, info] : Clients) {
+        try {
+            if (info.Filter) {
+                info.Filter->Push(offset, parsedValues);
+            }
+        } catch (const std::exception& e) {
+            FatalError(e.what(), &info.Filter);
+        }
+    }
+
+    Send(SelfId(), new TEvPrivate::TEvDataFiltered(offset, parsedValues.front().size()));
 }
 
 void TTopicSession::SendData(ClientsInfo& info) {
@@ -678,8 +708,8 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
         }
 
         if (ReadSession) {
-            if (clientInfo.Settings.HasOffset() && (clientInfo.Settings.GetOffset() <= LastReceivedMessageOffset)) {
-                LOG_ROW_DISPATCHER_INFO("New client has less offset (" << clientInfo.Settings.GetOffset() << ") than the last message (" << LastReceivedMessageOffset << "), stop (restart) topic session");
+            if (clientInfo.Settings.HasOffset() && (clientInfo.Settings.GetOffset() <= LastMessageOffset)) {
+                LOG_ROW_DISPATCHER_INFO("New client has less offset (" << clientInfo.Settings.GetOffset() << ") than the last message (" << LastMessageOffset << "), stop (restart) topic session");
                 StopReadSession();
             }
         }
@@ -737,7 +767,6 @@ void CollectColumns(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams, TSe
 }
 
 void TTopicSession::UpdateParserSchema(const TParserInputType& inputType) {
-    ++ParserCookie;
     ParserSchema.FieldsMap.clear();
     ParserSchema.FieldsMap.resize(FieldsIndexes.size());
     ui64 offset = 0;
@@ -765,12 +794,11 @@ void TTopicSession::UpdateParser() {
     }
 
     try {
-        if (ReadSession && LastParsedMessageOffset != LastReceivedMessageOffset) {
-            LOG_ROW_DISPATCHER_INFO("Inflate parsing data (" << (LastReceivedMessageOffset - LastParsedMessageOffset) << "), restart topic session");
-            StopReadSession();
-        }
+        // if (ReadSession && LastParsedMessageOffset != LastReceivedMessageOffset) { //
+        //     LOG_ROW_DISPATCHER_INFO("Inflate parsing data (" << (LastReceivedMessageOffset - LastParsedMessageOffset) << "), restart topic session");
+        //     StopReadSession();
+        // }
         UpdateParserSchema(namesWithTypes);
-        NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
 
         TVector<TString> names;
         TVector<TString> types;
@@ -780,12 +808,9 @@ void TTopicSession::UpdateParser() {
         }
 
         LOG_ROW_DISPATCHER_TRACE("Init JsonParser with columns: " << JoinSeq(',', names));
-        Parser = NewJsonParser(
-            names,
-            types,
-            [actorSystem, selfId = SelfId(), cookie = ParserCookie](ui64 offset, TJson&& value){
-                actorSystem->Send(selfId, new NFq::TEvPrivate::TEvDataParsed(offset, std::move(value), cookie));
-            });
+        Parser = NewJsonParser(names, types);
+      //  CurrentParserTypes = std::make_pair(GetVector(sourceParams.GetColumns()), GetVector(sourceParams.GetColumnTypes()));
+       // Parser = NewJsonParser(GetVector(sourceParams.GetColumns()), GetVector(sourceParams.GetColumnTypes()));
     } catch (const NYql::NPureCalc::TCompileError& e) {
         FatalError(e.GetIssues());
     }
@@ -795,10 +820,10 @@ void TTopicSession::FatalError(const TString& message, const std::unique_ptr<TJs
     TStringStream str;
     str << message;
     if (Parser) {
-        str << ", parser sql: " << Parser->GetSql();
+        str << ", parser description:\n" << Parser->GetDescription();
     }
     if (filter) {
-        str << ", filter sql:" << (*filter)->GetSql();
+        str << ", filter sql:\n" << (*filter)->GetSql();
     }
     LOG_ROW_DISPATCHER_ERROR("FatalError: " << str.Str());
 

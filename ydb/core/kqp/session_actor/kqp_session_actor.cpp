@@ -250,7 +250,7 @@ public:
         }
 
         Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvPlaceRequestIntoPool(
-            QueryState->Database,
+            QueryState->UserRequestContext->DatabaseId,
             SessionId,
             QueryState->UserRequestContext->PoolId,
             QueryState->UserToken
@@ -417,6 +417,7 @@ public:
             << " text: " << QueryState->GetQuery()
             << " rpcActor: " << QueryState->RequestActorId
             << " database: " << QueryState->GetDatabase()
+            << " databaseId: " << QueryState->UserRequestContext->DatabaseId
             << " pool id: " << QueryState->UserRequestContext->PoolId
         );
 
@@ -1265,10 +1266,11 @@ public:
         YQL_ENSURE(QueryState);
 
         auto userToken = QueryState->UserToken;
+        const TString clientAddress = QueryState->ClientAddress;
         const TString requestType = QueryState->GetRequestType();
         const bool temporary = GetTemporaryTableInfo(tx).has_value();
 
-        auto executerActor = CreateKqpSchemeExecuter(tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken,
+        auto executerActor = CreateKqpSchemeExecuter(tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken, clientAddress,
             temporary, TempTablesState.SessionId, QueryState->UserRequestContext, KqpTempTablesAgentActor);
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
@@ -2119,7 +2121,7 @@ public:
 
             const auto& stats = QueryState->QueryStats;
             auto event = std::make_unique<NWorkload::TEvCleanupRequest>(
-                QueryState->Database, SessionId, QueryState->UserRequestContext->PoolId,
+                QueryState->UserRequestContext->DatabaseId, SessionId, QueryState->UserRequestContext->PoolId,
                 TDuration::MicroSeconds(stats.DurationUs), TDuration::MicroSeconds(stats.WorkerCpuTimeUs)
             );
 

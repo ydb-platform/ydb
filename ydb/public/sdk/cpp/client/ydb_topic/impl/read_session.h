@@ -76,8 +76,8 @@ private:
 
     using TTransactionInfoPtr = std::shared_ptr<TTransactionInfo>;
 
-    using TTransactionList = THashMap<TTransactionId, TTransactionInfoPtr>;
-    using TTransactionListPtr = std::shared_ptr<TTransactionList>;
+    using TTransactionMap = THashMap<TTransactionId, TTransactionInfoPtr>;
+    using TTransactionMapPtr = std::shared_ptr<TTransactionMap>;
 
     void CollectOffsets(NTable::TTransaction& tx,
                         const TReadSessionEvent::TDataReceivedEvent& event);
@@ -111,7 +111,7 @@ private:
     bool Aborting = false;
     bool Closing = false;
 
-    TTransactionListPtr Txs;
+    TTransactionMapPtr Txs;
 };
 
 }  // namespace NYdb::NTopic

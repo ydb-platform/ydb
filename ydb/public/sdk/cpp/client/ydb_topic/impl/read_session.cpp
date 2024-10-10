@@ -28,7 +28,7 @@ TReadSession::TReadSession(const TReadSessionSettings& settings,
 
     MakeCountersIfNeeded();
 
-    Txs = std::make_shared<TTransactionList>();
+    Txs = std::make_shared<TTransactionMap>();
 }
 
 TReadSession::~TReadSession() {

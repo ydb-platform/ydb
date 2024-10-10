@@ -128,15 +128,14 @@ def process_test_group(name, group, last_day_data, default_start_date):
         current_days_in_state = 0
         state_filtered = ''
         prev_state_filtered = 'no_runs'
-        prev_date_filtered = datetime.datetime(default_start_date.year, default_start_date.month, default_start_date.day)
+        prev_date_filtered = datetime.datetime(
+            default_start_date.year, default_start_date.month, default_start_date.day
+        )
         current_days_in_state_filtered = 0
         saved_prev_state = prev_state
         saved_prev_state_filtered = prev_state_filtered
 
-    
-    
     for index, row in group.iterrows():
-
 
         current_days_in_state += 1
         if row['state'] != prev_state:
@@ -154,19 +153,18 @@ def process_test_group(name, group, last_day_data, default_start_date):
             state_filtered = prev_state_filtered
         else:
             state_filtered = row['state']
-            
+
         current_days_in_state_filtered += 1
         if state_filtered != prev_state_filtered:
             saved_prev_state_filtered = prev_state_filtered
             prev_state_filtered = state_filtered
             prev_date_filtered = row['date_window']
             current_days_in_state_filtered = 1
-            
+
         state_filtered_list.append(state_filtered)
         previous_state_filtered_list.append(saved_prev_state_filtered)
         state_change_date_filtered_list.append(prev_date_filtered)
         days_in_state_filtered_list.append(current_days_in_state_filtered)
-        
 
     return {
         'previous_state': previous_state_list,
@@ -250,10 +248,24 @@ def main():
         help='build : relwithdebinfo or release-asan',
     )
     parser.add_argument('--branch', default='main', choices=['main'], type=str, help='branch')
+
+    parser.add_argument(
+        '--concurent',
+        dest='concurrent_mode',
+        action='store_true',
+        default=True,
+        help='Set concurrent mode to true (default).',
+    )
+
+    parser.add_argument(
+        '--no-concurrent', dest='concurrent_mode', action='store_false', help='Set concurrent mode to false.'
+    )
+
     args, unknown = parser.parse_known_args()
     history_for_n_day = args.days_window
     build_type = args.build_type
     branch = args.branch
+    concurrent_mode = args.concurrent_mode
 
     if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
         print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
@@ -273,9 +285,8 @@ def main():
         table_client = ydb.TableClient(driver, tc_settings)
         base_date = datetime.datetime(1970, 1, 1)
         default_start_date = datetime.date(2024, 8, 1)
-        #today = datetime.date.today() -  datetime.timedelta(days=1)
-        today = datetime.date.today() 
-        table_path = f'test_results/analytics/tests_monitor_test_with_filtered_states_test'
+        today = datetime.date.today()
+        table_path = f'test_results/analytics/tests_monitor_test_with_filtered_states'
 
         # Get last existing day
         print("Geting date of last collected monitor data")
@@ -323,7 +334,6 @@ def main():
                 WHERE build_type = '{build_type}'
                 AND branch = '{branch}'
                 AND date_window = Date('{last_exist_day_str}')
-                and full_name = 'ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse/test.py.test_select_positive[constant_HTTP-kqprun]'
             """
             query = ydb.ScanQuery(query_last_exist_data, {})
             it = driver.table_client.scan_query(query)
@@ -415,9 +425,7 @@ def main():
                     WHERE 
                     date_window = Date('{date}')
                     AND build_type = '{build_type}' 
-                    AND branch = '{branch}'  
-                    and full_name = 'ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse/test.py.test_select_positive[constant_HTTP-kqprun]'
-  
+                    AND branch = '{branch}'
                 ) AS hist 
                 LEFT JOIN (
                     SELECT 
@@ -432,8 +440,6 @@ def main():
                     WHERE 
                         branch = '{branch}'
                         AND date = Date('{date}')
-                        and full_name = 'ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse/test.py.test_select_positive[constant_HTTP-kqprun]'
-
                 ) AS owners_t
                 ON 
                     hist.test_name = owners_t.test_name
@@ -518,6 +524,7 @@ def main():
                     'state_filtered',
                 ]
             ]
+
         end_time = time.time()
         print(f'Dataframe inited: {end_time - start_time}')
         tart_time = time.time()
@@ -540,38 +547,61 @@ def main():
         print(f'Computed base params: {end_time - start_time}')
         start_time = time.time()
 
-        # Determ state for prev date and saving change state date
-        previous_state_list = []
-        state_change_date_list = []
-        days_in_state_list = []
-        previous_state_filtered_list = []
-        state_change_date_filtered_list = []
-        days_in_state_filtered_list = []
-        state_filtered_list = []
-        for name, group in df.groupby('full_name'):
-            result = process_test_group(name, group, last_day_data, default_start_date)
-            previous_state_list = previous_state_list + result['previous_state']
-            state_change_date_list = state_change_date_list + result['state_change_date']
-            days_in_state_list = days_in_state_list + result['days_in_state']
-            previous_state_filtered_list = previous_state_filtered_list + result['previous_state_filtered']
-            state_change_date_filtered_list = state_change_date_filtered_list + result['state_change_date_filtered']
-            days_in_state_filtered_list = days_in_state_filtered_list + result['days_in_state_filtered']
-            state_filtered_list = state_filtered_list + result['state_filtered']
+        if concurrent_mode:
+            with Pool(processes=cpu_count()) as pool:
+                results = pool.starmap(
+                    process_test_group,
+                    [(name, group, last_day_data, default_start_date) for name, group in df.groupby('full_name')],
+                )
+                end_time = time.time()
+                print(
+                    f'Computed days_in_state, state_change_date, previous_state and other params: {end_time - start_time}'
+                )
+                start_time = time.time()
+                # Apply results to the DataFrame
+                for i, (name, group) in enumerate(df.groupby('full_name')):
+                    df.loc[group.index, 'previous_state'] = results[i]['previous_state']
+                    df.loc[group.index, 'state_change_date'] = results[i]['state_change_date']
+                    df.loc[group.index, 'days_in_state'] = results[i]['days_in_state']
+                    df.loc[group.index, 'previous_state_filtered'] = results[i]['previous_state_filtered']
+                    df.loc[group.index, 'state_change_date_filtered'] = results[i]['state_change_date_filtered']
+                    df.loc[group.index, 'days_in_state_filtered'] = results[i]['days_in_state_filtered']
+                    df.loc[group.index, 'state_filtered'] = results[i]['state_filtered']
+
+        else:
+            previous_state_list = []
+            state_change_date_list = []
+            days_in_state_list = []
+            previous_state_filtered_list = []
+            state_change_date_filtered_list = []
+            days_in_state_filtered_list = []
+            state_filtered_list = []
+            for name, group in df.groupby('full_name'):
+                result = process_test_group(name, group, last_day_data, default_start_date)
+                previous_state_list = previous_state_list + result['previous_state']
+                state_change_date_list = state_change_date_list + result['state_change_date']
+                days_in_state_list = days_in_state_list + result['days_in_state']
+                previous_state_filtered_list = previous_state_filtered_list + result['previous_state_filtered']
+                state_change_date_filtered_list = state_change_date_filtered_list + result['state_change_date_filtered']
+                days_in_state_filtered_list = days_in_state_filtered_list + result['days_in_state_filtered']
+                state_filtered_list = state_filtered_list + result['state_filtered']
+
+            end_time = time.time()
+            print(
+                f'Computed days_in_state, state_change_date, previous_state and other params: {end_time - start_time}'
+            )
+            start_time = time.time()
+            # Apply results to the DataFrame
+            df['previous_state'] = previous_state_list
+            df['state_change_date'] = state_change_date_list
+            df['days_in_state'] = days_in_state_list
+            df['previous_state_filtered'] = previous_state_filtered_list
+            df['state_change_date_filtered'] = state_change_date_filtered_list
+            df['days_in_state_filtered'] = days_in_state_filtered_list
+            df['state_filtered'] = state_filtered_list
 
         end_time = time.time()
-        print(f'Computed days_in_state, state_change_date, previous_state and 3 other params: {end_time - start_time}')
-        start_time = time.time()
-        # Apply results to the DataFrame
-        df['previous_state'] = previous_state_list
-        df['state_change_date'] = state_change_date_list
-        df['days_in_state'] = days_in_state_list
-        df['previous_state_filtered'] = previous_state_filtered_list
-        df['state_change_date_filtered'] = state_change_date_filtered_list
-        df['days_in_state_filtered'] = days_in_state_filtered_list
-        df['state_filtered'] = state_filtered_list
-
-        end_time = time.time()
-        print(f'Saving prev action result in dataframe: {end_time - start_time}')
+        print(f'Saving computed result in dataframe: {end_time - start_time}')
         start_time = time.time()
 
         df['state_change_date'] = df['state_change_date'].dt.date

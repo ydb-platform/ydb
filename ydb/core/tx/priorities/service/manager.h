@@ -12,6 +12,7 @@ class TManager {
 private:
     std::shared_ptr<TCounters> Counters;
     const TConfig Config;
+    const NActors::TActorId ServiceActorId;
 
     class TPriority {
     private:
@@ -71,7 +72,7 @@ private:
     void RemoveFromQueue(const TClientStatus& client);
 
 public:
-    TManager(const std::shared_ptr<TCounters>& counters, const TConfig& config);
+    TManager(const std::shared_ptr<TCounters>& counters, const TConfig& config, const NActors::TActorId& serviceActorId);
 
     void Ask(const ui64 client, const ui32 count, const std::shared_ptr<IRequest>& request, const ui64 extPriority);
     void Free(const ui64 client, const ui32 count);

@@ -132,11 +132,6 @@ public:
 };
 
 class TGranuleMeta: TNonCopyable {
-public:
-    enum class EActivity {
-        GeneralCompaction
-    };
-
 private:
     TMonotonic ModificationLastTime = TMonotonic::Now();
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
@@ -146,7 +141,6 @@ private:
     void RebuildHardMetrics() const;
     void RebuildAdditiveMetrics() const;
 
-    std::set<EActivity> Activity;
     mutable bool AllowInsertionFlag = false;
     const ui64 PathId;
     const NColumnShard::TGranuleDataCounters Counters;
@@ -300,7 +294,7 @@ public:
     }
 
     bool IsErasable() const {
-        return Activity.empty() && Portions.empty();
+        return Portions.empty();
     }
 
     void OnCompactionStarted();

@@ -628,6 +628,11 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        TestCreateTieringRule(runtime, ++txId, "/MyRoot/.metadata/tiering/rule", R"(
+            Name: "Tiering1"
+            DefaultColumn: "timestamp"
+        )");
+
         TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
             Name: "ColumnTable"
             AlterTtlSettings {

@@ -7,6 +7,7 @@ namespace NKikimr::NPrioritiesQueue {
     , UsedCount(TBase::GetValue("UsedCount"))
     , Ask(TBase::GetDeriviative("Ask"))
     , Free(TBase::GetDeriviative("Free"))
+    , FreeNoClient(TBase::GetDeriviative("FreeNoClient"))
     , Register(TBase::GetDeriviative("Register"))
     , Unregister(TBase::GetDeriviative("Unregister"))
     , QueueSize(TBase::GetValue("QueueSize"))

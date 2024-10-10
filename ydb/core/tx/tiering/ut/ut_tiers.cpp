@@ -445,8 +445,6 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         TLocalHelper lHelper(*server);
         lHelper.SetUseQueryService(useQueryService);
 
-        lHelper.CreateTestOlapTable("olapTable");
-
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
         runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NLog::PRI_INFO);
         //        runtime.SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG);
@@ -477,6 +475,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             emulator->SetExpectedTiersCount(2);
             emulator->CheckRuntime(runtime);
         }
+
+        lHelper.CreateTestOlapTable("olapTable");
 
         lHelper.StartSchemaRequest("DROP OBJECT tier2 (TYPE TIER)", false);
         lHelper.StartSchemaRequest("DROP OBJECT tier1 (TYPE TIER)", false);

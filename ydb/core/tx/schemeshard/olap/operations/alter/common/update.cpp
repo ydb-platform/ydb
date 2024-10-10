@@ -29,31 +29,4 @@ TConclusionStatus TColumnTableUpdate::DoFinish(const NOperations::TUpdateFinishC
     return TConclusionStatus::Success();
 }
 
-bool TColumnTableUpdate::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttl, const TOlapSchema& schema,
-    const NOperations::TUpdateInitializationContext& context, IErrorCollector& errors) {
-    if (!schema.ValidateTtlSettings(ttl, errors)) {
-        return false;
-    }
-
-    if (const TString& tieringId = ttl.GetUseTiering()) {
-        const TPath path =
-            TPath::Resolve(NColumnShard::NTiers::TTieringRule::GetBehaviour()->GetStorageTablePath(), context.GetSSOperationContext()->SS)
-                .Dive(ttl.GetUseTiering());
-        {
-            TPath::TChecker checks = path.Check();
-            checks.NotEmpty().NotUnderDomainUpgrade().IsAtLocalSchemeShard().IsResolved().NotDeleted().IsTieringRule().NotUnderOperation();
-            if (!checks) {
-                errors.AddError(checks.GetStatus(), checks.GetError());
-            }
-        }
-
-        const auto* tieringRule = context.GetSSOperationContext()->SS->TieringRules.FindPtr(path.Base()->PathId);
-        AFL_VERIFY(tieringRule)("name", tieringId);
-        if (!schema.ValidateTieringColumn(tieringRule->Get()->DefaultColumn, errors)) {
-            return false;
-        }
-    }
-
-    return true;
-}
 }   // namespace NKikimr::NSchemeShard::NOlap::NAlter

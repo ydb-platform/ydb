@@ -1,6 +1,8 @@
 #include "schema.h"
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/common/validation.h>
 #include <ydb/core/tx/schemeshard/olap/ttl/validator.h>
+#include <ydb/core/tx/tiering/rule/object.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -21,15 +23,28 @@ bool TOlapSchema::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycl
             break;
     }
 
-    return true;
-}
+    if (const TString& tieringId = ttl.GetUseTiering()) {
+        const TPath path =
+            TPath::Resolve(NColumnShard::NTiers::TTieringRule::GetBehaviour()->GetStorageTablePath(), &context)
+                .Dive(ttl.GetUseTiering());
+        {
+            TPath::TChecker checks = path.Check();
+            checks.NotEmpty().NotUnderDomainUpgrade().IsAtLocalSchemeShard().IsResolved().NotDeleted().IsTieringRule().NotUnderOperation();
+            if (!checks) {
+                errors.AddError(checks.GetStatus(), checks.GetError());
+                return false;
+            }
+        }
 
-bool TOlapSchema::ValidateTieringColumn(const TString& tieringColumn, IErrorCollector& errors) const {
-    const auto* column = Columns.GetByName(tieringColumn);
-    if (!column) {
-        errors.AddError("Incorrect tiering column - not found in scheme");
-        return false;
+        const auto* tieringRule = context.TieringRules.FindPtr(path.Base()->PathId);
+        AFL_VERIFY(tieringRule)("name", tieringId);
+        const auto* column = Columns.GetByName((*tieringRule)->DefaultColumn);
+        if (!column) {
+            errors.AddError("Incorrect tiering column - not found in scheme");
+            return false;
+        }
     }
+
     return true;
 }
 

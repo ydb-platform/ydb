@@ -182,22 +182,34 @@ public:
             int Count = 1;
             TStackVec<TString> Identifiers;
 
-            TNodeTabletStateCount(const NKikimrHive::TTabletInfo& info, const TTabletStateSettings& settings) {
-                Type = info.tablettype();
-                Leader = info.followerid() == 0;
+            static ETabletState GetState(const NKikimrHive::TTabletInfo& info, const TTabletStateSettings& settings) {
                 if (info.volatilestate() == NKikimrHive::TABLET_VOLATILE_STATE_STOPPED) {
-                    State = ETabletState::Stopped;
-                } else if (info.volatilestate() != NKikimrHive::TABLET_VOLATILE_STATE_RUNNING
-                            && info.has_lastalivetimestamp()
-                            && (info.lastalivetimestamp() != 0 && TInstant::MilliSeconds(info.lastalivetimestamp()) < settings.AliveBarrier)
-                            && info.tabletbootmode() == NKikimrHive::TABLET_BOOT_MODE_DEFAULT
-                            && (info.generation() > 0 || info.volatilestate() != NKikimrHive::TABLET_VOLATILE_STATE_BOOTING || info.inwaitqueue())) {
-                    State = ETabletState::Dead;
-                } else if (info.restartsperperiod() >= settings.MaxRestartsPerPeriod) {
-                    State = ETabletState::RestartsTooOften;
-                } else {
-                    State = ETabletState::Good;
+                    return ETabletState::Stopped;
                 }
+                ETabletState state = (info.restartsperperiod() >= settings.MaxRestartsPerPeriod) ? ETabletState::RestartsTooOften : ETabletState::Good;
+                if (info.volatilestate() == NKikimrHive::TABLET_VOLATILE_STATE_RUNNING) {
+                    return state;
+                }
+                if (info.tabletbootmode() != NKikimrHive::TABLET_BOOT_MODE_DEFAULT) {
+                    return state;
+                }
+                if (info.lastalivetimestamp() != 0 && TInstant::MilliSeconds(info.lastalivetimestamp()) < settings.AliveBarrier) {
+                    // Tablet is not alive for a long time
+                    // We should report it as dead unless it's just waiting to be created
+                    if (info.generation() == 0 && info.volatilestate() == NKikimrHive::TABLET_VOLATILE_STATE_BOOTING && !info.inwaitqueue()) {
+                        return state;
+                    }
+                    return ETabletState::Dead;
+                }
+                return state;
+
+            }
+
+            TNodeTabletStateCount(const NKikimrHive::TTabletInfo& info, const TTabletStateSettings& settings)
+                : Type(info.tablettype())
+                , State(GetState(info, settings))
+                , Leader(info.followerid() == 0)
+            {
             }
 
             bool operator ==(const TNodeTabletStateCount& o) const {

@@ -60,6 +60,7 @@ PEERDIR(
     ydb/core/tx/columnshard/blobs_action/storages_manager
     ydb/core/tx/tiering
     ydb/core/tx/conveyor/usage
+    ydb/core/tx/priorities/service
     ydb/core/tx/tracing
     ydb/core/tx/long_tx_service/public
     ydb/core/util

@@ -18,9 +18,13 @@ struct TParsedToken {
     // TODO: TStringBuf for Name & Content
     TString Name;
     TString Content;
-    // Position of first token symbol
+    // Position of first token byte/symbol
+    // When antlr3 lexer is used, LinePos is a position as in a byte array,
+    // but when antlr4 lexer is used, LinePos is a position as in a symbol array,
     ui32 Line = 0;    // starts from 1
     ui32 LinePos = 0; // starts from 0
+    // Position of first token symbol in a symbol array
+    ui32 RawPos = 0;  // starts from 0
 };
 
 class ILexer {

@@ -8,6 +8,10 @@
 #include <util/datetime/base.h>
 #include <util/string/cast.h>
 
+extern "C" {
+#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
+}
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -29,35 +33,78 @@ class TExpirationCondition: public IEraseRowsCondition {
         }
     }
 
-    TMaybe<TString> GetWallClockDyNumber() const {
-        if (WallClockDyNumber) {
-            return WallClockDyNumber;
+    void ParsePgFromText(const TString& value) const {
+        const auto& result = NPg::PgNativeBinaryFromNativeText(value, Type.GetPgTypeDesc());
+        if (result.Error) {
+            CannotSerialize = true;
+            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                "Cannot create PG native binary from: " << value.Quote());
+        } else {
+            WallClockSerialized = std::move(result.Str);
+        }
+    }
+
+    TMaybe<TString> GetWallClockSerialized() const {
+        if (WallClockSerialized) {
+            return WallClockSerialized;
         }
 
-        if (CannotParseDyNumber) {
+        if (CannotSerialize) {
             return Nothing();
         }
 
-        const auto instantValue = InstantValue(WallClockInstant, Unit);
-        if (!instantValue) {
-            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                "Unsupported unit: " << static_cast<ui32>(Unit));
-            return Nothing();
-        }
+        switch (Type.GetTypeId()) {
+        case NScheme::NTypeIds::DyNumber: {
+            const auto instantValue = InstantValue(WallClockInstant, Unit);
+            if (!instantValue) {
+                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                    "Unsupported unit: " << static_cast<ui32>(Unit));
+                return Nothing();
+            }
 
-        const auto strInstant = ToString(*instantValue);
-        const auto WallClockDyNumber = NDyNumber::ParseDyNumberString(strInstant);
-        if (!WallClockDyNumber) {
-            CannotParseDyNumber = true;
-            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                "Cannot parse DyNumber from: " << strInstant.Quote());
+            const auto strInstant = ToString(*instantValue);
+            const auto wallClockDyNumber = NDyNumber::ParseDyNumberString(strInstant);
+            if (!wallClockDyNumber) {
+                CannotSerialize = true;
+                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                    "Cannot parse DyNumber from: " << strInstant.Quote());
+            } else {
+                WallClockSerialized = *wallClockDyNumber;
+            }
+            break;
         }
-
-        return WallClockDyNumber;
+        case NScheme::NTypeIds::Pg: {
+            switch (NPg::PgTypeIdFromTypeDesc(Type.GetPgTypeDesc())) {
+                case DATEOID:
+                case TIMESTAMPOID: {
+                    const auto& wallClockIsoString = WallClockInstant.ToString();
+                    ParsePgFromText(wallClockIsoString);
+                    break;
+                }
+                case INT4OID:
+                case INT8OID: {
+                    const auto instantValue = InstantValue(WallClockInstant, Unit);
+                    if (!instantValue) {
+                        LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                            "Unsupported unit: " << static_cast<ui32>(Unit));
+                        return Nothing();
+                    }
+                    const auto strInstant = ToString(*instantValue);
+                    ParsePgFromText(strInstant);
+                    break;
+                }
+                default:
+                    CannotSerialize = true;
+                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Unsupported PG type");
+            }
+            break;
+        }
+        }
+        return WallClockSerialized;
     }
 
     bool CheckUi64(ui64 value) const {
-        switch (Type) {
+        switch (Type.GetTypeId()) {
         // 'date-type column' mode
         case NScheme::NTypeIds::Date:
             return TInstant::Days(value) <= WallClockInstant;
@@ -93,7 +140,7 @@ class TExpirationCondition: public IEraseRowsCondition {
         if (value < 0)
             return true;
 
-        switch (Type) {
+        switch (Type.GetTypeId()) {
         // 'big date-type column' mode
         case NScheme::NTypeIds::Date32:
             return TInstant::Days(value) <= WallClockInstant;
@@ -104,20 +151,27 @@ class TExpirationCondition: public IEraseRowsCondition {
         default:
             Y_ABORT("Unreachable");
         }
-    }    
+    }
 
-    bool CheckStr(TStringBuf value) const {
-        switch (Type) {
-        // 'value since epoch' mode
-        case NScheme::NTypeIds::DyNumber:
-            if (const auto& wallClockDyNumber = GetWallClockDyNumber()) {
-                Y_ABORT_UNLESS(NDyNumber::IsValidDyNumber(value));
-                return value <= *wallClockDyNumber;
-            } else {
-                return false;
+    bool CheckSerialized(TStringBuf value) const {
+        if (const auto& wallClockDSerialized = GetWallClockSerialized()) {
+            switch (Type.GetTypeId()) {
+            // 'value since epoch' mode
+            case NScheme::NTypeIds::DyNumber:
+                return value <= *wallClockDSerialized;
+            case NScheme::NTypeIds::Pg: {
+                int result = NPg::PgNativeBinaryCompare(
+                    value.Data(), value.Size(),
+                    wallClockDSerialized->Data(), wallClockDSerialized->Size(),
+                    Type.GetPgTypeDesc());
+                Cout << ":::result: " << result << Endl;
+                return result <= 0;
             }
-        default:
-            Y_ABORT("Unreachable");
+            default:
+                Y_ABORT("Unreachable");
+            }
+        } else {
+            return false;
         }
     }
 
@@ -126,9 +180,8 @@ public:
         : ColumnId(columnId)
         , WallClockInstant(TInstant::FromValue(wallClockTimestamp))
         , Unit(unit)
-        , CannotParseDyNumber(false)
+        , CannotSerialize(false)
         , Pos(Max<NTable::TPos>())
-        , Type(0)
     {
     }
 
@@ -151,8 +204,7 @@ public:
         Pos = remapPos.GetOrElse(columnInfo->Pos);
         Y_ABORT_UNLESS(Pos < scheme->Tags().size());
 
-        Type = columnInfo->TypeInfo.GetTypeId();
-        Y_ABORT_UNLESS(Type != NScheme::NTypeIds::Pg, "pg types are not supported");
+        Type = columnInfo->TypeInfo;
     }
 
     bool Check(const NTable::TRowState& row) const override {
@@ -164,7 +216,7 @@ public:
             return false;
         }
 
-        switch (Type) {
+        switch (Type.GetTypeId()) {
         case NScheme::NTypeIds::Date:
             return CheckUi64(cell.AsValue<ui16>());
         case NScheme::NTypeIds::Datetime:
@@ -179,7 +231,8 @@ public:
         case NScheme::NTypeIds::Timestamp64:
             return CheckI64(cell.AsValue<i64>());
         case NScheme::NTypeIds::DyNumber:
-            return CheckStr(cell.AsBuf());
+        case NScheme::NTypeIds::Pg:
+            return CheckSerialized(cell.AsBuf());
         default:
             return false;
         }
@@ -194,11 +247,11 @@ private:
     const TInstant WallClockInstant;
     const EUnit Unit;
 
-    mutable TMaybe<TString> WallClockDyNumber;
-    mutable bool CannotParseDyNumber;
+    mutable TMaybe<TString> WallClockSerialized;
+    mutable bool CannotSerialize;
 
     NTable::TPos Pos;
-    NScheme::TTypeId Type;
+    NScheme::TTypeInfo Type;
 
 }; // TExpirationCondition
 

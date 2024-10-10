@@ -470,10 +470,9 @@ void InitFq(const NFq::NConfig::TConfig& fqConfig, TVector<std::pair<TActorId, T
         NFq::TYqSharedResources::TPtr yqSharedResources = NFq::TYqSharedResources::Cast(iSharedResources);
         ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
 
-        NFq::NConfig::TCommonConfig commonConfig;
         auto rowDispatcher = NFq::NewRowDispatcherService(
             fqConfig.GetRowDispatcher(),
-            commonConfig,
+            fqConfig.GetRowDispatcher(),
             NKikimr::CreateYdbCredentialsProviderFactory,
             yqSharedResources,
             credentialsFactory,

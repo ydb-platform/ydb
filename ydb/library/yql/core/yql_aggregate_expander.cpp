@@ -531,7 +531,7 @@ TExprNode::TPtr TAggregateExpander::GetFinalAggStateExtractor(ui32 i) {
 }
 
 TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& stream, TExprNode::TListType& keyIdxs,
-    TVector<TString>& outputColumns, TExprNode::TListType& aggs, bool overState, bool many, bool isStream, ui32* streamIdxColumn) {
+    TVector<TString>& outputColumns, TExprNode::TListType& aggs, bool overState, bool many, ui32* streamIdxColumn) {
     TVector<TString> inputColumns;
     auto flow = Ctx.NewCallable(Node->Pos(), "ToFlow", { stream });
     for (ui32 i = 0; i < RowType->GetSize(); ++i) {
@@ -679,12 +679,7 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
     auto extractorLambda = Ctx.NewLambda(Node->Pos(), Ctx.NewArguments(Node->Pos(), std::move(extractorArgs)), std::move(extractorRoots));
     auto mappedWideFlow = Ctx.NewCallable(Node->Pos(), "WideMap", { wideFlow, extractorLambda });
     auto blocks = Ctx.NewCallable(Node->Pos(), "WideToBlocks", { mappedWideFlow });
-    if (isStream) {
-        auto stream = Ctx.NewCallable(Node->Pos(), "FromFlow", { blocks });
-        return stream;
-    } else {
-        return blocks;
-    }
+    return blocks;
 }
 
 TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
@@ -705,7 +700,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
         stream = AggList;
     }
     
-    TExprNode::TPtr blocks = MakeInputBlocks(stream, keyIdxs, outputColumns, aggs, false, false, hashed);
+    TExprNode::TPtr blocks = MakeInputBlocks(stream, keyIdxs, outputColumns, aggs, false, false);
     if (!blocks) {
         return nullptr;
     }
@@ -714,15 +709,17 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
     if (hashed) {
         auto aggWideStream = Ctx.Builder(Node->Pos())
             .Callable("BlockCombineHashed")
-                .Add(0, blocks)
+                .Callable(0, "FromFlow")
+                    .Add(0, blocks)
+                    .Seal()
                 .Callable(1, "Void")
                 .Seal()
                 .Add(2, Ctx.NewList(Node->Pos(), std::move(keyIdxs)))
                 .Add(3, Ctx.NewList(Node->Pos(), std::move(aggs)))
             .Seal()
             .Build();
-        aggWideFlow = Ctx.Builder(Node->Pos()).
-            Callable("WideFromBlocks")
+        aggWideFlow = Ctx.Builder(Node->Pos())
+            .Callable("WideFromBlocks")
                 .Callable(0, "ToFlow")
                     .Add(0, aggWideStream)
                 .Seal()
@@ -2883,7 +2880,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalizeHashed() {
     TVector<TString> outputColumns;
     TExprNode::TListType aggs;
     ui32 streamIdxColumn;
-    auto blocks = MakeInputBlocks(streamArg, keyIdxs, outputColumns, aggs, true, isMany, false, &streamIdxColumn);
+    auto blocks = MakeInputBlocks(streamArg, keyIdxs, outputColumns, aggs, true, isMany, &streamIdxColumn);
     if (!blocks) {
         return nullptr;
     }

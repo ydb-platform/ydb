@@ -86,7 +86,7 @@ private:
     TExprNode::TPtr TryGenerateBlockCombine();
     TExprNode::TPtr TryGenerateBlockMergeFinalize();
     TExprNode::TPtr MakeInputBlocks(const TExprNode::TPtr& stream, TExprNode::TListType& keyIdxs,
-        TVector<TString>& outputColumns, TExprNode::TListType& aggs, bool overState, bool many, bool isStream, ui32* streamIdxColumn = nullptr);
+        TVector<TString>& outputColumns, TExprNode::TListType& aggs, bool overState, bool many, ui32* streamIdxColumn = nullptr);
 
 private:
     static constexpr TStringBuf SessionStartMemberName = "_yql_group_session_start";

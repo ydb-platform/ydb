@@ -74,17 +74,20 @@ void TTierPreparationActor::AdvanceCheckerState() {
                 new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TTierSnapshotConstructor>()));
             Register(MakeListTieringRulesActor(SelfId()).Release());
             State = FETCH_TIERING;
+            AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tier_preparation_actor")("event", "start_stage")("stage", "fetch_tiering");
             break;
         case FETCH_TIERING:
             if (Tiers && TieringRules) {
                 StartSSFetcher();
                 State = CHECK_PERMISSIONS;
+                AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tier_preparation_actor")("event", "start_stage")("stage", "check_permissions");
             }
             break;
         case CHECK_PERMISSIONS:
             if (Tiers && Secrets && SSCheckResult && TieringRules) {
                 StartChecker();
                 State = MAKE_RESULT;
+                AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tier_preparation_actor")("event", "start_stage")("stage", "make_result");
             }
             break;
         case MAKE_RESULT:

@@ -51,7 +51,6 @@ private:
             switch (result.Status) {
                 case EStatus::PathNotTable:
                 case EStatus::PathNotPath:
-                case EStatus::RootUnknown:
                 case EStatus::AccessDenied:
                     AFL_VERIFY(false)("status", result.Status)("result", result.ToString());
                     return;
@@ -63,6 +62,7 @@ private:
                         ReplyErrorAndPassAway("Retry limit exceeded");
                     }
                     return;
+                case EStatus::RootUnknown:
                 case EStatus::PathErrorUnknown:
                     OnObjectFetched(std::nullopt, result.TableId.PathId);
                     return;
@@ -150,7 +150,6 @@ private:
         AFL_VERIFY(results.size() == 1)("size", results.size());
         const auto& result = results[0];
         switch (result.Status) {
-            case EStatus::RootUnknown:
             case EStatus::AccessDenied:
             case EStatus::PathNotTable:
             case EStatus::PathNotPath:
@@ -164,6 +163,7 @@ private:
                     ReplyErrorAndPassAway("Retry limit exceeded");
                 }
                 return;
+            case EStatus::RootUnknown:
             case EStatus::PathErrorUnknown:
                 OnObjectsListed({});
                 return;

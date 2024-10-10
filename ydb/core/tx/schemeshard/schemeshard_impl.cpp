@@ -4731,6 +4731,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvDataShard::TEvCompactBorrowedResult, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvSyncTenantSchemeShard, Handle);
+        HFuncTraced(TEvSchemeShard::TEvProcessingRequest, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvUpdateTenantSchemeShard, Handle);
 
@@ -5391,6 +5392,21 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvModifySchemeTransaction::TPtr &ev, 
     }
 
     Execute(CreateTxOperationPropose(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvSchemeShard::TEvProcessingRequest::TPtr& ev, const TActorContext& ctx) {
+    const auto processor = ev->Get()->RestoreProcessor();
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "TSchemeShard::Handle"
+        << ", at schemeshard: " << TabletID()
+        << ", processor: " << (processor ? processor->DebugString() : "nullptr"));
+    if (processor) {
+        NKikimrScheme::TEvProcessingResponse result;
+        processor->Process(*this, result);
+        ctx.Send(ev->Sender, new TEvSchemeShard::TEvProcessingResponse(result));
+    } else {
+        ctx.Send(ev->Sender, new TEvSchemeShard::TEvProcessingResponse("cannot restore processor: " + ev->Get()->Record.GetClassName()));
+    }
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvProgressOperation::TPtr &ev, const TActorContext &ctx) {

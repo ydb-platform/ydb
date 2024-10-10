@@ -62,9 +62,10 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
 
         TString dataPath;
         if (!runCfg.TestContext->IsFormatedDiskExpected()) {
-            if (runCfg.TestContext->Dir) {
-                TString databaseDirectory = MakeDatabasePath(runCfg.TestContext->Dir);
-                dataPath = MakePDiskPath(runCfg.TestContext->Dir);
+            auto dir = runCfg.TestContext->GetDir();
+            if (dir) {
+                TString databaseDirectory = MakeDatabasePath(dir);
+                dataPath = MakePDiskPath(dir);
                 MakeDirIfNotExist(databaseDirectory.c_str());
             }
 

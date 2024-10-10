@@ -49,6 +49,8 @@ namespace NKikimr::NYmq::V1 {
     // Names of queue attributes
     static const TString APPROXIMATE_NUMBER_OF_MESSAGES = "ApproximateNumberOfMessages";
     static const TString APPROXIMATE_NUMBER_OF_MESSAGES_DELAYED = "ApproximateNumberOfMessagesDelayed";
+    static const TString APPROXIMATE_NUMBER_OF_MESSAGES_NOT_VISIBLE = "ApproximateNumberOfMessagesNotVisible";
+    static const TString CONTENT_BASED_DEDUPLICATION = "ContentBasedDeduplication";
     static const TString CREATED_TIMESTAMP = "CreatedTimestamp";
     static const TString DELAY_SECONDS = "DelaySeconds";
     static const TString LAST_MODIFIED_TIMESTAMP = "LastModifiedTimestamp";
@@ -425,6 +427,11 @@ namespace NKikimr::NYmq::V1 {
         result.Mutableattributes()->emplace(name, value);
     };
 
+    template <>
+    void AddAttribute(Ydb::Ymq::V1::GetQueueAttributesResult& result, const TString& name, bool value) {
+        result.Mutableattributes()->emplace(name, value ? "true" : "false");
+    };
+
     class TGetQueueAttributesReplyCallback : public TReplyCallback<
             NKikimr::NSQS::TGetQueueAttributesResponse,
             Ydb::Ymq::V1::GetQueueAttributesResult> {
@@ -452,6 +459,12 @@ namespace NKikimr::NYmq::V1 {
             }
             if (attrs.HasApproximateNumberOfMessagesDelayed()) {
                 AddAttribute(result, APPROXIMATE_NUMBER_OF_MESSAGES_DELAYED, attrs.GetApproximateNumberOfMessagesDelayed());
+            }
+            if (attrs.HasApproximateNumberOfMessagesNotVisible()) {
+                AddAttribute(result, APPROXIMATE_NUMBER_OF_MESSAGES_NOT_VISIBLE, attrs.GetApproximateNumberOfMessagesNotVisible());
+            }
+            if (attrs.HasContentBasedDeduplication()) {
+                AddAttribute(result, CONTENT_BASED_DEDUPLICATION, attrs.GetContentBasedDeduplication());
             }
             if (attrs.HasCreatedTimestamp()) {
                 AddAttribute(result, CREATED_TIMESTAMP, attrs.GetCreatedTimestamp());

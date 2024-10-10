@@ -470,7 +470,6 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
 
         Self.IngressStats.Bytes += message.GetData().size();
         Self.LastMessageOffset = message.GetOffset();
-        //Self.LastReceivedMessageOffset = message.GetOffset();
     }
 
     Self.SendToParsing(event.GetMessages());

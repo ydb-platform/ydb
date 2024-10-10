@@ -5755,25 +5755,24 @@ TRuntimeNode TProgramBuilder::BlockCombineAll(TRuntimeNode flow, std::optional<u
 
 TRuntimeNode TProgramBuilder::BlockCombineHashed(TRuntimeNode stream, std::optional<ui32> filterColumn, const TArrayRef<ui32>& keys,
     const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
-    Cerr << "Pgm: BlockCombineHashed: Runtime version" << RuntimeVersion << "\n";
     if constexpr (RuntimeVersion < 31U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
-
+    
+    // we expect here only stream as input and output, but when wrapping for older runtime version we need to accept flow
     const auto streamType = stream.GetStaticType();
-    Cerr << "stream type: " << streamType->GetKindAsStr() << " return type: " << returnType->GetKindAsStr() << "\n";
-    if constexpr (RuntimeVersion < 52U) {
-        if (streamType->IsFlow()) {
-            Cerr << "Wrapping with to/from flow\n";
-            // MKQL_ENSURE(streamType->IsFlow(), "Expected flow");
-            MKQL_ENSURE(returnType->IsFlow(), "Expected flow as return type");
-            const auto streamReturnType = NewStreamType(AS_TYPE(TFlowType, returnType)->GetItemType());
-            return ToFlow(BlockCombineHashed(FromFlow(stream), filterColumn, keys, aggs, streamReturnType));
-        }
-    }
 
-    MKQL_ENSURE(streamType->IsStream(), "Expected stream");
-    MKQL_ENSURE(returnType->IsStream(), "Expected stream as return type");
+    if constexpr (RuntimeVersion < 52U) {
+        MKQL_ENSURE(streamType->IsStream() || streamType->IsFlow(), "Expected either stream or flow as input type");
+        MKQL_ENSURE(returnType->IsStream() || streamType->IsFlow(), "Expected either stream or flow as return type");
+        if (streamType->IsStream()) {
+            const auto flowReturnType = NewFlowType(AS_TYPE(TStreamType, returnType)->GetItemType());
+            return FromFlow(BlockCombineHashed(ToFlow(stream), filterColumn, keys, aggs, flowReturnType));
+        }
+    } else {
+        MKQL_ENSURE(streamType->IsStream(), "Expected stream as input type");
+        MKQL_ENSURE(returnType->IsStream(), "Expected stream as return type");
+    }
 
     TCallableBuilder builder(Env, __func__, returnType);
     builder.Add(stream);

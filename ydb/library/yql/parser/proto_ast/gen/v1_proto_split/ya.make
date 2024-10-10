@@ -11,7 +11,7 @@ CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/codege
 IF(EXPORT_CMAKE)
     MANUAL_GENERATION(${sql_grammar})
 ELSE()
-    # Filled by epilogue.cmake
+    # For exporting CMake this vars fill in epilogue.cmake
     SET(GRAMMAR_STRING_CORE_SINGLE "\"~(QUOTE_SINGLE | BACKSLASH) | (BACKSLASH .)\"")
     SET(GRAMMAR_STRING_CORE_DOUBLE "\"~(QUOTE_DOUBLE | BACKSLASH) | (BACKSLASH .)\"")
     SET(GRAMMAR_MULTILINE_COMMENT_CORE "\".\"")

@@ -312,19 +312,18 @@ def enable_pqcd(arguments):
 
 
 def get_yaml_config(arguments, path):
-    if arguments.ydb_working_dir:
-        with open(os.path.join(arguments.ydb_working_dir, path)) as fh:
-            yaml_config = yaml.load(fh, Loader=yaml.FullLoader)
-    else:
-        raise Exception("No working directory")
+    default_store = arguments.ydb_working_dir if arguments.ydb_working_dir else "/ydb_data"
+    with open(os.path.join(default_store, path)) as fh:
+        yaml_config = yaml.load(fh, Loader=yaml.SafeLoader)
 
     return yaml_config
 
 
-def get_pdsiks_name(configuration):
+def get_pdsiks_path(configuration):
     pdisks = []
     for i in range(len(configuration.yaml_config["blob_storage_config"]["service_set"]["pdisks"])):
-        pdisks.append(configuration.yaml_config["blob_storage_config"]["service_set"]["pdisks"][i]["path"])
+        pdisks.append(
+            configuration.yaml_config["blob_storage_config"]["service_set"]["pdisks"][i]["path"])
 
     return pdisks
 
@@ -399,8 +398,9 @@ def deploy(arguments):
     )
 
     if os.path.exists(os.path.join(arguments.ydb_working_dir, "kikimr_configs/config.yaml")):
-        pdisks = get_pdsiks_name(configuration)
-        configuration.yaml_config = get_yaml_config(arguments, "kikimr_configs/config.yaml")
+        pdisks = get_pdsiks_path(configuration)
+        configuration.yaml_config = get_yaml_config(
+            arguments, "kikimr_configs/config.yaml")
         insert_pdsiks_name(configuration, pdisks)
 
     cluster = kikimr_cluster_factory(configuration)

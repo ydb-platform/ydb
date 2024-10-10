@@ -309,6 +309,7 @@ namespace {
 
         config.Opts->AddLongOption("partitions-per-tablet", "Partitions per PQ tablet")
             .Optional()
+            .Hidden()
             .StoreResult(&PartitionsPerTablet_);
     }
 

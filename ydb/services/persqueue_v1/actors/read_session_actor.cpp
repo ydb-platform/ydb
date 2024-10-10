@@ -1754,25 +1754,36 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvRead::TPtr& 
     ProcessReads(ctx);
 }
 
+
 template <typename TServerMessage>
 i64 TFormedReadResponse<TServerMessage>::ApplyResponse(TServerMessage&& resp) {
     constexpr bool UseMigrationProtocol = std::is_same_v<TServerMessage, PersQueue::V1::MigrationStreamingReadServerMessage>;
 
-    auto* partition_data = UseMigrationProtocol
-        ? resp.mutable_data_batch()->mutable_partition_data(0)
-        : resp.mutable_read_response()->mutable_partition_data(0);
-
-    Y_ABORT_UNLESS(partition_data != nullptr && partition_data->batches_size() > 0);
-
-    for (auto& batch : *partition_data->mutable_batches()) {
-        if (batch.codec() == Ydb::PersQueue::V1::CODEC_UNSPECIFIED) {
-            batch.set_codec(Ydb::PersQueue::V1::CODEC_RAW);
-        }
-    }
-
     if constexpr (UseMigrationProtocol) {
+        auto* partition_data = resp.mutable_data_batch()->mutable_partition_data(0);
+        Y_ABORT_UNLESS(partition_data != nullptr && partition_data->batches_size() > 0);
+
+        // Проходим по всем батчам и устанавливаем codec в 0, если он равен -1
+        for (auto& batch : *partition_data->mutable_batches()) {
+            for (auto& message_data : *batch.mutable_message_data()) {
+                if (message_data.codec() == Ydb::PersQueue::V1::CODEC_UNSPECIFIED) {
+                    message_data.set_codec(Ydb::PersQueue::V1::CODEC_RAW);
+                }
+            }
+        }
+
         Response.mutable_data_batch()->add_partition_data()->Swap(partition_data);
     } else {
+        auto* partition_data = resp.mutable_read_response()->mutable_partition_data(0);
+        Y_ABORT_UNLESS(partition_data != nullptr && partition_data->batches_size() > 0);
+
+        // Проходим по всем батчам и устанавливаем codec в 0, если он равен -1
+        for (auto& batch : *partition_data->mutable_batches()) {
+            if (batch.codec() == Ydb::Topic::CODEC_UNSPECIFIED) {
+                batch.set_codec(Ydb::Topic::CODEC_RAW);
+            }
+        }
+
         Response.mutable_read_response()->add_partition_data()->Swap(partition_data);
     }
 
@@ -1782,6 +1793,7 @@ i64 TFormedReadResponse<TServerMessage>::ApplyResponse(TServerMessage&& resp) {
     std::swap<i64>(prev, ByteSize);
     return ByteSize - prev;
 }
+
 
 
 template <typename TServerMessage>

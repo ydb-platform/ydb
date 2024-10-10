@@ -1,3 +1,4 @@
+from __future__ import annotations
 import pytest
 import allure
 import json
@@ -5,16 +6,23 @@ from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType
 from ydb.tests.olap.lib.allure_utils import allure_test_description
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from time import time
+from typing import Optional
 from allure_commons._core import plugin_manager
 from allure_pytest.listener import AllureListener
 
 
 class LoadSuiteBase:
+    class QuerySettings:
+        def __init__(self, iterations: Optional[int] = None, timeout: Optional[float] = None) -> None:
+            self.iterations = iterations
+            self.timeout = timeout
+
     iterations: int = 5
     workload_type: WorkloadType = None
     timeout: float = 1800.
     refference: str = ''
-    check_canonical = False
+    check_canonical: bool = False
+    query_settings: dict[int, LoadSuiteBase.QuerySettings]
 
     @property
     def suite(self) -> str:
@@ -22,6 +30,16 @@ class LoadSuiteBase:
         if result.startswith('Test'):
             return result[4:]
         return result
+
+    @classmethod
+    def _get_iterations(cls, query_num: int) -> int:
+        q = cls.query_settings.get(query_num, None)
+        return q.iterations if q is not None and q.iterations is not None else cls.iterations
+
+    @classmethod
+    def _get_timeout(cls, query_num: int) -> float:
+        q = cls.query_settings.get(query_num, None)
+        return q.timeout if q is not None and q.timeout is not None else cls.timeout
 
     @classmethod
     def _test_name(cls, query_num: int) -> str:
@@ -58,7 +76,7 @@ class LoadSuiteBase:
                 _attach_plans(result.explain_plan)
 
         if result.plans is not None:
-            for i in range(iterations):
+            for i in range(self._get_iterations(query_num)):
                 try:
                     with allure.step(f'Iteration {i}'):
                         _attach_plans(result.plans[i])
@@ -123,9 +141,9 @@ class LoadSuiteBase:
         result = YdbCliHelper.workload_run(
             path=path,
             query_num=query_num,
-            iterations=self.iterations,
+            iterations=self._get_iterations(query_num),
             workload_type=self.workload_type,
-            timeout=self.timeout,
+            timeout=self._get_timeout(query_num),
             check_canonical=self.check_canonical
         )
         allure_test_description(self.suite, self._test_name(query_num), refference_set=self.refference, start_time=start_time, end_time=time())

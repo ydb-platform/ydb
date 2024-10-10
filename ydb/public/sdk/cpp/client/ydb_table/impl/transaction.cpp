@@ -17,7 +17,7 @@ TAsyncStatus TTransaction::TImpl::Precommit() const
         // If you send multiple requests in parallel, the `KQP` service can respond with `SESSION_BUSY`.
         // Therefore, precommit operations are performed sequentially. Here we capture the closure to
         // trigger it later.
-        auto action = [callback](const TAsyncStatus& prev) {
+        auto action = [callback = std::move(callback)](const TAsyncStatus& prev) {
             if (const TStatus& status = prev.GetValue(); !status.IsSuccess()) {
                 return prev;
             }

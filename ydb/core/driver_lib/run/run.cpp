@@ -943,9 +943,9 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             const auto& pathToCertificateFile = GET_PATH_TO_FILE(grpcConfig, PathToCertificateFile, Cert);
             const auto& pathToPrivateKeyFile = GET_PATH_TO_FILE(grpcConfig, PathToPrivateKeyFile, Key);
 
-            Y_ABORT_UNLESS(!pathToCaFile.Empty(), "CA not set");
-            Y_ABORT_UNLESS(!pathToCertificateFile.Empty(), "Cert not set");
-            Y_ABORT_UNLESS(!pathToPrivateKeyFile.Empty(), "Key not set");
+            Y_ABORT_UNLESS(!pathToCaFile.empty(), "CA not set");
+            Y_ABORT_UNLESS(!pathToCertificateFile.empty(), "Cert not set");
+            Y_ABORT_UNLESS(!pathToPrivateKeyFile.empty(), "Key not set");
             sslOpts.SetPort(grpcConfig.GetSslPort());
             NYdbGrpc::TSslData sslData;
             sslData.Root = ReadFile(pathToCaFile);
@@ -985,19 +985,19 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                 NYdbGrpc::TSslData sslData;
 
                 auto pathToCaFile = GET_PATH_TO_FILE(ex, PathToCaFile, CA);
-                if (pathToCaFile.Empty()) {
+                if (pathToCaFile.empty()) {
                     pathToCaFile = GET_PATH_TO_FILE(grpcConfig, PathToCaFile, CA);
                 }
                 sslData.Root = ReadFile(pathToCaFile);
 
                 auto pathToCertificateFile = GET_PATH_TO_FILE(ex, PathToCertificateFile, Cert);
-                if (pathToCertificateFile.Empty()) {
+                if (pathToCertificateFile.empty()) {
                     pathToCertificateFile = GET_PATH_TO_FILE(grpcConfig, PathToCertificateFile, Cert);
                 }
                 sslData.Cert = ReadFile(pathToCertificateFile);
 
                 auto pathToPrivateKeyFile = GET_PATH_TO_FILE(ex, PathToPrivateKeyFile, Key);
-                if (pathToPrivateKeyFile.Empty()) {
+                if (pathToPrivateKeyFile.empty()) {
                     pathToPrivateKeyFile = GET_PATH_TO_FILE(grpcConfig, PathToPrivateKeyFile, Key);
                 }
                 sslData.Key = ReadFile(pathToPrivateKeyFile);

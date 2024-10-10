@@ -29,7 +29,7 @@ const TString YtGateway_PathStat = "YtGateway_PathStat";
 TString MakeHash(const TString& str) {
     SHA256_CTX sha;
     SHA256_Init(&sha);
-    SHA256_Update(&sha, str.Data(), str.Size());
+    SHA256_Update(&sha, str.data(), str.size());
     unsigned char hash[SHA256_DIGEST_LENGTH];
     SHA256_Final(hash, &sha);
     return TString((const char*)hash, sizeof(hash));

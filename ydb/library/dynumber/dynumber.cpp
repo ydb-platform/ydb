@@ -10,10 +10,10 @@
 namespace NKikimr::NDyNumber {
 
 bool IsValidDyNumber(TStringBuf buffer) {
-    const auto size = buffer.Size();
+    const auto size = buffer.size();
     if (!size)
         return false;
-    switch (const auto data = buffer.Data(); *data) {
+    switch (const auto data = buffer.data(); *data) {
         case '\x00':
             if (size < 2U || size > 21U)
                 return false;

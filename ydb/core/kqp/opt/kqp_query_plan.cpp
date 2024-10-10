@@ -443,7 +443,7 @@ private:
     }
 
     ui32 AddOperator(TQueryPlanNode& planNode, const TString& name, TOperator op) {
-        if (!planNode.TypeName.Empty()) {
+        if (!planNode.TypeName.empty()) {
             planNode.TypeName += "-" + name;
         } else {
             planNode.TypeName = name;
@@ -875,7 +875,7 @@ private:
             CurrentArgContext.stack.pop_back();
 
             /* is that collect stage? */
-            if (stagePlanNode.TypeName.Empty()) {
+            if (stagePlanNode.TypeName.empty()) {
                 if (expr.Cast<TDqStageBase>().Program().Body().Maybe<TCoArgument>()) {
                     stagePlanNode.TypeName = "Collect";
                 } else {
@@ -893,7 +893,7 @@ private:
         } else {
             Visit(expr.Ptr(),  planNode);
 
-            if (planNode.TypeName.Empty()) {
+            if (planNode.TypeName.empty()) {
                 planNode.TypeName = "Stage";
             }
         }
@@ -2349,7 +2349,7 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NO
     writer.WriteKey("type").WriteString("query");
     writer.EndObject();
 
-    if (!commonPlanInfo.Empty()) {
+    if (!commonPlanInfo.empty()) {
         NJson::TJsonValue commonPlanJson;
         NJson::ReadJsonTree(commonPlanInfo, &commonPlanJson, true);
 

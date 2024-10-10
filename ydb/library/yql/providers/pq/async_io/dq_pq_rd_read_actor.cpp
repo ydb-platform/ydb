@@ -625,8 +625,8 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
 std::pair<NUdf::TUnboxedValuePod, i64> TDqPqRdReadActor::CreateItem(const TString& data) {
     i64 usedSpace = 0;
     NUdf::TUnboxedValuePod item;
-    item = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.Data(), data.Size()));
-    usedSpace += data.Size();
+    item = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.data(), data.size()));
+    usedSpace += data.size();
     return std::make_pair(item, usedSpace);
 }
 

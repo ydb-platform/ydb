@@ -31,7 +31,7 @@ public:
         : Path({coordinationNode, resourcePath, databaseName, token}) {
     }
 
-    operator bool() const { return !Path.ResourcePath.Empty() && !Path.CoordinationNode.Empty(); };
+    operator bool() const { return !Path.ResourcePath.empty() && !Path.CoordinationNode.empty(); };
     const NRpcService::TRlFullPath GetPath() const { return Path; }
 
 private:

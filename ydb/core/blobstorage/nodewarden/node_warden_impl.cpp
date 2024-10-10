@@ -17,13 +17,13 @@ void TNodeWarden::RemoveDrivesWithBadSerialsAndReport(TVector<NPDisk::TDriveData
     size_t maxSerialSizeInBytes = 100;
 
     auto isValidSerial = [maxSerialSizeInBytes](TString& serial) {
-        if (serial.Size() > maxSerialSizeInBytes) {
+        if (serial.size() > maxSerialSizeInBytes) {
             // Not sensible size.
             return false;
         }
 
         // Check if serial number contains only ASCII characters.
-        for (size_t i = 0; i < serial.Size(); ++i) {
+        for (size_t i = 0; i < serial.size(); ++i) {
             i8 c = serial[i];
 
             if (c <= 0) {
@@ -76,7 +76,7 @@ void TNodeWarden::RemoveDrivesWithBadSerialsAndReport(TVector<NPDisk::TDriveData
         auto [mapIt, _] = ByPathDriveCounters.try_emplace(path, AppData()->Counters, path);
 
         // Cut string in case it exceeds max size.
-        size_t size = std::min(serial.Size(), maxSerialSizeInBytes);
+        size_t size = std::min(serial.size(), maxSerialSizeInBytes);
 
         // Encode in case it contains weird symbols.
         TString encoded = Base64Encode(serial.substr(0, size));

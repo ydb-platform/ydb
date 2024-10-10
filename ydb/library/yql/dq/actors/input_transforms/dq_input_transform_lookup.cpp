@@ -135,10 +135,12 @@ private: //events
     }
 
     void Handle(IDqAsyncLookupSource::TEvLookupResult::TPtr ev) {
+        auto StartCycleCount = GetCycleCountFast();
         auto guard = BindAllocator();
         const auto now = std::chrono::steady_clock::now();
         auto lookupResult = ev->Get()->Result.lock();
         Y_ABORT_UNLESS(lookupResult == KeysForLookup);
+        auto lookupResultSize = lookupResult->size();
         for (; !AwaitingQueue.empty(); AwaitingQueue.pop_front()) {
             auto& [lookupKey, inputOther] = AwaitingQueue.front();
             auto lookupPayload = lookupResult->FindPtr(lookupKey);
@@ -151,6 +153,12 @@ private: //events
             LruCache->Update(NUdf::TUnboxedValue(const_cast<NUdf::TUnboxedValue&&>(k)), std::move(v), now + CacheTtl);
         }
         KeysForLookup.reset();
+        if (LookupCount) {
+            LookupCount->Inc();
+            LookupKeys->Add(lookupResultSize);
+            LookupTimeMs->Add(std::chrono::duration_cast<std::chrono::milliseconds>(now - LastLookupTime).count());
+        }
+        CpuTime += GetCpuTimeDelta(StartCycleCount);
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived{InputIndex});
     }
 
@@ -189,6 +197,7 @@ private: //IDqComputeActorAsyncInput
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
         Y_UNUSED(freeSpace);
+        auto StartCycleCount = GetCycleCountFast();
         auto guard = BindAllocator();
 
         DrainReadyQueue(batch);
@@ -220,17 +229,41 @@ private: //IDqComputeActorAsyncInput
                 }
             }
             if (!KeysForLookup->empty()) {
+                LastLookupTime = now;
                 Send(LookupSourceId, new IDqAsyncLookupSource::TEvLookupRequest(KeysForLookup));
             } else {
                 KeysForLookup.reset();
             }
+            if (Batches) {
+                Batches->Inc();
+                LruHits->Add(ReadyQueue.RowCount());
+                LruMiss->Add(AwaitingQueue.size());
+            }
             DrainReadyQueue(batch);
         }
+        CpuTime += GetCpuTimeDelta(StartCycleCount);
         finished = IsFinished();
         return AwaitingQueue.size();
     }
 
     void InitMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
+        if (taskCounters) {
+            LruHits = taskCounters->GetCounter("StreamLookupTransformLruHits");
+            LruMiss = taskCounters->GetCounter("StreamLookupTransformLruMiss");
+            CpuTimeMs = taskCounters->GetCounter("StreamLookupTransformCpuTimeMs");
+            Batches = taskCounters->GetCounter("StreamLookupTransformBatchCount");
+            LookupCount = taskCounters->GetCounter("StreamLookupTransformCount");
+            LookupKeys = taskCounters->GetCounter("StreamLookupTransformKeys");
+            LookupTimeMs = taskCounters->GetCounter("StreamLookupTransformTimeMs");
+        }
+    }
+
+    static TDuration GetCpuTimeDelta(ui64 StartCycleCount) {
+        return TDuration::Seconds(NHPTimer::GetSeconds(GetCycleCountFast() - StartCycleCount));
+    }
+
+    TDuration GetCpuTime() override {
+        return CpuTime;
     }
 
     TMaybe<google::protobuf::Any> ExtraData() override {
@@ -288,6 +321,16 @@ protected:
     NKikimr::NMiniKQL::TUnboxedValueBatch ReadyQueue;
     NYql::NDq::TDqAsyncStats IngressStats;
     std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> KeysForLookup;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr LruHits;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LruMiss;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CpuTimeMs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Batches;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LookupCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LookupKeys;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LookupTimeMs;
+    std::chrono::steady_clock::time_point LastLookupTime {};
+    TDuration CpuTime {};
 };
 
 class TInputTransformStreamLookupWide: public TInputTransformStreamLookupBase {

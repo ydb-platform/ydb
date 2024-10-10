@@ -87,7 +87,9 @@ private:
     TTransactionInfoPtr GetOrCreateTxInfo(const TTransactionId& txId);
     TAsyncStatus AsyncUpdateOffsets(const TTransactionId& txId);
 
-    auto MakeUpdateOffsetsInTransactionCaller(const TTransactionId& txId);
+    using TUpdateOffsetsInTransactionCaller = std::function<TAsyncStatus (TTransactionInfoPtr)>;
+
+    TUpdateOffsetsInTransactionCaller MakeUpdateOffsetsInTransactionCaller(const TTransactionId& txId);
 
     TReadSessionSettings Settings;
     const TString SessionId;

@@ -183,7 +183,37 @@ void TReadSession::CollectOffsets(NTable::TTransaction& tx,
     }
 }
 
-auto TReadSession::MakeUpdateOffsetsInTransactionCaller(const TTransactionId& txId)
+void TReadSession::CollectOffsets(NTable::TTransaction& tx,
+                                  const TString& topicPath, ui32 partitionId, ui64 offset)
+{
+    const TTransactionId txId = MakeTransactionId(tx);
+    TTransactionInfoPtr txInfo = GetOrCreateTxInfo(txId);
+
+    with_lock(txInfo->Lock) {
+        txInfo->Ranges[topicPath][partitionId].InsertInterval(offset, offset + 1);
+
+        if (txInfo->Subscribed) {
+            return;
+        }
+
+        auto callback = [txInfo, updateOffsetsInTransaction = MakeUpdateOffsetsInTransactionCaller(txId)]() {
+            with_lock(txInfo->Lock) {
+                if (txInfo->IsActive) {
+                    return updateOffsetsInTransaction(txInfo);
+                }
+
+                return NThreading::MakeFuture(MakeSessionExpiredError());
+            }
+        };
+
+        tx.AddPrecommitCallback(std::move(callback));
+
+        txInfo->IsActive = true;
+        txInfo->Subscribed = true;
+    }
+}
+
+auto TReadSession::MakeUpdateOffsetsInTransactionCaller(const TTransactionId& txId) -> TUpdateOffsetsInTransactionCaller
 {
     auto call = [client = Client, consumer = Settings.ConsumerName_, txs = Txs, txId](TTransactionInfoPtr txInfo) {
         TVector<TTopicOffsets> topics;
@@ -235,36 +265,6 @@ auto TReadSession::GetOrCreateTxInfo(const TTransactionId& txId) -> TTransaction
         p = Txs->find(txId);
     }
     return p->second;
-}
-
-void TReadSession::CollectOffsets(NTable::TTransaction& tx,
-                                  const TString& topicPath, ui32 partitionId, ui64 offset)
-{
-    const TTransactionId txId = MakeTransactionId(tx);
-    TTransactionInfoPtr txInfo = GetOrCreateTxInfo(txId);
-
-    with_lock(txInfo->Lock) {
-        txInfo->Ranges[topicPath][partitionId].InsertInterval(offset, offset + 1);
-
-        if (txInfo->Subscribed) {
-            return;
-        }
-
-        auto callback = [txInfo, updateOffsetsInTransaction = MakeUpdateOffsetsInTransactionCaller(txId)]() {
-            with_lock(txInfo->Lock) {
-                if (txInfo->IsActive) {
-                    return updateOffsetsInTransaction(txInfo);
-                }
-
-                return NThreading::MakeFuture(MakeSessionExpiredError());
-            }
-        };
-
-        tx.AddPrecommitCallback(std::move(callback));
-
-        txInfo->IsActive = true;
-        txInfo->Subscribed = true;
-    }
 }
 
 bool TReadSession::Close(TDuration timeout) {

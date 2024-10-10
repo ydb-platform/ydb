@@ -1,11 +1,12 @@
 
 #include "general_compaction.h"
 
-#include "counters/general.h"
 #include "compaction/merger.h"
+#include "counters/general.h"
 
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/priorities/usage/service.h>
 
 namespace NKikimr::NOlap::NCompaction {
 
@@ -211,6 +212,7 @@ void TGeneralCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TC
 }
 
 void TGeneralCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
+    AFL_VERIFY(PrioritiesAllocationGuard);
     TBase::DoStart(self);
     auto& g = *GranuleMeta;
     self.Counters.GetCSCounters().OnSplitCompactionInfo(
@@ -221,13 +223,16 @@ NColumnShard::ECumulativeCounters TGeneralCompactColumnEngineChanges::GetCounter
     return isSuccess ? NColumnShard::COUNTER_COMPACTION_SUCCESS : NColumnShard::COUNTER_COMPACTION_FAIL;
 }
 
-void TGeneralCompactColumnEngineChanges::AddCheckPoint(
-    const NArrow::NMerger::TSortableBatchPosition& position, const bool include) {
+void TGeneralCompactColumnEngineChanges::AddCheckPoint(const NArrow::NMerger::TSortableBatchPosition& position, const bool include) {
     CheckPoints.InsertPosition(position, include);
 }
 
 std::shared_ptr<TGeneralCompactColumnEngineChanges::IMemoryPredictor> TGeneralCompactColumnEngineChanges::BuildMemoryPredictor() {
     return std::make_shared<TMemoryPredictorChunkedPolicy>();
+}
+
+TGeneralCompactColumnEngineChanges::~TGeneralCompactColumnEngineChanges() {
+    PrioritiesAllocationGuard->Release(NPrioritiesQueue::TCompServiceOperator::MakeServiceId());
 }
 
 ui64 TGeneralCompactColumnEngineChanges::TMemoryPredictorChunkedPolicy::AddPortion(const TPortionInfo& portionInfo) {

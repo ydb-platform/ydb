@@ -2044,9 +2044,10 @@ message TAppConfig {
     optional TLimiterConfig CompDiskLimiterConfig = 79;
     optional TMetadataCacheConfig MetadataCacheConfig = 80;
     optional TMemoryControllerConfig MemoryControllerConfig = 81;
-	optional TGroupedMemoryLimiterConfig GroupedMemoryLimiterConfig = 82;
+    optional TGroupedMemoryLimiterConfig GroupedMemoryLimiterConfig = 82;
     optional NKikimrReplication.TReplicationDefaults ReplicationConfig = 83;
     optional TShutdownConfig ShutdownConfig = 84;
+    optional TPrioritiesQueueConfig CompPrioritiesConfig = 85;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

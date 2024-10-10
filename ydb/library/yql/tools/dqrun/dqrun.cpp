@@ -81,12 +81,8 @@
 #include <ydb/library/yql/public/result_format/yql_result_format_data.h>
 
 #include <ydb/core/fq/libs/actors/database_resolver.h>
-#include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
-#include <ydb/core/fq/libs/init/init.h>
-#include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
-
 #include <ydb/core/util/pb.h>
 
 #include <yt/cpp/mapreduce/interface/init.h>
@@ -181,17 +177,6 @@ void ReadGatewaysConfig(const TString& configFile, TGatewaysConfig* config, THas
 
     if (config->HasSqlCore()) {
         sqlFlags.insert(config->GetSqlCore().GetTranslationFlags().begin(), config->GetSqlCore().GetTranslationFlags().end());
-    }
-}
-
-void ReadFqConfig(const TString& fqCfgFile, NFq::NConfig::TConfig* fqConfig) {
-    if (fqCfgFile.empty()) {
-        return;
-    }
-    auto configData = TFileInput(fqCfgFile).ReadAll();
-    using ::google::protobuf::TextFormat;
-    if (!TextFormat::ParseFromString(configData, fqConfig)) {
-        ythrow yexception() << "Bad format of fq configuration";
     }
 }
 
@@ -524,7 +509,6 @@ void InitFq(const NFq::NConfig::TConfig& fqConfig, TVector<std::pair<TActorId, T
 int RunMain(int argc, const char* argv[])
 {
     TString gatewaysCfgFile;
-    TString fqCfgFile;
     TString progFile;
     TVector<TString> tablesMappingList;
     THashMap<TString, TString> tablesMapping;
@@ -620,10 +604,6 @@ int RunMain(int argc, const char* argv[])
         .Optional()
         .RequiredArgument("FILE")
         .StoreResult(&gatewaysCfgFile);
-    opts.AddLongOption("fq-cfg", "federated query configuration file")
-        .Optional()
-        .RequiredArgument("FILE")
-        .StoreResult(&fqCfgFile);
     opts.AddLongOption("fs-cfg", "Path to file storage config")
         .Optional()
         .StoreResult(&fileStorageCfg);
@@ -917,9 +897,6 @@ int RunMain(int argc, const char* argv[])
         setting->SetValue("1");
     }
 
-    NFq::NConfig::TConfig fqConfig;
-    ReadFqConfig(fqCfgFile, &fqConfig);
-
     if (res.Has("enable-spilling")) {
         auto* setting = gatewaysConfig.MutableDq()->AddDefaultSettings();
         setting->SetName("SpillingEngine");
@@ -1089,8 +1066,6 @@ int RunMain(int argc, const char* argv[])
             clusters.emplace(to_lower(cluster.GetName()), TString{NYql::SolomonProviderName});
         }
     }
-    TVector<std::pair<TActorId, TActorSetupCmd>> additionalLocalServices;
-    InitFq(fqConfig, additionalLocalServices);
 
     std::function<NActors::IActor*(void)> metricsPusherFactory = {};
 
@@ -1115,7 +1090,7 @@ int RunMain(int argc, const char* argv[])
             bool enableSpilling = res.Has("enable-spilling");
             dqGateway = CreateLocalDqGateway(funcRegistry.Get(), dqCompFactory, dqTaskTransformFactory, dqTaskPreprocessorFactories, enableSpilling,
                 CreateAsyncIoFactory(driver, httpGateway, ytFileServices, genericClient, credentialsFactory, *funcRegistry, requestTimeout, maxRetries, pqGateway), threads,
-                metricsRegistry, metricsPusherFactory, std::move(additionalLocalServices));
+                metricsRegistry, metricsPusherFactory);
         }
 
         dataProvidersInit.push_back(GetDqDataProviderInitializer(&CreateDqExecTransformer, dqGateway, dqCompFactory, {}, storage));

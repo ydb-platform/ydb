@@ -31,8 +31,7 @@ public:
         NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, int threads,
         IMetricsRegistryPtr metricsRegistry,
         const std::function<IActor*(void)>& metricsPusherFactory,
-        bool withSpilling,
-        TVector<std::pair<TActorId, TActorSetupCmd>>&& additionalLocalServices)
+        bool withSpilling)
         : MetricsRegistry(metricsRegistry
             ? metricsRegistry
             : CreateMetricsRegistry(GetSensorsGroupFor(NSensorComponent::kDq))
@@ -89,9 +88,6 @@ public:
             ServiceNode->AddLocalService(
                 NDq::MakeDqLocalFileSpillingServiceID(nodeId),
                 TActorSetupCmd(spillingActor, TMailboxType::Simple, 0));
-        }
-        for (auto& [actorId, setupCmd] : additionalLocalServices) {
-            ServiceNode->AddLocalService(actorId, std::move(setupCmd));
         }
 
         auto statsCollector = CreateStatsCollector(1, *ServiceNode->GetSetup(), MetricsRegistry->GetSensors());
@@ -252,8 +248,7 @@ THolder<TLocalServiceHolder> CreateLocalServiceHolder(const NKikimr::NMiniKQL::I
     NBus::TBindResult interconnectPort, NBus::TBindResult grpcPort,
     NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, int threads,
     IMetricsRegistryPtr metricsRegistry,
-    const std::function<IActor*(void)>& metricsPusherFactory, bool withSpilling,
-    TVector<std::pair<TActorId, TActorSetupCmd>>&& additionalLocalServices)
+    const std::function<IActor*(void)>& metricsPusherFactory, bool withSpilling)
 {
     return MakeHolder<TLocalServiceHolder>(functionRegistry,
         compFactory,
@@ -265,8 +260,7 @@ THolder<TLocalServiceHolder> CreateLocalServiceHolder(const NKikimr::NMiniKQL::I
         threads,
         metricsRegistry,
         metricsPusherFactory,
-        withSpilling,
-        std::move(additionalLocalServices));
+        withSpilling);
 }
 
 TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
@@ -274,8 +268,7 @@ TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctio
     TTaskTransformFactory taskTransformFactory, const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories,
     bool withSpilling, NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, int threads,
     IMetricsRegistryPtr metricsRegistry,
-    const std::function<IActor*(void)>& metricsPusherFactory,
-    TVector<std::pair<TActorId, TActorSetupCmd>>&& additionalLocalServices)
+    const std::function<IActor*(void)>& metricsPusherFactory)
 {
     int startPort = 31337;
     TRangeWalker<int> portWalker(startPort, startPort+100);
@@ -294,8 +287,7 @@ TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctio
             threads,
             metricsRegistry,
             metricsPusherFactory,
-            withSpilling,
-            std::move(additionalLocalServices)),
+            withSpilling),
         CreateDqGateway("[::1]", grpcPort.Addr.GetPort()));
 }
 

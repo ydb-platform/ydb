@@ -1724,12 +1724,22 @@ template <typename TServerMessage>
 i64 TFormedReadResponse<TServerMessage>::ApplyResponse(TServerMessage&& resp) {
     constexpr bool UseMigrationProtocol = std::is_same_v<TServerMessage, PersQueue::V1::MigrationStreamingReadServerMessage>;
 
+    auto* partition_data = UseMigrationProtocol
+        ? resp.mutable_data_batch()->mutable_partition_data(0)
+        : resp.mutable_read_response()->mutable_partition_data(0);
+
+    Y_ABORT_UNLESS(partition_data != nullptr && partition_data->batches_size() > 0);
+
+    for (auto& batch : *partition_data->mutable_batches()) {
+        if (batch.codec() == Ydb::PersQueue::V1::CODEC_UNSPECIFIED) {
+            batch.set_codec(Ydb::PersQueue::V1::CODEC_RAW);
+        }
+    }
+
     if constexpr (UseMigrationProtocol) {
-        Y_ABORT_UNLESS(resp.data_batch().partition_data_size() == 1);
-        Response.mutable_data_batch()->add_partition_data()->Swap(resp.mutable_data_batch()->mutable_partition_data(0));
+        Response.mutable_data_batch()->add_partition_data()->Swap(partition_data);
     } else {
-        Y_ABORT_UNLESS(resp.read_response().partition_data_size() == 1);
-        Response.mutable_read_response()->add_partition_data()->Swap(resp.mutable_read_response()->mutable_partition_data(0));
+        Response.mutable_read_response()->add_partition_data()->Swap(partition_data);
     }
 
     Response.set_status(Ydb::StatusIds::SUCCESS);
@@ -1738,6 +1748,7 @@ i64 TFormedReadResponse<TServerMessage>::ApplyResponse(TServerMessage&& resp) {
     std::swap<i64>(prev, ByteSize);
     return ByteSize - prev;
 }
+
 
 template <typename TServerMessage>
 i64 TFormedReadResponse<TServerMessage>::ApplyDirectReadResponse(TEvPQProxy::TEvDirectReadResponse::TPtr& ev) {

@@ -1,8 +1,8 @@
 # Приложение на Node.js
 
-На этой странице представлено подробное описание кода тестового приложения
-[basic-example-v2-with-query-service](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/master/examples/basic-example-v2-with-query-service),
-доступого в составе [Node.js SDK](https://github.com/ydb-platform/ydb-nodejs-sdk) {{ ydb-short-name }}.
+На этой странице представлено подробное описание кода 
+[тестового приложения](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/master/examples/basic-example-v2-with-query-service),
+доступого в составе [{{ ydb-short-name }} Node.js SDK](https://github.com/ydb-platform/ydb-nodejs-sdk) {{ ydb-short-name }}.
 
 {% include [init.md](steps/01_init.md) %}
 
@@ -130,7 +130,7 @@ async function upsertSimple(driver: Driver, logger: Logger): Promise<void> {
 
 Для выполнения YQL-запросов используется метод `QuerySession.execute()`.
 
-В зависимости оп параметра `rowMode` данные можно получить в JavaScript  форме или как {{ ydb-short-name }} структуры.
+В зависимости оп параметра `rowMode` данные можно получить в JavaScript форме или как {{ ydb-short-name }} структуры.
 
 {% list tabs %}
 
@@ -195,7 +195,6 @@ async function upsertSimple(driver: Driver, logger: Logger): Promise<void> {
 
 {% include [param_queries.md](steps/06_param_queries.md) %}
 
-В Query Service нет явной опции Prepared Query.  YDB определяет необходимость использование этого режима самостоятельно.
 
 ```ts
 async function selectWithParameters(driver: Driver, data: ThreeIds[], logger: Logger): Promise<void> {
@@ -225,7 +224,7 @@ async function selectWithParameters(driver: Driver, data: ThreeIds[], logger: Lo
               const {value: resultSet} = await resultSets.next();
               const {value: row} = await resultSet.rows.next();
               await opFinished;
-              logger.info(`Select prepared query ${JSON.stringify(row, null, 2)}`);
+              logger.info(`Parametrized select query ${JSON.stringify(row, null, 2)}`);
           }
       }
   });
@@ -234,7 +233,7 @@ async function selectWithParameters(driver: Driver, data: ThreeIds[], logger: Lo
 
 {% include [scan-query.md](steps/08_scan_query.md) %}
 
-В Query Service для получения данных потоком используется метод `QuerySession.execute()`.
+Для получения данных потоком используется метод `QuerySession.execute()`.
 
 ```ts
 async function selectWithParametrs(driver: Driver, data: ThreeIds[], logger: Logger): Promise<void> {
@@ -275,7 +274,7 @@ async function selectWithParametrs(driver: Driver, data: ThreeIds[], logger: Log
 
 {% include [transaction-control.md](steps/10_transaction_control.md) %}
 
-Фрагмент кода, демонстрирующий явное использование вызовов `Session.beginTransaction()` и `Session.сommitTransaction()` для создания и завершения транзакции:
+Фрагмент кода, демонстрирующий явное использование вызовов `Session.beginTransaction()` и `Session.сommitTransaction()` для выполнения транзакции:
 
 {% list tabs %}
 

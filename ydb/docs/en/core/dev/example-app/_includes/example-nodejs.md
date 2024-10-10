@@ -194,8 +194,6 @@ Depending on the rowMode parameter, the data can be retrieved in javascript form
 
 {% include [param_queries.md](steps/06_param_queries.md) %}
 
-There is no explicit Prepared Query option in the Query Service. YDB determines the necessity of using this mode by
-itself.
 
 ```ts
 async function selectWithParameters(driver: Driver, data: ThreeIds[], logger: Logger): Promise<void> {
@@ -234,11 +232,11 @@ async function selectWithParameters(driver: Driver, data: ThreeIds[], logger: Lo
 
 {% include [scan-query.md](steps/08_scan_query.md) %}
 
-`QuerySession.execute()` method is used to retrieve data by a stream.
+The `QuerySession.execute()` method is used to retrieve data in a streaming manner.
 
 ```ts
 async function selectWithParametrs(driver: Driver, data: ThreeIds[], logger: Logger): Promise<void> {
-    logger.info('Selecting prepared query...');
+    logger.info('Selecting with a parametrized query...');
     await driver.queryClient.do({
         fn: async (session) => {
             for (const [seriesId, seasonId, episodeId] of data) {
@@ -266,7 +264,7 @@ async function selectWithParametrs(driver: Driver, data: ThreeIds[], logger: Log
                 const {value: resultSet} = await resultSets.next();
                 const {value: row} = await resultSet.rows.next();
                 await opFinished;
-                logger.info(`Select prepared query ${JSON.stringify(row, null, 2)}`);
+                logger.info(`Parametrized select query ${JSON.stringify(row, null, 2)}`);
             }
         }
     });
@@ -275,8 +273,7 @@ async function selectWithParametrs(driver: Driver, data: ThreeIds[], logger: Log
 
 {% include [transaction-control.md](steps/10_transaction_control.md) %}
 
-Here's a code sample that demonstrates how to explicitly use the `Session.beginTransaction()`
-and `Session.сommitTransaction()` calls to create and terminate a transaction:
+Here's a code sample demonstrating how to explicitly use the `Session.beginTransaction()` and `Session.commitTransaction()` calls to execute a transaction:
 
 {% list tabs %}
 
@@ -284,7 +281,7 @@ and `Session.сommitTransaction()` calls to create and terminate a transaction:
 
   ```ts
   async function explicitTcl(driver: Driver, ids: ThreeIds, logger: Logger) {
-      logger.info('Running prepared query with explicit transaction control...');
+      logger.info('Running a parametrized query with explicit transaction control...');
       await driver.queryClient.do({
           fn: async (session) => {
               await session.beginTransaction({serializableReadWrite: {}});
@@ -319,7 +316,7 @@ and `Session.сommitTransaction()` calls to create and terminate a transaction:
 
   ```ts
   async function transactionPerWholeDo(driver: Driver, ids: ThreeIds, logger: Logger) {
-      logger.info('Running query with one transaction per whole doTx()...');
+      logger.info('Running a query with one transaction per whole doTx()...');
       await driver.queryClient.doTx({
           txSettings: {serializableReadWrite: {}},
           fn: async (session) => {

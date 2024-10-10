@@ -25,6 +25,7 @@ private:
     }
 
     void ReplySuccessAndPassAway() {
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_lister")("event", "send_tiering_rules")("size", Result.size());
         Send(Recipient, new NTiers::TEvListTieringRulesResult(std::move(Result)));
         PassAway();
     }
@@ -53,23 +54,23 @@ private:
                 case EStatus::PathNotPath:
                 case EStatus::AccessDenied:
                     AFL_VERIFY(false)("status", result.Status)("result", result.ToString());
-                    return;
                 case EStatus::Unknown:
                 case EStatus::RedirectLookupError:
                 case EStatus::LookupError:
                 case EStatus::TableCreationNotComplete:
                     if (!ScheduleRetry(TStringBuilder() << "Retry error " << result.Status)) {
                         ReplyErrorAndPassAway("Retry limit exceeded");
+                        return;
                     }
-                    return;
+                    break;
                 case EStatus::RootUnknown:
                 case EStatus::PathErrorUnknown:
                     OnObjectFetched(std::nullopt, result.TableId.PathId);
-                    return;
+                    break;
                 case EStatus::Ok:
                     AFL_VERIFY(result.Kind == NSchemeCache::TSchemeCacheNavigate::KindTieringRule)("kind", result.Kind)("result", result.ToString());
                     OnObjectFetched(result.TieringRuleInfo->Description, result.TableId.PathId);
-                    return;
+                    break;
             }
         }
 
@@ -80,6 +81,7 @@ private:
     }
 
     void OnObjectFetched(std::optional<NKikimrSchemeOp::TTieringRuleDescription> description, const TPathId& pathId) {
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_lister")("event", "object_fetched")("exists", !!description);
         if (description) {
             TTieringRule tieringRule;
             AFL_VERIFY(tieringRule.DeserializeFromProto(*description));
@@ -165,6 +167,7 @@ private:
                 return;
             case EStatus::RootUnknown:
             case EStatus::PathErrorUnknown:
+                AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_lister")("event", "unknown_path")("path", JoinPath(result.Path));
                 OnObjectsListed({});
                 return;
             case EStatus::Ok:
@@ -174,6 +177,7 @@ private:
     }
 
     void OnObjectsListed(TVector<NSchemeCache::TSchemeCacheNavigate::TListNodeEntry::TChild> nodes) {
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_lister")("event", "objects_listed")("size", nodes.size());
         std::set<TPathId> objects;
         for (const auto& node : nodes) {
             objects.insert(node.PathId);
@@ -184,7 +188,9 @@ private:
 
 protected:
     void StartRequest() override {
-        auto event = BuildListRequest({ NTiers::TTieringRule::GetBehaviour()->GetStorageTablePath() });
+        const TString storagePath = NTiers::TTieringRule::GetBehaviour()->GetStorageTablePath();
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_lister")("event", "send_list_request")("path", storagePath);
+        auto event = BuildListRequest(SplitPath(storagePath));
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(event.Release()), IEventHandle::FlagTrackDelivery);
     }
 

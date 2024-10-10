@@ -45,6 +45,7 @@ private:
             hFunc(NTiers::TEvNotifyTieringRuleUpdated, Handle);
             hFunc(NTiers::TEvNotifyTieringRuleDeleted, Handle);
             hFunc(NTiers::TEvTieringRuleResolutionFailed, Handle);
+            hFunc(NTiers::TEvWatchTieringRules, Handle);
             default:
                 break;
         }
@@ -95,6 +96,10 @@ private:
         }
     }
 
+    void Handle(NTiers::TEvWatchTieringRules::TPtr& ev) {
+        Send(SchemeTieringFetcher, ev->Release());
+    }
+
 public:
     TActor(std::shared_ptr<TTiersManager> owner)
         : Owner(owner)
@@ -114,7 +119,8 @@ public:
     void WatchTieringRules(std::vector<TString> names) {
         AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiers_manager")("event", "start_watching")("type", "tiering_rule")(
             "names", JoinStrings(names.begin(), names.end(), ","));
-        Send(SchemeTieringFetcher, new NTiers::TEvWatchTieringRules(std::move(names)));
+        AFL_VERIFY(SelfId());
+        Send(SelfId(), new NTiers::TEvWatchTieringRules(std::move(names)));
     }
 
     ~TActor() {
@@ -293,6 +299,7 @@ THashMap<ui64, NKikimr::NOlap::TTiering> TTiersManager::GetTiering() const {
 }
 
 void TTiersManager::EnablePathId(const ui64 pathId, const TString& tieringId) {
+    AFL_VERIFY(Actor)("error", "tiers_manager_is_not_started");
     PathIdTiering.emplace(pathId, tieringId);
     if (!TieringRules.contains(tieringId)) {
         Actor->WatchTieringRules({tieringId});

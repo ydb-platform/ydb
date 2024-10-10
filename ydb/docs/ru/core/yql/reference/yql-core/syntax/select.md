@@ -46,7 +46,7 @@
 
 {% endif %}
 
-{% if feature_map_reduce %}
+{% if feature_mapreduce %}
 
   {% include [x](_includes/select/folder.md) %}
 
@@ -58,7 +58,7 @@
 
 {% include [x](_includes/select/from_select.md) %}
 
-{% if feature_map_reduce %}
+{% if feature_mapreduce %}
 
   {% include [x](_includes/select/view.md) %}
 

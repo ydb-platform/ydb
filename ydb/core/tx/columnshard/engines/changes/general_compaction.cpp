@@ -138,7 +138,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
 
             for (auto&& i : portions) {
                 auto blobsSchema = i.GetPortionInfo().GetSchema(context.SchemaVersions);
-                auto batch = i.RestoreBatch(*blobsSchema, *resultFiltered, seqDataColumnIds);
+                auto batch = i.RestoreBatch(*blobsSchema, *resultFiltered, seqDataColumnIds).DetachResult();
                 std::shared_ptr<NArrow::TColumnFilter> filter =
                     BuildPortionFilter(shardingActual, batch, i.GetPortionInfo(), usedPortionIds, resultFiltered);
                 merger.AddBatch(batch, filter);

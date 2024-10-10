@@ -620,6 +620,11 @@ message TConveyorConfig {
     optional double WorkersCountDouble = 5;
 }
 
+message TPrioritiesQueueConfig {
+    optional bool Enabled = 1 [default = true];
+    optional uint32 Limit = 2 [default = 32];
+}
+
 message TLimiterConfig {
     optional bool Enabled = 1 [default = true];
     optional uint64 Limit = 2;

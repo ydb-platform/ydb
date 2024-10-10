@@ -532,7 +532,7 @@
 
   Запись в топик начинается с создания писателя методом `db.topic.createWriter()`.
 
-  Полный список параметров смотри [в заголовочном файле](https://github-link.vercel.app/api?ghUrl=https://github.com/ydb-platform/ydb-nodejs-sdk/blob/main/src/topic/topic-client.ts&q=type%20ICreateWriterArgs).
+  Полный список параметров смотри [в коде SDK](https://github-link.vercel.app/api?ghUrl=https://github.com/ydb-platform/ydb-nodejs-sdk/blob/main/src/topic/topic-client.ts&q=type%20ICreateWriterArgs).
 
   ```ts
   const writer = await db.topic.createWriter({
@@ -685,7 +685,7 @@
 
   Полезно при этом логировать ошибку его исполнения.
 
-  Полный список параметров смотри [в заголовочном файле](https://github-link.vercel.app/api?ghUrl=https://github.com/ydb-platform/ydb-nodejs-sdk/blob/main/src/topic/topic-client.ts&q=type%20ISendArgs).
+  Полный список параметров смотри [в коде SDK](https://github-link.vercel.app/api?ghUrl=https://github.com/ydb-platform/ydb-nodejs-sdk/blob/main/src/topic/topic-client.ts&q=type%20ISendArgs).
 
   ```ts
   writer.send({
@@ -813,7 +813,7 @@
 
   Для этого достаточно дождаться в `Promise.then()` или через `await` результата выполнения метода `db.topic.send()`.
 
-  Полный список параметров смотри [в заголовочном файле](https://github-link.vercel.app/api?ghUrl=https://github.com/ydb-platform/ydb-nodejs-sdk/blob/main/src/topic/topic-client.ts&q=type%20ISendArgs).
+  Полный список параметров смотри [в коде SDK](https://github-link.vercel.app/api?ghUrl=https://github.com/ydb-platform/ydb-nodejs-sdk/blob/main/src/topic/topic-client.ts&q=type%20ISendArgs).
 
   ```ts
   logger.info(await writer.send({
@@ -994,7 +994,7 @@
 
   Для этого надо указать параметр metadataItems в параметрах метода `db.topic.send()`
 
-  Полный список параметров смотри [в заголовочном файле](https://github-link.vercel.app/api?ghUrl=https://github.com/ydb-platform/ydb-nodejs-sdk/blob/main/src/topic/topic-client.ts&q=type%20ISendArgs).
+  Полный список параметров смотри [в коде SDK](https://github-link.vercel.app/api?ghUrl=https://github.com/ydb-platform/ydb-nodejs-sdk/blob/main/src/topic/topic-client.ts&q=type%20ISendArgs).
 
   ```ts
   writer.send({
@@ -1335,7 +1335,7 @@
 
   А так же максимальный размер сообщений которые могут одновременно находится в очереди на обработку на клиенте (`receiveBufferSizeInBytes`).
 
-  Полный список параметров смотри [в заголовочном файле](https://github-link.vercel.app/api?ghUrl=https://github.com/ydb-platform/ydb-nodejs-sdk/blob/main/src/topic/topic-client.ts&q=type%20ICreateReaderArgs).
+  Полный список параметров смотри [в коде SDK](https://github-link.vercel.app/api?ghUrl=https://github.com/ydb-platform/ydb-nodejs-sdk/blob/main/src/topic/topic-client.ts&q=type%20ICreateReaderArgs).
 
   ```ts
   const reader = await db.topic.createReader({
@@ -1427,7 +1427,7 @@
 
 - Node.js
 
-  Полный список параметров смотри [в заголовочном файле](https://github-link.vercel.app/api?ghUrl=https://github.com/ydb-platform/ydb-nodejs-sdk/blob/main/src/topic/topic-client.ts&q=type%20ICreateReaderArgs).
+  Полный список параметров смотри [в коде SDK](https://github-link.vercel.app/api?ghUrl=https://github.com/ydb-platform/ydb-nodejs-sdk/blob/main/src/topic/topic-client.ts&q=type%20ICreateReaderArgs).
 
   ```ts
   const reader = await db.topic.createReader({
@@ -2052,7 +2052,7 @@
   }
   ```
 
-{% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
+  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
 - Node.js
 

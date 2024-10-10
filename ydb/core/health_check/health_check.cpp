@@ -191,7 +191,7 @@ public:
                             && info.has_lastalivetimestamp()
                             && (info.lastalivetimestamp() != 0 && TInstant::MilliSeconds(info.lastalivetimestamp()) < settings.AliveBarrier)
                             && info.tabletbootmode() == NKikimrHive::TABLET_BOOT_MODE_DEFAULT
-                            && (info.generation() > 0 || info.volatilestate() != NKikimrHive::TABLET_VOLATILE_STATE_BOOTING)) {
+                            && (info.generation() > 0 || info.volatilestate() != NKikimrHive::TABLET_VOLATILE_STATE_BOOTING || info.inwaitqueue())) {
                     State = ETabletState::Dead;
                 } else if (info.restartsperperiod() >= settings.MaxRestartsPerPeriod) {
                     State = ETabletState::RestartsTooOften;

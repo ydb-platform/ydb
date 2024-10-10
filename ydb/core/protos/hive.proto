@@ -38,7 +38,6 @@ enum ETabletVolatileState {
     TABLET_VOLATILE_STATE_STARTING = 3;
     TABLET_VOLATILE_STATE_RUNNING = 4;
     _TABLET_VOLATILE_STATE_BLOCKED = 5; // deprecated
-    TABLET_VOLATILE_STATE_WAITING = 6;
 }
 
 enum EMigrationState {
@@ -496,6 +495,7 @@ message TTabletInfo {
     optional uint32 RestartsPerPeriod = 22;
     optional uint64 LastAliveTimestamp = 23;
     optional EBalancerPolicy BalancerPolicy = 24;
+    optional bool InWaitQueue = 25;
 }
 
 message TEvSeizeTabletsReply {

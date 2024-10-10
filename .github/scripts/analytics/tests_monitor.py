@@ -9,8 +9,8 @@ import sys
 import traceback
 import time
 import ydb
-from collections import Counter
 import pandas as pd
+from collections import Counter
 from multiprocessing import Pool, cpu_count
 
 dir = os.path.dirname(__file__)

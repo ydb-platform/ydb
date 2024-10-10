@@ -301,7 +301,7 @@ void TMvpTokenator::UpdateOAuthToken(const NMvp::TOAuthInfo* oauthInfo) {
 }
 
 template<>
-TString SecureShortDebugString<yandex::cloud::priv::iam::v1::CreateIamTokenRequest>(const yandex::cloud::priv::iam::v1::CreateIamTokenRequest& request) {
+TString SecureShortDebugString(const yandex::cloud::priv::iam::v1::CreateIamTokenRequest& request) {
     yandex::cloud::priv::iam::v1::CreateIamTokenRequest copy = request;
     switch (copy.identity_case()) {
     case yandex::cloud::priv::iam::v1::CreateIamTokenRequest::kYandexPassportOauthToken:
@@ -319,9 +319,23 @@ TString SecureShortDebugString<yandex::cloud::priv::iam::v1::CreateIamTokenReque
 }
 
 template<>
-TString SecureShortDebugString<nebius::iam::v1::ExchangeTokenRequest>(const nebius::iam::v1::ExchangeTokenRequest& request) {
+TString SecureShortDebugString(const yandex::cloud::priv::iam::v1::CreateIamTokenResponse& request) {
+    yandex::cloud::priv::iam::v1::CreateIamTokenResponse copy = request;
+    copy.set_iam_token(NKikimr::MaskTicket(copy.iam_token()));
+    return copy.ShortDebugString();
+}
+
+template<>
+TString SecureShortDebugString(const nebius::iam::v1::ExchangeTokenRequest& request) {
     nebius::iam::v1::ExchangeTokenRequest copy = request;
     copy.set_subject_token(NKikimr::MaskTicket(copy.subject_token()));
+    return copy.ShortDebugString();
+}
+
+template<>
+TString SecureShortDebugString(const nebius::iam::v1::CreateTokenResponse& request) {
+    nebius::iam::v1::CreateTokenResponse copy = request;
+    copy.set_access_token(NKikimr::MaskTicket(copy.access_token()));
     return copy.ShortDebugString();
 }
 

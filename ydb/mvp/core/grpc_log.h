@@ -7,8 +7,8 @@
 
 namespace NMVP {
 
-template<typename TRequest>
-TString SecureShortDebugString(const TRequest& request) {
+template<typename TProto>
+TString SecureShortDebugString(const TProto& request) {
     return request.ShortDebugString();
 }
 
@@ -52,7 +52,7 @@ public:
         NYdbGrpc::TResponseCallback<TResponse> cb =
                 [actorSystem, requestName, host = host, timer = std::move(timer), prefix = Prefix(), callback = std::move(callback)](NYdbGrpc::TGrpcStatus&& status, TResponse&& response) -> void {
             if (status.Ok()) {
-                BLOG_GRPC_DC(*actorSystem, prefix << "Response " << response.GetDescriptor()->name() << " " << Trim(response.ShortDebugString()));
+                BLOG_GRPC_DC(*actorSystem, prefix << "Response " << response.GetDescriptor()->name() << " " << Trim(SecureShortDebugString(response)));
             } else {
                 BLOG_GRPC_DC(*actorSystem, prefix << "Status " << status.GRpcStatusCode << " " << status.Msg);
             }
@@ -84,7 +84,7 @@ public:
         NYdbGrpc::TAdvancedResponseCallback<TResponse> cb =
             [actorSystem, requestName, host = host, timer = std::move(timer), prefix = Prefix(), callback = std::move(callback)](const grpc::ClientContext& context, NYdbGrpc::TGrpcStatus&& status, TResponse&& response) -> void {
             if (status.Ok()) {
-                BLOG_GRPC_DC(*actorSystem, prefix << "Response " << response.GetDescriptor()->name() << " " << Trim(response.ShortDebugString()));
+                BLOG_GRPC_DC(*actorSystem, prefix << "Response " << response.GetDescriptor()->name() << " " << Trim(SecureShortDebugString(response)));
             } else {
                 BLOG_GRPC_DC(*actorSystem, prefix << "Status " << status.GRpcStatusCode << " " << status.Msg);
             }

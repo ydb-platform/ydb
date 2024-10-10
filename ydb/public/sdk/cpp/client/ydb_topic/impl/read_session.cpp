@@ -27,6 +27,8 @@ TReadSession::TReadSession(const TReadSessionSettings& settings,
     }
 
     MakeCountersIfNeeded();
+
+    Txs = std::make_shared<TTransactionList>();
 }
 
 TReadSession::~TReadSession() {
@@ -183,12 +185,10 @@ void TReadSession::CollectOffsets(NTable::TTransaction& tx,
     }
 }
 
-auto TReadSession::MakeUpdateOffsetsInTransactionCaller(std::shared_ptr<TTopicClient::TImpl> client,
-                                                        const TTransactionId& txId,
-                                                        TOffsetRangesPtr offsets,
-                                                        const TString& consumer)
+auto TReadSession::MakeUpdateOffsetsInTransactionCaller(const TTransactionId& txId,
+                                                        TOffsetRangesPtr offsets)
 {
-    auto call = [client, txId, consumer, offsets]() {
+    auto call = [client = Client, txId, consumer = Settings.ConsumerName_, offsets, txs = Txs]() {
         TVector<TTopicOffsets> topics;
         for (auto& [path, partitions] : *offsets) {
             TTopicOffsets topic;
@@ -217,6 +217,8 @@ auto TReadSession::MakeUpdateOffsetsInTransactionCaller(std::shared_ptr<TTopicCl
 
         Y_ABORT_UNLESS(!topics.empty());
 
+        txs->erase(txId);
+
         return client->UpdateOffsetsInTransaction(txId,
                                                   topics,
                                                   consumer,
@@ -240,7 +242,7 @@ void TReadSession::TrySubscribeOnTransactionCommit(TTransaction& tx, TOffsetRang
         txInfo->Subscribed = true;
     }
 
-    auto callback = [txInfo, updateOffsetsInTransaction = MakeUpdateOffsetsInTransactionCaller(Client, txId, ranges, Settings.ConsumerName_)]() {
+    auto callback = [txInfo, updateOffsetsInTransaction = MakeUpdateOffsetsInTransactionCaller(txId, ranges)]() {
         with_lock(txInfo->Lock) {
             if (txInfo->IsActive) {
                 return updateOffsetsInTransaction();
@@ -255,12 +257,12 @@ void TReadSession::TrySubscribeOnTransactionCommit(TTransaction& tx, TOffsetRang
 
 auto TReadSession::GetOrCreateTxInfo(const TTransactionId& txId) -> TTransactionInfoPtr
 {
-    auto p = Txs.find(txId);
-    if (p == Txs.end()) {
-        TTransactionInfoPtr& txInfo = Txs[txId];
+    auto p = Txs->find(txId);
+    if (p == Txs->end()) {
+        TTransactionInfoPtr& txInfo = (*Txs)[txId];
         txInfo = std::make_shared<TTransactionInfo>();
         txInfo->Subscribed = false;
-        p = Txs.find(txId);
+        p = Txs->find(txId);
     }
     return p->second;
 }

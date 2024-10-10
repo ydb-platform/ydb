@@ -86,10 +86,8 @@ private:
     TTransactionInfoPtr GetOrCreateTxInfo(const TTransactionId& txId);
     TAsyncStatus AsyncUpdateOffsets(const TTransactionId& txId);
 
-    auto MakeUpdateOffsetsInTransactionCaller(std::shared_ptr<TTopicClient::TImpl> client,
-                                              const TTransactionId& txId,
-                                              TOffsetRangesPtr offsets,
-                                              const TString& consumer);
+    auto MakeUpdateOffsetsInTransactionCaller(const TTransactionId& txId,
+                                              TOffsetRangesPtr offsets);
 
     //
     // (session, tx) -> topic -> partition -> (begin, end)
@@ -116,7 +114,10 @@ private:
     bool Aborting = false;
     bool Closing = false;
 
-    THashMap<TTransactionId, TTransactionInfoPtr> Txs;
+    using TTransactionList = THashMap<TTransactionId, TTransactionInfoPtr>;
+    using TTransactionListPtr = std::shared_ptr<TTransactionList>;
+
+    TTransactionListPtr Txs;
 };
 
 }  // namespace NYdb::NTopic

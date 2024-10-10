@@ -130,7 +130,7 @@ async function upsertSimple(driver: Driver, logger: Logger): Promise<void> {
 
 Для выполнения YQL-запросов используется метод `QuerySession.execute()`.
 
-В зависимости оп параметра rowMode данные можно получить в javascript форме или как YDB структуры.
+В зависимости оп параметра `rowMode` данные можно получить в JavaScript  форме или как {{ ydb-short-name }} структуры.
 
 {% list tabs %}
 
@@ -143,7 +143,7 @@ async function upsertSimple(driver: Driver, logger: Logger): Promise<void> {
           fn: async (session) => {
               const {resultSets} =
                   await session.execute({
-                      // rowMode: RowType.Native, // Result set cols and rows returned as native javascript values. It's default behaviour
+                      // rowMode: RowType.Native, // Result set columns and rows are returned as native JavaScript values. This is the default behavior.
                       text: `
                           SELECT series_id,
                                  title,

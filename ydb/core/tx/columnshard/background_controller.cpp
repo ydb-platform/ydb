@@ -4,14 +4,14 @@
 namespace NKikimr::NColumnShard {
 
 bool TBackgroundController::StartCompaction(const NOlap::TPlanCompactionInfo& info) {
-    Y_ABORT_UNLESS(ActiveCompactionInfo.emplace(info.GetPathId(), info).second);
+    Y_ABORT_UNLESS(ActiveCompactionInfo.emplace(info.GetIdentifier(), info).second);
     return true;
 }
 
 void TBackgroundController::CheckDeadlines() {
     for (auto&& i : ActiveCompactionInfo) {
         if (TMonotonic::Now() - i.second.GetStartTime() > NOlap::TCompactionLimits::CompactionTimeout) {
-            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "deadline_compaction");
+            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "deadline_compaction")("path_id", i.second.GetPathId());
             Y_DEBUG_ABORT_UNLESS(false);
         }
     }

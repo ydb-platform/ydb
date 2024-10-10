@@ -34,11 +34,8 @@ public:
 
     bool StartCompaction(const NOlap::TPlanCompactionInfo& info);
     void FinishCompaction(const NOlap::TPlanCompactionInfo& info) {
-        Y_ABORT_UNLESS(ActiveCompactionInfo.erase(info.GetPathId()));
+        Y_ABORT_UNLESS(ActiveCompactionInfo.erase(info.GetIdentifier()));
         Counters->OnCompactionFinish(info.GetPathId());
-    }
-    const TCurrentCompaction& GetActiveCompaction() const {
-        return ActiveCompactionInfo;
     }
     ui32 GetCompactionsCount() const {
         return ActiveCompactionInfo.size();

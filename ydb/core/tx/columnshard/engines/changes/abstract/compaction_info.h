@@ -11,8 +11,15 @@ class TGranuleMeta;
 class TPlanCompactionInfo {
 private:
     ui64 PathId = 0;
+    static inline TAtomicCounter Counter = 0;
+    const ui64 Identifier = Counter.Inc();
     const TMonotonic StartTime = TMonotonic::Now();
+
 public:
+    ui64 GetIdentifier() const {
+        return Identifier;
+    }
+
     TMonotonic GetStartTime() const {
         return StartTime;
     }

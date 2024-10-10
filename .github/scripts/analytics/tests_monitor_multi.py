@@ -99,15 +99,9 @@ def bulk_upsert(table_client, table_path, rows):
 
 
 def process_test_group(name, group, last_day_data, default_start_date):
-    """Processes data for a single test group (by full_name)."""
-    prev_state = 'no_runs'
-    prev_date = datetime.datetime(default_start_date.year, default_start_date.month, default_start_date.day)
-    current_days_in_state = 0
-    prev_state_filtered = 'no_runs'
-    prev_date_filtered = datetime.datetime(default_start_date.year, default_start_date.month, default_start_date.day)
-    current_days_in_state_filtered = 0
     state_list_for_filter = ['Muted', 'Muted Flaky', 'Muted Stable', 'Flaky', 'Passed']
-    
+    """Processes data for a single test group (by full_name)."""
+
     previous_state_list = []
     state_change_date_list = []
     days_in_state_list = []
@@ -115,52 +109,62 @@ def process_test_group(name, group, last_day_data, default_start_date):
     state_change_date_filtered_list = []
     days_in_state_filtered_list = []
     state_filtered_list = []
-    
-    # Get 'days_in_state' for the last existing day for the current test
-    if last_day_data is not None and last_day_data.shape[0] > 0:
-        try:
-            last_day_days_in_state = last_day_data[last_day_data['full_name'] == name]['days_in_state'].iloc[0]
-            prev_state = last_day_data[last_day_data['full_name'] == name]['state'].iloc[0]
-            prev_date = last_day_data[last_day_data['full_name'] == name]['state_change_date'].iloc[0]
-            last_day_days_in_state_filtered = last_day_data[last_day_data['full_name'] == name]['days_in_state_filtered'].iloc[0]
-            prev_state_filtered = last_day_data[last_day_data['full_name'] == name]['previous_state_filtered'].iloc[0]
-            prev_date_filtered = last_day_data[last_day_data['full_name'] == name]['state_change_date_filtered'].iloc[0]
-        except IndexError:
-            # If data for this test doesn't exist in last_day_data, use default values
-            last_day_days_in_state = current_days_in_state
-            last_day_days_in_state_filtered = current_days_in_state_filtered
-        current_days_in_state = last_day_days_in_state
-        current_days_in_state_filtered = last_day_days_in_state_filtered
 
+    # Get 'days_in_state' for the last existing day for the current test
+    if last_day_data is not None and last_day_data[last_day_data['full_name'] == name].shape[0] > 0:
+        prev_state = last_day_data[last_day_data['full_name'] == name]['state'].iloc[0]
+        prev_date = last_day_data[last_day_data['full_name'] == name]['state_change_date'].iloc[0]
+        current_days_in_state = last_day_data[last_day_data['full_name'] == name]['days_in_state'].iloc[0]
+        prev_state_filtered = last_day_data[last_day_data['full_name'] == name]['state_filtered'].iloc[0]
+        prev_date_filtered = last_day_data[last_day_data['full_name'] == name]['state_change_date_filtered'].iloc[0]
+        current_days_in_state_filtered = last_day_data[last_day_data['full_name'] == name][
+            'days_in_state_filtered'
+        ].iloc[0]
+        saved_prev_state = last_day_data[last_day_data['full_name'] == name]['previous_state'].iloc[0]
+        saved_prev_state_filtered = last_day_data[last_day_data['full_name'] == name]['previous_state_filtered'].iloc[0]
+    else:
+        prev_state = 'no_runs'
+        prev_date = datetime.datetime(default_start_date.year, default_start_date.month, default_start_date.day)
+        current_days_in_state = 0
+        state_filtered = ''
+        prev_state_filtered = 'no_runs'
+        prev_date_filtered = datetime.datetime(default_start_date.year, default_start_date.month, default_start_date.day)
+        current_days_in_state_filtered = 0
+        saved_prev_state = prev_state
+        saved_prev_state_filtered = prev_state_filtered
 
     for index, row in group.iterrows():
-        previous_state_list.append(prev_state)
+
+
+        current_days_in_state += 1
         if row['state'] != prev_state:
+            saved_prev_state = prev_state
             prev_state = row['state']
             prev_date = row['date_window']
             current_days_in_state = 1
-
+        previous_state_list.append(saved_prev_state)
         state_change_date_list.append(prev_date)
         days_in_state_list.append(current_days_in_state)
-        current_days_in_state += 1
 
         # Process filtered states
-        previous_state_filtered_list.append(prev_state_filtered)
-        state_filtered = ''
+
         if row['state'] not in state_list_for_filter:
-            state_filtered = prev_state_filtered 
+            state_filtered = prev_state_filtered
         else:
-            state_filtered =  row['state']
+            state_filtered = row['state']
             
+        current_days_in_state_filtered += 1
         if state_filtered != prev_state_filtered:
+            saved_prev_state_filtered = prev_state_filtered
             prev_state_filtered = state_filtered
             prev_date_filtered = row['date_window']
             current_days_in_state_filtered = 1
-
+            
         state_filtered_list.append(state_filtered)
+        previous_state_filtered_list.append(saved_prev_state_filtered)
         state_change_date_filtered_list.append(prev_date_filtered)
         days_in_state_filtered_list.append(current_days_in_state_filtered)
-        current_days_in_state_filtered += 1
+        
 
     return {
         'previous_state': previous_state_list,
@@ -169,7 +173,7 @@ def process_test_group(name, group, last_day_data, default_start_date):
         'previous_state_filtered': previous_state_filtered_list,
         'state_change_date_filtered': state_change_date_filtered_list,
         'days_in_state_filtered': days_in_state_filtered_list,
-        'state_filtered': state_filtered_list
+        'state_filtered': state_filtered_list,
     }
 
 
@@ -270,7 +274,6 @@ def main():
         today = datetime.date.today()
         table_path = f'test_results/analytics/tests_monitor_test_with_filtered_states'
 
-        
         # Get last existing day
         print("Geting date of last collected monitor data")
         query_last_exist_day = f"""
@@ -285,9 +288,9 @@ def main():
         while True:
             try:
                 result = next(it)
-                last_exist_day = (
-                    base_date + datetime.timedelta(days=result.result_set.rows[0]['last_exist_day'])
-                ).date()  # exclude last day, we want recalculate last day
+                last_exist_day = result.result_set.rows[0][
+                    'last_exist_day'
+                ]  # exclude last day, we want recalculate last day
                 break
             except StopIteration:
                 break
@@ -296,7 +299,7 @@ def main():
 
         last_exist_df = None
         last_day_data = None
-        
+
         # If no data exists, set last_exist_day to a default start date
         if last_exist_day is None:
             last_exist_day = default_start_date
@@ -305,7 +308,8 @@ def main():
             print(f"Monitor data do not exist - init new monitor collecting from default date {last_exist_day_str}")
         else:
             # Get data from tests_monitor for last existing day
-            if last_exist_day == today : # to recalculate data for today
+            last_exist_day = (base_date + datetime.timedelta(days=last_exist_day)).date()
+            if last_exist_day == today:  # to recalculate data for today
                 last_exist_day = last_exist_day - datetime.timedelta(days=1)
             last_exist_day_str = last_exist_day.strftime('%Y-%m-%d')
             print(f"Monitor data exist - geting data for date {last_exist_day_str}")
@@ -350,9 +354,10 @@ def main():
                             'state_change_date': base_date + datetime.timedelta(days=row['state_change_date']),
                             'days_in_state': row['days_in_state'],
                             'previous_state_filtered': row['previous_state_filtered'],
-                            'state_change_date_filtered': base_date + datetime.timedelta(days=row['state_change_date_filtered']),
+                            'state_change_date_filtered': base_date
+                            + datetime.timedelta(days=row['state_change_date_filtered']),
                             'days_in_state_filtered': row['days_in_state_filtered'],
-                            'state_filtered': row['state_filtered']
+                            'state_filtered': row['state_filtered'],
                         }
                         last_exist_data.append(row_dict)
                 except StopIteration:
@@ -492,8 +497,19 @@ def main():
         df = pd.DataFrame(data)
         # **Concatenate DataFrames**
         if last_exist_df is not None and last_exist_df.shape[0] > 0:
-            last_day_data = last_exist_df[['full_name', 'days_in_state', 'state', 'state_change_date', 'days_in_state_filtered', 'state_change_date_filtered', 'previous_state_filtered', 'state_filtered']]
-            df = pd.concat([last_exist_df, df], ignore_index=True)
+            last_day_data = last_exist_df[
+                [
+                    'full_name',
+                    'days_in_state',
+                    'state',
+                    'previous_state',
+                    'state_change_date',
+                    'days_in_state_filtered',
+                    'state_change_date_filtered',
+                    'previous_state_filtered',
+                    'state_filtered',
+                ]
+            ]
 
         end_time = time.time()
         print(f'Dataframe inited: {end_time - start_time}')
@@ -524,7 +540,9 @@ def main():
                 [(name, group, last_day_data, default_start_date) for name, group in df.groupby('full_name')],
             )
             end_time = time.time()
-            print(f'Computed days_in_state, state_change_date, previous_state and 3 other params: {end_time - start_time}')
+            print(
+                f'Computed days_in_state, state_change_date, previous_state and 3 other params: {end_time - start_time}'
+            )
             start_time = time.time()
             # Apply results to the DataFrame
             for i, (name, group) in enumerate(df.groupby('full_name')):
@@ -538,7 +556,7 @@ def main():
             end_time = time.time()
             print(f'Saving prev action result in dataframe: {end_time - start_time}')
             start_time = time.time()
-        
+
         df['state_change_date'] = df['state_change_date'].dt.date
         df['date_window'] = df['date_window'].dt.date
         df['days_in_state'] = df['days_in_state'].astype(int)

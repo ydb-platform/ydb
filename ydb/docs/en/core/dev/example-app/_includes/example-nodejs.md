@@ -1,8 +1,8 @@
 # Example app in Node.js
 
-This page contains a detailed description of the code of
-[basic-example-v2-with-query-service](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/master/examples/basic-example-v2-with-query-service)
-that is available as part of the {{ ydb-short-name }} [Node.js SDK](https://github.com/ydb-platform/ydb-nodejs-sdk).
+This page provides a detailed description of the code for
+[an example application](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/master/examples/basic-example-v2-with-query-service),
+which is available as part of the [{{ ydb-short-name }} Node.js SDK](https://github.com/ydb-platform/ydb-nodejs-sdk).
 
 {% include [init.md](steps/01_init.md) %}
 

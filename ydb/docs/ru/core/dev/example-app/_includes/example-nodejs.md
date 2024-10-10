@@ -1,7 +1,6 @@
 # Приложение на Node.js
 
-На этой странице представлено подробное описание кода 
-[тестового приложения](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/master/examples/basic-example-v2-with-query-service),
+На этой странице представлено подробное описание кода [тестового приложения](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/master/examples/basic-example-v2-with-query-service),
 доступого в составе [{{ ydb-short-name }} Node.js SDK](https://github.com/ydb-platform/ydb-nodejs-sdk) {{ ydb-short-name }}.
 
 {% include [init.md](steps/01_init.md) %}

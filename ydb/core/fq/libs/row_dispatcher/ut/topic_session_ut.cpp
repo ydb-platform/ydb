@@ -371,12 +371,13 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StartSession(ReadActorId1, source1);
         StartSession(ReadActorId2, source2);
 
-        TString json1 = "{\"dt\":100,\"value\":\"value1\", \"field1\":\"field1\"}";
+        TString json1 = "{\"dt\":101,\"value\":\"value1\", \"field1\":\"field1\"}";
+        TString json2 = "{\"dt\":102,\"value\":\"value2\", \"field1\":\"field2\"}";
     
-        PQWrite({ json1 }, topicName);
+        PQWrite({ json1, json2 }, topicName);
         ExpectNewDataArrived({ReadActorId1, ReadActorId2});
-        ExpectMessageBatch(ReadActorId1, { "{\"dt\":100,\"value\":\"value1\"}" });
-        ExpectMessageBatch(ReadActorId2, { "{\"dt\":100,\"field1\":\"field1\",\"value\":\"value1\"}" });
+        ExpectMessageBatch(ReadActorId1, { "{\"dt\":101,\"value\":\"value1\"}", "{\"dt\":102,\"value\":\"value2\"}" });
+        ExpectMessageBatch(ReadActorId2, { "{\"dt\":101,\"field1\":\"field1\",\"value\":\"value1\"}", "{\"dt\":102,\"field1\":\"field2\",\"value\":\"value2\"}" });
 
         auto source3 = BuildSource(topicName);
         source3.AddColumns("field2");
@@ -384,20 +385,21 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         auto readActorId3 = Runtime.AllocateEdgeActor();
         StartSession(readActorId3, source3);
 
-        TString json2 = "{\"dt\":101,\"value\":\"value2\", \"field1\":\"value1_field1\", \"field2\":\"value1_field2\"}";
-        PQWrite({ json2 }, topicName);
+        TString json3 = "{\"dt\":103,\"value\":\"value3\", \"field1\":\"value1_field1\", \"field2\":\"value1_field2\"}";
+        PQWrite({ json3 }, topicName);
         ExpectNewDataArrived({ReadActorId1, ReadActorId2, readActorId3});
-        ExpectMessageBatch(ReadActorId1, { "{\"dt\":101,\"value\":\"value2\"}" });
-        ExpectMessageBatch(ReadActorId2, { "{\"dt\":101,\"field1\":\"value1_field1\",\"value\":\"value2\"}" });
-        ExpectMessageBatch(readActorId3, { "{\"dt\":101,\"field2\":\"value1_field2\",\"value\":\"value2\"}" });
+        ExpectMessageBatch(ReadActorId1, { "{\"dt\":103,\"value\":\"value3\"}" });
+        ExpectMessageBatch(ReadActorId2, { "{\"dt\":103,\"field1\":\"value1_field1\",\"value\":\"value3\"}" });
+        ExpectMessageBatch(readActorId3, { "{\"dt\":103,\"field2\":\"value1_field2\",\"value\":\"value3\"}" });
 
         StopSession(ReadActorId1, source3);
         StopSession(readActorId3, source3);
 
-        TString json3 = "{\"dt\":102,\"value\":\"value3\", \"field1\":\"value2_field1\", \"field2\":\"value2_field2\"}";
-        PQWrite({ json3 }, topicName);
+        TString json4 = "{\"dt\":104,\"value\":\"value4\", \"field1\":\"value2_field1\", \"field2\":\"value2_field2\"}";
+        TString json5 = "{\"dt\":105,\"value\":\"value5\", \"field1\":\"value2_field1\", \"field2\":\"value2_field2\"}";
+        PQWrite({ json4, json5 }, topicName);
         ExpectNewDataArrived({ReadActorId2});
-        ExpectMessageBatch(ReadActorId2, { "{\"dt\":102,\"field1\":\"value2_field1\",\"value\":\"value3\"}" });
+        ExpectMessageBatch(ReadActorId2, { "{\"dt\":104,\"field1\":\"value2_field1\",\"value\":\"value4\"}", "{\"dt\":105,\"field1\":\"value2_field1\",\"value\":\"value5\"}" });
 
         StopSession(ReadActorId1, source1);
         StopSession(ReadActorId2, source2);

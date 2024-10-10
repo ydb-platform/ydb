@@ -45,7 +45,8 @@ struct TTopicSessionMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
 };
 
-using TJson = TList<TString>;
+using TJson = TVector<std::string_view>;
+using TJsonBatch = TVector<TJson>;
 
 struct TEvPrivate {
     // Event ids
@@ -66,23 +67,11 @@ struct TEvPrivate {
     struct TEvCreateSession : public NActors::TEventLocal<TEvCreateSession, EvCreateSession> {};
     struct TEvPrintState : public NActors::TEventLocal<TEvPrintState, EvPrintState> {};
     struct TEvStatus : public NActors::TEventLocal<TEvStatus, EvStatus> {};
-    // struct TEvDataParsed : public NActors::TEventLocal<TEvDataParsed, EvDataParsed> {
-    //     TEvDataParsed(ui64 offset, TJson&& value, ui64 cookie) 
-    //         : Offset(offset)
-    //         , Value(std::move(value))
-    //         , Cookie(cookie)
-    //     {}
-    //     ui64 Offset; 
-    //     TJson Value;
-    //     ui64 Cookie;
-    // };
-
     struct TEvDataFiltered : public NActors::TEventLocal<TEvDataFiltered, EvDataFiltered> {
         TEvDataFiltered(ui64 offset, ui64 numberValues) 
             : Offset(offset)
             , NumberValues(numberValues)
         {}
-
         const ui64 Offset; 
         const ui64 NumberValues;
     };
@@ -161,8 +150,6 @@ private:
     TString LogPrefix;
     NYql::NDq::TDqAsyncStats IngressStats;
     ui64 LastMessageOffset = 0;
-   // ui64 LastReceivedMessageOffset = 0;
-   // ui64 LastParsedMessageOffset = 0;  // TODO: ? нужно
     bool IsWaitingEvents = false;
     THashMap<NActors::TActorId, ClientsInfo> Clients;
     THashSet<NActors::TActorId> ClientsWithoutPredicate;
@@ -223,7 +210,7 @@ private:
 
     void PrintInternalState();
     void SendSessionError(NActors::TActorId readActorId, const TString& message);
-    TJson RebuildJson(const ClientsInfo& info, const TJson& json);
+    TVector<TVector<std::string_view>> RebuildJson(const ClientsInfo& info, const TVector<TVector<std::string_view>>& jsonBatch);
     void UpdateParserSchema(const TParserInputType& inputType);
     void UpdateFieldsIds(ClientsInfo& clientInfo);
 
@@ -388,48 +375,18 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&) {
     CreateTopicSession();
 }
 
-TJson TTopicSession::RebuildJson(const ClientsInfo& info, const TJson& json) {
-    TJson result;
-
+TVector<TVector<std::string_view>> TTopicSession::RebuildJson(const ClientsInfo& info, const TVector<TVector<std::string_view>>& jsonBatch) {
+    TVector<TVector<std::string_view>> result;
     const auto& offsets = ParserSchema.FieldsMap;
+    result.reserve(info.FieldsIds.size());
     for (auto fieldId : info.FieldsIds) {
-        Y_ENSURE(fieldId < offsets.size());
-        auto offset = offsets.at(fieldId);
-        auto it = json.begin();
-        std::advance(it, offset);
-        result.push_back(*it);
+        Y_ENSURE(fieldId < offsets.size(), "fieldId " << fieldId << ", offsets.size() " << offsets.size());
+        auto offset = offsets[fieldId];
+        Y_ENSURE(offset < jsonBatch.size(), "offset " << offset << ", jsonBatch.size() " << jsonBatch.size());
+        result.push_back(jsonBatch[offset]); 
     }
-    LOG_ROW_DISPATCHER_TRACE("RebuildJson " << JoinSeq(',', result));
     return result;
 }
-
-// void TTopicSession::Handle(NFq::TEvPrivate::TEvDataParsed::TPtr& ev) {
-//     LOG_ROW_DISPATCHER_TRACE("TEvDataParsed, offset " << ev->Get()->Offset << ", cookie " << ev->Get()->Cookie);
-
-//     LastParsedMessageOffset = ev->Get()->Offset;
-//     if (ev->Get()->Cookie < ParserCookie) {
-//         LOG_ROW_DISPATCHER_TRACE("Ignore message");
-//         return;
-//     }
-
-//     for (auto v: ev->Get()->Value) {
-//         LOG_ROW_DISPATCHER_TRACE("v " << v);
-//     }
-
-//     for (auto& [actorId, info] : Clients) {
-//         try {
-//             if (!info.Filter) {
-//                 continue;
-//             }
-//             auto json = RebuildJson(info, ev->Get()->Value);
-//             info.Filter->Push(ev->Get()->Offset, json);
-//         } catch (const std::exception& e) {
-//             FatalError(e.what(), &info.Filter);
-//         }
-//     }
-//     auto event = std::make_unique<TEvPrivate::TEvDataFiltered>(ev->Get()->Offset);
-//     Send(SelfId(), event.release());
-// }
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvDataAfterFilteration::TPtr& ev) {
     LOG_ROW_DISPATCHER_TRACE("TEvDataAfterFilteration, read actor id " << ev->Get()->ReadActorId.ToString() << ", " << ev->Get()->Json);
@@ -585,7 +542,6 @@ void TTopicSession::SendToParsing(const TVector<NYdb::NTopic::TReadSessionEvent:
     }
 
     if (ClientsWithoutPredicate.size() == Clients.size() || messages.empty()) {
- //       LastParsedMessageOffset = offset;
         return;
     }
 
@@ -608,12 +564,12 @@ void TTopicSession::SendToParsing(const TVector<NYdb::NTopic::TReadSessionEvent:
 
 void TTopicSession::SendToFiltering(ui64 offset, const TVector<TVector<std::string_view>>& parsedValues) {
     Y_ENSURE(parsedValues, "Expected non empty schema");
-    LOG_ROW_DISPATCHER_TRACE("TEvDataParsed, offset " << offset << ", data:\n" << Parser->GetDebugString(parsedValues));
+    LOG_ROW_DISPATCHER_TRACE("SendToFiltering, offset " << offset << ", data:\n" << Parser->GetDebugString(parsedValues));
 
     for (auto& [actorId, info] : Clients) {
         try {
             if (info.Filter) {
-                info.Filter->Push(offset, parsedValues);
+                info.Filter->Push(offset, RebuildJson(info, parsedValues));
             }
         } catch (const std::exception& e) {
             FatalError(e.what(), &info.Filter);

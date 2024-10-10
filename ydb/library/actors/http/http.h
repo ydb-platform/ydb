@@ -198,7 +198,56 @@ public:
 };
 
 template <typename HeaderType, typename BufferType>
-class THttpParser : public HeaderType, public BufferType {
+class THttpBase : public virtual HeaderType, public virtual BufferType {
+public:
+    TStringBuf GetRawData() const {
+        return TStringBuf(BufferType::Data(), BufferType::Size());
+    }
+
+    TString GetObfuscatedData() const {
+        THeaders headers(HeaderType::Headers);
+        TStringBuf authorization(headers["Authorization"]);
+        TStringBuf cookie(headers["Cookie"]);
+        TStringBuf set_cookie(headers["Set-Cookie"]);
+        TStringBuf x_ydb_auth_ticket(headers["x-ydb-auth-ticket"]);
+        TStringBuf x_yacloud_subjecttoken(headers["x-yacloud-subjecttoken"]);
+        TString data(GetRawData());
+        if (!authorization.empty()) {
+            auto pos = data.find(authorization);
+            if (pos != TString::npos) {
+                data.replace(pos, authorization.size(), TString("<obfuscated>"));
+            }
+        }
+        if (!cookie.empty()) {
+            auto pos = data.find(cookie);
+            if (pos != TString::npos) {
+                data.replace(pos, cookie.size(), TString("<obfuscated>"));
+            }
+        }
+        if (!set_cookie.empty()) {
+            auto pos = data.find(set_cookie);
+            if (pos != TString::npos) {
+                data.replace(pos, set_cookie.size(), TString("<obfuscated>"));
+            }
+        }
+        if (!x_ydb_auth_ticket.empty()) {
+            auto pos = data.find(x_ydb_auth_ticket);
+            if (pos != TString::npos) {
+                data.replace(pos, x_ydb_auth_ticket.size(), TString("<obfuscated>"));
+            }
+        }
+        if (!x_yacloud_subjecttoken.empty()) {
+            auto pos = data.find(x_yacloud_subjecttoken);
+            if (pos != TString::npos) {
+                data.replace(pos, x_yacloud_subjecttoken.size(), TString("<obfuscated>"));
+            }
+        }
+        return data;
+    }
+};
+
+template <typename HeaderType, typename BufferType>
+class THttpParser : public THttpBase<HeaderType, BufferType> {
 public:
     enum class EParseStage : ui8 {
         Method,
@@ -403,44 +452,6 @@ public:
         Advance(size);
     }
 
-    TStringBuf GetRawData() const {
-        return TStringBuf(BufferType::Data(), BufferType::Size());
-    }
-
-    TString GetObfuscatedData() const {
-        THeaders headers(HeaderType::Headers);
-        TStringBuf authorization(headers["Authorization"]);
-        TStringBuf cookie(headers["Cookie"]);
-        TStringBuf x_ydb_auth_ticket(headers["x-ydb-auth-ticket"]);
-        TStringBuf x_yacloud_subjecttoken(headers["x-yacloud-subjecttoken"]);
-        TString data(GetRawData());
-        if (!authorization.empty()) {
-            auto pos = data.find(authorization);
-            if (pos != TString::npos) {
-                data.replace(pos, authorization.size(), TString("<obfuscated>"));
-            }
-        }
-        if (!cookie.empty()) {
-            auto pos = data.find(cookie);
-            if (pos != TString::npos) {
-                data.replace(pos, cookie.size(), TString("<obfuscated>"));
-            }
-        }
-        if (!x_ydb_auth_ticket.empty()) {
-            auto pos = data.find(x_ydb_auth_ticket);
-            if (pos != TString::npos) {
-                data.replace(pos, x_ydb_auth_ticket.size(), TString("<obfuscated>"));
-            }
-        }
-        if (!x_yacloud_subjecttoken.empty()) {
-            auto pos = data.find(x_yacloud_subjecttoken);
-            if (pos != TString::npos) {
-                data.replace(pos, x_yacloud_subjecttoken.size(), TString("<obfuscated>"));
-            }
-        }
-        return data;
-    }
-
     static EParseStage GetInitialStage();
 
     THttpParser()
@@ -460,7 +471,7 @@ public:
 };
 
 template <typename HeaderType, typename BufferType>
-class THttpRenderer : public HeaderType, public BufferType {
+class THttpRenderer : public THttpBase<HeaderType, BufferType> {
 public:
     enum class ERenderStage {
         Init,
@@ -653,10 +664,6 @@ public:
             break;
         }
         Y_ABORT_UNLESS(size == BufferType::Size());
-    }
-
-    TStringBuf GetRawData() const {
-        return TStringBuf(BufferType::Data(), BufferType::Size());
     }
 };
 

@@ -591,7 +591,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
     SRC_LOG_T("TEvMessageBatch from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo());
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
-    YQL_ENSURE(Sessions.count(partitionId), "Unknown partition id");
+    YQL_ENSURE(Sessions.count(partitionId), "Unknown partition id " << partitionId);
     auto it = Sessions.find(partitionId);
     if (it == Sessions.end()) {
         Stop("Wrong session data");

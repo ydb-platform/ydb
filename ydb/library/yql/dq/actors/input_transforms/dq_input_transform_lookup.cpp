@@ -141,7 +141,6 @@ private: //events
         const auto now = std::chrono::steady_clock::now();
         auto lookupResult = ev->Get()->Result.lock();
         Y_ABORT_UNLESS(lookupResult == KeysForLookup);
-        auto lookupResultSize = lookupResult->size();
         for (; !AwaitingQueue.empty(); AwaitingQueue.pop_front()) {
             auto& [lookupKey, inputOther] = AwaitingQueue.front();
             auto lookupPayload = lookupResult->FindPtr(lookupKey);

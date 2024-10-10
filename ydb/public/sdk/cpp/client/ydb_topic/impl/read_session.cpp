@@ -143,7 +143,6 @@ TVector<TReadSessionEvent::TEvent> TReadSession::GetEvents(const TReadSessionGet
                 CollectOffsets(tx, *dataEvent);
             }
         }
-        //UpdateOffsets(tx);
     }
     return events;
 }
@@ -164,7 +163,6 @@ TMaybe<TReadSessionEvent::TEvent> TReadSession::GetEvent(const TReadSessionGetEv
         if (auto* dataEvent = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
             CollectOffsets(tx, *dataEvent);
         }
-        //UpdateOffsets(tx);
     }
     return event;
 }
@@ -227,33 +225,6 @@ auto TReadSession::MakeUpdateOffsetsInTransactionCaller(const TTransactionId& tx
     return call;
 }
 
-//void TReadSession::TrySubscribeOnTransactionCommit(TTransaction& tx, TOffsetRangesPtr ranges)
-//{
-//    const TTransactionId txId = MakeTransactionId(tx);
-//    TTransactionInfoPtr txInfo = GetOrCreateTxInfo(txId);
-//
-//    with_lock(txInfo->Lock) {
-//        if (txInfo->Subscribed) {
-//            return;
-//        }
-//
-//        txInfo->IsActive = true;
-//        txInfo->Subscribed = true;
-//    }
-//
-//    auto callback = [txInfo, updateOffsetsInTransaction = MakeUpdateOffsetsInTransactionCaller(txId, ranges)]() {
-//        with_lock(txInfo->Lock) {
-//            if (txInfo->IsActive) {
-//                return updateOffsetsInTransaction();
-//            }
-//
-//            return NThreading::MakeFuture(MakeSessionExpiredError());
-//        }
-//    };
-//
-//    tx.AddPrecommitCallback(std::move(callback));
-//}
-
 auto TReadSession::GetOrCreateTxInfo(const TTransactionId& txId) -> TTransactionInfoPtr
 {
     auto p = Txs->find(txId);
@@ -269,15 +240,6 @@ auto TReadSession::GetOrCreateTxInfo(const TTransactionId& txId) -> TTransaction
 void TReadSession::CollectOffsets(NTable::TTransaction& tx,
                                   const TString& topicPath, ui32 partitionId, ui64 offset)
 {
-//    const TString& sessionId = tx.GetSession().GetId();
-//    const TString& txId = tx.GetId();
-//    TOffsetRangesPtr& ranges = OffsetRanges[std::make_pair(sessionId, txId)];
-//    if (!ranges) {
-//        ranges = std::make_shared<TOffsetRanges>();
-//    }
-//    (*ranges)[topicPath][partitionId].InsertInterval(offset, offset + 1);
-//    TrySubscribeOnTransactionCommit(tx, ranges);
-
     const TTransactionId txId = MakeTransactionId(tx);
     TTransactionInfoPtr txInfo = GetOrCreateTxInfo(txId);
 
@@ -304,64 +266,6 @@ void TReadSession::CollectOffsets(NTable::TTransaction& tx,
         txInfo->Subscribed = true;
     }
 }
-
-//void TReadSession::UpdateOffsets(const NTable::TTransaction& tx)
-//{
-//    const TString& sessionId = tx.GetSession().GetId();
-//    const TString& txId = tx.GetId();
-//
-//    auto p = OffsetRanges.find(std::make_pair(sessionId, txId));
-//    if (p == OffsetRanges.end()) {
-//        return;
-//    }
-//
-//    TVector<TTopicOffsets> topics;
-//    for (auto& [path, partitions] : *p->second) {
-//        TTopicOffsets topic;
-//        topic.Path = path;
-//
-//        topics.push_back(std::move(topic));
-//
-//        for (auto& [id, ranges] : partitions) {
-//            TPartitionOffsets partition;
-//            partition.PartitionId = id;
-//
-//            TTopicOffsets& t = topics.back();
-//            t.Partitions.push_back(std::move(partition));
-//
-//            for (auto& range : ranges) {
-//                TPartitionOffsets& p = t.Partitions.back();
-//
-//                TOffsetsRange r;
-//                r.Start = range.first;
-//                r.End = range.second;
-//
-//                p.Offsets.push_back(r);
-//            }
-//        }
-//    }
-//
-//    Y_ABORT_UNLESS(!topics.empty());
-//
-//    while (true) {
-//        auto result = Client->UpdateOffsetsInTransaction(tx,
-//                                                         topics,
-//                                                         Settings.ConsumerName_,
-//                                                         {}).GetValueSync();
-//        Y_ABORT_UNLESS(!result.IsTransportError());
-//
-//        if (result.GetStatus() != EStatus::SESSION_BUSY) {
-//            if (!result.IsSuccess()) {
-//                ythrow yexception() << "error on update offsets: " << result;
-//            }
-//            break;
-//        }
-//
-//        Sleep(TDuration::MilliSeconds(1));
-//    }
-//
-//    OffsetRanges.erase(std::make_pair(sessionId, txId));
-//}
 
 bool TReadSession::Close(TDuration timeout) {
     LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Closing read session. Close timeout: " << timeout);

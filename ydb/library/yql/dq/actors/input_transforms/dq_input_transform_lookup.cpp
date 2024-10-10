@@ -153,7 +153,10 @@ private: //events
             LruCache->Update(NUdf::TUnboxedValue(const_cast<NUdf::TUnboxedValue&&>(k)), std::move(v), now + CacheTtl);
         }
         KeysForLookup.reset();
-        CpuTime += GetCpuTimeDelta(StartCycleCount);
+        auto deltaTime = GetCpuTimeDelta(StartCycleCount);
+        CpuTime += deltaTime;
+        if (CpuTimeUs)
+            CpuTimeUs->Add(deltaTime.MicroSeconds());
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived{InputIndex});
     }
 
@@ -235,7 +238,10 @@ private: //IDqComputeActorAsyncInput
             }
             DrainReadyQueue(batch);
         }
-        CpuTime += GetCpuTimeDelta(StartCycleCount);
+        auto deltaTime = GetCpuTimeDelta(StartCycleCount);
+        CpuTime += deltaTime;
+        if (CpuTimeUs)
+            CpuTimeUs->Add(deltaTime.MicroSeconds());
         finished = IsFinished();
         return AwaitingQueue.size();
     }
@@ -244,7 +250,7 @@ private: //IDqComputeActorAsyncInput
         if (taskCounters) {
             LruHits = taskCounters->GetCounter("StreamLookupTransformLruHits");
             LruMiss = taskCounters->GetCounter("StreamLookupTransformLruMiss");
-            CpuTimeMs = taskCounters->GetCounter("StreamLookupTransformCpuTimeMs");
+            CpuTimeUs = taskCounters->GetCounter("StreamLookupTransformCpuTimeUs");
             Batches = taskCounters->GetCounter("StreamLookupTransformBatchCount");
         }
     }
@@ -315,7 +321,7 @@ protected:
 
     ::NMonitoring::TDynamicCounters::TCounterPtr LruHits;
     ::NMonitoring::TDynamicCounters::TCounterPtr LruMiss;
-    ::NMonitoring::TDynamicCounters::TCounterPtr CpuTimeMs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CpuTimeUs;
     ::NMonitoring::TDynamicCounters::TCounterPtr Batches;
     TDuration CpuTime {};
 };

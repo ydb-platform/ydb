@@ -7,6 +7,11 @@
 
 namespace NMVP {
 
+template<typename TRequest>
+TString SecureShortDebugString(const TRequest& request) {
+    return request.ShortDebugString();
+}
+
 template <typename TGRpcService>
 class TLoggedGrpcServiceConnection {
     std::unique_ptr<NYdbGrpc::TServiceConnection<TGRpcService>> Connection;
@@ -41,7 +46,7 @@ public:
                    NYdbGrpc::IQueueClientContextProvider* provider = nullptr)
     {
         const TString& requestName = request.GetDescriptor()->name();
-        BLOG_GRPC_D(Prefix() << "Request " << requestName << " " << Trim(request.ShortDebugString()));
+        BLOG_GRPC_D(Prefix() << "Request " << requestName << " " << Trim(SecureShortDebugString(request)));
         NActors::TActorSystem* actorSystem = NActors::TlsActivationContext->ActorSystem();
         THPTimer timer;
         NYdbGrpc::TResponseCallback<TResponse> cb =
@@ -73,7 +78,7 @@ public:
                            NYdbGrpc::IQueueClientContextProvider* provider = nullptr)
     {
         const TString& requestName = request.GetDescriptor()->name();
-        BLOG_GRPC_D(Prefix() << "Request " << requestName << " " << Trim(request.ShortDebugString()));
+        BLOG_GRPC_D(Prefix() << "Request " << requestName << " " << Trim(SecureShortDebugString(request)));
         NActors::TActorSystem* actorSystem = NActors::TlsActivationContext->ActorSystem();
         THPTimer timer;
         NYdbGrpc::TAdvancedResponseCallback<TResponse> cb =

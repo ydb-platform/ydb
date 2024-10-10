@@ -1,4 +1,5 @@
 #include <ydb/library/actors/http/http.h>
+#include <ydb/library/security/util.h>
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/appdata.h>
 #include <ydb/mvp/core/mvp_log.h>
@@ -85,4 +86,12 @@ bool THandlerSessionServiceCheckYandex::NeedSendSecureHttpRequest(const NHttp::T
 }
 
 }  // NOIDC
+
+template<>
+TString SecureShortDebugString<yandex::cloud::priv::oauth::v1::CheckSessionRequest>(const yandex::cloud::priv::oauth::v1::CheckSessionRequest& request) {
+    yandex::cloud::priv::oauth::v1::CheckSessionRequest copy = request;
+    copy.set_cookie_header(NKikimr::MaskTicket(copy.cookie_header()));
+    return copy.ShortDebugString();
+}
+
 }  // NMVP

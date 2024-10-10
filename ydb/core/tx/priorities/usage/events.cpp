@@ -13,15 +13,4 @@ TEvExecution::TEvAsk::TEvAsk(const ui64 clientId, const ui32 count, const std::s
     AFL_VERIFY(Count);
 }
 
- TEvExecution::TAllocationGuard::~TAllocationGuard() {
-    AFL_VERIFY(Released);
-}
-
- void TEvExecution::TAllocationGuard::Release() {
-     AFL_VERIFY(!Released);
-     auto& context = NActors::TActorContext::AsActorContext();
-     context.Send(ServiceActorId, new TEvFree(ClientId, Count));
-     Released = true;
- }
-
 }   // namespace NKikimr::NPrioritiesQueue

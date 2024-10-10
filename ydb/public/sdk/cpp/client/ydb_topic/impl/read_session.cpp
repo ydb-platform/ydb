@@ -185,12 +185,11 @@ void TReadSession::CollectOffsets(NTable::TTransaction& tx,
     }
 }
 
-auto TReadSession::MakeUpdateOffsetsInTransactionCaller(const TTransactionId& txId,
-                                                        TOffsetRangesPtr offsets)
+auto TReadSession::MakeUpdateOffsetsInTransactionCaller(const TTransactionId& txId)
 {
-    auto call = [client = Client, txId, consumer = Settings.ConsumerName_, offsets, txs = Txs]() {
+    auto call = [client = Client, consumer = Settings.ConsumerName_, txs = Txs, txId](TTransactionInfoPtr txInfo) {
         TVector<TTopicOffsets> topics;
-        for (auto& [path, partitions] : *offsets) {
+        for (auto& [path, partitions] : txInfo->Ranges) {
             TTopicOffsets topic;
             topic.Path = path;
 
@@ -228,32 +227,32 @@ auto TReadSession::MakeUpdateOffsetsInTransactionCaller(const TTransactionId& tx
     return call;
 }
 
-void TReadSession::TrySubscribeOnTransactionCommit(TTransaction& tx, TOffsetRangesPtr ranges)
-{
-    const TTransactionId txId = MakeTransactionId(tx);
-    TTransactionInfoPtr txInfo = GetOrCreateTxInfo(txId);
-
-    with_lock(txInfo->Lock) {
-        if (txInfo->Subscribed) {
-            return;
-        }
-
-        txInfo->IsActive = true;
-        txInfo->Subscribed = true;
-    }
-
-    auto callback = [txInfo, updateOffsetsInTransaction = MakeUpdateOffsetsInTransactionCaller(txId, ranges)]() {
-        with_lock(txInfo->Lock) {
-            if (txInfo->IsActive) {
-                return updateOffsetsInTransaction();
-            }
-
-            return NThreading::MakeFuture(MakeSessionExpiredError());
-        }
-    };
-
-    tx.AddPrecommitCallback(std::move(callback));
-}
+//void TReadSession::TrySubscribeOnTransactionCommit(TTransaction& tx, TOffsetRangesPtr ranges)
+//{
+//    const TTransactionId txId = MakeTransactionId(tx);
+//    TTransactionInfoPtr txInfo = GetOrCreateTxInfo(txId);
+//
+//    with_lock(txInfo->Lock) {
+//        if (txInfo->Subscribed) {
+//            return;
+//        }
+//
+//        txInfo->IsActive = true;
+//        txInfo->Subscribed = true;
+//    }
+//
+//    auto callback = [txInfo, updateOffsetsInTransaction = MakeUpdateOffsetsInTransactionCaller(txId, ranges)]() {
+//        with_lock(txInfo->Lock) {
+//            if (txInfo->IsActive) {
+//                return updateOffsetsInTransaction();
+//            }
+//
+//            return NThreading::MakeFuture(MakeSessionExpiredError());
+//        }
+//    };
+//
+//    tx.AddPrecommitCallback(std::move(callback));
+//}
 
 auto TReadSession::GetOrCreateTxInfo(const TTransactionId& txId) -> TTransactionInfoPtr
 {
@@ -270,14 +269,40 @@ auto TReadSession::GetOrCreateTxInfo(const TTransactionId& txId) -> TTransaction
 void TReadSession::CollectOffsets(NTable::TTransaction& tx,
                                   const TString& topicPath, ui32 partitionId, ui64 offset)
 {
-    const TString& sessionId = tx.GetSession().GetId();
-    const TString& txId = tx.GetId();
-    TOffsetRangesPtr& ranges = OffsetRanges[std::make_pair(sessionId, txId)];
-    if (!ranges) {
-        ranges = std::make_shared<TOffsetRanges>();
+//    const TString& sessionId = tx.GetSession().GetId();
+//    const TString& txId = tx.GetId();
+//    TOffsetRangesPtr& ranges = OffsetRanges[std::make_pair(sessionId, txId)];
+//    if (!ranges) {
+//        ranges = std::make_shared<TOffsetRanges>();
+//    }
+//    (*ranges)[topicPath][partitionId].InsertInterval(offset, offset + 1);
+//    TrySubscribeOnTransactionCommit(tx, ranges);
+
+    const TTransactionId txId = MakeTransactionId(tx);
+    TTransactionInfoPtr txInfo = GetOrCreateTxInfo(txId);
+
+    with_lock(txInfo->Lock) {
+        txInfo->Ranges[topicPath][partitionId].InsertInterval(offset, offset + 1);
+
+        if (txInfo->Subscribed) {
+            return;
+        }
+
+        auto callback = [txInfo, updateOffsetsInTransaction = MakeUpdateOffsetsInTransactionCaller(txId)]() {
+            with_lock(txInfo->Lock) {
+                if (txInfo->IsActive) {
+                    return updateOffsetsInTransaction(txInfo);
+                }
+
+                return NThreading::MakeFuture(MakeSessionExpiredError());
+            }
+        };
+
+        tx.AddPrecommitCallback(std::move(callback));
+
+        txInfo->IsActive = true;
+        txInfo->Subscribed = true;
     }
-    (*ranges)[topicPath][partitionId].InsertInterval(offset, offset + 1);
-    TrySubscribeOnTransactionCommit(tx, ranges);
 }
 
 //void TReadSession::UpdateOffsets(const NTable::TTransaction& tx)

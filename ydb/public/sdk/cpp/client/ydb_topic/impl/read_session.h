@@ -66,15 +66,19 @@ private:
 private:
     // topic -> partition -> (begin, end)
     using TOffsetRanges = THashMap<TString, THashMap<ui64, TDisjointIntervalTree<ui64>>>;
-    using TOffsetRangesPtr = std::shared_ptr<TOffsetRanges>;
+//    using TOffsetRangesPtr = std::shared_ptr<TOffsetRanges>;
 
     struct TTransactionInfo {
         TSpinLock Lock;
         bool IsActive = false;
         bool Subscribed = false;
+        TOffsetRanges Ranges;
     };
 
     using TTransactionInfoPtr = std::shared_ptr<TTransactionInfo>;
+
+    using TTransactionList = THashMap<TTransactionId, TTransactionInfoPtr>;
+    using TTransactionListPtr = std::shared_ptr<TTransactionList>;
 
     void CollectOffsets(NTable::TTransaction& tx,
                         const TReadSessionEvent::TDataReceivedEvent& event);
@@ -82,17 +86,16 @@ private:
                         const TString& topicPath, ui32 partitionId, ui64 offset);
     //void UpdateOffsets(const NTable::TTransaction& tx);
 
-    void TrySubscribeOnTransactionCommit(TTransaction& tx, TOffsetRangesPtr ranges);
+//    void TrySubscribeOnTransactionCommit(TTransaction& tx, TOffsetRangesPtr ranges);
     TTransactionInfoPtr GetOrCreateTxInfo(const TTransactionId& txId);
     TAsyncStatus AsyncUpdateOffsets(const TTransactionId& txId);
 
-    auto MakeUpdateOffsetsInTransactionCaller(const TTransactionId& txId,
-                                              TOffsetRangesPtr offsets);
+    auto MakeUpdateOffsetsInTransactionCaller(const TTransactionId& txId);
 
-    //
-    // (session, tx) -> topic -> partition -> (begin, end)
-    //
-    THashMap<TTransactionId, TOffsetRangesPtr> OffsetRanges;
+//    //
+//    // (session, tx) -> topic -> partition -> (begin, end)
+//    //
+//    THashMap<TTransactionId, TOffsetRangesPtr> OffsetRanges;
 
     TReadSessionSettings Settings;
     const TString SessionId;
@@ -113,9 +116,6 @@ private:
     // Exiting.
     bool Aborting = false;
     bool Closing = false;
-
-    using TTransactionList = THashMap<TTransactionId, TTransactionInfoPtr>;
-    using TTransactionListPtr = std::shared_ptr<TTransactionList>;
 
     TTransactionListPtr Txs;
 };

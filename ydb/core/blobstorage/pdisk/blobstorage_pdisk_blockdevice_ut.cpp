@@ -139,19 +139,6 @@ private:
     TDuration WorkTime;
 };
 
-TString CreateFile(const char *baseDir, ui32 dataSize) {
-    TString databaseDirectory = MakeDatabasePath(baseDir);
-    MakeDirIfNotExist(databaseDirectory.c_str());
-    TString path = MakePDiskPath(baseDir);
-    {
-        TFile file(path.c_str(), OpenAlways | RdWr | Seq | Direct);
-        file.Resize(dataSize);
-        file.Close();
-    }
-    UNIT_ASSERT_EQUAL_C(NFs::Exists(path), true, "File " << path << " does not exist.");
-    return path;
-}
-
 void WaitForValue(TAtomic *counter, TDuration maxDuration, TAtomicBase expectedValue) {
     TInstant finishTime = TInstant::Now() + maxDuration;
     while (TInstant::Now() < finishTime) {

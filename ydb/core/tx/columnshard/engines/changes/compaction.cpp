@@ -1,6 +1,6 @@
 #include "compaction.h"
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
-#include <ydb/core/tx/columnshard/engines/storage/granule.h>
+#include <ydb/core/tx/columnshard/engines/storage/granule/granule.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/protos/counters_columnshard.pb.h>
 

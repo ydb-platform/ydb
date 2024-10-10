@@ -5,8 +5,8 @@
 
 #include "changes/actualization/controller/controller.h"
 #include "scheme/tier_info.h"
-#include "storage/granule.h"
-#include "storage/storage.h"
+#include "storage/granule/granule.h"
+#include "storage/granule/storage.h"
 
 #include <ydb/core/tx/columnshard/columnshard_ttl.h>
 #include <ydb/core/tx/columnshard/common/limits.h>

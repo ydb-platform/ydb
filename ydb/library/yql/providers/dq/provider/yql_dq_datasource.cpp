@@ -51,7 +51,7 @@ public:
         , TypeAnnotationTransformer_([] () { return CreateDqsDataSourceTypeAnnotationTransformer(); })
         , ConstraintsTransformer_([] () { return CreateDqDataSourceConstraintTransformer(); })
         , StatisticsTransformer_([this]() { return CreateDqsStatisticsTransformer(State_, TBaseProviderContext::Instance()); })
-        , ExecutionValidator_(MakeHolder<TDqExecutionValidator>(State_))
+        , ExecutionValidator_([this]() { return MakeHolder<TDqExecutionValidator>(State_); })
     { }
 
     TStringBuf GetName() const override {
@@ -284,7 +284,9 @@ public:
         if (ConstraintsTransformer_) {
             ConstraintsTransformer_->Rewind();
         }
-        ExecutionValidator_->Rewind();
+        if (ExecutionValidator_) {
+            ExecutionValidator_->Rewind();
+        }
     }
 
 private:
@@ -294,7 +296,7 @@ private:
     TLazyInitHolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
     TLazyInitHolder<IGraphTransformer> ConstraintsTransformer_;
     TLazyInitHolder<IGraphTransformer> StatisticsTransformer_;
-    THolder<TDqExecutionValidator> ExecutionValidator_;
+    TLazyInitHolder<TDqExecutionValidator> ExecutionValidator_;
 };
 
 }

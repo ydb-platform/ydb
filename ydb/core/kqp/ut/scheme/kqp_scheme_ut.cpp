@@ -5141,8 +5141,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         TString tableName = "/Root/ColumnTableTest";
 
         testHelper.CreateTier("tier1");
+        testHelper.CreateTier("tier2");
         const auto tieringRule1 = testHelper.CreateTieringRule("tier1", "Key");
-        const auto tieringRule2 = testHelper.CreateTieringRule("tier1", "Key");
+        const auto tieringRule2 = testHelper.CreateTieringRule("tier2", "Key");
 
         auto query = TStringBuilder() << R"(
             --!syntax_v1

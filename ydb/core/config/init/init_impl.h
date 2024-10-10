@@ -287,6 +287,7 @@ struct TCommonAppOptions {
     ui32 MonitoringPort = 0;
     TString MonitoringAddress;
     ui32 MonitoringThreads = 10;
+    ui32 MonitoringMaxRequestsPerSecond = 0;
     TString MonitoringCertificateFile;
     TString RestartsCountFile = "";
     size_t CompileInflightLimit = 100000; // MiniKQLCompileService

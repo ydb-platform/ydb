@@ -13,7 +13,7 @@
 #include <ydb/core/protos/config.pb.h>
 
 #include <ydb/core/blobstorage/nodewarden/group_stat_aggregator.h>
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/base/blobstorage_common.h>

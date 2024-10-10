@@ -56,8 +56,8 @@ Y_UNIT_TEST_SUITE(TJsonFilterTests) {
             [&](ui64 offset, const TString& json) {
                 result[offset] = json;
             });
-        Filter->Push(5, {"hello1", "99"});
-        Filter->Push(6, {"hello2", "101"});
+        Filter->Push(5, {{"hello1"}, {"99"}});
+        Filter->Push(6, {{"hello2"}, {"101"}});
         UNIT_ASSERT_VALUES_EQUAL(1, result.size());
         UNIT_ASSERT_VALUES_EQUAL(R"({"a1":"hello2","a2":101})", result[6]);
     }
@@ -71,20 +71,34 @@ Y_UNIT_TEST_SUITE(TJsonFilterTests) {
             [&](ui64 offset, const TString& json) {
                 result[offset] = json;
             });
-        Filter->Push(5, {"99", "hello1"});
-        Filter->Push(6, {"101", "hello2"});
+        Filter->Push(5, {{"99"}, {"hello1"}});
+        Filter->Push(6, {{"101"}, {"hello2"}});
         UNIT_ASSERT_VALUES_EQUAL(1, result.size());
         UNIT_ASSERT_VALUES_EQUAL(R"({"a1":"hello2","a2":101})", result[6]);
     }
 
-     Y_UNIT_TEST_F(ThrowExceptionByError, TFixture) { 
+    Y_UNIT_TEST_F(ManyValues, TFixture) {
+        TMap<ui64, TString> result;
+        MakeFilter(
+            {"a1", "a2"},
+            {"String", "UInt64"},
+            "where a2 > 100",
+            [&](ui64 offset, const TString& json) {
+                result[offset] = json;
+            });
+        Filter->Push(5, {{"hello1", "hello2"}, {"99", "101"}});
+        UNIT_ASSERT_VALUES_EQUAL(1, result.size());
+        UNIT_ASSERT_VALUES_EQUAL(R"({"a1":"hello2","a2":101})", result[6]);
+    }
+
+    Y_UNIT_TEST_F(ThrowExceptionByError, TFixture) { 
         MakeFilter(
             {"a1", "a2"},
             {"String", "UInt64"},
             "where Unwrap(a2) = 1",
             [&](ui64, const TString&) { });
-        UNIT_ASSERT_EXCEPTION_CONTAINS(Filter->Push(5, {"99", "hello1"}), yexception, "Failed to unwrap empty optional");
-     }
+        UNIT_ASSERT_EXCEPTION_CONTAINS(Filter->Push(5, {{"99"}, {"hello1"}}), yexception, "Failed to unwrap empty optional");
+    }
 }
 
 }

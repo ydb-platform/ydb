@@ -193,7 +193,6 @@ runs:
           --stat
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
           -DUSE_EAT_MY_DATA
-          -DDEBUGINFO_LINES_ONLY
         )
 
         TEST_RETRY_COUNT=${{ inputs.test_retry_count }}

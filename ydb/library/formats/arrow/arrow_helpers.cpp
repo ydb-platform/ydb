@@ -237,10 +237,16 @@ std::vector<TString> ColumnNames(const std::shared_ptr<arrow::Schema>& schema) {
     return out;
 }
 
-std::shared_ptr<arrow::UInt64Array> MakeUI64Array(ui64 value, i64 size) {
+std::shared_ptr<arrow::UInt64Array> MakeUI64Array(const ui64 value, const i64 size) {
     auto res = arrow::MakeArrayFromScalar(arrow::UInt64Scalar(value), size);
     Y_ABORT_UNLESS(res.ok());
     return std::static_pointer_cast<arrow::UInt64Array>(*res);
+}
+
+std::shared_ptr<arrow::StringArray> MakeStringArray(const TString& value, const i64 size) {
+    auto res = arrow::MakeArrayFromScalar(arrow::StringScalar(value), size);
+    Y_ABORT_UNLESS(res.ok());
+    return std::static_pointer_cast<arrow::StringArray>(*res);
 }
 
 std::pair<int, int> FindMinMaxPosition(const std::shared_ptr<arrow::Array>& array) {

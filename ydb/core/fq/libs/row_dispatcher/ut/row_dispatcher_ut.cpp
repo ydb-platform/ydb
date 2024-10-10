@@ -61,7 +61,6 @@ public:
         database.SetDatabase("YDB_DATABASE");
         database.SetToken("");
 
-        NConfig::TCommonConfig commonConfig;
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
    
@@ -74,7 +73,6 @@ public:
 
         RowDispatcher = Runtime.Register(NewRowDispatcher(
             config,
-            commonConfig,
             NKikimr::CreateYdbCredentialsProviderFactory,
             yqSharedResources,
             credentialsFactory,

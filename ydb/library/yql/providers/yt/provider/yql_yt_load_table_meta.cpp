@@ -102,7 +102,7 @@ public:
                     if (State_->Types->IsReadOnly || State_->Types->UseTableMetaFromGraph || tableDesc.HasWriteLock || !HasModifyIntents(tableDesc.Intents)) {
                         // Intents/views can be updated since evaluation phase
                         if (!tableDesc.FillViews(
-                            clusterAndTable.first, clusterAndTable.second, ctx,
+                            clusterAndTable.first, clusterAndTable.second, State_->Types->QContext, ctx,
                             State_->Types->Modules.get(), State_->Types->UrlListerManager.Get(), *State_->Types->RandomProvider,
                             State_->Configuration->ViewIsolation.Get().GetOrElse(false),
                             State_->Types->UdfResolver
@@ -231,7 +231,7 @@ public:
 
                 if (0 == LoadCtx->Epoch) {
                     if (!tableDesc.Fill(
-                        cluster, tableName, ctx,
+                        cluster, tableName, State_->Types->QContext, ctx,
                         State_->Types->Modules.get(), State_->Types->UrlListerManager.Get(), *State_->Types->RandomProvider,
                         State_->Configuration->ViewIsolation.Get().GetOrElse(false),
                         State_->Types->UdfResolver

@@ -44,7 +44,7 @@ plugins {
 {%- endif %}
 }
 {# language level #}
-{%- if target.required_jdk != "" %}
+{%- if target.required_jdk is defined and target.required_jdk|length %}
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of("{{ target.required_jdk }}")
@@ -55,6 +55,11 @@ java {
 
 allOpen {
     annotation("org.springframework.stereotype.Component")
+    annotation("org.springframework.transaction.annotation.Transactional")
+    annotation("org.springframework.scheduling.annotation.Async")
+    annotation("org.springframework.cache.annotation.Cacheable")
+    annotation("org.springframework.boot.test.context.SpringBootTest")
+    annotation("org.springframework.validation.annotation.Validated")
 }
 {%  endif -%}
 {%- if with_kotlin %}

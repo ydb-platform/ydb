@@ -574,5 +574,5 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
       NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
       NLs::IndexKeys({"indexed"}),
         });
-    }    
+    }
 }

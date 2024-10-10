@@ -229,16 +229,16 @@ private: //IDqComputeActorAsyncInput
                     KeysForLookup->emplace(std::move(key), NUdf::TUnboxedValue{});
                 }
             }
+            if (Batches && (!KeysForLookup->empty() || !ReadyQueue.RowCount())) {
+                Batches->Inc();
+                LruHits->Add(ReadyQueue.RowCount());
+                LruMiss->Add(AwaitingQueue.size());
+            }
             if (!KeysForLookup->empty()) {
                 LastLookupTime = now;
                 Send(LookupSourceId, new IDqAsyncLookupSource::TEvLookupRequest(KeysForLookup));
             } else {
                 KeysForLookup.reset();
-            }
-            if (Batches) {
-                Batches->Inc();
-                LruHits->Add(ReadyQueue.RowCount());
-                LruMiss->Add(AwaitingQueue.size());
             }
             DrainReadyQueue(batch);
         }

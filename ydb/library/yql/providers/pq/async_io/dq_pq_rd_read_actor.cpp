@@ -224,7 +224,7 @@ public:
     void ProcessState();
     void Stop(const TString& message);
     void StopSessions();
-    void ReInit();
+    void ReInit(const TString& reason);
     void PrintInternalState();
 };
 
@@ -401,7 +401,12 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStartSessionAck::TPtr& e
 
     ui64 partitionId = ev->Get()->Record.GetConsumer().GetPartitionId();
     auto sessionIt = Sessions.find(partitionId);
-    YQL_ENSURE(sessionIt != Sessions.end(), "Unknown partition id");
+    if (sessionIt == Sessions.end()) {
+        SRC_LOG_W("Ignore TEvStartSessionAck from " << ev->Sender << ", seqNo " << meta.GetSeqNo() 
+            << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << ", PartitionId " << partitionId);
+        YQL_ENSURE(State != EState::STARTED);
+        return;
+    }
     auto& sessionInfo = sessionIt->second;
     if (!sessionInfo.EventsQueue.OnEventReceived(ev)) {
         SRC_LOG_W("Wrong seq num ignore message, seqNo " << meta.GetSeqNo());
@@ -415,7 +420,12 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) 
 
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
     auto sessionIt = Sessions.find(partitionId);
-    YQL_ENSURE(sessionIt != Sessions.end(), "Unknown partition id");
+    if (sessionIt == Sessions.end()) {
+        SRC_LOG_W("Ignore TEvSessionError from " << ev->Sender << ", seqNo " << meta.GetSeqNo() 
+            << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << ", PartitionId " << partitionId);
+        YQL_ENSURE(State != EState::STARTED);
+        return;
+    }
 
     auto& sessionInfo = sessionIt->second;
     if (!sessionInfo.EventsQueue.OnEventReceived(ev)) {
@@ -431,7 +441,12 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatus::TPtr& ev) {
 
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
     auto sessionIt = Sessions.find(partitionId);
-    YQL_ENSURE(sessionIt != Sessions.end(), "Unknown partition id");
+    if (sessionIt == Sessions.end()) {
+        SRC_LOG_W("Ignore TEvStatus from " << ev->Sender << ", seqNo " << meta.GetSeqNo() 
+            << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << ", PartitionId " << partitionId);
+        YQL_ENSURE(State != EState::STARTED);
+        return;
+    }
     auto& sessionInfo = sessionIt->second;
 
     if (!sessionInfo.EventsQueue.OnEventReceived(ev)) {
@@ -452,7 +467,9 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
     auto sessionIt = Sessions.find(partitionId);
     if (sessionIt == Sessions.end()) {
-        Stop("Internal error: unknown partition id " + ToString(partitionId));
+        SRC_LOG_W("Ignore TEvNewDataArrived from " << ev->Sender << ", seqNo " << meta.GetSeqNo() 
+            << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << ", PartitionId " << partitionId);
+        YQL_ENSURE(State != EState::STARTED);
         return;
     }
 
@@ -512,13 +529,12 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr
     }
 
     CoordinatorActorId = ev->Get()->CoordinatorActorId;
-    SRC_LOG_I("Coordinator is changed, reinit all sessions");
-    ReInit();
+    ReInit("Coordinator is changed");
     ProcessState();
 }
 
-void TDqPqRdReadActor::ReInit() {
-    SRC_LOG_I("ReInit state");
+void TDqPqRdReadActor::ReInit(const TString& reason) {
+    SRC_LOG_I("ReInit state, reason " << reason);
     StopSessions();
     Sessions.clear();
     State = EState::INIT;
@@ -582,8 +598,7 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     }
 
     if (CoordinatorActorId && *CoordinatorActorId == ev->Sender) {
-        SRC_LOG_D("TEvUndelivered to coordinator, reinit");
-        ReInit();
+        ReInit("TEvUndelivered to coordinator");
     }
 }
 
@@ -591,15 +606,16 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
     SRC_LOG_T("TEvMessageBatch from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo());
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
-    YQL_ENSURE(Sessions.count(partitionId), "Unknown partition id");
-    auto it = Sessions.find(partitionId);
-    if (it == Sessions.end()) {
-        Stop("Wrong session data");
+    auto sessionIt = Sessions.find(partitionId);
+    if (sessionIt == Sessions.end()) {
+        SRC_LOG_W("Ignore TEvMessageBatch from " << ev->Sender << ", seqNo " << meta.GetSeqNo() 
+            << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << ", PartitionId " << partitionId);
+        YQL_ENSURE(State != EState::STARTED);
         return;
     }
 
     Metrics.InFlyGetNextBatch->Set(0);
-    auto& sessionInfo = it->second;
+    auto& sessionInfo = sessionIt->second;
     if (!sessionInfo.EventsQueue.OnEventReceived(ev)) {
         SRC_LOG_W("Wrong seq num ignore message, seqNo " << meta.GetSeqNo());
         return;
@@ -631,8 +647,7 @@ std::pair<NUdf::TUnboxedValuePod, i64> TDqPqRdReadActor::CreateItem(const TStrin
 }
 
 void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed::TPtr& ev) {
-    SRC_LOG_D("Session closed, event queue id " << ev->Get()->EventQueueId);
-    ReInit();
+    ReInit(TStringBuilder() << "Session closed, event queue id " << ev->Get()->EventQueueId);
 }
 
 void TDqPqRdReadActor::Handle(NActors::TEvents::TEvPong::TPtr& ev) {

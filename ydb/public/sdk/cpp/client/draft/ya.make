@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     ydb_dynamic_config.cpp
     ydb_scripting.cpp
+    ydb_view.cpp
 )
 
 PEERDIR(

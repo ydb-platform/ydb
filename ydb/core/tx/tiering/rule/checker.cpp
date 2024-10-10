@@ -57,7 +57,7 @@ void TTieringRulePreparationActor::ReplySuccess() {
     Controller->OnBuildFinished(std::move(Request), UserToken);
 }
 
-NKikimrSchemeOp::TTieringRuleDescription TTieringRulePreparationActor::GetTieringRule() const {
+const NKikimrSchemeOp::TTieringRuleDescription& TTieringRulePreparationActor::GetTieringRule() const {
     switch (Context.GetActivityType()) {
         case NMetadata::NModifications::IOperationsManager::EActivityType::Undefined:
         case NMetadata::NModifications::IOperationsManager::EActivityType::Upsert:

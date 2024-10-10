@@ -32,7 +32,7 @@ private:
     void StartChecker();
     void AdvanceCheckerState();
     void ReplySuccess();
-    NKikimrSchemeOp::TTieringRuleDescription GetTieringRule() const;
+    const NKikimrSchemeOp::TTieringRuleDescription& GetTieringRule() const;
 protected:
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev);
 public:

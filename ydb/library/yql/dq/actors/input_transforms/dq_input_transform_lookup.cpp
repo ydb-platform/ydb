@@ -93,6 +93,7 @@ public:
         auto [lookupSource, lookupSourceActor] = Factory->CreateDqLookupSource(Settings.GetRightSource().GetProviderName(), std::move(lookupSourceArgs));
         MaxKeysInRequest = lookupSource->GetMaxSupportedKeysInRequest();
         LookupSourceId = RegisterWithSameMailbox(lookupSourceActor);
+        KeysForLookup = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(MaxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
     }
 protected:
     virtual NUdf::EFetchStatus FetchWideInputValue(NUdf::TUnboxedValue* inputRowItems) = 0;
@@ -132,6 +133,8 @@ private: //events
     }
 
     void Handle(IDqAsyncLookupSource::TEvLookupResult::TPtr ev) {
+        if (!KeysForLookup)
+            return;
         auto guard = BindAllocator();
         const auto now = std::chrono::steady_clock::now();
         auto lookupResult = ev->Get()->Result.lock();
@@ -147,7 +150,7 @@ private: //events
         for (auto&& [k, v]: *lookupResult) {
             LruCache->Update(NUdf::TUnboxedValue(const_cast<NUdf::TUnboxedValue&&>(k)), std::move(v), now + CacheTtl);
         }
-        KeysForLookup.reset();
+        KeysForLookup->clear();
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived{InputIndex});
     }
 
@@ -190,11 +193,10 @@ private: //IDqComputeActorAsyncInput
 
         DrainReadyQueue(batch);
 
-        if (InputFlowFetchStatus != NUdf::EFetchStatus::Finish && !KeysForLookup) {
+        if (InputFlowFetchStatus != NUdf::EFetchStatus::Finish && KeysForLookup->empty()) {
              NUdf::TUnboxedValue* inputRowItems;
              NUdf::TUnboxedValue inputRow = HolderFactory.CreateDirectArrayHolder(InputRowType->GetElementsCount(), inputRowItems);
             const auto now = std::chrono::steady_clock::now();
-            KeysForLookup = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(MaxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
             LruCache->Prune(now);
             while (
                 (KeysForLookup->size() < MaxKeysInRequest) &&
@@ -218,8 +220,6 @@ private: //IDqComputeActorAsyncInput
             }
             if (!KeysForLookup->empty()) {
                 Send(LookupSourceId, new IDqAsyncLookupSource::TEvLookupRequest(KeysForLookup));
-            } else {
-                KeysForLookup.reset();
             }
             DrainReadyQueue(batch);
         }

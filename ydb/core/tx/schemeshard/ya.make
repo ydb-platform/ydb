@@ -2,6 +2,8 @@ RECURSE_FOR_TESTS(
     ut_auditsettings
     ut_background_cleaning
     ut_backup
+    ut_backup_collection
+    ut_backup_collection_reboots
     ut_base
     ut_base_reboots
     ut_bsvolume

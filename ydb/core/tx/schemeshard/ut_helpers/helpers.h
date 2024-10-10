@@ -300,6 +300,12 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropBackupCollection);
     DROP_BY_PATH_ID_HELPERS(DropBackupCollection);
 
+    // tiering rule
+    GENERIC_HELPERS(CreateTieringRule);
+    GENERIC_HELPERS(AlterTieringRule);
+    GENERIC_HELPERS(DropTieringRule);
+    DROP_BY_PATH_ID_HELPERS(DropTieringRule);
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS

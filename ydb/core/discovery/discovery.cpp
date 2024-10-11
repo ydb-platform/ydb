@@ -46,6 +46,16 @@ namespace NDiscovery {
         return false;
     }
 
+    bool CheckEndpointId(const TString& endpointId, const NKikimrStateStorage::TEndpointBoardEntry &entry) {
+        if (endpointId.empty() && !entry.HasEndpointId())
+            return true;
+
+        if (entry.HasEndpointId() && entry.GetEndpointId() == endpointId)
+            return true;
+
+        return false;
+    }
+
     bool IsSafeLocationMarker(TStringBuf location) {
         const ui8* isrc = reinterpret_cast<const ui8*>(location.data());
         for (auto idx : xrange(location.size())) {
@@ -128,6 +138,7 @@ namespace NDiscovery {
                 const TMap<TActorId, TEvStateStorage::TBoardInfoEntry>& prevInfoEntries,
                 TMap<TActorId, TEvStateStorage::TBoardInfoEntry> newInfoEntries,
                 TSet<TString> services,
+                TString endpointId,
                 const THolder<TEvInterconnect::TEvNodeInfo>& nameserviceResponse) {
         TMap<TActorId, TEvStateStorage::TBoardInfoEntry> infoEntries;
         if (prevInfoEntries.empty()) {

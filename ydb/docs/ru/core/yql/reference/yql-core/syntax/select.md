@@ -44,7 +44,7 @@
 
 {% endif %}
 
-{% if feature_mapreduce %}
+{% if yt %}
 
   {% include [x](_includes/select/folder.md) %}
 

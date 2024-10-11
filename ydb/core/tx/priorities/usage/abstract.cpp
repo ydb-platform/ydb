@@ -14,8 +14,10 @@ TAllocationGuard::~TAllocationGuard() {
 
 void TAllocationGuard::Release() {
     AFL_VERIFY(!Released);
-    auto& context = NActors::TActorContext::AsActorContext();
-    context.Send(ServiceActorId, new TEvExecution::TEvFree(ClientId, Count));
+    if (TlsActivationContext) {
+        auto& context = NActors::TActorContext::AsActorContext();
+        context.Send(ServiceActorId, new TEvExecution::TEvFree(ClientId, Count));
+    }
     Released = true;
 }
 

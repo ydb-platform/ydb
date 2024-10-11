@@ -578,6 +578,7 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/lib/deprecated/kicli
     ydb/public/lib/json_value
+    ydb/public/lib/ydb_cli/common
     ydb/public/api/grpc
     ydb/public/sdk/cpp/client/ydb_types
     contrib/libs/yaml-cpp

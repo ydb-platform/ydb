@@ -53,11 +53,6 @@ class TMetadataUploader: public TActorBootstrapped<TMetadataUploader> {
         return TStringBuilder() << settings.items(itemIdx).destination_prefix() << "/metadata.json";
     }
 
-    void Bootstrap() {
-        Client = this->RegisterWithSameMailbox(NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
-        UploadMetadata();
-    }
-
     void Handle(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         if (ev->Get()->IsSuccess()) {
             Send(ReplyTo, new TEvPrivate::TEvExportMetadataUploaded(ExportInfo->Id, ItemIdx, true, ""));
@@ -104,6 +99,11 @@ public:
         }
     }
     
+    void Bootstrap() {
+        Client = this->RegisterWithSameMailbox(NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
+        UploadMetadata();
+    }
+
 private:
     const TActorId ReplyTo;
     TExportInfo::TPtr ExportInfo;

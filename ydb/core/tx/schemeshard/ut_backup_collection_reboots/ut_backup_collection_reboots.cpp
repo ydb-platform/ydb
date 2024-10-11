@@ -9,30 +9,28 @@ Y_UNIT_TEST_SUITE(TBackupCollectionWithRebootsTests) {
     TString DefaultCollectionSettings() {
         return R"(
             Name: ")" DEFAULT_NAME_1 R"("
-            Properties {
-                ExplicitEntryList {
-                    Entries {
-                        Type: ETypeTable
-                        Path: "/MyRoot/Table1"
-                    }
+
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/Table1"
                 }
-                Cluster: NULL_VALUE
             }
+            Cluster {}
         )";
     }
 
     TString CollectionSettings(const TString& name) {
         return Sprintf(R"(
             Name: "%s"
-            Properties {
-                ExplicitEntryList {
-                    Entries {
-                        Type: ETypeTable
-                        Path: "/MyRoot/Table1"
-                    }
+
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/Table1"
                 }
-                Cluster: NULL_VALUE
             }
+            Cluster {}
         )", name.c_str());
     }
 
@@ -46,22 +44,23 @@ Y_UNIT_TEST_SUITE(TBackupCollectionWithRebootsTests) {
 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId, t.TxId - 1});
 
-            NKikimrSchemeOp::TBackupCollectionProperties properties;
+            NKikimrSchemeOp::TBackupCollectionDescription properties;
+            properties.SetName(DEFAULT_NAME_1);
             auto& entry = *properties.MutableExplicitEntryList()->AddEntries();
-            entry.SetType(::NKikimrSchemeOp::TBackupCollectionProperties_TBackupEntry_EType_ETypeTable);
+            entry.SetType(::NKikimrSchemeOp::TBackupCollectionDescription_TBackupEntry_EType_ETypeTable);
             entry.SetPath("/MyRoot/Table1");
-            properties.SetCluster(::google::protobuf::NULL_VALUE);
+            properties.MutableCluster();
 
             {
                 TInactiveZone inactive(activeZone);
-                auto describeResult =  DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1);
+                auto describeResult = DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1);
                 TestDescribeResult(describeResult, {NLs::Finished});
 
                 UNIT_ASSERT(describeResult.GetPathDescription().HasBackupCollectionDescription());
                 const auto& backupCollectionDescription = describeResult.GetPathDescription().GetBackupCollectionDescription();
                 UNIT_ASSERT_VALUES_EQUAL(backupCollectionDescription.GetName(), DEFAULT_NAME_1);
                 UNIT_ASSERT_VALUES_EQUAL(backupCollectionDescription.GetVersion(), 0);
-                UNIT_ASSERT_VALUES_EQUAL(backupCollectionDescription.GetProperties().DebugString(), properties.DebugString());
+                UNIT_ASSERT_VALUES_EQUAL(backupCollectionDescription.DebugString(), properties.DebugString());
             }
         });
     }

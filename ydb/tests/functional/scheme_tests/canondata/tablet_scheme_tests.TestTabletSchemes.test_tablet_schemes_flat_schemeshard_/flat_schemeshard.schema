@@ -7514,7 +7514,7 @@
             },
             {
                 "ColumnId": 4,
-                "ColumnName": "Properties",
+                "ColumnName": "Description",
                 "ColumnType": "String"
             }
         ],

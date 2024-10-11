@@ -13,30 +13,28 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
     TString DefaultCollectionSettings() {
         return R"(
             Name: ")" DEFAULT_NAME_1 R"("
-            Properties {
-                ExplicitEntryList {
-                    Entries {
-                        Type: ETypeTable
-                        Path: "/MyRoot/Table1"
-                    }
+
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/Table1"
                 }
-                Cluster: NULL_VALUE
             }
+            Cluster: {}
         )";
     }
 
     TString CollectionSettings(const TString& name) {
         return Sprintf(R"(
             Name: "%s"
-            Properties {
-                ExplicitEntryList {
-                    Entries {
-                        Type: ETypeTable
-                        Path: "/MyRoot/Table1"
-                    }
+
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/Table1"
                 }
-                Cluster: NULL_VALUE
             }
+            Cluster: {}
         )", name.c_str());
     }
 

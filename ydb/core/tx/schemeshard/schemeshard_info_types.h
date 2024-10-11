@@ -3424,16 +3424,16 @@ struct TBackupCollectionInfo : TSimpleRefCount<TBackupCollectionInfo> {
         return new TBackupCollectionInfo();
     }
 
-    static TPtr Create(const NKikimrSchemeOp::TBackupCollection& desc) {
+    static TPtr Create(const NKikimrSchemeOp::TBackupCollectionDescription& desc) {
         TPtr result = New();
 
-        result->Properties = desc.GetProperties();
+        result->Description = desc;
 
         return result;
     }
 
     ui64 AlterVersion = 0;
-    NKikimrSchemeOp::TBackupCollectionProperties Properties;
+    NKikimrSchemeOp::TBackupCollectionDescription Description;
 };
 
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,

@@ -23,6 +23,7 @@ import "ydb/core/tx/columnshard/engines/scheme/defaults/protos/data.proto";
 import "ydb/core/tx/columnshard/common/protos/snapshot.proto";
 import "ydb/library/formats/arrow/protos/accessor.proto";
 
+import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
 
 package NKikimrSchemeOp;
@@ -1762,43 +1763,6 @@ message TAlterShards {
     }
 }
 
-message TBackupCollectionProperties {
-    message TBackupEntry {
-        enum EType {
-            ETypeInvalid = 0;
-            ETypeTable = 1;
-        }
-
-        optional EType Type = 1;
-        optional string Path = 2;
-    }
-
-    message TExplicitEntryList {
-        repeated TBackupEntry Entries = 1;
-    }
-
-    message TIncrementalBackupConfig {
-
-    }
-
-    oneof Entries {
-        google.protobuf.NullValue Database = 1;
-        TExplicitEntryList ExplicitEntryList = 2;
-    }
-
-    // non-empty enables data-collection
-    optional TIncrementalBackupConfig IncrementalBackupConfig = 3;
-
-    oneof Storage {
-        google.protobuf.NullValue Cluster = 4;
-    }
-}
-
-message TBackupCollection {
-    optional string Name = 1;
-    optional TBackupCollectionProperties Properties = 2;
-}
-
 // Request for scheme modification
 // Has only one of the operations
 message TModifyScheme {
@@ -1895,9 +1859,9 @@ message TModifyScheme {
 
     optional TRestoreIncrementalBackup RestoreIncrementalBackup = 73;
 
-    optional TBackupCollection CreateBackupCollection = 74;
-    optional TBackupCollection AlterBackupCollection = 75;
-    optional TBackupCollection DropBackupCollection = 76;
+    optional TBackupCollectionDescription CreateBackupCollection = 74;
+    optional TBackupCollectionDescription AlterBackupCollection = 75;
+    optional TBackupCollectionDescription DropBackupCollection = 76;
 }
 
 message TCopySequence {
@@ -2256,5 +2220,34 @@ message TBackupCollectionDescription {
     optional string Name = 1;
     optional NKikimrProto.TPathID PathId = 2;
     optional uint64 Version = 3;
-    optional TBackupCollectionProperties Properties = 4;
+
+    message TBackupEntry {
+        enum EType {
+            ETypeInvalid = 0;
+            ETypeTable = 1;
+        }
+
+        optional EType Type = 1;
+        optional string Path = 2;
+    }
+
+    message TExplicitEntryList {
+        repeated TBackupEntry Entries = 1;
+    }
+
+    message TIncrementalBackupConfig {
+
+    }
+
+    oneof Entries {
+        google.protobuf.Empty Database = 4;
+        TExplicitEntryList ExplicitEntryList = 5;
+    }
+
+    // non-empty enables data-collection
+    optional TIncrementalBackupConfig IncrementalBackupConfig = 6;
+
+    oneof Storage {
+        google.protobuf.Empty Cluster = 7;
+    }
 }

@@ -1076,7 +1076,7 @@ void TPathDescriber::DescribeBackupCollection(TPathId pathId, TPathElement::TPtr
     entry->SetName(pathEl->Name);
     PathIdFromPathId(pathId, entry->MutablePathId());
     entry->SetVersion(backupCollectionInfo->AlterVersion);
-    entry->MutableProperties()->CopyFrom(backupCollectionInfo->Properties);
+    entry->CopyFrom(backupCollectionInfo->Description);
 }
 
 static bool ConsiderAsDropped(const TPath& path) {

@@ -3006,7 +3006,7 @@ void TSchemeShard::PersistBackupCollection(NIceDb::TNiceDb& db, TPathId pathId, 
 
     db.Table<Schema::BackupCollection>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
         NIceDb::TUpdate<Schema::BackupCollection::AlterVersion>{backupCollection->AlterVersion},
-        NIceDb::TUpdate<Schema::BackupCollection::Properties>{backupCollection->Properties.SerializeAsString()}
+        NIceDb::TUpdate<Schema::BackupCollection::Description>{backupCollection->Description.SerializeAsString()}
     );
 }
 

@@ -1970,7 +1970,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 auto& backupCollection = Self->BackupCollections[pathId] = new TBackupCollectionInfo();
                 backupCollection->AlterVersion = rowset.GetValue<Schema::BackupCollection::AlterVersion>();
-                Y_PROTOBUF_SUPPRESS_NODISCARD backupCollection->Properties.ParseFromString(rowset.GetValue<Schema::BackupCollection::Properties>());
+                Y_PROTOBUF_SUPPRESS_NODISCARD backupCollection->Description.ParseFromString(rowset.GetValue<Schema::BackupCollection::Description>());
                 Self->IncrementPathDbRefCount(pathId);
 
                 if (!rowset.Next()) {

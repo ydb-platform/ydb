@@ -5,5 +5,5 @@
 | [Hibernate](https://hibernate.org/orm/)                         | [Instruction](../hibernate.md)          |
 | [Spring Data JDBC](https://spring.io/projects/spring-data-jdbc) | [Instruction](../spring-data-jdbc.md)   |
 | [JOOQ](https://www.jooq.org/)                                   | [Instruction](../jooq.md)               |
-| [Dapper](https://www.learndapper.com/)                                                       | [Instuction](../dapper) |
+| [Dapper](https://www.learndapper.com/)                                                       | [Instruction](../dapper.md) |
 

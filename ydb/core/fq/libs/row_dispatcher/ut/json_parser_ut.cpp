@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
         MakeParser({"a1", "a2"});
 
         TJsonParserBuffer& buffer = Parser->GetBuffer();
-        buffer.AddValue(R"({"a1": "hello1", "a2": 101, "event": "event1"})");
+        buffer.AddValue(R"({"a1": "hello1", "a2": "101", "event": "event1"})");
         buffer.AddValue(R"({"a1": "hello1", "a2": "101", "event": "event2"})");
         buffer.AddValue(R"({"a2": "101", "a1": "hello1", "event": "event3"})");
 
@@ -131,6 +131,57 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
             UNIT_ASSERT_VALUES_EQUAL_C("hello1", result.front(), i);
             UNIT_ASSERT_VALUES_EQUAL_C("101", result.back(), i);
         }
+    }
+
+    Y_UNIT_TEST_F(MissingFields, TFixture) {
+        MakeParser({"a1", "a2"});
+
+        TJsonParserBuffer& buffer = Parser->GetBuffer();
+        buffer.AddValue(R"({"a1": "hello1", "a2": "101", "event": "event1"})");
+        buffer.AddValue(R"({"a1": "hello1", "event": "event2"})");
+        buffer.AddValue(R"({"a2": "101", "a1": null, "event": "event3"})");
+
+        ParsedValues = Parser->Parse();
+        ResultNumberValues = ParsedValues.front().size();
+        UNIT_ASSERT_VALUES_EQUAL(3, ResultNumberValues);
+        for (size_t i = 0; i < ResultNumberValues; ++i) {
+            const auto& result = GetParsedRow(i);
+            UNIT_ASSERT_VALUES_EQUAL_C(2, result.size(), i);
+            UNIT_ASSERT_VALUES_EQUAL_C(i != 2 ? "hello1" : "", result.front(), i);
+            UNIT_ASSERT_VALUES_EQUAL_C(i != 1 ? "101" : "", result.back(), i);
+        }
+    }
+
+    Y_UNIT_TEST_F(NestedTypes, TFixture) {
+        MakeParser({"nested", "a1"}, {"Optional<Json>", "String"});
+
+        TJsonParserBuffer& buffer = Parser->GetBuffer();
+        buffer.AddValue(R"({"a1": "hello1", "nested": {"key": "value"}})");
+        buffer.AddValue(R"({"a1": "hello1", "nested": ["key1", "key2"]})");
+
+        ParsedValues = Parser->Parse();
+        ResultNumberValues = ParsedValues.front().size();
+        UNIT_ASSERT_VALUES_EQUAL(2, ResultNumberValues);
+
+        const auto& nestedJson = GetParsedRow(0);
+        UNIT_ASSERT_VALUES_EQUAL(2, nestedJson.size());
+        UNIT_ASSERT_VALUES_EQUAL("{\"key\": \"value\"}", nestedJson.front());
+        UNIT_ASSERT_VALUES_EQUAL("hello1", nestedJson.back());
+
+        const auto& nestedList = GetParsedRow(1);
+        UNIT_ASSERT_VALUES_EQUAL(2, nestedList.size());
+        UNIT_ASSERT_VALUES_EQUAL("[\"key1\", \"key2\"]", nestedList.front());
+        UNIT_ASSERT_VALUES_EQUAL("hello1", nestedList.back());
+    }
+
+    Y_UNIT_TEST_F(StringTypeValidation, TFixture) {
+        MakeParser({"a1"}, {"String"});
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(R"({"a1": 1234})"), simdjson::simdjson_error, "INCORRECT_TYPE: The JSON element does not have the requested type.");
+    }
+
+    Y_UNIT_TEST_F(JsonTypeValidation, TFixture) {
+        MakeParser({"a1"}, {"Int32"});
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(R"({"a1": {"key": "value"}})"), yexception, "Failed to parse json string, expected scalar type for column 'a1' with type Int32 but got nested json, please change column type to Json.");
     }
 
     Y_UNIT_TEST_F(ThrowExceptionByError, TFixture) {

@@ -87,7 +87,7 @@ public:
     THashMap<ui64, NOlap::TTiering> GetTiering() const;
     void EnablePathId(const ui64 pathId, const TString& tieringId);
     void DisablePathId(const ui64 pathId);
-    void OnConfigsUpdated();
+    void OnConfigsUpdated(bool notifyShard = true);
     bool IsReady() const {
         return HasCompleteData;
     }

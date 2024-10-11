@@ -103,7 +103,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
 
 void TColumnShard::Handle(TEvPrivate::TEvTieringModified::TPtr& /*ev*/, const TActorContext& /*ctx*/) {
     if (NYDBTest::TControllers::GetColumnShardController()->OverrideTieringSnapshot(Tiers->MutableTiers(), Tiers->MutableTieringRules())) {
-        Tiers->OnConfigsUpdated();
+        Tiers->OnConfigsUpdated(false);
     }
 
     OnTieringModified();

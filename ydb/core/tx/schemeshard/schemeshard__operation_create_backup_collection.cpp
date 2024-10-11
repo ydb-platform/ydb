@@ -210,9 +210,22 @@ public:
             }
         }
 
-        TPath dstPath = rootPath.Child(name);
-
         const TString& backupCollectionsDir = JoinPath({rootPath.GetDomainPathString(), ".backups/collections"});
+
+        TPathSplitUnix absPathSplit(name);
+
+        if (absPathSplit.size() > 1 && !absPathSplit.IsAbsolute) {
+            result->SetError(NKikimrScheme::EStatus::StatusSchemeError, TStringBuilder() << "Backup collections must be placed directly in " << backupCollectionsDir);
+            return result;
+        }
+
+        std::optional<TPath> parentPath;
+        if (absPathSplit.size() > 1) {
+            TString realParent = "/" + JoinRange("/", absPathSplit.begin(), absPathSplit.end() - 1);
+            parentPath = TPath::Resolve(realParent, context.SS);
+        }
+
+        TPath dstPath = absPathSplit.IsAbsolute && parentPath ? parentPath->Child(TString(absPathSplit.back())) : rootPath.Child(name);
 
         if (!dstPath.PathString().StartsWith(backupCollectionsDir + "/")) {
             result->SetError(NKikimrScheme::EStatus::StatusSchemeError, TStringBuilder() << "Backup collections must be placed in " << backupCollectionsDir);

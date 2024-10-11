@@ -28,7 +28,7 @@
 #include <ydb/core/util/tuples.h>
 
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
-#include <ydb/core/protos/sys_view.pb.h>
+#include <ydb/core/sys_view/common/events.h>
 
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
 #include <regex>

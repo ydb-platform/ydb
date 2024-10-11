@@ -7,6 +7,7 @@
 #include <ydb/core/mon/sync_http_mon.h>
 #include <ydb/core/mon/async_http_mon.h>
 #include <ydb/core/mon_alloc/profiler.h>
+#include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/tablet/tablet_impl.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>

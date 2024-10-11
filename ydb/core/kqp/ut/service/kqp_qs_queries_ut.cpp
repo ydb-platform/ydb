@@ -2892,7 +2892,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         auto client = kikimr.GetQueryClient();
         {
-            auto prepareResult = client.ExecuteQuery(R"(
+            auto result = client.ExecuteQuery(R"(
                 UPSERT INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES
                     (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12), (4u, NULL, 13);
                 UPSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES

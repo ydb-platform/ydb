@@ -22,8 +22,6 @@ void MarkSrcDropped(NIceDb::TNiceDb& db,
     srcPath->SetDropped(txState.PlanStep, operationId.GetTxId());
     context.SS->PersistDropStep(db, srcPath->PathId, txState.PlanStep, operationId);
     context.SS->PersistSequenceRemove(db, srcPath->PathId);
-    context.SS->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Add(-srcPath->UserAttrs->Size());
-    context.SS->PersistUserAttributes(db, srcPath->PathId, srcPath->UserAttrs, nullptr);
 
     srcPath.Parent()->DecAliveChildren();
     srcPath.DomainInfo()->DecPathsInside();
@@ -873,16 +871,6 @@ public:
             }
         }
 
-        auto domainPathId = dstParentPath.GetPathIdForDomain();
-        auto domainInfo = dstParentPath.DomainInfo();
-
-        Y_ABORT_UNLESS(context.SS->Sequences.contains(srcPath.Base()->PathId));
-        TSequenceInfo::TPtr srcSequence = context.SS->Sequences.at(srcPath.Base()->PathId);
-        Y_ABORT_UNLESS(!srcSequence->Sharding.GetSequenceShards().empty());
-
-        const auto& protoSequenceShard = *srcSequence->Sharding.GetSequenceShards().rbegin();
-        TShardIdx sequenceShard = FromProto(protoSequenceShard);
-
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
 
         {
@@ -938,17 +926,37 @@ public:
             return result;
         }
 
-        dstPath.MaterializeLeaf(srcPath.Base()->Owner);
+        auto guard = context.DbGuard();
+        TPathId allocatedPathId = context.SS->AllocatePathId();
+        context.MemChanges.GrabNewPath(context.SS, allocatedPathId);
+        context.MemChanges.GrabPath(context.SS, dstParentPath.Base()->PathId);
+        context.MemChanges.GrabPath(context.SS, srcPath.Base()->PathId);
+        context.MemChanges.GrabPath(context.SS, srcPath.Base()->ParentPathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+        context.MemChanges.GrabNewSequence(context.SS, allocatedPathId);
+
+        context.DbChanges.PersistPath(allocatedPathId);
+        context.DbChanges.PersistPath(dstParentPath.Base()->PathId);
+        context.DbChanges.PersistPath(srcPath.Base()->PathId);
+        context.DbChanges.PersistPath(srcPath.Base()->ParentPathId);
+        context.DbChanges.PersistSequence(allocatedPathId);
+        context.DbChanges.PersistAlterSequence(allocatedPathId);
+        context.DbChanges.PersistTxState(OperationId);
+
+        dstPath.MaterializeLeaf(srcPath.Base()->Owner, allocatedPathId, /*allowInactivePath*/ true);
         result->SetPathId(dstPath->PathId.LocalPathId);
-
-        srcPath.Base()->PathState = TPathElement::EPathState::EPathStateMoving;
-        srcPath.Base()->LastTxId = OperationId.GetTxId();
-
-        TPathId pathId = dstPath->PathId;
         dstPath->CreateTxId = OperationId.GetTxId();
         dstPath->LastTxId = OperationId.GetTxId();
         dstPath->PathState = TPathElement::EPathState::EPathStateCreate;
         dstPath->PathType = TPathElement::EPathType::EPathTypeSequence;
+        if (!acl.empty()) {
+            dstPath->ApplyACL(acl);
+        }
+
+        dstParentPath->IncAliveChildren();
+
+        srcPath.Base()->PathState = TPathElement::EPathState::EPathStateMoving;
+        srcPath.Base()->LastTxId = OperationId.GetTxId();
 
         if (dstParentPath->HasActiveChanges()) {
             TTxId parentTxId = dstParentPath->PlannedToCreate() ? dstParentPath->CreateTxId : dstParentPath->LastTxId;
@@ -956,8 +964,15 @@ public:
         }
 
         TTxState& txState =
-            context.SS->CreateTx(OperationId, TTxState::TxMoveSequence, pathId, srcPath.Base()->PathId);
+            context.SS->CreateTx(OperationId, TTxState::TxMoveSequence, dstPath.Base()->PathId, srcPath.Base()->PathId);
         txState.State = TTxState::Propose;
+
+        Y_ABORT_UNLESS(context.SS->Sequences.contains(srcPath.Base()->PathId));
+        TSequenceInfo::TPtr srcSequence = context.SS->Sequences.at(srcPath.Base()->PathId);
+        Y_ABORT_UNLESS(!srcSequence->Sharding.GetSequenceShards().empty());
+
+        const auto& protoSequenceShard = *srcSequence->Sharding.GetSequenceShards().rbegin();
+        TShardIdx sequenceShard = FromProto(protoSequenceShard);
 
         TSequenceInfo::TPtr sequenceInfo = new TSequenceInfo(0);
         sequenceInfo->AlterData = srcSequence->CreateNextVersion();
@@ -974,33 +989,9 @@ public:
             p->SetLocalId(ui64(sequenceShard.GetLocalId()));
         }
 
-        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->Sequences[dstPath.Base()->PathId] = sequenceInfo;
 
-        context.SS->ChangeTxState(db, OperationId, txState.State);
-        context.OnComplete.ActivateTx(OperationId);
-
-        context.SS->PersistPath(db, dstPath->PathId);
-        if (!acl.empty()) {
-            dstPath->ApplyACL(acl);
-            context.SS->PersistACL(db, dstPath.Base());
-        }
-
-        context.SS->Sequences[pathId] = sequenceInfo;
-        context.SS->PersistSequence(db, pathId, *sequenceInfo);
-        context.SS->PersistSequenceAlter(db, pathId, *sequenceInfo->AlterData);
-        context.SS->IncrementPathDbRefCount(pathId);
-
-        context.SS->PersistTxState(db, OperationId);
-        context.SS->PersistUpdateNextPathId(db);
-
-        for (auto shard : txState.Shards) {
-            if (shard.Operation == TTxState::CreateParts) {
-                context.SS->PersistChannelsBinding(db, shard.Idx, context.SS->ShardInfos.at(shard.Idx).BindedChannels);
-                context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, domainPathId, OperationId.GetTxId(), shard.TabletType);
-            }
-        }
-
-        dstParentPath->IncAliveChildren();
+        context.SS->IncrementPathDbRefCount(dstPath.Base()->PathId);
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, srcPath, context.SS, context.OnComplete);

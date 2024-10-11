@@ -87,6 +87,10 @@ class TestPqRowDispatcher(TestYdsBase):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
+        connections = client.list_connections(fq.Acl.Visibility.PRIVATE).result.connection
+        assert len(connections) == 1
+        assert connections[0].content.setting.data_streams.shared_reading == True
+
         self.init_topics("test_read_raw_format_without_row_dispatcher", create_output=False)
         output_topic = "pq_test_pq_read_write_output"
         create_stream(output_topic, partitions_count=1)
@@ -377,8 +381,8 @@ class TestPqRowDispatcher(TestYdsBase):
 
         sql3 = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{output_topic3}`
-            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
-            WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''
+            SELECT event FROM {YDS_CONNECTION}.`{self.input_topic}`
+            WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, event String NOT NULL));'''
         query_id3 = start_yds_query(kikimr, client, sql3)
 
         data = [
@@ -387,11 +391,11 @@ class TestPqRowDispatcher(TestYdsBase):
         ]
 
         self.write_stream(data)
-        expected = ['103', '104']
-
-        assert self.read_stream(len(expected), topic_path=output_topic1) == expected
-        assert self.read_stream(len(expected), topic_path=output_topic2) == expected
-        assert self.read_stream(len(expected), topic_path=output_topic3) == expected
+        expected12 = ['103', '104']
+        expected3 = ['event3', 'event4']
+        assert self.read_stream(len(expected), topic_path=output_topic1) == expected12
+        assert self.read_stream(len(expected), topic_path=output_topic2) == expected12
+        assert self.read_stream(len(expected), topic_path=output_topic3) == expected3
 
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
 

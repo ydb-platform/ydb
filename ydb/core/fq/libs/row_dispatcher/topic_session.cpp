@@ -10,6 +10,8 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/dq/runtime/dq_async_stats.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+
+#include <util/string/join.h>
 #include <util/generic/queue.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/json_parser.h>
@@ -62,13 +64,11 @@ struct TEvPrivate {
     struct TEvCreateSession : public NActors::TEventLocal<TEvCreateSession, EvCreateSession> {};
     struct TEvPrintState : public NActors::TEventLocal<TEvPrintState, EvPrintState> {};
     struct TEvStatus : public NActors::TEventLocal<TEvStatus, EvStatus> {};
-
     struct TEvDataFiltered : public NActors::TEventLocal<TEvDataFiltered, EvDataFiltered> {
         TEvDataFiltered(ui64 offset, ui64 numberValues) 
             : Offset(offset)
             , NumberValues(numberValues)
         {}
-
         const ui64 Offset; 
         const ui64 NumberValues;
     };
@@ -95,7 +95,7 @@ TVector<TString> GetVector(const google::protobuf::RepeatedPtrField<TString>& va
 class TTopicSession : public TActorBootstrapped<TTopicSession> {
 
 private:
-    using TParserInputType = std::pair< TVector<TString>, TVector<TString>>; // TODO: remove after YQ-3594
+    using TParserInputType = TSet<std::pair<TString, TString>>;
 
     struct ClientsInfo {
         ClientsInfo(const NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev)
@@ -114,6 +114,7 @@ private:
         bool DataArrivedSent = false;
         TMaybe<ui64> NextMessageOffset;
         ui64 LastSendedNextMessageOffset = 0;
+        TVector<ui64> FieldsIds;
     };
 
     struct TTopicEventProcessor {
@@ -128,6 +129,11 @@ private:
 
         TTopicSession& Self;
         const TString& LogPrefix;    
+    };
+
+    struct TParserSchema {
+        TVector<ui64> FieldsMap;    // index - FieldId (from FieldsIndexes), value - parsing schema offset
+        TParserInputType InputType;
     };
 
     const TString TopicPath;
@@ -147,9 +153,10 @@ private:
     std::unique_ptr<TJsonParser> Parser;
     NConfig::TRowDispatcherConfig Config;
     ui64 UsedSize = 0;
-    TMaybe<TParserInputType> CurrentParserTypes;
     const ::NMonitoring::TDynamicCounterPtr Counters;
     TTopicSessionMetrics Metrics;
+    TParserSchema ParserSchema;
+    THashMap<TString, ui64> FieldsIndexes;
 
 public:
     explicit TTopicSession(
@@ -176,7 +183,7 @@ private:
     void SendToParsing(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
     void SendToFiltering(ui64 offset, const TVector<TVector<std::string_view>>& parsedValues);
     void SendData(ClientsInfo& info);
-    void InitParser(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams);
+    void UpdateParser();
     void FatalError(const TString& message, const std::unique_ptr<TJsonFilter>* filter = nullptr);
     void SendDataArrived(ClientsInfo& client);
     void StopReadSession();
@@ -200,6 +207,9 @@ private:
 
     void PrintInternalState();
     void SendSessionError(NActors::TActorId readActorId, const TString& message);
+    TVector<TVector<std::string_view>> RebuildJson(const ClientsInfo& info, const TVector<TVector<std::string_view>>& parsedValues);
+    void UpdateParserSchema(const TParserInputType& inputType);
+    void UpdateFieldsIds(ClientsInfo& clientInfo);
 
 private:
 
@@ -340,11 +350,11 @@ void TTopicSession::CreateTopicSession() {
         return;
     }
 
-    // Use any sourceParams.
-    const NYql::NPq::NProto::TDqPqTopicSource& sourceParams = Clients.begin()->second.Settings.GetSource();
-
     if (!ReadSession) {
-        InitParser(sourceParams);
+        UpdateParser();
+    
+        // Use any sourceParams.
+        const NYql::NPq::NProto::TDqPqTopicSource& sourceParams = Clients.begin()->second.Settings.GetSource();
         ReadSession = GetTopicClient(sourceParams).CreateReadSession(GetReadSessionSettings(sourceParams));
         SubscribeOnNextEvent();
     }
@@ -362,8 +372,21 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&) {
     CreateTopicSession();
 }
 
+TVector<TVector<std::string_view>> TTopicSession::RebuildJson(const ClientsInfo& info, const TVector<TVector<std::string_view>>& parsedValues) {
+    TVector<TVector<std::string_view>> result;
+    const auto& offsets = ParserSchema.FieldsMap;
+    result.reserve(info.FieldsIds.size());
+    for (auto fieldId : info.FieldsIds) {
+        Y_ENSURE(fieldId < offsets.size(), "fieldId " << fieldId << ", offsets.size() " << offsets.size());
+        auto offset = offsets[fieldId];
+        Y_ENSURE(offset < parsedValues.size(), "offset " << offset << ", jsonBatch.size() " << parsedValues.size());
+        result.push_back(parsedValues[offset]); 
+    }
+    return result;
+}
+
 void TTopicSession::Handle(NFq::TEvPrivate::TEvDataAfterFilteration::TPtr& ev) {
-    LOG_ROW_DISPATCHER_TRACE("TEvDataAfterFilteration, read actor id " << ev->Get()->ReadActorId.ToString());
+    LOG_ROW_DISPATCHER_TRACE("TEvDataAfterFilteration, read actor id " << ev->Get()->ReadActorId.ToString() << ", " << ev->Get()->Json);
     auto it = Clients.find(ev->Get()->ReadActorId);
     if (it == Clients.end()) {
         LOG_ROW_DISPATCHER_ERROR("Skip DataAfterFilteration, wrong read actor, id " << ev->Get()->ReadActorId.ToString());
@@ -537,12 +560,12 @@ void TTopicSession::SendToParsing(const TVector<NYdb::NTopic::TReadSessionEvent:
 
 void TTopicSession::SendToFiltering(ui64 offset, const TVector<TVector<std::string_view>>& parsedValues) {
     Y_ENSURE(parsedValues, "Expected non empty schema");
-    LOG_ROW_DISPATCHER_TRACE("TEvDataParsed, offset " << offset << ", data:\n" << Parser->GetDebugString(parsedValues));
+    LOG_ROW_DISPATCHER_TRACE("SendToFiltering, offset " << offset << ", data:\n" << Parser->GetDebugString(parsedValues));
 
     for (auto& [actorId, info] : Clients) {
         try {
             if (info.Filter) {
-                info.Filter->Push(offset, parsedValues);
+                info.Filter->Push(offset, RebuildJson(info, parsedValues));
             }
         } catch (const std::exception& e) {
             FatalError(e.what(), &info.Filter);
@@ -590,6 +613,19 @@ void TTopicSession::SendData(ClientsInfo& info) {
     info.LastSendedNextMessageOffset = *info.NextMessageOffset;
 }
 
+void TTopicSession::UpdateFieldsIds(ClientsInfo& info) {
+    for (auto name : info.Settings.GetSource().GetColumns()) {
+        auto it = FieldsIndexes.find(name);
+        if (it == FieldsIndexes.end()) {
+            auto nextIndex = FieldsIndexes.size();
+            info.FieldsIds.push_back(nextIndex);
+            FieldsIndexes[name] = nextIndex;
+        } else {
+            info.FieldsIds.push_back(it->second);
+        }
+    }
+}
+
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto it = Clients.find(ev->Sender);
     if (it != Clients.end()) {
@@ -597,21 +633,18 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
         return;
     }
 
-    LOG_ROW_DISPATCHER_INFO("New client, read actor id " << ev->Sender.ToString());
+    LOG_ROW_DISPATCHER_INFO("New client: read actor id " << ev->Sender.ToString() << ", predicate: " 
+        << ev->Get()->Record.GetSource().GetPredicate() << ", offset: " << ev->Get()->Record.GetOffset());
 
     auto columns = GetVector(ev->Get()->Record.GetSource().GetColumns());
     auto types = GetVector(ev->Get()->Record.GetSource().GetColumnTypes());
-    auto parserType = std::make_pair(columns, types);
-    if (CurrentParserTypes && *CurrentParserTypes != parserType) {
-        SendSessionError(ev->Sender, "Different columns/types, use same in all queries");
-        return;
-    }
 
     try {
         auto& clientInfo = Clients.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(ev->Sender), 
             std::forward_as_tuple(ev)).first->second;
+        UpdateFieldsIds(clientInfo);
 
         TString predicate = clientInfo.Settings.GetSource().GetPredicate();
         if (!predicate.empty()) {
@@ -626,11 +659,9 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
             ClientsWithoutPredicate.insert(ev->Sender);
         }
 
-        LOG_ROW_DISPATCHER_INFO("New client: offset " << clientInfo.NextMessageOffset << ", predicate: " << clientInfo.Settings.GetSource().GetPredicate());
-
         if (ReadSession) {
             if (clientInfo.Settings.HasOffset() && (clientInfo.Settings.GetOffset() <= LastMessageOffset)) {
-                LOG_ROW_DISPATCHER_INFO("New client has less offset than the last message, stop (restart) topic session");
+                LOG_ROW_DISPATCHER_INFO("New client has less offset (" << clientInfo.Settings.GetOffset() << ") than the last message (" << LastMessageOffset << "), stop (restart) topic session");
                 StopReadSession();
             }
         }
@@ -641,7 +672,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     } catch (...) {
         FatalError("Adding new client failed, " + CurrentExceptionMessage());
     }
-
+    UpdateParser();
     PrintInternalState();
     if (!ReadSession) { 
         Schedule(TDuration::Seconds(Config.GetTimeoutBeforeStartSessionSec()), new NFq::TEvPrivate::TEvCreateSession());
@@ -665,20 +696,69 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
 
     auto it = Clients.find(ev->Sender);
     if (it == Clients.end()) {
-        LOG_ROW_DISPATCHER_DEBUG("Wrong ClientSettings"); // TODO
+        LOG_ROW_DISPATCHER_DEBUG("Wrong ClientSettings");
         return;
     }
     Clients.erase(it);
     ClientsWithoutPredicate.erase(ev->Sender);
+    if (Clients.empty()) {
+        StopReadSession();
+    }
+    UpdateParser();
 }
 
-void TTopicSession::InitParser(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) {
-    if (Parser) {
+void CollectColumns(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams, TSet<std::pair<TString, TString>>& columns) {
+    auto size = sourceParams.GetColumns().size();
+    Y_ENSURE(size == sourceParams.GetColumnTypes().size());
+
+    for (int i = 0; i < size; ++i) {
+        auto name = sourceParams.GetColumns().Get(i);
+        auto type = sourceParams.GetColumnTypes().Get(i);
+        columns.emplace(name, type);
+    }
+}
+
+void TTopicSession::UpdateParserSchema(const TParserInputType& inputType) {
+    ParserSchema.FieldsMap.clear();
+    ParserSchema.FieldsMap.resize(FieldsIndexes.size());
+    ui64 offset = 0;
+    for (const auto& [name, type]: inputType) {
+        Y_ENSURE(FieldsIndexes.contains(name));
+        ui64 index = FieldsIndexes[name];
+        ParserSchema.FieldsMap[index] = offset++;
+    }
+    ParserSchema.InputType = inputType;
+}
+
+void TTopicSession::UpdateParser() {
+    TSet<std::pair<TString, TString>> namesWithTypes;
+    for (auto& [readActorId, info] : Clients) {
+        CollectColumns(info.Settings.GetSource(), namesWithTypes);
+    }
+
+    if (namesWithTypes == ParserSchema.InputType) {
         return;
     }
+    if (namesWithTypes.empty()) {
+        LOG_ROW_DISPATCHER_INFO("No columns to parse, reset parser");
+        Parser.reset();
+        return;
+    }
+
     try {
-        CurrentParserTypes = std::make_pair(GetVector(sourceParams.GetColumns()), GetVector(sourceParams.GetColumnTypes()));
-        Parser = NewJsonParser(GetVector(sourceParams.GetColumns()), GetVector(sourceParams.GetColumnTypes()));
+        UpdateParserSchema(namesWithTypes);
+
+        TVector<TString> names;
+        TVector<TString> types;
+        names.reserve(namesWithTypes.size());
+        types.reserve(namesWithTypes.size());
+        for (const auto& [name, type] : namesWithTypes) {
+            names.push_back(name);
+            types.push_back(type);
+        }
+
+        LOG_ROW_DISPATCHER_TRACE("Init JsonParser with columns: " << JoinSeq(',', names));
+        Parser = NewJsonParser(names, types);
     } catch (const NYql::NPureCalc::TCompileError& e) {
         FatalError(e.GetIssues());
     }

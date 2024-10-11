@@ -1,5 +1,5 @@
-#ifndef HEADER_CURL_VQUIC_CURL_OSSLQ_H
-#define HEADER_CURL_VQUIC_CURL_OSSLQ_H
+#ifndef HEADER_CURL_NTLM_WB_H
+#define HEADER_CURL_NTLM_WB_H
 /***************************************************************************
  *                                  _   _ ____  _
  *  Project                     ___| | | |  _ \| |
@@ -26,26 +26,20 @@
 
 #include "curl_setup.h"
 
-#if defined(USE_OPENSSL_QUIC) && defined(USE_NGHTTP3)
+#if !defined(CURL_DISABLE_HTTP) && defined(USE_NTLM) && \
+    defined(NTLM_WB_ENABLED)
 
-#ifdef HAVE_NETINET_UDP_H
-#include <netinet/udp.h>
-#endif
+/* this is for ntlm header input */
+CURLcode Curl_input_ntlm_wb(struct Curl_easy *data,
+                            struct connectdata *conn, bool proxy,
+                            const char *header);
 
-struct Curl_cfilter;
+/* this is for creating ntlm header output */
+CURLcode Curl_output_ntlm_wb(struct Curl_easy *data, struct connectdata *conn,
+                             bool proxy);
 
-#include "urldata.h"
+void Curl_http_auth_cleanup_ntlm_wb(struct connectdata *conn);
 
-void Curl_osslq_ver(char *p, size_t len);
+#endif /* !CURL_DISABLE_HTTP && USE_NTLM && NTLM_WB_ENABLED */
 
-CURLcode Curl_cf_osslq_create(struct Curl_cfilter **pcf,
-                              struct Curl_easy *data,
-                              struct connectdata *conn,
-                              const struct Curl_addrinfo *ai);
-
-bool Curl_conn_is_osslq(const struct Curl_easy *data,
-                        const struct connectdata *conn,
-                        int sockindex);
-#endif
-
-#endif /* HEADER_CURL_VQUIC_CURL_OSSLQ_H */
+#endif /* HEADER_CURL_NTLM_WB_H */

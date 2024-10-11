@@ -117,24 +117,6 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         }
     }
 
-    Y_UNIT_TEST(Create) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableBackupService(true));
-        ui64 txId = 100;
-
-        SetupLogging(runtime);
-
-        PrepareDirs(runtime, env, txId);
-
-        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", DefaultCollectionSettings());
-
-        env.TestWaitNotification(runtime, txId);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {
-            NLs::PathExist,
-        });
-    }
-
     Y_UNIT_TEST(CreateAbsolutePath) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableBackupService(true));
@@ -150,8 +132,49 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {
             NLs::PathExist,
+            NLs::IsBackupCollection,
         });
     }
 
+    Y_UNIT_TEST(Create) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableBackupService(true));
+        ui64 txId = 100;
 
+        SetupLogging(runtime);
+
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", DefaultCollectionSettings());
+
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {
+            NLs::PathExist,
+            NLs::IsBackupCollection,
+        });
+    }
+
+    Y_UNIT_TEST(CreateTwice) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", DefaultCollectionSettings());
+
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {
+            NLs::PathExist,
+            NLs::IsBackupCollection,
+        });
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", DefaultCollectionSettings(), {NKikimrScheme::EStatus::StatusSchemeError});
+
+        env.TestWaitNotification(runtime, txId);
+    }
 } // TBackupCollectionTests

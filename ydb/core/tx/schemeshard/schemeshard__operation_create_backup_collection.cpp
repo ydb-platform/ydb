@@ -9,28 +9,6 @@ namespace NKikimr::NSchemeShard {
 
 namespace {
 
-TPath::TChecker IsParentPathValid(const TPath& parentPath) {
-    auto checks = parentPath.Check();
-    checks.NotUnderDomainUpgrade()
-        .IsAtLocalSchemeShard()
-        .IsResolved()
-        .NotDeleted()
-        .NotUnderDeleting()
-        .IsCommonSensePath()
-        .IsLikeDirectory();
-
-    return std::move(checks);
-}
-
-bool IsParentPathValid(const THolder<TProposeResponse>& result, const TPath& parentPath) {
-    const auto checks = IsParentPathValid(parentPath);
-    if (!checks) {
-        result->SetError(checks.GetStatus(), checks.GetError());
-    }
-
-    return static_cast<bool>(checks);
-}
-
 class TPropose: public TSubOperationState {
 private:
     const TOperationId OperationId;
@@ -178,6 +156,8 @@ public:
         const TString& rootPathStr = Transaction.GetWorkingDir();
         const auto& desc = Transaction.GetCreateBackupCollection();
         const TString& name = desc.GetName();
+        const TString acl = Transaction.GetModifyACL().GetDiffACL();
+
         LOG_N("TCreateBackupCollection Propose: opId# " << OperationId << ", path# " << rootPathStr << "/" << name);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
@@ -219,6 +199,23 @@ public:
             return result;
         }
 
+        const TPath& backupCollectionsPath = TPath::Resolve(backupCollectionsDir, context.SS);
+        {
+            const auto checks = backupCollectionsPath.Check();
+            checks.NotUnderDomainUpgrade()
+                .IsAtLocalSchemeShard()
+                .IsResolved()
+                .NotDeleted()
+                .NotUnderDeleting()
+                .IsCommonSensePath()
+                .IsLikeDirectory();
+
+            if (!checks) {
+                result->SetError(checks.GetStatus(), checks.GetError());
+                return result;
+            }
+        }
+
         std::optional<TPath> parentPath;
         if (absPathSplit.size() > 1) {
             TString realParent = "/" + JoinRange("/", absPathSplit.begin(), absPathSplit.end() - 1);
@@ -226,17 +223,37 @@ public:
         }
 
         TPath dstPath = absPathSplit.IsAbsolute && parentPath ? parentPath->Child(TString(absPathSplit.back())) : rootPath.Child(name);
-
         if (!dstPath.PathString().StartsWith(backupCollectionsDir + "/")) {
             result->SetError(NKikimrScheme::EStatus::StatusSchemeError, TStringBuilder() << "Backup collections must be placed in " << backupCollectionsDir);
             return result;
         }
+        {
+            const auto checks = dstPath.Check();
+            checks.IsAtLocalSchemeShard();
+            if (dstPath.IsResolved()) {
+                checks
+                    .IsResolved()
+                    .NotUnderDeleting()
+                    .FailOnExist(TPathElement::EPathType::EPathTypeBackupCollection, false);
+            } else {
+                checks
+                    .NotEmpty()
+                    .NotResolved();
+            }
 
-        const TPath& backupCollectionsPath = TPath::Resolve(backupCollectionsDir, context.SS);
+            if (checks) {
+                checks
+                    .IsValidLeafName()
+                    .DepthLimit()
+                    .PathsLimit()
+                    .DirChildrenLimit()
+                    .IsValidACL(acl);
+            }
 
-        // FIXME
-        if (backupCollectionsPath.IsResolved()) {
-            RETURN_RESULT_UNLESS(IsParentPathValid(result, backupCollectionsPath));
+            if (!checks) {
+                result->SetError(checks.GetStatus(), checks.GetError());
+                return result;
+            }
         }
 
         TString errStr;
@@ -254,20 +271,13 @@ public:
         auto backupCollection = TBackupCollectionInfo::Create(desc);
         context.SS->BackupCollections[dstPath->PathId] = backupCollection;
         context.SS->TabletCounters->Simple()[COUNTER_BACKUP_COLLECTION_COUNT].Add(1);
-
-        // in progress
-
-        TTxState& txState = context.SS->CreateTx(
+        context.SS->CreateTx(
             OperationId,
             TTxState::TxCreateBackupCollection,
             pathEl->PathId);
-        txState.Shards.clear();
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        const TString& acl = Transaction.GetModifyACL().GetDiffACL();
-        ////
-        // RegisterParentPathDependencies(context, parentPath);
         if (rootPath.Base()->HasActiveChanges()) {
             const TTxId parentTxId = rootPath.Base()->PlannedToCreate()
                                          ? rootPath.Base()->CreateTxId
@@ -275,12 +285,9 @@ public:
             context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
         }
 
-        // AdvanceTransactionStateToPropose(context, db);
         context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
         context.OnComplete.ActivateTx(OperationId);
 
-        // PersistExternalDataSource(context, db, externalDataSource,
-        //                           externalDataSourceInfo, acl);
         const auto& backupCollectionPathId = pathEl->PathId;
 
         context.SS->BackupCollections[dstPath->PathId] = backupCollection;

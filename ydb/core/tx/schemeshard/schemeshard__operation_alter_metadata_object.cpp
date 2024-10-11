@@ -137,6 +137,7 @@ public:
         RETURN_RESULT_UNLESS(NMetadataObject::IsParentPathValid(result, parentPath));
         RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl, update->GetObjectPathType()));
         RETURN_RESULT_UNLESS(NMetadataObject::IsApplyIfChecksPassed(Transaction, result, context));
+        result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
         std::shared_ptr<NOperations::ISSEntity> originalEntity;
         originalEntity = update->MakeEntity(dstPath->PathId);
@@ -151,7 +152,6 @@ public:
             return result;
         }
 
-        result->SetPathId(dstPath.Base()->PathId.LocalPathId);
         const TPathElement::TPtr object = ReplacePathElement(dstPath);
         NMetadataObject::CreateTransaction(OperationId, context, object->PathId, TTxState::TxAlterMetadataObject);
         NMetadataObject::RegisterParentPathDependencies(OperationId, context, parentPath);

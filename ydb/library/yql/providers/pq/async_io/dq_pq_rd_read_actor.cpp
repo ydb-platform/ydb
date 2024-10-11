@@ -24,7 +24,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -94,16 +94,19 @@ struct TEvPrivate {
     enum EEv : ui32 {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvPrintState = EvBegin + 20,
+        EvProcessState = EvBegin + 21,
         EvEnd
     };
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
     struct TEvPrintState : public NActors::TEventLocal<TEvPrintState, EvPrintState> {};
+    struct TEvProcessState : public NActors::TEventLocal<TEvProcessState, EvProcessState> {};
 };
 
-ui64 PrintStatePeriodSec = 60;
-
 class TDqPqRdReadActor : public NActors::TActor<TDqPqRdReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase {
-public:
+
+    const ui64 PrintStatePeriodSec = 60;
+    const ui64 ProcessStatePeriodSec = 2;
+
     using TDebugOffsets = TMaybe<std::pair<ui64, ui64>>;
 
     struct TReadyBatch {
@@ -136,6 +139,7 @@ private:
     ui64 CoordinatorRequestCookie = 0;
     TRowDispatcherReadActorMetrics Metrics;
     bool SchedulePrintStatePeriod = false;
+    bool ProcessStateScheduled = false;
 
     struct SessionInfo {
         enum class ESessionStatus {
@@ -193,6 +197,7 @@ public:
     void Handle(NActors::TEvents::TEvPong::TPtr& ev);
     void Handle(const NActors::TEvents::TEvPing::TPtr&);
     void Handle(TEvPrivate::TEvPrintState::TPtr&);
+    void Handle(TEvPrivate::TEvProcessState::TPtr&);
 
     STRICT_STFUNC(StateFunc, {
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Handle);
@@ -212,6 +217,7 @@ public:
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed, Handle);
         hFunc(NActors::TEvents::TEvPing, Handle);
         hFunc(TEvPrivate::TEvPrintState, Handle);
+        hFunc(TEvPrivate::TEvProcessState, Handle);
     })
 
     static constexpr char ActorName[] = "DQ_PQ_READ_ACTOR";
@@ -261,6 +267,10 @@ void TDqPqRdReadActor::ProcessState() {
     case EState::INIT:
         if (!ReadyBuffer.empty()) {
             return;
+        }
+        if (!ProcessStateScheduled) {
+            ProcessStateScheduled = true;
+            Schedule(TDuration::Seconds(ProcessStatePeriodSec), new TEvPrivate::TEvProcessState());
         }
         if (!CoordinatorActorId) {
             SRC_LOG_D("Send TEvCoordinatorChangesSubscribe to local row dispatcher, self id " << SelfId());
@@ -541,7 +551,6 @@ void TDqPqRdReadActor::ReInit(const TString& reason) {
     if (!ReadyBuffer.empty()) {
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
-    ProcessState();
 }
 
 void TDqPqRdReadActor::Stop(const TString& message) {
@@ -666,6 +675,11 @@ void TDqPqRdReadActor::PrintInternalState() {
         sessionInfo.EventsQueue.PrintInternalState(str);
     }
     SRC_LOG_D(str.Str());
+}
+
+void TDqPqRdReadActor::Handle(TEvPrivate::TEvProcessState::TPtr&) {
+    Schedule(TDuration::Seconds(ProcessStatePeriodSec), new TEvPrivate::TEvProcessState());
+    ProcessState();
 }
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(

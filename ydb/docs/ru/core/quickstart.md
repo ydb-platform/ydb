@@ -146,7 +146,7 @@
       git clone https://github.com/ydb-platform/ydb-kubernetes-operator && cd ydb-kubernetes-operator
       ```
 
-   4. Запустите `Kind` с использованием `kind-config.yaml`:
+   4. Создайте Kind кластер и дождитесь его готовности:
 
       ```bash
       kind create cluster --config=samples/kind/kind-config.yaml  --wait 5m

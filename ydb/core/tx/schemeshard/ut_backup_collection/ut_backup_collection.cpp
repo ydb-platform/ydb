@@ -1,6 +1,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #define DEFAULT_NAME_1 "MyCollection1"
+#define DEFAULT_NAME_2 "MyCollection2"
 
 using namespace NSchemeShardUT_Private;
 
@@ -48,7 +49,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
     Y_UNIT_TEST(HiddenByFeatureFlag) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        TTestEnv env(runtime, TTestEnvOptions());
         ui64 txId = 100;
 
         SetupLogging(runtime);
@@ -71,7 +72,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
     Y_UNIT_TEST(DisallowedPath) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableBackupService(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
 
         SetupLogging(runtime);
@@ -119,7 +120,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
     Y_UNIT_TEST(CreateAbsolutePath) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableBackupService(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
 
         SetupLogging(runtime);
@@ -138,7 +139,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
     Y_UNIT_TEST(Create) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableBackupService(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
 
         SetupLogging(runtime);
@@ -157,7 +158,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
     Y_UNIT_TEST(CreateTwice) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableBackupService(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
 
         SetupLogging(runtime);
@@ -176,5 +177,30 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", DefaultCollectionSettings(), {NKikimrScheme::EStatus::StatusSchemeError});
 
         env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(ParallelCreateBackupCollection) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        PrepareDirs(runtime, env, txId);
+
+        AsyncCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", CollectionSettings(DEFAULT_NAME_1));
+        AsyncCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", CollectionSettings(DEFAULT_NAME_2));
+        TestModificationResult(runtime, txId - 1, NKikimrScheme::StatusAccepted);
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+
+        env.TestWaitNotification(runtime, {txId, txId - 1});
+
+        TestDescribe(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1);
+        TestDescribe(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_2);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections"),
+                           {NLs::PathVersionEqual(7)});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1),
+                           {NLs::PathVersionEqual(1)});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_2),
+                           {NLs::PathVersionEqual(1)});
     }
 } // TBackupCollectionTests

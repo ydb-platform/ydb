@@ -5724,14 +5724,29 @@ TRuntimeNode TProgramBuilder::BlockBitCast(TRuntimeNode value, TType* targetType
     return TRuntimeNode(builder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::BlockCombineAll(TRuntimeNode flow, std::optional<ui32> filterColumn,
+TRuntimeNode TProgramBuilder::BlockCombineAll(TRuntimeNode stream, std::optional<ui32> filterColumn,
     const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
     if constexpr (RuntimeVersion < 31U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
 
+    // we expect here only stream as input and output, but when wrapping for older runtime version we need to accept flow
+    const auto streamType = stream.GetStaticType();
+
+    if constexpr (RuntimeVersion < 52U) {
+        MKQL_ENSURE(streamType->IsStream() || streamType->IsFlow(), "Expected either stream or flow as input type");
+        MKQL_ENSURE(returnType->IsStream() || streamType->IsFlow(), "Expected either stream or flow as return type");
+        if (streamType->IsStream()) {
+            const auto flowReturnType = NewFlowType(AS_TYPE(TStreamType, returnType)->GetItemType());
+            return FromFlow(BlockCombineAll(ToFlow(stream), filterColumn, aggs, flowReturnType));
+        }
+    } else {
+        MKQL_ENSURE(streamType->IsStream(), "Expected stream as input type");
+        MKQL_ENSURE(returnType->IsStream(), "Expected stream as return type");
+    }
+
     TCallableBuilder builder(Env, __func__, returnType);
-    builder.Add(flow);
+    builder.Add(stream);
     if (!filterColumn) {
         builder.Add(NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id));
     } else {

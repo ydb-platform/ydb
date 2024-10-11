@@ -441,18 +441,21 @@ size_t GetBitmapPopCount(const std::shared_ptr<arrow::ArrayData>& arr) {
     return GetSparseBitmapPopCount(src, len);
 }
 
+// from what?
+TArrayRef<TType *const> GetWideComponentsFromType(TType* type) {
+    if (type->IsFlow()) {
+        const auto outputFlowType = AS_TYPE(TFlowType, type);
+        return GetWideComponents(outputFlowType);
+    }
+    if (type->IsStream()) {
+        const auto outputStreamType = AS_TYPE(TStreamType, type);
+        return GetWideComponents(outputStreamType);
+    }
+    MKQL_ENSURE(false, "Expect either flow or stream");
+}
+
 size_t CalcMaxBlockLenForOutput(TType* out) {
-    const auto wideComponents = [](TType* out) {
-        if (out->IsFlow()) {
-            const auto outputFlowType = AS_TYPE(TFlowType, out);
-            return GetWideComponents(outputFlowType);
-        }
-        if (out->IsStream()) {
-            const auto outputStreamType = AS_TYPE(TStreamType, out);
-            return GetWideComponents(outputStreamType);
-        }
-        MKQL_ENSURE(false, "Expect either flow or stream");
-    } (out);
+    const auto wideComponents = GetWideComponentsFromType(out);
     MKQL_ENSURE(wideComponents.size() > 0, "Expecting at least one output column");
 
     size_t maxBlockItemSize = 0;
@@ -612,11 +615,99 @@ protected:
 #endif
 };
 
-class TBlockCombineAllWrapper : public TStatefulWideFlowCodegeneratorNode<TBlockCombineAllWrapper>,
+
+struct TBlockCombineAllState : public TComputationValue<TBlockCombineAllState> {
+    NUdf::TUnboxedValue* Pointer_ = nullptr;
+    bool IsFinished_ = false;
+    bool HasValues_ = false;
+    TUnboxedValueVector Values_;
+    std::vector<std::unique_ptr<IBlockAggregatorCombineAll>> Aggs_;
+    std::vector<char> AggStates_;
+    const std::optional<ui32> FilterColumn_;
+    const size_t Width_;
+
+    TBlockCombineAllState(TMemoryUsageInfo* memInfo, size_t width, std::optional<ui32> filterColumn, const std::vector<TAggParams<IBlockAggregatorCombineAll>>& params, TComputationContext& ctx)
+        : TComputationValue(memInfo)
+        , Values_(std::max(width, params.size()))
+        , FilterColumn_(filterColumn)
+        , Width_(width)
+    {
+        Pointer_ = Values_.data();
+
+        ui32 totalStateSize = 0;
+        for (const auto& p : params) {
+            Aggs_.emplace_back(p.Prepared_->Make(ctx));
+            MKQL_ENSURE(Aggs_.back()->StateSize == p.Prepared_->StateSize, "State size mismatch");
+            totalStateSize += Aggs_.back()->StateSize;
+        }
+
+        AggStates_.resize(totalStateSize);
+        char* ptr = AggStates_.data();
+        for (const auto& agg : Aggs_) {
+            agg->InitState(ptr);
+            ptr += agg->StateSize;
+        }
+    }
+
+    void ProcessInput() {
+        const ui64 batchLength = TArrowBlock::From(Values_[Width_ - 1U]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+        if (!batchLength) {
+            return;
+        }
+
+        std::optional<ui64> filtered;
+        if (FilterColumn_) {
+            const auto filterDatum = TArrowBlock::From(Values_[*FilterColumn_]).GetDatum();
+            if (filterDatum.is_scalar()) {
+                if (!filterDatum.scalar_as<arrow::UInt8Scalar>().value) {
+                    return;
+                }
+            } else {
+                const ui64 popCount = GetBitmapPopCount(filterDatum.array());
+                if (popCount == 0) {
+                    return;
+                }
+
+                if (popCount < batchLength) {
+                    filtered = popCount;
+                }
+            }
+        }
+
+        HasValues_ = true;
+        char* ptr = AggStates_.data();
+        for (size_t i = 0; i < Aggs_.size(); ++i) {
+            Aggs_[i]->AddMany(ptr, Values_.data(), batchLength, filtered);
+            ptr += Aggs_[i]->StateSize;
+        }
+    }
+
+    bool MakeOutput() {
+        IsFinished_ = true;
+        if (!HasValues_)
+            return false;
+
+        char* ptr = AggStates_.data();
+        for (size_t i = 0; i < Aggs_.size(); ++i) {
+            Values_[i] = Aggs_[i]->FinishOne(ptr);
+            Aggs_[i]->DestroyState(ptr);
+            ptr += Aggs_[i]->StateSize;
+        }
+        return true;
+    }
+
+    NUdf::TUnboxedValuePod Get(size_t index) const {
+        return Values_[index];
+    }
+};
+
+class TBlockCombineAllWrapperFromFlow : public TStatefulWideFlowCodegeneratorNode<TBlockCombineAllWrapperFromFlow>,
     protected TBlockCombineAllWrapperCodegenBase {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TBlockCombineAllWrapper>;
+using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TBlockCombineAllWrapperFromFlow>;
+
+using TState = TBlockCombineAllState;
 public:
-    TBlockCombineAllWrapper(TComputationMutables& mutables,
+    TBlockCombineAllWrapperFromFlow(TComputationMutables& mutables,
         IComputationWideFlowNode* flow,
         std::optional<ui32> filterColumn,
         size_t width,
@@ -663,95 +754,11 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         return DoGenGetValuesImpl(ctx, statePtr, block, Flow_, Width_, AggsParams_.size(),
-            GetMethodPtr(&TState::Get), GetMethodPtr(&TBlockCombineAllWrapper::MakeState),
+            GetMethodPtr(&TState::Get), GetMethodPtr(&TBlockCombineAllWrapperFromFlow::MakeState),
             GetMethodPtr(&TState::ProcessInput), GetMethodPtr(&TState::MakeOutput));
     }
 #endif
 private:
-    struct TState : public TComputationValue<TState> {
-        NUdf::TUnboxedValue* Pointer_ = nullptr;
-        bool IsFinished_ = false;
-        bool HasValues_ = false;
-        TUnboxedValueVector Values_;
-        std::vector<std::unique_ptr<IBlockAggregatorCombineAll>> Aggs_;
-        std::vector<char> AggStates_;
-        const std::optional<ui32> FilterColumn_;
-        const size_t Width_;
-
-        TState(TMemoryUsageInfo* memInfo, size_t width, std::optional<ui32> filterColumn, const std::vector<TAggParams<IBlockAggregatorCombineAll>>& params, TComputationContext& ctx)
-            : TComputationValue(memInfo)
-            , Values_(std::max(width, params.size()))
-            , FilterColumn_(filterColumn)
-            , Width_(width)
-        {
-            Pointer_ = Values_.data();
-
-            ui32 totalStateSize = 0;
-            for (const auto& p : params) {
-                Aggs_.emplace_back(p.Prepared_->Make(ctx));
-                MKQL_ENSURE(Aggs_.back()->StateSize == p.Prepared_->StateSize, "State size mismatch");
-                totalStateSize += Aggs_.back()->StateSize;
-            }
-
-            AggStates_.resize(totalStateSize);
-            char* ptr = AggStates_.data();
-            for (const auto& agg : Aggs_) {
-                agg->InitState(ptr);
-                ptr += agg->StateSize;
-            }
-        }
-
-        void ProcessInput() {
-            const ui64 batchLength = TArrowBlock::From(Values_[Width_ - 1U]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
-            if (!batchLength) {
-                return;
-            }
-
-            std::optional<ui64> filtered;
-            if (FilterColumn_) {
-                const auto filterDatum = TArrowBlock::From(Values_[*FilterColumn_]).GetDatum();
-                if (filterDatum.is_scalar()) {
-                    if (!filterDatum.scalar_as<arrow::UInt8Scalar>().value) {
-                        return;
-                    }
-                } else {
-                    const ui64 popCount = GetBitmapPopCount(filterDatum.array());
-                    if (popCount == 0) {
-                        return;
-                    }
-
-                    if (popCount < batchLength) {
-                        filtered = popCount;
-                    }
-                }
-            }
-
-            HasValues_ = true;
-            char* ptr = AggStates_.data();
-            for (size_t i = 0; i < Aggs_.size(); ++i) {
-                Aggs_[i]->AddMany(ptr, Values_.data(), batchLength, filtered);
-                ptr += Aggs_[i]->StateSize;
-            }
-        }
-
-        bool MakeOutput() {
-            IsFinished_ = true;
-            if (!HasValues_)
-                return false;
-
-            char* ptr = AggStates_.data();
-            for (size_t i = 0; i < Aggs_.size(); ++i) {
-                Values_[i] = Aggs_[i]->FinishOne(ptr);
-                Aggs_[i]->DestroyState(ptr);
-                ptr += Aggs_[i]->StateSize;
-            }
-            return true;
-        }
-
-        NUdf::TUnboxedValuePod Get(size_t index) const {
-            return Values_[index];
-        }
-    };
     void RegisterDependencies() const final {
         FlowDependsOn(Flow_);
     }
@@ -775,6 +782,89 @@ private:
     }
 private:
     IComputationWideFlowNode *const Flow_;
+    const std::optional<ui32> FilterColumn_;
+    const size_t Width_;
+    const std::vector<TAggParams<IBlockAggregatorCombineAll>> AggsParams_;
+    const size_t WideFieldsIndex_;
+};
+
+class TBlockCombineAllWrapperFromStream : public TMutableComputationNode<TBlockCombineAllWrapperFromStream> {
+using TBaseComputation = TMutableComputationNode<TBlockCombineAllWrapperFromStream>;
+
+using TState = TBlockCombineAllState;
+public:
+    TBlockCombineAllWrapperFromStream(TComputationMutables& mutables,
+        IComputationNode* stream,
+        std::optional<ui32> filterColumn,
+        size_t width,
+        std::vector<TAggParams<IBlockAggregatorCombineAll>>&& aggsParams)
+        : TBaseComputation(mutables, EValueRepresentation::Boxed)
+        , Stream_(stream)
+        , FilterColumn_(filterColumn)
+        , Width_(width)
+        , AggsParams_(std::move(aggsParams))
+        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(width))
+    {
+        MKQL_ENSURE(Width_ > 0, "Missing block length column");
+    }
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const
+    {
+        const auto state = ctx.HolderFactory.Create<TState>(Width_, FilterColumn_, AggsParams_, ctx);
+        return ctx.HolderFactory.Create<TStreamValue>(std::move(state), std::move(Stream_->GetValue(ctx)));
+    }
+        
+private:
+    class TStreamValue : public TComputationValue<TStreamValue> {
+    using TBase = TComputationValue<TStreamValue>;
+    public:
+        TStreamValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& state, NUdf::TUnboxedValue&& stream) 
+            : TBase(memInfo)
+            , State_(state)
+            , Stream_(stream)
+        {
+        }
+
+    private:
+        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+            TState& state = *static_cast<TState*>(State_.AsBoxed().Get());
+            auto* inputFields = state.Values_.data();
+            const size_t inputWidth = state.Width_;
+
+            if (state.IsFinished_)
+                return NUdf::EFetchStatus::Finish;
+            
+            while (true) {
+                switch (Stream_.WideFetch(inputFields, inputWidth)) {
+                    case NUdf::EFetchStatus::Yield:
+                        return NUdf::EFetchStatus::Yield;
+                    case NUdf::EFetchStatus::Ok:
+                        state.ProcessInput();
+                        continue;
+                    case NUdf::EFetchStatus::Finish:
+                        break;
+                }
+                if (state.MakeOutput()) {
+                    for (size_t i = 0; i < width; ++i) {
+                        output[i] = state.Get(i);
+                    }
+                    return NUdf::EFetchStatus::Ok;
+                }
+                return NUdf::EFetchStatus::Finish;
+            }
+        }
+    private:
+        NUdf::TUnboxedValue State_;
+        NUdf::TUnboxedValue Stream_;
+    };    
+
+private:
+    void RegisterDependencies() const final {
+        DependsOn(Stream_);
+    }
+
+private:
+    IComputationNode *const Stream_;
     const std::optional<ui32> FilterColumn_;
     const size_t Width_;
     const std::vector<TAggParams<IBlockAggregatorCombineAll>> AggsParams_;
@@ -2164,14 +2254,15 @@ void FillAggStreams(TRuntimeNode streamsNode, std::vector<std::vector<ui32>>& st
 
 IComputationNode* WrapBlockCombineAll(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args");
-    const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
-    const auto wideComponents = GetWideComponents(flowType);
-    const auto tupleType = TTupleType::Create(wideComponents.size(), wideComponents.data(), ctx.Env);
-    const auto returnFlowType = AS_TYPE(TFlowType, callable.GetType()->GetReturnType());
-    const auto returnWideComponents = GetWideComponents(returnFlowType);
 
-    auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
-    MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
+    const bool isStream = callable.GetInput(0).GetStaticType()->IsStream();
+    MKQL_ENSURE(isStream == callable.GetType()->GetReturnType()->IsStream(), "input and output must be both either flow or stream");
+
+    const auto wideComponents = GetWideComponentsFromType(callable.GetInput(0).GetStaticType());
+    const auto tupleType = TTupleType::Create(wideComponents.size(), wideComponents.data(), ctx.Env);
+    const auto returnWideComponents = GetWideComponentsFromType(callable.GetType()->GetReturnType());
+
+    const auto wideFlowOrStream = LocateNode(ctx.NodeLocator, callable, 0);
 
     auto filterColumnVal = AS_VALUE(TOptionalLiteral, callable.GetInput(1));
     std::optional<ui32> filterColumn;
@@ -2182,39 +2273,26 @@ IComputationNode* WrapBlockCombineAll(TCallable& callable, const TComputationNod
     auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(2));
     std::vector<TAggParams<IBlockAggregatorCombineAll>> aggsParams;
     FillAggParams<IBlockAggregatorCombineAll>(aggsVal, tupleType, filterColumn, aggsParams, ctx.Env, false, false, returnWideComponents, 0);
-    return new TBlockCombineAllWrapper(ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), std::move(aggsParams));
+
+    if (isStream) {
+        const auto wideStream = wideFlowOrStream;
+        return new TBlockCombineAllWrapperFromStream(ctx.Mutables, wideStream, filterColumn, tupleType->GetElementsCount(), std::move(aggsParams));
+    } else {
+        const auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(wideFlowOrStream);
+        MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
+        return new TBlockCombineAllWrapperFromFlow(ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), std::move(aggsParams));
+    }
 }
 
 IComputationNode* WrapBlockCombineHashed(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 args");
+
     const bool isStream = callable.GetInput(0).GetStaticType()->IsStream();
     MKQL_ENSURE(isStream == callable.GetType()->GetReturnType()->IsStream(), "input and output must be both either flow or stream");
 
-    const auto tupleType = [&ctx](TType* type){
-        if (type->IsStream()) {
-            const auto streamType = AS_TYPE(TStreamType, type);
-            const auto wideComponents = GetWideComponents(streamType);
-            return TTupleType::Create(wideComponents.size(), wideComponents.data(), ctx.Env);
-        } else if (type->IsFlow()) {
-            const auto flowType = AS_TYPE(TFlowType, type);
-            const auto wideComponents = GetWideComponents(flowType);
-            return TTupleType::Create(wideComponents.size(), wideComponents.data(), ctx.Env);
-        } else {
-            MKQL_ENSURE(false, "expect flow or stream");
-        }
-    }(callable.GetInput(0).GetStaticType());
-
-    const auto returnWideComponents = [](TType* type) {
-        if (type->IsStream()) {
-            const auto returnStreamType = AS_TYPE(TStreamType, type);
-            return GetWideComponents(returnStreamType);
-        } else if (type->IsFlow()) {
-            const auto returnFlowType = AS_TYPE(TFlowType, type);
-            return GetWideComponents(returnFlowType);
-        } else {
-            MKQL_ENSURE(false, "expect flow or stream");
-        }
-    }(callable.GetType()->GetReturnType());
+    const auto wideComponents = GetWideComponentsFromType(callable.GetInput(0).GetStaticType());
+    const auto tupleType = TTupleType::Create(wideComponents.size(), wideComponents.data(), ctx.Env);
+    const auto returnWideComponents = GetWideComponentsFromType(callable.GetType()->GetReturnType());
 
     auto streamOrFlow = LocateNode(ctx.NodeLocator, callable, 0);
 

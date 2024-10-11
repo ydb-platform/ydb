@@ -2,7 +2,6 @@
 
 #include "audit_log.h"
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/cms.h>

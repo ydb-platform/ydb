@@ -2,6 +2,8 @@
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
+#include <library/cpp/random_provider/random_provider.h>
+
 namespace NKikimr::NSchemeShard {
 
 namespace {

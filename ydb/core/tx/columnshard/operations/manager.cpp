@@ -2,6 +2,8 @@
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 
+#include <library/cpp/time_provider/time_provider.h>
+
 namespace NKikimr::NColumnShard {
 
 bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {

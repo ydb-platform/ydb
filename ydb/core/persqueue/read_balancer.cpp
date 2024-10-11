@@ -3,6 +3,7 @@
 #include "read_balancer__txpreinit.h"
 #include "read_balancer__txwrite.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/base/feature_flags.h>

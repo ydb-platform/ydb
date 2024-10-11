@@ -3,8 +3,11 @@
 #include <variant>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/mailbox.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/util/simple_cache.h>
+#include <ydb/core/grpc_services/grpc_helper.h>
 
 namespace NGrpcActorClient {
 

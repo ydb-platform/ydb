@@ -2,9 +2,11 @@
 
 #include <util/stream/file.h>
 
+#include <ydb/library/actors/core/actorsystem.h>
+
 namespace NKikimr::NSQS {
 
-void TAuthFactory::RegisterAuthActor(TActorSystem& system, TAuthActorData&& data)
+void TAuthFactory::RegisterAuthActor(NActors::TActorSystem& system, TAuthActorData&& data)
 {
     IActor* const actor = CreateProxyActionActor(
         *data.SQSRequest,

@@ -3,6 +3,8 @@
 #include "hive_log.h"
 #include "balancer.h"
 
+#include <library/cpp/random_provider/random_provider.h>
+
 namespace NKikimr {
 namespace NHive {
 

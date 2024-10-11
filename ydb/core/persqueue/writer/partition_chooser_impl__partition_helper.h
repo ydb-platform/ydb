@@ -8,6 +8,8 @@
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
+#include <util/generic/guid.h>
+
 namespace NKikimr::NPQ::NPartitionChooser {
 
 template<typename TPipeCreator>

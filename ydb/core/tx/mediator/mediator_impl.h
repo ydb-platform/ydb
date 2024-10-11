@@ -1,7 +1,6 @@
 #pragma once
 #include "defs.h"
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/scheme_types/scheme_types.h>
 #include <ydb/core/tx/coordinator/public/events.h>
 #include <ydb/core/tx/tx.h>

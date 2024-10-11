@@ -3,7 +3,6 @@
 #include "resource_broker.h"
 
 #include <ydb/core/mon/mon.h>
-#include <ydb/core/base/appdata.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>

@@ -4,7 +4,8 @@
 #include <library/cpp/monlib/service/pages/mon_page.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/public/lib/base/msgbus.h>
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 namespace NKikimr {
 namespace NMsgBusProxy {
@@ -34,7 +35,7 @@ public:
     NMonitoring::THistogramPtr RequestPrepareTimeHistogram;
 };
 
-IMessageBusHttpServer* CreateMessageBusHttpServer(TActorSystem* actorSystem, NBus::IBusServerHandler* handler, const TProtocol& protocol, const NBus::TBusServerSessionConfig& config);
+IMessageBusHttpServer* CreateMessageBusHttpServer(NActors::TActorSystem* actorSystem, NBus::IBusServerHandler* handler, const TProtocol& protocol, const NBus::TBusServerSessionConfig& config);
 
 }
 }

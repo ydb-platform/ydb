@@ -1,6 +1,7 @@
 #include "optimizer.h"
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer {
 
@@ -17,6 +18,14 @@ IOptimizerPlanner::TModificationGuard& IOptimizerPlanner::TModificationGuard::Ad
 IOptimizerPlanner::TModificationGuard& IOptimizerPlanner::TModificationGuard::RemovePortion(const std::shared_ptr<TPortionInfo>& portion) {
     AFL_VERIFY(RemovePortions.emplace(portion->GetPortionId(), portion).second);
     return*this;
+}
+
+TConclusion<TOptimizerPlannerConstructorContainer> TOptimizerPlannerConstructorContainer::BuildFromProto(const IOptimizerPlannerConstructor::TProto& data) {
+    TOptimizerPlannerConstructorContainer result;
+    if (!result.DeserializeFromProto(data)) {
+        return TConclusionStatus::Fail("cannot parse interface from proto: " + data.DebugString());
+    }
+    return result;
 }
 
 } // namespace NKikimr::NOlap

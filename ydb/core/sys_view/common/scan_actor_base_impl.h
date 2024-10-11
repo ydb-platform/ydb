@@ -3,10 +3,12 @@
 #include "utils.h"
 
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/runtime/kqp_compute.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/mind/tenant_node_enumeration.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/domain.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>

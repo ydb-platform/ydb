@@ -15,7 +15,7 @@
 #include "flat_bio_stats.h"
 
 #include <ydb/core/base/blobstorage.h>
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/library/actors/core/actor.h>
 
 #include <bitset>

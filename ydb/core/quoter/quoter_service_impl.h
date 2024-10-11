@@ -3,7 +3,6 @@
 #include "quoter_service.h"
 
 #include <ydb/core/base/tablet_pipe.h>
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 

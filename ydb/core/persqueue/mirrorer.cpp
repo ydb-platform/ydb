@@ -1,6 +1,7 @@
 #include "mirrorer.h"
 #include "write_meta.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>

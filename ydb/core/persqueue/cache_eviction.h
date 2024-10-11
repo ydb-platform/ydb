@@ -3,8 +3,10 @@
 #include "blob.h"
 #include "pq_l2_service.h"
 
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/persqueue/events/internal.h>
+
+#include <library/cpp/time_provider/time_provider.h>
 
 namespace NKikimr {
 namespace NPQ {

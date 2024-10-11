@@ -10,7 +10,6 @@
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/mind/local.h>
 #include <ydb/core/protos/counters_hive.pb.h>

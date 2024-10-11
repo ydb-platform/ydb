@@ -9,7 +9,7 @@
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 
 namespace NKikimr::NOlap {

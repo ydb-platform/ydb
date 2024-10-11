@@ -1,5 +1,4 @@
 #pragma once
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 
 #include <ydb/library/conclusion/result.h>
@@ -17,6 +16,10 @@ class TPortionInfo;
 namespace NDataLocks {
 class TManager;
 }
+}
+
+namespace NKikimrSchemeOp {
+    class TCompactionPlannerConstructorContainer;
 }
 
 namespace NKikimr::NOlap::NStorageOptimizer {
@@ -234,14 +237,7 @@ private:
 public:
     using TBase::TBase;
 
-    static TConclusion<TOptimizerPlannerConstructorContainer> BuildFromProto(const IOptimizerPlannerConstructor::TProto& data) {
-        TOptimizerPlannerConstructorContainer result;
-        if (!result.DeserializeFromProto(data)) {
-            return TConclusionStatus::Fail("cannot parse interface from proto: " + data.DebugString());
-        }
-        return result;
-    }
-
+    static TConclusion<TOptimizerPlannerConstructorContainer> BuildFromProto(const IOptimizerPlannerConstructor::TProto& data);
 };
 
 } // namespace NKikimr::NOlap

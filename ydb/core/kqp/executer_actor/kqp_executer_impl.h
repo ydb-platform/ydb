@@ -13,7 +13,7 @@
 #include <ydb/core/kqp/runtime/kqp_transport.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/wilson_ids/wilson.h>

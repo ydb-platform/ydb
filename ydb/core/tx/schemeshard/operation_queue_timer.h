@@ -4,7 +4,7 @@
 #include "schemeshard_info_types.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/util/operation_queue.h>
 
 #include <ydb/library/actors/core/monotonic_provider.h>

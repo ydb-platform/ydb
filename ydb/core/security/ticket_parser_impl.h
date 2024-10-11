@@ -2,7 +2,9 @@
 #include "ticket_parser_log.h"
 #include "ticket_parser_settings.h"
 
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/domain.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/ticket_parser.h>
@@ -23,6 +25,7 @@
 #include <ydb/library/ycloud/impl/user_account_service.h>
 
 #include <library/cpp/digest/md5/md5.h>
+#include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/generic/queue.h>
 #include <util/stream/file.h>

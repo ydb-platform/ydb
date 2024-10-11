@@ -2,6 +2,7 @@
 #include "quoter_service_impl.h"
 #include "debug_info.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kesus/tablet/events.h>

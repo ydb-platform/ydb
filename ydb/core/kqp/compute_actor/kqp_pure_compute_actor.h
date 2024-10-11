@@ -3,7 +3,6 @@
 #include "kqp_compute_actor.h"
 #include "kqp_compute_actor_impl.h"
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>

@@ -9,7 +9,7 @@
 #include <ydb/library/actors/interconnect/poller_tcp.h>
 #include <ydb/library/actors/util/should_continue.h>
 #include <ydb/library/grpc/server/grpc_server.h>
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/scheme_types/scheme_types.h>
 #include <ydb/core/formats/factory.h>

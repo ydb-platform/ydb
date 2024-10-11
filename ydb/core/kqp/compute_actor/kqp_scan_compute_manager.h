@@ -3,7 +3,7 @@
 #include "kqp_compute_actor.h"
 #include "kqp_compute_state.h"
 #include "kqp_scan_compute_stat.h"
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/library/actors/wilson/wilson_profile_span.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/datashard/range_ops.h>

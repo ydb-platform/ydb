@@ -25,6 +25,8 @@
 #include <util/generic/ptr.h>
 #include <util/string/join.h>
 
+#include <google/protobuf/util/message_differencer.h>
+
 #if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_TRACE
 #error log macro definition clash
 #endif

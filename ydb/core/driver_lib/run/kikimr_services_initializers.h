@@ -5,7 +5,7 @@
 
 #include <ydb/core/memory_controller/memory_controller.h>
 #include <ydb/library/actors/util/affinity.h>
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/tablet/tablet_setup.h>

@@ -8,6 +8,8 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 
+#include <library/cpp/string_utils/base64/base64.h>
+
 namespace NKikimr::NViewer {
 
 using namespace NActors;

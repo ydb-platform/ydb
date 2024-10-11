@@ -251,10 +251,10 @@ private:
 
 }; // TInputStreamContext
 
-template <typename TEvRequest, typename TEvResponse, template<typename, typename> typename TBaseContext = TContextBase>
-class TContextWithStorageClass : public TBaseContext<TEvRequest, TEvResponse> {
+template <typename TEvRequest, typename TEvResponse, template <typename, typename> typename TContext = TContextBase>
+class TContextWithStorageClass : public TContext<TEvRequest, TEvResponse> {
 private:
-    using TBase = TBaseContext<TEvRequest, TEvResponse>;
+    using TBase = TContext<TEvRequest, TEvResponse>;
 
 public:
     using TBase::TBase;
@@ -278,9 +278,9 @@ public:
 }; // TPutInputStreamContext
 
 template <typename TEvRequest, typename TEvResponse>
-class TCreateMultipartUploadContext: public TContextWithStorageClass<TEvRequest, TEvResponse, TContextBase> {
+class TCreateMultipartUploadContext: public TContextWithStorageClass<TEvRequest, TEvResponse> {
 private:
-    using TBase = TContextWithStorageClass<TEvRequest, TEvResponse, TContextBase>;
+    using TBase = TContextWithStorageClass<TEvRequest, TEvResponse>;
 
 public:
     using TBase::TBase;

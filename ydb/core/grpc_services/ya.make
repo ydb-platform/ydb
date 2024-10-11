@@ -109,6 +109,7 @@ PEERDIR(
     ydb/core/fq/libs/events
    #ydb/core/fq/libs/control_plane_proxy/events
     ydb/core/fq/libs/control_plane_proxy
+    ydb/core/fq/libs/audit
     ydb/core/grpc_services/base
     ydb/core/grpc_services/counters
     ydb/core/grpc_services/local_rpc

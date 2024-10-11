@@ -44,6 +44,7 @@ target_link_libraries(tx-schemeshard-ut_helpers PUBLIC
   public-lib-scheme_types
   yql-public-issue
   cpp-client-ydb_driver
+  cpp-client-ydb_table
 )
 
 target_sources(tx-schemeshard-ut_helpers PRIVATE

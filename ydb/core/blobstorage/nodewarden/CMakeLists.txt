@@ -58,7 +58,6 @@ target_sources(core-blobstorage-nodewarden PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_scrub.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_stat_aggr.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_vdisk.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/defs.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/group_stat_aggregator.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden.h

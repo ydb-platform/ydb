@@ -17,6 +17,14 @@ namespace NYT::NQueueClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TProducerSessionBatchOptions
+{
+    //! Weight of serialized buffered rows when flush will be called regardless of the background flush period.
+    std::optional<i64> ByteSize;
+    //! Buffered rows count when flush will be called regardless of the background flush period.
+    std::optional<i64> RowCount;
+};
+
 struct TProducerSessionOptions
 {
     //! If true, sequence numbers will be incremented automatically,
@@ -24,8 +32,12 @@ struct TProducerSessionOptions
     //! If false, each row should contain value of $sequnce_number column.
     bool AutoSequenceNumber = false;
 
-    //! Size of buffer when rows will be flushed to server.
-    size_t MaxBufferSize = 1_MB;
+    //! Batch sizes when rows will be flushed to server regardless of the background flush period (if it is specified).
+    //! If there is no background flush, than one of `BatchOptions::ByteSize` or `BatchOptions::RowCount` should be specified.
+    TProducerSessionBatchOptions BatchOptions;
+
+    //! If set, rows will be flushed in background with this period.
+    std::optional<TDuration> BackgroundFlushPeriod;
 };
 
 struct IProducerSession
@@ -47,12 +59,12 @@ struct IProducerClient
     : public virtual TRefCounted
 {
     //! Create a session (or increase its epoch) and return session writer.
-    //! NB: Session writer return by this method is NOT thread-safe.
     virtual TFuture<IProducerSessionPtr> CreateSession(
         const NYPath::TRichYPath& queuePath,
         const NTableClient::TNameTablePtr& nameTable,
         const NQueueClient::TQueueProducerSessionId& sessionId,
-        const TProducerSessionOptions& options = {}) = 0;
+        const TProducerSessionOptions& options = {},
+        const IInvokerPtr& invoker = nullptr) = 0;
 };
 DEFINE_REFCOUNTED_TYPE(IProducerClient)
 

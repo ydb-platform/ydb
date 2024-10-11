@@ -73,7 +73,7 @@ private:
 
     void Handle(NTiers::TEvNotifyTieringRuleUpdated::TPtr& ev) {
         AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_manager")("event", "object_updated")("name", ev->Get()->GetId())("type", "TIERING_RULE");
-        TieringRules.emplace(ev->Get()->GetId(), ev->Get()->GetConfig());
+        TieringRules[ev->Get()->GetId()] = ev->Get()->GetConfig();
         UpdateSnapshot();
     }
 
@@ -300,15 +300,16 @@ THashMap<ui64, NKikimr::NOlap::TTiering> TTiersManager::GetTiering() const {
 
 void TTiersManager::EnablePathId(const ui64 pathId, const TString& tieringId) {
     AFL_VERIFY(Actor)("error", "tiers_manager_is_not_started");
-    PathIdTiering.emplace(pathId, tieringId);
+    PathIdTiering[pathId] = tieringId;
     if (!TieringRules.contains(tieringId)) {
         Actor->WatchTieringRules({tieringId});
-        HasCompleteData = false;
     }
+    HasCompleteData = ValidateDependencies();
 }
 
 void TTiersManager::DisablePathId(const ui64 pathId) {
     PathIdTiering.erase(pathId);
+    HasCompleteData = ValidateDependencies();
 }
 
 TActorId TTiersManager::GetActorId() const {
@@ -345,7 +346,6 @@ TString TTiersManager::DebugString() {
         }
         sb << "}";
     }
-    sb << Endl;
     return sb;
 }
 }

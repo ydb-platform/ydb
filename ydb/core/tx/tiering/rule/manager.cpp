@@ -76,6 +76,7 @@ void TTieringRulesManager::DoBuildRequestFromSettings(
 
     if (!settings.GetFeaturesExtractor().IsFinished()) {
         controller->OnBuildProblem("undefined params: " + settings.GetFeaturesExtractor().GetRemainedParamsString());
+        return;
     }
 
     NKikimrSchemeOp::TModifyScheme modifyScheme;
@@ -99,8 +100,10 @@ void TTieringRulesManager::DoBuildRequestFromSettings(
             break;
         case IOperationsManager::EActivityType::Upsert:
             controller->OnBuildProblem("Upsert operations are not supported for tiering rules");
+            return;
         case IOperationsManager::EActivityType::Undefined:
             controller->OnBuildProblem("Operation type is undefined");
+            return;
     }
 
     std::optional<NACLib::TUserToken> userToken;

@@ -13,7 +13,7 @@
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapTiering) {
-    Y_UNIT_TEST(Eviction) {
+    void TestEvictionImpl(bool resetTiering) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
 
         TKikimrSettings runnerSettings;
@@ -21,6 +21,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         TTestHelper testHelper(runnerSettings);
         TLocalHelper localHelper(testHelper.GetKikimr());
         // testHelper.GetRuntime().SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
+        // testHelper.GetRuntime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
         testHelper.GetRuntime().SetLogPriority(NKikimrServices::TX_TIERING, NActors::NLog::PRI_DEBUG);
         // testHelper.GetRuntime().SetLogPriority(NKikimrServices::KQP_GATEWAY, NActors::NLog::PRI_DEBUG);
         // testHelper.GetRuntime().SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_DEBUG);
@@ -34,8 +35,8 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         const TString tieringRule = testHelper.CreateTieringRule("tier1", "timestamp");
 
         for (ui64 i = 0; i < 100; ++i) {
-            WriteTestData(testHelper.GetKikimr(), "/Root/olapStore/olapTable", 0, i * 10000, 1000);
-            WriteTestData(testHelper.GetKikimr(), "/Root/olapStore/olapTable", 0, i * 10000, 1000);
+            WriteTestData(testHelper.GetKikimr(), "/Root/olapStore/olapTable", 0, 3600000000 + i * 10000, 1000);
+            WriteTestData(testHelper.GetKikimr(), "/Root/olapStore/olapTable", 0, 3600000000 + i * 10000, 1000);
         }
 
         csController->WaitCompactions(TDuration::Seconds(5));
@@ -79,7 +80,21 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
                                  << " after=" << GetUint64(rows[0].at("RawBytes")));
         }
 
-        testHelper.ResetTiering("/Root/olapStore/olapTable");
+        if (resetTiering) {
+            testHelper.ResetTiering("/Root/olapStore/olapTable");
+        } else {
+            const TString query = R"(ALTER OBJECT )" + tieringRule + R"( (TYPE TIERING_RULE)
+                SET (description = `{
+                    "rules" : [
+                        {
+                            "tierName" : "tier1",
+                            "durationForEvict" : "100000000000d"
+                        }
+                    ]
+                }`))";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
         csController->WaitCompactions(TDuration::Seconds(5));
 
         {
@@ -98,6 +113,14 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
                 TStringBuilder() << "RawBytes changed after resetting tiering: before=" << columnRawBytes
                                  << " after=" << GetUint64(rows[0].at("RawBytes")));
         }
+    }
+
+    Y_UNIT_TEST(Eviction) {
+        TestEvictionImpl(true);
+    }
+
+    Y_UNIT_TEST(EvictionWithIncreasedDuration) {
+        TestEvictionImpl(false);
     }
 
     Y_UNIT_TEST(TieringRuleValidation) {

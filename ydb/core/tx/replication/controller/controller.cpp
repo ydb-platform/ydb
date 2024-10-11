@@ -480,7 +480,7 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
         const auto* target = replication->FindTarget(id.TargetId());
         if (!target) {
             Y_VERIFY_DEBUG(target);
-            CLOG_T(ctx, "Unknown target " <<  id.TargetId() << ": " << ev->Get()->ToString());
+            CLOG_E(ctx, "Resolve target error " <<  id.TargetId() << ": " << ev->Get()->ToString());
             return;
         }
         for (auto partitionId: record.GetChildPartitionsIds()) {

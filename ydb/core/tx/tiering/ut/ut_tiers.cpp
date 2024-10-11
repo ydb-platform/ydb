@@ -351,11 +351,11 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         Tests::TClient client(serverSettings);
 
         auto& runtime = *server->GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::TX_TIERING, NLog::PRI_DEBUG);
 
         auto sender = runtime.AllocateEdgeActor();
         server->SetupRootStoragePools(sender);
         TLocalHelper lHelper(*server);
-        lHelper.CreateTestOlapTable();
         {
             TTestCSEmulator* emulator = new TTestCSEmulator;
             emulator->MutableCheckers().emplace("TIER.tier1", TJsonChecker("Name", "abc"));
@@ -370,6 +370,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             lHelper.StartSchemaRequest("CREATE OBJECT tier2 (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName("abc") + "`");
             lHelper.StartSchemaRequest("CREATE OBJECT tiering1 ("
                 "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTiering1Str + "` )");
+            lHelper.CreateTestOlapTable();
             {
                 const TInstant start = Now();
                 while (!emulator->IsFound() && Now() - start < TDuration::Seconds(2000)) {
@@ -447,6 +448,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
         runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NLog::PRI_INFO);
+        runtime.SetLogPriority(NKikimrServices::TX_TIERING, NLog::PRI_DEBUG);
         //        runtime.SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG);
         runtime.SimulateSleep(TDuration::Seconds(10));
         Cerr << "Initialization finished" << Endl;
@@ -466,6 +468,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             "WITH (defaultColumn = timestamp, description = `" + ConfigTiering1Str + "`)");
         lHelper.StartSchemaRequest("CREATE OBJECT tiering2 (TYPE TIERING_RULE) "
             "WITH (defaultColumn = timestamp, description = `" + ConfigTiering2Str + "` )", true, false);
+        lHelper.CreateTestOlapTable("olapTable");
         {
             TTestCSEmulator* emulator = new TTestCSEmulator({{0, "tiering1"}});
             runtime.Register(emulator);
@@ -475,8 +478,6 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             emulator->SetExpectedTiersCount(2);
             emulator->CheckRuntime(runtime);
         }
-
-        lHelper.CreateTestOlapTable("olapTable");
 
         lHelper.StartSchemaRequest("DROP OBJECT tier2 (TYPE TIER)", false);
         lHelper.StartSchemaRequest("DROP OBJECT tier1 (TYPE TIER)", false);
@@ -658,8 +659,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         lHelper.DropTable("/Root/olapStore/olapTable");
         lHelper.StartDataRequest("DELETE FROM `/Root/olapStore/olapTable`");
 */
-        lHelper.StartSchemaRequest("UPSERT OBJECT tiering1 ("
-            "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTieringNothingStr + "` )");
+        lHelper.StartSchemaRequest("ALTER OBJECT tiering1 ("
+            "TYPE TIERING_RULE) SET (defaultColumn = timestamp, description = `" + ConfigTieringNothingStr + "` )");
         {
             const TInstant start = Now();
             bool check = false;

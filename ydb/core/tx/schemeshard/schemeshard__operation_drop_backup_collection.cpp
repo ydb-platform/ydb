@@ -16,6 +16,17 @@ public:
         : OperationId(std::move(id))
     {}
 
+    bool ProgressState(TOperationContext& context) override {
+        LOG_I(DebugHint() << "ProgressState");
+
+        const auto* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropBackupCollection);
+
+        context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
+        return false;
+    }
+
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
         LOG_I(DebugHint() << "HandleReply TEvOperationPlan: step# " << step);
@@ -54,17 +65,6 @@ public:
         return true;
     }
 
-    bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
-
-        const auto* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropBackupCollection);
-
-        context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
-        return false;
-    }
-
 private:
     TString DebugHint() const override {
         return TStringBuilder() << "TDropBackupCollection TPropose, operationId: " << OperationId << ", ";
@@ -97,38 +97,6 @@ class TDropBackupCollection : public TSubOperation {
         default:
             return nullptr;
         }
-    }
-
-    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TOperationContext& context, const TPath& dstPath) {
-        auto checks = dstPath.Check();
-        checks
-            .NotEmpty()
-            .NotUnderDomainUpgrade()
-            .IsAtLocalSchemeShard()
-            .IsResolved()
-            .NotDeleted()
-            .NotUnderDeleting()
-            .IsBackupCollection()
-            .NotUnderOperation()
-            .IsCommonSensePath();
-
-        if (checks) {
-            const TBackupCollectionInfo::TPtr backupCollection = context.SS->BackupCollections.Value(dstPath->PathId, nullptr);
-            if (!backupCollection) {
-                result->SetError(NKikimrScheme::StatusSchemeError, "Backup collection doesn't exist");
-                return false;
-            }
-        }
-
-        if (!checks) {
-            result->SetError(checks.GetStatus(), checks.GetError());
-            if (dstPath.IsResolved() && dstPath.Base()->IsBackupCollection() && (dstPath.Base()->PlannedToDrop() || dstPath.Base()->Dropped())) {
-                result->SetPathDropTxId(ui64(dstPath.Base()->DropTxId));
-                result->SetPathId(dstPath.Base()->PathId.LocalPathId);
-            }
-        }
-
-        return static_cast<bool>(checks);
     }
 
     void DropBackupCollectionPathElement(const TPath& dstPath) const {
@@ -172,7 +140,38 @@ public:
 
         auto& [_, dstPath] = *bcPaths;
 
-        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, context, dstPath));
+        {
+            auto checks = dstPath.Check();
+            checks
+                .NotEmpty()
+                .NotUnderDomainUpgrade()
+                .IsAtLocalSchemeShard()
+                .IsResolved()
+                .NotDeleted()
+                .NotUnderDeleting()
+                .IsBackupCollection()
+                .NotUnderOperation()
+                .IsCommonSensePath();
+
+            if (checks) {
+                const TBackupCollectionInfo::TPtr backupCollection = context.SS->BackupCollections.Value(dstPath->PathId, nullptr);
+                if (!backupCollection) {
+                    result->SetError(NKikimrScheme::StatusSchemeError, "Backup collection doesn't exist");
+
+                    return result;
+                }
+            }
+
+            if (!checks) {
+                result->SetError(checks.GetStatus(), checks.GetError());
+                if (dstPath.IsResolved() && dstPath.Base()->IsBackupCollection() && (dstPath.Base()->PlannedToDrop() || dstPath.Base()->Dropped())) {
+                    result->SetPathDropTxId(ui64(dstPath.Base()->DropTxId));
+                    result->SetPathId(dstPath.Base()->PathId.LocalPathId);
+                }
+
+                return result;
+            }
+        }
 
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {

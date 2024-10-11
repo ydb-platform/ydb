@@ -26,6 +26,17 @@ public:
     {
     }
 
+    bool ProgressState(TOperationContext& context) override {
+        LOG_I(DebugHint() << "ProgressState");
+
+        const TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateBackupCollection);
+
+        context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
+        return false;
+    }
+
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
 
@@ -54,17 +65,6 @@ public:
 
         context.SS->ChangeTxState(db, OperationId, TTxState::Done);
         return true;
-    }
-
-    bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
-
-        const TTxState* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateBackupCollection);
-
-        context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
-        return false;
     }
 };
 

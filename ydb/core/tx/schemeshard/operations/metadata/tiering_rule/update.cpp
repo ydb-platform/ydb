@@ -106,18 +106,17 @@ TConclusionStatus TDropTieringRule::DoInitialize(const TUpdateInitializationCont
         return TConclusionStatus::Fail("Tiering is in use by column table: " + tableString);
     }
 
-    Exists = context.HasOriginalEntity();
-
     return TConclusionStatus::Success();
 }
 
 TConclusionStatus TDropTieringRule::DoExecute(const TUpdateStartContext& context) {
-    if (Exists) {
-        context.GetSSOperationContext()->MemChanges.GrabTieringRule(
-            context.GetSSOperationContext()->SS, context.GetObjectPath()->Base()->PathId);
-        context.GetSSOperationContext()->SS->TabletCounters->Simple()[COUNTER_TIERING_RULE_COUNT].Sub(1);
-        context.GetSSOperationContext()->SS->PersistRemoveTieringRule(*context.GetDB(), context.GetObjectPath()->Base()->PathId);
-    }
+    context.GetSSOperationContext()->MemChanges.GrabTieringRule(context.GetSSOperationContext()->SS, context.GetObjectPath()->Base()->PathId);
+    return TConclusionStatus::Success();
+}
+
+TConclusionStatus TDropTieringRule::FinishDrop(const TUpdateFinishContext& context) {
+    context.GetSSOperationContext()->SS->TabletCounters->Simple()[COUNTER_TIERING_RULE_COUNT].Sub(1);
+    context.GetSSOperationContext()->SS->PersistRemoveTieringRule(*context.GetDB(), context.GetObjectPath()->Base()->PathId);
     return TConclusionStatus::Success();
 }
 

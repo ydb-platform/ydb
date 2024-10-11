@@ -43,7 +43,7 @@ PEERDIR(
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/formats
-    ydb/core/fq/libs/init
+    #ydb/core/fq/libs/init
     ydb/core/fq/libs/mock
     ydb/core/fq/libs/shared_resources
     ydb/core/grpc_services

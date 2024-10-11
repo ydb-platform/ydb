@@ -2,9 +2,11 @@
 
 #include "schemeshard_identificators.h"
 #include "schemeshard_path_element.h"
-#include "schemeshard_info_types.h"
 
-#include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include "schemeshard_info_types.h"  // only for TTopicInfo and TTopicPartitionInfo
+
+#include <ydb/library/actors/core/actor.h>  // for TActorContext
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>  // for TTransactionContext
 
 #include <util/generic/ptr.h>
 

@@ -315,7 +315,7 @@ private:
         auto& data = response->Data;
         auto key = MakeSessionKey(ev->Get());
 
-        if (key.SessionId.Empty()) {
+        if (key.SessionId.empty()) {
             for (const auto& [k,v] : ServerSessions) {
                 data.emplace_back(k, v);
             }

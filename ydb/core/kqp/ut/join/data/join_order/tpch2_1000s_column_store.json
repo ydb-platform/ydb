@@ -37,7 +37,7 @@
           ]
       },
       {
-        "op_name":"InnerJoin (MapJoin)",
+        "op_name":"InnerJoin (Grace)",
         "args":
           [
             {

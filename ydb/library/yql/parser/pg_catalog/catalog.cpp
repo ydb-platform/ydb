@@ -1254,7 +1254,7 @@ public:
         } else if (key == "amname") {
             CurrDesc_.AmName = value;
         } else if (key == "amtype") {
-            Y_ENSURE(value.Size() == 1);
+            Y_ENSURE(value.size() == 1);
             if ((char)EAmType::Index == value[0]) {
                 CurrDesc_.AmType = EAmType::Index;
             } else if ((char)EAmType::Table == value[0]) {
@@ -1931,7 +1931,7 @@ struct TCatalog : public IExtensionSqlBuilder {
 
         TString line = TStringBuilder() << "\"" << name << "\",\n";
         with_lock(ExportGuard) {
-            ExportFile->Write(line.Data(), line.Size());
+            ExportFile->Write(line.data(), line.size());
         }
     }
 
@@ -3679,7 +3679,7 @@ void RegisterExtensions(const TVector<TExtensionDesc>& extensions, bool typesOnl
                 throw yexception() << "Duplicated extension install name: " << e.InstallName;
             }
 
-            if (e.LibraryMD5.empty()) {
+            if (e.LibraryMD5.empty() && !e.LibraryPath.empty()) {
                 e.LibraryMD5 = MD5::File(e.LibraryPath);
             }
 
@@ -3691,7 +3691,7 @@ void RegisterExtensions(const TVector<TExtensionDesc>& extensions, bool typesOnl
             }
 
             parser.Parse(i + 1, sqls, catalog);
-            if (loader && !e.TypesOnly) {
+            if (loader && !e.TypesOnly && !e.LibraryPath.empty()) {
                 loader->Load(i + 1, e.Name, e.LibraryPath);
             }
         }
@@ -4042,13 +4042,20 @@ void ImportExtensions(const TString& exported, bool typesOnly, IExtensionLoader*
         Y_ENSURE(proto.ParseFromString(exported));
         for (ui32 i = 0; i < proto.ExtensionSize(); ++i) {
             const auto& protoExt = proto.GetExtension(i);
-            TExtensionDesc ext;
-            ext.Name = protoExt.GetName();
-            ext.InstallName = protoExt.GetInstallName();
-            ext.TypesOnly = protoExt.GetTypesOnly();
-            ext.LibraryMD5 = protoExt.GetLibraryMD5();
-            ext.LibraryPath = protoExt.GetLibraryPath();
-            catalog.State->Extensions.push_back(ext);
+            TExtensionDesc e;
+            e.Name = protoExt.GetName();
+            e.InstallName = protoExt.GetInstallName();
+            e.TypesOnly = protoExt.GetTypesOnly();
+            e.LibraryMD5 = protoExt.GetLibraryMD5();
+            e.LibraryPath = protoExt.GetLibraryPath();
+            catalog.State->Extensions.push_back(e);
+            if (!catalog.State->ExtensionsByName.insert(std::make_pair(e.Name, i + 1)).second) {
+                throw yexception() << "Duplicated extension name: " << e.Name;
+            }
+
+            if (!catalog.State->ExtensionsByInstallName.insert(std::make_pair(e.InstallName, i + 1)).second) {
+                throw yexception() << "Duplicated extension install name: " << e.InstallName;
+            }
         }
 
         for (const auto& protoType : proto.GetType()) {

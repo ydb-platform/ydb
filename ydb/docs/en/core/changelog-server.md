@@ -30,7 +30,7 @@ Release date: October 12, 2023.
 * Added support for [column tables](concepts/datamodel/table.md#column-tables). It is now possible to create analytical reports based on stored data in YDB with performance comparable to specialized analytical DBMS.
 * Added support for Kafka API for topics. YDB topics can now be accessed via a Kafka-compatible API designed for migrating existing applications. Support for Kafka protocol version 3.4.0 is provided.
 * Added the ability to [write to a topic without deduplication](concepts/topic.md#no-dedup). This is important in cases where message processing order is not critical.
-* YQL has added the capabilities to [create](yql/reference/syntax/create_topic.md), [modify](yql/reference/syntax/alter_topic.md), and [delete](yql/reference/syntax/delete.md) topics.
+* YQL has added the capabilities to [create](yql/reference/syntax/create-topic.md), [modify](yql/reference/syntax/alter-topic.md), and [delete](yql/reference/syntax/delete.md) topics.
 * Added support of assigning and revoking access rights using the YQL `GRANT` and `REVOKE` commands.
 * Added support of DML-operations logging in the audit log.
 * **_(Experimental)_** When writing messages to a topic, it is now possible to pass metadata. To enable this functionality, add `enable_topic_message_meta: true` to the [configuration file](deploy/configuration/config.md).

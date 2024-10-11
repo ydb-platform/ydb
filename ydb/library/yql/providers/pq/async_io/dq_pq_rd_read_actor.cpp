@@ -591,14 +591,14 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
     SRC_LOG_T("TEvMessageBatch from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo());
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
-    YQL_ENSURE(Sessions.count(partitionId), "Unknown partition id");
+    YQL_ENSURE(Sessions.count(partitionId), "Unknown partition id " << partitionId);
     auto it = Sessions.find(partitionId);
     if (it == Sessions.end()) {
         Stop("Wrong session data");
         return;
     }
 
-    Metrics.InFlyGetNextBatch->Dec();
+    Metrics.InFlyGetNextBatch->Set(0);
     auto& sessionInfo = it->second;
     if (!sessionInfo.EventsQueue.OnEventReceived(ev)) {
         SRC_LOG_W("Wrong seq num ignore message, seqNo " << meta.GetSeqNo());
@@ -625,8 +625,8 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
 std::pair<NUdf::TUnboxedValuePod, i64> TDqPqRdReadActor::CreateItem(const TString& data) {
     i64 usedSpace = 0;
     NUdf::TUnboxedValuePod item;
-    item = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.Data(), data.Size()));
-    usedSpace += data.Size();
+    item = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.data(), data.size()));
+    usedSpace += data.size();
     return std::make_pair(item, usedSpace);
 }
 

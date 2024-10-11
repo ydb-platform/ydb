@@ -36,6 +36,7 @@
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/core/ymq/actor/serviceid.h>
 
+#include <thread>
 
 using TJMap = NJson::TJsonValue::TMapType;
 using TJVector = NJson::TJsonValue::TArray;
@@ -335,6 +336,107 @@ public:
         return {httpCode, "", ""};
     }
 
+    NJson::TJsonMap CreateQueue(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", request, FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+        if (expectedHttpCode == 200) {
+            UNIT_ASSERT(GetByPath<TString>(json, "QueueUrl").EndsWith(GetByPath<TString>(request, "QueueName")));
+        }
+        return json;
+    }
+
+    NJson::TJsonMap DeleteQueue(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto res = SendHttpRequest("/Root", "AmazonSQS.DeleteQueue", request, FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        return json;
+    }
+
+    NJson::TJsonMap GetQueueAttributes(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto res = SendHttpRequest("/Root", "AmazonSQS.GetQueueAttributes", request, FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        return json;
+    }
+
+    NJson::TJsonMap SendMessage(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto res = SendHttpRequest("/Root", "AmazonSQS.SendMessage", request, FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        return json;
+    }
+
+    NJson::TJsonMap ReceiveMessage(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto res = SendHttpRequest("/Root", "AmazonSQS.ReceiveMessage", request, FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        return json;
+    }
+
+    NJson::TJsonMap DeleteMessage(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto res = SendHttpRequest("/Root", "AmazonSQS.DeleteMessage", request, FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        return json;
+    }
+
+    NJson::TJsonMap GetQueueUrl(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto res = SendHttpRequest("/Root", "AmazonSQS.GetQueueUrl", request, FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        return json;
+    }
+
+    NJson::TJsonMap ListQueues(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto res = SendHttpRequest("/Root", "AmazonSQS.ListQueues", request, FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        return json;
+    }
+
+    NJson::TJsonMap PurgeQueue(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto res = SendHttpRequest("/Root", "AmazonSQS.PurgeQueue", request, FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        return json;
+    }
+
+    NJson::TJsonMap SetQueueAttributes(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto res = SendHttpRequest("/Root", "AmazonSQS.SetQueueAttributes", request, FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        return json;
+    }
+
+    bool WaitQueueAttributes(TString queueUrl, size_t retries, std::function<bool (NJson::TJsonMap json)> predicate) {
+        for (size_t i = 0; i < retries; ++i) {
+            auto json = GetQueueAttributes({
+                {"QueueUrl", queueUrl},
+                {"AttributeNames", NJson::TJsonArray{"All"}}
+            });
+
+            if (predicate(json)) {
+                return true;
+            }
+
+            if (i + 1 < retries) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            }
+        }
+        return false;
+    }
+
 private:
     TMaybe<NYdb::TResultSet> RunYqlDataQuery(TString query) {
         TString endpoint = TStringBuilder() << "localhost:" << KikimrGrpcPort;
@@ -476,7 +578,7 @@ private:
         );
 
         client.MkDir("/Root/SQS", ".FIFO");
-        client.CreateTable("/Root/SQS/.FIFO", 
+        client.CreateTable("/Root/SQS/.FIFO",
            "Name: \"Messages\""
            "Columns { Name: \"QueueIdNumberHash\"     Type: \"Uint64\"}"
            "Columns { Name: \"QueueIdNumber\"         Type: \"Uint64\"}"
@@ -536,7 +638,7 @@ private:
            "KeyColumnNames: [\"Account\", \"QueueName\", \"EventType\"]"
         );
 
-        auto stateTableCommon = 
+        auto stateTableCommon =
            "Name: \"State\""
            "Columns { Name: \"QueueIdNumberHash\"      Type: \"Uint64\"}"
            "Columns { Name: \"QueueIdNumber\"          Type: \"Uint64\"}"
@@ -580,7 +682,7 @@ private:
            "KeyColumnNames: [\"QueueIdNumberAndShardHash\", \"QueueIdNumber\", \"Shard\", \"Offset\"]"
         );
 
-        auto sentTimestampIdxCommonColumns= 
+        auto sentTimestampIdxCommonColumns=
            "Columns { Name: \"QueueIdNumberAndShardHash\"  Type: \"Uint64\"}"
            "Columns { Name: \"QueueIdNumber\"              Type: \"Uint64\"}"
            "Columns { Name: \"Shard\"                      Type: \"Uint32\"}"
@@ -699,7 +801,7 @@ private:
         folderServiceConfig.SetEnable(false);
         actorId = as->Register(NKikimr::NFolderService::CreateFolderServiceActor(folderServiceConfig, "cloud4"));
         as->RegisterLocalService(NFolderService::FolderServiceActorId(), actorId);
-        
+
         actorId = as->Register(NKikimr::NFolderService::CreateFolderServiceActor(folderServiceConfig, "cloud4"));
         as->RegisterLocalService(NSQS::MakeSqsFolderServiceID(), actorId);
 

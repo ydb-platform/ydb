@@ -54,7 +54,7 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketRes
     }
     UserToken = ev->Get()->Token;
 
-    if (ClientAuthData.UserName.Empty()) {
+    if (ClientAuthData.UserName.empty()) {
         bool gotPermission = false;
         for (auto & sid : UserToken->GetGroupSIDs()) {
             if (sid == NKikimr::NGRpcProxy::V1::KafkaPlainAuthSid) {
@@ -212,7 +212,7 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeyS
         else if (attr.first == "kafka_api") KafkaApiFlag = attr.second;
     }
 
-    if (ClientAuthData.UserName.Empty()) {
+    if (ClientAuthData.UserName.empty()) {
         // ApiKey IAM authentification
         SendApiKeyRequest();
     } else {

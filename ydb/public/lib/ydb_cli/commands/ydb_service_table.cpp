@@ -327,10 +327,11 @@ int TCommandDropTable::Run(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-void TCommandQueryBase::CheckQueryOptions() const {
+void TCommandQueryBase::CheckQueryOptions(TClientCommand::TConfig& config) const {
     if (!Query && !QueryFile) {
-        throw TMisuseException() << "Neither \"Text of query\" (\"--query\", \"-q\") "
-            << "nor \"Path to file with query text\" (\"--file\", \"-f\") were provided.";
+        Cerr << "Neither \"Text of query\" (\"--query\", \"-q\") "
+            << "nor \"Path to file with query text\" (\"--file\", \"-f\") were provided." << Endl;
+        config.PrintHelpAndExit();
     }
     if (Query && QueryFile) {
         throw TMisuseException() << "Both mutually exclusive options \"Text of query\" (\"--query\", \"-q\") "
@@ -403,7 +404,7 @@ void TCommandExecuteQuery::Parse(TConfig& config) {
             || BatchMode != EBatchMode::Default) && QueryType == "scheme") {
         throw TMisuseException() << "Scheme queries does not support parameter options.";
     }
-    CheckQueryOptions();
+    CheckQueryOptions(config);
     CheckQueryFile();
     ParseParameters(config);
 }
@@ -780,7 +781,7 @@ void TCommandExecuteQuery::PrintFlameGraph(const TMaybe<TString>& plan)
     if (!FlameGraphPath) {
         return;
     }
-    if (FlameGraphPath->Empty()) {
+    if (FlameGraphPath->empty()) {
         Cout << Endl << "FlameGraph path can not be empty." << Endl;
         return;
     }
@@ -847,7 +848,7 @@ void TCommandExplain::SaveDiagnosticsToFile(const TString& diagnostics) {
 void TCommandExplain::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParseOutputFormats();
-    CheckQueryOptions();
+    CheckQueryOptions(config);
 }
 
 int TCommandExplain::Run(TConfig& config) {
@@ -980,7 +981,7 @@ int TCommandExplain::Run(TConfig& config) {
         TQueryPlanPrinter queryPlanPrinter(OutputFormat, Analyze);
         queryPlanPrinter.Print(planJson);
 
-        if( FlameGraphPath && !FlameGraphPath->Empty() ) {
+        if( FlameGraphPath && !FlameGraphPath->empty() ) {
             try {
                 NKikimr::NVisual::GenerateFlameGraphSvg(FlameGraphPath.GetRef(), planJson);
                 Cout << Endl << "Resource usage flame graph is successfully saved to " << FlameGraphPath.GetRef() << Endl;
@@ -989,7 +990,7 @@ int TCommandExplain::Run(TConfig& config) {
                 Cout << Endl << "Can't save resource usage flame graph, error: " << ex.what() << Endl;
             }
         }
-        else if( FlameGraphPath && FlameGraphPath->Empty() ) {
+        else if( FlameGraphPath && FlameGraphPath->empty() ) {
             Cout << Endl << "FlameGraph path can not be empty." << Endl;
         }
     }

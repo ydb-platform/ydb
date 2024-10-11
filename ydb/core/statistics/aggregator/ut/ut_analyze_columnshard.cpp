@@ -13,7 +13,8 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
     Y_UNIT_TEST(AnalyzeTable) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 1)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 1);
+        const auto& tableInfo = databaseInfo.Tables[0];
 
         AnalyzeTable(runtime, tableInfo.ShardIds[0], tableInfo.PathId);
     }
@@ -21,7 +22,8 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
     Y_UNIT_TEST(Analyze) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 1)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 1);
+        const auto& tableInfo = databaseInfo.Tables[0];
 
         Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
     }
@@ -29,7 +31,8 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
     Y_UNIT_TEST(AnalyzeServerless) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateServerlessDatabaseColumnTables(env, 1, 1)[0];
+        auto databaseInfo = CreateServerlessDatabaseColumnTables(env, 1, 1);
+        const auto& tableInfo = databaseInfo.Tables[0];
 
         Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
     }
@@ -37,7 +40,8 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
     Y_UNIT_TEST(AnalyzeAnalyzeOneColumnTableSpecificColumns) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 1)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 1);
+        const auto& tableInfo = databaseInfo.Tables[0];
 
         Analyze(runtime, tableInfo.SaTabletId, {{tableInfo.PathId, {1, 2}}});
     }
@@ -45,7 +49,8 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
     Y_UNIT_TEST(AnalyzeTwoColumnTables) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfos = CreateDatabaseColumnTables(env, 2, 1);
+        auto databaseInfo = CreateDatabaseColumnTables(env, 2, 1);
+        const auto& tableInfos = databaseInfo.Tables;
 
         Analyze(runtime, tableInfos[0].SaTabletId, {tableInfos[0].PathId, tableInfos[1].PathId});
     }
@@ -56,11 +61,10 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         auto sender = runtime.AllocateEdgeActor();
 
         TBlockEvents<TEvStatistics::TEvAnalyzeTableResponse> block(runtime);
-
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 1)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 1);
+        const auto& tableInfo = databaseInfo.Tables[0];
 
         const TString operationId = "operationId";
-
         AnalyzeStatus(runtime, sender, tableInfo.SaTabletId, operationId, NKikimrStat::TEvAnalyzeStatusResponse::STATUS_NO_OPERATION);
 
         auto analyzeRequest = MakeAnalyzeRequest({{tableInfo.PathId, {1, 2}}}, operationId);
@@ -75,7 +79,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
             auto httpResponse = runtime.GrabEdgeEventRethrow<NActors::NMon::TEvRemoteHttpInfoRes>(sender);
             TString body = httpResponse->Get()->Html;
             Cerr << body << Endl;
-            UNIT_ASSERT(body.Size() > 500);
+            UNIT_ASSERT(body.size() > 500);
             UNIT_ASSERT(body.Contains("ForceTraversals: 1"));
         }
 
@@ -91,7 +95,8 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
     Y_UNIT_TEST(AnalyzeSameOperationId) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 1)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 1);
+        const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
         const TString operationId = "operationId";
 
@@ -121,7 +126,8 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
     Y_UNIT_TEST(AnalyzeMultiOperationId) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 1)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 1);
+        const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
 
         auto GetOperationId = [] (size_t i) { return TStringBuilder() << "operationId" << i; };
@@ -152,7 +158,8 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
     Y_UNIT_TEST(AnalyzeRebootSaBeforeAnalyzeTableResponse) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 1)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 1);
+        const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
 
         bool eventSeen = false;
@@ -177,7 +184,8 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
     Y_UNIT_TEST(AnalyzeRebootSaBeforeResolve) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 1)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 1);
+        const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
 
         TBlockEvents<TEvTxProxySchemeCache::TEvResolveKeySetResult> block(runtime);
@@ -205,7 +213,8 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
     Y_UNIT_TEST(AnalyzeRebootSaBeforeReqDistribution) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 1)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 1);
+        const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
 
         bool eventSeen = false;
@@ -230,7 +239,8 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
     Y_UNIT_TEST(AnalyzeRebootSaBeforeAggregate) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 1)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 1);
+        const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
 
         bool eventSeen = false;
@@ -255,7 +265,8 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
     Y_UNIT_TEST(AnalyzeRebootSaBeforeSave) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 1)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 1);
+        const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
 
         bool eventSeen = false;
@@ -280,7 +291,8 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
     Y_UNIT_TEST(AnalyzeRebootSaInAggregate) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 10)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
+        const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
         
         int observerCount = 0;
@@ -306,7 +318,8 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
     Y_UNIT_TEST(AnalyzeRebootColumnShard) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 1)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 1);
+        const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
 
         TBlockEvents<TEvStatistics::TEvAnalyzeTableResponse> block(runtime);
@@ -324,7 +337,8 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
     Y_UNIT_TEST(AnalyzeDeadline) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto tableInfo = CreateDatabaseColumnTables(env, 1, 1)[0];
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 1);
+        const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
 
         TBlockEvents<TEvStatistics::TEvAnalyzeTableResponse> block(runtime);

@@ -14,7 +14,7 @@ def main(argv):
     print("name:",name)
     print("input_dir:",input_dir)
     print("output_dir:",output_dir)
-    
+
     in_h=os.path.join(input_dir,name + ".pb.h")
     in_cpp=os.path.join(input_dir,name + ".pb.cc")
     out_h=os.path.join(output_dir,name + ".pb.main.h")
@@ -24,7 +24,7 @@ def main(argv):
        with open(in_h,"r") as in_file:
            for line in in_file:
               line = line.replace("inline void RegisterArenaDtor","void RegisterArenaDtor")
-              out_file.write(line) 
+              out_file.write(line)
 
     for i in range(0,2 + NSPLIT):
         with open(out_cpp_template.replace("I","code" + str(i) + ".cc" if i<NSPLIT else "data.cc" if i==NSPLIT else "classes.h"),"w") as out_file:
@@ -49,7 +49,7 @@ def main(argv):
                 for line in in_file:
                     line=line.replace("inline ","")
                     if 'Generated::' in line and line.endswith('_default_instance_._instance,\n'):
-                        line = f'reinterpret_cast<const ::_pb::Message*>({line.removesuffix('._instance,\n')}),'
+                        line = 'reinterpret_cast<const ::_pb::Message*>(' + line.removesuffix('._instance,\n') + '),'
                     if line.startswith("#"):
                         out_file.write(line)
                         continue

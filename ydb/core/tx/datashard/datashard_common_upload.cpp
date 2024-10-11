@@ -137,7 +137,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             }
 
             keyBytes += c.Size();
-            key.emplace_back(TRawTypeValue(c.AsRef(), kt));
+            key.emplace_back(TRawTypeValue(c.AsRef(), kt.GetTypeId()));
             ++ki;
         }
 
@@ -189,7 +189,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             if (valueCells.GetCells()[vi].Size() > NLimits::MaxWriteValueSize) {
                 SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT,
                          Sprintf("Row cell size of %" PRISZT " bytes is larger than the allowed threshold %" PRIu64,
-                                 valueCells.GetBuffer().Size(), NLimits::MaxWriteValueSize));
+                                 valueCells.GetBuffer().size(), NLimits::MaxWriteValueSize));
                 return true;
             }
 
@@ -200,7 +200,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             }
 
             if (allowUpdate) {
-                value.emplace_back(NTable::TUpdateOp(vt.first, NTable::ECellOp::Set, TRawTypeValue(valueCells.GetCells()[vi].AsRef(), vt.second)));
+                value.emplace_back(NTable::TUpdateOp(vt.first, NTable::ECellOp::Set, TRawTypeValue(valueCells.GetCells()[vi].AsRef(), vt.second.GetTypeId())));
             }
             ++vi;
         }

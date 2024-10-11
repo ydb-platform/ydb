@@ -16,7 +16,6 @@
 #include <util/generic/strbuf.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include "grpc_log.h"
-#include "mvp_tokens.h"
 
 template <typename T>
 class TAtomicSingleton {
@@ -142,6 +141,9 @@ struct TYdbUnitResources {
 
 extern TMap<std::pair<TStringBuf, TStringBuf>, TYdbUnitResources> DefaultUnitResources;
 
+TString GetAuthHeaderValue(const TString& tokenName);
+void SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config);
+
 struct TYdbLocation {
     TString Name;
     TString Environment;
@@ -257,6 +259,7 @@ struct TYdbLocation {
             config.SslCredentials.pem_root_certs = certificate;
         }
         config.EnableSsl = ssl;
+        SetGrpcKeepAlive(config);
         return CreateGRpcServiceConnection<TGRpcService>(config);
     }
 
@@ -272,6 +275,7 @@ struct TYdbLocation {
         if (config.EnableSsl && CaCertificate) {
             config.SslCredentials.pem_root_certs = CaCertificate;
         }
+        SetGrpcKeepAlive(config);
         return CreateGRpcServiceConnection<TGRpcService>(config);
     }
 
@@ -350,5 +354,3 @@ private:
         return GRpcClientLow.GetRef();
     }
 };
-
-TString GetAuthHeaderValue(const TString& tokenName);

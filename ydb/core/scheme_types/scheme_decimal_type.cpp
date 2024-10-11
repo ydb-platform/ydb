@@ -11,6 +11,18 @@
 
 namespace NKikimr::NScheme {
 
+TDecimalType::TDecimalType(ui32 precision, ui32 scale)
+    : Precision(precision)
+    , Scale(scale)
+{
+    TString error;
+    Y_ABORT_UNLESS(Validate(precision, scale, error), "%s", error.c_str());
+}
+
+bool TDecimalType::operator==(const TDecimalType& other) const {
+    return Precision == other.Precision && Scale == other.Scale;
+} 
+
 TString TDecimalType::CellValueToString(const std::pair<ui64, i64>& cellValue) const {
     return NYql::NDecimal::ToString(NYql::NDecimal::FromHalfs(cellValue.first, cellValue.second),
         Precision, Scale);
@@ -22,23 +34,41 @@ void TDecimalType::CellValueToStream(const std::pair<ui64, i64>& cellValue, IOut
 }    
 
 const std::optional<TDecimalType> TDecimalType::ParseTypeName(const TStringBuf& typeName) {
-    ui32 precision = 0;
-    ui32 scale = 0;
     if (strcasecmp(typeName.data(), "decimal") == 0) {
-        precision = DECIMAL_PRECISION;
-        scale = DECIMAL_SCALE;
+        return TDecimalType::Default();
     } else {
-        static const std::regex regex("decimal\\((\\d+),(\\d+)\\)", std::regex_constants::icase);
+        static const std::regex regex("decimal\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)", std::regex_constants::icase);
         std::smatch match;
         if (std::regex_search(typeName.data(), match, regex)) {
-            precision = FromString<ui32>(match[1].str());
-            scale = FromString<ui32>(match[2].str());
+            ui32 precision = FromString<ui32>(match[1].str());
+            ui32 scale = FromString<ui32>(match[2].str());
+
+            if (precision > DECIMAL_MAX_PRECISION)
+                return {};
+            if (scale > precision)
+                return {};
+
+            return TDecimalType(precision, scale);
+        } else {
+            return {};
         }
     }
-    if (precision == 0 || scale == 0) {
-        return {};
+}
+
+bool TDecimalType::Validate(ui32 precision, ui32 scale, TString& error) {
+    if (precision == 0) {
+        error = Sprintf("Decimal precision should not be zero");
+        return false;
     }
-    return TDecimalType(precision, scale);
+    if (precision > NKikimr::NScheme::DECIMAL_MAX_PRECISION) {
+        error = Sprintf("Decimal precision %u should be less than %u", precision, NKikimr::NScheme::DECIMAL_MAX_PRECISION);
+        return false;
+    }
+    if (scale > precision) {
+        error = Sprintf("Decimal precision %u should be more than scale %u", precision, scale);
+        return false;
+    }
+    return true;
 }
 
 } // namespace NKikimr::NScheme

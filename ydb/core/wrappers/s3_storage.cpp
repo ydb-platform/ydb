@@ -148,7 +148,7 @@ private:
 
     public:
         explicit TOutputStreamBuf(TString& buffer)
-            : TOutputStreamBuf(buffer.Detach(), buffer.Size())
+            : TOutputStreamBuf(buffer.Detach(), buffer.size())
         {
         }
     };

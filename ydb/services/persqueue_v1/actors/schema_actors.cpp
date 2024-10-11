@@ -277,7 +277,7 @@ void TRemoveReadRuleActor::ModifyPersqueueConfig(
         GetProtoRequest()->consumer_name(),
         appData->PQConfig
     );
-    if (!error.Empty()) {
+    if (!error.empty()) {
         return ReplyWithError(Ydb::StatusIds::NOT_FOUND, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error);
     }
 }

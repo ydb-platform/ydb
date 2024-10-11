@@ -163,7 +163,7 @@ int TCommandImportFromS3::Run(TConfig& config) {
                 token = listResult.NextToken;
                 for (TStringBuf key : listResult.Keys) {
                     if (key.ChopSuffix(NDump::SCHEME_FILE_NAME)) {
-                        TString destination = item.Destination + key.substr(item.Source.Size());
+                        TString destination = item.Destination + key.substr(item.Source.size());
                         settings.AppendItem({TString(key), std::move(destination)});
                     }
                 }

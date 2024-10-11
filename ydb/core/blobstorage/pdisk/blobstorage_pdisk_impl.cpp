@@ -25,7 +25,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
-    : PCtx(std::move(pCtx)) //std::make_shared<TPDiskCtx>())
+    : PCtx(std::move(pCtx))
     , Mon(counters, cfg->PDiskId, cfg.Get())
     , DriveModel(cfg->DriveModelSeekTimeNs,
             cfg->DriveModelSpeedBps,
@@ -47,7 +47,7 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     , BlockDevice(CreateRealBlockDevice(cfg->GetDevicePath(), Mon,
                     HPCyclesMs(ReorderingMs), DriveModel.SeekTimeNs(), cfg->DeviceInFlight,
                     TDeviceMode::LockFile | (cfg->UseSpdkNvmeDriver ? TDeviceMode::UseSpdk : 0),
-                    cfg->MaxQueuedCompletionActions, cfg->SectorMap, this))
+                    cfg->MaxQueuedCompletionActions, cfg->CompletionThreadsCount, cfg->SectorMap, this))
     , Cfg(cfg)
     , CreationTime(TInstant::Now())
     , ExpectedSlotCount(cfg->ExpectedSlotCount)
@@ -60,8 +60,8 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
             0, 64 * 1024 * 1024);
     ForsetiMaxLogBatchNs = TControlWrapper((PDiskCategory.IsSolidState() ? 50'000ll : 500'000ll), 0, 100'000'000ll);
     ForsetiMaxLogBatchNsCached = ForsetiMaxLogBatchNs;
-    ForsetiOpPieceSizeSsd = TControlWrapper(64 * 1024, 1, 512 * 1024);
-    ForsetiOpPieceSizeRot = TControlWrapper(512 * 1024, 1, 512 * 1024);
+    ForsetiOpPieceSizeSsd = TControlWrapper(64 * 1024, 1, Cfg->BufferPoolBufferSizeBytes);
+    ForsetiOpPieceSizeRot = TControlWrapper(512 * 1024, 1, Cfg->BufferPoolBufferSizeBytes);
     ForsetiOpPieceSizeCached = PDiskCategory.IsSolidState() ?  ForsetiOpPieceSizeSsd : ForsetiOpPieceSizeRot;
 
     if (Cfg->SectorMap) {
@@ -322,36 +322,27 @@ void TPDisk::Stop() {
         delete req;
     }
     JointLogReads.clear();
+
     for (auto& req : JointChunkReads) {
+        Y_VERIFY_DEBUG_S(req->GetType() == ERequestType::RequestChunkReadPiece,
+                "Unexpected request type# " << TypeName(*req));
         TRequestBase::AbortDelete(req.Get(), PCtx->ActorSystem);
     }
     JointChunkReads.clear();
     for (TRequestBase* req : JointChunkWrites) {
-        switch (req->GetType()) {
-            case ERequestType::RequestChunkWrite:
-            {
-                TChunkWrite *write = static_cast<TChunkWrite*>(req);
-                if (write->IsTotallyEnqueued()) {
-                    delete write;
-                }
-                break;
-            }
-            case ERequestType::RequestChunkWritePiece:
-                delete req;
-                break;
-            default:
-                Y_FAIL_S("Unexpected request type# " << ui64(req->GetType()) << " in JointChunkWrites");
-        }
+        Y_VERIFY_DEBUG_S(req->GetType() == ERequestType::RequestChunkWritePiece,
+                "Unexpected request type# " << TypeName(req));
+        TRequestBase::AbortDelete(req, PCtx->ActorSystem);
     }
     JointChunkWrites.clear();
     for (TLogWrite* req : JointLogWrites) {
-        delete req;
+        TRequestBase::AbortDelete(req, PCtx->ActorSystem);
     }
     JointLogWrites.clear();
     JointCommits.clear();
     JointChunkForgets.clear();
-    for (const auto& req : FastOperationsQueue) {
-        TRequestBase::AbortDelete(req.get(), PCtx->ActorSystem);
+    for (auto& req : FastOperationsQueue) {
+        TRequestBase::AbortDelete(req.release(), PCtx->ActorSystem);
     }
     FastOperationsQueue.clear();
     for (TRequestBase* req : PausedQueue) {
@@ -2281,7 +2272,7 @@ void TPDisk::ProcessChunkReadQueue() {
             // Don't add code before the warning!
             //
             Mon.IncrementQueueTime(priorityClass, HPMilliSeconds(now - creationTime));
-            P_LOG(PRI_NOTICE, BPD37, "enqueued all TChunkReadPiece", (ReqId, reqId), (chunkIdx, chunkIdx));
+            P_LOG(PRI_DEBUG, BPD37, "enqueued all TChunkReadPiece", (ReqId, reqId), (chunkIdx, chunkIdx));
         }
     }
     LWTRACK(PDiskProcessChunkReadQueue, UpdateCycleOrbit, PCtx->PDiskId, JointChunkReads.size());
@@ -2484,6 +2475,9 @@ void TPDisk::ProcessFastOperationsQueue() {
                 break;
             case ERequestType::RequestPushUnformattedMetadataSector:
                 ProcessPushUnformattedMetadataSector(static_cast<TPushUnformattedMetadataSector&>(*req));
+                break;
+            case ERequestType::RequestContinueReadMetadata:
+                static_cast<TContinueReadMetadata&>(*req).Execute(PCtx->ActorSystem);
                 break;
             default:
                 Y_FAIL_S("Unexpected request type# " << (ui64)req->GetType());
@@ -3078,6 +3072,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
         case ERequestType::RequestPushUnformattedMetadataSector:
         case ERequestType::RequestReadMetadata:
         case ERequestType::RequestWriteMetadata:
+        case ERequestType::RequestContinueReadMetadata:
             break;
         case ERequestType::RequestStopDevice:
             BlockDevice->Stop();

@@ -100,7 +100,7 @@ void DumpLocalTable(const TString& tableContent, const TString& path) {
     }
 
     TFileOutput out(path);
-    out.Write(tableContent.Data(), tableContent.Size());
+    out.Write(tableContent.data(), tableContent.size());
     out.Flush();
 }
 
@@ -1802,7 +1802,7 @@ private:
             auto cacheKey = std::make_tuple(prefix, suffix, filterLambda);
             with_lock(entry->Lock_) {
                 if (auto p = entry->RangeCache.FindPtr(cacheKey)) {
-                    YQL_CLOG(INFO, ProviderYt) << "Found range in cache for key ('" << prefix << "','" << suffix << "',<filter with size " << filterLambda.Size() << ">) - number of items " << p->size();
+                    YQL_CLOG(INFO, ProviderYt) << "Found range in cache for key ('" << prefix << "','" << suffix << "',<filter with size " << filterLambda.size() << ">) - number of items " << p->size();
                     return MakeFuture(MakeTableRangeResult(*p));
                 }
             }
@@ -4309,6 +4309,10 @@ private:
 
                 if (transform.CanExecuteInternally() && !testRun) {
                     const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
+                    execCtx->SetNodeExecProgress("Waiting for concurrency limit");
+                    execCtx->Session_->InitLocalCalcSemaphore(execCtx->Options_.Config());
+                    TGuard<TFastSemaphore> guard(*execCtx->Session_->LocalCalcSemaphore_);
+                    execCtx->SetNodeExecProgress("Local run");
                     ExecSafeFill(outYPaths, root, execCtx->GetOutSpec(!useSkiff, nativeTypeCompat), execCtx, entry, builder, alloc, tmpFiles->TmpDir.GetPath() + '/');
                     return MakeFuture();
                 }
@@ -4906,6 +4910,10 @@ private:
             }
 
             if (transform.CanExecuteInternally()) {
+                execCtx->SetNodeExecProgress("Waiting for concurrency limit");
+                execCtx->Session_->InitLocalCalcSemaphore(execCtx->Options_.Config());
+                TGuard<TFastSemaphore> guard(*execCtx->Session_->LocalCalcSemaphore_);
+                execCtx->SetNodeExecProgress("Local run");
                 TExploringNodeVisitor explorer;
                 auto localGraph = builder.BuildLocalGraph(GetGatewayNodeFactory(codecCtx.Get(), nullptr, execCtx->UserFiles_, pathPrefix),
                     execCtx->Options_.UdfValidateMode(), NUdf::EValidatePolicy::Exception,

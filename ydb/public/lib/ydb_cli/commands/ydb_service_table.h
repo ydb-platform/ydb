@@ -84,7 +84,7 @@ public:
 
 class TCommandQueryBase {
 protected:
-    void CheckQueryOptions() const;
+    void CheckQueryOptions(TClientCommand::TConfig& config) const;
     void CheckQueryFile();
 
 protected:

@@ -26,6 +26,6 @@ TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType type, const T
 
 TVector<TString> GetImplTables(NKikimrSchemeOp::EIndexType indexType);
 bool IsImplTable(std::string_view tableName);
-bool IsTmpImplTable(std::string_view tableName);
+bool IsBuildImplTable(std::string_view tableName);
 
 }

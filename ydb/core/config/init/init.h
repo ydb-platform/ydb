@@ -2,10 +2,9 @@
 
 #include <ydb/core/driver_lib/run/service_mask.h>
 #include <ydb/core/base/event_filter.h>
-#include <ydb/core/config/init/source_location.h>
+#include <ydb/core/util/source_location.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/interconnect.h>
-#include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 #include <library/cpp/getopt/small/last_getopt_opts.h>
 

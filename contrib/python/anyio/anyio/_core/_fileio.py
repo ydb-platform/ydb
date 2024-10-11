@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import pathlib
 import sys
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import AsyncIterator, Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from functools import partial
 from os import PathLike
@@ -12,7 +12,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     AnyStr,
-    AsyncIterator,
     Final,
     Generic,
     overload,
@@ -358,8 +357,26 @@ class Path:
     def as_uri(self) -> str:
         return self._path.as_uri()
 
-    def match(self, path_pattern: str) -> bool:
-        return self._path.match(path_pattern)
+    if sys.version_info >= (3, 13):
+        parser = pathlib.Path.parser
+
+        @classmethod
+        def from_uri(cls, uri: str) -> Path:
+            return Path(pathlib.Path.from_uri(uri))
+
+        def full_match(
+            self, path_pattern: str, *, case_sensitive: bool | None = None
+        ) -> bool:
+            return self._path.full_match(path_pattern, case_sensitive=case_sensitive)
+
+        def match(
+            self, path_pattern: str, *, case_sensitive: bool | None = None
+        ) -> bool:
+            return self._path.match(path_pattern, case_sensitive=case_sensitive)
+    else:
+
+        def match(self, path_pattern: str) -> bool:
+            return self._path.match(path_pattern)
 
     def is_relative_to(self, other: str | PathLike[str]) -> bool:
         try:

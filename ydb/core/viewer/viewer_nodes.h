@@ -109,7 +109,7 @@ class TJsonNodes : public TViewerPipeClient {
     std::unordered_set<ui32> FilterGroupIds;
     std::optional<std::size_t> Offset;
     std::optional<std::size_t> Limit;
-    ui32 UptimeSeconds = 0;
+    int UptimeSeconds = 0;
     bool ProblemNodesOnly = false;
     TString Filter;
     bool AllWhiteboardFields = false;
@@ -145,6 +145,8 @@ class TJsonNodes : public TViewerPipeClient {
     bool OffloadMerge = true;
     size_t OffloadMergeAttempts = 2;
 
+    using TGroupSortKey = std::variant<TString, ui64, float, int>;
+
     struct TNode {
         TEvInterconnect::TNodeInfo NodeInfo;
         NKikimrWhiteboard::TSystemStateInfo SystemState;
@@ -165,6 +167,7 @@ class TJsonNodes : public TViewerPipeClient {
         bool HasDisks = false;
         bool GotDatabaseFromDatabaseBoardInfo = false;
         bool GotDatabaseFromResourceBoardInfo = false;
+        int UptimeSeconds = 0;
 
         TNodeId GetNodeId() const {
             return NodeInfo.NodeId;
@@ -282,7 +285,7 @@ class TJsonNodes : public TViewerPipeClient {
                     disconnectTime = std::max(disconnectTime, TInstant::MicroSeconds(pdisk.GetStatusChangeTimestamp()));
                 }
                 if (disconnectTime) {
-                    SystemState.SetDisconnectTime(disconnectTime.Seconds());
+                    SystemState.SetDisconnectTime(disconnectTime.MilliSeconds());
                 }
             }
         }
@@ -374,38 +377,56 @@ class TJsonNodes : public TViewerPipeClient {
             return TStringBuilder() << std::floor(std::clamp<float>(DiskSpaceUsage, 0, 100) / 5) * 5 << '%';
         }
 
-        TString GetUptimeForGroup(TInstant now) const {
-            if (!Disconnected) {
-                auto uptime = static_cast<int>(now.Seconds()) - SystemState.GetStartTime();
-                if (uptime < 60 * 10) {
-                    return "uptime < 10m";
+        TInstant GetStartTime() const {
+            return TInstant::MilliSeconds(SystemState.GetStartTime());
+        }
+
+        TInstant GetDisconnectTime() const {
+            return TInstant::MilliSeconds(SystemState.GetDisconnectTime());
+        }
+
+        int GetUptimeSeconds(TInstant now) const {
+            if (Disconnected) {
+                return static_cast<int>(GetDisconnectTime().Seconds()) - static_cast<int>(now.Seconds()); // negative for disconnected nodes
+            } else {
+                return static_cast<int>(now.Seconds()) - static_cast<int>(GetStartTime().Seconds());
+            }
+        }
+
+        void CalcUptimeSeconds(TInstant now) {
+            UptimeSeconds = GetUptimeSeconds(now);
+        }
+
+        TString GetUptimeForGroup() const {
+            if (!Disconnected && UptimeSeconds >= 0) {
+                if (UptimeSeconds < 60 * 10) {
+                    return "up <10m";
                 }
-                if (uptime < 60 * 60) {
-                    return "uptime < 1h";
+                if (UptimeSeconds < 60 * 60) {
+                    return "up <1h";
                 }
-                if (uptime < 60 * 60 * 24) {
-                    return "uptime < 24h";
+                if (UptimeSeconds < 60 * 60 * 24) {
+                    return "up <24h";
                 }
-                if (uptime < 60 * 60 * 24 * 7) {
-                    return "uptime < 1 week";
+                if (UptimeSeconds < 60 * 60 * 24 * 7) {
+                    return "up 24h+";
                 }
-                return "uptime > 1 week";
+                return "up 1 week+";
             } else {
                 if (SystemState.HasDisconnectTime()) {
-                    auto downtime = static_cast<int>(now.Seconds()) - SystemState.GetDisconnectTime();
-                    if (downtime < 60 * 10) {
-                        return "downtime < 10m";
+                    if (UptimeSeconds > -60 * 10) {
+                        return "down <10m";
                     }
-                    if (downtime < 60 * 60) {
-                        return "downtime < 1h";
+                    if (UptimeSeconds > -60 * 60) {
+                        return "down <1h";
                     }
-                    if (downtime < 60 * 60 * 24) {
-                        return "downtime < 24h";
+                    if (UptimeSeconds > -60 * 60 * 24) {
+                        return "down <24h";
                     }
-                    if (downtime < 60 * 60 * 24 * 7) {
-                        return "downtime < 1 week";
+                    if (UptimeSeconds > -60 * 60 * 24 * 7) {
+                        return "down 24h+";
                     }
-                    return "downtime > 1 week";
+                    return "down 1 week+";
                 } else {
                     return "disconnected";
                 }
@@ -428,7 +449,7 @@ class TJsonNodes : public TViewerPipeClient {
             return SubDomainKey == subDomainKey;
         }
 
-        TString GetGroupName(ENodeFields groupBy, TInstant now) const {
+        TString GetGroupName(ENodeFields groupBy) const {
             TString groupName;
             switch (groupBy) {
                 case ENodeFields::NodeId:
@@ -456,7 +477,7 @@ class TJsonNodes : public TViewerPipeClient {
                     groupName = ToString(MissingDisks);
                     break;
                 case ENodeFields::Uptime:
-                    groupName = GetUptimeForGroup(now);
+                    groupName = GetUptimeForGroup();
                     break;
                 case ENodeFields::Version:
                     groupName = GetVersionForGroup();
@@ -470,18 +491,35 @@ class TJsonNodes : public TViewerPipeClient {
             return groupName;
         }
 
-        void MergeFrom(const NKikimrWhiteboard::TSystemStateInfo& systemState) {
+        TGroupSortKey GetGroupSortKey(ENodeFields groupBy) const {
+            switch (groupBy) {
+                case ENodeFields::NodeId:
+                case ENodeFields::HostName:
+                case ENodeFields::NodeName:
+                case ENodeFields::Database:
+                case ENodeFields::DC:
+                case ENodeFields::Rack:
+                case ENodeFields::Version:
+                    return GetGroupName(groupBy);
+                case ENodeFields::DiskSpaceUsage:
+                    return DiskSpaceUsage;
+                case ENodeFields::Missing:
+                    return MissingDisks;
+                case ENodeFields::Uptime:
+                    return UptimeSeconds;
+                default:
+                    return TString();
+            }
+        }
+
+        void MergeFrom(const NKikimrWhiteboard::TSystemStateInfo& systemState, TInstant now) {
             SystemState.MergeFrom(systemState);
             Cleanup();
             CalcDatabase();
             CalcCpuUsage();
             CalcLoadAverage();
+            CalcUptimeSeconds(now);
         }
-    };
-
-    struct TNodeGroup {
-        TString Name;
-        std::vector<TNode*> Nodes;
     };
 
     struct TNodeBatch {
@@ -500,6 +538,12 @@ class TJsonNodes : public TViewerPipeClient {
 
     using TNodeData = std::vector<TNode>;
     using TNodeView = std::deque<TNode*>;
+
+    struct TNodeGroup {
+        TString Name;
+        TGroupSortKey SortKey;
+        TNodeView Nodes;
+    };
 
     TNodeData NodeData;
     TNodeView NodeView;
@@ -626,7 +670,7 @@ public:
         InitConfig(params);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         FieldsRequired.set(+ENodeFields::NodeId);
-        UptimeSeconds = FromStringWithDefault<ui32>(params.Get("uptime"), 0);
+        UptimeSeconds = FromStringWithDefault<int>(params.Get("uptime"), 0);
         ProblemNodesOnly = FromStringWithDefault<bool>(params.Get("problems_only"), ProblemNodesOnly);
         Filter = params.Get("filter");
         if (UptimeSeconds || ProblemNodesOnly || !Filter.empty()) {
@@ -969,10 +1013,9 @@ public:
                 InvalidateNodes();
             }
             if (UptimeSeconds > 0 && FieldsAvailable.test(+ENodeFields::SystemState)) {
-                ui64 limitMilliSeconds = TInstant::Now().MilliSeconds() - UptimeSeconds * 1000;
                 TNodeView nodeView;
                 for (TNode* node : NodeView) {
-                    if (node->SystemState.GetStartTime() >= limitMilliSeconds) {
+                    if (node->UptimeSeconds < UptimeSeconds) {
                         nodeView.push_back(node);
                     }
                 }
@@ -984,18 +1027,11 @@ public:
                 TVector<TString> filterWords = SplitString(Filter, " ");
                 TNodeView nodeView;
                 for (TNode* node : NodeView) {
-                    bool match = false;
                     for (const TString& word : filterWords) {
-                        if (node->GetHostName().Contains(word)) {
-                            match = true;
-                            break;
-                        } else if (::ToString(node->GetNodeId()).Contains(word)) {
-                            match = true;
+                        if (node->GetHostName().Contains(word) || ::ToString(node->GetNodeId()).Contains(word)) {
+                            nodeView.push_back(node);
                             break;
                         }
-                    }
-                    if (match) {
-                        nodeView.push_back(node);
                     }
                 }
                 NodeView.swap(nodeView);
@@ -1004,9 +1040,8 @@ public:
             }
             if (!FilterGroup.empty() && FieldsAvailable.test(+FilterGroupBy)) {
                 TNodeView nodeView;
-                auto now = TInstant::Now();
                 for (TNode* node : NodeView) {
-                    if (node->GetGroupName(FilterGroupBy, now) == FilterGroup) {
+                    if (node->GetGroupName(FilterGroupBy) == FilterGroup) {
                         nodeView.push_back(node);
                     }
                 }
@@ -1020,17 +1055,17 @@ public:
     }
 
     void GroupCollection() {
-        auto now = TInstant::Now();
         std::unordered_map<TString, size_t> nodeGroups;
         NodeGroups.clear();
         for (TNode* node : NodeView) {
-            auto gb = node->GetGroupName(GroupBy, now);
+            auto gb = node->GetGroupName(GroupBy);
             TNodeGroup* nodeGroup = nullptr;
             auto it = nodeGroups.find(gb);
             if (it == nodeGroups.end()) {
                 nodeGroups.emplace(gb, NodeGroups.size());
                 nodeGroup = &NodeGroups.emplace_back();
                 nodeGroup->Name = gb;
+                nodeGroup->SortKey = node->GetGroupSortKey(GroupBy);
             } else {
                 nodeGroup = &NodeGroups[it->second];
             }
@@ -1045,14 +1080,18 @@ public:
                 case ENodeFields::HostName:
                 case ENodeFields::NodeName:
                 case ENodeFields::Database:
-                case ENodeFields::DiskSpaceUsage:
                 case ENodeFields::DC:
                 case ENodeFields::Rack:
-                case ENodeFields::Missing:
                 case ENodeFields::Uptime:
+                    GroupCollection();
+                    SortCollection(NodeGroups, [](const TNodeGroup& nodeGroup) { return nodeGroup.SortKey; });
+                    NeedGroup = false;
+                    break;
+                case ENodeFields::DiskSpaceUsage:
+                case ENodeFields::Missing:
                 case ENodeFields::Version:
                     GroupCollection();
-                    SortCollection(NodeGroups, [](const TNodeGroup& nodeGroup) { return nodeGroup.Name; });
+                    SortCollection(NodeGroups, [](const TNodeGroup& nodeGroup) { return nodeGroup.SortKey; }, true);
                     NeedGroup = false;
                     break;
                 case ENodeFields::NodeInfo:
@@ -1100,7 +1139,7 @@ public:
                     NeedSort = false;
                     break;
                 case ENodeFields::Uptime:
-                    SortCollection(NodeView, [](const TNode* node) { return node->SystemState.GetStartTime(); }, ReverseSort);
+                    SortCollection(NodeView, [](const TNode* node) { return node->UptimeSeconds; }, ReverseSort);
                     NeedSort = false;
                     break;
                 case ENodeFields::Memory:
@@ -1518,6 +1557,7 @@ public:
             for (const auto& [hiveId, nodeStats] : HiveNodeStats) {
                 if (nodeStats.IsDone()) {
                     if (nodeStats.IsOk()) {
+                        TInstant now = TInstant::Now();
                         for (const NKikimrHive::THiveNodeStats& nodeStats : nodeStats.Get()->Record.GetNodeStats()) {
                             ui32 nodeId = nodeStats.GetNodeId();
                             TNode* node = FindNode(nodeId);
@@ -1532,7 +1572,8 @@ public:
                                     }
                                 }
                                 if (nodeStats.HasLastAliveTimestamp()) {
-                                    node->SystemState.SetDisconnectTime(std::max(node->SystemState.GetDisconnectTime(), nodeStats.GetLastAliveTimestamp() / 1000)); // seconds
+                                    node->SystemState.SetDisconnectTime(std::max(node->SystemState.GetDisconnectTime(), nodeStats.GetLastAliveTimestamp())); // milliseconds
+                                    node->CalcUptimeSeconds(now);
                                     FieldsAvailable.set(+ENodeFields::DisconnectTime);
                                 }
                                 if (nodeStats.HasNodeDomain()) {
@@ -1679,7 +1720,7 @@ public:
                     viewerRequest->Record.MutableLocation()->AddNodeId(node->GetNodeId());
                 }
                 TabletViewerResponse.emplace(nodeId, MakeViewerRequest(nodeId, viewerRequest.release()));
-                NodeBatches.emplace(nodeId, batch);
+                NodeBatches.emplace(nodeId, batch); // ignore second insert because they are the same
                 ++WhiteboardStateRequestsInFlight;
             }
         } else {
@@ -1742,21 +1783,38 @@ public:
 
     void ProcessWhiteboard() {
         if (FieldsNeeded(FieldsSystemState)) {
+            TInstant now = TInstant::Now();
             std::unordered_set<TNodeId> removeNodes;
             for (const auto& [responseNodeId, response] : SystemViewerResponse) {
                 if (response.IsOk()) {
                     const auto& systemResponse(response.Get()->Record.GetSystemResponse());
+                    std::unordered_set<TNodeId> nodesWithoutData;
+                    for (auto nodeId : response.Get()->Record.GetLocationResponded().GetNodeId()) {
+                        nodesWithoutData.insert(nodeId);
+                    }
                     for (const auto& systemInfo : systemResponse.GetSystemStateInfo()) {
                         TNodeId nodeId = systemInfo.GetNodeId();
                         TNode* node = FindNode(nodeId);
                         if (node) {
-                            node->MergeFrom(systemInfo);
+                            nodesWithoutData.erase(nodeId);
+                            node->MergeFrom(systemInfo, now);
                             if (Database && node->Database) {
                                 if (node->Database != Database && (!SharedDatabase || node->Database != SharedDatabase)) {
                                     removeNodes.insert(nodeId);
                                 }
                             }
                         }
+                    }
+                    for (auto nodeId : nodesWithoutData) {
+                        TNode* node = FindNode(nodeId);
+                        if (node) {
+                            node->DisconnectNode();
+                        }
+                    }
+                } else {
+                    TNode* node = FindNode(responseNodeId);
+                    if (node) {
+                        node->DisconnectNode();
                     }
                 }
             }
@@ -1766,13 +1824,18 @@ public:
                     if (systemState.SystemStateInfoSize() > 0) {
                         TNode* node = FindNode(nodeId);
                         if (node) {
-                            node->MergeFrom(systemState.GetSystemStateInfo(0));
+                            node->MergeFrom(systemState.GetSystemStateInfo(0), now);
                             if (Database && node->Database) {
                                 if (node->Database != Database && (!SharedDatabase || node->Database != SharedDatabase)) {
                                     removeNodes.insert(nodeId);
                                 }
                             }
                         }
+                    }
+                } else {
+                    TNode* node = FindNode(nodeId);
+                    if (node) {
+                        node->DisconnectNode();
                     }
                 }
             }
@@ -2004,6 +2067,7 @@ public:
             if (FieldsRequired.test(+ENodeFields::PDisks) || FieldsRequired.test(+ENodeFields::VDisks)) {
                 node->RemapDisks();
             }
+            node->CalcUptimeSeconds(TInstant::Now());
         }
         TString error("NodeDisconnected");
         {
@@ -2253,6 +2317,21 @@ public:
                 NKikimrViewer::TNodeInfo& jsonNode = *json.AddNodes();
                 if (FieldsAvailable.test(+ENodeFields::NodeInfo)) {
                     jsonNode.SetNodeId(node->GetNodeId());
+                }
+                if (node->Database) {
+                    jsonNode.SetDatabase(node->Database);
+                }
+                if (node->UptimeSeconds) {
+                    jsonNode.SetUptimeSeconds(node->UptimeSeconds);
+                }
+                if (node->Disconnected) {
+                    jsonNode.SetDisconnected(node->Disconnected);
+                }
+                if (node->CpuUsage) {
+                    jsonNode.SetCpuUsage(node->CpuUsage);
+                }
+                if (node->DiskSpaceUsage) {
+                    jsonNode.SetDiskSpaceUsage(node->DiskSpaceUsage);
                 }
                 if (FieldsAvailable.test(+ENodeFields::NodeInfo) || FieldsAvailable.test(+ENodeFields::SystemState)) {
                     *jsonNode.MutableSystemState() = std::move(node->SystemState);

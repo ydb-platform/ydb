@@ -74,8 +74,9 @@ void TCommandExecuteYqlScript::Parse(TConfig& config) {
     ParseInputFormats();
     ParseOutputFormats();
     if (!Script && !ScriptFile) {
-        throw TMisuseException() << "Neither \"Text of script\" (\"--script\", \"-s\") "
-            << "nor \"Path to file with script text\" (\"--file\", \"-f\") were provided.";
+        Cerr << "Neither \"Text of script\" (\"--script\", \"-s\") "
+            << "nor \"Path to file with script text\" (\"--file\", \"-f\") were provided." << Endl;
+        config.PrintHelpAndExit();
     }
     if (Script && ScriptFile) {
         throw TMisuseException() << "Both mutually exclusive options \"Text of script\" (\"--script\", \"-s\") "
@@ -84,7 +85,7 @@ void TCommandExecuteYqlScript::Parse(TConfig& config) {
     if (ScriptFile) {
         Script = ReadFromFile(ScriptFile, "script");
     }
-    if(FlameGraphPath && FlameGraphPath->Empty())
+    if(FlameGraphPath && FlameGraphPath->empty())
     {
         throw TMisuseException() << "FlameGraph path can not be empty.";
     }
@@ -110,7 +111,7 @@ int TCommandExecuteYqlScript::Run(TConfig& config) {
         if (FlameGraphPath && (settings.CollectQueryStats_ != NTable::ECollectQueryStatsMode::Full
                                && settings.CollectQueryStats_ != NTable::ECollectQueryStatsMode::Profile)) {
             throw TMisuseException() << "Flame graph is available for full or profile stats. Current: "
-                                        + (CollectStatsMode.Empty() ? "none" : CollectStatsMode) + '.';
+                                        + (CollectStatsMode.empty() ? "none" : CollectStatsMode) + '.';
         }
 
         if (!Parameters.empty() || InputParamStream) {

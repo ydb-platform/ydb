@@ -479,7 +479,7 @@ private:
     using TMarkTokenStack = TVector<ui32>;
 
     void Out(TStringBuf s) {
-        for (ui32 i = 0; i < s.Size(); ++i) {
+        for (ui32 i = 0; i < s.size(); ++i) {
             Out(s[i], i == 0);
         }
     }
@@ -513,7 +513,7 @@ private:
     }
 
     void AddComment(TStringBuf text) {
-        if (text.StartsWith("--") && !SB.Empty() && SB.back() == '-') {
+        if (text.StartsWith("--") && !SB.empty() && SB.back() == '-') {
             Out(' ');
         }
 
@@ -1702,7 +1702,7 @@ private:
         AfterNamespace = (str == "::");
         AfterBracket = (str == "(" || str == "[" || str == "{" || str == "<|");
         AfterDot = (str == ".");
-        AfterDigits = !str.Empty() && AllOf(str, [](char c) { return c >= '0' && c <= '9'; });
+        AfterDigits = !str.empty() && AllOf(str, [](char c) { return c >= '0' && c <= '9'; });
         AfterQuestion = (str == "?");
         AfterLess = (str == "<");
         AfterKeyExpr = false;
@@ -2992,7 +2992,7 @@ public:
                 return false;
             }
 
-            if (addLine && !finalFormattedQuery.Empty()) {
+            if (addLine && !finalFormattedQuery.empty()) {
                 finalFormattedQuery << "\n";
             }
 

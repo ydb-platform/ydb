@@ -10,6 +10,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/tests/fq/pq_async_io/ut_helpers.h>
 
+#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
+
 namespace {
 
 using namespace NKikimr;
@@ -42,6 +44,16 @@ public:
         Config.SetSendStatusPeriodSec(2);
         Config.SetWithoutConsumer(true);
 
+        auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
+        auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
+   
+        NYql::TPqGatewayServices pqServices(
+            yqSharedResources->UserSpaceYdbDriver,
+            nullptr,
+            nullptr,
+            std::make_shared<NYql::TPqGatewayConfig>(),
+            nullptr);
+
         TopicSession = Runtime.Register(NewTopicSession(
             topicPath,
             Config,
@@ -49,7 +61,8 @@ public:
             0,
             Driver,
             CredentialsProviderFactory,
-            MakeIntrusive<NMonitoring::TDynamicCounters>()
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
+            CreatePqNativeGateway(pqServices)
             ).release());
         Runtime.EnableScheduleForActor(TopicSession);
 
@@ -81,7 +94,7 @@ public:
         settings.SetDatabase(GetDefaultPqDatabase());
         settings.AddColumns("dt");
         settings.AddColumns("value");
-        settings.AddColumnTypes("UInt64");
+        settings.AddColumnTypes("Uint64");
         settings.AddColumnTypes("String");
         if (!emptyPredicate) {
             settings.SetPredicate("WHERE true");
@@ -97,22 +110,24 @@ public:
     }
 
     void ExpectMessageBatch(NActors::TActorId readActorId, const std::vector<TString>& expected) {
+        Runtime.Send(new IEventHandle(TopicSession, readActorId, new TEvRowDispatcher::TEvGetNextBatch()));
+
         auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvMessageBatch>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
-        UNIT_ASSERT(eventHolder->Get()->ReadActorId == readActorId);
-        UNIT_ASSERT(expected.size() == eventHolder->Get()->Record.MessagesSize());
+        UNIT_ASSERT_VALUES_EQUAL(eventHolder->Get()->ReadActorId, readActorId);
+        UNIT_ASSERT_VALUES_EQUAL(expected.size(), eventHolder->Get()->Record.MessagesSize());
         for (size_t i = 0; i < expected.size(); ++i) {
             NFq::NRowDispatcherProto::TEvMessage message = eventHolder->Get()->Record.GetMessages(i);
             std::cerr << "message.GetJson() " << message.GetJson() << std::endl;    
-            UNIT_ASSERT(expected[i] == message.GetJson());
+            UNIT_ASSERT_VALUES_EQUAL(expected[i], message.GetJson());
         }
     }
 
     void ExpectSessionError(NActors::TActorId readActorId, TString message) {
         auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvSessionError>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
-        UNIT_ASSERT(eventHolder->Get()->ReadActorId == readActorId);
-        UNIT_ASSERT(TString(eventHolder->Get()->Record.GetMessage()).Contains(message));
+        UNIT_ASSERT_VALUES_EQUAL(eventHolder->Get()->ReadActorId, readActorId);
+        UNIT_ASSERT_STRING_CONTAINS(TString(eventHolder->Get()->Record.GetMessage()), message);
     }
 
     void ExpectNewDataArrived(TSet<NActors::TActorId> readActorIds) {
@@ -129,7 +144,7 @@ public:
         Runtime.Send(new IEventHandle(TopicSession, readActorId, new TEvRowDispatcher::TEvGetNextBatch()));
         auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvMessageBatch>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
-        UNIT_ASSERT(eventHolder->Get()->ReadActorId == readActorId);
+        UNIT_ASSERT_VALUES_EQUAL(eventHolder->Get()->ReadActorId, readActorId);
         return eventHolder->Get()->Record.MessagesSize();
     }
 
@@ -162,13 +177,32 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         const std::vector<TString> data = { Json1 };
         PQWrite(data, topicName);
         ExpectNewDataArrived({ReadActorId1, ReadActorId2});
-        Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
-        Runtime.Send(new IEventHandle(TopicSession, ReadActorId2, new TEvRowDispatcher::TEvGetNextBatch()));
         ExpectMessageBatch(ReadActorId1, { Json1 });
         ExpectMessageBatch(ReadActorId2, { Json1 });
 
         StopSession(ReadActorId1, source);
         StopSession(ReadActorId2, source);
+    }
+
+    Y_UNIT_TEST_F(TwoSessionWithoutPredicate, TFixture) {
+        const TString topicName = "twowithoutpredicate";
+        PQCreateStream(topicName);
+        Init(topicName);
+        auto source1 = BuildSource(topicName, true);
+        auto source2 = BuildSource(topicName, true);
+        StartSession(ReadActorId1, source1);
+        StartSession(ReadActorId2, source2);
+
+        const std::vector<TString> data = { Json1 };
+        PQWrite(data, topicName);
+        ExpectNewDataArrived({ReadActorId1, ReadActorId2});
+        Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
+        Runtime.Send(new IEventHandle(TopicSession, ReadActorId2, new TEvRowDispatcher::TEvGetNextBatch()));
+        ExpectMessageBatch(ReadActorId1, { Json1 });
+        ExpectMessageBatch(ReadActorId2, { Json1 });
+
+        StopSession(ReadActorId1, source1);
+        StopSession(ReadActorId2, source2);
     }
 
     Y_UNIT_TEST_F(SessionWithPredicateAndSessionWithoutPredicate, TFixture) {
@@ -183,8 +217,6 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         const std::vector<TString> data = { Json1 };
         PQWrite(data, topicName);
         ExpectNewDataArrived({ReadActorId1, ReadActorId2});
-        Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
-        Runtime.Send(new IEventHandle(TopicSession, ReadActorId2, new TEvRowDispatcher::TEvGetNextBatch()));
         ExpectMessageBatch(ReadActorId1, { Json1 });
         ExpectMessageBatch(ReadActorId2, { Json1 });
 
@@ -202,7 +234,6 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         const std::vector<TString> data = { Json1 };
         PQWrite(data, topicName);
         ExpectNewDataArrived({ReadActorId1});
-        Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
         ExpectMessageBatch(ReadActorId1, data);
 
         StartSession(ReadActorId2, source);
@@ -211,9 +242,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         PQWrite(data2, topicName);
         ExpectNewDataArrived({ReadActorId1, ReadActorId2});
         
-        Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
         ExpectMessageBatch(ReadActorId1, data2);
-        Runtime.Send(new IEventHandle(TopicSession, ReadActorId2, new TEvRowDispatcher::TEvGetNextBatch()));
         ExpectMessageBatch(ReadActorId2, data2);
 
         StopSession(ReadActorId1, source);
@@ -232,21 +261,16 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StartSession(ReadActorId2, source, 2);
 
         ExpectNewDataArrived({ReadActorId1, ReadActorId2});
-        Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
         std::vector<TString> expected1 = { Json2, Json3};
         ExpectMessageBatch(ReadActorId1, expected1);
 
-        Runtime.Send(new IEventHandle(TopicSession, ReadActorId2, new TEvRowDispatcher::TEvGetNextBatch()));
         std::vector<TString> expected2 = { Json3 };
         ExpectMessageBatch(ReadActorId2, expected2);
 
         const std::vector<TString> data2 = { Json4 };
         PQWrite(data2, topicName);
         ExpectNewDataArrived({ReadActorId1, ReadActorId2});
-        Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
         ExpectMessageBatch(ReadActorId1, data2);
-
-        Runtime.Send(new IEventHandle(TopicSession, ReadActorId2, new TEvRowDispatcher::TEvGetNextBatch()));
         ExpectMessageBatch(ReadActorId2, data2);
 
         StopSession(ReadActorId1, source);
@@ -263,7 +287,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         const std::vector<TString> data = { "not json", "noch einmal / nicht json" };
         PQWrite(data, topicName);
 
-        ExpectSessionError(ReadActorId1, "Failed to unwrap empty optional");
+        ExpectSessionError(ReadActorId1, "INCORRECT_TYPE: The JSON element does not have the requested type.");
         StopSession(ReadActorId1, source);
     }
 
@@ -277,7 +301,6 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         const std::vector<TString> data = { Json1, Json2 }; // offset 0, 1
         PQWrite(data, topicName);
         ExpectNewDataArrived({ReadActorId1});
-        Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
         ExpectMessageBatch(ReadActorId1, data);
 
         // Restart topic session.
@@ -287,10 +310,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         PQWrite({ Json3 }, topicName);
         ExpectNewDataArrived({ReadActorId1});
 
-        Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
         ExpectMessageBatch(ReadActorId1, { Json3 });
-
-        Runtime.Send(new IEventHandle(TopicSession, ReadActorId2, new TEvRowDispatcher::TEvGetNextBatch()));
         ExpectMessageBatch(ReadActorId2, { Json2, Json3 });
 
         StopSession(ReadActorId1, source);
@@ -350,6 +370,52 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
         StopSession(ReadActorId1, source);
         StopSession(ReadActorId2, source);
+    }
+
+     Y_UNIT_TEST_F(TwoSessionsWithDifferentSchemes, TFixture) {
+        const TString topicName = "dif_schemes";
+        PQCreateStream(topicName);
+        Init(topicName);
+        auto source1 = BuildSource(topicName);
+        auto source2 = BuildSource(topicName);
+        source2.AddColumns("field1");
+        source2.AddColumnTypes("String");
+
+        StartSession(ReadActorId1, source1);
+        StartSession(ReadActorId2, source2);
+
+        TString json1 = "{\"dt\":101,\"value\":\"value1\", \"field1\":\"field1\"}";
+        TString json2 = "{\"dt\":102,\"value\":\"value2\", \"field1\":\"field2\"}";
+    
+        PQWrite({ json1, json2 }, topicName);
+        ExpectNewDataArrived({ReadActorId1, ReadActorId2});
+        ExpectMessageBatch(ReadActorId1, { "{\"dt\":101,\"value\":\"value1\"}", "{\"dt\":102,\"value\":\"value2\"}" });
+        ExpectMessageBatch(ReadActorId2, { "{\"dt\":101,\"field1\":\"field1\",\"value\":\"value1\"}", "{\"dt\":102,\"field1\":\"field2\",\"value\":\"value2\"}" });
+
+        auto source3 = BuildSource(topicName);
+        source3.AddColumns("field2");
+        source3.AddColumnTypes("String");
+        auto readActorId3 = Runtime.AllocateEdgeActor();
+        StartSession(readActorId3, source3);
+
+        TString json3 = "{\"dt\":103,\"value\":\"value3\", \"field1\":\"value1_field1\", \"field2\":\"value1_field2\"}";
+        PQWrite({ json3 }, topicName);
+        ExpectNewDataArrived({ReadActorId1, ReadActorId2, readActorId3});
+        ExpectMessageBatch(ReadActorId1, { "{\"dt\":103,\"value\":\"value3\"}" });
+        ExpectMessageBatch(ReadActorId2, { "{\"dt\":103,\"field1\":\"value1_field1\",\"value\":\"value3\"}" });
+        ExpectMessageBatch(readActorId3, { "{\"dt\":103,\"field2\":\"value1_field2\",\"value\":\"value3\"}" });
+
+        StopSession(ReadActorId1, source3);
+        StopSession(readActorId3, source3);
+
+        TString json4 = "{\"dt\":104,\"value\":\"value4\", \"field1\":\"value2_field1\", \"field2\":\"value2_field2\"}";
+        TString json5 = "{\"dt\":105,\"value\":\"value5\", \"field1\":\"value2_field1\", \"field2\":\"value2_field2\"}";
+        PQWrite({ json4, json5 }, topicName);
+        ExpectNewDataArrived({ReadActorId2});
+        ExpectMessageBatch(ReadActorId2, { "{\"dt\":104,\"field1\":\"value2_field1\",\"value\":\"value4\"}", "{\"dt\":105,\"field1\":\"value2_field1\",\"value\":\"value5\"}" });
+
+        StopSession(ReadActorId1, source1);
+        StopSession(ReadActorId2, source2);
     }
 }
 

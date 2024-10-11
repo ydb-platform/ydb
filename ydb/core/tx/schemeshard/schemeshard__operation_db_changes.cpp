@@ -26,6 +26,10 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
         ss->PersistTableIndexAlterData(db, pId);
     }
 
+    for (const auto& pId : AlterSequences) {
+        ss->PersistSequenceAlter(db, pId);
+    }
+
     for (const auto& pId : ApplyIndexes) {
         ss->PersistTableIndex(db, pId);
     }

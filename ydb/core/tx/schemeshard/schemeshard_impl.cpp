@@ -3655,6 +3655,22 @@ void TSchemeShard::PersistSequenceAlter(NIceDb::TNiceDb& db, TPathId pathId, con
         NIceDb::TUpdate<Schema::SequencesAlters::Sharding>(serializedSharding));
 }
 
+void TSchemeShard::PersistSequenceAlter(NIceDb::TNiceDb& db, TPathId pathId)
+{
+    Y_ABORT_UNLESS(PathsById.contains(pathId));
+    TPathElement::TPtr elem = PathsById.at(pathId);
+
+    Y_ABORT_UNLESS(Sequences.contains(pathId));
+    TSequenceInfo::TPtr sequenceInfo = Sequences.at(pathId);
+
+    Y_ABORT_UNLESS(elem->IsSequence());
+
+    TSequenceInfo::TPtr alterData = sequenceInfo->AlterData;
+    Y_ABORT_UNLESS(alterData);
+
+    PersistSequenceAlter(db, pathId, *alterData);
+}
+
 void TSchemeShard::PersistSequenceAlterRemove(NIceDb::TNiceDb& db, TPathId pathId)
 {
     Y_ABORT_UNLESS(IsLocalId(pathId));

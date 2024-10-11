@@ -20,6 +20,7 @@
 
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 #include <util/stream/null.h>
 
@@ -61,10 +62,6 @@
     static TTestRegistration##N testRegistration##N;                                                               \
     template<bool OPT1, bool OPT2>                                                                                 \
     void N(NUnitTest::TTestContext&)
-
-namespace NYdb::NTable {
-    struct TGlobalIndexSettings;
-}
 
 namespace NSchemeShardUT_Private {
     using namespace NKikimr;

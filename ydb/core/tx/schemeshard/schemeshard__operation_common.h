@@ -156,7 +156,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override;
     bool HandleReply(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override;
-    bool HandleReply(TEvPersQueue::TEvProposeTransactionAttachResult::TPtr& ev, TOperationContext& context) override;
+    bool HandleReply(TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev, TOperationContext& context) override;
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override;
 
 private:

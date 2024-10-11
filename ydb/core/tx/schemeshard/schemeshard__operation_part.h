@@ -77,7 +77,7 @@
     action(TEvPrivate::TEvCompletePublication, NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_PUBLICATION) \
     action(TEvPrivate::TEvCompleteBarrier,     NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_BARRIER)     \
 \
-    action(TEvPersQueue::TEvProposeTransactionAttachResult, NSchemeShard::TXTYPE_PERSQUEUE_PROPOSE_ATTACH_RESULT)
+    action(TEvDataShard, TEvProposeTransactionAttachResult, NSchemeShard::TXTYPE_PERSQUEUE_PROPOSE_ATTACH_RESULT)
 
 
 namespace NKikimr {

@@ -25,6 +25,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         return TChangefeedDescription(name, EChangefeedMode::Updates, EChangefeedFormat::Json)
             .WithRetentionPeriod(retentionPeriod)
             .WithInitialScan()
+            //.WithTopicAutopartitioning()
             .AddAttribute("__async_replication", NJson::WriteJson(attrs, false));
     }
 

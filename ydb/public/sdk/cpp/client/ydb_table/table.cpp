@@ -2706,6 +2706,11 @@ TChangefeedDescription& TChangefeedDescription::WithInitialScan() {
     return *this;
 }
 
+TChangefeedDescription& TChangefeedDescription::WithTopicAutopartitioning() {
+    TopicAutopartitioning_ = true;
+    return *this;
+}
+
 TChangefeedDescription& TChangefeedDescription::AddAttribute(const TString& key, const TString& value) {
     Attributes_[key] = value;
     return *this;
@@ -2752,6 +2757,10 @@ const std::optional<TDuration>& TChangefeedDescription::GetResolvedTimestamps() 
 
 bool TChangefeedDescription::GetInitialScan() const {
     return InitialScan_;
+}
+
+bool TChangefeedDescription::GetTopicAutopartitioning() const {
+    return TopicAutopartitioning_;
 }
 
 const THashMap<TString, TString>& TChangefeedDescription::GetAttributes() const {
@@ -2854,6 +2863,9 @@ void TChangefeedDescription::SerializeTo(Ydb::Table::Changefeed& proto) const {
     proto.set_virtual_timestamps(VirtualTimestamps_);
     proto.set_initial_scan(InitialScan_);
     proto.set_aws_region(AwsRegion_);
+    if (TopicAutopartitioning_) {
+        proto.mutable_topic_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
+    }
 
     switch (Mode_) {
     case EChangefeedMode::KeysOnly:

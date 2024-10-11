@@ -12,15 +12,25 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_library(common-stat-static)
+
+
+target_compile_options(common-stat-static PRIVATE
+  -DUDF_ABI_VERSION_MAJOR=2
+  -DUDF_ABI_VERSION_MINOR=28
+  -DUDF_ABI_VERSION_PATCH=0
+)
+
+target_link_libraries(common-stat-static PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  yql-public-udf
+  library-cpp-tdigest
+)
+
+target_sources(common-stat-static PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/stat/static/static_udf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/stat/static/stat_udf.h
+)
 

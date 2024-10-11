@@ -12,15 +12,49 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_library(json2_udf INTERFACE)
+
+
+target_compile_options(json2_udf INTERFACE
+  -DUDF_ABI_VERSION_MAJOR=2
+  -DUDF_ABI_VERSION_MINOR=28
+  -DUDF_ABI_VERSION_PATCH=0
+)
+
+target_link_libraries(json2_udf INTERFACE
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  yql-public-udf
+  public-udf-support
+  ydb-library-binary_json
+  yql-minikql-dom
+  yql-minikql-jsonpath
+)
+
+
+add_global_library_for(json2_udf.global
+  json2_udf)
+
+
+target_compile_options(json2_udf.global PRIVATE
+  -DUDF_ABI_VERSION_MAJOR=2
+  -DUDF_ABI_VERSION_MINOR=28
+  -DUDF_ABI_VERSION_PATCH=0
+)
+
+target_link_libraries(json2_udf.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  yql-public-udf
+  public-udf-support
+  ydb-library-binary_json
+  yql-minikql-dom
+  yql-minikql-jsonpath
+)
+
+target_sources(json2_udf.global PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/json2/json2_udf.cpp
+)
 

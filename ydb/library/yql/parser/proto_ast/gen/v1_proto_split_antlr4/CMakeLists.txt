@@ -12,15 +12,147 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
+find_package(Python3 REQUIRED)
+
+get_built_tool_path(
+  TOOL_cpp_styleguide_bin
+  TOOL_cpp_styleguide_dependency
+  contrib/tools/protoc/plugins/cpp_styleguide
+  cpp_styleguide
+)
+
+get_built_tool_path(
+  TOOL_protoc_bin
+  TOOL_protoc_dependency
+  contrib/tools/protoc/bin
+  protoc
+)
+
+set(ANTLR_PACKAGE_NAME NSQLv1Generated)
+
+add_library(proto_ast-gen-v1_proto_split_antlr4)
+
+
+target_include_directories(proto_ast-gen-v1_proto_split_antlr4 PUBLIC
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/org/antlr/v4/tool/templates/codegen/Java
+)
+
+target_link_libraries(proto_ast-gen-v1_proto_split_antlr4 PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-protobuf
+)
+
+target_sources(proto_ast-gen-v1_proto_split_antlr4 PRIVATE
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.classes.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.main.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.classes.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.main.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.code0.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.code1.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.code2.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.code3.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.code4.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.code5.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.code6.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.code7.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.code8.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.code9.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.data.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/org/antlr/v4/tool/templates/codegen/Java/Java.stg
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.classes.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.main.h
+)
+
+
+configure_file(
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/v4/tool/templates/codegen/Java/Java.stg.in
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/org/antlr/v4/tool/templates/codegen/Java/Java.stg
+)
+
+run_antlr4(
+  OUTPUT
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.proto
+  DEPENDS
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4.g
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/org/antlr/v4/tool/templates/codegen/Java/Java.stg
+  WORKING_DIRECTORY
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4
+  ANTLER_ARGS
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4.g
+  -lib
+  .
+  -no-listener
+  -o
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4
+  -Dlanguage=Java
+)
+
+add_custom_command(
+  OUTPUT
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.cc
+  DEPENDS
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.proto
+  ${TOOL_protoc_bin}
+  ${TOOL_cpp_styleguide_bin}
+  WORKING_DIRECTORY
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4
+  COMMAND
+  ${TOOL_protoc_bin}
+  -I=${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4
+  -I=${PROJECT_SOURCE_DIR}
+  -I=${PROJECT_BINARY_DIR}
+  -I=${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  --cpp_out=${PROJECT_BINARY_DIR}
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}
+  --plugin=protoc-gen-cpp_styleguide=${PROJECT_BINARY_DIR}/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.proto
+)
+
+add_custom_command(
+  OUTPUT
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.code0.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.code1.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.code2.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.code3.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.code4.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.code5.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.code6.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.code7.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.code8.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.code9.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.data.cc
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.classes.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.main.h
+  DEPENDS
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.cc
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/gen/multiproto.py
+  WORKING_DIRECTORY
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4
+  COMMAND
+  Python3::Interpreter
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/gen/multiproto.py
+  SQLv1Antlr4Parser
+)
+
+
+if(NOT CMAKE_CROSSCOMPILING)
+  add_dependencies(proto_ast-gen-v1_proto_split_antlr4
+    protoc
+    cpp_styleguide
+  )
 endif()
+set(GRAMMAR_STRING_CORE_SINGLE "~(['\\\\]) | (BACKSLASH .)")
+set(GRAMMAR_STRING_CORE_DOUBLE "~([\"\\\\]) | (BACKSLASH .)")
+set(GRAMMAR_MULTILINE_COMMENT_CORE ".")
+
+configure_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/SQLv1Antlr4.g.in
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4.g
+)
 

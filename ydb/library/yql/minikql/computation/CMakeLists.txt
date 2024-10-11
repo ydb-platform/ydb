@@ -12,15 +12,41 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_subdirectory(llvm14)
+add_subdirectory(no_llvm)
+
+add_library(yql-minikql-computation)
+
+
+target_compile_options(yql-minikql-computation PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(yql-minikql-computation PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  libs-apache-arrow
+  yql-public-types
+  parser-pg_wrapper-interface
+  yql-public-udf
+  yql-minikql-arrow
+)
+
+target_sources(yql-minikql-computation PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_block_builder.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_block_impl.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_block_reader.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_block_transport.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_holders.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_impl.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_pack.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_pack_impl.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_custom_list.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_validate.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_value_builder.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_pattern_cache.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/presort.cpp
+)
 

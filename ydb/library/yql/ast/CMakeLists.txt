@@ -12,15 +12,54 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_subdirectory(serialize)
+add_subdirectory(ut)
+
+add_library(library-yql-ast)
+
+
+target_link_libraries(library-yql-ast PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-openssl
+  library-cpp-colorizer
+  cpp-containers-sorted_vector
+  cpp-containers-stack_vector
+  cpp-deprecated-enum_codegen
+  library-cpp-enumbitset
+  cpp-string_utils-levenshtein_diff
+  library-cpp-yson
+  cpp-yson-node
+  yql-public-udf
+  library-yql-utils
+  yql-utils-fetch
+  yql-core-issue
+  core-url_lister-interface
+  yql-parser-pg_catalog
+  api-protos
+)
+
+target_sources(library-yql-ast PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_ast.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_constraint.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_ast_annotation.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_ast_escaping.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_errors.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_expr.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_builder.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_types.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_gc_nodes.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_type_string.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_ast.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_constraint.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_ast_annotation.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_ast_escaping.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_errors.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_expr.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_builder.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_types.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_gc_nodes.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/ast/yql_type_string.h
+)
 

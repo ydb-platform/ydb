@@ -12,15 +12,56 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+get_built_tool_path(
+  TOOL_protoc_bin
+  TOOL_protoc_dependency
+  contrib/tools/protoc/bin
+  protoc
+)
 
+get_built_tool_path(
+  TOOL_cpp_styleguide_bin
+  TOOL_cpp_styleguide_dependency
+  contrib/tools/protoc/plugins/cpp_styleguide
+  cpp_styleguide
+)
+
+add_library(library-yql-protos)
+
+
+target_link_libraries(library-yql-protos PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-protobuf
+)
+
+target_proto_messages(library-yql-protos PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/protos/common.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/protos/yql_mount.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/protos/clickhouse.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/protos/pg_ext.proto
+)
+
+target_sources(library-yql-protos PRIVATE
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/protos/common.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/protos/yql_mount.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/protos/clickhouse.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/protos/pg_ext.pb.h
+)
+
+
+target_proto_outs(library-yql-protos
+  --cpp_out=${PROJECT_BINARY_DIR}/
+  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
+)
+
+target_proto_addincls(library-yql-protos
+  ./
+  ${PROJECT_SOURCE_DIR}/
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
+)

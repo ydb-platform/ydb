@@ -12,15 +12,33 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_subdirectory(settings)
+add_subdirectory(v0)
+add_subdirectory(v1)
+add_subdirectory(pg)
+add_subdirectory(pg_dummy)
+
+add_library(library-yql-sql)
+
+
+target_link_libraries(library-yql-sql PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-deprecated-split
+  parser-pg_wrapper-interface
+  yql-sql-settings
+  yql-sql-v0
+  sql-v0-lexer
+  yql-sql-v1
+  sql-v1-format
+  sql-v1-lexer
+  sql-v1-proto_parser
+  library-yql-utils
+)
+
+target_sources(library-yql-sql PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/cluster_mapping.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/sql.cpp
+)
 

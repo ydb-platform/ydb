@@ -12,15 +12,48 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_subdirectory(mounts)
+
+add_library(yql-core-services)
+
+
+target_compile_options(yql-core-services PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(yql-core-services PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-string_utils-base64
+  library-cpp-yson
+  yql-ast-serialize
+  library-yql-minikql
+  library-yql-sql
+  yql-utils-log
+  library-yql-core
+  yql-core-common_opt
+  yql-core-peephole_opt
+  yql-core-type_ann
+  providers-common-codec
+  providers-common-mkql
+  providers-common-provider
+  common-schema-expr
+  providers-result-expr_nodes
+)
+
+target_sources(yql-core-services PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/services/yql_eval_expr.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/services/yql_eval_params.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/services/yql_out_transformers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/services/yql_lineage.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/services/yql_plan.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/services/yql_transform_pipeline.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/services/yql_eval_expr.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/services/yql_eval_params.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/services/yql_out_transformers.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/services/yql_lineage.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/services/yql_plan.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/services/yql_transform_pipeline.h
+)
 

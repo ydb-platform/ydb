@@ -12,15 +12,25 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_subdirectory(abstract)
+add_subdirectory(portions)
+add_subdirectory(chunks)
+add_subdirectory(constructor)
+add_subdirectory(granules)
+add_subdirectory(optimizer)
+
+add_library(engines-reader-sys_view INTERFACE)
+
+
+target_link_libraries(engines-reader-sys_view INTERFACE
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  reader-sys_view-abstract
+  reader-sys_view-portions
+  reader-sys_view-chunks
+  reader-sys_view-constructor
+  reader-sys_view-granules
+  reader-sys_view-optimizer
+)
 

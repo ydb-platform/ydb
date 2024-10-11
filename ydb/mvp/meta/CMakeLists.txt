@@ -12,15 +12,44 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_subdirectory(ut)
+add_subdirectory(bin)
+
+add_library(ydb-mvp-meta)
+
+
+target_compile_options(ydb-mvp-meta PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(ydb-mvp-meta PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  ydb-mvp-core
+  client-yc_private-resourcemanager
+  yql-public-udf
+  udf-service-exception_policy
+  yql-sql-pg_dummy
+  providers-result-expr_nodes
+  yql-core-expr_nodes
+  library-aclib-protos
+  cpp-protobuf-json
+)
+
+target_sources(ydb-mvp-meta PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/mvp/meta/meta.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/mvp/meta/meta_cache.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/mvp/meta/meta_versions.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/mvp/meta/mvp.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/mvp/meta/meta_cache.h
+  ${PROJECT_SOURCE_DIR}/ydb/mvp/meta/meta_cloud.h
+  ${PROJECT_SOURCE_DIR}/ydb/mvp/meta/meta_cluster.h
+  ${PROJECT_SOURCE_DIR}/ydb/mvp/meta/meta_clusters.h
+  ${PROJECT_SOURCE_DIR}/ydb/mvp/meta/meta_cp_databases.h
+  ${PROJECT_SOURCE_DIR}/ydb/mvp/meta/meta_cp_databases_verbose.h
+  ${PROJECT_SOURCE_DIR}/ydb/mvp/meta/meta_db_clusters.h
+  ${PROJECT_SOURCE_DIR}/ydb/mvp/meta/meta_versions.h
+  ${PROJECT_SOURCE_DIR}/ydb/mvp/meta/mvp.h
+)
 

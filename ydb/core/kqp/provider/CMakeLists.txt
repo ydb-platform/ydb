@@ -12,15 +12,116 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+find_package(Python3 REQUIRED)
 
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
+
+add_subdirectory(ut)
+
+add_library(core-kqp-provider)
+
+
+target_compile_options(core-kqp-provider PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(core-kqp-provider PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  ydb-core-base
+  ydb-core-protos
+  ydb-core-docapi
+  core-kqp-query_data
+  ydb-library-aclib
+  library-aclib-protos
+  ydb-library-binary_json
+  ydb-library-dynumber
+  yql-core-services
+  library-yql-minikql
+  yql-public-decimal
+  public-lib-scheme_types
+  cpp-client-ydb_topic
+  yql-core-expr_nodes
+  yql-core-peephole_opt
+  parser-pg_wrapper-interface
+  providers-common-codec
+  providers-common-config
+  providers-common-gateway
+  providers-common-proto
+  providers-common-provider
+  common-schema-expr
+  providers-dq-expr_nodes
+  providers-pg-expr_nodes
+  providers-result-expr_nodes
+  providers-result-provider
+  library-yql-sql
+  library-ydb_issue-proto
+  yql-public-issue
+  yql-utils-log
+  tools-enum_parser-enum_serialization_runtime
+)
+
+target_sources(core-kqp-provider PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/read_attributes_utils.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/rewrite_io_utils.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_datasink.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_datasource.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_exec.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_gateway.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_opt_build.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_opt.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_provider.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_results.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_settings.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_type_ann.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_type_ann_pg.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.gen.h
+  ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.decl.inl.h
+  ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.defs.inl.h
+  ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.gen.h
+  ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.decl.inl.h
+  ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.defs.inl.h
+  ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.gen.h
+  ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.decl.inl.h
+  ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.defs.inl.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_gateway.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_provider.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_provider_impl.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_results.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_settings.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_type_ann_pg.h
+)
+
+
+add_custom_command(
+  OUTPUT
+  ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.gen.h
+  ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.decl.inl.h
+  ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.defs.inl.h
+  DEPENDS
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.jnj
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.json
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/gen/__main__.py
+  COMMAND
+  Python3::Interpreter
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/gen/__main__.py
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.jnj
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.json
+  ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.gen.h
+  ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.decl.inl.h
+  ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.defs.inl.h
+)
+
+generate_enum_serilization(core-kqp-provider
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_provider.h
+  INCLUDE_HEADERS
+  ydb/core/kqp/provider/yql_kikimr_provider.h
+)

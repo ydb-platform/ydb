@@ -98,7 +98,6 @@ target_link_libraries(query_replay_yt PUBLIC
   topfreq_udf
   yson2_udf
   dsv_udf
-  yql-sql-pg_dummy
 )
 
 target_allocator(query_replay_yt

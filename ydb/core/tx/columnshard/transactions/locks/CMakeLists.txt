@@ -12,15 +12,43 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_library(columnshard-transactions-locks)
+
+
+target_link_libraries(columnshard-transactions-locks PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  columnshard-transactions-protos
+  columnshard-engines-predicate
+  columnshard-blobs_action-events
+  data_sharing-destination-events
+)
+
+target_sources(columnshard-transactions-locks PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/locks/dependencies.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/locks/interaction.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/locks/abstract.cpp
+)
+
+
+add_global_library_for(columnshard-transactions-locks.global
+  columnshard-transactions-locks)
+
+
+target_link_libraries(columnshard-transactions-locks.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  columnshard-transactions-protos
+  columnshard-engines-predicate
+  columnshard-blobs_action-events
+  data_sharing-destination-events
+)
+
+target_sources(columnshard-transactions-locks.global PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/locks/read_start.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/locks/read_finished.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/locks/write.cpp
+)
 

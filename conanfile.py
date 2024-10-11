@@ -5,10 +5,7 @@ class App(ConanFile):
 
     settings = "os", "compiler", "build_type", "arch"
 
-    default_options = {"libiconv:shared": "True"}
-
-    def requirements(self):
-        self.requires("libiconv/1.15")
+    default_options = {}
 
     def build_requirements(self):
         self.tool_requires("bison/3.8.2")

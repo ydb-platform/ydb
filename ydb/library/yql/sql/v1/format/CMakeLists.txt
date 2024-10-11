@@ -12,15 +12,72 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
 
+add_subdirectory(ut)
+add_subdirectory(ut_antlr4)
+
+add_library(sql-v1-format)
+
+
+target_link_libraries(sql-v1-format PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  yql-parser-lexer_common
+  yql-sql-settings
+  sql-v1-lexer
+  sql-v1-proto_parser
+  yql-core-sql_types
+  cpp-protobuf-util
+)
+
+target_sources(sql-v1-format PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/format/sql_format.cpp
+)
+
+
+add_global_library_for(sql-v1-format.global
+  sql-v1-format)
+
+
+target_link_libraries(sql-v1-format.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  yql-parser-lexer_common
+  yql-sql-settings
+  sql-v1-lexer
+  sql-v1-proto_parser
+  yql-core-sql_types
+  cpp-protobuf-util
+)
+
+target_sources(sql-v1-format.global PRIVATE
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/sql/v1/format/8b41f60c03c12372ee6c489297948988.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/sql/v1/format/4cee6ce0a1bc354d969b8af86c5da207.cpp
+)
+
+
+resources(sql-v1-format.global
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/sql/v1/format/8b41f60c03c12372ee6c489297948988.cpp
+  INPUTS
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/SQLv1.g.in
+  KEYS
+  SQLv1.g.in
+)
+
+resources(sql-v1-format.global
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/sql/v1/format/4cee6ce0a1bc354d969b8af86c5da207.cpp
+  INPUTS
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/SQLv1Antlr4.g.in
+  KEYS
+  SQLv1Antlr4.g.in
+)

@@ -12,15 +12,37 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_library(providers-pg-provider)
+
+
+target_compile_options(providers-pg-provider PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(providers-pg-provider PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-yql-core
+  yql-core-type_ann
+  yql-dq-integration
+  providers-common-dq
+  providers-common-provider
+  providers-common-transform
+  providers-pg-expr_nodes
+  yql-parser-pg_catalog
+  yql-utils-log
+)
+
+target_sources(providers-pg-provider PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/pg/provider/yql_pg_datasink.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/pg/provider/yql_pg_datasink_execution.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/pg/provider/yql_pg_datasink_type_ann.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/pg/provider/yql_pg_datasource.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/pg/provider/yql_pg_dq_integration.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/pg/provider/yql_pg_datasource_type_ann.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/pg/provider/yql_pg_provider.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/pg/provider/yql_pg_provider.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/pg/provider/yql_pg_provider_impl.h
+)
 

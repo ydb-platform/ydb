@@ -46,5 +46,6 @@ target_sources(yt-library-program PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/library/program/program_config_mixin.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/library/program/program_pdeathsig_mixin.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/library/program/program_setsid_mixin.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/program/stockpile.cpp
 )
 

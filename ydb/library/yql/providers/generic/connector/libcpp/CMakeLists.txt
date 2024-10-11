@@ -12,15 +12,33 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_subdirectory(ut_helpers)
+
+add_library(generic-connector-libcpp)
+
+
+target_link_libraries(generic-connector-libcpp PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  libs-apache-arrow
+  contrib-libs-grpc
+  formats-arrow-serializer
+  library-grpc-client
+  library-yql-ast
+  dq-actors-protos
+  providers-common-proto
+  connector-api-common
+  connector-api-service
+  api-service-protos
+  yql-public-issue
+  library-yql-utils
+  yql-utils-log
+)
+
+target_sources(generic-connector-libcpp PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/libcpp/client.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/libcpp/error.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/libcpp/utils.cpp
+)
 

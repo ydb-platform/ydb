@@ -97,6 +97,7 @@ target_link_libraries(dqrun PUBLIC
   yql-utils-actor_system
   fq-libs-actors
   fq-libs-db_id_async_resolver_impl
+  fq-libs-init
   clickhouse_client_udf
 )
 

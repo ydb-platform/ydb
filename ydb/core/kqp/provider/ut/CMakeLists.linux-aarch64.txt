@@ -31,7 +31,6 @@ target_link_libraries(ydb-core-kqp-provider-ut PUBLIC
   core-kqp-provider
   core-client-minikql_result_lib
   kqp-ut-common
-  yql-sql-pg_dummy
   cpp-testing-gmock_in_unittest
 )
 

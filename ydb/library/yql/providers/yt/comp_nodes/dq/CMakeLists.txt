@@ -12,15 +12,49 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_library(yt-comp_nodes-dq)
+
+
+target_compile_options(yt-comp_nodes-dq PRIVATE
+  -Wno-unused-parameter
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_include_directories(yt-comp_nodes-dq PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/flatbuffers/include
+)
+
+target_link_libraries(yt-comp_nodes-dq PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-yql-minikql
+  minikql-computation-llvm14
+  providers-yt-comp_nodes
+  providers-yt-codec
+  providers-common-codec
+  yql-utils-failure_injector
+  cpp-mapreduce-interface
+  cpp-mapreduce-common
+  cpp-yson-node
+  yt-yt-core
+  public-udf-arrow
+  yql-public-udf
+  libs-apache-arrow
+  contrib-libs-flatbuffers
+  yt-yt-client
+  yt-client-arrow
+  yt-lib-yt_rpc_helpers
+)
+
+target_sources(yt-comp_nodes-dq PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/dq/arrow_converter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/dq/stream_decoder.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_rpc_reader.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_rpc_helpers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_block_reader.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_reader.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_writer.cpp
+)
 

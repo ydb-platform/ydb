@@ -12,15 +12,85 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
+add_subdirectory(events)
+add_subdirectory(shutdown)
+add_subdirectory(compilation)
+add_subdirectory(simple)
+
+add_library(core-kqp-common)
+
+
+target_compile_options(core-kqp-common PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(core-kqp-common PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  ydb-core-base
+  ydb-core-engine
+  core-kqp-expr_nodes
+  kqp-common-simple
+  kqp-common-compilation
+  kqp-common-events
+  kqp-common-shutdown
+  core-kqp-provider
+  tx-long_tx_service-public
+  core-tx-sharding
+  yql-dq-expr_nodes
+  ydb-library-aclib
+  yql-core-issue
+  yql-core-services
+  yql-dq-actors
+  yql-dq-common
+  yql-dq-integration
+  parser-pg_wrapper-interface
+  public-lib-operation_id
+  lib-operation_id-protos
+  core-grpc_services-cancelation
+  library-cpp-lwtrace
+  tools-enum_parser-enum_serialization_runtime
+)
+
+target_sources(core-kqp-common PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_event_impl.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_lwtrace_probes.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_resolve.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_ru_calc.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_script_executions.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_timeouts.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_tx.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_types.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_user_request_context.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_yql.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_event_ids.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_lwtrace_probes.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_resolve.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_timeouts.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_types.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_user_request_context.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_yql.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp.h
+)
+
+
+generate_enum_serilization(core-kqp-common
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_tx_info.h
+  INCLUDE_HEADERS
+  ydb/core/kqp/common/kqp_tx_info.h
+)
+
+generate_enum_serilization(core-kqp-common
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_yql.h
+  INCLUDE_HEADERS
+  ydb/core/kqp/common/kqp_yql.h
+)

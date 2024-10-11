@@ -12,15 +12,62 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_library(public-embedded-no_llvm)
+
+
+target_compile_options(public-embedded-no_llvm PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_include_directories(public-embedded-no_llvm PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/embedded
+)
+
+target_link_libraries(public-embedded-no_llvm PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-protobuf
+  library-cpp-resource
+  library-cpp-yson
+  cpp-yson-node
+  cpp-mapreduce-client
+  cpp-mapreduce-common
+  library-yql-ast
+  yql-sql-pg
+  yql-core-facade
+  yql-core-file_storage
+  core-file_storage-defs
+  core-file_storage-proto
+  core-file_storage-http_download
+  core-services-mounts
+  yql-core-user_data
+  library-yql-minikql
+  minikql-invoke_builtins-no_llvm
+  minikql-comp_nodes-no_llvm
+  minikql-computation-no_llvm
+  minikql-codegen-no_llvm
+  library-yql-protos
+  udf-service-exception_policy
+  yql-utils-backtrace
+  yql-utils-log
+  yql-parser-pg_wrapper
+  providers-common-proto
+  providers-common-udf_resolve
+  yql-core-url_preprocessing
+  yql-core-url_lister
+  yt-gateway-native
+  yt-lib-log
+  yt-lib-yt_download
+  yt-lib-yt_url_lister
+  providers-yt-provider
+  codec-codegen-no_llvm
+  yt-comp_nodes-no_llvm
+  parser-pg_wrapper-interface
+  yql-parser-pg_catalog
+)
+
+target_sources(public-embedded-no_llvm PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/embedded/yql_embedded.cpp
+)
 

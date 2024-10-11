@@ -12,15 +12,33 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_subdirectory(ut)
+
+add_library(core-statistics-service)
+
+
+target_compile_options(core-statistics-service PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(core-statistics-service PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  ydb-core-base
+  core-engine-minikql
+  ydb-core-protos
+  ydb-core-tablet
+  ydb-core-tablet_flat
+  core-statistics-database
+  ydb-library-minsketch
+)
+
+target_sources(core-statistics-service PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/service/http_request.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/service/service.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/service/service_impl.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/service/http_request.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/service/service.h
+)
 

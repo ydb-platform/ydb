@@ -13,4 +13,3 @@
 # changes in this file.
 
 add_subdirectory(cpp)
-add_subdirectory(python)

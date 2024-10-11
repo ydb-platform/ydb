@@ -12,15 +12,33 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_subdirectory(ut)
+
+add_library(yql-minikql-protobuf_udf)
+
+
+target_compile_options(yql-minikql-protobuf_udf PRIVATE
+  -DUDF_ABI_VERSION_MAJOR=2
+  -DUDF_ABI_VERSION_MINOR=9
+  -DUDF_ABI_VERSION_PATCH=0
+)
+
+target_link_libraries(yql-minikql-protobuf_udf PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-protobuf
+  cpp-protobuf-yql
+  yql-public-udf
+  library-yql-minikql
+  cpp-mapreduce-interface
+  yt_proto-yt-formats
+)
+
+target_sources(yql-minikql-protobuf_udf PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/protobuf_udf/proto_builder.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/protobuf_udf/module.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/protobuf_udf/type_builder.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/protobuf_udf/value_builder.cpp
+)
 

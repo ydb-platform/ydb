@@ -12,15 +12,78 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
+
+add_subdirectory(ut)
+
+add_library(ydb-core-metering)
+
+
+target_link_libraries(ydb-core-metering PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  tools-enum_parser-enum_serialization_runtime
+  library-actors-core
+  library-cpp-json
+  library-cpp-logger
+  ydb-core-base
+  library-cpp-resource
+)
+
+target_sources(ydb-core-metering PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/metering/bill_record.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/metering/metering.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/metering/stream_ru_calculator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/metering/bill_record.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/metering/metering.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/metering/time_grid.h
+)
+
+
+generate_enum_serilization(ydb-core-metering
+  ${PROJECT_SOURCE_DIR}/ydb/core/metering/bill_record.h
+  INCLUDE_HEADERS
+  ydb/core/metering/bill_record.h
+)
+
+add_global_library_for(ydb-core-metering.global
+  ydb-core-metering)
+
+
+target_link_libraries(ydb-core-metering.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  tools-enum_parser-enum_serialization_runtime
+  library-actors-core
+  library-cpp-json
+  library-cpp-logger
+  ydb-core-base
+  library-cpp-resource
+)
+
+target_sources(ydb-core-metering.global PRIVATE
+  ${PROJECT_BINARY_DIR}/ydb/core/metering/da10233abc65c3f178c7da0ce0d7a4ea.cpp
+)
+
+
+resources(ydb-core-metering.global
+  ${PROJECT_BINARY_DIR}/ydb/core/metering/da10233abc65c3f178c7da0ce0d7a4ea.cpp
+  INPUTS
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/kqp_default_settings.txt
+  KEYS
+  kqp_default_settings.txt
+)

@@ -12,15 +12,42 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_library(compute-ydb-control_plane)
+
+
+target_compile_options(compute-ydb-control_plane PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(compute-ydb-control_plane PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-json
+  library-actors-core
+  library-actors-protos
+  library-grpc-actor_client
+  compute-ydb-synchronization_service
+  libs-control_plane_storage-proto
+  libs-quota_manager-proto
+  kqp-workload_service-common
+  ydb-core-protos
+  library-db_pool-protos
+  yql-public-issue
+  library-yql-utils
+  yql-utils-actors
+  api-grpc
+  api-grpc-draft
+  lib-operation_id-protos
+)
+
+target_sources(compute-ydb-control_plane PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/control_plane/cms_grpc_client_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/control_plane/compute_database_control_plane_service.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/control_plane/compute_databases_cache.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/control_plane/database_monitoring.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/control_plane/monitoring_grpc_client_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/control_plane/monitoring_rest_client_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/control_plane/ydbcp_grpc_client_actor.cpp
+)
 

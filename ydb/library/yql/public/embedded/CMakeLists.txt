@@ -12,15 +12,61 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_subdirectory(ut)
+add_subdirectory(no_llvm)
+
+add_library(yql-public-embedded)
+
+
+target_compile_options(yql-public-embedded PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(yql-public-embedded PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-protobuf
+  library-cpp-resource
+  library-cpp-yson
+  cpp-yson-node
+  cpp-mapreduce-client
+  cpp-mapreduce-common
+  library-yql-ast
+  yql-sql-pg
+  yql-core-facade
+  yql-core-file_storage
+  core-file_storage-defs
+  core-file_storage-proto
+  core-file_storage-http_download
+  core-services-mounts
+  yql-core-user_data
+  library-yql-minikql
+  minikql-invoke_builtins-llvm14
+  minikql-comp_nodes-llvm14
+  minikql-computation-llvm14
+  library-yql-protos
+  udf-service-exception_policy
+  yql-utils-backtrace
+  yql-utils-log
+  yql-parser-pg_wrapper
+  providers-common-proto
+  providers-common-udf_resolve
+  yql-core-url_preprocessing
+  yql-core-url_lister
+  yt-gateway-native
+  yt-lib-log
+  yt-lib-yt_download
+  yt-lib-yt_url_lister
+  providers-yt-provider
+  yt-codec-codegen
+  yt-comp_nodes-llvm14
+  parser-pg_wrapper-interface
+  yql-parser-pg_catalog
+)
+
+target_sources(yql-public-embedded PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/embedded/yql_embedded.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/embedded/yql_embedded.h
+)
 

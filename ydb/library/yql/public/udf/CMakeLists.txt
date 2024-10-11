@@ -12,15 +12,66 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_subdirectory(arrow)
+add_subdirectory(tz)
+add_subdirectory(support)
+add_subdirectory(service)
+add_subdirectory(ut)
+
+add_library(yql-public-udf)
+
+
+target_compile_options(yql-public-udf PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(yql-public-udf PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-deprecated-enum_codegen
+  library-cpp-resource
+  yql-public-decimal
+  yql-public-types
+  cpp-deprecated-atomic
+)
+
+target_sources(yql-public-udf PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_allocator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_counter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_data_type.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_helpers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_registrator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_static_registry.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_string.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_type_builder.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_type_inspection.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_type_printer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_types.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_validate.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_value.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_value_builder.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_version.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_allocator.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_counter.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_data_type.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_helpers.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_pg_type_description.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_ptr.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_registrator.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_static_registry.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_string.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_type_builder.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_type_inspection.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_type_ops.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_type_printer.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_type_size_check.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_types.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_ut_helpers.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_validate.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_value.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_value_builder.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_value_inl.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/udf_version.h
+)
 

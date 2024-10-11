@@ -12,15 +12,70 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
+add_subdirectory(scheme)
+add_subdirectory(protos)
+add_subdirectory(storage)
+add_subdirectory(changes)
+add_subdirectory(reader)
+add_subdirectory(predicate)
+add_subdirectory(insert_table)
+add_subdirectory(portions)
+add_subdirectory(writer)
+add_subdirectory(ut)
+
+add_library(tx-columnshard-engines)
+
+
+target_compile_options(tx-columnshard-engines PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(tx-columnshard-engines PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  tools-enum_parser-enum_serialization_runtime
+  libs-apache-arrow
+  ydb-core-base
+  ydb-core-formats
+  ydb-core-protos
+  ydb-core-scheme
+  ydb-core-tablet
+  ydb-core-tablet_flat
+  columnshard-engines-reader
+  columnshard-engines-predicate
+  columnshard-engines-storage
+  columnshard-engines-insert_table
+  columnshard-engines-changes
+  columnshard-engines-portions
+  columnshard-engines-protos
+  core-tx-program
+  tx-columnshard-common
+  udf-service-exception_policy
+)
+
+target_sources(tx-columnshard-engines PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/column_engine_logs.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/column_engine.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/column_features.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/db_wrapper.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/index_info.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/filter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portion_info.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/tier_info.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/defs.cpp
+)
+
+
+generate_enum_serilization(tx-columnshard-engines
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/column_engine_logs.h
+  INCLUDE_HEADERS
+  ydb/core/tx/columnshard/engines/column_engine_logs.h
+)

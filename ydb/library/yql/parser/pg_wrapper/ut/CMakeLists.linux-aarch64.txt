@@ -33,6 +33,12 @@ target_compile_options(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
   -Wno-int-conversion
   -Wno-deprecated-declarations
   -Wno-null-pointer-subtraction
+  -Dmonths=yql_months
+  -Dpg_popcount32=yql_pg_popcount32
+  -Dpg_popcount64=yql_pg_popcount64
+  -Dpg_number_of_ones=yql_pg_number_of_ones
+  -Dpg_leftmost_one_pos=yql_pg_leftmost_one_pos
+  -Dpg_rightmost_one_pos=yql_pg_rightmost_one_pos
   -Darray_length=yql_array_length
   -Dpg_encoding_max_length=yql_pg_encoding_max_length
   -Dpg_encoding_mblen=yql_pg_encoding_mblen

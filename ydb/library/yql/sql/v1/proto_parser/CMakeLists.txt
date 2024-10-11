@@ -12,15 +12,25 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_library(sql-v1-proto_parser)
+
+
+target_link_libraries(sql-v1-proto_parser PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-yql-utils
+  parser-proto_ast-antlr3
+  parser-proto_ast-antlr4
+  parser-proto_ast-collect_issues
+  proto_ast-gen-v1
+  proto_ast-gen-v1_ansi
+  proto_ast-gen-v1_proto_split
+  proto_ast-gen-v1_antlr4
+  proto_ast-gen-v1_ansi_antlr4
+)
+
+target_sources(sql-v1-proto_parser PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/proto_parser/proto_parser.cpp
+)
 

@@ -12,15 +12,22 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_library(contrib-libs-lz4)
+
+
+target_include_directories(contrib-libs-lz4 PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/xxhash
+)
+
+target_link_libraries(contrib-libs-lz4 PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-xxhash
+)
+
+target_sources(contrib-libs-lz4 PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/lz4/lz4.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/lz4/lz4file.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/lz4/lz4frame.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/lz4/lz4hc.c
+)
 

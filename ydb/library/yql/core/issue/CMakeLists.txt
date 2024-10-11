@@ -12,15 +12,57 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
 
+add_subdirectory(protos)
+add_subdirectory(ut)
+
+add_library(yql-core-issue)
+
+
+target_link_libraries(yql-core-issue PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  contrib-libs-protobuf
+  yql-public-issue
+  core-issue-protos
+)
+
+target_sources(yql-core-issue PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/issue/yql_issue.cpp
+)
+
+
+add_global_library_for(yql-core-issue.global
+  yql-core-issue)
+
+
+target_link_libraries(yql-core-issue.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  contrib-libs-protobuf
+  yql-public-issue
+  core-issue-protos
+)
+
+target_sources(yql-core-issue.global PRIVATE
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/core/issue/6939e1a0697a96c4e354038ff01108b2.cpp
+)
+
+
+resources(yql-core-issue.global
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/core/issue/6939e1a0697a96c4e354038ff01108b2.cpp
+  INPUTS
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/issue/yql_issue.txt
+  KEYS
+  yql_issue.txt
+)

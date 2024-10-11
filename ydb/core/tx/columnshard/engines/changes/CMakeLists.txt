@@ -12,15 +12,38 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_subdirectory(abstract)
+add_subdirectory(compaction)
+add_subdirectory(counters)
+add_subdirectory(actualization)
+
+add_library(columnshard-engines-changes)
+
+
+target_link_libraries(columnshard-engines-changes PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  core-formats-arrow
+  tx-columnshard-common
+  columnshard-engines-insert_table
+  engines-changes-abstract
+  engines-changes-compaction
+  engines-changes-counters
+  engines-changes-actualization
+  tx-columnshard-splitter
+  ydb-core-tablet_flat
+  core-tx-tiering
+  ydb-core-protos
+)
+
+target_sources(columnshard-engines-changes PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/compaction.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/ttl.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/indexation.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/cleanup_portions.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/cleanup_tables.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/with_appended.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/general_compaction.cpp
+)
 

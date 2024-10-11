@@ -12,15 +12,35 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_subdirectory(ut)
+
+add_library(fq-libs-result_formatter)
+
+
+target_compile_options(fq-libs-result_formatter PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(fq-libs-result_formatter PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-json
+  cpp-json-yson
+  ydb-library-mkql_proto
+  library-yql-ast
+  yql-minikql-computation
+  yql-public-udf
+  api-protos
+  cpp-client-ydb_proto
+  cpp-client-ydb_result
+  cpp-client-ydb_value
+  providers-common-codec
+  common-schema-expr
+  common-schema-mkql
+)
+
+target_sources(fq-libs-result_formatter PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/result_formatter/result_formatter.cpp
+)
 

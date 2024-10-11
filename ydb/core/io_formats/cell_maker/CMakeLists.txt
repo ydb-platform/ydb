@@ -12,15 +12,33 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_library(core-io_formats-cell_maker)
+
+
+target_compile_options(core-io_formats-cell_maker PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(core-io_formats-cell_maker PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  ydb-core-scheme
+  ydb-core-scheme_types
+  ydb-library-binary_json
+  ydb-library-dynumber
+  yql-minikql-dom
+  yql-public-decimal
+  yql-public-udf
+  library-yql-utils
+  contrib-libs-double-conversion
+  library-cpp-json
+  cpp-json-yson
+  cpp-string_utils-base64
+  cpp-string_utils-quote
+)
+
+target_sources(core-io_formats-cell_maker PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/io_formats/cell_maker/cell_maker.cpp
+)
 

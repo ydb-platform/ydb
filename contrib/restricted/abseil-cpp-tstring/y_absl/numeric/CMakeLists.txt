@@ -12,15 +12,24 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_library(abseil-cpp-tstring-y_absl-numeric)
+
+
+target_compile_options(abseil-cpp-tstring-y_absl-numeric PRIVATE
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
+)
+
+target_include_directories(abseil-cpp-tstring-y_absl-numeric PUBLIC
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
+)
+
+target_link_libraries(abseil-cpp-tstring-y_absl-numeric PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+)
+
+target_sources(abseil-cpp-tstring-y_absl-numeric PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/numeric/int128.cc
+)
 

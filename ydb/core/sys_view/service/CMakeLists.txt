@@ -12,15 +12,32 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_subdirectory(ut)
+
+add_library(core-sys_view-service)
+
+
+target_link_libraries(core-sys_view-service PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-actors-core
+  ydb-core-base
+  ydb-core-protos
+  core-graph-api
+  core-graph-service
+  library-aclib-protos
+)
+
+target_sources(core-sys_view-service PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/service/db_counters.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/service/ext_counters.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/service/query_interval.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/service/sysview_service.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/service/db_counters.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/service/ext_counters.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/service/query_history.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/service/query_interval.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/service/sysview_service.h
+)
 

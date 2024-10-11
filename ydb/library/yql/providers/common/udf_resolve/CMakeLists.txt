@@ -12,15 +12,38 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_library(providers-common-udf_resolve)
+
+
+target_compile_options(providers-common-udf_resolve PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(providers-common-udf_resolve PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-digest-md5
+  cpp-protobuf-util
+  yql-core-file_storage
+  library-yql-minikql
+  yql-public-udf
+  library-yql-utils
+  yql-utils-log
+  library-yql-core
+  providers-common-mkql
+  providers-common-proto
+  common-schema-expr
+)
+
+target_sources(providers-common-udf_resolve PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/udf_resolve/yql_files_box.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/udf_resolve/yql_outproc_udf_resolver.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/udf_resolve/yql_udf_resolver_with_index.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/udf_resolve/yql_files_box.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/udf_resolve/yql_outproc_udf_resolver.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/udf_resolve/yql_udf_resolver_with_index.h
+)
 

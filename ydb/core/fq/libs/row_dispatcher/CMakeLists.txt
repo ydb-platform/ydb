@@ -12,15 +12,47 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_subdirectory(protos)
+add_subdirectory(events)
+
+add_library(fq-libs-row_dispatcher)
+
+
+target_compile_options(fq-libs-row_dispatcher PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(fq-libs-row_dispatcher PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-fmt
+  contrib-libs-simdjson
+  libs-actors-logging
+  libs-config-protos
+  fq-libs-control_plane_storage
+  libs-row_dispatcher-events
+  fq-libs-shared_resources
+  fq-libs-ydb
+  library-actors-core
+  ydb-library-security
+  dq-actors-common
+  dq-actors-compute
+  yql-dq-proto
+  providers-pq-provider
+  public-purecalc-common
+  cpp-client-ydb_scheme
+  cpp-client-ydb_table
+)
+
+target_sources(fq-libs-row_dispatcher PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/actors_factory.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/coordinator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/json_filter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/json_parser.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/leader_election.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/row_dispatcher.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/topic_session.cpp
+)
 

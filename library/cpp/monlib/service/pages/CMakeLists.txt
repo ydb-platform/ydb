@@ -12,15 +12,36 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_subdirectory(resources)
+add_subdirectory(tablesorter)
+
+add_library(monlib-service-pages)
+
+
+target_link_libraries(monlib-service-pages PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-build_info
+  cpp-malloc-api
+  library-cpp-svnversion
+  library-cpp-resource
+  cpp-monlib-service
+  monlib-encode-json
+  monlib-encode-text
+  monlib-encode-spack
+  monlib-encode-prometheus
+)
+
+target_sources(monlib-service-pages PRIVATE
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/diag_mon_page.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/html_mon_page.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/index_mon_page.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/mon_page.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/pre_mon_page.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/resource_mon_page.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/templates.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/version_mon_page.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/registry_mon_page.cpp
+)
 

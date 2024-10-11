@@ -12,15 +12,29 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_library(core-engine-minikql)
+
+
+target_compile_options(core-engine-minikql PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(core-engine-minikql PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  ydb-core-base
+  core-client-minikql_compile
+  ydb-core-engine
+  ydb-core-formats
+  ydb-core-tablet_flat
+  parser-pg_wrapper-interface
+)
+
+target_sources(core-engine-minikql PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/engine/minikql/flat_local_tx_factory.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/engine/minikql/minikql_engine_host.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/engine/minikql/flat_local_minikql_host.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/engine/minikql/minikql_engine_host.h
+)
 

@@ -12,15 +12,42 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
-  include(CMakeLists.linux-aarch64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  include(CMakeLists.darwin-x86_64.txt)
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  include(CMakeLists.darwin-arm64.txt)
-elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
-  include(CMakeLists.windows-x86_64.txt)
-endif()
+add_library(ydb-core-test_tablet)
+
+
+target_link_libraries(ydb-core-test_tablet PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-t1ha
+  library-cpp-json
+  ydb-core-keyvalue
+  ydb-core-protos
+  ydb-core-util
+)
+
+target_sources(ydb-core-test_tablet PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/test_tablet/load_actor_impl.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/test_tablet/load_actor_delete.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/test_tablet/load_actor_mon.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/test_tablet/load_actor_read_validate.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/test_tablet/load_actor_state.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/test_tablet/load_actor_write.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/test_tablet/state_server_interface.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/test_tablet/test_shard_context.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/test_tablet/test_shard_mon.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/test_tablet/test_tablet.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/test_tablet/tx_init_scheme.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/test_tablet/tx_initialize.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/test_tablet/tx_load_everything.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/test_tablet/defs.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/test_tablet/events.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/test_tablet/load_actor_impl.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/test_tablet/processor.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/test_tablet/scheme.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/test_tablet/state_server_interface.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/test_tablet/test_shard_context.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/test_tablet/test_shard_impl.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/test_tablet/test_tablet.h
+)
 

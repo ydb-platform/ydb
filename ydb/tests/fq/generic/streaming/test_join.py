@@ -525,7 +525,7 @@ class TestJoinStreaming(TestYdsBase):
                     labels={"operation": query_id}, key_label="sensor"
                 )
                 for k in sensors:
-                    for prefix in ("GenericLookup", "StreamLookup", "InputTransform"):
+                    for prefix in ("Lookup", "InputTransform"):
                         if k.startswith(prefix):
                             print(f'node[{node_index}].operation[{query_id}].{k} = {sensors[k]}', file=sys.stderr)
                             break

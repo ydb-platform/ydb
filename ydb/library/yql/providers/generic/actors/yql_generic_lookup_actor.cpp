@@ -103,13 +103,13 @@ namespace NYql::NDq {
             if (!taskCounters) {
                 return;
             }
-            Count = taskCounters->GetCounter("GenericLookupCount");
-            Keys = taskCounters->GetCounter("GenericLookupKeys");
-            ResultChunks = taskCounters->GetCounter("GenericLookupResultChunks");
-            ResultRows = taskCounters->GetCounter("GenericLookupResultRows");
-            ResultBytes = taskCounters->GetCounter("GenericLookupResultBytes");
-            AnswerTime = taskCounters->GetCounter("GenericLookupAnswerTimeMs");
-            CpuTime = taskCounters->GetCounter("GenericLookupCpuTimeUs");
+            Count = taskCounters->GetCounter("LookupSrcReqs");
+            Keys = taskCounters->GetCounter("LookupSrcKeys");
+            ResultChunks = taskCounters->GetCounter("LookupSrcChunks");
+            ResultRows = taskCounters->GetCounter("LookupSrcRows");
+            ResultBytes = taskCounters->GetCounter("LookupSrcBytes");
+            AnswerTime = taskCounters->GetCounter("LookupSrcAnswerMs");
+            CpuTime = taskCounters->GetCounter("LookupSrcCpuUs");
         }
     public:
 

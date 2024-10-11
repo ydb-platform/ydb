@@ -61,6 +61,7 @@ SRCS(
     operation_queue_timer.h
     schemeshard.cpp
     schemeshard__background_cleaning.cpp
+    schemeshard__backup_collection_common.cpp
     schemeshard__borrowed_compaction.cpp
     schemeshard__clean_pathes.cpp
     schemeshard__compaction.cpp

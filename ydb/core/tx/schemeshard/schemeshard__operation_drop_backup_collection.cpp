@@ -1,4 +1,5 @@
 #include "schemeshard__operation_common.h"
+#include "schemeshard__backup_collection_common.h"
 #include "schemeshard_impl.h"
 
 #define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -155,18 +156,24 @@ public:
     using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
-        const TString& parentPathStr = Transaction.GetWorkingDir();
+        const TString& rootPathStr = Transaction.GetWorkingDir();
         const auto& dropDescription = Transaction.GetDropBackupCollection();
         const TString& name = dropDescription.GetName();
-        LOG_N("TDropBackupCollection Propose: opId# " << OperationId << ", path# " << parentPathStr << "/" << name);
+        LOG_N("TDropBackupCollection Propose: opId# " << OperationId << ", path# " << rootPathStr << "/" << name);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(context.SS->SelfTabletId()));
 
-        const TPath& dstPath = TPath::Resolve(parentPathStr, context.SS).Child(name);
+        auto bcPaths = ResolveBackupCollectionPaths(rootPathStr, name, false, context, result);
+        if (!bcPaths) {
+            return result;
+        }
+
+        auto& [_, dstPath] = *bcPaths;
 
         RETURN_RESULT_UNLESS(IsDestinationPathValid(result, context, dstPath));
+
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);

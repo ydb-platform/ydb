@@ -1,4 +1,5 @@
 #include "schemeshard__operation_common.h"
+#include "schemeshard__backup_collection_common.h"
 #include "schemeshard_impl.h"
 
 #define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -94,40 +95,6 @@ class TCreateBackupCollection : public TSubOperation {
         }
     }
 
-    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TPath& dstPath, const TString& acl, bool acceptExisted) {
-        const auto checks = dstPath.Check();
-        checks.IsAtLocalSchemeShard();
-        if (dstPath.IsResolved()) {
-            checks
-                .IsResolved()
-                .NotUnderDeleting()
-                .FailOnExist(TPathElement::EPathType::EPathTypeBackupCollection, acceptExisted);
-        } else {
-            checks
-                .NotEmpty()
-                .NotResolved();
-        }
-
-        if (checks) {
-            checks
-                .IsValidLeafName()
-                .DepthLimit()
-                .PathsLimit()
-                .DirChildrenLimit()
-                .IsValidACL(acl);
-        }
-
-        if (!checks) {
-            result->SetError(checks.GetStatus(), checks.GetError());
-            if (dstPath.IsResolved()) {
-                result->SetPathCreateTxId(static_cast<ui64>(dstPath.Base()->CreateTxId));
-                result->SetPathId(dstPath.Base()->PathId.LocalPathId);
-            }
-        }
-
-        return static_cast<bool>(checks);
-    }
-
     static void AddPathInSchemeShard(const THolder<TProposeResponse>& result, TPath& dstPath, const TString& owner) {
         dstPath.MaterializeLeaf(owner);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
@@ -161,72 +128,16 @@ public:
         LOG_N("TCreateBackupCollection Propose: opId# " << OperationId << ", path# " << rootPathStr << "/" << name);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
-                                                   static_cast<ui64>(OperationId.GetTxId()),
-                                                   static_cast<ui64>(context.SS->SelfTabletId()));
+                                                    static_cast<ui64>(OperationId.GetTxId()),
+                                                    static_cast<ui64>(context.SS->SelfTabletId()));
 
-        bool backupServiceEnabled = AppData()->FeatureFlags.GetEnableBackupService();
-        if (!backupServiceEnabled) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Backup collections are disabled. Please contact your system administrator to enable it");
+        auto bcPaths = ResolveBackupCollectionPaths(rootPathStr, name, true, context, result);
+        if (!bcPaths) {
             return result;
         }
 
-        const TPath& rootPath = TPath::Resolve(rootPathStr, context.SS);
-        {
-            const auto checks = rootPath.Check();
-            checks
-                .NotEmpty()
-                .NotUnderDomainUpgrade()
-                .IsAtLocalSchemeShard()
-                .IsResolved()
-                .NotDeleted()
-                .NotUnderDeleting()
-                .IsCommonSensePath()
-                .IsLikeDirectory()
-                .FailOnRestrictedCreateInTempZone();
+        auto& [rootPath, dstPath] = *bcPaths;
 
-            if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
-                return result;
-            }
-        }
-
-        const TString& backupCollectionsDir = JoinPath({rootPath.GetDomainPathString(), ".backups/collections"});
-
-        TPathSplitUnix absPathSplit(name);
-
-        if (absPathSplit.size() > 1 && !absPathSplit.IsAbsolute) {
-            result->SetError(NKikimrScheme::EStatus::StatusSchemeError, TStringBuilder() << "Backup collections must be placed directly in " << backupCollectionsDir);
-            return result;
-        }
-
-        const TPath& backupCollectionsPath = TPath::Resolve(backupCollectionsDir, context.SS);
-        {
-            const auto checks = backupCollectionsPath.Check();
-            checks.NotUnderDomainUpgrade()
-                .IsAtLocalSchemeShard()
-                .IsResolved()
-                .NotDeleted()
-                .NotUnderDeleting()
-                .IsCommonSensePath()
-                .IsLikeDirectory();
-
-            if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
-                return result;
-            }
-        }
-
-        std::optional<TPath> parentPath;
-        if (absPathSplit.size() > 1) {
-            TString realParent = "/" + JoinRange("/", absPathSplit.begin(), absPathSplit.end() - 1);
-            parentPath = TPath::Resolve(realParent, context.SS);
-        }
-
-        TPath dstPath = absPathSplit.IsAbsolute && parentPath ? parentPath->Child(TString(absPathSplit.back())) : rootPath.Child(name);
-        if (!dstPath.PathString().StartsWith(backupCollectionsDir + "/")) {
-            result->SetError(NKikimrScheme::EStatus::StatusSchemeError, TStringBuilder() << "Backup collections must be placed in " << backupCollectionsDir);
-            return result;
-        }
         {
             const auto checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
@@ -255,6 +166,7 @@ public:
                 return result;
             }
         }
+
 
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {

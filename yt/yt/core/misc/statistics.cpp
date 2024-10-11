@@ -93,21 +93,15 @@ bool TSummary::operator ==(const TSummary& other) const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TErrorOr<TSummary*> TStatistics::GetSummary(const TStatisticPath& path)
+TSummary& TStatistics::GetSummary(const TStatisticPath& path)
 {
-    auto emplaceResult = CheckedEmplaceStatistic(Data_, path, TSummary());
-    if (!emplaceResult.IsOK()) {
-        return TError(emplaceResult);
-    }
-    auto [it, _] = emplaceResult.Value();
-    return &it->second;
+    auto [it, _] = CheckedEmplaceStatistic(Data_, path, TSummary());
+    return it->second;
 }
 
 void TStatistics::AddSample(const TStatisticPath& path, i64 sample)
 {
-    auto summary = GetSummary(path);
-    THROW_ERROR_EXCEPTION_IF(!summary.IsOK(), summary);
-    summary.Value()->AddSample(sample);
+    GetSummary(path).AddSample(sample);
 }
 
 void TStatistics::AddSample(const TStatisticPath& path, const INodePtr& sample)
@@ -119,10 +113,9 @@ void TStatistics::AddSample(const TStatisticPath& path, const INodePtr& sample)
 
 void TStatistics::ReplacePathWithSample(const TStatisticPath& path, const i64 sample)
 {
-    auto summary = GetSummary(path);
-    THROW_ERROR_EXCEPTION_IF(!summary.IsOK(), summary);
-    summary.Value()->Reset();
-    summary.Value()->AddSample(sample);
+    auto& summary = GetSummary(path);
+    summary.Reset();
+    summary.AddSample(sample);
 }
 
 void TStatistics::ReplacePathWithSample(const TStatisticPath& path, const INodePtr& sample)
@@ -158,32 +151,17 @@ void TStatistics::ProcessNodeWithCallback(const TStatisticPath& path, const NYTr
     }
 }
 
-TError TStatistics::Merge(const TStatistics& statistics)
+void TStatistics::Merge(const TStatistics& statistics)
 {
-    TError error;
     for (const auto& [path, summary] : statistics.Data()) {
-        auto currentSummary = GetSummary(path);
-        if (currentSummary.IsOK()) {
-            currentSummary.Value()->Merge(summary);
-        } else {
-            error = currentSummary;
-        }
+        GetSummary(path).Merge(summary);
     }
-    return error;
 }
 
-TError TStatistics::MergeWithOverride(const TStatistics& statistics)
+void TStatistics::MergeWithOverride(const TStatistics& statistics)
 {
-    TError error;
-    for (const auto& [path, summary] : statistics.Data()) {
-        auto currentSummary = GetSummary(path);
-        if (currentSummary.IsOK()) {
-            *currentSummary.Value() = summary;
-        } else {
-            error = currentSummary;
-        }
-    }
-    return error;
+    const auto& otherData = statistics.Data();
+    Data_.insert(otherData.begin(), otherData.end());
 }
 
 // TODO(pavook) quite funky implementation details. Should we move this into statistic_path.h?

@@ -66,14 +66,14 @@ std::pair<EStatisticPathConflictType, typename TSummaryMap::iterator> IsCompatib
 
 //! Tries to emplace statistic into TSummaryMap, and checks if it is valid and compatible.
 template <typename TSummaryMap, typename... Ts>
-TErrorOr<std::pair<typename TSummaryMap::iterator, bool>> CheckedEmplaceStatistic(
+std::pair<typename TSummaryMap::iterator, bool> CheckedEmplaceStatistic(
     TSummaryMap& existingStatistics,
     const NStatisticPath::TStatisticPath& path,
     Ts&&... args)
 {
     auto [conflictType, hintIt] = IsCompatibleStatistic(existingStatistics, path);
     if (conflictType == EStatisticPathConflictType::Exists) {
-        return std::pair{hintIt, false};
+        return {hintIt, false};
     }
     if (conflictType != EStatisticPathConflictType::None) {
         auto prefixPath = hintIt->first;
@@ -83,28 +83,21 @@ TErrorOr<std::pair<typename TSummaryMap::iterator, bool>> CheckedEmplaceStatisti
             std::swap(prefixPath, conflictPath);
         }
 
-        return TError("Statistic path cannot be a prefix of another statistic path")
+        THROW_ERROR_EXCEPTION("Statistic path cannot be a prefix of another statistic path")
             << TErrorAttribute("prefix_path", prefixPath)
             << TErrorAttribute("contained_in_path", conflictPath);
     }
     auto emplacedIt = existingStatistics.emplace_hint(hintIt, path, std::forward<Ts>(args)...);
-    return std::pair{emplacedIt, true};
+    return {emplacedIt, true};
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TTags>
-TError TTaggedStatistics<TTags>::AppendStatistics(const TStatistics& statistics, TTags tags)
+void TTaggedStatistics<TTags>::AppendStatistics(const TStatistics& statistics, TTags tags)
 {
-    TError error;
     for (const auto& [path, summary] : statistics.Data()) {
-        auto emplaceResult = CheckedEmplaceStatistic(Data_, path, TTaggedSummaries{});
-        if (!emplaceResult.IsOK()) {
-            error = emplaceResult;
-            continue;
-        }
-
-        auto [emplacedIterator, _] = emplaceResult.Value();
+        auto [emplacedIterator, _] = CheckedEmplaceStatistic(Data_, path, TTaggedSummaries{});
         auto& pathSummaries = emplacedIterator->second;
         auto it = pathSummaries.find(tags);
         if (it == pathSummaries.end()) {
@@ -113,20 +106,14 @@ TError TTaggedStatistics<TTags>::AppendStatistics(const TStatistics& statistics,
             it->second.Merge(summary);
         }
     }
-    return error;
 }
 
 template <class TTags>
-TError TTaggedStatistics<TTags>::AppendTaggedSummary(const NStatisticPath::TStatisticPath& path, const TTaggedStatistics<TTags>::TTaggedSummaries& taggedSummaries)
+void TTaggedStatistics<TTags>::AppendTaggedSummary(const NStatisticPath::TStatisticPath& path, const TTaggedStatistics<TTags>::TTaggedSummaries& taggedSummaries)
 {
-    auto emplaceResult = CheckedEmplaceStatistic(Data_, path, taggedSummaries);
-    if (!emplaceResult.IsOK()) {
-        return TError(emplaceResult);
-    }
-
-    auto [taggedSummariesIt, emplaceHappened] = emplaceResult.Value();
+    auto [taggedSummariesIt, emplaceHappened] = CheckedEmplaceStatistic(Data_, path, taggedSummaries);
     if (emplaceHappened) {
-        return {};
+        return;
     }
 
     auto& currentTaggedSummaries = taggedSummariesIt->second;
@@ -137,7 +124,6 @@ TError TTaggedStatistics<TTags>::AppendTaggedSummary(const NStatisticPath::TStat
             summaryIt->second.Merge(summary);
         }
     }
-    return {};
 }
 
 template <class TTags>

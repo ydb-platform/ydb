@@ -73,9 +73,9 @@ public:
     void ReplacePathWithSample(const NStatisticPath::TStatisticPath& path, const T& sample);
 
     //! Merge statistics by merging summaries for each common statistics path.
-    TError Merge(const TStatistics& statistics);
+    void Merge(const TStatistics& statistics);
     //! Merge statistics by taking summary from #statistics for each common statistics path.
-    TError MergeWithOverride(const TStatistics& statistics);
+    void MergeWithOverride(const TStatistics& statistics);
 
     //! Get range of all elements whose path starts with a given strict prefix path (possibly empty).
     /*!
@@ -94,7 +94,7 @@ private:
     template <class TCallback>
     void ProcessNodeWithCallback(const NStatisticPath::TStatisticPath& path, const NYTree::INodePtr& sample, TCallback callback);
 
-    TErrorOr<TSummary*> GetSummary(const NStatisticPath::TStatisticPath& path);
+    TSummary& GetSummary(const NStatisticPath::TStatisticPath& path);
 
     friend class TStatisticsBuildingConsumer;
 };
@@ -144,8 +144,8 @@ public:
     using TTaggedSummaries = THashMap<TTags, TSummary>;
     using TSummaryMap = std::map<NStatisticPath::TStatisticPath, TTaggedSummaries>;
 
-    TError AppendStatistics(const TStatistics& statistics, TTags tags);
-    TError AppendTaggedSummary(const NStatisticPath::TStatisticPath& path, const TTaggedSummaries& taggedSummaries);
+    void AppendStatistics(const TStatistics& statistics, TTags tags);
+    void AppendTaggedSummary(const NStatisticPath::TStatisticPath& path, const TTaggedSummaries& taggedSummaries);
 
     const TTaggedSummaries* FindTaggedSummaries(const NStatisticPath::TStatisticPath& path) const;
     const TSummaryMap& GetData() const;

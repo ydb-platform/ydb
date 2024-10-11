@@ -73,7 +73,7 @@ PEERDIR(
     ydb/core/driver_lib/cli_utils
     ydb/core/driver_lib/version
     ydb/core/formats
-    ydb/core/fq/libs/init
+    #ydb/core/fq/libs/init
     ydb/core/fq/libs/logs
     ydb/core/graph/service
     ydb/core/graph/shard

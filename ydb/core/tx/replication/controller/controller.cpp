@@ -469,15 +469,21 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
 
     const auto& record = ev->Get()->Record;
     const auto id = TWorkerId::Parse(record.GetWorker());
-    auto replication = Replications.at(id.ReplicationId());
+    auto worker = GetOrCreateWorker(id);
+    worker->SetDataEnded(true);
 
-    replication->SetPartitionEnded(record.GetPartitionId());
-    auto allEnded = std::all_of(record.GetAdjacentPartitionsIds().begin(), record.GetAdjacentPartitionsIds().end(), [&](auto id) {
-        return replication->IsPartitionEnded(id);
+    auto allParentsEnded = std::all_of(record.GetAdjacentPartitionsIds().begin(), record.GetAdjacentPartitionsIds().end(), [&](auto partitionId) {
+        auto worker = Workers.find(TWorkerId{id.ReplicationId(), id.TargetId(), partitionId});
+        if (worker == Workers.end()) {
+            return false;
+        }
+        return worker->second.IsDataEnded();
     });
 
-    if (allEnded) {
+    if (allParentsEnded) {
+        auto replication = Replications.at(id.ReplicationId());
         const auto* target = replication->FindTarget(id.TargetId());
+
         if (!target) {
             Y_VERIFY_DEBUG(target);
             CLOG_E(ctx, "Resolve target error " <<  id.TargetId() << ": " << ev->Get()->ToString());
@@ -489,7 +495,7 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
 
             auto& worker = *record.MutableWorker();
             worker.SetReplicationId(replication->GetId());
-            worker.SetTargetId(replication->GetNextTargetId());
+            worker.SetTargetId(id.TargetId());
             worker.SetWorkerId(partitionId);
 
             auto& readerSettings = *record.MutableCommand()->MutableRemoteTopicReader();

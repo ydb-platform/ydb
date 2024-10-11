@@ -33,7 +33,8 @@ bool TSessionInfo::HasWorker(const TWorkerId& id) const {
     return Workers.contains(id);
 }
 
-TWorkerInfo::TWorkerInfo(NKikimrReplication::TRunWorkerCommand* cmd) {
+TWorkerInfo::TWorkerInfo(NKikimrReplication::TRunWorkerCommand* cmd)
+    : DataEnded(false) {
     SetCommand(cmd);
 }
 
@@ -59,6 +60,7 @@ const NKikimrReplication::TRunWorkerCommand* TWorkerInfo::GetCommand() const {
 
 void TWorkerInfo::AttachSession(ui32 nodeId) {
     Session = nodeId;
+    DataEnded = false;
 }
 
 void TWorkerInfo::ClearSession() {
@@ -72,6 +74,14 @@ bool TWorkerInfo::HasSession() const {
 ui32 TWorkerInfo::GetSession() const {
     Y_ABORT_UNLESS(Session.Defined());
     return *Session;
+}
+
+bool TWorkerInfo::IsDataEnded() const {
+    return DataEnded;
+}
+
+void TWorkerInfo::SetDataEnded(bool value) {
+    DataEnded = value;
 }
 
 }

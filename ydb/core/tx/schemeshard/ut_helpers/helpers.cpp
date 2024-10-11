@@ -920,9 +920,9 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropResourcePool, NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropResourcePool, NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool)
 
-    // resource pool
+    // backup collection
     GENERIC_HELPERS(CreateBackupCollection, NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection, &NKikimrSchemeOp::TModifyScheme::MutableCreateBackupCollection)
-    GENERIC_HELPERS(DropBackupCollection, NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    GENERIC_HELPERS(DropBackupCollection, NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection, &NKikimrSchemeOp::TModifyScheme::MutableDropBackupCollection)
     DROP_BY_PATH_ID_HELPERS(DropBackupCollection, NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection)
 
     #undef DROP_BY_PATH_ID_HELPERS

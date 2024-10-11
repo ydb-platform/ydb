@@ -179,7 +179,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         env.TestWaitNotification(runtime, txId);
     }
 
-    Y_UNIT_TEST(ParallelCreateBackupCollection) {
+    Y_UNIT_TEST(ParallelCreate) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
@@ -202,5 +202,23 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                            {NLs::PathVersionEqual(1)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_2),
                            {NLs::PathVersionEqual(1)});
+    }
+
+    Y_UNIT_TEST(Drop) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", DefaultCollectionSettings());
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1, false, NLs::PathExist);
+
+        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", "Name: \"" DEFAULT_NAME_1 "\"");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1, false, NLs::PathNotExist);
     }
 } // TBackupCollectionTests

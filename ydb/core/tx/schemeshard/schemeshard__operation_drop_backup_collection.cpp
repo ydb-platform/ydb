@@ -154,9 +154,7 @@ class TDropBackupCollection : public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
-        Y_UNUSED(owner);
-
+    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const auto& dropDescription = Transaction.GetDropBackupCollection();
         const TString& name = dropDescription.GetName();
@@ -166,19 +164,23 @@ public:
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(context.SS->SelfTabletId()));
 
-        const TPath& dstPath = TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        const TPath& dstPath = TPath::Resolve(parentPathStr, context.SS).Child(name);
 
         RETURN_RESULT_UNLESS(IsDestinationPathValid(result, context, dstPath));
-        // RETURN_RESULT_UNLESS(NBackupCollection::IsApplyIfChecksPassed(Transaction, result, context));
+        TString errStr;
+        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+            return result;
+        }
 
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
         auto guard = context.DbGuard();
         PersistDropBackupCollection(context, dstPath);
-        // TTxState& txState = context.SS->CreateTx(
-        //         OperationId,
-        //         TTxState::TxDropBackupCollection,
-        //         dstPath.Base()->PathId);
+        context.SS->CreateTx(
+                OperationId,
+                TTxState::TxDropBackupCollection,
+                dstPath.Base()->PathId);
 
         DropBackupCollectionPathElement(dstPath);
 

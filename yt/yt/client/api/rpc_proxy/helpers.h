@@ -106,6 +106,14 @@ void FromProto(
     NApi::TListJobsResult* result,
     const NProto::TListJobsResult& proto);
 
+void ToProto(
+    NProto::TJobTraceEvent* proto,
+    const NApi::TJobTraceEvent& result);
+
+void FromProto(
+    NApi::TJobTraceEvent* result,
+    const NProto::TJobTraceEvent& proto);
+
 void ToProto(NProto::TColumnSchema* protoSchema, const NTableClient::TColumnSchema& schema);
 void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema& protoSchema);
 

@@ -516,6 +516,11 @@ public:
         const TGetJobStderrOptions& options),
         (operationIdOrAlias, jobId, options))
 
+    DELEGATE_METHOD(TFuture<std::vector<TJobTraceEvent>>, GetJobTrace, (
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const TGetJobTraceOptions& options),
+        (operationIdOrAlias, options))
+
     DELEGATE_METHOD(TFuture<TSharedRef>, GetJobFailContext, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,

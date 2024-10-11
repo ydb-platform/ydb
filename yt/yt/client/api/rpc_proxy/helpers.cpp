@@ -426,6 +426,30 @@ void FromProto(
     FromProto(&result->Errors, proto.errors());
 }
 
+void ToProto(
+    NProto::TJobTraceEvent* proto,
+    const NApi::TJobTraceEvent& result)
+{
+    ToProto(proto->mutable_operation_id(), result.OperationId);
+    ToProto(proto->mutable_job_id(), result.JobId);
+    ToProto(proto->mutable_trace_id(), result.TraceId);
+    proto->set_event_index(result.EventIndex);
+    proto->set_event(result.Event);
+    proto->set_event_time(ToProto<i64>(result.EventTime));
+}
+
+void FromProto(
+    NApi::TJobTraceEvent* result,
+    const NProto::TJobTraceEvent& proto)
+{
+    FromProto(&result->OperationId, proto.operation_id());
+    FromProto(&result->JobId, proto.job_id());
+    FromProto(&result->TraceId, proto.trace_id());
+    result->EventIndex = proto.event_index();
+    result->Event = proto.event();
+    result->EventTime = TInstant::FromValue(proto.event_time());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // MISC
 ////////////////////////////////////////////////////////////////////////////////

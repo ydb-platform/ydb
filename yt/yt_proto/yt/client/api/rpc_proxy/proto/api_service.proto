@@ -2485,6 +2485,27 @@ message TRspGetJobStderr
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TReqGetJobTrace
+{
+    oneof operation_id_or_alias {
+        NYT.NProto.TGuid operation_id = 1;
+        string operation_alias = 2;
+    }
+    optional NYT.NProto.TGuid job_id = 3;
+    optional NYT.NProto.TGuid trace_id = 4;
+    optional int64 from_event_index = 5;
+    optional int64 to_event_index = 6;
+    optional int64 from_time = 7;
+    optional int64 to_time = 8;
+}
+
+message TRspGetJobTrace
+{
+    repeated TJobTraceEvent events = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TReqGetJobFailContext
 {
     oneof operation_id_or_alias {
@@ -3155,6 +3176,16 @@ message TListJobsResult
 
     required TListJobsStatistics statistics = 5;
     repeated NYT.NProto.TError errors = 6;
+}
+
+message TJobTraceEvent
+{
+    required NYT.NProto.TGuid operation_id = 1;
+    required NYT.NProto.TGuid job_id = 2;
+    required NYT.NProto.TGuid trace_id = 3;
+    required int64 event_index = 4;
+    required string event = 5;
+    required int64 event_time = 6; // TInstant
 }
 
 ////////////////////////////////////////////////////////////////////////////////

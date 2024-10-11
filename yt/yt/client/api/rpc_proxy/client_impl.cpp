@@ -1328,6 +1328,41 @@ TFuture<TGetJobStderrResponse> TClient::GetJobStderr(
     }));
 }
 
+TFuture<std::vector<TJobTraceEvent>> TClient::GetJobTrace(
+    const TOperationIdOrAlias& operationIdOrAlias,
+    const TGetJobTraceOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetJobTrace();
+    SetTimeoutOptions(*req, options);
+
+    NScheduler::ToProto(req, operationIdOrAlias);
+    if (options.JobId) {
+        ToProto(req->mutable_job_id(), *options.JobId);
+    }
+    if (options.TraceId) {
+        ToProto(req->mutable_trace_id(), *options.TraceId);
+    }
+    if (options.FromTime) {
+        req->set_from_time(*options.FromTime);
+    }
+    if (options.ToTime) {
+        req->set_to_time(*options.ToTime);
+    }
+    if (options.FromEventIndex) {
+        req->set_from_event_index(*options.FromEventIndex);
+    }
+    if (options.ToEventIndex) {
+        req->set_to_event_index(*options.ToEventIndex);
+    }
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetJobTracePtr& rsp) {
+        return FromProto<std::vector<TJobTraceEvent>>(rsp->events());
+    }));
+}
+
+
 TFuture<TSharedRef> TClient::GetJobFailContext(
     const TOperationIdOrAlias& operationIdOrAlias,
     NJobTrackerClient::TJobId jobId,

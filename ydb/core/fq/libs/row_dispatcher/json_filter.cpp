@@ -258,7 +258,13 @@ private:
         Y_ABORT_UNLESS(columnNames.size() == columnTypes.size());
         str << OffsetFieldName << ", ";
         for (size_t i = 0; i < columnNames.size(); ++i) {
-            str << "CAST(" << columnNames[i] << " as " << columnTypes[i] << ") as " << columnNames[i] << ((i != columnNames.size() - 1) ? "," : "");
+            TString columnType = columnTypes[i];
+            if (columnType == "Json") {
+                columnType = "String";
+            } else if (columnType == "Optional<Json>") {
+                columnType = "Optional<String>";
+            }
+            str << "CAST(" << columnNames[i] << " as " << columnType << ") as " << columnNames[i] << ((i != columnNames.size() - 1) ? "," : "");
         }
         str << " FROM Input;\n";
         str << "$filtered = SELECT * FROM $fields " << whereFilter << ";\n";

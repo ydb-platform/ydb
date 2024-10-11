@@ -352,7 +352,7 @@ void TDataShard::Handle(TEvDataShard::TEvGetTableStats::TPtr& ev, const TActorCo
 template <class TTables>
 void ListTableNames(const TTables& tables, TStringBuilder& names) {
     for (auto& t : tables) {
-        if (!names.Empty()) {
+        if (!names.empty()) {
             names << ", ";
         }
         names << "[" << t.second->Path << "]";

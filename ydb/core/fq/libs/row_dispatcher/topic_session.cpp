@@ -141,7 +141,7 @@ private:
     ui32 PartitionId;
     NYdb::TDriver Driver;
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
-    std::unique_ptr<NYdb::NTopic::TTopicClient> TopicClient;
+    NYql::ITopicClient::TPtr TopicClient;
     std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
     const i64 BufferSize;
     TString LogPrefix;
@@ -157,6 +157,7 @@ private:
     TTopicSessionMetrics Metrics;
     TParserSchema ParserSchema;
     THashMap<TString, ui64> FieldsIndexes;
+    NYql::IPqGateway::TPtr PqGateway;
 
 public:
     explicit TTopicSession(
@@ -166,7 +167,8 @@ public:
         ui32 partitionId,
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-        const ::NMonitoring::TDynamicCounterPtr& counters);
+        const ::NMonitoring::TDynamicCounterPtr& counters,
+        const NYql::IPqGateway::TPtr& pqGateway);
 
     void Bootstrap();
     void PassAway() override;
@@ -175,7 +177,7 @@ public:
 
 private:
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) const;
-    NYdb::NTopic::TTopicClient& GetTopicClient(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams);
+    NYql::ITopicClient& GetTopicClient(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams);
     NYdb::NTopic::TReadSessionSettings GetReadSessionSettings(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) const;
     void CreateTopicSession();
     void CloseTopicSession();
@@ -248,7 +250,8 @@ TTopicSession::TTopicSession(
     ui32 partitionId,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-    const ::NMonitoring::TDynamicCounterPtr& counters)
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    const NYql::IPqGateway::TPtr& pqGateway)
     : TopicPath(topicPath)
     , RowDispatcherActorId(rowDispatcherActorId)
     , PartitionId(partitionId)
@@ -258,6 +261,7 @@ TTopicSession::TTopicSession(
     , LogPrefix("TopicSession")
     , Config(config)
     , Counters(counters)
+    , PqGateway(pqGateway)
 {
 }
 
@@ -306,9 +310,9 @@ NYdb::NTopic::TTopicClientSettings TTopicSession::GetTopicClientSettings(const N
     return opts;
 }
 
-NYdb::NTopic::TTopicClient& TTopicSession::GetTopicClient(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) {
+NYql::ITopicClient& TTopicSession::GetTopicClient(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) {
     if (!TopicClient) {
-        TopicClient = std::make_unique<NYdb::NTopic::TTopicClient>(Driver, GetTopicClientSettings(sourceParams));
+        TopicClient = PqGateway->GetTopicClient(Driver, GetTopicClientSettings(sourceParams));
     }
     return *TopicClient;
 }
@@ -451,7 +455,7 @@ void TTopicSession::HandleNewEvents() {
             break;
         }
         std::visit(TTopicEventProcessor{*this, LogPrefix}, *event);
-    } 
+    }
 }
 
 void TTopicSession::CloseTopicSession() {
@@ -512,8 +516,8 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
 
 std::pair<NYql::NUdf::TUnboxedValuePod, i64> TTopicSession::CreateItem(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
     const TString& data = message.GetData();
-    i64 usedSpace = data.Size();
-    NYql::NUdf::TUnboxedValuePod item = NKikimr::NMiniKQL::MakeString(NYql::NUdf::TStringRef(data.Data(), data.Size()));
+    i64 usedSpace = data.size();
+    NYql::NUdf::TUnboxedValuePod item = NKikimr::NMiniKQL::MakeString(NYql::NUdf::TStringRef(data.data(), data.size()));
     return std::make_pair(item, usedSpace);
 }
 
@@ -798,7 +802,7 @@ void TTopicSession::StopReadSession() {
         ReadSession->Close(TDuration::Zero());
         ReadSession.reset();
     }
-    TopicClient.reset();
+    TopicClient.Reset();
 }
 
 void TTopicSession::SendDataArrived(ClientsInfo& info) {
@@ -849,8 +853,9 @@ std::unique_ptr<NActors::IActor> NewTopicSession(
     ui32 partitionId,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-    const ::NMonitoring::TDynamicCounterPtr& counters) {
-    return std::unique_ptr<NActors::IActor>(new TTopicSession(topicPath, config, rowDispatcherActorId, partitionId, std::move(driver), credentialsProviderFactory, counters));
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    const NYql::IPqGateway::TPtr& pqGateway) {
+    return std::unique_ptr<NActors::IActor>(new TTopicSession(topicPath, config, rowDispatcherActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, pqGateway));
 }
 
 } // namespace NFq

@@ -32,7 +32,7 @@ TString ToString(const TParsedTokenList& tokens) {
         if (token.Name == "WS" || token.Name == "EOF") {
             continue;
         }
-        if (!reconstructedQuery.Empty()) {
+        if (!reconstructedQuery.empty()) {
             reconstructedQuery << ' ';
         }
         reconstructedQuery << token.Content;
@@ -5046,10 +5046,10 @@ Y_UNIT_TEST_SUITE(JsonValue) {
                 TStringBuilder query;
                 query << "$json = CAST(@@{\"key\": 1238}@@ as Json);\n"
                     << "SELECT JSON_VALUE($json, \"strict $.key\"";
-                if (!onEmpty.first.Empty()) {
+                if (!onEmpty.first.empty()) {
                     query << " " << onEmpty.first << " ON EMPTY";
                 }
-                if (!onError.first.Empty()) {
+                if (!onError.first.empty()) {
                     query << " " << onError.first << " ON ERROR";
                 }
                 query << ");\n";
@@ -5221,13 +5221,13 @@ Y_UNIT_TEST_SUITE(JsonQuery) {
                     TStringBuilder query;
                     query << R"($json = CAST(@@{"key": [123]}@@ as Json);
                     SELECT JSON_QUERY($json, "strict $.key" )" << wrap.first;
-                    if (!onEmpty.first.Empty()) {
+                    if (!onEmpty.first.empty()) {
                         if (wrap.first.StartsWith("WITH ")) {
                             continue;
                         }
                         query << " " << onEmpty.first << " ON EMPTY";
                     }
-                    if (!onError.first.Empty()) {
+                    if (!onError.first.empty()) {
                         query << " " << onError.first << " ON ERROR";
                     }
                     query << ");\n";

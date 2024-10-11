@@ -1802,28 +1802,28 @@ StringContentInternal(TContext& ctx, TPosition pos, const TString& input, EStrin
     if (mode == EStringContentMode::TypedStringLiteral) {
         auto lower = to_lower(str);
         if (lower.EndsWith("y")) {
-            str = str.substr(0, str.Size() - 1);
+            str = str.substr(0, str.size() - 1);
             result.Type = NKikimr::NUdf::EDataSlot::Yson;
         } else if (lower.EndsWith("j")) {
-            str = str.substr(0, str.Size() - 1);
+            str = str.substr(0, str.size() - 1);
             result.Type = NKikimr::NUdf::EDataSlot::Json;
         } else if (lower.EndsWith("p")) {
-            str = str.substr(0, str.Size() - 1);
+            str = str.substr(0, str.size() - 1);
             result.PgType = "PgText";
         } else if (lower.EndsWith("pt")) {
-            str = str.substr(0, str.Size() - 2);
+            str = str.substr(0, str.size() - 2);
             result.PgType = "PgText";
         } else if (lower.EndsWith("pb")) {
-            str = str.substr(0, str.Size() - 2);
+            str = str.substr(0, str.size() - 2);
             result.PgType = "PgBytea";
         } else if (lower.EndsWith("pv")) {
-            str = str.substr(0, str.Size() - 2);
+            str = str.substr(0, str.size() - 2);
             result.PgType = "PgVarchar";
         } else if (lower.EndsWith("s")) {
-            str = str.substr(0, str.Size() - 1);
+            str = str.substr(0, str.size() - 1);
             result.Type = NKikimr::NUdf::EDataSlot::String;
         } else if (lower.EndsWith("u")) {
-            str = str.substr(0, str.Size() - 1);
+            str = str.substr(0, str.size() - 1);
             result.Type = NKikimr::NUdf::EDataSlot::Utf8;
         } else {
             if (ctx.Scoped->WarnUntypedStringLiterals) {
@@ -3075,7 +3075,7 @@ TNodePtr BuildBinaryOp(TContext& ctx, TPosition pos, const TString& opName, TNod
 
         if (bothArgNull || (oneArgNull && opName != "Or" && opName != "And")) {
             ctx.Warning(pos, TIssuesIds::YQL_OPERATION_WILL_RETURN_NULL) << "Binary operation "
-            << opName.substr(0, opName.Size() - 7 * opName.EndsWith("MayWarn"))
+            << opName.substr(0, opName.size() - 7 * opName.EndsWith("MayWarn"))
             << " will return NULL here";
         }
     }
@@ -3295,7 +3295,7 @@ void MakeTableFromExpression(TPosition pos, TContext& ctx, TNodePtr node, TDefer
         }
     }
 
-    if (!prefix.Empty()) {
+    if (!prefix.empty()) {
         node = node->Y("Concat", node->Y("String", node->Q(prefix)), node);
     }
 
@@ -3312,7 +3312,7 @@ TDeferredAtom MakeAtomFromExpression(TPosition pos, TContext& ctx, TNodePtr node
         return TDeferredAtom(node->GetPos(), prefix + *literal);
     }
 
-    if (!prefix.Empty()) {
+    if (!prefix.empty()) {
         node = node->Y("Concat", node->Y("String", node->Q(prefix)), node);
     }
 

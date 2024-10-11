@@ -1,0 +1,63 @@
+--- contrib/python/Flask/py3/flask/scaffold.py	(index)
++++ contrib/python/Flask/py3/flask/scaffold.py	(working tree)
+@@ -1,2 +1,3 @@
+ import importlib.util
++import mimetypes
+ import os
+@@ -12,1 +13,1 @@ from functools import update_wrapper
+-from jinja2 import FileSystemLoader
++from jinja2 import ChoiceLoader, FileSystemLoader, ResourceLoader, PackageLoader
+@@ -20,2 +21,3 @@ from .cli import AppGroup
+ from .helpers import locked_cached_property
++from .helpers import send_file
+ from .helpers import send_from_directory
+@@ -97,6 +99,12 @@ class Scaffold:
+         self.static_folder = static_folder  # type: ignore
+         self.static_url_path = static_url_path
+ 
++        package_name = import_name
++        self.module_loader = pkgutil.find_loader(import_name)
++        if self.module_loader and not self.module_loader.is_package(import_name):
++            package_name = package_name.rsplit('.', 1)[0]
++        self._builtin_resource_prefix = package_name.replace('.', '/')
++
+         #: The path to the templates folder, relative to
+         #: :attr:`root_path`, to add to the template loader. ``None`` if
+         #: templates should not be added.
+@@ -313,6 +323,23 @@ class Scaffold:
+ 
+         .. versionadded:: 0.5
+         """
++
++        if self.module_loader is not None:
++            from io import BytesIO
++            path = os.path.join(self._builtin_resource_prefix, self._static_folder, filename)
++            try:
++                data = self.module_loader.get_data(path)
++            except IOError:
++                data = None
++            if data:
++                mimetype = mimetypes.guess_type(filename)[0]
++                max_age = self.get_send_file_max_age(filename)
++                fobj = BytesIO(data)
++                # Note: in case of uWSGI, might also need to set
++                # `wsgi-disable-file-wrapper = true`
++                # because, otherwise, uwsgi expects a `fileno` on it.
++                return send_file(fobj, mimetype=mimetype, max_age=max_age, conditional=True)
++
+         if not self.has_static_folder:
+             raise RuntimeError("'static_folder' must be set to serve static_files.")
+ 
+@@ -332,7 +357,11 @@ class Scaffold:
+         .. versionadded:: 0.5
+         """
+         if self.template_folder is not None:
+-            return FileSystemLoader(os.path.join(self.root_path, self.template_folder))
++            return ChoiceLoader([
++                FileSystemLoader(os.path.join(self.root_path, self.template_folder)),
++                PackageLoader(self.import_name, self.template_folder, skip_unknown_package=True),
++                ResourceLoader(os.path.join(self._builtin_resource_prefix, self.template_folder), self.module_loader),
++            ])
+         else:
+             return None
+ 

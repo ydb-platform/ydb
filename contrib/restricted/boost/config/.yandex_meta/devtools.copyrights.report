@@ -1,0 +1,1086 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 063415ea5f4f1d2813797e674bb69bb4
+BELONGS ya.make
+    License text:
+        //  Copyright (C) Christof Meerwald 2003
+        //  Copyright (C) Dan Watkins 2003
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/digitalmars.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0c6b4a71af48e0c6aa05a5427f73c88f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/assert_cxx03.hpp [1:5]
+        include/boost/config/assert_cxx11.hpp [1:5]
+        include/boost/config/assert_cxx14.hpp [1:5]
+        include/boost/config/assert_cxx17.hpp [1:5]
+        include/boost/config/assert_cxx20.hpp [1:5]
+        include/boost/config/assert_cxx23.hpp [1:5]
+        include/boost/config/detail/cxx_composite.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 11c555b9f12ef58efab27df9bf8c2090
+BELONGS ya.make
+    License text:
+        //  Copyright Beman Dawes 2011
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/cxx11_char_types.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 18bad9344d7cba762fbd435259d6301b
+BELONGS ya.make
+    License text:
+        // Copyright David Abrahams 2002.
+        // Distributed under the Boost Software License, Version 1.0. (See
+        // accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/workaround.hpp [1:3]
+        include/boost/detail/workaround.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1a93e11c2572326c6a8b7cbe63d4f6a3
+BELONGS ya.make
+    License text:
+        //  Copyright John Maddock 2008
+        //  Use, modification, and distribution is subject to the Boost Software
+        //  License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/warning_disable.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1b9e68c88d4d11c6efc3d2b7423c816c
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Noel Belcourt 2007.
+        //  Copyright 2017, NVIDIA CORPORATION.
+        //  Use, modification and distribution are subject to the
+        //  Boost Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/pgi.hpp [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1c034100ff11e3930ab970dbeb694450
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/hp_acc.hpp [1:8]
+        include/boost/config/platform/hpux.hpp [1:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1daddaec4a141024c460f121eb640798
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/common_edg.hpp [1:7]
+        include/boost/config/compiler/kai.hpp [1:5]
+        include/boost/config/compiler/sunpro_cc.hpp [1:7]
+        include/boost/config/platform/hpux.hpp [1:7]
+        include/boost/config/stdlib/dinkumware.hpp [1:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1f0bef8fd2dab232c436a28951751d24
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/hp_acc.hpp [1:8]
+        include/boost/config/compiler/sunpro_cc.hpp [1:7]
+        include/boost/config/platform/hpux.hpp [1:7]
+        include/boost/config/platform/linux.hpp [1:4]
+        include/boost/config/platform/symbian.hpp [1:5]
+        include/boost/config/stdlib/sgi.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 27ddeabbafbaeb743985907331386107
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/vacpp.hpp [1:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2dfa333cc285f02a792246cce5434be0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/detail/suffix.hpp [4:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2e768fc3f92b09309b782197c57b4c12
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/hp_acc.hpp [1:8]
+        include/boost/config/platform/hpux.hpp [1:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 302eb32d7e0c5743b68227dba3d17d14
+BELONGS ya.make
+    License text:
+        //  Copyright 2001 John Maddock.
+        //  Copyright 2017 Peter Dimov.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/helper_macros.hpp [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 362e438ad12174e10c63f3ad9fa1ce0d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/borland.hpp [1:5]
+        include/boost/config/compiler/codegear.hpp [1:5]
+        include/boost/config/compiler/gcc.hpp [1:9]
+        include/boost/config/compiler/hp_acc.hpp [1:8]
+        include/boost/config/compiler/intel.hpp [1:10]
+        include/boost/config/compiler/visualc.hpp [1:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 386422ed6dcb6b59b9ac548256e71381
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/platform/macos.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3c6022a5a6a98ab812ff2265a476c832
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/borland.hpp [1:5]
+        include/boost/config/compiler/codegear.hpp [1:5]
+        include/boost/config/compiler/compaq_cxx.hpp [1:3]
+        include/boost/config/compiler/gcc.hpp [1:9]
+        include/boost/config/compiler/hp_acc.hpp [1:8]
+        include/boost/config/compiler/vacpp.hpp [1:7]
+        include/boost/config/compiler/visualc.hpp [1:8]
+        include/boost/config/detail/posix_features.hpp [1:3]
+        include/boost/config/detail/select_compiler_config.hpp [3:5]
+        include/boost/config/detail/select_stdlib_config.hpp [3:6]
+        include/boost/config/platform/bsd.hpp [1:5]
+        include/boost/config/platform/cygwin.hpp [1:3]
+        include/boost/config/platform/hpux.hpp [1:7]
+        include/boost/config/platform/irix.hpp [1:4]
+        include/boost/config/platform/linux.hpp [1:4]
+        include/boost/config/platform/macos.hpp [1:5]
+        include/boost/config/platform/solaris.hpp [1:4]
+        include/boost/config/platform/symbian.hpp [1:5]
+        include/boost/config/platform/win32.hpp [1:6]
+        include/boost/config/stdlib/dinkumware.hpp [1:7]
+        include/boost/config/stdlib/roguewave.hpp [1:6]
+        include/boost/config/stdlib/sgi.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3e1af80126953168abcba7ece6794e0d
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Jim Douglas 2005. 
+        //  Use, modification and distribution are subject to the 
+        //  Boost Software License, Version 1.0. (See accompanying file 
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/platform/qnxnto.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3ebe5469577bc9d9b871ed6f23b7567e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/vacpp.hpp [1:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3eeaf5942d3d86ca753bc9e1493ee8f0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/platform/win32.hpp [1:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3eeb9233d0c8faa3468506996fae389d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/common_edg.hpp [1:7]
+        include/boost/config/compiler/intel.hpp [1:10]
+        include/boost/config/detail/select_platform_config.hpp [3:6]
+        include/boost/config/stdlib/dinkumware.hpp [1:7]
+        include/boost/config/stdlib/libstdcpp3.hpp [1:4]
+        include/boost/config/stdlib/modena.hpp [1:3]
+        include/boost/config/stdlib/roguewave.hpp [1:6]
+        include/boost/config/stdlib/stlport.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4476312bde74e54ae89f7415fcb2f06a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/detail/suffix.hpp [4:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 46d9e1f8aedb16cf722125fc124d9495
+BELONGS ya.make
+    License text:
+        // (C) Copyright Douglas Gregor 2010
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/clang.hpp [1:1]
+        include/boost/config/compiler/xlcpp.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4a060e80d859c7e83ba0c643ebbf6487
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/gcc.hpp [1:9]
+        include/boost/config/platform/bsd.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4bcc7787f0424f3d32f66485fdb7a1dd
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Brian Kuhl 2016.
+        //  Use, modification and distribution are subject to the
+        //  Boost Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/diab.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4d10949f0d1cde0db83ea5d5329e99ec
+BELONGS ya.make
+    License text:
+        //  Copyright 2011 John Maddock
+        //  Copyright 2013, 2017-2018 Cray, Inc.
+        //  Use, modification and distribution are subject to the
+        //  Boost Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/cray.hpp [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4ec4f75b23ed6344d1947aa985c282ce
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/vacpp.hpp [1:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5c8ac41153fe8e9daf8181b70c9bcb2b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/stdlib/roguewave.hpp [1:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 60cb7957f86db726c6c6c70fc4644460
+BELONGS ya.make
+    License text:
+        // (c) Copyright John Maddock 2003
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/abi/borland_prefix.hpp [1:3]
+        include/boost/config/abi/borland_suffix.hpp [1:3]
+        include/boost/config/abi/msvc_prefix.hpp [1:3]
+        include/boost/config/abi/msvc_suffix.hpp [1:3]
+        include/boost/config/abi_prefix.hpp [3:3]
+        include/boost/config/abi_suffix.hpp [3:3]
+        include/boost/config/auto_link.hpp [1:3]
+        include/boost/config/requires_threads.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 60ddb105cb6f365c4198d8c97b2115e4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/intel.hpp [1:10]
+        include/boost/config/detail/select_compiler_config.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 626904b1a20ac363e1bb99d9bae924e6
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Beman Dawes 1999.
+        //  (C) Copyright Jens Mauer 2001
+        //  (C) Copyright John Maddock 2001
+        //  Distributed under the Boost
+        //  Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/comeau.hpp [1:8]
+        include/boost/config/compiler/greenhills.hpp [1:3]
+        include/boost/config/compiler/kai.hpp [1:5]
+        include/boost/config/compiler/metrowerks.hpp [1:8]
+        include/boost/config/compiler/sunpro_cc.hpp [1:7]
+        include/boost/config/platform/beos.hpp [1:3]
+        include/boost/config/stdlib/libstdcpp3.hpp [1:4]
+        include/boost/config/stdlib/msl.hpp [1:4]
+        include/boost/config/user.hpp [3:5]
+        include/boost/cstdint.hpp [3:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6372fa2fa3d2b6fd37659a53404e040d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/comeau.hpp [1:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 688f8a68a65d165207c6dbdd79b6f042
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/stdlib/libcomo.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 68edd4a9e831eca12e9c421dc603f4c6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/platform/win32.hpp [1:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6d38655d4303b3037e1b5115a1fbcfb0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/assert_cxx98.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6ddab30a8c1d7c05633d59e90eea754f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/limits.hpp [2:5]
+        include/boost/version.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 71d6cd8e892808ae69f01369b7fd9464
+BELONGS ya.make
+    License text:
+        //  Copyright 2011 John Maddock
+        //  Copyright 2013, 2017-2018 Cray, Inc.
+        //  Use, modification and distribution are subject to the
+        //  Boost Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/cray.hpp [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 771f0ca891cf31e52365f2c5c7ea5ac9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/detail/suffix.hpp [4:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 797b8159646b0e965f8cd05df63d1074
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/comeau.hpp [1:8]
+        include/boost/config/compiler/intel.hpp [1:10]
+        include/boost/config/compiler/metrowerks.hpp [1:8]
+        include/boost/config/compiler/visualc.hpp [1:8]
+        include/boost/config/stdlib/dinkumware.hpp [1:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7a77c5a5c02e42b779cbc7701c396c44
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Bryce Lelbach 2011
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/pathscale.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7aedad2c03ecc61a2ef6e770da75eaf2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/limits.hpp [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7d17bb2579336b337d87a036e9ce244b
+BELONGS ya.make
+    License text:
+        //  (C) Copyright John Maddock 2006.
+        //  Use, modification and distribution are subject to the
+        //  Boost Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/gcc_xml.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 80c44e7f6c87f424f98e861b85c5ce2d
+BELONGS ya.make
+    License text:
+        //  (C) Copyright John Maddock 2002.
+        //  Use, modification and distribution are subject to the 
+        //  Boost Software License, Version 1.0. (See accompanying file 
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config.hpp [3:5]
+        include/boost/config/platform/amigaos.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8105f2c79ac57a14ec250eba3e02c438
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/gcc.hpp [1:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8247b8e57241653b1a6c9310db268720
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/detail/suffix.hpp [4:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 82b5e5f7da5de75b8236435ea1ff6d07
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/intel.hpp [1:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 84c2f237d9b27185e5ee0a17bf920901
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/detail/suffix.hpp [4:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 878bdc8a748b4f845c717d1e57e8953d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/sunpro_cc.hpp [1:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8cf1d6f59e36dba9fc9f6ebd0154e611
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Artyom Beilis 2010.  
+        //  Use, modification and distribution are subject to the  
+        //  Boost Software License, Version 1.0. (See accompanying file  
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/platform/vms.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8f0399d287bd4672d939ab68c754655c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/metrowerks.hpp [1:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 937d6d0019a0a134e2c853ee7ca9c743
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/stdlib/libcomo.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9d195dfaf2f01572424e02192d7f0ba0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/detail/suffix.hpp [4:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9fbe755e4325767774b2c5b52827f08b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/gcc.hpp [1:9]
+        include/boost/config/detail/select_stdlib_config.hpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a82e1cdd44c59d927ac69ec1ca05ab28
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Noel Belcourt 2007.
+        //  Copyright 2017, NVIDIA CORPORATION.
+        //  Use, modification and distribution are subject to the
+        //  Boost Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/pgi.hpp [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a9a214e2eed0b89d70377475968a7415
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/gcc.hpp [1:9]
+        include/boost/config/compiler/visualc.hpp [1:8]
+        include/boost/config/platform/macos.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ab52442e18290412f599104f036282c6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/intel.hpp [1:10]
+        include/boost/config/compiler/sunpro_cc.hpp [1:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ab6e44ab43f9d94c918f3af9054f4430
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/comeau.hpp [1:8]
+        include/boost/config/platform/irix.hpp [1:4]
+        include/boost/config/platform/solaris.hpp [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b05eb40bb3bae6be16123d31cff82a10
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/comeau.hpp [1:8]
+        include/boost/config/platform/win32.hpp [1:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b594eb502e937a54ebdadbe8bd5a68df
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/metrowerks.hpp [1:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b60b728810c5d736d2650873aa7fb51c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/detail/suffix.hpp [4:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b638be5dce43d5e4914245ec2ed92e62
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/common_edg.hpp [1:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b9f3ad3a077b36756db8dbac805868c6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/intel.hpp [1:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bbcd1acfe8595de9d40645962088e6b2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/detail/suffix.hpp [4:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL be44267cfc427e35019ccaf97e96aacb
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/comeau.hpp [1:8]
+        include/boost/config/compiler/intel.hpp [1:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL be5c67e7ba15e8061895f6a1cea1c23b
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Eric Jourdanneau, Joel Falcou 2010
+        //  Use, modification and distribution are subject to the 
+        //  Boost Software License, Version 1.0. (See accompanying file 
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/nvcc.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c06c9ff8636443eb86616d2d2c0497be
+BELONGS ya.make
+    License text:
+        //  Copyright (C) Christof Meerwald 2003
+        //  Copyright (C) Dan Watkins 2003
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/digitalmars.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d1e593bd85d0eb5a452ed45663a23154
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Beman Dawes 1999.
+        //  (C) Copyright Jens Mauer 2001
+        //  (C) Copyright John Maddock 2001
+        //  Distributed under the Boost
+        //  Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/cstdint.hpp [3:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL de772d73074b2097bc4d45f814122331
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2017 Dynatrace
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/xlcpp_zos.hpp [1:1]
+        include/boost/config/platform/zos.hpp [1:1]
+        include/boost/config/stdlib/xlcpp_zos.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dea2c85dcebaf59c9970e07c8eec47d4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/vacpp.hpp [1:7]
+        include/boost/config/compiler/visualc.hpp [1:8]
+        include/boost/config/stdlib/libcomo.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e2f2608b1a713fdf90c3ec334ab18042
+BELONGS ya.make
+    License text:
+        //  (C) Copyright John Maddock 2001 - 2003. 
+        //  (C) Copyright Martin Wille 2003.
+        //  (C) Copyright Guillaume Melquiond 2003.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/detail/select_compiler_config.hpp [3:5]
+        include/boost/config/stdlib/dinkumware.hpp [1:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e323857368fb1433c9c3079428ca51d3
+BELONGS ya.make
+    License text:
+        //  Copyright 2017 Peter Dimov.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/header_deprecated.hpp [4:4]
+        include/boost/config/helper_macros.hpp [4:5]
+        include/boost/config/pragma_message.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e48b5698327b63513b38fe20f3b27554
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/platform/symbian.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e48b5b59655db222047e250fd037f63e
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Beman Dawes 1999.
+        //  (C) Copyright Jens Mauer 2001
+        //  (C) Copyright John Maddock 2001
+        //  Distributed under the Boost
+        //  Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/cstdint.hpp [3:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ecfc68e71298029a5aa1e76441c84c15
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Jessica Hamilton 2014.
+        //  Use, modification and distribution are subject to the
+        //  Boost Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/platform/haiku.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ed74a56708958a0e69848c4205e33dae
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Christopher Jefferson 2011.
+        //  Use, modification and distribution are subject to the
+        //  Boost Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/stdlib/libcpp.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL eecb44649514b05c6320f2629932cbe8
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/detail/suffix.hpp [4:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f19bb76a109bcd2142b125200d42ea4d
+BELONGS ya.make
+    License text:
+        //  (C) Copyright John Maddock 2011.
+        //  Use, modification and distribution are subject to the
+        //  Boost Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/platform/cray.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f2ea0ebe0ed5b434328b3bbd19527a30
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/common_edg.hpp [1:7]
+        include/boost/config/compiler/mpw.hpp [1:4]
+        include/boost/config/compiler/sgi_mipspro.hpp [1:3]
+        include/boost/config/detail/select_platform_config.hpp [3:6]
+        include/boost/config/platform/aix.hpp [1:3]
+        include/boost/config/stdlib/stlport.hpp [1:5]
+        include/boost/config/stdlib/vacpp.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f3740778d3f36d8f0818515a788483db
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/metrowerks.hpp [1:8]
+        include/boost/config/platform/bsd.hpp [1:5]
+        include/boost/config/stdlib/msl.hpp [1:4]
+        include/boost/config/stdlib/sgi.hpp [1:5]
+        include/boost/config/stdlib/stlport.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f5bb10adeab32a85a8058f4c7409e355
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/stdlib/roguewave.hpp [1:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL faedff635aa9f9a8a18d7c7c02b75e2d
+BELONGS ya.make
+    License text:
+        // Copyright 2021 Peter Dimov
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/clang_version.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL faef8c3be0a1612051d45827262d7799
+BELONGS ya.make
+    License text:
+        //  (C) Copyright John Maddock 2008.
+        //  Use, modification and distribution are subject to the
+        //  Boost Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/no_tr1/cmath.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fb0c843abf394387c8df0eca1810bb44
+BELONGS ya.make
+    License text:
+        //  (C) Copyright John Maddock 2005.
+        //  Use, modification and distribution are subject to the
+        //  Boost Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/no_tr1/complex.hpp [1:3]
+        include/boost/config/no_tr1/functional.hpp [1:3]
+        include/boost/config/no_tr1/memory.hpp [1:3]
+        include/boost/config/no_tr1/utility.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fcd2c8a16a246d6c41d59f33179993f4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/gcc.hpp [1:9]
+        include/boost/config/compiler/metrowerks.hpp [1:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fcff9832642f1fc146a81e1a466219bc
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/compiler/borland.hpp [1:5]
+        include/boost/config/compiler/codegear.hpp [1:5]
+        include/boost/config/compiler/common_edg.hpp [1:7]
+        include/boost/config/compiler/hp_acc.hpp [1:8]
+        include/boost/config/compiler/kai.hpp [1:5]
+        include/boost/config/compiler/mpw.hpp [1:4]
+        include/boost/config/compiler/visualc.hpp [1:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fdecbaccaf7ea6d5b8ae93697149a007
+BELONGS ya.make
+    License text:
+        //  (C) Copyright John Maddock 2020.
+        //  Use, modification and distribution are subject to the
+        //  Boost Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/config/platform/wasm.hpp [1:3]

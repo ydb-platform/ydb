@@ -106,6 +106,7 @@ public:
         auto [lookupSource, lookupSourceActor] = Factory->CreateDqLookupSource(Settings.GetRightSource().GetProviderName(), std::move(lookupSourceArgs));
         MaxKeysInRequest = lookupSource->GetMaxSupportedKeysInRequest();
         LookupSourceId = RegisterWithSameMailbox(lookupSourceActor);
+        KeysForLookup = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(MaxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
 #ifndef NDEBUG
         state = EState::Bootstrapped;
 #endif
@@ -117,7 +118,16 @@ protected:
 private: //events
     STRICT_STFUNC(StateFunc,
         hFunc(IDqAsyncLookupSource::TEvLookupResult, Handle);
+        hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, Handle);
     )
+
+    void Handle(IDqComputeActorAsyncInput::TEvAsyncInputError::TPtr ev) {
+        auto evptr = ev->Get();
+        Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(
+                                  InputIndex,
+                                  evptr->Issues,
+                                  evptr->FatalCode));
+    }
 
     void AddReadyQueue(NUdf::TUnboxedValue& lookupKey, NUdf::TUnboxedValue& inputOther, NUdf::TUnboxedValue *lookupPayload) {
             NUdf::TUnboxedValue* outputRowItems;
@@ -151,6 +161,8 @@ private: //events
 #ifndef NDEBUG
         Y_ENSURE(state == EState::Bootstrapped);
 #endif
+        if (!KeysForLookup)
+            return;
         auto guard = BindAllocator();
         const auto now = std::chrono::steady_clock::now();
         auto lookupResult = ev->Get()->Result.lock();
@@ -166,7 +178,7 @@ private: //events
         for (auto&& [k, v]: *lookupResult) {
             LruCache->Update(NUdf::TUnboxedValue(const_cast<NUdf::TUnboxedValue&&>(k)), std::move(v), now + CacheTtl);
         }
-        KeysForLookup.reset();
+        KeysForLookup->clear();
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived{InputIndex});
     }
 
@@ -225,11 +237,10 @@ private: //IDqComputeActorAsyncInput
 
         DrainReadyQueue(batch);
 
-        if (InputFlowFetchStatus != NUdf::EFetchStatus::Finish && !KeysForLookup) {
+        if (InputFlowFetchStatus != NUdf::EFetchStatus::Finish && KeysForLookup->empty()) {
              NUdf::TUnboxedValue* inputRowItems;
              NUdf::TUnboxedValue inputRow = HolderFactory.CreateDirectArrayHolder(InputRowType->GetElementsCount(), inputRowItems);
             const auto now = std::chrono::steady_clock::now();
-            KeysForLookup = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(MaxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
             LruCache->Prune(now);
             while (
                 (KeysForLookup->size() < MaxKeysInRequest) &&
@@ -253,8 +264,6 @@ private: //IDqComputeActorAsyncInput
             }
             if (!KeysForLookup->empty()) {
                 Send(LookupSourceId, new IDqAsyncLookupSource::TEvLookupRequest(KeysForLookup));
-            } else {
-                KeysForLookup.reset();
             }
             DrainReadyQueue(batch);
         }

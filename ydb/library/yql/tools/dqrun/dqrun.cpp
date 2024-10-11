@@ -498,7 +498,7 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
     return 0;
 }
 
-void InitFq(const NFq::NConfig::TConfig& fqConfig, TVector<std::pair<TActorId, TActorSetupCmd>>& additionalLocalServices) {
+void InitFq(const NFq::NConfig::TConfig& fqConfig, IPqGateway::TPtr pqGateway, TVector<std::pair<TActorId, TActorSetupCmd>>& additionalLocalServices) {
     if (fqConfig.HasRowDispatcher() && fqConfig.GetRowDispatcher().GetEnabled()) {
         NFq::IYqSharedResources::TPtr iSharedResources = NFq::CreateYqSharedResources(
             fqConfig,
@@ -513,7 +513,8 @@ void InitFq(const NFq::NConfig::TConfig& fqConfig, TVector<std::pair<TActorId, T
             yqSharedResources,
             credentialsFactory,
             "/tenant",
-            MakeIntrusive<NMonitoring::TDynamicCounters>());
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
+            pqGateway);
 
         additionalLocalServices.emplace_back(
             NFq::RowDispatcherServiceActorId(),
@@ -1087,7 +1088,7 @@ int RunMain(int argc, const char* argv[])
         }
     }
     TVector<std::pair<TActorId, TActorSetupCmd>> additionalLocalServices;
-    InitFq(fqConfig, additionalLocalServices);
+    InitFq(fqConfig, pqGateway, additionalLocalServices);
 
     std::function<NActors::IActor*(void)> metricsPusherFactory = {};
 

@@ -1034,7 +1034,7 @@ void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobIn
     write->SetKey(newWrite->Key.ToString());
     write->SetValue(newWrite->Value);
     Y_ABORT_UNLESS(!newWrite->Key.IsHead());
-    auto channel = GetChannel(NextChannel(newWrite->Key.IsHead(), newWrite->Value.Size()));
+    auto channel = GetChannel(NextChannel(newWrite->Key.IsHead(), newWrite->Value.size()));
     write->SetStorageChannel(channel);
     write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
 

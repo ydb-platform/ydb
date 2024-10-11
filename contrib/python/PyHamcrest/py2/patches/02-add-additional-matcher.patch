@@ -1,0 +1,87 @@
+commit d2cd9189374434ea6603b07c67b316c59e6d689f
+author: asatarin
+date: 2017-06-13T11:54:11+03:00
+revision: 2945097
+
+    REVIEW:285653 Add additional capabilities to standard raises() matcher
+
+--- contrib/python/PyHamcrest/py2/hamcrest/core/core/raises.py	(f026926efe42aecf93ac9fb70955b96fbdb35a67)
++++ contrib/python/PyHamcrest/py2/hamcrest/core/core/raises.py	(d2cd9189374434ea6603b07c67b316c59e6d689f)
+@@ -10,11 +10,13 @@ __license__ = "BSD, see License.txt"
+ 
+ 
+ class Raises(BaseMatcher):
+-    def __init__(self, expected, pattern=None):
++    def __init__(self, expected, pattern=None, matcher=None):
+         self.pattern = pattern
+         self.expected = expected
+         self.actual = None
+         self.function = None
++        self.matcher = matcher
++        self.actual_return_value = None
+ 
+     def _matches(self, function):
+         if not is_callable(function):
+@@ -26,18 +28,24 @@ class Raises(BaseMatcher):
+     def _call_function(self, function):
+         self.actual = None
+         try:
+-            function()
++            self.actual_return_value = function()
+         except Exception:
+             self.actual = sys.exc_info()[1]
+ 
+             if isinstance(self.actual, self.expected):
+                 if self.pattern is not None:
+-                    return re.search(self.pattern, str(self.actual)) is not None
+-                return True
++                    return (
++                        re.search(self.pattern, str(self.actual)) is not None
++                        and (self.matcher is None or self.matcher.matches(self.actual))
++                    )
++                return self.matcher is None or self.matcher.matches(self.actual)
+         return False
+ 
+     def describe_to(self, description):
+         description.append_text('Expected a callable raising %s' % self.expected)
++        if self.matcher is not None:
++            description.append_text("\n and ")
++            description.append_description_of(self.matcher)
+ 
+     def describe_mismatch(self, item, description):
+         if not is_callable(item):
+@@ -51,15 +59,20 @@ class Raises(BaseMatcher):
+                 return
+ 
+         if self.actual is None:
+-            description.append_text('No exception raised.')
+-        elif isinstance(self.actual, self.expected) and self.pattern is not None:
+-            description.append_text('Correct assertion type raised, but the expected pattern ("%s") not found.' % self.pattern)
+-            description.append_text('\n          message was: "%s"' % str(self.actual))
++            description.append_text('No exception raised and actual return value = ')
++            description.append_value(self.actual_return_value)
++        elif isinstance(self.actual, self.expected):
++            if self.pattern is not None:
++                description.append_text('Correct assertion type raised, but the expected pattern ("%s") not found.' % self.pattern)
++                description.append_text('\n          message was: "%s"' % str(self.actual))
++            if self.matcher is not None:
++                description.append_text("\nAdditional exception matcher: ")
++                self.matcher.describe_mismatch(self.actual, description)
+         else:
+             description.append_text('%s was raised instead' % type(self.actual))
+ 
+ 
+-def raises(exception, pattern=None):
++def raises(exception, pattern=None, matcher=None):
+     """Matches if the called function raised the expected exception.
+ 
+     :param exception:  The class of the expected exception
+@@ -75,7 +88,7 @@ def raises(exception, pattern=None):
+         assert_that(calling(int).with_args('q'), raises(TypeError))
+         assert_that(calling(parse, broken_input), raises(ValueError))
+     """
+-    return Raises(exception, pattern)
++    return Raises(exception, pattern, matcher)
+ 
+ 
+ class DeferredCallable(object):

@@ -1,9 +1,9 @@
 #include "pipe.h"
 
-#include <yt/yt/client/table_client/row_buffer.h>
-#include <yt/yt/client/table_client/unversioned_reader.h>
-#include <yt/yt/client/table_client/unversioned_writer.h>
-#include <yt/yt/client/table_client/row_batch.h>
+#include "row_batch.h"
+#include "row_buffer.h"
+#include "unversioned_reader.h"
+#include "unversioned_writer.h"
 
 #include <yt/yt/core/misc/ring_queue.h>
 

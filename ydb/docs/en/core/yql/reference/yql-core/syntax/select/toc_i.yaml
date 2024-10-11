@@ -4,8 +4,8 @@ items:
 - { name: FROM,              href: from.md                                                 }
 - { name: FROM AS_TABLE,     href: from_as_table.md                                        }
 - { name: FROM SELECT,       href: from_select.md                                          }
-- { name: FOLDER,            href: folder.md,                when: feature_mapreduce       }
-- { name: WalkFolders,       href: walk_folders.md,          when: feature_mapreduce       }
+- { name: FOLDER,            href: folder.md,                when: yt                      }
+- { name: WalkFolders,       href: walk_folders.md,          when: yt                      }
 - { name: DISTINCT,          href: distinct.md                                             }
 - { name: UNIQUE DISTINCT,   href: unique_distinct_hints.md                                }
 - { name: UNION,             href: union.md                                                }

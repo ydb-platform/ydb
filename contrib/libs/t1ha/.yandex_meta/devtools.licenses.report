@@ -1,0 +1,121 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Zlib                 7f9996b789a3ad97b9dd5fdc532c0cab
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        src/t1ha0.c [8:22]
+        src/t1ha0_ia32aes_a.h [8:22]
+        src/t1ha0_ia32aes_b.h [8:22]
+        src/t1ha0_selfcheck.c [8:22]
+        src/t1ha1.c [8:22]
+        src/t1ha1_selfcheck.c [8:22]
+        src/t1ha2.c [8:22]
+        src/t1ha2_selfcheck.c [8:22]
+        src/t1ha_bits.h [8:22]
+        src/t1ha_selfcheck.c [8:22]
+        src/t1ha_selfcheck.h [8:22]
+        src/t1ha_selfcheck_all.c [8:22]
+        t1ha.h [8:22]
+
+KEEP     Zlib                 9b5a0ae5559c312f309925f4dc7b06c5
+BELONGS ya.make
+    # this is Zlib - see License text below
+    License text:
+        3. Licensed under [zlib License](https://en.wikipedia.org/wiki/Zlib_License).
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        README.md [39:39]
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        README.md [39:39]
+
+SKIP     LicenseRef-scancode-warranty-disclaimer a4c257c7267aeb4cb0b1675ee3acebdd
+BELONGS ya.make
+    # warrantly disclaimer
+    License text:
+         *   2. No warranty that the hash result will be same for particular
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 90.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+    Files with this license:
+        t1ha.h [570:570]
+
+KEEP     Zlib                 acd2a2affffa19da38f317b44da0c299
+BELONGS ya.make
+    License text:
+         zlib License, see https://en.wikipedia.org/wiki/Zlib_License
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        LICENSE [1:1]
+
+KEEP     Zlib                 b3336312ee6274008cdaa6fdb56491ed
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        LICENSE [9:23]
+
+KEEP     Zlib                 d5dd3219c935a8636ee393fda233bb25
+BELONGS ya.make
+    License text:
+        [![License: Zlib](https://img.shields.io/badge/License-Zlib-lightgrey.svg)](https://opensource.org/licenses/Zlib)
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 83.00
+        Match type      : REFERENCE
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        README.md [11:11]

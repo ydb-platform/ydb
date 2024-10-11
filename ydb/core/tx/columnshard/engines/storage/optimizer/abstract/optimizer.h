@@ -33,7 +33,7 @@ private:
 
 public:
     ui64 GetGeneralPriority() const {
-        return Level << 56 + InternalLevelWeight;
+        return ((ui64)Level << 56) + InternalLevelWeight;
     }
 
     bool operator<(const TOptimizationPriority& item) const {

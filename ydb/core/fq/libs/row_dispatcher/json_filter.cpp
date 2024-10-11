@@ -111,8 +111,10 @@ public:
 
                 size_t fieldId = 0;
                 for (const auto& column : values.second) {
-                    NYql::NUdf::TStringValue str(column[rowId]);
-                    items[FieldsPositions[fieldId++]] = NYql::NUdf::TUnboxedValuePod(std::move(str));
+                    items[FieldsPositions[fieldId++]] = NYql::NUdf::TUnboxedValuePod(column[rowId].empty()
+                        ? NYql::NUdf::TStringValue("\0")
+                        : NYql::NUdf::TStringValue(column[rowId])
+                    );
                 }
 
                 Worker->Push(std::move(result));

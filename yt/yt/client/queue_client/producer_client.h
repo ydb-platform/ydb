@@ -33,7 +33,7 @@ struct TProducerSessionOptions
     bool AutoSequenceNumber = false;
 
     //! Batch sizes when rows will be flushed to server regardless of the background flush period (if it is specified).
-    //! If there is no background flush, than one of `BatchOptions::ByteSize` or `BatchOptions::RowCount` should be specified.
+    //! If there is no background flush, rows will be flush when `BatchOptions::ByteSize` or `BatchOptions::RowCount` is reached. If none of them are specified, `BatchOptions::ByteSize` will be equal to 16 MB.
     TProducerSessionBatchOptions BatchOptions;
 
     //! If set, rows will be flushed in background with this period.
@@ -50,6 +50,9 @@ struct IProducerSession
 
     //! Get user meta saved in the producer session.
     virtual const NYTree::INodePtr& GetUserMeta() const = 0;
+
+    //! Flush all written rows.
+    virtual TFuture<void> Flush() = 0;
 };
 DEFINE_REFCOUNTED_TYPE(IProducerSession)
 

@@ -50,8 +50,8 @@ public:
         , QueuePath_(std::move(queuePath))
         , NameTable_(std::move(nameTable))
         , SessionId_(std::move(sessionId))
-        , Options_(std::move(options))
         , Invoker_(std::move(invoker))
+        , Options_(std::move(options))
         , Epoch_(createSessionResult.Epoch)
         , LastSequenceNumber_(createSessionResult.SequenceNumber)
         , UserMeta_(std::move(createSessionResult.UserMeta))
@@ -68,7 +68,8 @@ public:
                 *Options_.BackgroundFlushPeriod);
         } else {
             if (!Options_.BatchOptions.RowCount && !Options_.BatchOptions.ByteSize) {
-                THROW_ERROR_EXCEPTION("One of batch row count or batch byte size should be specified");
+                YT_LOG_DEBUG("None of batch row count or batch byte size are specified, batch byte size will be equal to 16 MB");
+                Options_.BatchOptions.ByteSize = 16_MB;
             }
         }
     }
@@ -128,13 +129,29 @@ public:
         return TryToFlush();
     }
 
+    TFuture<void> Flush() override
+    {
+        if (!FlushExecutor_) {
+            std::vector<TSharedRef> serializedRows;
+            {
+                auto guard = Guard(SpinLock_);
+                YT_LOG_DEBUG("Flushing rows (RowCount: %v)", BufferedRowCount_);
+                serializedRows = GetRowsToFlushAndResetBuffer();
+            }
+
+            return FlushImpl(serializedRows);
+        }
+
+        FlushExecutor_->ScheduleOutOfBand();
+        return FlushExecutor_->GetExecutedEvent();
+    }
+
     TFuture<void> Close() override
     {
         {
             auto guard = Guard(SpinLock_);
             Closed_ = true;
         }
-
 
         // Run one last flush will finish writing the remaining items and
         // eventually lead to the stop promise being set.
@@ -164,8 +181,9 @@ private:
     const TRichYPath QueuePath_;
     const TNameTablePtr NameTable_;
     const TQueueProducerSessionId SessionId_;
-    const TProducerSessionOptions Options_;
     const IInvokerPtr Invoker_;
+
+    TProducerSessionOptions Options_;
 
     TQueueProducerEpoch Epoch_ = TQueueProducerEpoch{0};
     std::atomic<TQueueProducerSequenceNumber> LastSequenceNumber_ = TQueueProducerSequenceNumber{0};
@@ -200,7 +218,7 @@ private:
             }
             serializedRows = GetRowsToFlushAndResetBuffer();
         }
-        return Flush(std::move(serializedRows));
+        return FlushImpl(std::move(serializedRows));
     }
 
     std::vector<TSharedRef> GetRowsToFlushAndResetBuffer()
@@ -223,7 +241,7 @@ private:
             serializedRows = GetRowsToFlushAndResetBuffer();
         }
 
-        WaitFor(Flush(std::move(serializedRows)))
+        WaitFor(FlushImpl(std::move(serializedRows)))
             .ThrowOnError();
 
         bool isStopped = false;
@@ -239,7 +257,7 @@ private:
         }
     }
 
-    TFuture<void> Flush(std::vector<TSharedRef> serializedRows)
+    TFuture<void> FlushImpl(std::vector<TSharedRef> serializedRows)
     {
         return Client_->StartTransaction(ETransactionType::Tablet)
             .Apply(BIND([serializedRows = std::move(serializedRows), this, this_ = MakeStrong(this)] (const ITransactionPtr& transaction) {

@@ -29,6 +29,7 @@ ENDIF()
         yt/cpp/mapreduce/interface
         ydb/library/yql/sql/pg
         ydb/core/fq/libs/init
+        ydb/core/fq/libs/row_dispatcher
         ydb/library/yql/core/facade
         ydb/library/yql/core/file_storage
         ydb/library/yql/core/file_storage/proto

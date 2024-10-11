@@ -430,6 +430,12 @@ message TCmsConfig {
             optional uint32 Limit = 2;
         }
 
+        enum EEvictVDisksStatus {
+            UNKNOWN = 0;
+            DISABLED = 1;
+            FAULTY = 2;
+        }
+
         optional bool Enable = 1 [default = true];
         // Updater's config
         optional uint64 UpdateConfigInterval = 2 [default = 3600000000];
@@ -449,6 +455,7 @@ message TCmsConfig {
 
         optional bool DryRun = 13;
         repeated TStateLimit StateLimits = 14;
+        optional EEvictVDisksStatus EvictVDisksStatus = 15;
     }
 
     message TLogConfig {

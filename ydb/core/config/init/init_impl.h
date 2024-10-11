@@ -22,6 +22,7 @@
 #include <ydb/library/actors/core/log_iface.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/library/yaml_config/yaml_config_parser.h>
+#include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/public/lib/ydb_cli/common/common.h>
 
 #include <google/protobuf/text_format.h>

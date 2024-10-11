@@ -128,6 +128,7 @@
 #include <ydb/services/ydb/ydb_table.h>
 #include <ydb/services/ydb/ydb_object_storage.h>
 #include <ydb/services/tablet/ydb_tablet.h>
+#include <ydb/services/view/grpc_service.h>
 
 #include <ydb/core/fq/libs/init/init.h>
 
@@ -610,6 +611,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["replication"] = &hasReplication;
         TServiceCfg hasTabletService = services.empty();
         names["tablet_service"] = &hasTabletService;
+        TServiceCfg hasView = services.empty();
+        names["view"] = &hasView;
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -893,6 +896,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasTabletService) {
             server.AddService(new NGRpcService::TGRpcYdbTabletService(ActorSystem.Get(), Counters, grpcRequestProxies,
                 hasTabletService.IsRlAllowed(), grpcConfig.GetHandlersPerCompletionQueue()));
+        }
+
+        if (hasView) {
+            server.AddService(new NGRpcService::TGRpcViewService(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0], hasView.IsRlAllowed()));
         }
 
         if (ModuleFactories) {

@@ -5,6 +5,8 @@
 #include "query_autocomplete_helper.h"
 #include "viewer_request.h"
 
+#include <library/cpp/json/json_reader.h>
+
 namespace NKikimr::NViewer {
 
 using namespace NActors;

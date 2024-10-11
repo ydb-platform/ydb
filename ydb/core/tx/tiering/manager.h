@@ -60,7 +60,7 @@ private:
     ui64 TabletId = 0;
     const TActorId TabletActorId;
     std::function<void(const TActorContext& ctx)> ShardCallback;
-    TActor* Actor = nullptr;
+    IActor* Actor = nullptr;
     TManagers Managers;
 
     std::unordered_map<ui64, TString> PathIdTiering;

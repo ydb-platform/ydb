@@ -116,13 +116,6 @@ public:
         Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvSubscribeExternal(TiersFetcher));
     }
 
-    void WatchTieringRules(std::vector<TString> names) {
-        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiers_manager")("event", "start_watching")("type", "tiering_rule")(
-            "names", JoinStrings(names.begin(), names.end(), ","));
-        AFL_VERIFY(SelfId());
-        Send(SelfId(), new NTiers::TEvWatchTieringRules(std::move(names)));
-    }
-
     ~TActor() {
         Owner->Stop(false);
     }
@@ -302,7 +295,9 @@ void TTiersManager::EnablePathId(const ui64 pathId, const TString& tieringId) {
     AFL_VERIFY(Actor)("error", "tiers_manager_is_not_started");
     PathIdTiering[pathId] = tieringId;
     if (!TieringRules.contains(tieringId)) {
-        Actor->WatchTieringRules({tieringId});
+        const auto& actorContext = NActors::TActivationContext::AsActorContext();
+        AFL_VERIFY(&actorContext)("error", "no_actor_context");
+        actorContext.Send(Actor->SelfId(), new NTiers::TEvWatchTieringRules({tieringId}));
     }
     HasCompleteData = ValidateDependencies();
 }

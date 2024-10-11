@@ -10,6 +10,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/tests/fq/pq_async_io/ut_helpers.h>
 
+#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
+
 namespace {
 
 using namespace NKikimr;
@@ -42,6 +44,16 @@ public:
         Config.SetSendStatusPeriodSec(2);
         Config.SetWithoutConsumer(true);
 
+        auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
+        auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
+   
+        NYql::TPqGatewayServices pqServices(
+            yqSharedResources->UserSpaceYdbDriver,
+            nullptr,
+            nullptr,
+            std::make_shared<NYql::TPqGatewayConfig>(),
+            nullptr);
+
         TopicSession = Runtime.Register(NewTopicSession(
             topicPath,
             Config,
@@ -49,7 +61,8 @@ public:
             0,
             Driver,
             CredentialsProviderFactory,
-            MakeIntrusive<NMonitoring::TDynamicCounters>()
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
+            CreatePqNativeGateway(pqServices)
             ).release());
         Runtime.EnableScheduleForActor(TopicSession);
 

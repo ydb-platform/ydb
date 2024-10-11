@@ -192,7 +192,7 @@ void TTiersManager::TakeConfigs(std::shared_ptr<NTiers::TTiersSnapshot> tiers, s
     OnConfigsUpdated();
 }
 
-void TTiersManager::OnConfigsUpdated() {
+void TTiersManager::OnConfigsUpdated(bool notifyShard) {
     for (auto itSelf = Managers.begin(); itSelf != Managers.end(); ) {
         auto it = Tiers->GetTierConfigs().find(itSelf->first);
         if (it == Tiers->GetTierConfigs().end()) {
@@ -217,7 +217,7 @@ void TTiersManager::OnConfigsUpdated() {
 
     HasCompleteData = ValidateDependencies();
 
-    if (ShardCallback && TlsActivationContext) {
+    if (notifyShard && ShardCallback && TlsActivationContext) {
         if (IsReady()) {
             ShardCallback(TActivationContext::AsActorContext());
         } else {

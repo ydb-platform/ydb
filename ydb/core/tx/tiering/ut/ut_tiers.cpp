@@ -231,6 +231,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         STATEFN(StateInit) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvPrivate::TEvTieringModified, Handle);
+                hFunc(TEvents::TEvWakeup, Handle);
                 default:
                     Y_ABORT_UNLESS(false);
             }
@@ -256,6 +257,24 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             }
             runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
             Y_ABORT_UNLESS(IsFound());
+        }
+
+        void RefreshManagerSettings() {
+            {
+                std::vector<ui64> pathIdsToDisable;
+                for (const auto& [pathId, tieringId] : Manager->GetPathIdTiering()) {
+                    if (!TieringByTable.contains(pathId)) {
+                        pathIdsToDisable.emplace_back(pathId);
+                    }
+                }
+                for (const ui64 pathId: pathIdsToDisable) {
+                    Manager->DisablePathId(pathId);
+                }
+            }
+
+            for (const auto& [pathId, tieringId] : TieringByTable) {
+                Manager->EnablePathId(pathId, tieringId);
+            }
         }
 
         void CheckFound() {
@@ -291,6 +310,10 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             FoundFlag = true;
         }
 
+        void Handle(TEvents::TEvWakeup::TPtr& /*ev*/) {
+            RefreshManagerSettings();
+        }
+
         void Handle(TEvPrivate::TEvTieringModified::TPtr& /*ev*/) {
             CheckFound();
         }
@@ -302,21 +325,21 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 }
             });
             Manager->Start(Manager);
-            for (const auto& [pathId, tieringId] : TieringByTable) {
-                Manager->EnablePathId(pathId, tieringId);
-            }
+            RefreshManagerSettings();
             Become(&TThis::StateInit);
             Start = Now();
         }
 
-        void EnableTiering(ui64 pathId, TString tieringId) {
+        void EnablePathId(ui64 pathId, TString tieringId, TTestActorRuntime& runtime) {
             AFL_VERIFY(Manager);
-            Manager->EnablePathId(pathId, tieringId);
+            TieringByTable[pathId] = tieringId;
+            runtime.Send(SelfId(), SelfId(), new TEvents::TEvWakeup);
         }
 
-        void DisableTiering(ui64 pathId) {
+        void DisablePathId(ui64 pathId, TTestActorRuntime& runtime) {
             AFL_VERIFY(Manager);
-            Manager->DisablePathId(pathId);
+            TieringByTable.erase(pathId);
+            runtime.Send(SelfId(), SelfId(), new TEvents::TEvWakeup);
         }
 
         TTestCSEmulator() = default;
@@ -410,6 +433,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 emulator->ResetConditions();
                 emulator->SetExpectedTieringsCount(0);
                 emulator->SetExpectedTiersCount(0);
+                emulator->DisablePathId(0, runtime);
 
                 lHelper.StartSchemaRequest("DROP OBJECT tier1(TYPE TIER)", false);
                 lHelper.StartSchemaRequest("DROP OBJECT tiering1(TYPE TIERING_RULE)", false);

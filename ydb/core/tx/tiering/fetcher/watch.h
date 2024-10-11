@@ -234,7 +234,7 @@ public:
         const TString name = TString(ExtractBase(record->Path));
         const TString storageDir = TString(ExtractParent(record->Path));
         AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_watcher")("event", "object_deleted")("path", record->Path);
-        if (IsEqualPaths(record->Path, NTiers::TTieringRule::GetBehaviour()->GetStorageTablePath())) {
+        if (IsEqualPaths(storageDir, NTiers::TTieringRule::GetBehaviour()->GetStorageTablePath())) {
             WatchedTieringRules.erase(name);
             Send(Owner, new NTiers::TEvNotifyTieringRuleDeleted(name));
         } else {

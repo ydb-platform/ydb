@@ -7,6 +7,30 @@
 
 namespace NKikimr::NSchemeShard::NOperations {
 
+class IDropMetadataUpdate {
+public:
+    class TRestoreContext {
+    private:
+        using TOperationContextPtr = TOperationContext*;
+        using TPathPtr = const TPath*;
+        YDB_READONLY_DEF(TPathPtr, ObjectPath);
+        YDB_READONLY_DEF(TOperationContextPtr, SSOperationContext);
+
+    public:
+        TRestoreContext(const TPath* objectPath, TOperationContext* operationContext)
+            : ObjectPath(objectPath)
+            , SSOperationContext(operationContext) {
+            AFL_VERIFY(objectPath);
+            AFL_VERIFY(objectPath->IsResolved())("path", objectPath->PathString());
+        }
+    };
+
+public:
+    virtual void RestoreDrop(const TRestoreContext& context) = 0;
+    virtual TConclusionStatus FinishDrop(const TUpdateFinishContext& context) = 0;
+    ~IDropMetadataUpdate() = default;
+};
+
 class TMetadataUpdate: public ISSEntityUpdate {
 private:
     using TBase = ISSEntityUpdate;
@@ -27,6 +51,8 @@ private:
         return TConclusionStatus::Success();
     }
 
+    static std::shared_ptr<IDropMetadataUpdate> MakeDrop(const TPath& object);
+
 protected:
     virtual TConclusionStatus DoExecute(const TUpdateStartContext& context) = 0;
 
@@ -44,6 +70,7 @@ protected:
 
 public:
     static std::shared_ptr<TMetadataUpdate> MakeUpdate(const NKikimrSchemeOp::TModifyScheme& transaction);
+    static std::shared_ptr<IDropMetadataUpdate> RestoreDrop(const IDropMetadataUpdate::TRestoreContext& context);
     virtual std::shared_ptr<ISSEntity> MakeEntity(const TPathId& pathId) const = 0;
 
     virtual TPathElement::EPathType GetObjectPathType() const = 0;

@@ -228,15 +228,15 @@ namespace NYql::NDq {
         }
 
     private:
-        static TDuration GetCpuTimeDelta(ui64 StartCycleCount) {
-            return TDuration::Seconds(NHPTimer::GetSeconds(GetCycleCountFast() - StartCycleCount));
+        static TDuration GetCpuTimeDelta(ui64 startCycleCount) {
+            return TDuration::Seconds(NHPTimer::GetSeconds(GetCycleCountFast() - startCycleCount));
         }
 
         void CreateRequest(std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> request) {
             if (!request) {
                 return;
             }
-            auto StartCycleCount = GetCycleCountFast();
+            auto startCycleCount = GetCycleCountFast();
             SentTime = TInstant::Now();
             YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " Got LookupRequest for " << request->size() << " keys";
             Y_ABORT_IF(request->size() == 0 || request->size() > MaxKeysInRequest);
@@ -268,7 +268,7 @@ namespace NYql::NDq {
                 }
             });
             if (CpuTime)
-                CpuTime->Add(GetCpuTimeDelta(StartCycleCount).MicroSeconds());
+                CpuTime->Add(GetCpuTimeDelta(startCycleCount).MicroSeconds());
         }
 
         void ReadNextData() {
@@ -296,7 +296,7 @@ namespace NYql::NDq {
         }
 
         void ProcessReceivedData(const NConnector::NApi::TReadSplitsResponse& resp) {
-            auto StartCycleCount = GetCycleCountFast();
+            auto startCycleCount = GetCycleCountFast();
             Y_ABORT_UNLESS(resp.payload_case() == NConnector::NApi::TReadSplitsResponse::PayloadCase::kArrowIpcStreaming);
             if (ResultChunks) {
                 ResultChunks->Inc();
@@ -331,7 +331,7 @@ namespace NYql::NDq {
                 }
             }
             if (CpuTime)
-                CpuTime->Add(GetCpuTimeDelta(StartCycleCount).MicroSeconds());
+                CpuTime->Add(GetCpuTimeDelta(startCycleCount).MicroSeconds());
         }
 
         void FinalizeRequest() {

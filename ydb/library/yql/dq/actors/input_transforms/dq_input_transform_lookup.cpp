@@ -146,7 +146,7 @@ private: //events
     }
 
     void Handle(IDqAsyncLookupSource::TEvLookupResult::TPtr ev) {
-        auto StartCycleCount = GetCycleCountFast();
+        auto startCycleCount = GetCycleCountFast();
         if (!KeysForLookup)
             return;
         auto guard = BindAllocator();
@@ -165,7 +165,7 @@ private: //events
             LruCache->Update(NUdf::TUnboxedValue(const_cast<NUdf::TUnboxedValue&&>(k)), std::move(v), now + CacheTtl);
         }
         KeysForLookup->clear();
-        auto deltaTime = GetCpuTimeDelta(StartCycleCount);
+        auto deltaTime = GetCpuTimeDelta(startCycleCount);
         CpuTime += deltaTime;
         if (CpuTimeUs)
             CpuTimeUs->Add(deltaTime.MicroSeconds());
@@ -207,7 +207,7 @@ private: //IDqComputeActorAsyncInput
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
         Y_UNUSED(freeSpace);
-        auto StartCycleCount = GetCycleCountFast();
+        auto startCycleCount = GetCycleCountFast();
         auto guard = BindAllocator();
 
         DrainReadyQueue(batch);
@@ -247,7 +247,7 @@ private: //IDqComputeActorAsyncInput
             }
             DrainReadyQueue(batch);
         }
-        auto deltaTime = GetCpuTimeDelta(StartCycleCount);
+        auto deltaTime = GetCpuTimeDelta(startCycleCount);
         CpuTime += deltaTime;
         if (CpuTimeUs)
             CpuTimeUs->Add(deltaTime.MicroSeconds());
@@ -264,8 +264,8 @@ private: //IDqComputeActorAsyncInput
         }
     }
 
-    static TDuration GetCpuTimeDelta(ui64 StartCycleCount) {
-        return TDuration::Seconds(NHPTimer::GetSeconds(GetCycleCountFast() - StartCycleCount));
+    static TDuration GetCpuTimeDelta(ui64 startCycleCount) {
+        return TDuration::Seconds(NHPTimer::GetSeconds(GetCycleCountFast() - startCycleCount));
     }
 
     TDuration GetCpuTime() override {

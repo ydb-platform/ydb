@@ -5,8 +5,6 @@
 #undef INCLUDE_READ_SESSION_IMPL_H
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>

@@ -1,5 +1,4 @@
 #include "write_session_impl.h"
-#include "transaction.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/common/trace_lazy.h>

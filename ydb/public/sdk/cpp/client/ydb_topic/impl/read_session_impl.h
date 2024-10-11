@@ -12,6 +12,9 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/include/read_session.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/include/read_session.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
+
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 

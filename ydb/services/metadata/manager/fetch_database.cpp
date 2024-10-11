@@ -1,7 +1,6 @@
 #include "fetch_database.h"
 
 #include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/base/path.h>
 
 #include <ydb/library/table_creator/table_creator.h>
 

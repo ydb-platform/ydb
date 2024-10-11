@@ -183,6 +183,12 @@ public:
 
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
+        NOperations::TUpdateInitializationContext initializationContext(&context, &Transaction, OperationId.GetTxId().GetValue(), originalEntity.get());
+        if (auto status = update->Initialize(initializationContext); status.IsFail()) {
+            result->SetError(NKikimrScheme::StatusSchemeError, status.GetErrorMessage());
+            return result;
+        }
+
         NIceDb::TNiceDb db(context.GetDB());
         NOperations::TUpdateStartContext executionContext(&dstPath, &context, &db);
         if (auto status = update->Start(executionContext); status.IsFail()) {

@@ -4,6 +4,7 @@
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/mkql_terminator.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/json_filter.h>
 #include <ydb/core/fq/libs/actors/logging/log.h>
@@ -111,10 +112,7 @@ public:
 
                 size_t fieldId = 0;
                 for (const auto& column : values.second) {
-                    items[FieldsPositions[fieldId++]] = NYql::NUdf::TUnboxedValuePod(column[rowId].empty()
-                        ? NYql::NUdf::TStringValue("\0")
-                        : NYql::NUdf::TStringValue(column[rowId])
-                    );
+                    items[FieldsPositions[fieldId++]] = NKikimr::NMiniKQL::MakeString(column[rowId]);
                 }
 
                 Worker->Push(std::move(result));

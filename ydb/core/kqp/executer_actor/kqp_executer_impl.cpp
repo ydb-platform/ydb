@@ -78,22 +78,20 @@ TActorId ReportToRl(ui64 ru, const TString& database, const TString& userToken,
 
 IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
-    const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
-    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
-    NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, TPreparedQueryHolder::TConstPtr preparedQuery,
+    const NKikimrConfig::TTableServiceConfig tableServiceConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
+    TPreparedQueryHolder::TConstPtr preparedQuery,
     const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
-    const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-    const bool useEvWrite, ui32 statementResultIndex,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    const TShardIdToTableInfoPtr& shardIdToTableInfo, const bool htapTx)
+    const TShardIdToTableInfoPtr& shardIdToTableInfo)
 {
     if (request.Transactions.empty()) {
         // commit-only or rollback-only data transaction
         return CreateKqpDataExecuter(
-            std::move(request), database, userToken, counters, false, 
-            aggregation, executerRetriesConfig, std::move(asyncIoFactory), chanTransportVersion, creator, 
-            userRequestContext, useEvWrite, statementResultIndex, 
-            federatedQuerySetup, /*GUCSettings*/nullptr, shardIdToTableInfo, htapTx
+            std::move(request), database, userToken, counters, false, tableServiceConfig,
+            std::move(asyncIoFactory), chanTransportVersion, creator, 
+            userRequestContext, statementResultIndex, 
+            federatedQuerySetup, /*GUCSettings*/nullptr, shardIdToTableInfo
         );
     }
 
@@ -113,25 +111,25 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
         case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
         case NKqpProto::TKqpPhyTx::TYPE_DATA:
             return CreateKqpDataExecuter(
-                std::move(request), database, userToken, counters, false, 
-                aggregation, executerRetriesConfig, std::move(asyncIoFactory), chanTransportVersion, creator, 
-                userRequestContext, useEvWrite, statementResultIndex, 
-                federatedQuerySetup, /*GUCSettings*/nullptr, shardIdToTableInfo, htapTx
+                std::move(request), database, userToken, counters, false, tableServiceConfig,
+                std::move(asyncIoFactory), chanTransportVersion, creator, 
+                userRequestContext, statementResultIndex, 
+                federatedQuerySetup, /*GUCSettings*/nullptr, shardIdToTableInfo
             );
 
         case NKqpProto::TKqpPhyTx::TYPE_SCAN:
             return CreateKqpScanExecuter(
-                std::move(request), database, userToken, counters, aggregation, 
-                executerRetriesConfig, preparedQuery, chanTransportVersion, userRequestContext, 
+                std::move(request), database, userToken, counters, tableServiceConfig,
+                preparedQuery, chanTransportVersion, userRequestContext, 
                 statementResultIndex
             );
 
         case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
             return CreateKqpDataExecuter(
                 std::move(request), database, userToken, counters, true,
-                aggregation, executerRetriesConfig, std::move(asyncIoFactory), chanTransportVersion, creator,
-                userRequestContext, useEvWrite, statementResultIndex,
-                federatedQuerySetup, GUCSettings, shardIdToTableInfo, htapTx
+                tableServiceConfig, std::move(asyncIoFactory), chanTransportVersion, creator,
+                userRequestContext, statementResultIndex,
+                federatedQuerySetup, GUCSettings, shardIdToTableInfo
             );
 
         default:

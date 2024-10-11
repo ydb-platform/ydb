@@ -39,8 +39,6 @@ message TKqpLocks {
     optional uint64 ArbiterShard = 5;
 
     optional uint64 ArbiterColumnShard = 6;
-    repeated uint64 SendingColumnShards = 7;  
-    repeated uint64 ReceivingColumnShards = 8;
 }
 
 message TTableId {

@@ -23,10 +23,15 @@
 * [SAMPLE](sample.md)
 * [TABLESAMPLE](sample.md)
 
-{% if feature_mapreduce %}
+{% if yt %}
 
 * [FOLDER](folder.md)
 * [WalkFolders](walk_folders.md)
+
+{% endif %}
+
+{% if feature_mapreduce %}
+
 * [VIEW](view.md)
 {% endif %}
 {% if feature_temp_table %}

@@ -2889,10 +2889,14 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalizeHashed() {
     TExprNode::TPtr aggBlocks;
     if (!isMany) {
         aggBlocks = Ctx.Builder(Node->Pos())
-            .Callable("BlockMergeFinalizeHashed")
-                .Add(0, blocks)
-                .Add(1, Ctx.NewList(Node->Pos(), std::move(keyIdxs)))
-                .Add(2, Ctx.NewList(Node->Pos(), std::move(aggs)))
+            .Callable("ToFlow")
+                .Callable(0, "BlockMergeFinalizeHashed")
+                    .Callable(0, "FromFlow")
+                        .Add(0, blocks)
+                    .Seal()
+                    .Add(1, Ctx.NewList(Node->Pos(), std::move(keyIdxs)))
+                    .Add(2, Ctx.NewList(Node->Pos(), std::move(aggs)))
+                .Seal()
             .Seal()
             .Build();
     } else {
@@ -2900,12 +2904,16 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalizeHashed() {
         YQL_ENSURE(manyStreamsSetting, "Missing many_streams setting");
 
         aggBlocks = Ctx.Builder(Node->Pos())
-            .Callable("BlockMergeManyFinalizeHashed")
-                .Add(0, blocks)
-                .Add(1, Ctx.NewList(Node->Pos(), std::move(keyIdxs)))
-                .Add(2, Ctx.NewList(Node->Pos(), std::move(aggs)))
-                .Atom(3, ToString(streamIdxColumn))
-                .Add(4, manyStreamsSetting->TailPtr())
+            .Callable("ToFlow")
+                .Callable(0, "BlockMergeManyFinalizeHashed")
+                    .Callable(0, "FromFlow")
+                        .Add(0, blocks)
+                    .Seal()
+                    .Add(1, Ctx.NewList(Node->Pos(), std::move(keyIdxs)))
+                    .Add(2, Ctx.NewList(Node->Pos(), std::move(aggs)))
+                    .Atom(3, ToString(streamIdxColumn))
+                    .Add(4, manyStreamsSetting->TailPtr())
+                .Seal()
             .Seal()
             .Build();
     }

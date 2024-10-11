@@ -5818,14 +5818,29 @@ TRuntimeNode TProgramBuilder::BlockCombineHashed(TRuntimeNode stream, std::optio
     return TRuntimeNode(builder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::BlockMergeFinalizeHashed(TRuntimeNode flow, const TArrayRef<ui32>& keys,
+TRuntimeNode TProgramBuilder::BlockMergeFinalizeHashed(TRuntimeNode stream, const TArrayRef<ui32>& keys,
     const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
     if constexpr (RuntimeVersion < 31U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
 
+    // we expect here only stream as input and output, but when wrapping for older runtime version we need to accept flow
+    const auto streamType = stream.GetStaticType();
+
+    if constexpr (RuntimeVersion < 52U) {
+        MKQL_ENSURE(streamType->IsStream() || streamType->IsFlow(), "Expected either stream or flow as input type");
+        MKQL_ENSURE(returnType->IsStream() || streamType->IsFlow(), "Expected either stream or flow as return type");
+        if (streamType->IsStream()) {
+            const auto flowReturnType = NewFlowType(AS_TYPE(TStreamType, returnType)->GetItemType());
+            return FromFlow(BlockMergeFinalizeHashed(ToFlow(stream), keys, aggs, flowReturnType));
+        }
+    } else {
+        MKQL_ENSURE(streamType->IsStream(), "Expected stream as input type");
+        MKQL_ENSURE(returnType->IsStream(), "Expected stream as return type");
+    }
+
     TCallableBuilder builder(Env, __func__, returnType);
-    builder.Add(flow);
+    builder.Add(stream);
 
     TVector<TRuntimeNode> keyNodes;
     for (const auto& key : keys) {
@@ -5848,14 +5863,29 @@ TRuntimeNode TProgramBuilder::BlockMergeFinalizeHashed(TRuntimeNode flow, const 
     return TRuntimeNode(builder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::BlockMergeManyFinalizeHashed(TRuntimeNode flow, const TArrayRef<ui32>& keys,
+TRuntimeNode TProgramBuilder::BlockMergeManyFinalizeHashed(TRuntimeNode stream, const TArrayRef<ui32>& keys,
     const TArrayRef<const TAggInfo>& aggs, ui32 streamIndex, const TVector<TVector<ui32>>& streams, TType* returnType) {
     if constexpr (RuntimeVersion < 31U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
 
+    // we expect here only stream as input and output, but when wrapping for older runtime version we need to accept flow
+    const auto streamType = stream.GetStaticType();
+
+    if constexpr (RuntimeVersion < 52U) {
+        MKQL_ENSURE(streamType->IsStream() || streamType->IsFlow(), "Expected either stream or flow as input type");
+        MKQL_ENSURE(returnType->IsStream() || streamType->IsFlow(), "Expected either stream or flow as return type");
+        if (streamType->IsStream()) {
+            const auto flowReturnType = NewFlowType(AS_TYPE(TStreamType, returnType)->GetItemType());
+            return FromFlow(BlockMergeManyFinalizeHashed(ToFlow(stream), keys, aggs, streamIndex, streams, flowReturnType));
+        }
+    } else {
+        MKQL_ENSURE(streamType->IsStream(), "Expected stream as input type");
+        MKQL_ENSURE(returnType->IsStream(), "Expected stream as return type");
+    }
+
     TCallableBuilder builder(Env, __func__, returnType);
-    builder.Add(flow);
+    builder.Add(stream);
 
     TVector<TRuntimeNode> keyNodes;
     for (const auto& key : keys) {

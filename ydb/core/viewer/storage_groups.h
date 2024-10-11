@@ -1046,18 +1046,11 @@ public:
                 TVector<TString> filterWords = SplitString(Filter, " ");
                 TGroupView groupView;
                 for (TGroup* group : GroupView) {
-                    bool match = false;
                     for (const TString& word : filterWords) {
-                        if (group->PoolName.Contains(word)) {
-                            match = true;
-                            break;
-                        } else if (::ToString(group->GroupId).Contains(word)) {
-                            match = true;
+                        if (group->PoolName.Contains(word) || ::ToString(group->GroupId).Contains(word)) {
+                            groupView.push_back(group);
                             break;
                         }
-                    }
-                    if (match) {
-                        groupView.push_back(group);
                     }
                 }
                 GroupView.swap(groupView);

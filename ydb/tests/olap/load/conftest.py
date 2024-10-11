@@ -5,6 +5,7 @@ import json
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType
 from ydb.tests.olap.lib.allure_utils import allure_test_description
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
+from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
 from time import time
 from typing import Optional
 from allure_commons._core import plugin_manager
@@ -44,6 +45,24 @@ class LoadSuiteBase:
     @classmethod
     def _test_name(cls, query_num: int) -> str:
         return f'Query{query_num:02d}'
+
+    @allure.step('check tables size')
+    def check_tables_size(self, folder: Optional[str], tables: dict[str, int]):
+        sth = ScenarioTestHelper(None)
+        errors: list[str] = []
+        for table, expected_size in tables.items():
+            if folder is None:
+                table_full = table
+            elif folder.endswith('/') or table.startswith('/'):
+                table_full = f'{folder}{table}'
+            else:
+                table_full = f'{folder}/{table}'
+            size = sth.get_table_rows_count(table_full)
+            if size != expected_size:
+                errors.append(f'table `{table}`: expect {expected_size}, but actually is {size};')
+        if len(errors) > 0:
+            msg = "\n".join(errors)
+            pytest.fail(f'Unexpected tables size in `{folder}`:\n {msg}')
 
     def process_query_result(self, result: YdbCliHelper.WorkloadRunResult, query_num: int, iterations: int, upload: bool):
         def _get_duraton(stats, field):
@@ -131,12 +150,37 @@ class LoadSuiteBase:
                 exc = exc.with_traceback(result.traceback)
             raise exc
 
+    def setup_class(self) -> None:
+        if not hasattr(self, 'do_setup_class'):
+            return
+        error = None
+        tb = None
+        start_time = time()
+        try:
+            self.do_setup_class(self)
+        except BaseException as e:
+            error = str(e)
+            tb = e.__traceback__
+        ResultsProcessor.upload_results(
+            kind='Load',
+            suite=self.suite,
+            test='_Verification',
+            timestamp=start_time,
+            is_successful=(error is None)
+        )
+        if error is not None:
+            exc = pytest.fail.Exception(error)
+            exc.with_traceback(tb)
+            raise exc
+
     def run_workload_test(self, path: str, query_num: int) -> None:
-        allure_listener = next(filter(lambda x: isinstance(x, AllureListener), plugin_manager.get_plugin_manager().get_plugins()))
-        allure_test_result = allure_listener.allure_logger.get_test(None)
-        query_num_param = next(filter(lambda x: x.name == 'query_num', allure_test_result.parameters), None)
-        if query_num_param:
-            query_num_param.mode = allure.parameter_mode.HIDDEN.value
+        for plugin in plugin_manager.get_plugin_manager().get_plugins():
+            if isinstance(plugin, AllureListener):
+                allure_test_result = plugin.allure_logger.get_test(None)
+                if allure_test_result is not None:
+                    for param in allure_test_result.parameters:
+                        if param.name == 'query_num':
+                            param.mode = allure.parameter_mode.HIDDEN.value
         start_time = time()
         result = YdbCliHelper.workload_run(
             path=path,

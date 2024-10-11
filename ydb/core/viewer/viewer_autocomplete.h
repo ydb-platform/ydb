@@ -140,7 +140,6 @@ public:
     TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate() {
         auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         for (const TString& path : Paths) {
-            Cerr << "Looking into " << path << Endl;
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
             entry.SyncVersion = false;

@@ -37,13 +37,13 @@ cat <<'EOF'>$UNIX_TEMPLATE
       "arch": "$arch",
       "os": "$os",
       "toolchain": "default",
-      "visible_name": "clang14"
+      "visible_name": "clang16"
     },
     "target": {
       "arch": "$arch",
       "os": "$os",
       "toolchain": "default",
-      "visible_name": "clang14"
+      "visible_name": "clang16"
     }
   }
 }

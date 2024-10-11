@@ -25,6 +25,7 @@ const TString YtGateway_GetFolder = "YtGateway_GetFolder";
 const TString YtGateway_GetFolders = "YtGateway_GetFolders";
 const TString YtGateway_ResolveLinks = "YtGateway_ResolveLinks";
 const TString YtGateway_PathStat = "YtGateway_PathStat";
+const TString YtGateway_PathStatMissing = "YtGateway_PathStatMissing";
 
 TString MakeHash(const TString& str) {
     SHA256_CTX sha;
@@ -814,7 +815,18 @@ public:
 
             for (ui32 index = 0; index < options.Paths().size(); ++index) {
                 const auto& key = MakePathStatKey(options.Cluster(), options.Extended(), options.Paths()[index]);
-                if (!PathStatKeys_.contains(key)) {
+                bool allow = false;
+                if (PathStatKeys_.contains(key)) {
+                    allow = true;
+                } else {
+                    auto missingItem = QContext_.GetReader()->Get({YtGateway_PathStatMissing, key}).GetValueSync();
+                    if (!missingItem) {
+                        allow = true;
+                        PathStatKeys_.emplace(key);
+                    }
+                }
+
+                if (!allow) {
                     return res;
                 }
 
@@ -838,6 +850,11 @@ public:
         }
 
         if (!res.Success()) {
+            for (ui32 index = 0; index < optionsDup.Paths().size(); ++index) {
+                const auto& key = MakePathStatKey(optionsDup.Cluster(), optionsDup.Extended(), optionsDup.Paths()[index]);
+                QContext_.GetWriter()->Put({YtGateway_PathStatMissing, key}, "1").GetValueSync();
+            }
+
             return res;
         }
 

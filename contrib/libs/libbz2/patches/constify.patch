@@ -1,0 +1,23 @@
+From: Антон Самохвалов <pg@yandex-team.ru>
+Date: Tue, 2 Feb 2016 18:19:02 +0000
+Subject: [PATCH] constify
+
+git-svn-id: svn+ssh://arcadia.yandex.ru/arc/trunk/arcadia/contrib/libs/libbz2@2108189 41d65440-b5be-11dd-afe3-b2e846d9b4f8
+--- a/bzlib_private.h
++++ b/bzlib_private.h
+@@ -131,1 +131,1 @@
+-extern Int32 BZ2_rNums[512];
++extern const Int32 BZ2_rNums[512];
+@@ -155,1 +155,1 @@
+-extern UInt32 BZ2_crc32Table[256];
++extern const UInt32 BZ2_crc32Table[256];
+--- a/crctable.c
++++ b/crctable.c
+@@ -31,1 +31,1 @@
+-UInt32 BZ2_crc32Table[256] = {
++const UInt32 BZ2_crc32Table[256] = {
+--- a/randtable.c
++++ b/randtable.c
+@@ -26,1 +26,1 @@
+-Int32 BZ2_rNums[512] = { 
++const Int32 BZ2_rNums[512] = {

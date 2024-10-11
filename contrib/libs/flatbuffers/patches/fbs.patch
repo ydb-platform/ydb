@@ -1,0 +1,20 @@
+commit 49b15e2436058ebf592fdf68bbd101efc612645e
+author: yazevnul
+date: 2016-05-11T10:19:29+03:00
+revision: 2301807
+
+    flatc will generate files with .fbs.h extension
+    Also, pepify flatc.py plugin.
+    REVIEW:148421
+
+--- a/src/idl_gen_cpp.cpp
++++ b/src/idl_gen_cpp.cpp
+@@ -316,5 +316,5 @@ class CppGenerator : public BaseGenerator {
+-    code_ += "#include \"flatbuffers/flatbuffers.h\"";
++    code_ += "#include <contrib/libs/flatbuffers/include/flatbuffers/flatbuffers.h>";
+     if (parser_.uses_flexbuffers_) {
+-      code_ += "#include \"flatbuffers/flexbuffers.h\"";
+-      code_ += "#include \"flatbuffers/flex_flat_util.h\"";
++      code_ += "#include <contrib/libs/flatbuffers/include/flatbuffers/flexbuffers.h>";
++      code_ += "#include <contrib/libs/flatbuffers/include/flatbuffers/flex_flat_util.h>";
+     }

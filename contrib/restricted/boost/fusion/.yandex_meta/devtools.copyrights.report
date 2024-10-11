@@ -1,0 +1,1985 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 005b001f62b4974bcb9a98a2709f28e9
+BELONGS ya.make
+    License text:
+            Copyright (c) 2012-2014 Kohei Takahashi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/adapted/boost_tuple/detail/build_cons.hpp [2:2]
+        include/boost/fusion/adapted/boost_tuple/detail/convert_impl.hpp [2:2]
+        include/boost/fusion/adapted/std_tuple/detail/convert_impl.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 00c8d119e4bafd94a749c18eb8de40a7
+BELONGS ya.make
+    License text:
+            Copyright (c) 2014 Eric Niebler
+            Copyright (c) 2014,2015,2018 Kohei Takahashi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/support/config.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 00d518ada4857f45f5e11e5f3d0ded5f
+BELONGS ya.make
+    License text:
+            Copyright (c) 2009 Christopher Schmidt
+            Copyright (c) 2021-2022 Denis Mikhailov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/view/reverse_view/detail/deref_data_impl.hpp [2:3]
+        include/boost/fusion/view/reverse_view/detail/key_of_impl.hpp [2:3]
+        include/boost/fusion/view/reverse_view/detail/value_of_data_impl.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 013a24bcf69d213aa5b670e96cefb293
+BELONGS ya.make
+    License text:
+            Copyright (c) 2022 Denis Mikhailov
+            Distributed under the Boost Software License, Version 1.0. (See accompanying
+            file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/include/identity_view.hpp [2:4]
+        include/boost/fusion/view/identity_view.hpp [2:4]
+        include/boost/fusion/view/identity_view/identity_view.hpp [2:4]
+        include/boost/fusion/view/transform_view/detail/deref_data_impl.hpp [2:4]
+        include/boost/fusion/view/transform_view/detail/key_of_impl.hpp [2:4]
+        include/boost/fusion/view/transform_view/detail/value_of_data_impl.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 059623504befbc01814eabacf56f307c
+BELONGS ya.make
+    License text:
+            Copyright (c) 2016 Lee Clagett
+            Copyright (c) 2018 Kohei Takahashi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/support/detail/and.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0c190a3fed9f645e32983879cf237122
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2011 Joel de Guzman
+            Copyright (c) 2011 Brandon Kohn
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/container/map/detail/cpp03/at_impl.hpp [2:3]
+        include/boost/fusion/container/map/detail/cpp03/value_at_impl.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0d425d37a7f3a1d0fc0a1ea34a2d4150
+BELONGS ya.make
+    License text:
+            Copyright (c) 2014 Kohei Takahashi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/adapted/std_tuple/detail/build_std_tuple.hpp [2:2]
+        include/boost/fusion/container/generation/make_list.hpp [2:2]
+        include/boost/fusion/container/generation/vector_tie.hpp [2:2]
+        include/boost/fusion/container/list/list_fwd.hpp [2:2]
+        include/boost/fusion/container/set/set_fwd.hpp [2:2]
+        include/boost/fusion/container/vector/vector10.hpp [2:2]
+        include/boost/fusion/container/vector/vector20.hpp [2:2]
+        include/boost/fusion/container/vector/vector30.hpp [2:2]
+        include/boost/fusion/container/vector/vector40.hpp [2:2]
+        include/boost/fusion/container/vector/vector50.hpp [2:2]
+        include/boost/fusion/include/std_tuple.hpp [2:4]
+        include/boost/fusion/tuple/make_tuple.hpp [2:2]
+        include/boost/fusion/tuple/tuple_tie.hpp [2:2]
+        include/boost/fusion/view/nview/detail/nview_impl.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 17933b826f084cbdab08e8129bb2d208
+BELONGS ya.make
+    License text:
+            Copyright (c) 2014 Christoph Weiss
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/include/hash.hpp [2:2]
+        include/boost/fusion/sequence/hash.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1a5bfddf0b038e143ef61e1e55728936
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2009 Joel de Guzman
+            Copyright (c) 2007 Dan Marsden
+            Copyright (c) 2010-2011 Christopher Schmidt
+            Copyright (c) 2013-2014 Damien Buhl
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/adapted/adt/adapt_assoc_adt.hpp [2:5]
+        include/boost/fusion/adapted/struct/adapt_assoc_struct.hpp [2:4]
+        include/boost/fusion/algorithm/iteration/detail/preprocessed/fold.hpp [2:4]
+        include/boost/fusion/algorithm/iteration/fold.hpp [2:5]
+        include/boost/fusion/algorithm/iteration/fold.hpp [35:37]
+        include/boost/fusion/algorithm/iteration/for_each.hpp [2:4]
+        include/boost/fusion/algorithm/query/all.hpp [2:3]
+        include/boost/fusion/algorithm/query/any.hpp [2:4]
+        include/boost/fusion/algorithm/query/count.hpp [2:3]
+        include/boost/fusion/algorithm/query/count_if.hpp [2:3]
+        include/boost/fusion/algorithm/query/detail/all.hpp [2:3]
+        include/boost/fusion/algorithm/query/detail/any.hpp [2:4]
+        include/boost/fusion/algorithm/query/detail/count_if.hpp [2:3]
+        include/boost/fusion/algorithm/query/detail/find_if.hpp [2:5]
+        include/boost/fusion/algorithm/query/none.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 20a463d46bce9a241ea6c39dc4765269
+BELONGS ya.make
+    License text:
+            Copyright (c) 2005-2013 Joel de Guzman
+            Copyright (c) 2006 Dan Marsden
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/container/deque/convert.hpp [2:3]
+        include/boost/fusion/container/deque/detail/build_deque.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/build_deque.hpp [2:2]
+        include/boost/fusion/container/map/detail/begin_impl.hpp [2:2]
+        include/boost/fusion/container/map/detail/build_map.hpp [2:2]
+        include/boost/fusion/container/map/detail/end_impl.hpp [2:2]
+        include/boost/fusion/container/map/detail/map_impl.hpp [2:2]
+        include/boost/fusion/container/map/detail/map_index.hpp [2:2]
+        include/boost/fusion/container/map/map_iterator.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 234430fe848ce8d6594b231bd8e0cfb8
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001 Doug Gregor
+            Copyright (c) 1999-2003 Jaakko Jarvi
+            Copyright (c) 2001-2011 Joel de Guzman
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/container/generation/ignore.hpp [2:4]
+        include/boost/fusion/container/vector/detail/cpp03/vector_fwd.hpp [2:3]
+        include/boost/fusion/sequence/comparison/detail/equal_to.hpp [2:3]
+        include/boost/fusion/sequence/comparison/detail/greater.hpp [2:3]
+        include/boost/fusion/sequence/comparison/detail/greater_equal.hpp [2:3]
+        include/boost/fusion/sequence/comparison/detail/less.hpp [2:3]
+        include/boost/fusion/sequence/comparison/detail/less_equal.hpp [2:3]
+        include/boost/fusion/sequence/comparison/detail/not_equal_to.hpp [2:3]
+        include/boost/fusion/sequence/comparison/equal_to.hpp [2:3]
+        include/boost/fusion/sequence/comparison/greater.hpp [2:3]
+        include/boost/fusion/sequence/comparison/greater_equal.hpp [2:3]
+        include/boost/fusion/sequence/comparison/less.hpp [2:3]
+        include/boost/fusion/sequence/comparison/less_equal.hpp [2:3]
+        include/boost/fusion/sequence/comparison/not_equal_to.hpp [2:3]
+        include/boost/fusion/sequence/io/detail/in.hpp [2:4]
+        include/boost/fusion/sequence/io/detail/manip.hpp [2:4]
+        include/boost/fusion/sequence/io/detail/out.hpp [2:4]
+        include/boost/fusion/sequence/io/in.hpp [2:4]
+        include/boost/fusion/sequence/io/out.hpp [2:4]
+        include/boost/fusion/support/detail/as_fusion_element.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 23778f87dcf85ae8b833451d958ec8be
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2007 Joel de Guzman
+            Copyright (c) 2007 Dan Marsden
+            Copyright (c) 2009-2011 Christopher Schmidt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/adapted/struct/adapt_assoc_struct.hpp [2:4]
+        include/boost/fusion/adapted/struct/adapt_struct.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/adapt_base.hpp [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 26d8aac6fc547a1e5f51e33742e3d215
+BELONGS ya.make
+    License text:
+            Copyright (c) 2014 Eric Niebler
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/include/nil.hpp [2:2]
+        include/boost/fusion/support/config.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2c1fc4e14b8b85ff09dea84fb89e149a
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2011 Joel de Guzman
+            Copyright (c) 2006 Dan Marsden
+            Copyright (c) 2009 Hartmut Kaiser
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/view/nview.hpp [2:4]
+        include/boost/fusion/view/nview/detail/advance_impl.hpp [2:2]
+        include/boost/fusion/view/nview/detail/at_impl.hpp [2:2]
+        include/boost/fusion/view/nview/detail/begin_impl.hpp [2:2]
+        include/boost/fusion/view/nview/detail/cpp03/nview_impl.hpp [2:2]
+        include/boost/fusion/view/nview/detail/deref_impl.hpp [2:2]
+        include/boost/fusion/view/nview/detail/distance_impl.hpp [2:2]
+        include/boost/fusion/view/nview/detail/end_impl.hpp [2:2]
+        include/boost/fusion/view/nview/detail/equal_to_impl.hpp [2:2]
+        include/boost/fusion/view/nview/detail/next_impl.hpp [2:2]
+        include/boost/fusion/view/nview/detail/prior_impl.hpp [2:2]
+        include/boost/fusion/view/nview/detail/value_at_impl.hpp [2:2]
+        include/boost/fusion/view/nview/detail/value_of_impl.hpp [2:2]
+        include/boost/fusion/view/nview/nview.hpp [2:2]
+        include/boost/fusion/view/nview/nview_iterator.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 49dd121655e5c734739cb54d9f69e91e
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2011 Joel de Guzman
+            Copyright (c) 2005-2006 Dan Marsden
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/adapted.hpp [2:3]
+        include/boost/fusion/adapted/adt.hpp [2:4]
+        include/boost/fusion/adapted/array.hpp [2:4]
+        include/boost/fusion/adapted/boost_array.hpp [2:3]
+        include/boost/fusion/adapted/boost_array/array_iterator.hpp [2:3]
+        include/boost/fusion/adapted/boost_array/detail/at_impl.hpp [2:3]
+        include/boost/fusion/adapted/boost_array/detail/begin_impl.hpp [2:3]
+        include/boost/fusion/adapted/boost_array/detail/category_of_impl.hpp [2:3]
+        include/boost/fusion/adapted/boost_array/detail/end_impl.hpp [2:3]
+        include/boost/fusion/adapted/boost_array/detail/is_sequence_impl.hpp [2:3]
+        include/boost/fusion/adapted/boost_array/detail/is_view_impl.hpp [2:3]
+        include/boost/fusion/adapted/boost_array/detail/size_impl.hpp [2:3]
+        include/boost/fusion/adapted/boost_array/detail/value_at_impl.hpp [2:3]
+        include/boost/fusion/adapted/boost_array/tag_of.hpp [2:3]
+        include/boost/fusion/adapted/boost_tuple.hpp [2:2]
+        include/boost/fusion/adapted/boost_tuple/boost_tuple_iterator.hpp [2:2]
+        include/boost/fusion/adapted/boost_tuple/detail/at_impl.hpp [2:2]
+        include/boost/fusion/adapted/boost_tuple/detail/begin_impl.hpp [2:2]
+        include/boost/fusion/adapted/boost_tuple/detail/category_of_impl.hpp [2:2]
+        include/boost/fusion/adapted/boost_tuple/detail/end_impl.hpp [2:2]
+        include/boost/fusion/adapted/boost_tuple/detail/is_sequence_impl.hpp [2:2]
+        include/boost/fusion/adapted/boost_tuple/detail/is_view_impl.hpp [2:2]
+        include/boost/fusion/adapted/boost_tuple/detail/size_impl.hpp [2:2]
+        include/boost/fusion/adapted/boost_tuple/detail/value_at_impl.hpp [2:2]
+        include/boost/fusion/adapted/boost_tuple/tag_of.hpp [2:2]
+        include/boost/fusion/adapted/mpl.hpp [2:3]
+        include/boost/fusion/adapted/mpl/detail/at_impl.hpp [2:3]
+        include/boost/fusion/adapted/mpl/detail/begin_impl.hpp [2:3]
+        include/boost/fusion/adapted/mpl/detail/category_of_impl.hpp [2:3]
+        include/boost/fusion/adapted/mpl/detail/empty_impl.hpp [2:3]
+        include/boost/fusion/adapted/mpl/detail/end_impl.hpp [2:3]
+        include/boost/fusion/adapted/mpl/detail/has_key_impl.hpp [2:3]
+        include/boost/fusion/adapted/mpl/detail/is_sequence_impl.hpp [2:3]
+        include/boost/fusion/adapted/mpl/detail/is_view_impl.hpp [2:3]
+        include/boost/fusion/adapted/mpl/detail/size_impl.hpp [2:3]
+        include/boost/fusion/adapted/mpl/detail/value_at_impl.hpp [2:3]
+        include/boost/fusion/adapted/mpl/mpl_iterator.hpp [2:2]
+        include/boost/fusion/adapted/std_array.hpp [2:4]
+        include/boost/fusion/adapted/std_array/detail/at_impl.hpp [2:3]
+        include/boost/fusion/adapted/std_array/detail/begin_impl.hpp [2:4]
+        include/boost/fusion/adapted/std_array/detail/category_of_impl.hpp [2:3]
+        include/boost/fusion/adapted/std_array/detail/end_impl.hpp [2:4]
+        include/boost/fusion/adapted/std_array/detail/is_sequence_impl.hpp [2:4]
+        include/boost/fusion/adapted/std_array/detail/is_view_impl.hpp [2:4]
+        include/boost/fusion/adapted/std_array/detail/size_impl.hpp [2:4]
+        include/boost/fusion/adapted/std_array/detail/value_at_impl.hpp [2:3]
+        include/boost/fusion/adapted/std_array/std_array_iterator.hpp [2:4]
+        include/boost/fusion/adapted/std_array/tag_of.hpp [2:3]
+        include/boost/fusion/adapted/std_pair.hpp [2:4]
+        include/boost/fusion/adapted/std_tuple.hpp [2:2]
+        include/boost/fusion/adapted/std_tuple/detail/at_impl.hpp [2:2]
+        include/boost/fusion/adapted/std_tuple/detail/begin_impl.hpp [2:2]
+        include/boost/fusion/adapted/std_tuple/detail/category_of_impl.hpp [2:2]
+        include/boost/fusion/adapted/std_tuple/detail/end_impl.hpp [2:2]
+        include/boost/fusion/adapted/std_tuple/detail/is_sequence_impl.hpp [2:2]
+        include/boost/fusion/adapted/std_tuple/detail/is_view_impl.hpp [2:2]
+        include/boost/fusion/adapted/std_tuple/detail/size_impl.hpp [2:2]
+        include/boost/fusion/adapted/std_tuple/detail/value_at_impl.hpp [2:2]
+        include/boost/fusion/adapted/std_tuple/std_tuple_iterator.hpp [2:2]
+        include/boost/fusion/adapted/std_tuple/tag_of.hpp [2:2]
+        include/boost/fusion/adapted/struct.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/at_impl.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/begin_impl.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/category_of_impl.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/end_impl.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/is_sequence_impl.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/is_view_impl.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/size_impl.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/value_at_impl.hpp [2:4]
+        include/boost/fusion/algorithm.hpp [2:2]
+        include/boost/fusion/algorithm/auxiliary.hpp [2:2]
+        include/boost/fusion/algorithm/auxiliary/copy.hpp [2:2]
+        include/boost/fusion/algorithm/iteration.hpp [2:2]
+        include/boost/fusion/algorithm/iteration/accumulate.hpp [2:3]
+        include/boost/fusion/algorithm/iteration/detail/fold.hpp [2:5]
+        include/boost/fusion/algorithm/iteration/detail/for_each.hpp [2:2]
+        include/boost/fusion/algorithm/iteration/detail/preprocessed/fold.hpp [2:4]
+        include/boost/fusion/algorithm/iteration/detail/preprocessed/iter_fold.hpp [2:3]
+        include/boost/fusion/algorithm/iteration/detail/preprocessed/reverse_fold.hpp [2:3]
+        include/boost/fusion/algorithm/iteration/detail/preprocessed/reverse_iter_fold.hpp [2:3]
+        include/boost/fusion/algorithm/iteration/fold.hpp [2:5]
+        include/boost/fusion/algorithm/iteration/fold.hpp [35:37]
+        include/boost/fusion/algorithm/iteration/iter_fold.hpp [2:4]
+        include/boost/fusion/algorithm/iteration/iter_fold.hpp [37:38]
+        include/boost/fusion/algorithm/iteration/reverse_fold.hpp [2:4]
+        include/boost/fusion/algorithm/iteration/reverse_fold.hpp [37:38]
+        include/boost/fusion/algorithm/iteration/reverse_iter_fold.hpp [2:4]
+        include/boost/fusion/algorithm/iteration/reverse_iter_fold.hpp [37:38]
+        include/boost/fusion/algorithm/query.hpp [2:2]
+        include/boost/fusion/algorithm/query/all.hpp [2:3]
+        include/boost/fusion/algorithm/query/any.hpp [2:4]
+        include/boost/fusion/algorithm/query/count.hpp [2:3]
+        include/boost/fusion/algorithm/query/count_if.hpp [2:3]
+        include/boost/fusion/algorithm/query/detail/all.hpp [2:3]
+        include/boost/fusion/algorithm/query/detail/any.hpp [2:4]
+        include/boost/fusion/algorithm/query/detail/count.hpp [2:2]
+        include/boost/fusion/algorithm/query/detail/count_if.hpp [2:3]
+        include/boost/fusion/algorithm/query/detail/find_if.hpp [2:5]
+        include/boost/fusion/algorithm/query/find.hpp [2:3]
+        include/boost/fusion/algorithm/query/find_if.hpp [2:3]
+        include/boost/fusion/algorithm/query/none.hpp [2:3]
+        include/boost/fusion/algorithm/transformation.hpp [2:2]
+        include/boost/fusion/algorithm/transformation/clear.hpp [2:2]
+        include/boost/fusion/algorithm/transformation/detail/preprocessed/zip.hpp [2:2]
+        include/boost/fusion/algorithm/transformation/detail/preprocessed/zip10.hpp [2:3]
+        include/boost/fusion/algorithm/transformation/detail/preprocessed/zip20.hpp [2:3]
+        include/boost/fusion/algorithm/transformation/detail/preprocessed/zip30.hpp [2:3]
+        include/boost/fusion/algorithm/transformation/detail/preprocessed/zip40.hpp [2:3]
+        include/boost/fusion/algorithm/transformation/detail/preprocessed/zip50.hpp [2:3]
+        include/boost/fusion/algorithm/transformation/detail/replace.hpp [2:2]
+        include/boost/fusion/algorithm/transformation/detail/replace_if.hpp [2:2]
+        include/boost/fusion/algorithm/transformation/erase.hpp [2:2]
+        include/boost/fusion/algorithm/transformation/erase_key.hpp [2:2]
+        include/boost/fusion/algorithm/transformation/filter.hpp [2:3]
+        include/boost/fusion/algorithm/transformation/filter_if.hpp [2:2]
+        include/boost/fusion/algorithm/transformation/insert.hpp [2:2]
+        include/boost/fusion/algorithm/transformation/insert_range.hpp [2:2]
+        include/boost/fusion/algorithm/transformation/join.hpp [2:3]
+        include/boost/fusion/algorithm/transformation/pop_back.hpp [2:2]
+        include/boost/fusion/algorithm/transformation/pop_front.hpp [2:2]
+        include/boost/fusion/algorithm/transformation/push_back.hpp [2:2]
+        include/boost/fusion/algorithm/transformation/push_front.hpp [2:2]
+        include/boost/fusion/algorithm/transformation/remove.hpp [2:2]
+        include/boost/fusion/algorithm/transformation/remove_if.hpp [2:3]
+        include/boost/fusion/algorithm/transformation/replace.hpp [2:2]
+        include/boost/fusion/algorithm/transformation/replace_if.hpp [2:2]
+        include/boost/fusion/algorithm/transformation/reverse.hpp [2:2]
+        include/boost/fusion/algorithm/transformation/transform.hpp [2:2]
+        include/boost/fusion/algorithm/transformation/zip.hpp [2:3]
+        include/boost/fusion/algorithm/transformation/zip.hpp [43:44]
+        include/boost/fusion/container.hpp [2:2]
+        include/boost/fusion/container/deque.hpp [2:3]
+        include/boost/fusion/container/deque/detail/cpp03/as_deque.hpp [66:66]
+        include/boost/fusion/container/deque/detail/cpp03/deque.hpp [51:51]
+        include/boost/fusion/container/deque/detail/cpp03/deque_fwd.hpp [26:26]
+        include/boost/fusion/container/deque/detail/cpp03/deque_initial_size.hpp [35:35]
+        include/boost/fusion/container/deque/detail/cpp03/deque_keyed_values.hpp [43:43]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/as_deque.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/as_deque10.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/as_deque20.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/as_deque30.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/as_deque40.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/as_deque50.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/deque.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/deque10.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/deque10_fwd.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/deque20.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/deque20_fwd.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/deque30.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/deque30_fwd.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/deque40.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/deque40_fwd.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/deque50.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/deque50_fwd.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/deque_fwd.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/deque_initial_size.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/deque_initial_size10.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/deque_initial_size20.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/deque_initial_size30.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/deque_initial_size40.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/deque_initial_size50.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/deque_keyed_values.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/deque_keyed_values10.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/deque_keyed_values20.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/deque_keyed_values30.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/deque_keyed_values40.hpp [2:2]
+        include/boost/fusion/container/deque/detail/cpp03/preprocessed/deque_keyed_values50.hpp [2:2]
+        include/boost/fusion/container/generation.hpp [2:2]
+        include/boost/fusion/container/generation/cons_tie.hpp [2:2]
+        include/boost/fusion/container/generation/detail/pp_deque_tie.hpp [2:3]
+        include/boost/fusion/container/generation/detail/pp_deque_tie.hpp [28:28]
+        include/boost/fusion/container/generation/detail/pp_list_tie.hpp [2:2]
+        include/boost/fusion/container/generation/detail/pp_list_tie.hpp [27:27]
+        include/boost/fusion/container/generation/detail/pp_make_deque.hpp [2:3]
+        include/boost/fusion/container/generation/detail/pp_make_deque.hpp [28:28]
+        include/boost/fusion/container/generation/detail/pp_make_list.hpp [2:2]
+        include/boost/fusion/container/generation/detail/pp_make_list.hpp [27:27]
+        include/boost/fusion/container/generation/detail/pp_make_map.hpp [2:2]
+        include/boost/fusion/container/generation/detail/pp_make_map.hpp [28:28]
+        include/boost/fusion/container/generation/detail/pp_make_set.hpp [2:2]
+        include/boost/fusion/container/generation/detail/pp_make_set.hpp [29:29]
+        include/boost/fusion/container/generation/detail/pp_make_vector.hpp [2:2]
+        include/boost/fusion/container/generation/detail/pp_make_vector.hpp [27:27]
+        include/boost/fusion/container/generation/detail/pp_map_tie.hpp [2:3]
+        include/boost/fusion/container/generation/detail/pp_map_tie.hpp [31:31]
+        include/boost/fusion/container/generation/detail/pp_vector_tie.hpp [2:2]
+        include/boost/fusion/container/generation/detail/pp_vector_tie.hpp [27:27]
+        include/boost/fusion/container/generation/detail/preprocessed/deque_tie.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/deque_tie10.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/deque_tie20.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/deque_tie30.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/deque_tie40.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/deque_tie50.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/list_tie.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/list_tie10.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/list_tie20.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/list_tie30.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/list_tie40.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/list_tie50.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_deque.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_deque10.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_deque20.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_deque30.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_deque40.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_deque50.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_list.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_list10.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_list20.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_list30.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_list40.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_list50.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_map.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_map10.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_map20.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_map30.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_map40.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_map50.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_set.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_set10.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_set20.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_set30.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_set40.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_set50.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_vector.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_vector10.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_vector20.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_vector30.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_vector40.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/make_vector50.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/map_tie.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/map_tie10.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/map_tie20.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/map_tie30.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/map_tie40.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/map_tie50.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/vector_tie.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/vector_tie10.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/vector_tie20.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/vector_tie30.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/vector_tie40.hpp [2:2]
+        include/boost/fusion/container/generation/detail/preprocessed/vector_tie50.hpp [2:2]
+        include/boost/fusion/container/generation/ignore.hpp [2:4]
+        include/boost/fusion/container/generation/make_cons.hpp [2:3]
+        include/boost/fusion/container/generation/pair_tie.hpp [2:3]
+        include/boost/fusion/container/list.hpp [2:2]
+        include/boost/fusion/container/list/cons.hpp [2:3]
+        include/boost/fusion/container/list/cons_fwd.hpp [2:3]
+        include/boost/fusion/container/list/cons_iterator.hpp [2:3]
+        include/boost/fusion/container/list/convert.hpp [2:2]
+        include/boost/fusion/container/list/detail/at_impl.hpp [2:2]
+        include/boost/fusion/container/list/detail/begin_impl.hpp [2:3]
+        include/boost/fusion/container/list/detail/build_cons.hpp [2:2]
+        include/boost/fusion/container/list/detail/convert_impl.hpp [2:3]
+        include/boost/fusion/container/list/detail/cpp03/limits.hpp [2:2]
+        include/boost/fusion/container/list/detail/cpp03/list.hpp [2:2]
+        include/boost/fusion/container/list/detail/cpp03/list.hpp [26:26]
+        include/boost/fusion/container/list/detail/cpp03/list_forward_ctor.hpp [2:2]
+        include/boost/fusion/container/list/detail/cpp03/list_fwd.hpp [2:2]
+        include/boost/fusion/container/list/detail/cpp03/list_fwd.hpp [22:22]
+        include/boost/fusion/container/list/detail/cpp03/list_to_cons.hpp [2:2]
+        include/boost/fusion/container/list/detail/cpp03/list_to_cons.hpp [34:34]
+        include/boost/fusion/container/list/detail/cpp03/list_to_cons_call.hpp [2:2]
+        include/boost/fusion/container/list/detail/cpp03/preprocessed/list.hpp [2:2]
+        include/boost/fusion/container/list/detail/cpp03/preprocessed/list10.hpp [2:2]
+        include/boost/fusion/container/list/detail/cpp03/preprocessed/list10_fwd.hpp [2:2]
+        include/boost/fusion/container/list/detail/cpp03/preprocessed/list20.hpp [2:2]
+        include/boost/fusion/container/list/detail/cpp03/preprocessed/list20_fwd.hpp [2:2]
+        include/boost/fusion/container/list/detail/cpp03/preprocessed/list30.hpp [2:2]
+        include/boost/fusion/container/list/detail/cpp03/preprocessed/list30_fwd.hpp [2:2]
+        include/boost/fusion/container/list/detail/cpp03/preprocessed/list40.hpp [2:2]
+        include/boost/fusion/container/list/detail/cpp03/preprocessed/list40_fwd.hpp [2:2]
+        include/boost/fusion/container/list/detail/cpp03/preprocessed/list50.hpp [2:2]
+        include/boost/fusion/container/list/detail/cpp03/preprocessed/list50_fwd.hpp [2:2]
+        include/boost/fusion/container/list/detail/cpp03/preprocessed/list_fwd.hpp [2:2]
+        include/boost/fusion/container/list/detail/cpp03/preprocessed/list_to_cons.hpp [2:2]
+        include/boost/fusion/container/list/detail/cpp03/preprocessed/list_to_cons10.hpp [2:2]
+        include/boost/fusion/container/list/detail/cpp03/preprocessed/list_to_cons20.hpp [2:2]
+        include/boost/fusion/container/list/detail/cpp03/preprocessed/list_to_cons30.hpp [2:2]
+        include/boost/fusion/container/list/detail/cpp03/preprocessed/list_to_cons40.hpp [2:2]
+        include/boost/fusion/container/list/detail/cpp03/preprocessed/list_to_cons50.hpp [2:2]
+        include/boost/fusion/container/list/detail/deref_impl.hpp [2:3]
+        include/boost/fusion/container/list/detail/end_impl.hpp [2:3]
+        include/boost/fusion/container/list/detail/equal_to_impl.hpp [2:2]
+        include/boost/fusion/container/list/detail/next_impl.hpp [2:3]
+        include/boost/fusion/container/list/detail/value_at_impl.hpp [2:2]
+        include/boost/fusion/container/list/detail/value_of_impl.hpp [2:3]
+        include/boost/fusion/container/list/nil.hpp [2:3]
+        include/boost/fusion/container/map.hpp [2:2]
+        include/boost/fusion/container/map/convert.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/as_map.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/as_map.hpp [65:65]
+        include/boost/fusion/container/map/detail/cpp03/at_impl.hpp [2:3]
+        include/boost/fusion/container/map/detail/cpp03/begin_impl.hpp [2:3]
+        include/boost/fusion/container/map/detail/cpp03/convert.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/convert_impl.hpp [2:3]
+        include/boost/fusion/container/map/detail/cpp03/end_impl.hpp [2:3]
+        include/boost/fusion/container/map/detail/cpp03/limits.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/map.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/map.hpp [45:45]
+        include/boost/fusion/container/map/detail/cpp03/map_forward_ctor.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/map_fwd.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/map_fwd.hpp [22:22]
+        include/boost/fusion/container/map/detail/cpp03/preprocessed/as_map.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/preprocessed/as_map10.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/preprocessed/as_map20.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/preprocessed/as_map30.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/preprocessed/as_map40.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/preprocessed/as_map50.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/preprocessed/map.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/preprocessed/map10.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/preprocessed/map10_fwd.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/preprocessed/map20.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/preprocessed/map20_fwd.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/preprocessed/map30.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/preprocessed/map30_fwd.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/preprocessed/map40.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/preprocessed/map40_fwd.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/preprocessed/map50.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/preprocessed/map50_fwd.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/preprocessed/map_fwd.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/value_at_impl.hpp [2:3]
+        include/boost/fusion/container/map/map.hpp [2:2]
+        include/boost/fusion/container/map/map_fwd.hpp [2:2]
+        include/boost/fusion/container/set.hpp [2:2]
+        include/boost/fusion/container/set/convert.hpp [2:2]
+        include/boost/fusion/container/set/detail/begin_impl.hpp [2:3]
+        include/boost/fusion/container/set/detail/convert_impl.hpp [2:3]
+        include/boost/fusion/container/set/detail/cpp03/as_set.hpp [2:2]
+        include/boost/fusion/container/set/detail/cpp03/as_set.hpp [65:65]
+        include/boost/fusion/container/set/detail/cpp03/limits.hpp [2:2]
+        include/boost/fusion/container/set/detail/cpp03/preprocessed/as_set.hpp [2:2]
+        include/boost/fusion/container/set/detail/cpp03/preprocessed/as_set10.hpp [2:2]
+        include/boost/fusion/container/set/detail/cpp03/preprocessed/as_set20.hpp [2:2]
+        include/boost/fusion/container/set/detail/cpp03/preprocessed/as_set30.hpp [2:2]
+        include/boost/fusion/container/set/detail/cpp03/preprocessed/as_set40.hpp [2:2]
+        include/boost/fusion/container/set/detail/cpp03/preprocessed/as_set50.hpp [2:2]
+        include/boost/fusion/container/set/detail/cpp03/preprocessed/set.hpp [2:2]
+        include/boost/fusion/container/set/detail/cpp03/preprocessed/set10.hpp [2:2]
+        include/boost/fusion/container/set/detail/cpp03/preprocessed/set10_fwd.hpp [2:2]
+        include/boost/fusion/container/set/detail/cpp03/preprocessed/set20.hpp [2:2]
+        include/boost/fusion/container/set/detail/cpp03/preprocessed/set20_fwd.hpp [2:2]
+        include/boost/fusion/container/set/detail/cpp03/preprocessed/set30.hpp [2:2]
+        include/boost/fusion/container/set/detail/cpp03/preprocessed/set30_fwd.hpp [2:2]
+        include/boost/fusion/container/set/detail/cpp03/preprocessed/set40.hpp [2:2]
+        include/boost/fusion/container/set/detail/cpp03/preprocessed/set40_fwd.hpp [2:2]
+        include/boost/fusion/container/set/detail/cpp03/preprocessed/set50.hpp [2:2]
+        include/boost/fusion/container/set/detail/cpp03/preprocessed/set50_fwd.hpp [2:2]
+        include/boost/fusion/container/set/detail/cpp03/preprocessed/set_fwd.hpp [2:2]
+        include/boost/fusion/container/set/detail/cpp03/set.hpp [2:2]
+        include/boost/fusion/container/set/detail/cpp03/set.hpp [38:38]
+        include/boost/fusion/container/set/detail/cpp03/set_forward_ctor.hpp [2:2]
+        include/boost/fusion/container/set/detail/cpp03/set_fwd.hpp [2:2]
+        include/boost/fusion/container/set/detail/cpp03/set_fwd.hpp [22:22]
+        include/boost/fusion/container/set/detail/end_impl.hpp [2:3]
+        include/boost/fusion/container/vector.hpp [2:2]
+        include/boost/fusion/container/vector/convert.hpp [2:2]
+        include/boost/fusion/container/vector/detail/advance_impl.hpp [2:2]
+        include/boost/fusion/container/vector/detail/at_impl.hpp [2:2]
+        include/boost/fusion/container/vector/detail/begin_impl.hpp [2:2]
+        include/boost/fusion/container/vector/detail/convert_impl.hpp [2:3]
+        include/boost/fusion/container/vector/detail/cpp03/as_vector.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/as_vector.hpp [65:65]
+        include/boost/fusion/container/vector/detail/cpp03/limits.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/as_vector.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/as_vector10.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/as_vector20.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/as_vector30.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/as_vector40.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/as_vector50.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vector.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vector10.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vector10_fwd.hpp [2:3]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vector20.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vector20_fwd.hpp [2:3]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vector30.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vector30_fwd.hpp [2:3]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vector40.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vector40_fwd.hpp [2:3]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vector50.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vector50_fwd.hpp [2:3]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vector_chooser.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vector_chooser10.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vector_chooser20.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vector_chooser30.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vector_chooser40.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vector_chooser50.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vector_fwd.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vvector10.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vvector10_fwd.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vvector20.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vvector20_fwd.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vvector30.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vvector30_fwd.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vvector40.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vvector40_fwd.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vvector50.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vvector50_fwd.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/value_at_impl.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/vector.hpp [2:3]
+        include/boost/fusion/container/vector/detail/cpp03/vector.hpp [70:70]
+        include/boost/fusion/container/vector/detail/cpp03/vector10.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/vector10.hpp [73:73]
+        include/boost/fusion/container/vector/detail/cpp03/vector10_fwd.hpp [3:4]
+        include/boost/fusion/container/vector/detail/cpp03/vector10_fwd.hpp [31:32]
+        include/boost/fusion/container/vector/detail/cpp03/vector20.hpp [2:3]
+        include/boost/fusion/container/vector/detail/cpp03/vector20.hpp [48:48]
+        include/boost/fusion/container/vector/detail/cpp03/vector20_fwd.hpp [3:4]
+        include/boost/fusion/container/vector/detail/cpp03/vector20_fwd.hpp [25:26]
+        include/boost/fusion/container/vector/detail/cpp03/vector30.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/vector30.hpp [47:47]
+        include/boost/fusion/container/vector/detail/cpp03/vector30_fwd.hpp [3:4]
+        include/boost/fusion/container/vector/detail/cpp03/vector30_fwd.hpp [25:26]
+        include/boost/fusion/container/vector/detail/cpp03/vector40.hpp [2:3]
+        include/boost/fusion/container/vector/detail/cpp03/vector40.hpp [48:48]
+        include/boost/fusion/container/vector/detail/cpp03/vector40_fwd.hpp [3:4]
+        include/boost/fusion/container/vector/detail/cpp03/vector40_fwd.hpp [25:26]
+        include/boost/fusion/container/vector/detail/cpp03/vector50.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/vector50.hpp [47:47]
+        include/boost/fusion/container/vector/detail/cpp03/vector50_fwd.hpp [3:4]
+        include/boost/fusion/container/vector/detail/cpp03/vector50_fwd.hpp [25:26]
+        include/boost/fusion/container/vector/detail/cpp03/vector_forward_ctor.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/vector_fwd.hpp [2:3]
+        include/boost/fusion/container/vector/detail/cpp03/vector_fwd.hpp [37:37]
+        include/boost/fusion/container/vector/detail/cpp03/vector_n.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/vector_n_chooser.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/vector_n_chooser.hpp [48:48]
+        include/boost/fusion/container/vector/detail/deref_impl.hpp [2:2]
+        include/boost/fusion/container/vector/detail/distance_impl.hpp [2:2]
+        include/boost/fusion/container/vector/detail/end_impl.hpp [2:2]
+        include/boost/fusion/container/vector/detail/equal_to_impl.hpp [2:2]
+        include/boost/fusion/container/vector/detail/next_impl.hpp [2:2]
+        include/boost/fusion/container/vector/detail/prior_impl.hpp [2:2]
+        include/boost/fusion/container/vector/detail/value_of_impl.hpp [2:2]
+        include/boost/fusion/container/vector/vector_iterator.hpp [2:2]
+        include/boost/fusion/include/auxiliary.hpp [2:2]
+        include/boost/fusion/include/copy.hpp [2:2]
+        include/boost/fusion/include/iterator_adapter.hpp [2:2]
+        include/boost/fusion/iterator.hpp [2:2]
+        include/boost/fusion/iterator/advance.hpp [2:2]
+        include/boost/fusion/iterator/deref.hpp [2:2]
+        include/boost/fusion/iterator/detail/adapt_deref_traits.hpp [2:2]
+        include/boost/fusion/iterator/detail/adapt_value_traits.hpp [2:2]
+        include/boost/fusion/iterator/detail/advance.hpp [2:2]
+        include/boost/fusion/iterator/detail/distance.hpp [2:2]
+        include/boost/fusion/iterator/distance.hpp [2:2]
+        include/boost/fusion/iterator/equal_to.hpp [2:2]
+        include/boost/fusion/iterator/iterator_adapter.hpp [2:2]
+        include/boost/fusion/iterator/iterator_facade.hpp [2:2]
+        include/boost/fusion/iterator/mpl.hpp [2:2]
+        include/boost/fusion/iterator/mpl/convert_iterator.hpp [2:2]
+        include/boost/fusion/iterator/mpl/fusion_iterator.hpp [2:2]
+        include/boost/fusion/iterator/next.hpp [2:2]
+        include/boost/fusion/iterator/prior.hpp [2:2]
+        include/boost/fusion/iterator/value_of.hpp [2:2]
+        include/boost/fusion/mpl.hpp [2:2]
+        include/boost/fusion/mpl/at.hpp [2:2]
+        include/boost/fusion/mpl/back.hpp [2:2]
+        include/boost/fusion/mpl/begin.hpp [2:2]
+        include/boost/fusion/mpl/clear.hpp [2:2]
+        include/boost/fusion/mpl/detail/clear.hpp [2:2]
+        include/boost/fusion/mpl/empty.hpp [2:2]
+        include/boost/fusion/mpl/end.hpp [2:2]
+        include/boost/fusion/mpl/erase.hpp [2:2]
+        include/boost/fusion/mpl/erase_key.hpp [2:2]
+        include/boost/fusion/mpl/front.hpp [2:2]
+        include/boost/fusion/mpl/has_key.hpp [2:2]
+        include/boost/fusion/mpl/insert.hpp [2:2]
+        include/boost/fusion/mpl/insert_range.hpp [2:2]
+        include/boost/fusion/mpl/pop_back.hpp [2:2]
+        include/boost/fusion/mpl/pop_front.hpp [2:2]
+        include/boost/fusion/mpl/push_back.hpp [2:2]
+        include/boost/fusion/mpl/push_front.hpp [2:2]
+        include/boost/fusion/mpl/size.hpp [2:2]
+        include/boost/fusion/sequence.hpp [2:2]
+        include/boost/fusion/sequence/comparison.hpp [2:2]
+        include/boost/fusion/sequence/comparison/detail/equal_to.hpp [2:3]
+        include/boost/fusion/sequence/comparison/detail/greater.hpp [2:3]
+        include/boost/fusion/sequence/comparison/detail/greater_equal.hpp [2:3]
+        include/boost/fusion/sequence/comparison/detail/less.hpp [2:3]
+        include/boost/fusion/sequence/comparison/detail/less_equal.hpp [2:3]
+        include/boost/fusion/sequence/comparison/detail/not_equal_to.hpp [2:3]
+        include/boost/fusion/sequence/comparison/enable_comparison.hpp [2:2]
+        include/boost/fusion/sequence/comparison/equal_to.hpp [2:3]
+        include/boost/fusion/sequence/comparison/greater.hpp [2:3]
+        include/boost/fusion/sequence/comparison/greater_equal.hpp [2:3]
+        include/boost/fusion/sequence/comparison/less.hpp [2:3]
+        include/boost/fusion/sequence/comparison/less_equal.hpp [2:3]
+        include/boost/fusion/sequence/comparison/not_equal_to.hpp [2:3]
+        include/boost/fusion/sequence/convert.hpp [2:2]
+        include/boost/fusion/sequence/intrinsic.hpp [2:2]
+        include/boost/fusion/sequence/intrinsic/at.hpp [2:2]
+        include/boost/fusion/sequence/intrinsic/at_c.hpp [2:2]
+        include/boost/fusion/sequence/intrinsic/at_key.hpp [2:3]
+        include/boost/fusion/sequence/intrinsic/back.hpp [2:2]
+        include/boost/fusion/sequence/intrinsic/begin.hpp [2:2]
+        include/boost/fusion/sequence/intrinsic/empty.hpp [2:2]
+        include/boost/fusion/sequence/intrinsic/end.hpp [2:2]
+        include/boost/fusion/sequence/intrinsic/front.hpp [2:2]
+        include/boost/fusion/sequence/intrinsic/has_key.hpp [2:2]
+        include/boost/fusion/sequence/intrinsic/size.hpp [2:2]
+        include/boost/fusion/sequence/intrinsic/swap.hpp [2:3]
+        include/boost/fusion/sequence/intrinsic/value_at.hpp [2:2]
+        include/boost/fusion/sequence/intrinsic/value_at_key.hpp [2:3]
+        include/boost/fusion/sequence/intrinsic_fwd.hpp [2:2]
+        include/boost/fusion/sequence/io.hpp [2:2]
+        include/boost/fusion/sequence/io/detail/in.hpp [2:4]
+        include/boost/fusion/sequence/io/detail/manip.hpp [2:4]
+        include/boost/fusion/sequence/io/detail/out.hpp [2:4]
+        include/boost/fusion/sequence/io/in.hpp [2:4]
+        include/boost/fusion/sequence/io/out.hpp [2:4]
+        include/boost/fusion/sequence/sequence_facade.hpp [2:2]
+        include/boost/fusion/support.hpp [2:2]
+        include/boost/fusion/support/category_of.hpp [2:2]
+        include/boost/fusion/support/detail/access.hpp [2:2]
+        include/boost/fusion/support/detail/as_fusion_element.hpp [2:3]
+        include/boost/fusion/support/detail/is_mpl_sequence.hpp [2:3]
+        include/boost/fusion/support/detail/mpl_iterator_category.hpp [2:2]
+        include/boost/fusion/support/is_iterator.hpp [2:2]
+        include/boost/fusion/support/is_sequence.hpp [2:2]
+        include/boost/fusion/support/is_view.hpp [2:2]
+        include/boost/fusion/support/iterator_base.hpp [2:2]
+        include/boost/fusion/support/pair.hpp [2:3]
+        include/boost/fusion/support/sequence_base.hpp [2:3]
+        include/boost/fusion/support/tag_of.hpp [2:2]
+        include/boost/fusion/support/tag_of_fwd.hpp [2:3]
+        include/boost/fusion/support/unused.hpp [2:3]
+        include/boost/fusion/support/void.hpp [2:2]
+        include/boost/fusion/tuple.hpp [2:2]
+        include/boost/fusion/tuple/detail/make_tuple.hpp [2:2]
+        include/boost/fusion/tuple/detail/make_tuple.hpp [34:34]
+        include/boost/fusion/tuple/detail/preprocessed/make_tuple.hpp [2:2]
+        include/boost/fusion/tuple/detail/preprocessed/make_tuple10.hpp [2:2]
+        include/boost/fusion/tuple/detail/preprocessed/make_tuple20.hpp [2:2]
+        include/boost/fusion/tuple/detail/preprocessed/make_tuple30.hpp [2:2]
+        include/boost/fusion/tuple/detail/preprocessed/make_tuple40.hpp [2:2]
+        include/boost/fusion/tuple/detail/preprocessed/make_tuple50.hpp [2:2]
+        include/boost/fusion/tuple/detail/preprocessed/tuple.hpp [2:2]
+        include/boost/fusion/tuple/detail/preprocessed/tuple10.hpp [2:2]
+        include/boost/fusion/tuple/detail/preprocessed/tuple10_fwd.hpp [2:2]
+        include/boost/fusion/tuple/detail/preprocessed/tuple20.hpp [2:2]
+        include/boost/fusion/tuple/detail/preprocessed/tuple20_fwd.hpp [2:2]
+        include/boost/fusion/tuple/detail/preprocessed/tuple30.hpp [2:2]
+        include/boost/fusion/tuple/detail/preprocessed/tuple30_fwd.hpp [2:2]
+        include/boost/fusion/tuple/detail/preprocessed/tuple40.hpp [2:2]
+        include/boost/fusion/tuple/detail/preprocessed/tuple40_fwd.hpp [2:2]
+        include/boost/fusion/tuple/detail/preprocessed/tuple50.hpp [2:2]
+        include/boost/fusion/tuple/detail/preprocessed/tuple50_fwd.hpp [2:2]
+        include/boost/fusion/tuple/detail/preprocessed/tuple_fwd.hpp [2:2]
+        include/boost/fusion/tuple/detail/preprocessed/tuple_tie.hpp [2:2]
+        include/boost/fusion/tuple/detail/preprocessed/tuple_tie10.hpp [2:2]
+        include/boost/fusion/tuple/detail/preprocessed/tuple_tie20.hpp [2:2]
+        include/boost/fusion/tuple/detail/preprocessed/tuple_tie30.hpp [2:2]
+        include/boost/fusion/tuple/detail/preprocessed/tuple_tie40.hpp [2:2]
+        include/boost/fusion/tuple/detail/preprocessed/tuple_tie50.hpp [2:2]
+        include/boost/fusion/tuple/detail/tuple.hpp [2:2]
+        include/boost/fusion/tuple/detail/tuple.hpp [30:30]
+        include/boost/fusion/tuple/detail/tuple_expand.hpp [2:2]
+        include/boost/fusion/tuple/detail/tuple_fwd.hpp [2:2]
+        include/boost/fusion/tuple/detail/tuple_fwd.hpp [22:22]
+        include/boost/fusion/tuple/detail/tuple_tie.hpp [2:2]
+        include/boost/fusion/tuple/detail/tuple_tie.hpp [25:25]
+        include/boost/fusion/view.hpp [2:2]
+        include/boost/fusion/view/detail/strictest_traversal.hpp [2:3]
+        include/boost/fusion/view/filter_view.hpp [2:2]
+        include/boost/fusion/view/filter_view/detail/begin_impl.hpp [2:2]
+        include/boost/fusion/view/filter_view/detail/deref_impl.hpp [2:2]
+        include/boost/fusion/view/filter_view/detail/end_impl.hpp [2:2]
+        include/boost/fusion/view/filter_view/detail/equal_to_impl.hpp [2:3]
+        include/boost/fusion/view/filter_view/detail/next_impl.hpp [2:3]
+        include/boost/fusion/view/filter_view/detail/size_impl.hpp [2:2]
+        include/boost/fusion/view/filter_view/detail/value_of_impl.hpp [2:2]
+        include/boost/fusion/view/filter_view/filter_view.hpp [2:2]
+        include/boost/fusion/view/filter_view/filter_view_iterator.hpp [2:3]
+        include/boost/fusion/view/iterator_range.hpp [2:2]
+        include/boost/fusion/view/iterator_range/detail/begin_impl.hpp [2:2]
+        include/boost/fusion/view/iterator_range/detail/end_impl.hpp [2:2]
+        include/boost/fusion/view/iterator_range/iterator_range.hpp [2:2]
+        include/boost/fusion/view/joint_view.hpp [2:2]
+        include/boost/fusion/view/joint_view/detail/begin_impl.hpp [2:2]
+        include/boost/fusion/view/joint_view/detail/deref_impl.hpp [2:2]
+        include/boost/fusion/view/joint_view/detail/end_impl.hpp [2:2]
+        include/boost/fusion/view/joint_view/detail/next_impl.hpp [2:2]
+        include/boost/fusion/view/joint_view/detail/value_of_impl.hpp [2:2]
+        include/boost/fusion/view/joint_view/joint_view.hpp [2:2]
+        include/boost/fusion/view/joint_view/joint_view_iterator.hpp [2:2]
+        include/boost/fusion/view/nview.hpp [2:4]
+        include/boost/fusion/view/nview/detail/size_impl.hpp [2:2]
+        include/boost/fusion/view/reverse_view.hpp [2:2]
+        include/boost/fusion/view/reverse_view/detail/advance_impl.hpp [2:3]
+        include/boost/fusion/view/reverse_view/detail/begin_impl.hpp [2:2]
+        include/boost/fusion/view/reverse_view/detail/deref_impl.hpp [2:2]
+        include/boost/fusion/view/reverse_view/detail/distance_impl.hpp [2:3]
+        include/boost/fusion/view/reverse_view/detail/end_impl.hpp [2:2]
+        include/boost/fusion/view/reverse_view/detail/next_impl.hpp [2:2]
+        include/boost/fusion/view/reverse_view/detail/prior_impl.hpp [2:2]
+        include/boost/fusion/view/reverse_view/detail/value_of_impl.hpp [2:2]
+        include/boost/fusion/view/reverse_view/reverse_view.hpp [2:2]
+        include/boost/fusion/view/reverse_view/reverse_view_iterator.hpp [2:2]
+        include/boost/fusion/view/single_view.hpp [2:2]
+        include/boost/fusion/view/single_view/detail/begin_impl.hpp [2:3]
+        include/boost/fusion/view/single_view/detail/deref_impl.hpp [2:3]
+        include/boost/fusion/view/single_view/detail/end_impl.hpp [2:3]
+        include/boost/fusion/view/single_view/detail/next_impl.hpp [2:3]
+        include/boost/fusion/view/single_view/detail/value_of_impl.hpp [2:3]
+        include/boost/fusion/view/single_view/single_view.hpp [2:3]
+        include/boost/fusion/view/single_view/single_view_iterator.hpp [2:3]
+        include/boost/fusion/view/transform_view.hpp [2:2]
+        include/boost/fusion/view/transform_view/detail/advance_impl.hpp [2:3]
+        include/boost/fusion/view/transform_view/detail/at_impl.hpp [2:4]
+        include/boost/fusion/view/transform_view/detail/begin_impl.hpp [2:2]
+        include/boost/fusion/view/transform_view/detail/deref_impl.hpp [2:3]
+        include/boost/fusion/view/transform_view/detail/distance_impl.hpp [2:3]
+        include/boost/fusion/view/transform_view/detail/end_impl.hpp [2:2]
+        include/boost/fusion/view/transform_view/detail/equal_to_impl.hpp [2:2]
+        include/boost/fusion/view/transform_view/detail/next_impl.hpp [2:2]
+        include/boost/fusion/view/transform_view/detail/prior_impl.hpp [2:3]
+        include/boost/fusion/view/transform_view/detail/value_at_impl.hpp [2:4]
+        include/boost/fusion/view/transform_view/detail/value_of_impl.hpp [2:3]
+        include/boost/fusion/view/transform_view/transform_view.hpp [2:2]
+        include/boost/fusion/view/transform_view/transform_view_fwd.hpp [2:2]
+        include/boost/fusion/view/transform_view/transform_view_iterator.hpp [2:2]
+        include/boost/fusion/view/zip_view.hpp [2:3]
+        include/boost/fusion/view/zip_view/detail/advance_impl.hpp [2:3]
+        include/boost/fusion/view/zip_view/detail/at_impl.hpp [2:3]
+        include/boost/fusion/view/zip_view/detail/begin_impl.hpp [2:3]
+        include/boost/fusion/view/zip_view/detail/deref_impl.hpp [2:3]
+        include/boost/fusion/view/zip_view/detail/distance_impl.hpp [2:3]
+        include/boost/fusion/view/zip_view/detail/end_impl.hpp [2:3]
+        include/boost/fusion/view/zip_view/detail/equal_to_impl.hpp [2:3]
+        include/boost/fusion/view/zip_view/detail/next_impl.hpp [2:3]
+        include/boost/fusion/view/zip_view/detail/prior_impl.hpp [2:3]
+        include/boost/fusion/view/zip_view/detail/size_impl.hpp [2:3]
+        include/boost/fusion/view/zip_view/detail/value_at_impl.hpp [2:3]
+        include/boost/fusion/view/zip_view/detail/value_of_impl.hpp [2:3]
+        include/boost/fusion/view/zip_view/zip_view.hpp [2:3]
+        include/boost/fusion/view/zip_view/zip_view_iterator.hpp [2:3]
+        include/boost/fusion/view/zip_view/zip_view_iterator_fwd.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 604fdc25ecaa79236312492568566c5e
+BELONGS ya.make
+    License text:
+            Copyright (c) 2006 Eric Niebler
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/sequence/intrinsic/segments.hpp [2:2]
+        include/boost/fusion/support/is_segmented.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6130b1094fc9360db3fcfb20d798534e
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2011 Joel de Guzman
+            Copyright (c) 2015 Kohei Takahashi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/algorithm/iteration/accumulate.hpp [2:3]
+        include/boost/fusion/algorithm/iteration/accumulate_fwd.hpp [2:3]
+        include/boost/fusion/algorithm/iteration/detail/fold.hpp [2:5]
+        include/boost/fusion/algorithm/iteration/fold.hpp [2:5]
+        include/boost/fusion/algorithm/iteration/iter_fold.hpp [2:4]
+        include/boost/fusion/algorithm/iteration/reverse_fold.hpp [2:4]
+        include/boost/fusion/algorithm/iteration/reverse_iter_fold.hpp [2:4]
+        include/boost/fusion/container/deque/detail/convert_impl.hpp [2:4]
+        include/boost/fusion/container/generation/list_tie.hpp [2:2]
+        include/boost/fusion/support/detail/enabler.hpp [2:2]
+        include/boost/fusion/support/detail/index_sequence.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 65ba4d43cd2a4710f9a61abf485eb0b5
+BELONGS ya.make
+    License text:
+            Copyright (c) 2005-2012 Joel de Guzman
+            Copyright (c) 2005-2007 Dan Marsden
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/container/deque/deque_fwd.hpp [2:3]
+        include/boost/fusion/container/deque/detail/cpp03/deque_fwd.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6a98d8fc5a884a9147e3cd6981b9cba9
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2009 Joel de Guzman
+            Copyright (c) 2009-2010 Hartmut Kaiser
+            Copyright (c) 2010-2011 Christopher Schmidt
+            Copyright (c) 2013-2014 Damien Buhl
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/adapted/adt/adapt_adt.hpp [2:5]
+        include/boost/fusion/adapted/adt/adapt_adt_named.hpp [2:4]
+        include/boost/fusion/adapted/adt/adapt_assoc_adt.hpp [2:5]
+        include/boost/fusion/adapted/adt/detail/adapt_base.hpp [2:4]
+        include/boost/fusion/adapted/adt/detail/extension.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/adapt_base.hpp [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 70b7ec76fc92ec62f0bff9be8534781e
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2011 Joel de Guzman
+            Copyright (c) 2005-2006 Dan Marsden
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/adapted.hpp [2:3]
+        include/boost/fusion/adapted/adt.hpp [2:4]
+        include/boost/fusion/adapted/adt/detail/adapt_base.hpp [2:4]
+        include/boost/fusion/adapted/adt/detail/extension.hpp [2:4]
+        include/boost/fusion/adapted/array.hpp [2:4]
+        include/boost/fusion/adapted/boost_array.hpp [2:3]
+        include/boost/fusion/adapted/boost_array/array_iterator.hpp [2:3]
+        include/boost/fusion/adapted/boost_array/detail/at_impl.hpp [2:3]
+        include/boost/fusion/adapted/boost_array/detail/begin_impl.hpp [2:3]
+        include/boost/fusion/adapted/boost_array/detail/category_of_impl.hpp [2:3]
+        include/boost/fusion/adapted/boost_array/detail/end_impl.hpp [2:3]
+        include/boost/fusion/adapted/boost_array/detail/is_sequence_impl.hpp [2:3]
+        include/boost/fusion/adapted/boost_array/detail/is_view_impl.hpp [2:3]
+        include/boost/fusion/adapted/boost_array/detail/size_impl.hpp [2:3]
+        include/boost/fusion/adapted/boost_array/detail/value_at_impl.hpp [2:3]
+        include/boost/fusion/adapted/boost_array/tag_of.hpp [2:3]
+        include/boost/fusion/adapted/mpl.hpp [2:3]
+        include/boost/fusion/adapted/mpl/detail/at_impl.hpp [2:3]
+        include/boost/fusion/adapted/mpl/detail/begin_impl.hpp [2:3]
+        include/boost/fusion/adapted/mpl/detail/category_of_impl.hpp [2:3]
+        include/boost/fusion/adapted/mpl/detail/empty_impl.hpp [2:3]
+        include/boost/fusion/adapted/mpl/detail/end_impl.hpp [2:3]
+        include/boost/fusion/adapted/mpl/detail/has_key_impl.hpp [2:3]
+        include/boost/fusion/adapted/mpl/detail/is_sequence_impl.hpp [2:3]
+        include/boost/fusion/adapted/mpl/detail/is_view_impl.hpp [2:3]
+        include/boost/fusion/adapted/mpl/detail/size_impl.hpp [2:3]
+        include/boost/fusion/adapted/mpl/detail/value_at_impl.hpp [2:3]
+        include/boost/fusion/adapted/std_array.hpp [2:4]
+        include/boost/fusion/adapted/std_array/detail/at_impl.hpp [2:3]
+        include/boost/fusion/adapted/std_array/detail/begin_impl.hpp [2:4]
+        include/boost/fusion/adapted/std_array/detail/category_of_impl.hpp [2:3]
+        include/boost/fusion/adapted/std_array/detail/end_impl.hpp [2:4]
+        include/boost/fusion/adapted/std_array/detail/is_sequence_impl.hpp [2:4]
+        include/boost/fusion/adapted/std_array/detail/is_view_impl.hpp [2:4]
+        include/boost/fusion/adapted/std_array/detail/size_impl.hpp [2:4]
+        include/boost/fusion/adapted/std_array/detail/value_at_impl.hpp [2:3]
+        include/boost/fusion/adapted/std_array/std_array_iterator.hpp [2:4]
+        include/boost/fusion/adapted/std_array/tag_of.hpp [2:3]
+        include/boost/fusion/adapted/std_pair.hpp [2:4]
+        include/boost/fusion/adapted/struct.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/adapt_base.hpp [2:5]
+        include/boost/fusion/adapted/struct/detail/at_impl.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/begin_impl.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/category_of_impl.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/end_impl.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/extension.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/is_sequence_impl.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/is_view_impl.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/size_impl.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/value_at_impl.hpp [2:4]
+        include/boost/fusion/algorithm/transformation/filter.hpp [2:3]
+        include/boost/fusion/container/deque.hpp [2:3]
+        include/boost/fusion/container/deque/back_extended_deque.hpp [2:3]
+        include/boost/fusion/container/deque/deque.hpp [2:3]
+        include/boost/fusion/container/deque/deque_iterator.hpp [2:3]
+        include/boost/fusion/container/deque/detail/at_impl.hpp [2:3]
+        include/boost/fusion/container/deque/detail/begin_impl.hpp [2:3]
+        include/boost/fusion/container/deque/detail/convert_impl.hpp [2:4]
+        include/boost/fusion/container/deque/detail/cpp03/deque.hpp [2:3]
+        include/boost/fusion/container/deque/detail/cpp03/deque_forward_ctor.hpp [2:3]
+        include/boost/fusion/container/deque/detail/cpp03/deque_initial_size.hpp [2:3]
+        include/boost/fusion/container/deque/detail/cpp03/deque_keyed_values.hpp [2:3]
+        include/boost/fusion/container/deque/detail/cpp03/deque_keyed_values_call.hpp [2:3]
+        include/boost/fusion/container/deque/detail/cpp03/limits.hpp [2:3]
+        include/boost/fusion/container/deque/detail/deque_keyed_values.hpp [2:3]
+        include/boost/fusion/container/deque/detail/end_impl.hpp [2:3]
+        include/boost/fusion/container/deque/detail/keyed_element.hpp [2:3]
+        include/boost/fusion/container/deque/detail/value_at_impl.hpp [2:3]
+        include/boost/fusion/container/deque/front_extended_deque.hpp [2:3]
+        include/boost/fusion/container/list/detail/convert_impl.hpp [2:3]
+        include/boost/fusion/container/map/detail/cpp03/convert_impl.hpp [2:3]
+        include/boost/fusion/container/map/map_iterator.hpp [2:3]
+        include/boost/fusion/container/set/detail/convert_impl.hpp [2:3]
+        include/boost/fusion/container/vector/detail/convert_impl.hpp [2:3]
+        include/boost/fusion/support/detail/is_mpl_sequence.hpp [2:3]
+        include/boost/fusion/support/tag_of_fwd.hpp [2:3]
+        include/boost/fusion/view/filter_view/detail/equal_to_impl.hpp [2:3]
+        include/boost/fusion/view/reverse_view/detail/advance_impl.hpp [2:3]
+        include/boost/fusion/view/reverse_view/detail/distance_impl.hpp [2:3]
+        include/boost/fusion/view/transform_view/detail/advance_impl.hpp [2:3]
+        include/boost/fusion/view/transform_view/detail/at_impl.hpp [2:4]
+        include/boost/fusion/view/transform_view/detail/distance_impl.hpp [2:3]
+        include/boost/fusion/view/transform_view/detail/prior_impl.hpp [2:3]
+        include/boost/fusion/view/transform_view/detail/value_at_impl.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 71f99a73ae228de2701864e837c3c359
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2007 Hartmut Kaiser
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/include/in.hpp [2:2]
+        include/boost/fusion/include/io.hpp [2:2]
+        include/boost/fusion/include/out.hpp [2:2]
+        include/boost/fusion/include/value_at.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 725bf619a93c94289aea04b05b43067f
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2011 Joel de Guzman
+            Copyright (c) 2007 Dan Marsden
+            Copyright (c) 2009 Christopher Schmidt
+            Copyright (c) 2018 Kohei Takahashi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/algorithm/query/detail/find_if.hpp [2:5]
+        include/boost/fusion/container/map/detail/cpp03/begin_impl.hpp [2:3]
+        include/boost/fusion/container/map/detail/cpp03/deref_data_impl.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/deref_impl.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/end_impl.hpp [2:3]
+        include/boost/fusion/container/map/detail/cpp03/key_of_impl.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/value_of_data_impl.hpp [2:2]
+        include/boost/fusion/container/map/detail/cpp03/value_of_impl.hpp [2:2]
+        include/boost/fusion/container/set/detail/begin_impl.hpp [2:3]
+        include/boost/fusion/container/set/detail/deref_data_impl.hpp [2:2]
+        include/boost/fusion/container/set/detail/deref_impl.hpp [2:2]
+        include/boost/fusion/container/set/detail/end_impl.hpp [2:3]
+        include/boost/fusion/container/set/detail/key_of_impl.hpp [2:2]
+        include/boost/fusion/container/set/detail/value_of_data_impl.hpp [2:2]
+        include/boost/fusion/container/set/detail/value_of_impl.hpp [2:2]
+        include/boost/fusion/include/deref_data.hpp [2:2]
+        include/boost/fusion/include/key_of.hpp [2:2]
+        include/boost/fusion/include/value_of_data.hpp [2:2]
+        include/boost/fusion/iterator/basic_iterator.hpp [2:2]
+        include/boost/fusion/iterator/deref_data.hpp [2:2]
+        include/boost/fusion/iterator/key_of.hpp [2:2]
+        include/boost/fusion/iterator/value_of_data.hpp [2:2]
+        include/boost/fusion/view/filter_view/detail/deref_data_impl.hpp [2:2]
+        include/boost/fusion/view/filter_view/detail/key_of_impl.hpp [2:2]
+        include/boost/fusion/view/filter_view/detail/value_of_data_impl.hpp [2:2]
+        include/boost/fusion/view/joint_view/detail/deref_data_impl.hpp [2:2]
+        include/boost/fusion/view/joint_view/detail/key_of_impl.hpp [2:2]
+        include/boost/fusion/view/joint_view/detail/value_of_data_impl.hpp [2:2]
+        include/boost/fusion/view/reverse_view/detail/at_impl.hpp [2:2]
+        include/boost/fusion/view/reverse_view/detail/deref_data_impl.hpp [2:3]
+        include/boost/fusion/view/reverse_view/detail/key_of_impl.hpp [2:3]
+        include/boost/fusion/view/reverse_view/detail/value_at_impl.hpp [2:2]
+        include/boost/fusion/view/reverse_view/detail/value_of_data_impl.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 73a854045058b52a933e9b9c1ed5c5bd
+BELONGS ya.make
+    License text:
+            Copyright (c) 2007 Tobias Schwinger
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/container/list/detail/empty_impl.hpp [2:2]
+        include/boost/fusion/functional/generation.hpp [2:2]
+        include/boost/fusion/functional/generation/detail/gen_make_adapter.hpp [2:2]
+        include/boost/fusion/functional/generation/make_fused.hpp [2:2]
+        include/boost/fusion/functional/generation/make_fused_function_object.hpp [2:2]
+        include/boost/fusion/functional/generation/make_fused_procedure.hpp [2:2]
+        include/boost/fusion/functional/generation/make_unfused.hpp [2:2]
+        include/boost/fusion/support/deduce.hpp [2:2]
+        include/boost/fusion/support/deduce_sequence.hpp [2:2]
+        include/boost/fusion/support/sequence_base.hpp [2:3]
+        include/boost/fusion/view/iterator_range/detail/at_impl.hpp [2:2]
+        include/boost/fusion/view/iterator_range/detail/value_at_impl.hpp [2:2]
+        include/boost/fusion/view/repetitive_view.hpp [2:2]
+        include/boost/fusion/view/repetitive_view/detail/begin_impl.hpp [2:2]
+        include/boost/fusion/view/repetitive_view/detail/deref_impl.hpp [2:2]
+        include/boost/fusion/view/repetitive_view/detail/end_impl.hpp [2:2]
+        include/boost/fusion/view/repetitive_view/detail/next_impl.hpp [2:2]
+        include/boost/fusion/view/repetitive_view/detail/value_of_impl.hpp [2:2]
+        include/boost/fusion/view/repetitive_view/repetitive_view.hpp [2:2]
+        include/boost/fusion/view/repetitive_view/repetitive_view_fwd.hpp [2:2]
+        include/boost/fusion/view/repetitive_view/repetitive_view_iterator.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7d5110d3ce71c7d285877787619305f3
+BELONGS ya.make
+    License text:
+            Copyright (c) 2005-2006 Joao Abecasis
+            Copyright (c) 2006-2007 Tobias Schwinger
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/functional/invocation/invoke.hpp [2:3]
+        include/boost/fusion/functional/invocation/invoke_function_object.hpp [2:3]
+        include/boost/fusion/functional/invocation/invoke_procedure.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7dd6d1d05da218a30c942d31b089b985
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2009 Joel de Guzman
+            Copyright (c) 2009-2010 Hartmut Kaiser
+            Copyright (c) 2010-2011 Christopher Schmidt
+            Copyright (c) 2013-2014 Damien Buhl
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/adapted/adt/adapt_adt.hpp [2:5]
+        include/boost/fusion/adapted/adt/adapt_assoc_adt.hpp [2:5]
+        include/boost/fusion/adapted/struct/adapt_assoc_struct_named.hpp [2:2]
+        include/boost/fusion/adapted/struct/adapt_struct_named.hpp [2:4]
+        include/boost/fusion/adapted/struct/define_assoc_struct.hpp [2:2]
+        include/boost/fusion/adapted/struct/define_struct.hpp [2:2]
+        include/boost/fusion/adapted/struct/detail/define_struct.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7e4aa3d1095ffd1092cff9f549b3de89
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2011 Joel de Guzman
+            Copyright (c) 2005 Eric Niebler
+            Copyright (c) 2007 Dan Marsden
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/algorithm/query/any.hpp [2:4]
+        include/boost/fusion/algorithm/query/detail/any.hpp [2:4]
+        include/boost/fusion/container/generation/make_cons.hpp [2:3]
+        include/boost/fusion/container/list/cons.hpp [2:3]
+        include/boost/fusion/container/list/cons_fwd.hpp [2:3]
+        include/boost/fusion/container/list/cons_iterator.hpp [2:3]
+        include/boost/fusion/container/list/detail/begin_impl.hpp [2:3]
+        include/boost/fusion/container/list/detail/deref_impl.hpp [2:3]
+        include/boost/fusion/container/list/detail/end_impl.hpp [2:3]
+        include/boost/fusion/container/list/detail/next_impl.hpp [2:3]
+        include/boost/fusion/container/list/detail/value_of_impl.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7fe227ec710d458b7abf79bdc3c1ad1e
+BELONGS ya.make
+    License text:
+            Copyright (c) 2011 Thomas Heller
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/support/detail/pp_round.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 827562f5ed05600883ea03e3e0a2c31c
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2007 Joel de Guzman
+            Copyright (c) 2007 Dan Marsden
+            Copyright (c) 2018 Kohei Takahashi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/algorithm/iteration/for_each.hpp [2:4]
+        include/boost/fusion/algorithm/iteration/for_each_fwd.hpp [2:3]
+        include/boost/fusion/algorithm/query/detail/find_if.hpp [2:5]
+        include/boost/fusion/algorithm/transformation/remove_if.hpp [2:3]
+        include/boost/fusion/container/map/detail/value_at_key_impl.hpp [2:3]
+        include/boost/fusion/support/detail/and.hpp [2:3]
+        include/boost/fusion/support/detail/is_native_fusion_sequence.hpp [2:2]
+        include/boost/fusion/support/unused.hpp [2:3]
+        include/boost/fusion/view/filter_view/detail/next_impl.hpp [2:3]
+        include/boost/fusion/view/filter_view/filter_view_iterator.hpp [2:3]
+        include/boost/fusion/view/transform_view/detail/at_impl.hpp [2:4]
+        include/boost/fusion/view/transform_view/detail/deref_impl.hpp [2:3]
+        include/boost/fusion/view/transform_view/detail/value_at_impl.hpp [2:4]
+        include/boost/fusion/view/transform_view/detail/value_of_impl.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8464df292fc04767d911d71f2cb5e8c7
+BELONGS ya.make
+    License text:
+            Copyright (c) 2005-2012 Joel de Guzman
+            Copyright (c) 2005-2006 Dan Marsden
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/container/deque/back_extended_deque.hpp [2:3]
+        include/boost/fusion/container/deque/deque.hpp [2:3]
+        include/boost/fusion/container/deque/deque_fwd.hpp [2:3]
+        include/boost/fusion/container/deque/deque_iterator.hpp [2:3]
+        include/boost/fusion/container/deque/detail/at_impl.hpp [2:3]
+        include/boost/fusion/container/deque/detail/begin_impl.hpp [2:3]
+        include/boost/fusion/container/deque/detail/convert_impl.hpp [2:4]
+        include/boost/fusion/container/deque/detail/cpp03/as_deque.hpp [2:3]
+        include/boost/fusion/container/deque/detail/cpp03/deque.hpp [2:3]
+        include/boost/fusion/container/deque/detail/cpp03/deque_forward_ctor.hpp [2:3]
+        include/boost/fusion/container/deque/detail/cpp03/deque_fwd.hpp [2:3]
+        include/boost/fusion/container/deque/detail/cpp03/deque_initial_size.hpp [2:3]
+        include/boost/fusion/container/deque/detail/cpp03/deque_keyed_values.hpp [2:3]
+        include/boost/fusion/container/deque/detail/cpp03/deque_keyed_values_call.hpp [2:3]
+        include/boost/fusion/container/deque/detail/cpp03/limits.hpp [2:3]
+        include/boost/fusion/container/deque/detail/deque_keyed_values.hpp [2:3]
+        include/boost/fusion/container/deque/detail/end_impl.hpp [2:3]
+        include/boost/fusion/container/deque/detail/keyed_element.hpp [2:3]
+        include/boost/fusion/container/deque/detail/value_at_impl.hpp [2:3]
+        include/boost/fusion/container/deque/front_extended_deque.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 97e496341d3cdfa138aa5b3dd79cbe08
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2011 Joel de Guzman
+            Copyright (c) 2006 Tobias Schwinger
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/support/pair.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9f22f5d5569d36c36ab19ecf517c15c0
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2011 Joel de Guzman
+            Copyright (c) 2006 Dan Marsden
+            Copyright (c) 2009-2010 Christopher Schmidt
+            Copyright (c) 2015 Kohei Takahashi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/algorithm/iteration/detail/fold.hpp [2:5]
+        include/boost/fusion/algorithm/transformation/detail/preprocessed/zip10.hpp [2:3]
+        include/boost/fusion/algorithm/transformation/detail/preprocessed/zip20.hpp [2:3]
+        include/boost/fusion/algorithm/transformation/detail/preprocessed/zip30.hpp [2:3]
+        include/boost/fusion/algorithm/transformation/detail/preprocessed/zip40.hpp [2:3]
+        include/boost/fusion/algorithm/transformation/detail/preprocessed/zip50.hpp [2:3]
+        include/boost/fusion/algorithm/transformation/join.hpp [2:3]
+        include/boost/fusion/algorithm/transformation/zip.hpp [2:3]
+        include/boost/fusion/algorithm/transformation/zip.hpp [43:44]
+        include/boost/fusion/container/deque/convert.hpp [2:3]
+        include/boost/fusion/container/deque/detail/cpp03/as_deque.hpp [2:3]
+        include/boost/fusion/container/generation/detail/pp_deque_tie.hpp [2:3]
+        include/boost/fusion/container/generation/detail/pp_make_deque.hpp [2:3]
+        include/boost/fusion/container/generation/detail/pp_map_tie.hpp [2:3]
+        include/boost/fusion/container/generation/pair_tie.hpp [2:3]
+        include/boost/fusion/sequence/intrinsic/at_key.hpp [2:3]
+        include/boost/fusion/sequence/intrinsic/swap.hpp [2:3]
+        include/boost/fusion/sequence/intrinsic/value_at_key.hpp [2:3]
+        include/boost/fusion/view/detail/strictest_traversal.hpp [2:3]
+        include/boost/fusion/view/nview.hpp [2:4]
+        include/boost/fusion/view/zip_view.hpp [2:3]
+        include/boost/fusion/view/zip_view/detail/advance_impl.hpp [2:3]
+        include/boost/fusion/view/zip_view/detail/at_impl.hpp [2:3]
+        include/boost/fusion/view/zip_view/detail/begin_impl.hpp [2:3]
+        include/boost/fusion/view/zip_view/detail/deref_impl.hpp [2:3]
+        include/boost/fusion/view/zip_view/detail/distance_impl.hpp [2:3]
+        include/boost/fusion/view/zip_view/detail/end_impl.hpp [2:3]
+        include/boost/fusion/view/zip_view/detail/equal_to_impl.hpp [2:3]
+        include/boost/fusion/view/zip_view/detail/next_impl.hpp [2:3]
+        include/boost/fusion/view/zip_view/detail/prior_impl.hpp [2:3]
+        include/boost/fusion/view/zip_view/detail/size_impl.hpp [2:3]
+        include/boost/fusion/view/zip_view/detail/value_at_impl.hpp [2:3]
+        include/boost/fusion/view/zip_view/detail/value_of_impl.hpp [2:3]
+        include/boost/fusion/view/zip_view/zip_view.hpp [2:3]
+        include/boost/fusion/view/zip_view/zip_view_iterator.hpp [2:3]
+        include/boost/fusion/view/zip_view/zip_view_iterator_fwd.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a0e20da7cdeea7e16b12e33f7083427b
+BELONGS ya.make
+    License text:
+            Copyright (c) 2014 Jamboree
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/include/flatten.hpp [2:2]
+        include/boost/fusion/include/flatten_view.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a1b12dcef6e1643e121684b10b24a56c
+BELONGS ya.make
+    License text:
+            Copyright (c) 2012 Kohei Takahashi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/adapted/boost_tuple/mpl/clear.hpp [2:2]
+        include/boost/fusion/adapted/std_tuple/mpl/clear.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a70d1de046a7f07a72bd05b73f591262
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2009 Joel de Guzman
+            Copyright (c) 2009-2010 Hartmut Kaiser
+            Copyright (c) 2010-2011 Christopher Schmidt
+            Copyright (c) 2013-2014 Damien Buhl
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/adapted/adt/adapt_adt.hpp [2:5]
+        include/boost/fusion/adapted/adt/adapt_adt_named.hpp [2:4]
+        include/boost/fusion/adapted/struct/adapt_struct_named.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/namespace.hpp [2:3]
+        include/boost/fusion/adapted/struct/detail/proxy_type.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ab55c1af00e5063abe7c47185db8e544
+BELONGS ya.make
+    License text:
+            Copyright (c) 2011 Eric Niebler
+            Copyright (c) 2015 Kohei Takahashi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/algorithm/iteration/accumulate_fwd.hpp [2:3]
+        include/boost/fusion/algorithm/iteration/detail/segmented_fold.hpp [2:2]
+        include/boost/fusion/algorithm/iteration/detail/segmented_for_each.hpp [2:2]
+        include/boost/fusion/algorithm/iteration/fold_fwd.hpp [2:2]
+        include/boost/fusion/algorithm/iteration/for_each_fwd.hpp [2:3]
+        include/boost/fusion/algorithm/iteration/iter_fold_fwd.hpp [2:2]
+        include/boost/fusion/algorithm/iteration/reverse_fold_fwd.hpp [2:2]
+        include/boost/fusion/algorithm/iteration/reverse_iter_fold_fwd.hpp [2:2]
+        include/boost/fusion/algorithm/query/detail/segmented_find.hpp [2:2]
+        include/boost/fusion/algorithm/query/detail/segmented_find_if.hpp [2:2]
+        include/boost/fusion/algorithm/query/find.hpp [2:3]
+        include/boost/fusion/algorithm/query/find_fwd.hpp [2:2]
+        include/boost/fusion/algorithm/query/find_if.hpp [2:3]
+        include/boost/fusion/algorithm/query/find_if_fwd.hpp [2:2]
+        include/boost/fusion/container/list/detail/reverse_cons.hpp [2:2]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vector10_fwd.hpp [2:3]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vector20_fwd.hpp [2:3]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vector30_fwd.hpp [2:3]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vector40_fwd.hpp [2:3]
+        include/boost/fusion/container/vector/detail/cpp03/preprocessed/vector50_fwd.hpp [2:3]
+        include/boost/fusion/container/vector/detail/cpp03/vector10_fwd.hpp [3:4]
+        include/boost/fusion/container/vector/detail/cpp03/vector10_fwd.hpp [31:32]
+        include/boost/fusion/container/vector/detail/cpp03/vector20_fwd.hpp [3:4]
+        include/boost/fusion/container/vector/detail/cpp03/vector20_fwd.hpp [25:26]
+        include/boost/fusion/container/vector/detail/cpp03/vector30_fwd.hpp [3:4]
+        include/boost/fusion/container/vector/detail/cpp03/vector30_fwd.hpp [25:26]
+        include/boost/fusion/container/vector/detail/cpp03/vector40_fwd.hpp [3:4]
+        include/boost/fusion/container/vector/detail/cpp03/vector40_fwd.hpp [25:26]
+        include/boost/fusion/container/vector/detail/cpp03/vector50_fwd.hpp [3:4]
+        include/boost/fusion/container/vector/detail/cpp03/vector50_fwd.hpp [25:26]
+        include/boost/fusion/include/is_segmented.hpp [2:2]
+        include/boost/fusion/include/segmented_fold_until.hpp [2:2]
+        include/boost/fusion/include/segmented_iterator.hpp [2:2]
+        include/boost/fusion/include/segments.hpp [2:2]
+        include/boost/fusion/iterator/detail/segment_sequence.hpp [2:2]
+        include/boost/fusion/iterator/detail/segmented_equal_to.hpp [2:2]
+        include/boost/fusion/iterator/detail/segmented_iterator.hpp [2:2]
+        include/boost/fusion/iterator/detail/segmented_next_impl.hpp [2:2]
+        include/boost/fusion/iterator/segmented_iterator.hpp [2:2]
+        include/boost/fusion/sequence/intrinsic/detail/segmented_begin.hpp [2:2]
+        include/boost/fusion/sequence/intrinsic/detail/segmented_begin_impl.hpp [2:2]
+        include/boost/fusion/sequence/intrinsic/detail/segmented_end.hpp [2:2]
+        include/boost/fusion/sequence/intrinsic/detail/segmented_end_impl.hpp [2:2]
+        include/boost/fusion/sequence/intrinsic/detail/segmented_size.hpp [2:2]
+        include/boost/fusion/support/detail/segmented_fold_until_impl.hpp [2:2]
+        include/boost/fusion/support/segmented_fold_until.hpp [2:2]
+        include/boost/fusion/view/iterator_range/detail/is_segmented_impl.hpp [2:2]
+        include/boost/fusion/view/iterator_range/detail/segmented_iterator_range.hpp [2:2]
+        include/boost/fusion/view/iterator_range/detail/segments_impl.hpp [2:2]
+        include/boost/fusion/view/iterator_range/detail/size_impl.hpp [2:2]
+        include/boost/fusion/view/joint_view/joint_view_fwd.hpp [2:2]
+        include/boost/fusion/view/single_view/detail/advance_impl.hpp [2:2]
+        include/boost/fusion/view/single_view/detail/at_impl.hpp [2:2]
+        include/boost/fusion/view/single_view/detail/begin_impl.hpp [2:3]
+        include/boost/fusion/view/single_view/detail/deref_impl.hpp [2:3]
+        include/boost/fusion/view/single_view/detail/distance_impl.hpp [2:2]
+        include/boost/fusion/view/single_view/detail/end_impl.hpp [2:3]
+        include/boost/fusion/view/single_view/detail/equal_to_impl.hpp [2:2]
+        include/boost/fusion/view/single_view/detail/next_impl.hpp [2:3]
+        include/boost/fusion/view/single_view/detail/prior_impl.hpp [2:2]
+        include/boost/fusion/view/single_view/detail/size_impl.hpp [2:2]
+        include/boost/fusion/view/single_view/detail/value_at_impl.hpp [2:2]
+        include/boost/fusion/view/single_view/detail/value_of_impl.hpp [2:3]
+        include/boost/fusion/view/single_view/single_view.hpp [2:3]
+        include/boost/fusion/view/single_view/single_view_iterator.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL acec60e7a5ccc2aee8d37ebb5ffda3a2
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2009 Joel de Guzman
+            Copyright (c) 2009-2010 Hartmut Kaiser
+            Copyright (c) 2010-2011 Christopher Schmidt
+            Copyright (c) 2013-2014 Damien Buhl
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/adapted/adt/adapt_adt.hpp [2:5]
+        include/boost/fusion/adapted/adt/adapt_assoc_adt.hpp [2:5]
+        include/boost/fusion/adapted/adt/detail/adapt_base_assoc_attr_filler.hpp [2:2]
+        include/boost/fusion/adapted/adt/detail/adapt_base_attr_filler.hpp [2:2]
+        include/boost/fusion/adapted/struct/adapt_struct.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/adapt_auto.hpp [2:2]
+        include/boost/fusion/adapted/struct/detail/adapt_base.hpp [2:5]
+        include/boost/fusion/adapted/struct/detail/adapt_base_assoc_attr_filler.hpp [2:2]
+        include/boost/fusion/adapted/struct/detail/adapt_base_attr_filler.hpp [2:2]
+        include/boost/fusion/adapted/struct/detail/adapt_is_tpl.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d029d22004bd9ecc9a0c8c630af36231
+BELONGS ya.make
+    License text:
+            Copyright Paul Mensonides 2003
+            Copyright Aleksey Gurtovoy 2003-2004
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/adapted/struct/detail/preprocessor/is_seq.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d33733b6812586c20c76107355a1b34c
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2011 Joel de Guzman
+            Copyright (c) 2017 Kohei Takahashi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/container/vector/detail/cpp03/vector.hpp [2:3]
+        include/boost/fusion/include/std_array.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d4340d0d736b54981d79b03c9fdb5dd0
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2013 Joel de Guzman
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/algorithm/auxiliary/move.hpp [2:2]
+        include/boost/fusion/container/generation/deque_tie.hpp [2:2]
+        include/boost/fusion/container/generation/make_deque.hpp [2:2]
+        include/boost/fusion/container/generation/make_map.hpp [2:2]
+        include/boost/fusion/container/generation/map_tie.hpp [2:2]
+        include/boost/fusion/container/map/detail/at_impl.hpp [2:2]
+        include/boost/fusion/container/map/detail/at_key_impl.hpp [2:2]
+        include/boost/fusion/container/map/detail/value_at_impl.hpp [2:2]
+        include/boost/fusion/container/map/detail/value_at_key_impl.hpp [2:3]
+        include/boost/fusion/include/move.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL db499a5ed298660439fc712d0054f814
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001 Doug Gregor
+            Copyright (c) 1999-2003 Jaakko Jarvi
+            Copyright (c) 2001-2011 Joel de Guzman
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/container/generation/ignore.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e2ac57f2ea4023ec9b11936484e4a2f0
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2011 Joel de Guzman
+            Copyright (c) 2005-2006 Dan Marsden
+            Copyright (c) 2010 Christopher Schmidt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/adapted/adt.hpp [2:4]
+        include/boost/fusion/adapted/adt/adapt_adt_named.hpp [2:4]
+        include/boost/fusion/adapted/adt/adapt_assoc_adt_named.hpp [2:2]
+        include/boost/fusion/adapted/adt/detail/adapt_base.hpp [2:4]
+        include/boost/fusion/adapted/adt/detail/extension.hpp [2:4]
+        include/boost/fusion/adapted/array.hpp [2:4]
+        include/boost/fusion/adapted/array/at_impl.hpp [2:2]
+        include/boost/fusion/adapted/array/begin_impl.hpp [2:2]
+        include/boost/fusion/adapted/array/category_of_impl.hpp [2:2]
+        include/boost/fusion/adapted/array/deref_impl.hpp [2:2]
+        include/boost/fusion/adapted/array/end_impl.hpp [2:2]
+        include/boost/fusion/adapted/array/is_sequence_impl.hpp [2:2]
+        include/boost/fusion/adapted/array/is_view_impl.hpp [2:2]
+        include/boost/fusion/adapted/array/size_impl.hpp [2:2]
+        include/boost/fusion/adapted/array/tag_of.hpp [2:2]
+        include/boost/fusion/adapted/array/value_at_impl.hpp [2:2]
+        include/boost/fusion/adapted/array/value_of_impl.hpp [2:2]
+        include/boost/fusion/adapted/struct/detail/namespace.hpp [2:3]
+        include/boost/fusion/adapted/struct/detail/proxy_type.hpp [2:3]
+        include/boost/fusion/algorithm/iteration/detail/preprocessed/iter_fold.hpp [2:3]
+        include/boost/fusion/algorithm/iteration/detail/preprocessed/reverse_iter_fold.hpp [2:3]
+        include/boost/fusion/algorithm/iteration/iter_fold.hpp [2:4]
+        include/boost/fusion/algorithm/iteration/iter_fold.hpp [37:38]
+        include/boost/fusion/algorithm/iteration/reverse_fold.hpp [2:4]
+        include/boost/fusion/algorithm/iteration/reverse_iter_fold.hpp [2:4]
+        include/boost/fusion/algorithm/iteration/reverse_iter_fold.hpp [37:38]
+        include/boost/fusion/container/deque/detail/is_sequence_impl.hpp [2:2]
+        include/boost/fusion/include/adapt_adt_named.hpp [2:2]
+        include/boost/fusion/include/adapt_assoc_adt.hpp [2:2]
+        include/boost/fusion/include/adapt_assoc_adt_named.hpp [2:2]
+        include/boost/fusion/include/adapt_assoc_struct.hpp [2:2]
+        include/boost/fusion/include/adapt_assoc_struct_named.hpp [2:2]
+        include/boost/fusion/include/adapt_struct_named.hpp [2:2]
+        include/boost/fusion/include/boost_array.hpp [2:2]
+        include/boost/fusion/include/define_assoc_struct.hpp [2:2]
+        include/boost/fusion/include/define_struct.hpp [2:2]
+        include/boost/fusion/include/iter_fold.hpp [2:2]
+        include/boost/fusion/include/make_unfused.hpp [2:2]
+        include/boost/fusion/include/proxy_type.hpp [2:2]
+        include/boost/fusion/include/reverse_fold.hpp [2:2]
+        include/boost/fusion/include/reverse_iter_fold.hpp [2:2]
+        include/boost/fusion/include/unfused.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e33f9b0942991a1015e55f9d51fcdfe9
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2007 Joel de Guzman
+            Copyright (c) 2007 Dan Marsden
+            Copyright (c) 2009-2011 Christopher Schmidt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/adapted/struct/adapt_assoc_struct.hpp [2:4]
+        include/boost/fusion/adapted/struct/adapt_struct.hpp [2:4]
+        include/boost/fusion/adapted/struct/adapt_struct_named.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/extension.hpp [2:4]
+        include/boost/fusion/algorithm/iteration/for_each.hpp [2:4]
+        include/boost/fusion/include/accumulate.hpp [2:2]
+        include/boost/fusion/include/adapt_adt.hpp [2:2]
+        include/boost/fusion/include/adapt_struct.hpp [2:2]
+        include/boost/fusion/include/adapted.hpp [2:2]
+        include/boost/fusion/include/adapter.hpp [2:2]
+        include/boost/fusion/include/advance.hpp [2:2]
+        include/boost/fusion/include/algorithm.hpp [2:2]
+        include/boost/fusion/include/all.hpp [2:2]
+        include/boost/fusion/include/any.hpp [2:2]
+        include/boost/fusion/include/array.hpp [2:2]
+        include/boost/fusion/include/as_deque.hpp [2:2]
+        include/boost/fusion/include/as_list.hpp [2:2]
+        include/boost/fusion/include/as_map.hpp [2:2]
+        include/boost/fusion/include/as_set.hpp [2:2]
+        include/boost/fusion/include/as_vector.hpp [2:2]
+        include/boost/fusion/include/at.hpp [2:2]
+        include/boost/fusion/include/at_c.hpp [2:2]
+        include/boost/fusion/include/at_key.hpp [2:2]
+        include/boost/fusion/include/back.hpp [2:2]
+        include/boost/fusion/include/begin.hpp [2:2]
+        include/boost/fusion/include/boost_tuple.hpp [2:2]
+        include/boost/fusion/include/category_of.hpp [2:2]
+        include/boost/fusion/include/clear.hpp [2:2]
+        include/boost/fusion/include/comparison.hpp [2:2]
+        include/boost/fusion/include/cons.hpp [2:2]
+        include/boost/fusion/include/cons_tie.hpp [2:2]
+        include/boost/fusion/include/container.hpp [2:2]
+        include/boost/fusion/include/convert.hpp [2:2]
+        include/boost/fusion/include/count.hpp [2:2]
+        include/boost/fusion/include/count_if.hpp [2:2]
+        include/boost/fusion/include/deduce.hpp [2:2]
+        include/boost/fusion/include/deduce_sequence.hpp [2:2]
+        include/boost/fusion/include/deque.hpp [2:2]
+        include/boost/fusion/include/deque_fwd.hpp [2:2]
+        include/boost/fusion/include/deque_tie.hpp [2:2]
+        include/boost/fusion/include/deref.hpp [2:2]
+        include/boost/fusion/include/distance.hpp [2:2]
+        include/boost/fusion/include/empty.hpp [2:2]
+        include/boost/fusion/include/end.hpp [2:2]
+        include/boost/fusion/include/equal_to.hpp [2:2]
+        include/boost/fusion/include/erase.hpp [2:2]
+        include/boost/fusion/include/erase_key.hpp [2:2]
+        include/boost/fusion/include/filter.hpp [2:2]
+        include/boost/fusion/include/filter_if.hpp [2:2]
+        include/boost/fusion/include/filter_view.hpp [2:2]
+        include/boost/fusion/include/find.hpp [2:2]
+        include/boost/fusion/include/find_if.hpp [2:2]
+        include/boost/fusion/include/fold.hpp [2:2]
+        include/boost/fusion/include/for_each.hpp [2:2]
+        include/boost/fusion/include/front.hpp [2:2]
+        include/boost/fusion/include/functional.hpp [2:2]
+        include/boost/fusion/include/fused.hpp [2:2]
+        include/boost/fusion/include/fused_function_object.hpp [2:2]
+        include/boost/fusion/include/fused_procedure.hpp [2:2]
+        include/boost/fusion/include/generation.hpp [2:2]
+        include/boost/fusion/include/greater.hpp [2:2]
+        include/boost/fusion/include/greater_equal.hpp [2:2]
+        include/boost/fusion/include/has_key.hpp [2:2]
+        include/boost/fusion/include/ignore.hpp [2:2]
+        include/boost/fusion/include/insert.hpp [2:2]
+        include/boost/fusion/include/insert_range.hpp [2:2]
+        include/boost/fusion/include/intrinsic.hpp [2:2]
+        include/boost/fusion/include/invocation.hpp [2:2]
+        include/boost/fusion/include/invoke.hpp [2:2]
+        include/boost/fusion/include/invoke_function_object.hpp [2:2]
+        include/boost/fusion/include/invoke_procedure.hpp [2:2]
+        include/boost/fusion/include/is_iterator.hpp [2:2]
+        include/boost/fusion/include/is_sequence.hpp [2:2]
+        include/boost/fusion/include/is_view.hpp [2:2]
+        include/boost/fusion/include/iteration.hpp [2:2]
+        include/boost/fusion/include/iterator.hpp [2:2]
+        include/boost/fusion/include/iterator_base.hpp [2:2]
+        include/boost/fusion/include/iterator_facade.hpp [2:2]
+        include/boost/fusion/include/iterator_range.hpp [2:2]
+        include/boost/fusion/include/join.hpp [2:2]
+        include/boost/fusion/include/joint_view.hpp [2:2]
+        include/boost/fusion/include/less.hpp [2:2]
+        include/boost/fusion/include/less_equal.hpp [2:2]
+        include/boost/fusion/include/list.hpp [2:2]
+        include/boost/fusion/include/list_fwd.hpp [2:2]
+        include/boost/fusion/include/list_tie.hpp [2:2]
+        include/boost/fusion/include/make_cons.hpp [2:2]
+        include/boost/fusion/include/make_deque.hpp [2:2]
+        include/boost/fusion/include/make_fused.hpp [2:2]
+        include/boost/fusion/include/make_fused_function_object.hpp [2:2]
+        include/boost/fusion/include/make_fused_procedure.hpp [2:2]
+        include/boost/fusion/include/make_list.hpp [2:2]
+        include/boost/fusion/include/make_map.hpp [2:2]
+        include/boost/fusion/include/make_set.hpp [2:2]
+        include/boost/fusion/include/make_tuple.hpp [2:2]
+        include/boost/fusion/include/make_vector.hpp [2:2]
+        include/boost/fusion/include/map.hpp [2:2]
+        include/boost/fusion/include/map_fwd.hpp [2:2]
+        include/boost/fusion/include/map_tie.hpp [2:2]
+        include/boost/fusion/include/mpl.hpp [2:2]
+        include/boost/fusion/include/next.hpp [2:2]
+        include/boost/fusion/include/none.hpp [2:2]
+        include/boost/fusion/include/not_equal_to.hpp [2:2]
+        include/boost/fusion/include/nview.hpp [2:2]
+        include/boost/fusion/include/pair.hpp [2:2]
+        include/boost/fusion/include/pair_tie.hpp [2:2]
+        include/boost/fusion/include/pop_back.hpp [2:2]
+        include/boost/fusion/include/pop_front.hpp [2:2]
+        include/boost/fusion/include/prior.hpp [2:2]
+        include/boost/fusion/include/push_back.hpp [2:2]
+        include/boost/fusion/include/push_front.hpp [2:2]
+        include/boost/fusion/include/query.hpp [2:2]
+        include/boost/fusion/include/remove.hpp [2:2]
+        include/boost/fusion/include/remove_if.hpp [2:2]
+        include/boost/fusion/include/repetitive_view.hpp [2:2]
+        include/boost/fusion/include/replace.hpp [2:2]
+        include/boost/fusion/include/replace_if.hpp [2:2]
+        include/boost/fusion/include/reverse.hpp [2:2]
+        include/boost/fusion/include/reverse_view.hpp [2:2]
+        include/boost/fusion/include/sequence.hpp [2:2]
+        include/boost/fusion/include/sequence_base.hpp [2:2]
+        include/boost/fusion/include/sequence_facade.hpp [2:2]
+        include/boost/fusion/include/set.hpp [2:2]
+        include/boost/fusion/include/set_fwd.hpp [2:2]
+        include/boost/fusion/include/single_view.hpp [2:2]
+        include/boost/fusion/include/size.hpp [2:2]
+        include/boost/fusion/include/std_pair.hpp [2:2]
+        include/boost/fusion/include/struct.hpp [2:2]
+        include/boost/fusion/include/support.hpp [2:2]
+        include/boost/fusion/include/swap.hpp [2:2]
+        include/boost/fusion/include/tag_of.hpp [2:2]
+        include/boost/fusion/include/tag_of_fwd.hpp [2:2]
+        include/boost/fusion/include/transform.hpp [2:2]
+        include/boost/fusion/include/transform_view.hpp [2:2]
+        include/boost/fusion/include/transformation.hpp [2:2]
+        include/boost/fusion/include/tuple.hpp [2:2]
+        include/boost/fusion/include/tuple_fwd.hpp [2:2]
+        include/boost/fusion/include/tuple_tie.hpp [2:2]
+        include/boost/fusion/include/unfused_typed.hpp [2:2]
+        include/boost/fusion/include/unused.hpp [2:2]
+        include/boost/fusion/include/value_at_key.hpp [2:2]
+        include/boost/fusion/include/value_of.hpp [2:2]
+        include/boost/fusion/include/vector.hpp [2:2]
+        include/boost/fusion/include/vector10.hpp [2:2]
+        include/boost/fusion/include/vector20.hpp [2:2]
+        include/boost/fusion/include/vector30.hpp [2:2]
+        include/boost/fusion/include/vector40.hpp [2:2]
+        include/boost/fusion/include/vector50.hpp [2:2]
+        include/boost/fusion/include/vector_fwd.hpp [2:2]
+        include/boost/fusion/include/vector_tie.hpp [2:2]
+        include/boost/fusion/include/view.hpp [2:2]
+        include/boost/fusion/include/void.hpp [2:2]
+        include/boost/fusion/include/zip.hpp [2:2]
+        include/boost/fusion/include/zip_view.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e5360be9eee83c576021171be4c1dcfa
+BELONGS ya.make
+    License text:
+            Copyright (c) 2013 Mateusz Loskot
+            Copyright (c) 2001-2011 Joel de Guzman
+            Copyright (c) 2005-2006 Dan Marsden
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/adapted/std_array.hpp [2:4]
+        include/boost/fusion/adapted/std_array/detail/array_size.hpp [2:2]
+        include/boost/fusion/adapted/std_array/detail/begin_impl.hpp [2:4]
+        include/boost/fusion/adapted/std_array/detail/end_impl.hpp [2:4]
+        include/boost/fusion/adapted/std_array/detail/is_sequence_impl.hpp [2:4]
+        include/boost/fusion/adapted/std_array/detail/is_view_impl.hpp [2:4]
+        include/boost/fusion/adapted/std_array/detail/size_impl.hpp [2:4]
+        include/boost/fusion/adapted/std_array/std_array_iterator.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e777cb8c0600e2a77090b952364f50e2
+BELONGS ya.make
+    License text:
+            Copyright (c) 1999-2003 Jaakko Jarvi
+            Copyright (c) 1999-2003 Jeremiah Willcock
+            Copyright (c) 2001-2011 Joel de Guzman
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/sequence/io/detail/in.hpp [2:4]
+        include/boost/fusion/sequence/io/detail/manip.hpp [2:4]
+        include/boost/fusion/sequence/io/detail/out.hpp [2:4]
+        include/boost/fusion/sequence/io/in.hpp [2:4]
+        include/boost/fusion/sequence/io/out.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ec409aaa055f9ff0ccdde38e327ecdf4
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2011 Joel de Guzman
+            Copyright (c) 2005-2006 Dan Marsden
+            Copyright (c) 2009-2010 Christopher Schmidt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/adapted/std_pair.hpp [2:4]
+        include/boost/fusion/adapted/struct.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/at_impl.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/begin_impl.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/category_of_impl.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/deref_data_impl.hpp [2:2]
+        include/boost/fusion/adapted/struct/detail/deref_impl.hpp [2:2]
+        include/boost/fusion/adapted/struct/detail/end_impl.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/extension.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/is_sequence_impl.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/is_view_impl.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/key_of_impl.hpp [2:2]
+        include/boost/fusion/adapted/struct/detail/size_impl.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/value_at_impl.hpp [2:4]
+        include/boost/fusion/adapted/struct/detail/value_of_data_impl.hpp [2:2]
+        include/boost/fusion/adapted/struct/detail/value_of_impl.hpp [2:2]
+        include/boost/fusion/algorithm/iteration/detail/fold.hpp [2:5]
+        include/boost/fusion/algorithm/iteration/detail/preprocessed/fold.hpp [2:4]
+        include/boost/fusion/algorithm/iteration/detail/preprocessed/reverse_fold.hpp [2:3]
+        include/boost/fusion/algorithm/iteration/fold.hpp [2:5]
+        include/boost/fusion/algorithm/iteration/fold.hpp [35:37]
+        include/boost/fusion/algorithm/iteration/reverse_fold.hpp [37:38]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ede994e659efc353e0f29d6360b48dda
+BELONGS ya.make
+    License text:
+            Copyright Paul Mensonides 2003
+            Copyright Aleksey Gurtovoy 2003-2004
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/adapted/struct/detail/preprocessor/is_seq.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL eec5b9f3dab000f75bbd866c41254808
+BELONGS ya.make
+    License text:
+            Copyright (c) 2014,2018 Kohei Takahashi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/container/vector/detail/value_at_impl.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f292e7aaed3f315448930281fe405402
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2011 Joel de Guzman
+            Copyright (c) 2005, 2014 Eric Niebler
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/container/list/nil.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f654a91ae5842daef6292616876810df
+BELONGS ya.make
+    License text:
+            Copyright (c) 2012 Nathan Ridge
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/adapted/struct/define_struct_inline.hpp [2:2]
+        include/boost/fusion/adapted/struct/detail/define_struct_inline.hpp [2:2]
+        include/boost/fusion/include/define_struct_inline.hpp [2:2]
+        include/boost/fusion/support/as_const.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f6f9fad1b42d83826bdb8713dc511159
+BELONGS ya.make
+    License text:
+            Copyright (c) 2015 Agustin K-ballo Berge
+            Copyright (c) 2015 Kohei Takahashi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/support/detail/index_sequence.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f9a846689286adc00201dd976f81ff02
+BELONGS ya.make
+    License text:
+            Copyright (c) 2006-2007 Tobias Schwinger
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/functional.hpp [2:2]
+        include/boost/fusion/functional/adapter.hpp [2:2]
+        include/boost/fusion/functional/adapter/detail/access.hpp [2:2]
+        include/boost/fusion/functional/adapter/fused.hpp [2:2]
+        include/boost/fusion/functional/adapter/fused_function_object.hpp [2:2]
+        include/boost/fusion/functional/adapter/fused_procedure.hpp [2:2]
+        include/boost/fusion/functional/adapter/limits.hpp [2:2]
+        include/boost/fusion/functional/adapter/unfused.hpp [2:2]
+        include/boost/fusion/functional/adapter/unfused_typed.hpp [2:2]
+        include/boost/fusion/functional/invocation.hpp [2:2]
+        include/boost/fusion/functional/invocation/detail/that_ptr.hpp [2:2]
+        include/boost/fusion/functional/invocation/invoke.hpp [2:3]
+        include/boost/fusion/functional/invocation/invoke_function_object.hpp [2:3]
+        include/boost/fusion/functional/invocation/invoke_procedure.hpp [2:3]
+        include/boost/fusion/functional/invocation/limits.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fa9a32968bea29cee8bae21e3db66f48
+BELONGS ya.make
+    License text:
+            Copyright (c) 2014-2015 Kohei Takahashi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/container/generation/make_set.hpp [2:2]
+        include/boost/fusion/container/generation/make_vector.hpp [2:2]
+        include/boost/fusion/container/list/detail/list_to_cons.hpp [2:2]
+        include/boost/fusion/container/list/list.hpp [2:2]
+        include/boost/fusion/container/set/detail/as_set.hpp [2:2]
+        include/boost/fusion/container/set/set.hpp [2:2]
+        include/boost/fusion/container/vector/detail/as_vector.hpp [2:2]
+        include/boost/fusion/container/vector/detail/config.hpp [2:2]
+        include/boost/fusion/container/vector/vector.hpp [2:2]
+        include/boost/fusion/container/vector/vector_fwd.hpp [2:2]
+        include/boost/fusion/support/detail/is_same_size.hpp [2:2]
+        include/boost/fusion/tuple/tuple.hpp [2:2]
+        include/boost/fusion/tuple/tuple_fwd.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fd84e5521c389f735db1160443952431
+BELONGS ya.make
+    License text:
+            Copyright (c) 2013 Jamboree
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/fusion/algorithm/transformation/flatten.hpp [2:2]
+        include/boost/fusion/view/flatten_view.hpp [2:2]
+        include/boost/fusion/view/flatten_view/flatten_view.hpp [2:2]
+        include/boost/fusion/view/flatten_view/flatten_view_iterator.hpp [2:2]

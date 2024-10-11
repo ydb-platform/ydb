@@ -1,0 +1,12 @@
+diff --git a/include/grpc++/impl/codegen/method_handler_impl.h b/include/grpc++/impl/codegen/method_handler_impl.h
+index 0bdb620..82654eb 100644
+--- a/include/grpc++/impl/codegen/method_handler_impl.h
++++ b/include/grpc++/impl/codegen/method_handler_impl.h
+@@ -23,6 +23,6 @@
+ #ifndef GRPCXX_IMPL_CODEGEN_METHOD_HANDLER_IMPL_H
+ #define GRPCXX_IMPL_CODEGEN_METHOD_HANDLER_IMPL_H
+
+-#include <grpcpp/impl/codegen/method_handler_impl.h>
++#include <grpcpp/impl/codegen/method_handler.h>
+
+ #endif  // GRPCXX_IMPL_CODEGEN_METHOD_HANDLER_IMPL_H

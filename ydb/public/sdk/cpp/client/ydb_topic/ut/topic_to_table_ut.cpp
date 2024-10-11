@@ -487,27 +487,19 @@ Y_UNIT_TEST_F(TwoSessionOneConsumer, TFixture)
     auto session1 = CreateTableSession();
     auto tx1 = BeginTx(session1);
 
-    {
-        auto reader = CreateReader();
-
-        StartPartitionSession(reader, tx1, 0);
-
-        ReadMessage(reader, tx1, 0);
-    }
+    auto reader = CreateReader();
+    StartPartitionSession(reader, tx1, 0);
+    ReadMessage(reader, tx1, 0);
 
     auto session2 = CreateTableSession();
     auto tx2 = BeginTx(session2);
 
-    {
-        auto reader = CreateReader();
-
-        StartPartitionSession(reader, tx2, 0);
-
-        ReadMessage(reader, tx2, 0);
-    }
+    reader = CreateReader();
+    StartPartitionSession(reader, tx2, 0);
+    ReadMessage(reader, tx2, 0);
 
     CommitTx(tx2, EStatus::SUCCESS);
-    CommitTx(tx1, EStatus::ABORTED);
+    CommitTx(tx1, EStatus::SESSION_EXPIRED);
 }
 
 //Y_UNIT_TEST_F(WriteToTopic_Invalid_Session, TFixture)

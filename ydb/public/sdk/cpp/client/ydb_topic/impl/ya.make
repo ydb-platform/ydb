@@ -6,6 +6,7 @@ SRCS(
     counters_logger.h
     deferred_commit.cpp
     event_handlers.cpp
+    offsets_collector.cpp
     read_session_event.cpp
     read_session_impl.ipp
     read_session.h

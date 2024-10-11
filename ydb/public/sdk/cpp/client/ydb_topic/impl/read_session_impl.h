@@ -6,6 +6,8 @@
 
 #include "common.h"
 #include "counters_logger.h"
+#include "offsets_collector.h"
+#include "transaction.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/include/read_session.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/include/read_session.h>
@@ -1159,6 +1161,13 @@ public:
         EventsQueue->SetCallbackContext(TEnableSelfContext<TSingleClusterReadSessionImpl<UseMigrationProtocol>>::SelfContext);
     }
 
+    void CollectOffsets(NTable::TTransaction& tx,
+                        const TVector<TReadSessionEvent::TEvent>& events,
+                        std::shared_ptr<TTopicClient::TImpl> client);
+    void CollectOffsets(NTable::TTransaction& tx,
+                        const TReadSessionEvent::TEvent& event,
+                        std::shared_ptr<TTopicClient::TImpl> client);
+
 private:
     void BreakConnectionAndReconnectImpl(TPlainStatus&& status, TDeferredActions<UseMigrationProtocol>& deferred);
 
@@ -1303,6 +1312,9 @@ private:
     };
 
 private:
+    void TrySubscribeOnTransactionCommit(NTable::TTransaction& tx,
+                                         std::shared_ptr<TTopicClient::TImpl> client);
+
     const TAReadSessionSettings<UseMigrationProtocol> Settings;
     const TString Database;
     const TString SessionId;
@@ -1350,6 +1362,8 @@ private:
 
     std::unordered_map<ui32, std::vector<TParentInfo>> HierarchyData;
     std::unordered_set<ui64> ReadingFinishedData;
+
+    TOffsetsCollector OffsetsCollector;
 };
 
 }  // namespace NYdb::NTopic

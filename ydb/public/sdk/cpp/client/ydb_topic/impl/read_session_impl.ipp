@@ -5,6 +5,8 @@
 #undef INCLUDE_READ_SESSION_IMPL_H
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
@@ -1913,6 +1915,59 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
                 break;
             }
         }
+    }
+}
+
+template <bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CollectOffsets(NTable::TTransaction& tx,
+                                                                         const TVector<TReadSessionEvent::TEvent>& events,
+                                                                         std::shared_ptr<TTopicClient::TImpl> client)
+{
+    with_lock (Lock) {
+        TrySubscribeOnTransactionCommit(tx, std::move(client));
+        OffsetsCollector.CollectOffsets(MakeTransactionId(tx), events);
+    }
+}
+
+template <bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CollectOffsets(NTable::TTransaction& tx,
+                                                                         const TReadSessionEvent::TEvent& event,
+                                                                         std::shared_ptr<TTopicClient::TImpl> client)
+{
+    with_lock (Lock) {
+        TrySubscribeOnTransactionCommit(tx, std::move(client));
+        OffsetsCollector.CollectOffsets(MakeTransactionId(tx), event);
+    }
+}
+
+template <bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::TrySubscribeOnTransactionCommit(NTable::TTransaction& tx,
+                                                                                          std::shared_ptr<TTopicClient::TImpl> client)
+{
+    const TTransactionId txId = MakeTransactionId(tx);
+    auto txInfo = OffsetsCollector.GetOrCreateTransactionInfo(txId);
+    Y_ABORT_UNLESS(txInfo);
+
+    with_lock (txInfo->Lock) {
+        if (txInfo->Subscribed) {
+            return;
+        }
+
+        auto callback = [cbContext = this->SelfContext, txId, consumer = Settings.ConsumerName_, client]() {
+            if (auto self = cbContext->LockShared()) {
+                return client->UpdateOffsetsInTransaction(txId,
+                                                          self->OffsetsCollector.ExtractOffsets(txId),
+                                                          consumer,
+                                                          {});
+            }
+
+            return NThreading::MakeFuture(MakeSessionExpiredError());
+        };
+
+        tx.AddPrecommitCallback(std::move(callback));
+
+        txInfo->IsActive = true;
+        txInfo->Subscribed = true;
     }
 }
 

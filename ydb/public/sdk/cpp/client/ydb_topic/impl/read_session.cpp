@@ -27,8 +27,6 @@ TReadSession::TReadSession(const TReadSessionSettings& settings,
     }
 
     MakeCountersIfNeeded();
-
-    Txs = std::make_shared<TTransactionMap>();
 }
 
 TReadSession::~TReadSession() {
@@ -138,11 +136,7 @@ TVector<TReadSessionEvent::TEvent> TReadSession::GetEvents(const TReadSessionGet
     auto events = GetEvents(settings.Block_, settings.MaxEventsCount_, settings.MaxByteSize_);
     if (!events.empty() && settings.Tx_) {
         auto& tx = settings.Tx_->get();
-        for (auto& event : events) {
-            if (auto* dataEvent = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&event)) {
-                CollectOffsets(tx, *dataEvent);
-            }
-        }
+        CbContext->TryGet()->CollectOffsets(tx, events, Client);
     }
     return events;
 }
@@ -158,113 +152,11 @@ TMaybe<TReadSessionEvent::TEvent> TReadSession::GetEvent(bool block, size_t maxB
 TMaybe<TReadSessionEvent::TEvent> TReadSession::GetEvent(const TReadSessionGetEventSettings& settings)
 {
     auto event = GetEvent(settings.Block_, settings.MaxByteSize_);
-    if (event) {
+    if (event && settings.Tx_) {
         auto& tx = settings.Tx_->get();
-        if (auto* dataEvent = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
-            CollectOffsets(tx, *dataEvent);
-        }
+        CbContext->TryGet()->CollectOffsets(tx, *event, Client);
     }
     return event;
-}
-
-void TReadSession::CollectOffsets(NTable::TTransaction& tx,
-                                  const TReadSessionEvent::TDataReceivedEvent& event)
-{
-    const auto& session = *event.GetPartitionSession();
-
-    if (event.HasCompressedMessages()) {
-        for (auto& message : event.GetCompressedMessages()) {
-            CollectOffsets(tx, session.GetTopicPath(), session.GetPartitionId(), message.GetOffset());
-        }
-    } else {
-        for (auto& message : event.GetMessages()) {
-            CollectOffsets(tx, session.GetTopicPath(), session.GetPartitionId(), message.GetOffset());
-        }
-    }
-}
-
-void TReadSession::CollectOffsets(NTable::TTransaction& tx,
-                                  const TString& topicPath, ui32 partitionId, ui64 offset)
-{
-    const TTransactionId txId = MakeTransactionId(tx);
-    TTransactionInfoPtr txInfo = GetOrCreateTxInfo(txId);
-
-    with_lock(txInfo->Lock) {
-        txInfo->Ranges[topicPath][partitionId].InsertInterval(offset, offset + 1);
-
-        if (txInfo->Subscribed) {
-            return;
-        }
-
-        auto callback = [txInfo, updateOffsetsInTransaction = MakeUpdateOffsetsInTransactionCaller(txId)]() {
-            with_lock(txInfo->Lock) {
-                if (txInfo->IsActive) {
-                    return updateOffsetsInTransaction(txInfo);
-                }
-
-                return NThreading::MakeFuture(MakeSessionExpiredError());
-            }
-        };
-
-        tx.AddPrecommitCallback(std::move(callback));
-
-        txInfo->IsActive = true;
-        txInfo->Subscribed = true;
-    }
-}
-
-auto TReadSession::MakeUpdateOffsetsInTransactionCaller(const TTransactionId& txId) -> TUpdateOffsetsInTransactionCaller
-{
-    auto call = [client = Client, consumer = Settings.ConsumerName_, txs = Txs, txId](TTransactionInfoPtr txInfo) {
-        TVector<TTopicOffsets> topics;
-        for (auto& [path, partitions] : txInfo->Ranges) {
-            TTopicOffsets topic;
-            topic.Path = path;
-
-            topics.push_back(std::move(topic));
-
-            for (auto& [id, ranges] : partitions) {
-                TPartitionOffsets partition;
-                partition.PartitionId = id;
-
-                TTopicOffsets& t = topics.back();
-                t.Partitions.push_back(std::move(partition));
-
-                for (auto& range : ranges) {
-                    TPartitionOffsets& p = t.Partitions.back();
-
-                    TOffsetsRange r;
-                    r.Start = range.first;
-                    r.End = range.second;
-
-                    p.Offsets.push_back(r);
-                }
-            }
-        }
-
-        Y_ABORT_UNLESS(!topics.empty());
-
-        txs->erase(txId);
-
-        return client->UpdateOffsetsInTransaction(txId,
-                                                  topics,
-                                                  consumer,
-                                                  {});
-    };
-
-    return call;
-}
-
-auto TReadSession::GetOrCreateTxInfo(const TTransactionId& txId) -> TTransactionInfoPtr
-{
-    auto p = Txs->find(txId);
-    if (p == Txs->end()) {
-        TTransactionInfoPtr& txInfo = (*Txs)[txId];
-        txInfo = std::make_shared<TTransactionInfo>();
-        txInfo->Subscribed = false;
-        p = Txs->find(txId);
-    }
-    return p->second;
 }
 
 bool TReadSession::Close(TDuration timeout) {

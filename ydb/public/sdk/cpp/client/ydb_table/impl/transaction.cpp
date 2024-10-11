@@ -14,6 +14,10 @@ TAsyncStatus TTransaction::TImpl::Precommit() const
     auto result = NThreading::MakeFuture(TStatus(EStatus::SUCCESS, {}));
 
     for (auto& callback : PrecommitCallbacks) {
+        if (!callback) {
+            continue;
+        }
+
         // If you send multiple requests in parallel, the `KQP` service can respond with `SESSION_BUSY`.
         // Therefore, precommit operations are performed sequentially. Here we capture the closure to
         // trigger it later.

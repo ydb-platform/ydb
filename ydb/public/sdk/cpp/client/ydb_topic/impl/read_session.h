@@ -64,33 +64,6 @@ private:
     void AbortImpl(EStatus statusCode, const TString& message, TDeferredActions<false>& deferred);
 
 private:
-    // topic -> partition -> (begin, end)
-    using TOffsetRanges = THashMap<TString, THashMap<ui64, TDisjointIntervalTree<ui64>>>;
-
-    struct TTransactionInfo {
-        TSpinLock Lock;
-        bool IsActive = false;
-        bool Subscribed = false;
-        TOffsetRanges Ranges;
-    };
-
-    using TTransactionInfoPtr = std::shared_ptr<TTransactionInfo>;
-
-    using TTransactionMap = THashMap<TTransactionId, TTransactionInfoPtr>;
-    using TTransactionMapPtr = std::shared_ptr<TTransactionMap>;
-
-    void CollectOffsets(NTable::TTransaction& tx,
-                        const TReadSessionEvent::TDataReceivedEvent& event);
-    void CollectOffsets(NTable::TTransaction& tx,
-                        const TString& topicPath, ui32 partitionId, ui64 offset);
-
-    TTransactionInfoPtr GetOrCreateTxInfo(const TTransactionId& txId);
-    TAsyncStatus AsyncUpdateOffsets(const TTransactionId& txId);
-
-    using TUpdateOffsetsInTransactionCaller = std::function<TAsyncStatus (TTransactionInfoPtr)>;
-
-    TUpdateOffsetsInTransactionCaller MakeUpdateOffsetsInTransactionCaller(const TTransactionId& txId);
-
     TReadSessionSettings Settings;
     const TString SessionId;
     const TInstant StartSessionTime = TInstant::Now();
@@ -110,8 +83,6 @@ private:
     // Exiting.
     bool Aborting = false;
     bool Closing = false;
-
-    TTransactionMapPtr Txs;
 };
 
 }  // namespace NYdb::NTopic

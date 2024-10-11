@@ -6,6 +6,7 @@ pragma yt.LookupJoinLimit="1000";
 pragma yt.LookupJoinMaxRows="100";
 pragma yt.ExtendedStatsMaxChunkCount="0";
 pragma yt.JoinMergeTablesLimit="100";
+pragma yt.JoinMergeForce="true";
 
 SELECT
     InputA.Key1, InputA.Key2, InputA.Value, InputB.val, InputC.v, InputD.value as vald

@@ -312,7 +312,7 @@ def enable_pqcd(arguments):
 
 
 def get_yaml_config(arguments, path):
-    default_store = arguments.ydb_working_dir if arguments.ydb_working_dir else "/ydb_data"
+    default_store = arguments.ydb_working_dir if arguments.ydb_working_dir else None
     with open(os.path.join(default_store, path)) as fh:
         yaml_config = yaml.load(fh, Loader=yaml.SafeLoader)
 

@@ -302,8 +302,29 @@ message TBlobStorageConfig {
         repeated TVDiskPerformanceConfig VDiskTypes = 1;
     };
 
+    message TVDiskBalancingConfig {
+        optional bool EnableSend = 1 [default=false];
+        optional bool EnableDelete = 2 [default=false];
+
+        optional bool BalanceOnlyHugeBlobs = 3 [default=true];
+        optional uint64 JobGranularityUs = 4 [default=1000];
+
+        optional uint64 BatchSize = 5 [default=32];
+        optional uint64 MaxToSendPerEpoch = 6 [default=1000];
+        optional uint64 MaxToDeletePerEpoch = 7 [default=1000];
+
+        optional uint64 ReadBatchTimeoutMs = 8 [default=10000];
+        optional uint64 SendBatchTimeoutMs = 9 [default=10000];
+        optional uint64 RequestBlobsOnMainTimeoutMs = 10 [default=10000];
+        optional uint64 DeleteBatchTimeoutMs = 11 [default=10000];
+        optional uint64 EpochTimeoutMs = 12 [default=60000];
+
+        optional uint64 SecondsToSleepIfNothingToDo = 13 [default=600];
+    }
+
     reserved 7;  // TCostMetricsSettings, moved to ICB
     optional TVDiskPerformanceSettings VDiskPerformanceSettings = 8;
+    optional TVDiskBalancingConfig VDiskBalancingConfig = 9;
  }
 
 message TBlobStorageFormatConfig {

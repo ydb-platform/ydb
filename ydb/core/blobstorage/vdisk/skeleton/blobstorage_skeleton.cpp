@@ -873,7 +873,7 @@ namespace NKikimr {
 
             std::unique_ptr<NSyncLog::TEvSyncLogPut> syncLogMsg(
                     new NSyncLog::TEvSyncLogPut(Db->GType, seg.Point(), msg->Id, msg->Ingress));
-            std::unique_ptr<TEvDelLogoBlobDataSyncLogResult> result(new TEvDelLogoBlobDataSyncLogResult(msg->OrderId, now,
+            std::unique_ptr<TEvDelLogoBlobDataSyncLogResult> result(new TEvDelLogoBlobDataSyncLogResult(msg->Id, msg->OrderId, now,
                     nullptr, nullptr));
 
             bool confirmSyncLogAlso = static_cast<bool>(syncLogMsg);
@@ -1246,7 +1246,7 @@ namespace NKikimr {
             TInstant now = TAppData::TimeProvider->Now();
             LOG_DEBUG_S(ctx, BS_VDISK_OTHER, VCtx->VDiskLogPrefix << "TEvVStatus Marker# BSVS20");
             auto aid = ctx.Register(CreateStatusRequestHandler(VCtx, Db->SkeletonID, Db->SyncerID, Db->SyncLogID,
-                IFaceMonGroup, SelfVDiskId, Db->GetVDiskIncarnationGuid(), GInfo, ev, ctx.SelfID, now, ReplDone));
+                IFaceMonGroup, SelfVDiskId, Db->GetVDiskIncarnationGuid(), GInfo, ev, ctx.SelfID, now, ReplDone, Config->BaseInfo.ReadOnly));
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
@@ -1929,7 +1929,7 @@ namespace NKikimr {
 
                 // create Hull
                 Hull = std::make_shared<THull>(Db->LsnMngr, PDiskCtx, Db->SkeletonID,
-                        Config->FeatureFlags.GetUseVDisksBalancing(), std::move(*ev->Get()->Uncond),
+                        Config->BalancingEnableDelete, std::move(*ev->Get()->Uncond),
                         ctx.ExecutorThread.ActorSystem, Config->BarrierValidation);
                 ActiveActors.Insert(Hull->RunHullServices(Config, HullLogCtx, Db->SyncLogFirstLsnToKeep,
                         Db->LoggerID, Db->LogCutterID, ctx), ctx, NKikimrServices::BLOBSTORAGE);
@@ -2551,16 +2551,35 @@ namespace NKikimr {
         }
 
         void RunBalancing(const TActorContext &ctx) {
-            if (!Config->FeatureFlags.GetUseVDisksBalancing() || VCtx->Top->GType.GetErasure() == TErasureType::ErasureMirror3of4) {
+            if (VCtx->GroupId.GetRawId() == 0) {
+                // don't run balancing for the static group
+                return;
+            }
+            bool balancingEnabled = Config->BalancingEnableSend || Config->BalancingEnableDelete;
+            if (!balancingEnabled || VCtx->Top->GType.GetErasure() == TErasureType::ErasureMirror3of4) {
                 return;
             }
             if (BalancingId) {
                 Send(BalancingId, new NActors::TEvents::TEvPoison());
                 ActiveActors.Erase(BalancingId);
             }
+            TBalancingCfg balancingCfg{
+                .EnableSend=Config->BalancingEnableSend,
+                .EnableDelete=Config->BalancingEnableDelete,
+                .BalanceOnlyHugeBlobs=Config->BalancingBalanceOnlyHugeBlobs,
+                .JobGranularity=Config->BalancingJobGranularity,
+                .BatchSize=Config->BalancingBatchSize,
+                .MaxToSendPerEpoch=Config->BalancingMaxToSendPerEpoch,
+                .MaxToDeletePerEpoch=Config->BalancingMaxToDeletePerEpoch,
+                .ReadBatchTimeout=Config->BalancingReadBatchTimeout,
+                .SendBatchTimeout=Config->BalancingSendBatchTimeout,
+                .RequestBlobsOnMainTimeout=Config->BalancingRequestBlobsOnMainTimeout,
+                .DeleteBatchTimeout=Config->BalancingDeleteBatchTimeout,
+                .EpochTimeout=Config->BalancingEpochTimeout,
+                .TimeToSleepIfNothingToDo=Config->BalancingTimeToSleepIfNothingToDo,
+            };
             auto balancingCtx = std::make_shared<TBalancingCtx>(
-                VCtx, PDiskCtx, SelfId(), Hull->GetSnapshot(), Config, GInfo
-            );
+                balancingCfg, VCtx, PDiskCtx, HugeBlobCtx, SelfId(), Hull->GetSnapshot(), Config, GInfo, MinREALHugeBlobInBytes);
             BalancingId = ctx.Register(CreateBalancingActor(balancingCtx));
             ActiveActors.Insert(BalancingId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }

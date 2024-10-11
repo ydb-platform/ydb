@@ -66,16 +66,10 @@ class TestTpch100(TpchSuiteBase):
 
 
 class TestTpch1000(TpchSuiteBase):
-    tables_size: dict[str, int] = {
-#        'lineitem': 5999989709,
-    }
     size: int = 1000
     timeout = max(TpchSuiteBase.timeout, 1000.)
 
 
 class TestTpch10000(TpchSuiteBase):
-    tables_size: dict[str, int] = {
-#        'lineitem': 59999994267,
-    }
     size: int = 10000
     timeout = max(TpchSuiteBase.timeout, 3600.)

@@ -147,7 +147,7 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
       git clone https://github.com/ydb-platform/ydb-kubernetes-operator && cd ydb-kubernetes-operator
       ```
 
-   4. Run `Kind` with `kind-config.yaml`:
+   4. Create a Kind cluster and wait until it is ready:
 
       ```bash
       kind create cluster --config=samples/kind/kind-config.yaml  --wait 5m

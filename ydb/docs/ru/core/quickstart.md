@@ -353,7 +353,7 @@ FLATTEN LIST BY keys AS key
    helm delete ydb-operator
    ```
 
-   Чтобы удалить кластер `kind` целиком, выполните следующую команду:
+   Чтобы удалить кластер Kind целиком, выполните следующую команду:
 
    ```bash
    kind delete cluster

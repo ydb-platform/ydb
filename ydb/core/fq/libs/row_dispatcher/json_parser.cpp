@@ -59,7 +59,7 @@ void TJsonParserBuffer::Clear() {
 class TJsonParser::TImpl {
     struct TColumnDescription {
         std::string Name;
-        std::string Type;
+        TString Type;
     };
 
 public:
@@ -171,12 +171,14 @@ private:
         return Buffer.AddHolder(value);
     }
 
-    std::string SkipOptional(TStringBuf type) {
+    static TString SkipOptional(const TString& type) {
         if (type.StartsWith("Optional")) {
-            Y_ENSURE(type.SkipPrefix("Optional<"), "Unexpected type");
-            Y_ENSURE(type.ChopSuffix(">"), "Unexpected type");
+            TStringBuf optionalType = type;
+            Y_ENSURE(optionalType.SkipPrefix("Optional<"), "Unexpected type");
+            Y_ENSURE(optionalType.ChopSuffix(">"), "Unexpected type");
+            return TString(optionalType);
         }
-        return std::string(type);
+        return type;
     }
 
 private:

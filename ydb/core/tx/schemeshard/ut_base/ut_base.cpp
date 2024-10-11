@@ -3603,6 +3603,35 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             NLs::IsBackupTable(true),
         });
 
+        // cannot alter backup table
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "CopyTable"
+            DropColumns { Name: "value" }
+        )", {NKikimrScheme::StatusSchemeError});
+
+        // cannot add cdc stream to backup table
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "CopyTable"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )", {NKikimrScheme::StatusSchemeError});
+
+        // cannot add sequence to backup table
+        TestCreateSequence(runtime, ++txId, "/MyRoot/CopyTable", R"(
+            Name: "Sequence"
+        )", {NKikimrScheme::StatusSchemeError});
+
+        // cannot add index to backup table
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/CopyTable", "Index", {"value"});
+        env.TestWaitNotification(runtime, txId);
+        {
+            auto desc = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", txId);
+            UNIT_ASSERT_EQUAL(desc.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED);
+        }
+
         // consistent copy table
         TestConsistentCopyTables(runtime, ++txId, "/", R"(
             CopyTableDescriptions {
@@ -3741,16 +3770,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         )", {NKikimrScheme::StatusInvalidParameter});
 
         // cannot remove 'IsBackup' property from existent table
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(AlterTableRequest(++txId, "/MyRoot", R"(
             Name: "CopyTable"
             IsBackup: false
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )")));
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusInvalidParameter});
 
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(AlterTableRequest(++txId, "/MyRoot", R"(
             Name: "CopyTable"
             IsBackup: false
             DropColumns { Name: "value" }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )")));
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusInvalidParameter});
 
         // sanity check
 

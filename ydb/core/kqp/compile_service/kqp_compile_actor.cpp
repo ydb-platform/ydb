@@ -453,9 +453,9 @@ private:
     }
 
     void FillCompileResult(std::unique_ptr<NKikimrKqp::TPreparedQuery> preparingQuery, NKikimrKqp::EQueryType queryType,
-            bool allowCache) {
+            bool allowCache, bool success) {
         auto preparedQueryHolder = std::make_shared<TPreparedQueryHolder>(
-            preparingQuery.release(), AppData()->FunctionRegistry);
+            preparingQuery.release(), AppData()->FunctionRegistry, !success);
         preparedQueryHolder->MutableLlvmSettings().Fill(Config, queryType);
         KqpCompileResult->PreparedQuery = preparedQueryHolder;
         KqpCompileResult->AllowCache = CanCacheQuery(KqpCompileResult->PreparedQuery->GetPhysicalQuery()) && allowCache;
@@ -504,7 +504,7 @@ private:
 
         if (status == Ydb::StatusIds::SUCCESS) {
             YQL_ENSURE(kqpResult.PreparingQuery);
-            FillCompileResult(std::move(kqpResult.PreparingQuery), queryType, kqpResult.AllowCache);
+            FillCompileResult(std::move(kqpResult.PreparingQuery), queryType, kqpResult.AllowCache, true);
 
             auto now = TInstant::Now();
             auto duration = now - StartTime;
@@ -515,7 +515,7 @@ private:
                 << ", duration: " << duration);
         } else {
             if (kqpResult.PreparingQuery) {
-                FillCompileResult(std::move(kqpResult.PreparingQuery), queryType, kqpResult.AllowCache);
+                FillCompileResult(std::move(kqpResult.PreparingQuery), queryType, kqpResult.AllowCache, false);
             }
 
             LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation failed"
@@ -611,6 +611,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.IdxLookupJoinsPrefixPointLimit = serviceConfig.GetIdxLookupJoinPointsLimit();
     kqpConfig.OldLookupJoinBehaviour = serviceConfig.GetOldLookupJoinBehaviour();
     kqpConfig.EnableSpillingGenericQuery = serviceConfig.GetEnableQueryServiceSpilling();
+    kqpConfig.DisableSimplifiedPlans = serviceConfig.GetDisableSimplifiedPlans();
 
     if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
         kqpConfig._KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));

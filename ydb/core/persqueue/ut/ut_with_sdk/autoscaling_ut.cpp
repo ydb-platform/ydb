@@ -727,6 +727,43 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         }
     }
 
+    Y_UNIT_TEST(ControlPlane_BackCompatibility) {
+        auto topicName = "back-compatibility-test";
+
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        {
+            TCreateTopicSettings createSettings;
+            createSettings
+                .BeginConfigurePartitioningSettings()
+                    .MinActivePartitions(3)
+                .EndConfigurePartitioningSettings();
+            client.CreateTopic(topicName, createSettings).Wait();
+        }
+
+        {
+            auto describeAfterAlter = client.DescribeTopic(topicName).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), 3);
+        }
+
+        {
+            TAlterTopicSettings alterSettings;
+            alterSettings
+                .BeginAlterPartitioningSettings()
+                    .MinActivePartitions(5)
+                .EndAlterTopicPartitioningSettings();
+            client.AlterTopic(topicName, alterSettings).Wait();
+        }
+
+        {
+            auto describeAfterAlter = client.DescribeTopic(topicName).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), 5);
+        }
+    }
+
     Y_UNIT_TEST(ControlPlane_PauseAutoPartitioning) {
         auto topicName = "autoscalit-topic";
 

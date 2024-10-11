@@ -143,7 +143,10 @@ private:
 
 public:
 
-    TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry);
+    TPreparedQueryHolder(
+        NKikimrKqp::TPreparedQuery* proto,
+        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+        bool noFillTables = false);
     ~TPreparedQueryHolder();
 
     using TConstPtr = std::shared_ptr<const TPreparedQueryHolder>;

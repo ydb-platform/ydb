@@ -267,8 +267,9 @@ namespace NYql::NDq {
                     SendError(actorSystem, selfId, result.Status);
                 }
             });
-            if (CpuTime)
+            if (CpuTime) {
                 CpuTime->Add(GetCpuTimeDelta(startCycleCount).MicroSeconds());
+            }
         }
 
         void ReadNextData() {
@@ -330,16 +331,18 @@ namespace NYql::NDq {
                     *v = std::move(output); // duplicates will be overwritten
                 }
             }
-            if (CpuTime)
+            if (CpuTime) {
                 CpuTime->Add(GetCpuTimeDelta(startCycleCount).MicroSeconds());
+            }
         }
 
         void FinalizeRequest() {
             YQL_CLOG(DEBUG, ProviderGeneric) << "Sending lookup results for " << Request->size() << " keys";
             auto guard = Guard(*Alloc);
             auto ev = new IDqAsyncLookupSource::TEvLookupResult(Request);
-            if (AnswerTime)
+            if (AnswerTime) {
                 AnswerTime->Add((TInstant::Now() - SentTime).MilliSeconds());
+            }
             Request.reset();
             TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
             LookupResult = {};

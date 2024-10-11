@@ -167,8 +167,9 @@ private: //events
         KeysForLookup->clear();
         auto deltaTime = GetCpuTimeDelta(startCycleCount);
         CpuTime += deltaTime;
-        if (CpuTimeUs)
+        if (CpuTimeUs) {
             CpuTimeUs->Add(deltaTime.MicroSeconds());
+        }
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived{InputIndex});
     }
 
@@ -249,8 +250,9 @@ private: //IDqComputeActorAsyncInput
         }
         auto deltaTime = GetCpuTimeDelta(startCycleCount);
         CpuTime += deltaTime;
-        if (CpuTimeUs)
+        if (CpuTimeUs) {
             CpuTimeUs->Add(deltaTime.MicroSeconds());
+        }
         finished = IsFinished();
         return AwaitingQueue.size();
     }
@@ -332,7 +334,7 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr LruMiss;
     ::NMonitoring::TDynamicCounters::TCounterPtr CpuTimeUs;
     ::NMonitoring::TDynamicCounters::TCounterPtr Batches;
-    TDuration CpuTime {};
+    TDuration CpuTime;
 };
 
 class TInputTransformStreamLookupWide: public TInputTransformStreamLookupBase {

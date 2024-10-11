@@ -24,18 +24,13 @@ public:
         TString plan(Event->Get()->Request.GetPostContent());
         TString result;
 
+        TRequestState state(Event->Get());
         try {
             TPlanVisualizer planViz;
             planViz.LoadPlans(plan);
-            result = planViz.PrintSvg();
+            result = Viewer->GetHTTPOK(state, "image/svg+xml", planViz.PrintSvg());
         } catch (std::exception& e) {
-            TStringBuilder builder;
-            builder
-                << "<svg width='600' height='200' xmlns='http://www.w3.org/2000/svg'>" << Endl
-                << "  <text font-size='16px' x='20' y='40'>Conversion error:</text>" << Endl
-                << "  <text font-size='16px' x='20' y='80'>" << e.what() << "</text>" << Endl
-                << "</svg>" << Endl;
-            result = builder;
+            result = Viewer->GetHTTPBADREQUEST(state, "text/plain", TStringBuilder() << "Conversion error: " << e.what());
         }
 
         Send(Event->Sender, new NMon::TEvHttpInfoRes(result, 0, NMon::IEvHttpInfoRes::EContentType::Custom));

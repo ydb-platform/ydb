@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     common.cpp
     manager.cpp
-    GLOBAL external_data.cpp
     snapshot.cpp
 )
 
@@ -27,6 +26,8 @@ PEERDIR(
     ydb/services/bg_tasks/abstract
     ydb/services/metadata
 )
+
+YQL_LAST_ABI_VERSION()
 
 END()
 

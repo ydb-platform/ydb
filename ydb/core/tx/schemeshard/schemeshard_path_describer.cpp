@@ -1067,6 +1067,20 @@ void TPathDescriber::DescribeResourcePool(TPathId pathId, TPathElement::TPtr pat
     entry->MutableProperties()->CopyFrom(resourcePoolInfo->Properties);
 }
 
+void TPathDescriber::DescribeAbstractObject(TPathId pathId, TPathElement::TPtr pathEl) {
+    auto it = Self->AbstractObjects.FindPtr(pathId);
+    Y_ABORT_UNLESS(it, "AbstractObject is not found");
+    TAbstractObjectInfo::TPtr abstractObjectInfo = *it;
+
+    auto entry = Result->Record.MutablePathDescription()->MutableAbstractObjectDescription();
+    entry->SetName(pathEl->Name);
+    entry->SetType(abstractObjectInfo->Config->GetObjectManager()->GetTypeId());
+    PathIdFromPathId(pathId, entry->MutablePathId());
+    entry->SetVersion(abstractObjectInfo->AlterVersion);
+    const auto manager = abstractObjectInfo->Config->GetObjectManager();
+    *entry->MutableProperties()->MutableProperties() = manager->SerializeToRecord(abstractObjectInfo->Config).SerializeToProto();
+}
+
 static bool ConsiderAsDropped(const TPath& path) {
     Y_ABORT_UNLESS(path.IsResolved());
 
@@ -1220,6 +1234,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             break;
         case NKikimrSchemeOp::EPathTypeResourcePool:
             DescribeResourcePool(base->PathId, base);
+            break;
+        case NKikimrSchemeOp::EPathTypeAbstractObject:
+            DescribeAbstractObject(base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();

@@ -102,6 +102,7 @@ public:
         const TChecker& IsView(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& FailOnRestrictedCreateInTempZone(bool allowCreateInTemporaryDir = false, EStatus status = EStatus::StatusPreconditionFailed) const;
         const TChecker& IsResourcePool(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& IsAbstractObject(EStatus status = EStatus::StatusNameConflict) const;
     };
 
 public:

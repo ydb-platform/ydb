@@ -68,16 +68,22 @@ TTableRecord& TTableRecord::SetColumn(const TString& columnId, const Ydb::Value&
 
 Ydb::ResultSet TTableRecord::BuildRecordSet() const {
     Ydb::ResultSet result;
-    Ydb::Value row;
     for (auto&& i : Values) {
         Ydb::Column column;
         column.set_name(i.first);
 //        column.set_type(i.second.type());
         *result.add_columns() = column;
+    }
+    *result.add_rows() = BuildRow();
+    return result;
+}
+
+Ydb::Value TTableRecord::BuildRow() const {
+    Ydb::Value row;
+    for (auto&& i : Values) {
         *row.add_items() = i.second;
     }
-    *result.add_rows() = row;
-    return result;
+    return row;
 }
 
 bool TTableRecord::SameColumns(const TTableRecord& item) const {
@@ -102,6 +108,21 @@ std::vector<Ydb::Column> TTableRecord::SelectOwnedColumns(const std::vector<Ydb:
         }
     }
     return result;
+}
+
+TTableRecord::TProto TTableRecord::SerializeToProto() const {
+    TProto serialized;
+    for (const auto& [key, value] : Values) {
+        serialized.emplace(key, value);
+    }
+    return serialized;
+}
+
+bool TTableRecord::DeserializeFromProto(const TProto& serialized) {
+    for (const auto& [key, value] : serialized) {
+        SetColumn(key, value);
+    }
+    return true;
 }
 
 ui32 TTableRecords::AddRecordImpl(const TTableRecord& record) {

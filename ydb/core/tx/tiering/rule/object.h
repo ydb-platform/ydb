@@ -51,7 +51,11 @@ class TTieringRule: public NMetadata::NModifications::TObject<TTieringRule> {
 private:
     YDB_ACCESSOR_DEF(TString, TieringRuleId);
     YDB_ACCESSOR_DEF(TString, DefaultColumn);
-    YDB_ACCESSOR_DEF(TVector<TTieringInterval>, Intervals);
+    YDB_ACCESSOR_DEF(std::vector<TTieringInterval>, Intervals);
+
+private:
+    friend class TRulePreprocessingActor;
+    static TConclusion<std::vector<TTieringInterval>> DeserializeIntervalsFromJson(const NJson::TJsonValue& jsonInfo);
 protected:
     NJson::TJsonValue SerializeDescriptionToJson() const;
     bool DeserializeDescriptionFromJson(const NJson::TJsonValue& jsonInfo);

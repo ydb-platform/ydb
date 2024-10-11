@@ -1,15 +1,18 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/testlib/cs_helper.h>
-#include <ydb/core/tx/tiering/external_data.h>
-#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
-#include <ydb/core/wrappers/ut_helpers/s3_mock.h>
-#include <ydb/core/wrappers/s3_wrapper.h>
-#include <ydb/core/wrappers/fake_storage.h>
+#include <ydb/core/testlib/cs_helper.h>
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/ro_controller.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/tiering/manager.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/wrappers/fake_storage.h>
+#include <ydb/core/wrappers/s3_wrapper.h>
+#include <ydb/core/wrappers/ut_helpers/s3_mock.h>
+
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/core/av_bootstrapped.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/services/metadata/manager/alter.h>
 #include <ydb/services/metadata/manager/common.h>
@@ -17,10 +20,8 @@
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 #include <ydb/services/metadata/service.h>
 
-#include <ydb/library/actors/core/av_bootstrapped.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/testing/unittest/registar.h>
-
 #include <util/system/hostname.h>
 
 namespace NKikimr {
@@ -212,7 +213,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
     class TTestCSEmulator: public NActors::TActorBootstrapped<TTestCSEmulator> {
     private:
         using TBase = NActors::TActorBootstrapped<TTestCSEmulator>;
-        std::shared_ptr<NTiers::TSnapshotConstructor> ExternalDataManipulation;
+        std::shared_ptr<TTiersManager> Manager;
         TActorId ProviderId;
         TInstant Start;
         YDB_READONLY_FLAG(Found, false);
@@ -229,7 +230,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 
         STATEFN(StateInit) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
+                hFunc(TEvPrivate::TEvTieringModified, Handle);
                 default:
                     Y_ABORT_UNLESS(false);
             }
@@ -240,9 +241,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 if (event->HasBuffer() && !event->HasEvent()) {
                 } else if (!event->HasEvent()) {
                 } else {
-                    auto ptr = event->CastAsLocal<NMetadata::NProvider::TEvRefreshSubscriberData>();
+                    auto ptr = event->CastAsLocal<TEvPrivate::TEvTieringModified>();
                     if (ptr) {
-                        CheckFound(ptr);
+                        CheckFound();
                     }
                 }
                 return TTestActorRuntimeBase::EEventAction::PROCESS;
@@ -257,35 +258,31 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             Y_ABORT_UNLESS(IsFound());
         }
 
-        void CheckFound(NMetadata::NProvider::TEvRefreshSubscriberData* event) {
-            auto snapshot = event->GetSnapshotAs<NTiers::TConfigsSnapshot>();
-            if (!snapshot) {
-                Cerr << "incorrect snapshot" << Endl;
-                return;
-            }
-            Cerr << "SNAPSHOT: " << snapshot->SerializeToString() << Endl;
-            const auto& tierings = snapshot->GetTableTierings();
+        void CheckFound() {
+            Cerr << "SNAPSHOT:" << Manager->GetSnapshot().DebugString() << Endl;
+            const auto& tierings = Manager->GetSnapshot().GetTableTierings();
+            const auto& tiers = Manager->GetSnapshot().GetTierConfigs();
             if (tierings.size() != ExpectedTieringsCount) {
-                Cerr << "TieringsCount incorrect: " << snapshot->SerializeToString() << ";expectation=" << ExpectedTieringsCount << Endl;
+                Cerr << "TieringsCount incorrect: " << tierings.size() << ";expectation=" << ExpectedTieringsCount << Endl;
                 return;
             }
-            if (ExpectedTiersCount != snapshot->GetTierConfigs().size()) {
-                Cerr << "TiersCount incorrect: " << snapshot->SerializeToString() << ";expectation=" << ExpectedTiersCount << Endl;
+            if (tiers.size() != ExpectedTiersCount) {
+                Cerr << "TiersCount incorrect: " << tiers.size() << ";expectation=" << ExpectedTiersCount << Endl;
                 return;
             }
             for (auto&& i : Checkers) {
                 NJson::TJsonValue jsonData;
                 if (i.first.StartsWith("TIER.")) {
-                    auto value = snapshot->GetTierById(i.first.substr(5));
-                    jsonData = value->SerializeConfigToJson();
+                    const auto& value = tiers.at(i.first.substr(5));
+                    jsonData = value.SerializeConfigToJson();
                 } else if (i.first.StartsWith("TIERING_RULE.")) {
-                    auto value = snapshot->GetTierById(i.first.substr(13));
-                    jsonData = value->SerializeConfigToJson();
+                    const auto& value = tiers.at(i.first.substr(13));
+                    jsonData = value.SerializeConfigToJson();
                 } else {
                     Y_ABORT_UNLESS(false);
                 }
                 if (!i.second.Check(jsonData)) {
-                    Cerr << "config value incorrect:" << snapshot->SerializeToString() << ";snapshot_check_path=" << i.first << Endl;
+                    Cerr << "config value incorrect:" << Manager->DebugString() << ";snapshot_check_path=" << i.first << Endl;
                     Cerr << "json path incorrect:" << jsonData << ";" << i.second.GetDebugString() << Endl;
                     return;
                 }
@@ -293,15 +290,19 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             FoundFlag = true;
         }
 
-        void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
-            CheckFound(ev->Get());
+        void Handle(TEvPrivate::TEvTieringModified::TPtr& /*ev*/) {
+            CheckFound();
         }
 
         void Bootstrap() {
             ProviderId = NMetadata::NProvider::MakeServiceId(SelfId().NodeId());
-            ExternalDataManipulation = std::make_shared<NTiers::TSnapshotConstructor>();
+            Manager = std::make_shared<TTiersManager>(0, SelfId(), [this](const TActorContext& /*ctx*/) {
+                if (Manager->IsReady()) {
+                    Send(SelfId(), new TEvPrivate::TEvTieringModified);
+                }
+            });
+            Manager->Start(Manager);
             Become(&TThis::StateInit);
-            Sender<NMetadata::NProvider::TEvSubscribeExternal>(ExternalDataManipulation).SendTo(ProviderId);
             Start = Now();
         }
     };

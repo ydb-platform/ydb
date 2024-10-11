@@ -5,6 +5,7 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 #include <ydb/core/util/pb.h>
+#include <ydb/services/metadata/abstract/kqp_common.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -4859,6 +4860,51 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         blobDepot->BlobDepotTabletId = jt->second.TabletID;
                     }
                 }
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
+        // Abstract objects
+        {
+            auto rowset = db.Table<Schema::AbstractObjects>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                const TOwnerId ownerPathId = rowset.GetValue<Schema::AbstractObjects::OwnerPathId>();
+                const TLocalPathId localPathId = rowset.GetValue<Schema::AbstractObjects::LocalPathId>();
+                TPathId pathId(ownerPathId, localPathId);
+
+                const ui64 alterVersion = rowset.GetValue<Schema::AbstractObjects::AlterVersion>();
+                const TString typeId = rowset.GetValue<Schema::AbstractObjects::TypeId>();
+                const TString data = rowset.GetValue<Schema::AbstractObjects::Properties>();
+                const TString referencesSerialized = rowset.GetValue<Schema::AbstractObjects::References>();
+
+                const NMetadata::IClassBehaviour::TPtr cBehaviour(NMetadata::IClassBehaviour::TPtr(NMetadata::IClassBehaviour::TFactory::Construct(typeId)));
+                Y_ABORT_UNLESS(cBehaviour);
+                const auto objectManager = cBehaviour->GetObjectManager();
+                Y_ABORT_UNLESS(objectManager);
+
+                NKikimrSchemeOp::TAbstractObjectProperties propertiesProto;
+                Y_ABORT_UNLESS(propertiesProto.ParseFromString(data));
+                NMetadata::NInternal::TTableRecord record;
+                Y_ABORT_UNLESS(record.DeserializeFromProto(propertiesProto.GetProperties()));
+                const auto object = objectManager->DeserializeFromRecord(record);
+                Y_ABORT_UNLESS(object);
+
+                NKikimrSchemeOp::TAbstractObjectReferences referencesProto;
+                Y_ABORT_UNLESS(referencesProto.ParseFromString(data));
+                THashSet<TPathId> references;
+                for (const auto& pathIdProto : referencesProto.GetReferers()) {
+                    references.emplace(PathIdFromPathId(pathIdProto));
+                }
+
+                Self->AbstractObjects.emplace(pathId, new TAbstractObjectInfo(alterVersion, object, references));
+                Self->IncrementPathDbRefCount(pathId);
 
                 if (!rowset.Next()) {
                     return false;

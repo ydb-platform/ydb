@@ -10,22 +10,37 @@
 
 namespace NKikimr::NColumnShard::NTiers {
 
-class TConfigsSnapshot: public NMetadata::NFetcher::ISnapshot {
+class TConfigsSnapshot {
 private:
-    using TBase = NMetadata::NFetcher::ISnapshot;
-    using TConfigsMap = TMap<TString, TTierConfig>;
+    using TConfigsMap = THashMap<TString, TTierConfig>;
     YDB_ACCESSOR_DEF(TConfigsMap, TierConfigs);
-    using TTieringMap = TMap<TString, TTieringRule>;
+    using TTieringMap = THashMap<TString, TTieringRule>;
     YDB_ACCESSOR_DEF(TTieringMap, TableTierings);
-protected:
-    virtual bool DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawData) override;
-    virtual TString DoSerializeToString() const override;
-public:
 
+public:
     std::set<TString> GetTieringIdsForTier(const TString& tierName) const;
     const TTieringRule* GetTieringById(const TString& tieringId) const;
     std::optional<TTierConfig> GetTierById(const TString& tierName) const;
-    using TBase::TBase;
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "TIERS={";
+        for (const auto& [id, config] : TierConfigs) {
+            sb << id << ';';
+        }
+        sb << "};TIERINGS={";
+        for (const auto& [id, config] : TableTierings) {
+            sb << id << ';';
+        }
+        sb << '}';
+        return sb;
+    }
+
+    TConfigsSnapshot() = default;
+    TConfigsSnapshot(TConfigsMap tiers, TTieringMap tierings)
+        : TierConfigs(std::move(tiers))
+        , TableTierings(std::move(tierings)) {
+    }
 };
 
 }

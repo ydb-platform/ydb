@@ -9,10 +9,12 @@ namespace NKikimr::NMetadata::NInternal {
 class TTableRecord {
 private:
     using TValues = std::map<TString, Ydb::Value>;
+    using TProto = ::google::protobuf::Map<TProtoStringType, ::Ydb::Value>;
     YDB_READONLY_DEF(TValues, Values);
 public:
     std::vector<Ydb::Column> SelectOwnedColumns(const std::vector<Ydb::Column>& columns) const;
     Ydb::ResultSet BuildRecordSet() const;
+    Ydb::Value BuildRow() const;
     ui32 GetColumnsCount() const {
         return Values.size();
     }
@@ -23,6 +25,8 @@ public:
     bool SameColumns(const TTableRecord& item) const;
     const Ydb::Value* GetValuePtr(const TString& columnId) const;
     Ydb::Value* GetMutableValuePtr(const TString& columnId);
+    TProto SerializeToProto() const;
+    bool DeserializeFromProto(const TProto& serialized);
 };
 
 class TTableRecords {

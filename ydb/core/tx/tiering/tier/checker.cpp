@@ -1,112 +1,91 @@
 #include "checker.h"
 
-#include <ydb/core/tx/tiering/external_data.h>
-#include <ydb/core/tx/tiering/rule/ss_checker.h>
 #include <ydb/services/metadata/secret/fetcher.h>
 
 namespace NKikimr::NColumnShard::NTiers {
 
-void TTierPreparationActor::StartChecker() {
-    if (!Tierings || !Secrets || !SSCheckResult) {
+void TTierPreprocessingActor::StartChecker() {
+    if (!Secrets) {
         return;
     }
     auto g = PassAwayGuard();
-    if (!SSCheckResult->GetContent().GetOperationAllow()) {
-        Controller->OnPreparationProblem(SSCheckResult->GetContent().GetDenyReason());
-        return;
-    }
-    for (auto&& tier : Objects) {
-        if (Context.GetActivityType() == NMetadata::NModifications::IOperationsManager::EActivityType::Drop) {
-            std::set<TString> tieringsWithTiers;
-            for (auto&& i : Tierings->GetTableTierings()) {
-                if (i.second.ContainsTier(tier.GetTierName())) {
-                    tieringsWithTiers.emplace(i.first);
-                    if (tieringsWithTiers.size() > 10) {
-                        break;
-                    }
-                }
-            }
-            if (tieringsWithTiers.size()) {
-                Controller->OnPreparationProblem("tier in usage for tierings: " + JoinSeq(", ", tieringsWithTiers));
+    if (const TString* serializedConfig = Settings.ReadFeature(TTierConfig::TDecoder::TierConfig)) {
+        NKikimrSchemeOp::TStorageTierConfig config;
+        if (!::google::protobuf::TextFormat::ParseFromString(*serializedConfig, &config)) {
+            AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "config_deserialization_failed")("config", *serializedConfig);
+            Controller->OnPreprocessingProblem("Can't deserialize tier config");
+            return;
+        }
+        if (config.HasObjectStorage()) {
+            if (auto status = PreprocessObjectStorage(*config.MutableObjectStorage()); status.IsFail()) {
+                Controller->OnPreprocessingProblem(status.GetErrorMessage());
                 return;
             }
         }
-        if (!Secrets->CheckSecretAccess(tier.GetAccessKey(), Context.GetExternalData().GetUserToken())) {
-            Controller->OnPreparationProblem("no access for secret: " + tier.GetAccessKey().DebugString());
-            return;
-        } else if (!Secrets->CheckSecretAccess(tier.GetSecretKey(), Context.GetExternalData().GetUserToken())) {
-            Controller->OnPreparationProblem("no access for secret: " + tier.GetSecretKey().DebugString());
-            return;
-        }
+        Settings.UpdateFeatures({{TTierConfig::TDecoder::TierConfig, config.SerializeAsString()}});
     }
-    Controller->OnPreparationFinished(std::move(Objects));
+    Controller->OnPreprocessingFinished(std::move(Settings));
 }
 
-void TTierPreparationActor::Handle(NSchemeShard::TEvSchemeShard::TEvProcessingResponse::TPtr& ev) {
-    auto& proto = ev->Get()->Record;
-    if (proto.HasError()) {
-        Controller->OnPreparationProblem(proto.GetError().GetErrorMessage());
-        PassAway();
-    } else if (proto.HasContent()) {
-        SSCheckResult = SSFetcher->UnpackResult(ev->Get()->Record.GetContent().GetData());
-        if (!SSCheckResult) {
-            Controller->OnPreparationProblem("cannot unpack ss-fetcher result for class " + SSFetcher->GetClassName());
-            PassAway();
-        } else {
-            StartChecker();
-        }
-    } else {
-        Y_ABORT_UNLESS(false);
-    }
-}
-
-void TTierPreparationActor::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
+void TTierPreprocessingActor::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
     if (auto snapshot = ev->Get()->GetSnapshotPtrAs<NMetadata::NSecret::TSnapshot>()) {
         Secrets = snapshot;
-    } else if (auto snapshot = ev->Get()->GetSnapshotPtrAs<TConfigsSnapshot>()) {
-        Tierings = snapshot;
-        std::set<TString> tieringIds;
-        std::set<TString> tiersChecked;
-        for (auto&& tier : Objects) {
-            if (!tiersChecked.emplace(tier.GetTierName()).second) {
-                continue;
-            }
-            auto tIds = Tierings->GetTieringIdsForTier(tier.GetTierName());
-            if (tieringIds.empty()) {
-                tieringIds = std::move(tIds);
-            } else {
-                tieringIds.insert(tIds.begin(), tIds.end());
-            }
-        }
-        {
-            SSFetcher = std::make_shared<TFetcherCheckUserTieringPermissions>();
-            SSFetcher->SetUserToken(Context.GetExternalData().GetUserToken());
-            SSFetcher->SetActivityType(Context.GetActivityType());
-            SSFetcher->MutableTieringRuleIds() = tieringIds;
-            Register(new TSSFetchingActor(SSFetcher, std::make_shared<TSSFetchingController>(SelfId()), TDuration::Seconds(10)));
-        }
     } else {
         Y_ABORT_UNLESS(false);
     }
     StartChecker();
 }
 
-void TTierPreparationActor::Bootstrap() {
+TConclusionStatus TTierPreprocessingActor::PreprocessObjectStorage(NKikimrSchemeOp::TS3Settings& config) const {
+    TString defaultUserId;
+    if (Context.GetExternalData().GetUserToken()) {
+        defaultUserId = Context.GetExternalData().GetUserToken()->GetUserSID();
+    }
+
+    if (config.HasSecretableAccessKey()) {
+        auto accessKey = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromProto(config.GetSecretableAccessKey(), defaultUserId);
+        if (!accessKey) {
+            return TConclusionStatus::Fail("AccessKey description is incorrect");
+        }
+        *config.MutableSecretableAccessKey() = accessKey->SerializeToProto();
+    } else if (config.HasAccessKey()) {
+        auto accessKey = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromString(config.GetAccessKey(), defaultUserId);
+        if (!accessKey) {
+            return TConclusionStatus::Fail("AccessKey is incorrect: " + config.GetAccessKey() + " for userId: " + defaultUserId);
+        }
+        *config.MutableAccessKey() = accessKey->SerializeToString();
+    } else {
+        return TConclusionStatus::Fail("AccessKey not configured");
+    }
+
+    if (config.HasSecretableSecretKey()) {
+        auto secretKey = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromProto(config.GetSecretableSecretKey(), defaultUserId);
+        if (!secretKey) {
+            return TConclusionStatus::Fail("SecretKey description is incorrect");
+        }
+        *config.MutableSecretableSecretKey() = secretKey->SerializeToProto();
+    } else if (config.HasSecretKey()) {
+        auto secretKey = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromString(config.GetSecretKey(), defaultUserId);
+        if (!secretKey) {
+            return TConclusionStatus::Fail("SecretKey is incorrect");
+        }
+        *config.MutableSecretKey() = secretKey->SerializeToString();
+    } else {
+        return TConclusionStatus::Fail("SecretKey not configured");
+    }
+    return TConclusionStatus::Success();
+}
+
+void TTierPreprocessingActor::Bootstrap() {
     Become(&TThis::StateMain);
     Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
         new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>()));
-    Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
-        new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TSnapshotConstructor>()));
 }
 
-TTierPreparationActor::TTierPreparationActor(std::vector<TTierConfig>&& objects,
-    NMetadata::NModifications::IAlterPreparationController<TTierConfig>::TPtr controller,
+TTierPreprocessingActor::TTierPreprocessingActor(NYql::TObjectSettingsImpl settings, IController::TPtr controller,
     const NMetadata::NModifications::IOperationsManager::TInternalModificationContext& context)
-    : Objects(std::move(objects))
+    : Settings(std::move(settings))
     , Controller(controller)
-    , Context(context)
-{
-
+    , Context(context) {
 }
-
-}
+}   // namespace NKikimr::NColumnShard::NTiers

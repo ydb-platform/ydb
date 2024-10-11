@@ -242,6 +242,13 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "DROP RESOURCE POOL";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
         return "ALTER RESOURCE POOL";
+    // abstract object
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateAbstractObject:
+        return "CREATE OBJECT";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropAbstractObject:
+        return "DROP OBJECT";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterAbstractObject:
+        return "ALTER OBJECT";
     // incremental backup
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
@@ -548,6 +555,15 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
         result.emplace_back(tx.GetCreateResourcePool().GetName());
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateAbstractObject:
+        result.emplace_back(tx.GetModifyAbstractObject().GetObject());
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropAbstractObject:
+        result.emplace_back(tx.GetDrop().GetName());
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterAbstractObject:
+        result.emplace_back(tx.GetModifyAbstractObject().GetObject());
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:

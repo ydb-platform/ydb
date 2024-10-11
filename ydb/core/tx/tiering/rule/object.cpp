@@ -1,7 +1,6 @@
 #include "object.h"
 #include "behaviour.h"
 
-#include <ydb/core/tx/tiering/rule/checker.h>
 #include <ydb/core/tx/tiering/snapshot.h>
 
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
@@ -25,23 +24,32 @@ NJson::TJsonValue TTieringRule::SerializeDescriptionToJson() const {
     return result;
 }
 
-bool TTieringRule::DeserializeDescriptionFromJson(const NJson::TJsonValue& jsonInfo) {
+TConclusion<std::vector<TTieringInterval>> TTieringRule::DeserializeIntervalsFromJson(const NJson::TJsonValue& jsonInfo) {
     const NJson::TJsonValue::TArray* rules;
     if (!jsonInfo["rules"].GetArrayPointer(&rules)) {
-        return false;
+        return TConclusionStatus::Fail("Missing rules");
     }
     if (rules->empty()) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "tiering_rule_deserialization_failed")("reason", "empty_rules");
-        return false;
+        return TConclusionStatus::Fail("Empty rules");
     }
+    std::vector<TTieringInterval> intervals;
     for (auto&& i : *rules) {
         TTieringInterval interval;
         if (!interval.DeserializeFromJson(i)) {
-            return false;
+            return TConclusionStatus::Fail(TStringBuilder() << "Can't parse tiering rule at " << i);
         }
-        Intervals.emplace_back(std::move(interval));
+        intervals.emplace_back(std::move(interval));
     }
-    std::sort(Intervals.begin(), Intervals.end());
+    std::sort(intervals.begin(), intervals.end());
+    return intervals;
+}
+
+bool TTieringRule::DeserializeDescriptionFromJson(const NJson::TJsonValue& jsonInfo) {
+    auto result = DeserializeIntervalsFromJson(jsonInfo);
+    if (result.IsFail()) {
+        return false;
+    }
+    Intervals = result.GetResult();
     return true;
 }
 

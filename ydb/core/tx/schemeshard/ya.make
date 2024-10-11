@@ -82,6 +82,7 @@ SRCS(
     schemeshard__operation_side_effects.h
     schemeshard__operation_memory_changes.cpp
     schemeshard__operation_db_changes.cpp
+    schemeshard__operation_alter_abstract_object.cpp
     schemeshard__operation_alter_bsv.cpp
     schemeshard__operation_alter_external_data_source.cpp
     schemeshard__operation_alter_external_table.cpp
@@ -102,6 +103,7 @@ SRCS(
     schemeshard__operation_cancel_tx.cpp
     schemeshard__operation_common.cpp
     schemeshard__operation_common.h
+    schemeshard__operation_common_abstract_object.cpp
     schemeshard__operation_common_external_data_source.cpp
     schemeshard__operation_common_external_table.cpp
     schemeshard__operation_common_resource_pool.cpp
@@ -109,6 +111,7 @@ SRCS(
     schemeshard__operation_consistent_copy_tables.cpp
     schemeshard__operation_copy_sequence.cpp
     schemeshard__operation_copy_table.cpp
+    schemeshard__operation_create_abstract_object.cpp
     schemeshard__operation_create_backup.cpp
     schemeshard__operation_create_bsv.cpp
     schemeshard__operation_create_external_data_source.cpp
@@ -130,6 +133,7 @@ SRCS(
     schemeshard__operation_create_subdomain.cpp
     schemeshard__operation_create_table.cpp
     schemeshard__operation_create_view.cpp
+    schemeshard__operation_drop_abstract_object.cpp
     schemeshard__operation_drop_bsv.cpp
     schemeshard__operation_drop_external_data_source.cpp
     schemeshard__operation_drop_external_table.cpp
@@ -287,6 +291,7 @@ PEERDIR(
     ydb/library/yql/minikql
     ydb/library/yql/providers/common/proto
     ydb/services/bg_tasks
+    ydb/services/metadata/abstract
     ydb/core/tx/columnshard/bg_tasks/manager
 )
 

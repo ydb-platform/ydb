@@ -1,9 +1,9 @@
 #include "behaviour.h"
 #include "manager.h"
-#include "initializer.h"
 
 #include <ydb/core/tx/tiering/tier/checker.h>
 
+#include <ydb/services/metadata/abstract/initialization.h>
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 #include <ydb/services/metadata/secret/fetcher.h>
 
@@ -23,7 +23,7 @@ NMetadata::NModifications::IOperationsManager::TPtr TTierConfigBehaviour::Constr
 }
 
 NMetadata::NInitializer::IInitializationBehaviour::TPtr TTierConfigBehaviour::ConstructInitializer() const {
-    return std::make_shared<TTiersInitializer>();
+    return nullptr;
 }
 
 TString TTierConfigBehaviour::GetTypeId() const {

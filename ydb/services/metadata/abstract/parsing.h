@@ -1,10 +1,14 @@
 #pragma once
 #include "request_features.h"
+
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 
 #include <util/generic/string.h>
 #include <util/generic/typetraits.h>
+
 #include <map>
 #include <optional>
 
@@ -20,6 +24,8 @@ Y_HAS_MEMBER(ResetFeatures); // for alter
 class TObjectSettingsImpl {
 public:
     using TFeaturesExtractor = NYql::TFeaturesExtractor;
+    using TProto = NKikimrSchemeOp::TModifyAbstractObject;
+
 private:
     using TFeatures = THashMap<TString, TString>;
     using TResetFeatures = std::unordered_set<TString>;
@@ -31,6 +37,12 @@ private:
     TFeatures Features;
     TResetFeatures ResetFeatures;
     std::shared_ptr<TFeaturesExtractor> FeaturesExtractor;
+
+private:
+    void InitFeaturesExtractor() {
+        FeaturesExtractor = std::make_shared<TFeaturesExtractor>(Features, ResetFeatures);
+    }
+
 public:
     TObjectSettingsImpl() = default;
 
@@ -45,6 +57,17 @@ public:
     TFeaturesExtractor& GetFeaturesExtractor() const {
         Y_ABORT_UNLESS(!!FeaturesExtractor);
         return *FeaturesExtractor;
+    }
+
+    const TString* ReadFeature(const TString& key) const {
+        return Features.FindPtr(key);
+    }
+
+    void UpdateFeatures(TFeatures values) {
+        for (auto&& [key, value] : values) {
+            Features[key] = std::move(value);
+        }
+        InitFeaturesExtractor();
     }
 
     template <class TKiObject>
@@ -81,8 +104,45 @@ public:
                 }
             }
         }
-        FeaturesExtractor = std::make_shared<TFeaturesExtractor>(Features, ResetFeatures);
+        InitFeaturesExtractor();
         return true;
+    }
+
+    bool DeserializeFromProto(const TProto& data) {
+        ObjectId = data.GetObject();
+        TypeId = data.GetType();
+        ReplaceIfExists = data.GetReplaceIfExists();
+        ExistingOk = data.GetExistingOk();
+        MissingOk = data.GetMissingOk();
+        for (const auto& feature : data.GetResetFeatures()) {
+            ResetFeatures.emplace(feature);
+        }
+        for (const auto& [key, value] : data.GetFeatures()) {
+            if (!value.has_text_value()) {
+                return false;
+            }
+            Features.emplace(key, value.Gettext_value());
+        }
+        InitFeaturesExtractor();
+        return true;
+    }
+
+    TProto SerializeToProto() const {
+        TProto result;
+        result.SetType(TypeId);
+        result.SetObject(ObjectId);
+        result.SetExistingOk(ExistingOk);
+        result.SetMissingOk(MissingOk);
+        result.SetReplaceIfExists(ReplaceIfExists);
+        for (const TString& feature : ResetFeatures) {
+            result.AddResetFeatures(feature);
+        }
+        for (const auto& [name, value] : Features) {
+            Ydb::Value serializedValue;
+            serializedValue.set_text_value(value);
+            result.MutableFeatures()->emplace(name, std::move(serializedValue));
+        }
+        return result;
     }
 };
 

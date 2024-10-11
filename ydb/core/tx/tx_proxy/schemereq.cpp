@@ -148,6 +148,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropExternalDataSource:
         case NKikimrSchemeOp::ESchemeOpDropView:
         case NKikimrSchemeOp::ESchemeOpDropResourcePool:
+        case NKikimrSchemeOp::ESchemeOpDropAbstractObject:
             return *modifyScheme.MutableDrop()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterTable:
@@ -362,6 +363,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackup:
         case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
             return *modifyScheme.MutableRestoreIncrementalBackup()->MutableSrcTableName();
+
+        case NKikimrSchemeOp::ESchemeOpAlterAbstractObject:
+            return *modifyScheme.MutableModifyAbstractObject()->MutableObject();
+
+        case NKikimrSchemeOp::ESchemeOpCreateAbstractObject:
+            return *modifyScheme.MutableModifyAbstractObject()->MutableObject();
         }
     }
 
@@ -385,6 +392,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateExternalDataSource:
         case NKikimrSchemeOp::ESchemeOpCreateView:
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
+        case NKikimrSchemeOp::ESchemeOpCreateAbstractObject:
             return true;
         default:
             return false;
@@ -617,6 +625,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterBlobDepot:
         case NKikimrSchemeOp::ESchemeOpAlterExternalTable:
         case NKikimrSchemeOp::ESchemeOpAlterExternalDataSource:
+        case NKikimrSchemeOp::ESchemeOpAlterAbstractObject:
         case NKikimrSchemeOp::ESchemeOpCreateContinuousBackup:
         case NKikimrSchemeOp::ESchemeOpAlterContinuousBackup:
         case NKikimrSchemeOp::ESchemeOpDropContinuousBackup:
@@ -646,6 +655,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropExternalDataSource:
         case NKikimrSchemeOp::ESchemeOpDropView:
         case NKikimrSchemeOp::ESchemeOpDropResourcePool:
+        case NKikimrSchemeOp::ESchemeOpDropAbstractObject:
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
@@ -708,6 +718,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateExternalDataSource:
         case NKikimrSchemeOp::ESchemeOpCreateView:
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
+        case NKikimrSchemeOp::ESchemeOpCreateAbstractObject:
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = workingDir;

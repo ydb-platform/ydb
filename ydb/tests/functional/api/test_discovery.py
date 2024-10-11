@@ -79,7 +79,7 @@ class TestDiscoveryExtEndpoint(object):
         for slot in self.cluster.slots.values():
             assert_that(slot.grpc_port not in endpoint_ports)
 
-        #Just check again to cover discovery cache issue
+        # Just check again to cover discovery cache issue
         driver_config = ydb.DriverConfig(
             "%s:%s" % (self.cluster.nodes[1].host, ext_port_1), self.database_name)
         resolver = ydb.DiscoveryEndpointsResolver(driver_config)
@@ -93,7 +93,7 @@ class TestDiscoveryExtEndpoint(object):
         for slot in self.cluster.slots.values():
             assert_that(slot.grpc_port not in endpoint_ports)
 
-        #repeat using other ext endpoint
+        # Repeat using other ext endpoint
         driver_config = ydb.DriverConfig(
             "%s:%s" % (self.cluster.nodes[1].host, ext_port_2), self.database_name)
         resolver = ydb.DiscoveryEndpointsResolver(driver_config)

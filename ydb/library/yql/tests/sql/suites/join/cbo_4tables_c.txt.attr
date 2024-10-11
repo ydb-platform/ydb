@@ -10,12 +10,12 @@
     [
         {
             "name" = "k";
-            "type" = "string";
+            "type" = "int64";
             "type_v3" = {"type_name" = "optional"; item = "int64"}
         };
         {
-            "name" = "val";
-            "type" = "string";
+            "name" = "v";
+            "type" = "int64";
             "type_v3" = {"type_name" = "optional"; item = "int64"}
         };
     ];

@@ -302,6 +302,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 }
             });
             Manager->Start(Manager);
+            for (const auto& [pathId, tieringId] : TieringByTable) {
+                Manager->EnablePathId(pathId, tieringId);
+            }
             Become(&TThis::StateInit);
             Start = Now();
         }
@@ -314,6 +317,15 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         void DisableTiering(ui64 pathId) {
             AFL_VERIFY(Manager);
             Manager->DisablePathId(pathId);
+        }
+
+        TTestCSEmulator() = default;
+        TTestCSEmulator(std::vector<std::pair<ui64, TString>> tieringByTable) : TieringByTable(tieringByTable.begin(), tieringByTable.end()) {
+            std::set<TString> tierings;
+            for (const auto& [pathId, tieringId] : TieringByTable) {
+                tierings.emplace(tieringId);
+            }
+            ExpectedTieringsCount = tierings.size();
         }
     };
 
@@ -358,21 +370,20 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         server->SetupRootStoragePools(sender);
         TLocalHelper lHelper(*server);
         {
-            TTestCSEmulator* emulator = new TTestCSEmulator;
-            emulator->MutableCheckers().emplace("TIER.tier1", TJsonChecker("Name", "abc"));
-            emulator->SetExpectedTiersCount(2);
-            runtime.Register(emulator);
-            runtime.SimulateSleep(TDuration::Seconds(10));
-            Cerr << "Initialization finished" << Endl;
-
             lHelper.StartSchemaRequest("CREATE OBJECT tier1 (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName("abc") + "`");
             lHelper.StartSchemaRequest("CREATE OBJECT tiering1 ("
                 "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTiering1Str + "` )", false);
             lHelper.StartSchemaRequest("CREATE OBJECT tier2 (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName("abc") + "`");
             lHelper.StartSchemaRequest("CREATE OBJECT tiering1 ("
                 "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTiering1Str + "` )");
-            emulator->EnableTiering(0, "tiering1");
-            // lHelper.CreateTestOlapTable();
+            lHelper.CreateTestOlapTable();
+
+            TTestCSEmulator* emulator = new TTestCSEmulator({{0, "tiering1"}});
+            emulator->MutableCheckers().emplace("TIER.tier1", TJsonChecker("Name", "abc"));
+            emulator->SetExpectedTiersCount(2);
+            runtime.Register(emulator);
+            runtime.SimulateSleep(TDuration::Seconds(10));
+            Cerr << "Initialization finished" << Endl;
             {
                 const TInstant start = Now();
                 while (!emulator->IsFound() && Now() - start < TDuration::Seconds(20)) {
@@ -472,13 +483,12 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             "WITH (defaultColumn = timestamp, description = `" + ConfigTiering2Str + "` )", true, false);
         lHelper.CreateTestOlapTable("olapTable");
         {
-            TTestCSEmulator* emulator = new TTestCSEmulator;
+            TTestCSEmulator* emulator = new TTestCSEmulator({{0, "tiering1"}});
             runtime.Register(emulator);
             emulator->MutableCheckers().emplace("TIER.tier1", TJsonChecker("Name", "abc1"));
             emulator->MutableCheckers().emplace("TIER.tier2", TJsonChecker("Name", "abc2"));
             emulator->SetExpectedTieringsCount(1);
             emulator->SetExpectedTiersCount(2);
-            emulator->EnableTiering(0, "tiering1");
             emulator->CheckRuntime(runtime);
         }
 
@@ -608,13 +618,12 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         lHelper.StartSchemaRequest("CREATE OBJECT tiering2 ("
             "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTiering2Str + "` )");
         {
-            TTestCSEmulator* emulator = new TTestCSEmulator;
+            TTestCSEmulator* emulator = new TTestCSEmulator({{0, "tiering1"}});
             runtime.Register(emulator);
             emulator->MutableCheckers().emplace("TIER.tier1", TJsonChecker("Name", "fakeTier"));
             emulator->MutableCheckers().emplace("TIER.tier2", TJsonChecker("ObjectStorage.Endpoint", TierEndpoint));
             emulator->SetExpectedTieringsCount(1);
             emulator->SetExpectedTiersCount(2);
-            emulator->EnableTiering(0, "tiering1");
             emulator->CheckRuntime(runtime);
         }
         lHelper.CreateTestOlapTable("olapTable", 2);
@@ -625,10 +634,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         runtime.UpdateCurrentTime(now);
         const TInstant pkStart = now - TDuration::Days(15);
 
-        auto batch1 = lHelper.TestArrowBatch(0, pkStart.GetValue(), 6000);
-        auto batch2 = lHelper.TestArrowBatch(0, pkStart.GetValue() - 100, 6000);
+        auto batch = lHelper.TestArrowBatch(0, pkStart.GetValue(), 6000);
         auto batchSmall = lHelper.TestArrowBatch(0, now.GetValue(), 1);
-        auto batchSize = NArrow::GetBatchDataSize(batch1);
+        auto batchSize = NArrow::GetBatchDataSize(batch);
         Cerr << "Inserting " << batchSize << " bytes..." << Endl;
         UNIT_ASSERT(batchSize > 4 * 1024 * 1024); // NColumnShard::TLimits::MIN_BYTES_TO_INSERT
         UNIT_ASSERT(batchSize < 8 * 1024 * 1024);
@@ -637,8 +645,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             TAtomic unusedPrev;
             runtime.GetAppData().Icb->SetValue("ColumnShardControls.GranuleIndexedPortionsCountLimit", 1, unusedPrev);
         }
-        lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch1);
-        lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch2);
+        lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch);
         {
             const TInstant start = Now();
             bool check = false;

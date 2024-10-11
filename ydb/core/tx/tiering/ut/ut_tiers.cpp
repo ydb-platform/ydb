@@ -213,13 +213,12 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
     class TTestCSEmulator: public NActors::TActorBootstrapped<TTestCSEmulator> {
     private:
         using TBase = NActors::TActorBootstrapped<TTestCSEmulator>;
-        std::vector<std::pair<ui64, TString>> TieringByTable;
+        THashMap<ui64, TString> TieringByTable;
         std::shared_ptr<TTiersManager> Manager;
-        TActorId ProviderId;
         TInstant Start;
         YDB_READONLY_FLAG(Found, false);
-        YDB_ACCESSOR(ui32, ExpectedTieringsCount, 1);
-        YDB_ACCESSOR(ui32, ExpectedTiersCount, 1);
+        YDB_ACCESSOR_DEF(ui32, ExpectedTieringsCount);
+        YDB_ACCESSOR_DEF(ui32, ExpectedTiersCount);
 
         using TKeyCheckers = TMap<TString, TJsonChecker>;
         YDB_ACCESSOR_DEF(TKeyCheckers, Checkers);
@@ -297,22 +296,24 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         }
 
         void Bootstrap() {
-            ProviderId = NMetadata::NProvider::MakeServiceId(SelfId().NodeId());
             Manager = std::make_shared<TTiersManager>(0, SelfId(), [this](const TActorContext& /*ctx*/) {
                 if (Manager->IsReady()) {
                     Send(SelfId(), new TEvPrivate::TEvTieringModified);
                 }
             });
             Manager->Start(Manager);
-            for (const auto& [pathId, tieringId] : TieringByTable) {
-                Manager->EnablePathId(pathId, tieringId);
-            }
             Become(&TThis::StateInit);
             Start = Now();
         }
 
-        TTestCSEmulator() = default;
-        TTestCSEmulator(std::vector<std::pair<ui64, TString>> tieringByTable) : TieringByTable(std::move(tieringByTable)) {
+        void EnableTiering(ui64 pathId, TString tieringId) {
+            AFL_VERIFY(Manager);
+            Manager->EnablePathId(pathId, tieringId);
+        }
+
+        void DisableTiering(ui64 pathId) {
+            AFL_VERIFY(Manager);
+            Manager->DisablePathId(pathId);
         }
     };
 
@@ -370,10 +371,11 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             lHelper.StartSchemaRequest("CREATE OBJECT tier2 (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName("abc") + "`");
             lHelper.StartSchemaRequest("CREATE OBJECT tiering1 ("
                 "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTiering1Str + "` )");
-            lHelper.CreateTestOlapTable();
+            emulator->EnableTiering(0, "tiering1");
+            // lHelper.CreateTestOlapTable();
             {
                 const TInstant start = Now();
-                while (!emulator->IsFound() && Now() - start < TDuration::Seconds(2000)) {
+                while (!emulator->IsFound() && Now() - start < TDuration::Seconds(20)) {
                     runtime.SimulateSleep(TDuration::Seconds(1));
                 }
                 Y_ABORT_UNLESS(emulator->IsFound());
@@ -387,7 +389,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 
                 {
                     const TInstant start = Now();
-                    while (!emulator->IsFound() && Now() - start < TDuration::Seconds(2000)) {
+                    while (!emulator->IsFound() && Now() - start < TDuration::Seconds(20)) {
                         runtime.SimulateSleep(TDuration::Seconds(1));
                     }
                     Y_ABORT_UNLESS(emulator->IsFound());
@@ -470,12 +472,13 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             "WITH (defaultColumn = timestamp, description = `" + ConfigTiering2Str + "` )", true, false);
         lHelper.CreateTestOlapTable("olapTable");
         {
-            TTestCSEmulator* emulator = new TTestCSEmulator({{0, "tiering1"}});
+            TTestCSEmulator* emulator = new TTestCSEmulator;
             runtime.Register(emulator);
             emulator->MutableCheckers().emplace("TIER.tier1", TJsonChecker("Name", "abc1"));
             emulator->MutableCheckers().emplace("TIER.tier2", TJsonChecker("Name", "abc2"));
             emulator->SetExpectedTieringsCount(1);
             emulator->SetExpectedTiersCount(2);
+            emulator->EnableTiering(0, "tiering1");
             emulator->CheckRuntime(runtime);
         }
 
@@ -605,12 +608,13 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         lHelper.StartSchemaRequest("CREATE OBJECT tiering2 ("
             "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTiering2Str + "` )");
         {
-            TTestCSEmulator* emulator = new TTestCSEmulator({{0, "tiering1"}});
+            TTestCSEmulator* emulator = new TTestCSEmulator;
             runtime.Register(emulator);
             emulator->MutableCheckers().emplace("TIER.tier1", TJsonChecker("Name", "fakeTier"));
             emulator->MutableCheckers().emplace("TIER.tier2", TJsonChecker("ObjectStorage.Endpoint", TierEndpoint));
             emulator->SetExpectedTieringsCount(1);
             emulator->SetExpectedTiersCount(2);
+            emulator->EnableTiering(0, "tiering1");
             emulator->CheckRuntime(runtime);
         }
         lHelper.CreateTestOlapTable("olapTable", 2);

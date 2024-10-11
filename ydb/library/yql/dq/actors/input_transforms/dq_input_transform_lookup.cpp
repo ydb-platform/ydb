@@ -258,12 +258,13 @@ private: //IDqComputeActorAsyncInput
     }
 
     void InitMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
-        if (taskCounters) {
-            LruHits = taskCounters->GetCounter("StreamLookupTransformLruHits");
-            LruMiss = taskCounters->GetCounter("StreamLookupTransformLruMiss");
-            CpuTimeUs = taskCounters->GetCounter("StreamLookupTransformCpuTimeUs");
-            Batches = taskCounters->GetCounter("StreamLookupTransformBatchCount");
+        if (!taskCounters) {
+            return;
         }
+        LruHits = taskCounters->GetCounter("StreamLookupTransformLruHits");
+        LruMiss = taskCounters->GetCounter("StreamLookupTransformLruMiss");
+        CpuTimeUs = taskCounters->GetCounter("StreamLookupTransformCpuTimeUs");
+        Batches = taskCounters->GetCounter("StreamLookupTransformBatchCount");
     }
 
     static TDuration GetCpuTimeDelta(ui64 startCycleCount) {

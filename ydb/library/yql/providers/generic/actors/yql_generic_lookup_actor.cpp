@@ -100,15 +100,16 @@ namespace NYql::NDq {
             KeyTypeHelper.reset();
         }
         void InitMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
-            if (taskCounters) {
-                Count = taskCounters->GetCounter("GenericLookupCount");
-                Keys = taskCounters->GetCounter("GenericLookupKeys");
-                ResultChunks = taskCounters->GetCounter("GenericLookupResultChunks");
-                ResultRows = taskCounters->GetCounter("GenericLookupResultRows");
-                ResultBytes = taskCounters->GetCounter("GenericLookupResultBytes");
-                AnswerTime = taskCounters->GetCounter("GenericLookupAnswerTimeMs");
-                CpuTime = taskCounters->GetCounter("GenericLookupCpuTimeUs");
+            if (!taskCounters) {
+                return;
             }
+            Count = taskCounters->GetCounter("GenericLookupCount");
+            Keys = taskCounters->GetCounter("GenericLookupKeys");
+            ResultChunks = taskCounters->GetCounter("GenericLookupResultChunks");
+            ResultRows = taskCounters->GetCounter("GenericLookupResultRows");
+            ResultBytes = taskCounters->GetCounter("GenericLookupResultBytes");
+            AnswerTime = taskCounters->GetCounter("GenericLookupAnswerTimeMs");
+            CpuTime = taskCounters->GetCounter("GenericLookupCpuTimeUs");
         }
     public:
 

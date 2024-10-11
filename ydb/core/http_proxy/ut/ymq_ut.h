@@ -770,51 +770,56 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestChangeMessageVisibility, THttpProxyTestMock) {
-        auto createQueueReq = CreateSqsCreateQueueRequest();
-        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-        NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
+        ChangeMessageVisibility({}, 400);
+        ChangeMessageVisibility({
+            {"QueueUrl", "unknown-url"},
+            {"ReceiptHandle", "unknown-receipt-handle"},
+            {"VisibilityTimeout", 1}
+        }, 400);
 
-        NJson::TJsonValue sendMessageReq;
-        sendMessageReq["QueueUrl"] = resultQueueUrl;
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        ChangeMessageVisibility({
+            {"QueueUrl", queueUrl},
+            {"VisibilityTimeout", 1}
+        }, 400);
+
+        ChangeMessageVisibility({
+            {"QueueUrl", queueUrl},
+            {"ReceiptHandle", "unknown-receipt-handle"},
+        }, 400);
+
+        ChangeMessageVisibility({
+            {"QueueUrl", queueUrl},
+            {"ReceiptHandle", "unknown-receipt-handle"},
+            {"VisibilityTimeout", 1}
+        }, 400);
+
         auto body = "MessageBody-0";
-        sendMessageReq["MessageBody"] = body;
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", body}});
 
-        res = SendHttpRequest("/Root", "AmazonSQS.SendMessage", std::move(sendMessageReq), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-
-        for (int i = 0; i < 20; ++i) {
-            NJson::TJsonValue receiveMessageReq;
-            receiveMessageReq["QueueUrl"] = resultQueueUrl;
-            res = SendHttpRequest("/Root", "AmazonSQS.ReceiveMessage", std::move(receiveMessageReq), FormAuthorizationStr("ru-central1"));
-            if (res.Body != TString("{}")) {
-                break;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}});
         auto receiptHandle = json["Messages"][0]["ReceiptHandle"].GetString();
         UNIT_ASSERT(!receiptHandle.Empty());
 
-        NJson::TJsonValue changeMessageVisibility;
-        changeMessageVisibility["QueueUrl"] = resultQueueUrl;
-        changeMessageVisibility["ReceiptHandle"] = receiptHandle;
-        changeMessageVisibility["VisibilityTimeout"] = 1;
+        ChangeMessageVisibility({
+            {"QueueUrl", queueUrl},
+            {"ReceiptHandle", receiptHandle},
+            {"VisibilityTimeout", 1}
+        });
 
-        res = SendHttpRequest(
-            "/Root",
-            "AmazonSQS.ChangeMessageVisibility",
-            std::move(changeMessageVisibility),
-            FormAuthorizationStr("ru-central1")
+        UNIT_ASSERT(
+            WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
+                return json["Attributes"]["ApproximateNumberOfMessages"] == "1" && json["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "0";
+            })
         );
 
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+        ChangeMessageVisibility({
+            {"QueueUrl", queueUrl},
+            {"ReceiptHandle", receiptHandle},
+            {"VisibilityTimeout", 1}
+        }, 400);
     }
 
     Y_UNIT_TEST_F(TestChangeMessageVisibilityBatch, THttpProxyTestMock) {

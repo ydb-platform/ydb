@@ -279,7 +279,7 @@ void TCommandExportToS3::Config(TConfig& config) {
             << "Codec used to compress data" << Endl
             << "  Available options:" << Endl
             << "    - zstd" << Endl
-            << "    - zstd-N (N is compression level, e.g. zstd-3)" << Endl)
+            << "    - zstd-N (N is compression level in range [1, 22], e.g. zstd-3)" << Endl)
         .RequiredArgument("STRING").StoreResult(&Compression);
 
     config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder() 

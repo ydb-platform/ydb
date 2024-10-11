@@ -24,9 +24,7 @@ bool TOlapSchema::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycl
     }
 
     if (const TString& tieringId = ttl.GetUseTiering()) {
-        const TPath path =
-            TPath::Resolve(NColumnShard::NTiers::TTieringRule::GetBehaviour()->GetStorageTablePath(), &context)
-                .Dive(ttl.GetUseTiering());
+        const TPath path = TPath::Resolve(NColumnShard::NTiers::TTieringRule::GetBehaviour()->GetStorageTablePath(), &context).Dive(tieringId);
         {
             TPath::TChecker checks = path.Check();
             checks.NotEmpty().NotUnderDomainUpgrade().IsAtLocalSchemeShard().IsResolved().NotDeleted().IsTieringRule().NotUnderOperation();

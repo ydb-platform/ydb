@@ -47,7 +47,7 @@ TConclusionStatus TCreateTieringRule::DoInitialize(const TUpdateInitializationCo
     const TString& parentPathStr = context.GetModification()->GetWorkingDir();
     const TString& tieringRulesDir = GetStorageDirectory();
     if (!IsEqualPaths(parentPathStr, tieringRulesDir)) {
-        return TConclusionStatus::Fail("Tiering rules must be placed in " + tieringRulesDir);
+        return TConclusionStatus::Fail("Tiering rules must be placed in " + tieringRulesDir + ", got :" + parentPathStr);
     }
 
     TPath dstPath = TPath::Resolve(GetPathString(), context.GetSSOperationContext()->SS);

@@ -33,7 +33,7 @@ class TpchSuiteBase(LoadSuiteBase):
             tpch_path = 'tpch'
         return get_external_param(f'table-path-{self.suite}', f'{tpch_path}/s{self.size}')
 
-    def setup_class(self):
+    def do_setup_class(self):
         if getenv('NO_VERIFY_DATA', '0') == '1' or getenv('NO_VERIFY_DATA_TPCH', '0') == '1' or getenv(f'NO_VERIFY_DATA_TPCH_{self.size}'):
             return
         self.check_tables_size(self, folder=self._get_path(self, False), tables=self._get_tables_size(self))

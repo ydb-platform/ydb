@@ -150,12 +150,37 @@ class LoadSuiteBase:
                 exc = exc.with_traceback(result.traceback)
             raise exc
 
+    def setup_class(self) -> None:
+        if not hasattr(self, 'do_setup_class'):
+            return
+        error = None
+        tb = None
+        start_time = time()
+        try:
+            self.do_setup_class(self)
+        except BaseException as e:
+            error = str(e)
+            tb = e.__traceback__
+        ResultsProcessor.upload_results(
+            kind='Load',
+            suite=self.suite,
+            test='_Verification',
+            timestamp=start_time,
+            is_successful=(error is None)
+        )
+        if error is not None:
+            exc = pytest.fail.Exception(error)
+            exc.with_traceback(tb)
+            raise exc
+
     def run_workload_test(self, path: str, query_num: int) -> None:
-        allure_listener = next(filter(lambda x: isinstance(x, AllureListener), plugin_manager.get_plugin_manager().get_plugins()))
-        allure_test_result = allure_listener.allure_logger.get_test(None)
-        query_num_param = next(filter(lambda x: x.name == 'query_num', allure_test_result.parameters), None)
-        if query_num_param:
-            query_num_param.mode = allure.parameter_mode.HIDDEN.value
+        for plugin in plugin_manager.get_plugin_manager().get_plugins():
+            if isinstance(plugin, AllureListener):
+                allure_test_result = plugin.allure_logger.get_test(None)
+                if allure_test_result is not None:
+                    for param in allure_test_result.parameters:
+                        if param.name == 'query_num':
+                            param.mode = allure.parameter_mode.HIDDEN.value
         start_time = time()
         result = YdbCliHelper.workload_run(
             path=path,

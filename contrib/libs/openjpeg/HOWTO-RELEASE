@@ -1,0 +1,34 @@
+Check-list OpenJPEG Release
+
+* update MAJOR, MINOR, BUILD, SOVERSION in CMakeLists.txt
+* update MAJOR, MINOR, BUILD in appveyor.yml
+* update CHANGELOG with
+`github_changelog_generator --token TOKEN_HERE --exclude-labels gcode_fixed,OpjVersion-1.x --release-url "https://github.com/uclouvain/openjpeg/releases/%s" --since-tag v2.5.0 --future-release v2.5.1 --output append2changelog.md --user uclouvain --project openjpeg --exclude-tags version.1.0` . TOKEN_HERE is created at https://github.com/settings/tokens
+* update NEWS.md
+* git commit -a -m "Prepare for OpenJPEG v2.5.1 release"
+* git tag -a v2.5.1 -m "OpenJPEG v2.5.1 release"
+* git push origin --tags
+* add post to OpenJPEG website in gh-pages branch in _posts/ subdirectory. See commit https://github.com/uclouvain/openjpeg/commit/6563d704f5fb896209dd862ccfc6b97eb9183c5c
+* change binversion of openjpeg website in _config.yml in gh-pages branch
+* update release description if needed
+* update openjpeg.json with latest release
+* update OPJ_LATEST_VERSION in abi-check.sh, uncomment and update OPJ_PREVIOUS_VERSION in abi-check.sh, and push
+* locally run: OPJ_CI_ABI_CHECK=1 ./tools/travis-ci/abi-check.sh
+* cd ~/abi-check/work/abi-check/
+* put the sources of the new version in src/openjpeg/2.5.1/version.-2.5.1.tar.gz
+* PATH=$PWD/../../tools/abi-tracker/bin:$PWD/../../tools/wdiff/bin:$PWD/../../tools:$PATH abi-monitor -v 2.5.1  -build ./openjpeg.json
+* PATH=$PWD/../../tools/abi-tracker/bin:$PWD/../../tools/wdiff/bin:$PWD/../../tools:$PATH abi-tracker  -build ./openjpeg.json 
+* rm -rf src/openjpeg/current
+* rm -rf build_logs
+* Remove symbolic links: rm -f installed/openjpeg/2.5.1/lib/libopenjp2.so installed/openjpeg/2.5.1/lib/libopenjp2.so.7 installed/openjpeg/current/lib/libopenjp2.so abi-check/installed/openjpeg/current/lib/libopenjp2.so.7
+* git add --all .
+* git commit -m "Update ABI/API compatibility reports after 2.5.1 release"
+* git push
+* cd ~/openjpeg/openjpeg
+* comment back OPJ_PREVIOUS_VERSION and push
+* build doc and update Doxygen on website
+* manual build on Windows:
+    - cmake ..  -G "Visual Studio 15 2017" -A x64 -DCMAKE_CONFIGURATION_TYPES=Release -DBUILD_THIRDPARTY=ON -D CPACK_GENERATOR:STRING=ZIP -D CPACK_PACKAGE_FILE_NAME:STRING=openjpeg-v2.4.0-windows-x64
+    - cmake --build . --target package --config Release
+* send email to ML opj, comp.compression, iiif
+* tweet

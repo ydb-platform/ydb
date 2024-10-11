@@ -473,7 +473,7 @@ TUnversionedValueToSkiffConverter CreateComplexValueConverter(
             input.Reset(value.Data.String, value.Length);
         } else if (value.Type == EValueType::Null) {
             static const TStringBuf empty = "#";
-            input.Reset(empty.Data(), empty.Size());
+            input.Reset(empty.data(), empty.size());
         } else {
             THROW_ERROR_EXCEPTION("Internal error; unexpected value type: expected %Qlv or %Qlv, actual %Qlv",
                 EValueType::Composite,

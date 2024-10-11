@@ -1,0 +1,144 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     MIT                  14395d49cccf7dd9c262788c7c3eb609
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: COPYING at line 20
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        COPYING [6:23]
+
+KEEP     MIT                  8c6b397cbef46628bea401075e15b1d5
+BELONGS ya.make
+    License text:
+        The MIT License
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        COPYING [1:1]
+
+KEEP     MIT                  a00cb0c2918046e6e350bbe37dc87fff
+BELONGS ya.make
+    License text:
+        License
+        -------
+        The MIT License
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.rst [1463:1466]
+
+KEEP     MIT                  a3a8f7feced3937b87cd090ba748e24b
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: lib/includes/nghttp2/nghttp2.h at line 20, lib/includes/nghttp2/nghttp2ver.h at line 20, lib/nghttp2_alpn.c at line 20, lib/nghttp2_alpn.h at line 20, lib/nghttp2_buf.c at line 20, lib/nghttp2_buf.h at line 20, lib/nghttp2_callbacks.c at line 20, lib/nghttp2_callbacks.h at line 20, lib/nghttp2_debug.c at line 20, lib/nghttp2_debug.h at line 20, lib/nghttp2_extpri.c at line 21, lib/nghttp2_extpri.h at line 21, lib/nghttp2_frame.c at line 20, lib/nghttp2_frame.h at line 20, lib/nghttp2_hd.c at line 20, lib/nghttp2_hd.h at line 20, lib/nghttp2_hd_huffman.c at line 20, lib/nghttp2_hd_huffman.h at line 20, lib/nghttp2_hd_huffman_data.c at line 20, lib/nghttp2_helper.c at line 20, lib/nghttp2_helper.h at line 20, lib/nghttp2_http.c at line 20, lib/nghttp2_http.h at line 20, lib/nghttp2_int.h at line 20, lib/nghttp2_map.c at line 21, lib/nghttp2_map.h at line 21, lib/nghttp2_mem.c at line 20, lib/nghttp2_mem.h at line 20, lib/nghttp2_net.h at line 20, lib/nghttp2_option.c at line 20, lib/nghttp2_option.h at line 20, lib/nghttp2_outbound_item.c at line 20, lib/nghttp2_outbound_item.h at line 20, lib/nghttp2_pq.c at line 20, lib/nghttp2_pq.h at line 20, lib/nghttp2_priority_spec.c at line 20, lib/nghttp2_priority_spec.h at line 20, lib/nghttp2_queue.c at line 20, lib/nghttp2_queue.h at line 20, lib/nghttp2_ratelim.c at line 20, lib/nghttp2_ratelim.h at line 20, lib/nghttp2_rcbuf.c at line 20, lib/nghttp2_rcbuf.h at line 20, lib/nghttp2_session.c at line 20, lib/nghttp2_session.h at line 20, lib/nghttp2_stream.c at line 20, lib/nghttp2_stream.h at line 20, lib/nghttp2_submit.c at line 20, lib/nghttp2_submit.h at line 20, lib/nghttp2_time.c at line 20, lib/nghttp2_time.h at line 20, lib/nghttp2_version.c at line 20, lib/sfparse.c at line 22, lib/sfparse.h at line 22
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        lib/includes/nghttp2/nghttp2.h [6:23]
+        lib/includes/nghttp2/nghttp2ver.h [6:23]
+        lib/nghttp2_alpn.c [6:23]
+        lib/nghttp2_alpn.h [6:23]
+        lib/nghttp2_buf.c [6:23]
+        lib/nghttp2_buf.h [6:23]
+        lib/nghttp2_callbacks.c [6:23]
+        lib/nghttp2_callbacks.h [6:23]
+        lib/nghttp2_debug.c [6:23]
+        lib/nghttp2_debug.h [6:23]
+        lib/nghttp2_extpri.c [7:24]
+        lib/nghttp2_extpri.h [7:24]
+        lib/nghttp2_frame.c [6:23]
+        lib/nghttp2_frame.h [6:23]
+        lib/nghttp2_hd.c [6:23]
+        lib/nghttp2_hd.h [6:23]
+        lib/nghttp2_hd_huffman.c [6:23]
+        lib/nghttp2_hd_huffman.h [6:23]
+        lib/nghttp2_hd_huffman_data.c [6:23]
+        lib/nghttp2_helper.c [6:23]
+        lib/nghttp2_helper.h [6:23]
+        lib/nghttp2_http.c [6:23]
+        lib/nghttp2_http.h [6:23]
+        lib/nghttp2_int.h [6:23]
+        lib/nghttp2_map.c [7:24]
+        lib/nghttp2_map.h [7:24]
+        lib/nghttp2_mem.c [6:23]
+        lib/nghttp2_mem.h [6:23]
+        lib/nghttp2_net.h [6:23]
+        lib/nghttp2_option.c [6:23]
+        lib/nghttp2_option.h [6:23]
+        lib/nghttp2_outbound_item.c [6:23]
+        lib/nghttp2_outbound_item.h [6:23]
+        lib/nghttp2_pq.c [6:23]
+        lib/nghttp2_pq.h [6:23]
+        lib/nghttp2_priority_spec.c [6:23]
+        lib/nghttp2_priority_spec.h [6:23]
+        lib/nghttp2_queue.c [6:23]
+        lib/nghttp2_queue.h [6:23]
+        lib/nghttp2_ratelim.c [6:23]
+        lib/nghttp2_ratelim.h [6:23]
+        lib/nghttp2_rcbuf.c [6:23]
+        lib/nghttp2_rcbuf.h [6:23]
+        lib/nghttp2_session.c [6:23]
+        lib/nghttp2_session.h [6:23]
+        lib/nghttp2_stream.c [6:23]
+        lib/nghttp2_stream.h [6:23]
+        lib/nghttp2_submit.c [6:23]
+        lib/nghttp2_submit.h [6:23]
+        lib/nghttp2_time.c [6:23]
+        lib/nghttp2_time.h [6:23]
+        lib/nghttp2_version.c [6:23]
+        lib/sfparse.c [8:25]
+        lib/sfparse.h [8:25]
+
+KEEP     FSFAP                d02cc4799cbd521d2aa8c3ff19e655f6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: FSFAP
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/prep/maintain/html_node/License-Notices-for-Other-Files.html, https://spdx.org/licenses/FSFAP
+    Files with this license:
+        INSTALL [7:10]

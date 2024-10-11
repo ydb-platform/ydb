@@ -1,0 +1,12 @@
+disable_includes:
+  - arch/aix/ifaddrs.h
+  - arch/solaris/v10/ifaddrs.h
+exclude:
+  - psutil/_psutil_aix.c
+  - psutil/_psutil_bsd.c
+  - psutil/_psutil_sunos.c
+  - psutil/arch/aix/*
+  - psutil/arch/freebsd/*
+  - psutil/arch/netbsd/*
+  - psutil/arch/openbsd/*
+  - psutil/arch/solaris/*

@@ -1,0 +1,28 @@
+--- a/main.cpp
++++ b/main.cpp
+@@ -24,9 +24,10 @@
+ #include <stdio.h>
+ #include <iostream>
+ #include <fstream>
+-#include <unistd.h>
++#ifndef _WIN32
++#   include <unistd.h>
++#endif
+ #include <sstream>
+-#include <unistd.h>
+ #include <sys/types.h>
+ #include <sys/stat.h>
+ #include <fcntl.h>
+--- a/parsedata.cpp
++++ b/parsedata.cpp
+@@ -120,6 +120,10 @@ Key makeFsmKeyHex( char *str, const InputLoc &loc, ParseData *pd )
+ 	return Key( (long)ul );
+ }
+ 
++#ifdef _MSC_VER
++#   define strtoll _strtoi64
++#endif
++
+ Key makeFsmKeyDec( char *str, const InputLoc &loc, ParseData *pd )
+ {
+ 	if ( keyOps->alphType->isSigned ) {

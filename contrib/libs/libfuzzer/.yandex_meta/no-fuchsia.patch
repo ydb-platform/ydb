@@ -1,0 +1,4 @@
+--- a/lib/fuzzer/CMakeLists.txt
++++ b/lib/fuzzer/CMakeLists.txt
+@@ -20 +20,0 @@ set(LIBFUZZER_SOURCES
+-  FuzzerUtilFuchsia.cpp

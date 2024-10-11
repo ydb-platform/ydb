@@ -873,7 +873,7 @@ void TCachedYPathService::RebuildCache()
         auto yson = WaitFor(asyncYson)
             .ValueOrThrow();
 
-        ProfilingCounters_->ByteSize.Update(yson.AsStringBuf().Size());
+        ProfilingCounters_->ByteSize.Update(yson.AsStringBuf().size());
 
         UpdateCachedTree(ConvertToNode(yson));
     } catch (const std::exception& ex) {

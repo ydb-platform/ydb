@@ -255,6 +255,7 @@ private:
 
                 SizeTest += entry->Size;
 
+                // TODO: should we advance HandCold before that call?
                 while (SizeTest > Limit) {
                     RunHandTest(evictedList);
                 }
@@ -333,24 +334,23 @@ private:
         }
 
         if (HandHot == HandCold) {
-            HandCold = HandCold->Prev();
+            HandCold = HandCold->Prev()->Node();
         }
     }
 
     void UnlinkEntry(TPageEntry* entry) {
-        if (entry == HandHot) {
-            HandHot = HandHot->Prev();
-        }
-        if (entry == HandCold) {
-            HandCold = HandCold->Prev();
-        }
-        if (entry == HandTest) {
-            HandTest = HandTest->Prev();
-        }
-
         if (entry->Empty()) { // the last entry in the cache
             HandHot = HandCold = HandTest = nullptr;
         } else {
+            if (entry == HandHot) {
+                HandHot = HandHot->Prev()->Node();
+            }
+            if (entry == HandCold) {
+                HandCold = HandCold->Prev()->Node();
+            }
+            if (entry == HandTest) {
+                HandTest = HandTest->Prev()->Node();
+            }
             entry->Unlink();
         }
     }
@@ -392,9 +392,9 @@ private:
         return entry->Page == nullptr;
     }
 
-    void Advance(TIntrusiveListItem<TPageEntry>*& ptr) const {
+    void Advance(TPageEntry*& ptr) const {
         if (ptr) {
-            ptr = ptr->Next();
+            ptr = ptr->Next()->Node();
         }
     } 
 
@@ -405,10 +405,12 @@ private:
     // TODO: unify this with TPageMap
     THashSet<THolder<TPageEntry>, TPageKeyHash, TPageKeyEqual> Entries;
 
-    TIntrusiveListItem<TPageEntry>* HandHot = nullptr;
-    TIntrusiveListItem<TPageEntry>* HandCold = nullptr;
-    TIntrusiveListItem<TPageEntry>* HandTest = nullptr;
-    ui64 SizeHot = 0, SizeCold = 0, SizeTest = 0;
+    TPageEntry* HandHot = nullptr;
+    TPageEntry* HandCold = nullptr;
+    TPageEntry* HandTest = nullptr;
+    ui64 SizeHot = 0;
+    ui64 SizeCold = 0;
+    ui64 SizeTest = 0;
 };
 
 }

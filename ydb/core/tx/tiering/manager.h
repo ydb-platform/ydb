@@ -63,7 +63,8 @@ private:
     IActor* Actor = nullptr;
     TManagers Managers;
 
-    std::unordered_map<ui64, TString> PathIdTiering;
+    using TTieringByPathId = std::unordered_map<ui64, TString>;
+    YDB_READONLY_DEF(TTieringByPathId, PathIdTiering);
     YDB_ACCESSOR_DEF(std::shared_ptr<NMetadata::NSecret::TSnapshot>, Secrets);
     YDB_ACCESSOR_DEF(std::shared_ptr<NTiers::TTiersSnapshot>, Tiers);
     YDB_ACCESSOR_DEF(TTieringRules, TieringRules);

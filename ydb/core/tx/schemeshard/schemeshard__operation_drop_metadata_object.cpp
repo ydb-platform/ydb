@@ -23,14 +23,22 @@ public:
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropMetadataObject);
 
         const TPathId& pathId = txState->TargetPathId;
-        const TPathElement::TPtr pathPtr = context.SS->PathsById.at(pathId);
-        const TPathElement::TPtr parentDirPtr = context.SS->PathsById.at(pathPtr->ParentPathId);
+        TPath path = TPath::Init(pathId, context.SS);
+        AFL_VERIFY(path.IsResolved());
+        const TPathElement::TPtr pathPtr = path.Base();
+        const TPathElement::TPtr parentDirPtr = path.Parent().Base();
+
+        NOperations::IDropMetadataUpdate::TRestoreContext restoreContext(&path, &context);
+        auto update = NOperations::TMetadataUpdate::RestoreDrop(restoreContext);
     
         NIceDb::TNiceDb db(context.GetDB());
 
         Y_ABORT_UNLESS(!pathPtr->Dropped());
         pathPtr->SetDropped(step, OperationId.GetTxId());
         context.SS->PersistDropStep(db, pathId, step, OperationId);
+
+        NOperations::TUpdateFinishContext finishContext(&path, &context, &db, NOlap::TSnapshot(step.GetValue(), ev->Get()->TxId));
+        update->FinishDrop(finishContext).Validate();
 
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
         domainInfo->DecPathsInside();
@@ -172,15 +180,16 @@ public:
         RETURN_RESULT_UNLESS(IsDestinationPathValid(result, context, dstPath, update->GetObjectPathType()));
         RETURN_RESULT_UNLESS(NMetadataObject::IsApplyIfChecksPassed(Transaction, result, context));
 
-        std::shared_ptr<NOperations::ISSEntity> originalEntity;
-        if (dstPath.IsResolved()) {
-            originalEntity = update->MakeEntity(dstPath->PathId);
-            if (auto status = originalEntity->Initialize(NOperations::TEntityInitializationContext(&context)); status.IsFail()) {
-                result->SetError(NKikimrScheme::StatusSchemeError, status.GetErrorMessage());
-                return result;
-            }
+        if (!dstPath.IsResolved()) {
+            result->SetError(NKikimrScheme::StatusSchemeError, "Object does not exist");
+            return result;
         }
 
+        std::shared_ptr<NOperations::ISSEntity> originalEntity = update->MakeEntity(dstPath->PathId);
+        if (auto status = originalEntity->Initialize(NOperations::TEntityInitializationContext(&context)); status.IsFail()) {
+            result->SetError(NKikimrScheme::StatusSchemeError, status.GetErrorMessage());
+            return result;
+        }
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
         NOperations::TUpdateInitializationContext initializationContext(&context, &Transaction, OperationId.GetTxId().GetValue(), originalEntity.get());

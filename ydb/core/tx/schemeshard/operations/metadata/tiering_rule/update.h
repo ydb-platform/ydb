@@ -50,14 +50,17 @@ public:
     using TTieringRuleUpdate::TTieringRuleUpdate;
 };
 
-class TDropTieringRule: public TTieringRuleUpdate {
+class TDropTieringRule: public TTieringRuleUpdate, public IDropMetadataUpdate {
 private:
     using TBase = TTieringRuleUpdate;
-    bool Exists;
 
 protected:
     TConclusionStatus DoInitialize(const TUpdateInitializationContext& context) override;
     TConclusionStatus DoExecute(const TUpdateStartContext& context) override;
+
+    void RestoreDrop(const TRestoreContext& /*context*/) override {
+    }
+    TConclusionStatus FinishDrop(const TUpdateFinishContext& context) override;
 
 public:
     using TTieringRuleUpdate::TTieringRuleUpdate;

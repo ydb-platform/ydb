@@ -6,6 +6,15 @@
 
 namespace NKikimr::NSchemeShard::NOperations {
 
+std::shared_ptr<IDropMetadataUpdate> TMetadataUpdate::MakeDrop(const TPath& object) {
+    switch (object->PathType) {
+        case NKikimrSchemeOp::EPathTypeTieringRule:
+            return std::make_shared<TDropTieringRule>(object.PathString());
+        default:
+            return nullptr;
+    }
+}
+
 std::shared_ptr<TMetadataUpdate> TMetadataUpdate::MakeUpdate(const NKikimrSchemeOp::TModifyScheme& transaction) {
     switch (transaction.GetOperationType()) {
         case NKikimrSchemeOp::ESchemeOpCreateTieringRule:
@@ -20,6 +29,12 @@ std::shared_ptr<TMetadataUpdate> TMetadataUpdate::MakeUpdate(const NKikimrScheme
         default:
             return nullptr;
     }
+}
+
+std::shared_ptr<IDropMetadataUpdate> TMetadataUpdate::RestoreDrop(const IDropMetadataUpdate::TRestoreContext& context) {
+    std::shared_ptr<IDropMetadataUpdate> update = MakeDrop(*context.GetObjectPath());
+    update->RestoreDrop(context);
+    return update;
 }
 
 }   // namespace NKikimr::NSchemeShard::NOperations

@@ -164,7 +164,6 @@ class TExpirationCondition: public IEraseRowsCondition {
                     value.Data(), value.Size(),
                     wallClockDSerialized->Data(), wallClockDSerialized->Size(),
                     Type.GetPgTypeDesc());
-                Cout << ":::result: " << result << Endl;
                 return result <= 0;
             }
             default:

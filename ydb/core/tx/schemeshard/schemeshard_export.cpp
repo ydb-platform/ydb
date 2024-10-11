@@ -230,6 +230,10 @@ void TSchemeShard::Handle(TEvExport::TEvListExportsRequest::TPtr& ev, const TAct
     Execute(CreateTxListExports(ev), ctx);
 }
 
+void TSchemeShard::Handle(TEvPrivate::TEvExportMetadataUploaded::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxProgressExport(ev), ctx);
+}
+
 void TSchemeShard::ResumeExports(const TVector<ui64>& exportIds, const TActorContext& ctx) {
     for (const ui64 id : exportIds) {
         Execute(CreateTxProgressExport(id), ctx);

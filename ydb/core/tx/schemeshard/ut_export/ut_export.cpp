@@ -2,6 +2,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/auditlog_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
@@ -2344,5 +2345,216 @@ partitioning_settings {
                 }
             }
         )"));
+    }
+
+    Y_UNIT_TEST(RestartDuringUploadingMetadata) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+
+        bool dataUploadingStarted = false;
+        bool metadataUploadingStarted = false;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvSchemeShard::EvModifySchemeTransaction: {
+                const auto* msg = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>();
+                if (msg->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpBackup) {
+                    dataUploadingStarted = true;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+            case TEvSchemeShard::EvNotifyTxCompletionResult:
+                if (dataUploadingStarted) {
+                    metadataUploadingStarted = true; // starts right after data uploading completed
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            case TEvPrivate::EvExportMetadataUploaded:
+                return TTestActorRuntime::EEventAction::DROP;
+            default:
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+        });
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+
+        if (!metadataUploadingStarted) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&metadataUploadingStarted](IEventHandle&) -> bool {
+                return metadataUploadingStarted;
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        Cerr << "Rebooting SchemeShard" << '\n';
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        runtime.SetObserverFunc(prevObserver);
+
+        env.TestWaitNotification(runtime, txId);
+        const auto desc = TestGetExport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_DONE);
+
+        auto* metadata = s3Mock.GetData().FindPtr("/metadata.json");
+        UNIT_ASSERT(metadata);
+    }
+
+    Y_UNIT_TEST(CancelDuringUploadingMetadata) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+
+        bool dataUploadingStarted = false;
+        bool metadataUploadingStarted = false;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvSchemeShard::EvModifySchemeTransaction: {
+                const auto* msg = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>();
+                if (msg->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpBackup) {
+                    dataUploadingStarted = true;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+            case TEvSchemeShard::EvNotifyTxCompletionResult:
+                if (dataUploadingStarted) {
+                    metadataUploadingStarted = true; // starts right after data uploading completed
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            case TEvPrivate::EvExportMetadataUploaded:
+                return TTestActorRuntime::EEventAction::DROP;
+            default:
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+        });
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+
+        if (!metadataUploadingStarted) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&metadataUploadingStarted](IEventHandle&) -> bool {
+                return metadataUploadingStarted;
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        const auto exportId = txId;
+        TestCancelExport(runtime, ++txId, "/MyRoot", exportId);
+        runtime.SetObserverFunc(prevObserver);
+
+        TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+    }
+
+    Y_UNIT_TEST(S3IssuesDuringUploadingMetadata) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+
+        bool dataUploadingStarted = false;
+        bool metadataUploadingStarted = false;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvSchemeShard::EvModifySchemeTransaction: {
+                const auto* msg = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>();
+                if (msg->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpBackup) {
+                    dataUploadingStarted = true;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+            case TEvSchemeShard::EvNotifyTxCompletionResult:
+                if (dataUploadingStarted) {
+                    metadataUploadingStarted = true; // starts right after data uploading completed
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            case NWrappers::NExternalStorage::EvPutObjectResponse:
+                if (metadataUploadingStarted) {
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            default:
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+        });
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
     }
 }

@@ -31,6 +31,7 @@ struct TEvPrivate {
         EvSendBaseStatsToSA,
         EvRunBackgroundCleaning,
         EvRetryNodeSubscribe,
+        EvExportMetadataUploaded,
         EvEnd
     };
 
@@ -89,6 +90,20 @@ struct TEvPrivate {
 
         TEvImportSchemeReady(ui64 id, ui32 itemIdx, bool success, const TString& error)
             : ImportId(id)
+            , ItemIdx(itemIdx)
+            , Success(success)
+            , Error(error)
+        {}
+    };
+
+    struct TEvExportMetadataUploaded: public TEventLocal<TEvExportMetadataUploaded, EvExportMetadataUploaded> {
+        const ui64 ExportId;
+        const ui32 ItemIdx;
+        const bool Success;
+        const TString Error;
+
+        TEvExportMetadataUploaded(ui64 id, ui32 itemIdx, bool success, const TString& error)
+            : ExportId(id)
             , ItemIdx(itemIdx)
             , Success(success)
             , Error(error)

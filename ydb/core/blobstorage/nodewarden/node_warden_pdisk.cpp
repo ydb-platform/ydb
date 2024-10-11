@@ -94,7 +94,7 @@ namespace NKikimr::NStorage {
                     google::protobuf::TextFormat::PrintToString(MockDevicesConfig, &data);
                     try {
                         TFile f(MockDevicesPath, CreateAlways | WrOnly);
-                        f.Write(data.Data(), data.Size());
+                        f.Write(data.data(), data.size());
                         f.Flush();
                     } catch (TFileError ex) {
                         STLOG(PRI_WARN, BS_NODE, NW89, "Can't write new MockDevicesConfig to file", (Path, MockDevicesPath));
@@ -120,7 +120,7 @@ namespace NKikimr::NStorage {
         pdiskConfig->HashedMainKey.resize(pdiskKey.Keys.size());
         for (ui32 i = 0; i < pdiskKey.Keys.size(); ++i) {
             THashCalculator hasher;
-            hasher.Hash(keyPrintSalt.Detach(), keyPrintSalt.Size());
+            hasher.Hash(keyPrintSalt.Detach(), keyPrintSalt.size());
             hasher.Hash(&pdiskKey.Keys[i], sizeof(pdiskKey.Keys[i]));
             pdiskConfig->HashedMainKey[i] = TStringBuilder() << Hex(hasher.GetHashResult(), HF_ADDX);
         }

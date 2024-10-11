@@ -286,7 +286,7 @@ private:
 
             for (auto& statistic : column.GetStatistics()) {
                 if (statistic.GetType() == NKikimr::NStat::COUNT_MIN_SKETCH) {
-                    auto data = statistic.GetData().Data();
+                    auto data = statistic.GetData().data();
                     auto sketch = reinterpret_cast<const TCountMinSketch*>(data);
                     auto& current = AggregationStatistics.CountMinSketches[tag];
 
@@ -523,7 +523,7 @@ private:
             auto data = it->second.Statistics->AsStringBuf();
             auto statistics = column->AddStatistics();
             statistics->SetType(NKikimr::NStat::COUNT_MIN_SKETCH);
-            statistics->SetData(data.Data(), data.Size());
+            statistics->SetData(data.data(), data.size());
         }
 
         auto failedTablets = record.MutableFailedTablets();
@@ -1075,7 +1075,7 @@ private:
             response.Success = true;
             auto& data = ev->Get()->Data;
             Y_ABORT_UNLESS(data);
-            response.CountMinSketch.CountMin.reset(TCountMinSketch::FromString(data->Data(), data->Size()));
+            response.CountMinSketch.CountMin.reset(TCountMinSketch::FromString(data->data(), data->size()));
         } else {
             response.Success = false;
         }

@@ -103,7 +103,7 @@ namespace {
     SIMPLE_UDF_WITH_OPTIONAL_ARGS(TToUint64, ui64(TAutoMap<TUtf8>, TOptional<ui16>), 1) {
         Y_UNUSED(valueBuilder);
         const TString inputStr(args[0].AsStringRef());
-        const char* input = inputStr.Data();
+        const char* input = inputStr.data();
         const int base = static_cast<int>(args[1].GetOrDefault<ui16>(0));
         char* pos = nullptr;
         unsigned long long res = std::strtoull(input, &pos, base);
@@ -121,7 +121,7 @@ namespace {
     SIMPLE_UDF_WITH_OPTIONAL_ARGS(TTryToUint64, TOptional<ui64>(TAutoMap<TUtf8>, TOptional<ui16>), 1) {
         Y_UNUSED(valueBuilder);
         const TString inputStr(args[0].AsStringRef());
-        const char* input = inputStr.Data();
+        const char* input = inputStr.data();
         const int base = static_cast<int>(args[1].GetOrDefault<ui16>(0));
         char* pos = nullptr;
         unsigned long long res = std::strtoull(input, &pos, base);

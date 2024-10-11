@@ -100,7 +100,7 @@ void DumpLocalTable(const TString& tableContent, const TString& path) {
     }
 
     TFileOutput out(path);
-    out.Write(tableContent.Data(), tableContent.Size());
+    out.Write(tableContent.data(), tableContent.size());
     out.Flush();
 }
 
@@ -1802,7 +1802,7 @@ private:
             auto cacheKey = std::make_tuple(prefix, suffix, filterLambda);
             with_lock(entry->Lock_) {
                 if (auto p = entry->RangeCache.FindPtr(cacheKey)) {
-                    YQL_CLOG(INFO, ProviderYt) << "Found range in cache for key ('" << prefix << "','" << suffix << "',<filter with size " << filterLambda.Size() << ">) - number of items " << p->size();
+                    YQL_CLOG(INFO, ProviderYt) << "Found range in cache for key ('" << prefix << "','" << suffix << "',<filter with size " << filterLambda.size() << ">) - number of items " << p->size();
                     return MakeFuture(MakeTableRangeResult(*p));
                 }
             }

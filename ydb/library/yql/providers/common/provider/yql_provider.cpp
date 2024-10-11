@@ -76,9 +76,9 @@ namespace {
         static const TString end = "_idx";
         static const TString delimiter = "_";
 
-        size_t sz = end.Size();
+        size_t sz = end.size();
         for (const auto& n: key)
-            sz += n.Value().Size() + delimiter.Size();
+            sz += n.Value().size() + delimiter.size();
 
         TString name(Reserve(sz));
         for (const auto& n: key) {
@@ -1775,7 +1775,7 @@ bool RenamePgSelectColumns(
     if (selectorColumnOrder->Size() > insertColumnOrder.Size()) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << Sprintf(
             "%s have %zu columns, INSERT INTO expects: %zu",
-            optionName.Data(),
+            optionName.data(),
             selectorColumnOrder->Size(),
             insertColumnOrder.Size()
         )));

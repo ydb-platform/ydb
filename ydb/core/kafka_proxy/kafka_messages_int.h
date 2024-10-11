@@ -390,7 +390,7 @@ public:
 
     inline static void DoLog(const TKafkaString& value) {
         if constexpr (DEBUG_ENABLED) {
-            Cerr << "Was read field '" << Meta::Name << "' type String. Size " << (value ? value->Size() : 0) << " Value: " << (value ? *value : "null") << Endl;
+            Cerr << "Was read field '" << Meta::Name << "' type String. Size " << (value ? value->size() : 0) << " Value: " << (value ? *value : "null") << Endl;
         }
     }
 };

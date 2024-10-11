@@ -158,8 +158,6 @@ public:
         }
 
         entry->IsInCache = true;
-
-        // TODO: don't forget to make cleanup on PushBack()
     }
 
     void NotifyPatternCompiled(const TString& serializedProgram) {
@@ -198,15 +196,11 @@ private:
 
     void OnPatternExpiredCallback(const TCacheEntry& entry) {
         Y_ENSURE(ProgramToEntryMap_.erase(*entry.first));
-        if (!LRUCompiledPatternList_.Has(entry)) {
-            return;
-        }
-
-        // TODO: no removal of compiled code here, why?
-        LRUCompiledPatternList_.Remove(entry);
-
-        // TODO: why set this member only if was compiled? Is it symmetrical?
         entry.second->IsInCache = false;
+        if (LRUCompiledPatternList_.Has(entry)) {
+            LRUCompiledPatternList_.Remove(entry);
+            OnCompiledPatternExpiredCallback(entry);
+        }
     }
 
     void OnCompiledPatternExpiredCallback(const TCacheEntry& entry) {

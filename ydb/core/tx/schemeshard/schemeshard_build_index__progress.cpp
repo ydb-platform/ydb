@@ -1,5 +1,6 @@
 #include "schemeshard_build_index.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_utils.h"  // for NTableIndex::ExtractInfo
 #include "schemeshard_build_index_helpers.h"
 #include "schemeshard_build_index_tx_base.h"
 

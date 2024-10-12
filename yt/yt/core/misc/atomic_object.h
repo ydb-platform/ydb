@@ -32,8 +32,8 @@ public:
     bool CompareExchange(T& expected, const T& desired);
 
     //! Atomically transforms the value with function #func.
-    template <CInvocable<void(T&)> F>
-    void Transform(const F& func);
+    template <class R = void, CInvocable<R(T&)> F>
+    R Transform(const F& func);
 
     //! Atomicaly reads the value with function #func.
     template <class R = void, CInvocable<R(const T&)> F>

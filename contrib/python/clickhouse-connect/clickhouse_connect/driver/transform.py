@@ -96,7 +96,7 @@ class NativeTransform:
                     col_enc = col_name.encode()
                     write_leb128(len(col_enc), output)
                     output += col_enc
-                    col_enc = col_type.name.encode()
+                    col_enc = col_type.insert_name.encode()
                     write_leb128(len(col_enc), output)
                     output += col_enc
                     context.start_column(col_name)

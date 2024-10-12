@@ -6,7 +6,8 @@ import os
 import sys
 import socket
 import time
-from typing import Dict, Any, Optional
+from collections import deque
+from typing import Dict, Any, Optional, Tuple, Callable
 
 import certifi
 import lz4.frame
@@ -192,34 +193,56 @@ class ResponseSource:
     def __init__(self, response: HTTPResponse, chunk_size: int = 1024 * 1024):
         self.response = response
         compression = response.headers.get('content-encoding')
+        decompress:Optional[Callable] = None
         if compression == 'zstd':
             zstd_decom = zstandard.ZstdDecompressor().decompressobj()
 
-            def decompress():
-                while True:
-                    chunk = response.read(chunk_size, decode_content=False)
-                    if not chunk:
-                        break
-                    yield zstd_decom.decompress(chunk)
+            def zstd_decompress(c: deque) -> Tuple[bytes, int]:
+                chunk = c.popleft()
+                return zstd_decom.decompress(chunk), len(chunk)
 
-            self.gen = decompress()
+            decompress = zstd_decompress
         elif compression == 'lz4':
             lz4_decom = lz4.frame.LZ4FrameDecompressor()
 
-            def decompress():
+            def lz_decompress(c: deque) -> Tuple[Optional[bytes], int]:
+                read_amt = 0
                 while lz4_decom.needs_input:
-                    data = self.response.read(chunk_size, decode_content=False)
+                    data = c.popleft()
+                    read_amt += len(data)
                     if lz4_decom.unused_data:
                         data = lz4_decom.unused_data + data
-                    if not data:
-                        return
-                    chunk = lz4_decom.decompress(data)
-                    if chunk:
-                        yield chunk
+                    return lz4_decom.decompress(data), read_amt
+                return None, 0
 
-            self.gen = decompress()
-        else:
-            self.gen = response.stream(amt=chunk_size, decode_content=True)
+            decompress = lz_decompress
+
+        buffer_size = common.get_setting('http_buffer_size')
+
+        def buffered():
+            chunks = deque()
+            done = False
+            current_size = 0
+            read_gen = response.read_chunked(chunk_size, decompress is None)
+            while True:
+                while not done and current_size < buffer_size:
+                    chunk = next(read_gen, None)
+                    if not chunk:
+                        done = True
+                        break
+                    chunks.append(chunk)
+                    current_size += len(chunk)
+                if len(chunks) == 0:
+                    return
+                if decompress:
+                    chunk, used = decompress(chunks)
+                    current_size -= used
+                else:
+                    chunk = chunks.popleft()
+                    current_size -= len(chunk)
+                yield chunk
+
+        self.gen = buffered()
 
     def close(self):
         self.response.drain_conn()

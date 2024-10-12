@@ -912,7 +912,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             create.MutableCreateResourcePool()->SetName(name);
             break;
         default:
-            Y_UNREACHABLE();
+            Y_ABORT("Invariant violation");
         }
 
         result.Transactions.push_back(create);

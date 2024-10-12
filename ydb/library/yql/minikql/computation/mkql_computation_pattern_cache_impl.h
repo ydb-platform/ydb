@@ -34,17 +34,14 @@ private:
         }
 
         void PushBack(const T& item) {
-            auto it = Iterators_.find(item);
-            Y_ENSURE(it == Iterators_.end());
+            Y_ENSURE(!Iterators_.contains(item));
             List_.push_back(item);
             Iterators_.emplace(item, std::prev(List_.end()));
             SizeInBytes_ += GetSizeInBytes_(item);
 
             while (Size() > MaxSize_ || SizeInBytes() > MaxSizeInBytes_) {
-                auto&& expired = std::move(List_.front());
+                auto expired = List_.front();
                 Remove(expired);
-                List_.pop_front();
-
                 OnExpiredCallback_(expired);
             }
         }

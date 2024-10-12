@@ -1,5 +1,0 @@
-items:
-- name: VM / Baremetal
-  include: { mode: link, path: manual/toc_p.yaml }
-- name: Конфигурация
-  href: configuration/config.md

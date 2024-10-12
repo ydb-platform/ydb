@@ -6,7 +6,7 @@ This functionality is in "Experimental" mode.
 
 {% endnote %}
 
-[Connectors](../../concepts/federated_query/architecture.md#connectors) are special microservices providing {{ ydb-full-name }} with a universal abstraction for accessing external data sources. Connectors act as extension points for the {{ ydb-full-name }} [federated query](../../concepts/federated_query/index.md) processing system. This guide will discuss the specifics of deploying connectors in an on-premise environment.
+[Connectors](../../../concepts/federated_query/architecture.md#connectors) are special microservices providing {{ ydb-full-name }} with a universal abstraction for accessing external data sources. Connectors act as extension points for the {{ ydb-full-name }} [federated query](../../../concepts/federated_query/index.md) processing system. This guide will discuss the specifics of deploying connectors in an on-premise environment.
 
 ## fq-connector-go {#fq-connector-go}
 
@@ -42,7 +42,7 @@ Use binary distributions to install the connector on a physical or virtual Linux
     sudo cp fq-connector-go.yaml /opt/ydb/cfg
     ```
 
-4. In the {% if oss %}[recommended usage mode](../../deploy/manual/deploy-ydb-federated-query.md#general-scheme){% else %}recommended usage mode{% endif %}, the connector is deployed on the same servers as the dynamic nodes of {{ ydb-short-name }}, so encryption of network connections between them *is not required*. However, if you need to enable encryption, [prepare a pair of TLS keys](../manual/deploy-ydb-on-premises.md#tls-certificates) and specify the paths to the public and private keys in the `connector_server.tls.cert` and `connector_server.tls.key` fields of the `fq-connector-go.yaml` configuration file:
+4. In the {% if oss %}[recommended usage mode](index.md#general-scheme){% else %}recommended usage mode{% endif %}, the connector is deployed on the same servers as the dynamic nodes of {{ ydb-short-name }}, so encryption of network connections between them *is not required*. However, if you need to enable encryption, [prepare a pair of TLS keys](../initial-deployment.md#tls-certificates) and specify the paths to the public and private keys in the `connector_server.tls.cert` and `connector_server.tls.key` fields of the `fq-connector-go.yaml` configuration file:
 
     ```yaml
     connector_server:
@@ -128,7 +128,7 @@ Use binary distributions to install the connector on a physical or virtual Linux
         ghcr.io/ydb-platform/fq-connector-go:latest
     ```
 
-1. In the {% if oss %}[recommended usage mode](../../deploy/manual/deploy-ydb-federated-query.md#general-scheme){% else %}recommended usage mode{% endif %}, the connector is deployed on the same servers as the dynamic nodes of {{ ydb-short-name }}, so encryption of network connections between them *is not required*. However, if you need to enable encryption between {{ ydb-short-name }} and the connector, [prepare a pair of TLS keys](../manual/deploy-ydb-on-premises.md#tls-certificates) and specify the paths to the public and private keys in the `connector_server.tls.cert` and `connector_server.tls.key` fields of the configuration file:
+1. In the {% if oss %}[recommended usage mode](./index.md#general-scheme){% else %}recommended usage mode{% endif %}, the connector is deployed on the same servers as the dynamic nodes of {{ ydb-short-name }}, so encryption of network connections between them *is not required*. However, if you need to enable encryption between {{ ydb-short-name }} and the connector, [prepare a pair of TLS keys](../initial-deployment.md#tls-certificates) and specify the paths to the public and private keys in the `connector_server.tls.cert` and `connector_server.tls.key` fields of the configuration file:
 
     ```yaml
     connector_server:

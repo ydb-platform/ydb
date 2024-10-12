@@ -4,9 +4,9 @@
 
 Основные материалы:
 
-- [{#T}](../../deploy/manual/deploy-ydb-on-premises.md)
+- [{#T}](initial-deployment.md)
 - [{#T}](../../maintenance/manual/index.md)
-- [{#T}](../../devops/manual/monitoring.md)
+- [{#T}](monitoring.md)
 - [{#T}](logging.md)
 - [{#T}](backup-and-recovery.md)
 - [{#T}](../../reference/embedded-ui/index.md)

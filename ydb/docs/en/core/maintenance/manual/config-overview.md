@@ -9,7 +9,7 @@ Static nodes in the cluster use static configuration. Dynamic nodes can use stat
 
 ## Static configuration
 
-Static configuration is a YAML file stored on the cluster nodes. This file lists all the system settings. The path to the file is passed to the `ydbd` process at startup via a command-line parameter. Distributing the static configuration across the cluster and maintaining it in a consistent state on all nodes is the responsibility of the cluster administrator. Details on using static configuration can be found in the section [{#T}](../../deploy/configuration/config.md). This configuration is **required** for running static nodes.
+Static configuration is a YAML file stored on the cluster nodes. This file lists all the system settings. The path to the file is passed to the `ydbd` process at startup via a command-line parameter. Distributing the static configuration across the cluster and maintaining it in a consistent state on all nodes is the responsibility of the cluster administrator. Details on using static configuration can be found in the section [{#T}](../../reference/configuration/index.md). This configuration is **required** for running static nodes.
 
 ![data tab](_assets/config-chart-1.png "static configs")
 

@@ -55,6 +55,6 @@ Authentication by username and password includes the following steps:
 1. The authentication system returns the token to the client.
 1. The client accesses the database, presenting their token as authentication data.
 
-To enable username/password authentication, use `true` in the `enforce_user_token_requirement` key of the cluster's [configuration file](../deploy/configuration/config.md#auth).
+To enable username/password authentication, use `true` in the `enforce_user_token_requirement` key of the cluster's [configuration file](../reference/configuration/index.md#auth).
 
 To learn how to manage roles and users, see [{#T}](../security/access-management.md).

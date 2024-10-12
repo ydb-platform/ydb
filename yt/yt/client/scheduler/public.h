@@ -67,6 +67,7 @@ YT_DEFINE_ERROR_ENUM(
     ((MasterDisconnected)                     (218))
     ((NoSuchJobShell)                         (219))
     ((JobResourceLimitsRestrictionsViolated)  (220))
+    ((CannotUseBothAclAndAco)                 (221))
 );
 
 DEFINE_ENUM(EUnavailableChunkAction,

@@ -135,6 +135,50 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
 
    10. To continue, get access to port 8765 from outside Kubernetes using `kubectl port-forward database-minikube-sample-0 8765`.
 
+- Kind
+
+   1. Install the Kubernetes CLI [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl) and [Helm 3](https://helm.sh/docs/intro/install/) package manager.
+
+   2. Install [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/).
+
+   3. Clone the repository with [{{ ydb-short-name }} Kubernetes Operator](https://github.com/ydb-platform/ydb-kubernetes-operator):
+
+      ```bash
+      git clone https://github.com/ydb-platform/ydb-kubernetes-operator && cd ydb-kubernetes-operator
+      ```
+
+   4. Create a Kind cluster and wait until it is ready:
+
+      ```bash
+      kind create cluster --config=samples/kind/kind-config.yaml  --wait 5m
+      ```
+
+   5. Install the {{ ydb-short-name }} controller in the cluster:
+
+      ```bash
+      helm upgrade --install ydb-operator deploy/ydb-operator --set metrics.enabled=false
+      ```
+
+   6. Apply the manifest for creating a storage:
+
+      ```bash
+      kubectl apply -f samples/kind/storage.yaml
+      ```
+
+   7. Wait for `kubectl get storages.ydb.tech` to become `Ready`.
+
+   8. Apply the manifest for creating a database:
+
+      ```bash
+      kubectl apply -f samples/kind/database.yaml
+      ```
+
+   9. Wait for `kubectl get databases.ydb.tech` to become `Ready`.
+
+   10. After processing the manifest, a StatefulSet object that describes a set of dynamic nodes is created. The created database will be accessible from inside the Kubernetes cluster by the `database-kind-sample` DNS name on port 2135.
+
+   11. To continue, get access to port 8765 from outside Kubernetes using `kubectl port-forward database-kind-sample-0 8765`.
+
 {% endlist %}
 
 
@@ -287,6 +331,32 @@ Stop the local {{ ydb-short-name }} cluster after you have finished experimentin
 
    ```bash
    helm delete ydb-operator
+   ```
+
+- Kind
+
+   To delete the {{ ydb-short-name }} database, it is enough to delete the Database resource associated with it:
+
+   ```bash
+   kubectl delete database.ydb.tech database-kind-sample
+   ```
+
+   To delete the {{ ydb-short-name }} cluster, execute the following commands (all data will be lost):
+
+   ```bash
+   kubectl delete storage.ydb.tech storage-kind-sample
+   ```
+
+   To remove the {{ ydb-short-name }} controller from the Kubernetes cluster, delete the release created by Helm:
+
+   ```bash
+   helm delete ydb-operator
+   ```
+
+   To delete `kind` cluster, run the following command:
+
+   ```bash
+   kind delete cluster
    ```
 
 {% endlist %}

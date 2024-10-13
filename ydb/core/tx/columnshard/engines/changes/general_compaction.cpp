@@ -158,24 +158,30 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
 }
 
 TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {
-    i64 portionsSize = 0;
-    i64 portionsCount = 0;
-    i64 insertedPortionsSize = 0;
-    i64 compactedPortionsSize = 0;
-    i64 otherPortionsSize = 0;
+    i64 insertedPortionsCount = 0;
+    i64 insertedPortionsRawSize = 0;
+    i64 insertedPortionsBlobSize = 0;
+
+    i64 compactedPortionsCount = 0;
+    i64 compactedPortionsRawSize = 0;
+    i64 compactedPortionsBlobSize = 0;
     for (auto&& i : SwitchedPortions) {
         if (i.GetMeta().GetProduced() == TPortionMeta::EProduced::INSERTED) {
-            insertedPortionsSize += i.GetTotalBlobBytes();
+            insertedPortionsBlobSize += i.GetTotalBlobBytes();
+            insertedPortionsRawSize += i.GetTotalRawBytes();
+            ++insertedPortionsCount;
         } else if (i.GetMeta().GetProduced() == TPortionMeta::EProduced::SPLIT_COMPACTED) {
-            compactedPortionsSize += i.GetTotalBlobBytes();
+            compactedPortionsBlobSize += i.GetTotalBlobBytes();
+            compactedPortionsRawSize += i.GetTotalRawBytes();
+            ++compactedPortionsCount;
         } else {
-            otherPortionsSize += i.GetTotalBlobBytes();
+            AFL_VERIFY(false);
         }
-        portionsSize += i.GetTotalBlobBytes();
-        ++portionsCount;
     }
-    NChanges::TGeneralCompactionCounters::OnPortionsKind(insertedPortionsSize, compactedPortionsSize, otherPortionsSize);
-    NChanges::TGeneralCompactionCounters::OnRepackPortions(portionsCount, portionsSize);
+    NChanges::TGeneralCompactionCounters::OnRepackPortions(insertedPortionsCount + compactedPortionsCount,
+        insertedPortionsBlobSize + compactedPortionsBlobSize, insertedPortionsRawSize + compactedPortionsRawSize);
+    NChanges::TGeneralCompactionCounters::OnRepackInsertedPortions(insertedPortionsCount, insertedPortionsBlobSize, insertedPortionsRawSize);
+    NChanges::TGeneralCompactionCounters::OnRepackCompactedPortions(compactedPortionsCount, compactedPortionsBlobSize, compactedPortionsRawSize);
 
     {
         std::vector<TReadPortionInfoWithBlobs> portions =

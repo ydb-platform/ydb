@@ -12,6 +12,7 @@ private:
 public:
     const ::NMonitoring::TDynamicCounters::TCounterPtr UsedCount;
     const ::NMonitoring::TDynamicCounters::TCounterPtr Ask;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr AskMax;
     const ::NMonitoring::TDynamicCounters::TCounterPtr Free;
     const ::NMonitoring::TDynamicCounters::TCounterPtr FreeNoClient;
     const ::NMonitoring::TDynamicCounters::TCounterPtr Register;

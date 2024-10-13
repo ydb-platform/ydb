@@ -44,16 +44,34 @@ void TManager::Free(const ui64 clientId, const ui32 count) {
     AllocateNext();
 }
 
+TClientStatus& TManager::GetClientVerified(const ui64 clientId) {
+    auto it = Clients.find(clientId);
+    AFL_VERIFY(it != Clients.end());
+    return it->second;
+}
+
 void TManager::Ask(const ui64 clientId, const ui32 count, const std::shared_ptr<IRequest>& request, const ui64 extPriority) {
     AFL_VERIFY(request);
     Counters->Ask->Inc();
-    auto it = Clients.find(clientId);
-    AFL_VERIFY(it != Clients.end());
-    RemoveFromQueue(it->second);
+    AskImpl(GetClientVerified(clientId), TAskRequest(clientId, request, count));
+}
+
+void TManager::AskMax(const ui64 clientId, const ui32 count, const std::shared_ptr<IRequest>& request, const ui64 extPriority) {
+    AFL_VERIFY(request);
+    Counters->AskMax->Inc();
+    auto& client = GetClientVerified(clientId);
+    if (client.GetLastPriority() && extPriority < client.GetLastPriority()->GetExternalPriority()) {
+        return;
+    }
+    AskImpl(client, TAskRequest(clientId, request, count));
+}
+
+void TManager::AskImpl(TClientStatus& client, TAskRequest&& request) {
+    RemoveFromQueue(client);
     AFL_VERIFY(count <= Config.GetLimit())("requested", count)("limit", Config.GetLimit());
     TPriority priority(extPriority);
     it->second.SetLastPriority(priority);
-    AFL_VERIFY(WaitingQueue.emplace(priority, TAskRequest(clientId, request, count)).second);
+    AFL_VERIFY(WaitingQueue.emplace(priority, std::move(request)).second);
     AllocateNext();
 }
 

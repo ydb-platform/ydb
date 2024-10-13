@@ -10,7 +10,7 @@
 
 * A table was created with the [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT](../../../../concepts/datamodel/table.md#AUTO_PARTITIONING_MAX_PARTITIONS_COUNT) setting and has already reached its partition limit.
 
-* An inefficient primary key that causes an imbalance in the distribution of queries across shards. A typical example is ingestion with a monotonically increasing primary key, which may overload the "last" partition. For example, this could occur with an autoincrementing primary key using the [serial](../../../../yql/reference/types/serial.md) data type.
+* An inefficient primary key that causes an imbalance in the distribution of queries across shards. A typical example is ingestion with a monotonically increasing primary key, which may overload the "last" partition. For example, this could occur with an autoincrementing primary key using the serial data type.
 
 ## Diagnostics
 

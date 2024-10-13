@@ -734,8 +734,12 @@ void TColumnShard::SetupCompaction(const std::set<ui64>& pathIds) {
     }
 
     BackgroundController.CheckDeadlines();
-    const ui64 priority = TablesManager.MutablePrimaryIndex().GetCompactionPriority(DataLocksManager, pathIds);
+    if (BackgroundController.GetCompactionsCount()) {
+        return;
+    }
+    const ui64 priority = TablesManager.MutablePrimaryIndex().GetCompactionPriority(DataLocksManager, pathIds, BackgroundController.GetWaitingPriorityOptional());
     if (priority) {
+        BackgroundController.UpdateWaitingPriority(priority);
         if (pathIds.size()) {
             NPrioritiesQueue::TCompServiceOperator::AskMax(PrioritizationClientId, priority, std::make_shared<TCompactionAllocated>(SelfId()));
         } else {
@@ -746,6 +750,7 @@ void TColumnShard::SetupCompaction(const std::set<ui64>& pathIds) {
 
 void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard) {
     Counters.GetCSCounters().OnSetupCompaction();
+    BackgroundController.ResetWaitingPriority();
 
     auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(DataLocksManager);
     if (!indexChanges) {

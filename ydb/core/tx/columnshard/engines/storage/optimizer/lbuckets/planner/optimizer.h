@@ -490,24 +490,26 @@ public:
 
     [[nodiscard]] TInstant Actualize(const TInstant currentInstant) {
         TInstant result = TInstant::Max();
+        const TInstant currentMarker = currentInstant - FutureDetector;
         {
             for (auto&& i : Futures) {
-                if (i.first + FutureDetector <= currentInstant) {
+                if (i.first <= currentMarker) {
                     for (auto&& p : i.second) {
                         AFL_VERIFY(AddPreActual(p.second));
                     }
                 } else {
                     result = std::min(result, i.first + FutureDetector);
+                    break;
                 }
             }
-            while (Futures.size() && Futures.begin()->first + FutureDetector <= currentInstant) {
+            while (Futures.size() && Futures.begin()->first <= currentMarker) {
                 RemoveFutures(Futures.begin()->first);
             }
         }
         {
             std::vector<std::shared_ptr<TPortionInfo>> remove;
             for (auto&& p : PreActuals) {
-                if (p.second->RecordSnapshotMax().GetPlanInstant() + FutureDetector < currentInstant) {
+                if (p.second->RecordSnapshotMax().GetPlanInstant() < currentMarker) {
                     AFL_VERIFY(AddActual(p.second));
                     remove.emplace_back(p.second);
                 }
@@ -607,9 +609,9 @@ public:
         const ui64 sumInsertedRepackBytes = InsertedBucketInfo.GetRawBytes();
 //        const ui64 sumInsertedReadBytes = InsertedBucketInfo.GetBlobBytes();
         const ui64 sumCompactedRepackBytes =
-            CompactedBucketInfo.GetRawBytes() + (mainPortion ? mainPortion->GetTotalRawBytes() : 0);
+            CompactedBucketInfo.GetRawBytes() + ((mainPortion && NeedCompactionsToCompact()) ? mainPortion->GetTotalRawBytes() : 0);
         const ui64 sumCompactedReadBytes =
-            CompactedBucketInfo.GetBlobBytes() + (mainPortion ? mainPortion->GetTotalBlobBytes() : 0);
+            CompactedBucketInfo.GetBlobBytes() + ((mainPortion && NeedCompactionsToCompact()) ? mainPortion->GetTotalBlobBytes() : 0);
         if (NYDBTest::TControllers::GetColumnShardController()->GetCompactionControl() == NYDBTest::EOptimizerCompactionWeightControl::Disable) {
             return 0;
         }
@@ -1035,9 +1037,31 @@ public:
 
 class TPortionBuckets {
 private:
-    struct TReverseComparator {
-        bool operator()(const i64 l, const i64 r) const {
-            return r < l;
+    class TOrderedBucket {
+    private:
+        const i64 Weight;
+        const TPortionsBucket* BucketPointer;
+    public:
+        i64 GetWeight() const {
+            return Weight;
+        }
+
+        const TPortionsBucket* GetBucketPointer() const {
+            return BucketPointer;
+        }
+
+        TOrderedBucket(const TPortionsBucket* bucketPointer, const i64 actualRating)
+            : Weight(actualRating)
+            , BucketPointer(bucketPointer) {
+        }
+
+        TOrderedBucket(const TPortionsBucket* bucketPointer)
+            : Weight(bucketPointer->GetWeight())
+            , BucketPointer(bucketPointer) {
+        }
+
+        bool operator<(const TOrderedBucket& item) const {
+            return item.Weight < Weight || (item.Weight == Weight && (ui64)item.BucketPointer < (ui64)BucketPointer);
         }
     };
 
@@ -1045,7 +1069,7 @@ private:
     const std::shared_ptr<IStoragesManager> StoragesManager;
     std::shared_ptr<TPortionsBucket> LeftBucket;
     std::map<NArrow::TReplaceKey, std::shared_ptr<TPortionsBucket>> Buckets;
-    std::map<i64, THashSet<TPortionsBucket*>, TReverseComparator> BucketsByWeight;
+    std::set<TOrderedBucket> BucketsByWeight;
     std::shared_ptr<TCounters> Counters;
     std::vector<std::shared_ptr<TPortionsBucket>> GetAffectedBuckets(
         const NArrow::TReplaceKey& fromInclude, const NArrow::TReplaceKey& toInclude) {
@@ -1068,16 +1092,15 @@ private:
     }
 
     void RemoveBucketFromRating(const std::shared_ptr<TPortionsBucket>& bucket, const i64 rating) {
-        auto it = BucketsByWeight.find(rating);
+        TOrderedBucket ordered(bucket.get(), rating);
+        auto it = BucketsByWeight.find(ordered);
         AFL_VERIFY(it != BucketsByWeight.end());
-        AFL_VERIFY(it->second.erase(bucket.get()));
-        if (it->second.empty()) {
-            BucketsByWeight.erase(it);
-        }
+        BucketsByWeight.erase(it);
     }
 
     void AddBucketToRating(const std::shared_ptr<TPortionsBucket>& bucket) {
-        AFL_VERIFY(BucketsByWeight[bucket->GetWeight()].emplace(bucket.get()).second);
+        TOrderedBucket ordered(bucket.get());
+        AFL_VERIFY(BucketsByWeight.emplace(ordered).second);
     }
 
     void RemoveOther(const std::shared_ptr<TPortionInfo>& portion) {
@@ -1152,8 +1175,7 @@ public:
         if (BucketsByWeight.empty()) {
             return false;
         }
-        AFL_VERIFY(BucketsByWeight.begin()->second.size());
-        const TPortionsBucket* bucketForOptimization = *BucketsByWeight.begin()->second.begin();
+        const TPortionsBucket* bucketForOptimization = BucketsByWeight.begin()->GetBucketPointer();
         return bucketForOptimization->IsLocked(dataLocksManager);
     }
 
@@ -1168,9 +1190,13 @@ public:
     }
 
     void Actualize(const TInstant currentInstant) {
-        RemoveBucketFromRating(LeftBucket);
-        Y_UNUSED(LeftBucket->Actualize(currentInstant));
-        AddBucketToRating(LeftBucket);
+        {
+            const i64 rating = LeftBucket->GetLastWeight();
+            if (LeftBucket->Actualize(currentInstant)) {
+                RemoveBucketFromRating(LeftBucket, rating);
+                AddBucketToRating(LeftBucket);
+            }
+        }
         for (auto&& i : Buckets) {
             const i64 rating = i.second->GetLastWeight();
             if (i.second->Actualize(currentInstant)) {
@@ -1182,7 +1208,7 @@ public:
 
     i64 GetWeight() const {
         AFL_VERIFY(BucketsByWeight.size());
-        return BucketsByWeight.begin()->first;
+        return BucketsByWeight.begin()->GetWeight();
     }
 
     void RemovePortion(const std::shared_ptr<TPortionInfo>& portion) {
@@ -1197,11 +1223,10 @@ public:
     std::shared_ptr<TColumnEngineChanges> BuildOptimizationTask(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
         AFL_VERIFY(BucketsByWeight.size());
-        if (!BucketsByWeight.begin()->first) {
+        if (!BucketsByWeight.begin()->GetWeight()) {
             return nullptr;
         }
-        AFL_VERIFY(BucketsByWeight.begin()->second.size());
-        const TPortionsBucket* bucketForOptimization = *BucketsByWeight.begin()->second.begin();
+        const TPortionsBucket* bucketForOptimization = BucketsByWeight.begin()->GetBucketPointer();
         if (bucketForOptimization == LeftBucket.get()) {
             if (Buckets.size()) {
                 return bucketForOptimization->BuildOptimizationTask(

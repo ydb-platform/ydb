@@ -43,6 +43,14 @@ public:
             request->OnAllocated(std::make_shared<TAllocationGuard>(NActors::TActorId(), clientId, count));
         }
     }
+    static void AskMax(const ui64 clientId, const ui64 priority, const std::shared_ptr<IRequest>& request, const ui32 count = 1) {
+        AFL_VERIFY(request);
+        if (TSelf::IsEnabled()) {
+            NActors::TActorContext::AsActorContext().Send(MakeServiceId(), new TEvExecution::TEvAskMax(clientId, count, request, priority));
+        } else {
+            request->OnAllocated(std::make_shared<TAllocationGuard>(NActors::TActorId(), clientId, count));
+        }
+    }
     static bool IsEnabled() {
         return Singleton<TSelf>()->IsEnabledFlag;
     }

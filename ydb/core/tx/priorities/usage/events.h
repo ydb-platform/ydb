@@ -15,6 +15,7 @@ struct TEvExecution {
         EvRegisterClient = EventSpaceBegin(TKikimrEvents::ES_PRIORITY_QUEUE),
         EvUnregisterClient,
         EvAsk,
+        EvAskMax,
         EvFree,
         EvAllocated,
         EvEnd
@@ -51,6 +52,17 @@ struct TEvExecution {
 
     public:
         TEvAsk(const ui64 clientId, const ui32 count, const std::shared_ptr<IRequest>& request, const ui64 priority);
+    };
+
+    class TEvAskMax: public NActors::TEventLocal<TEvAskMax, EvAskMax> {
+    private:
+        YDB_READONLY(ui64, ClientId, 0);
+        YDB_READONLY(ui32, Count, 0);
+        YDB_READONLY_DEF(std::shared_ptr<IRequest>, Request);
+        YDB_READONLY(ui64, Priority, 0);
+
+    public:
+        TEvAskMax(const ui64 clientId, const ui32 count, const std::shared_ptr<IRequest>& request, const ui64 priority);
     };
 
     class TEvFree: public NActors::TEventLocal<TEvFree, EvFree> {

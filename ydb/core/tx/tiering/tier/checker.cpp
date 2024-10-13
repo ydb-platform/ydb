@@ -9,7 +9,9 @@
 namespace NKikimr::NColumnShard::NTiers {
 
 void TTierPreparationActor::StartChecker() {
-    AFL_VERIFY(Tiers && Secrets && SSCheckResult && TieringRules);
+    if (!Tiers || !Secrets || !SSCheckResult || !TieringRules) {
+        return;
+    }
     auto g = PassAwayGuard();
     if (!SSCheckResult->GetContent().GetOperationAllow()) {
         Controller->OnPreparationProblem(SSCheckResult->GetContent().GetDenyReason());
@@ -43,7 +45,9 @@ void TTierPreparationActor::StartChecker() {
 }
 
 void TTierPreparationActor::StartSSFetcher() {
-    AFL_VERIFY(Tiers && TieringRules);
+    if (!Tiers || !TieringRules) {
+        return;
+    }
     std::set<TString> tieringIds;
     std::set<TString> tiersChecked;
     for (auto&& tier : Objects) {
@@ -63,36 +67,7 @@ void TTierPreparationActor::StartSSFetcher() {
         SSFetcher->MutableTieringRuleIds() = tieringIds;
         Register(new TSSFetchingActor(SSFetcher, std::make_shared<TSSFetchingController>(SelfId()), TDuration::Seconds(10)));
     }
-}
-
-void TTierPreparationActor::AdvanceCheckerState() {
-    switch (State) {
-        case INITIAL:
-            Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
-                new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>()));
-            Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
-                new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TTierSnapshotConstructor>()));
-            Register(MakeListTieringRulesActor(SelfId()).Release());
-            State = FETCH_TIERING;
-            AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tier_preparation_actor")("event", "start_stage")("stage", "fetch_tiering");
-            break;
-        case FETCH_TIERING:
-            if (Tiers && TieringRules) {
-                StartSSFetcher();
-                State = CHECK_PERMISSIONS;
-                AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tier_preparation_actor")("event", "start_stage")("stage", "check_permissions");
-            }
-            break;
-        case CHECK_PERMISSIONS:
-            if (Tiers && Secrets && SSCheckResult && TieringRules) {
-                StartChecker();
-                State = MAKE_RESULT;
-                AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tier_preparation_actor")("event", "start_stage")("stage", "make_result");
-            }
-            break;
-        case MAKE_RESULT:
-            AFL_VERIFY(false);
-    }
+    Become(&TTierPreparationActor::StateCheckPermissions);
 }
 
 void TTierPreparationActor::Handle(NSchemeShard::TEvSchemeShard::TEvProcessingResponse::TPtr& ev) {
@@ -106,7 +81,7 @@ void TTierPreparationActor::Handle(NSchemeShard::TEvSchemeShard::TEvProcessingRe
             Controller->OnPreparationProblem("cannot unpack ss-fetcher result for class " + SSFetcher->GetClassName());
             PassAway();
         } else {
-            AdvanceCheckerState();
+            StartChecker();
         }
     } else {
         Y_ABORT_UNLESS(false);
@@ -121,7 +96,7 @@ void TTierPreparationActor::Handle(NMetadata::NProvider::TEvRefreshSubscriberDat
     } else {
         Y_ABORT_UNLESS(false);
     }
-    AdvanceCheckerState();
+    StartSSFetcher();
 }
 
 void TTierPreparationActor::Handle(TEvListTieringRulesResult::TPtr& ev) {
@@ -132,12 +107,16 @@ void TTierPreparationActor::Handle(TEvListTieringRulesResult::TPtr& ev) {
         return;
     }
     TieringRules.emplace(result.GetResult());
-    AdvanceCheckerState();
+    StartSSFetcher();
 }
 
 void TTierPreparationActor::Bootstrap() {
-    AdvanceCheckerState();
-    Become(&TThis::StateMain);
+    Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
+        new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>()));
+    Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
+        new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TTierSnapshotConstructor>()));
+    Register(MakeListTieringRulesActor(SelfId()).Release());
+    Become(&TThis::StateFetchTiering);
 }
 
 TTierPreparationActor::TTierPreparationActor(std::vector<TTierConfig>&& objects,

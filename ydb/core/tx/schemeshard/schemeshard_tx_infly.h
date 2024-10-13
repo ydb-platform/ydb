@@ -755,9 +755,9 @@ struct TTxState {
             case NKikimrSchemeOp::ESchemeOpCreateResourcePool: return TxCreateResourcePool;
             case NKikimrSchemeOp::ESchemeOpAlterResourcePool: return TxAlterResourcePool;
             case NKikimrSchemeOp::ESchemeOpDropResourcePool: return TxDropResourcePool;
-            case NKikimrSchemeOp::ESchemeOpCreateTieringRule: return TxCreateMetadataObject;
-            case NKikimrSchemeOp::ESchemeOpAlterTieringRule: return TxAlterMetadataObject;
-            case NKikimrSchemeOp::ESchemeOpDropTieringRule: return TxDropMetadataObject;
+            case NKikimrSchemeOp::ESchemeOpCreateMetadataObject: return TxCreateMetadataObject;
+            case NKikimrSchemeOp::ESchemeOpAlterMetadataObject: return TxAlterMetadataObject;
+            case NKikimrSchemeOp::ESchemeOpDropMetadataObject: return TxDropMetadataObject;
             case NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive: return TxInvalid;
             case NKikimrSchemeOp::ESchemeOpDropExternalTable: return TxInvalid;
             case NKikimrSchemeOp::ESchemeOpDropExternalDataSource: return TxInvalid;

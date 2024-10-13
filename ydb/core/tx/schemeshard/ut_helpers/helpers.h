@@ -294,11 +294,11 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropResourcePool);
     DROP_BY_PATH_ID_HELPERS(DropResourcePool);
 
-    // tiering rule
-    GENERIC_HELPERS(CreateTieringRule);
-    GENERIC_HELPERS(AlterTieringRule);
-    GENERIC_HELPERS(DropTieringRule);
-    DROP_BY_PATH_ID_HELPERS(DropTieringRule);
+    // metadata object
+    GENERIC_HELPERS(CreateMetadataObject);
+    GENERIC_HELPERS(AlterMetadataObject);
+    GENERIC_HELPERS(DropMetadataObject);
+    DROP_BY_PATH_ID_HELPERS(DropMetadataObject);
 
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS

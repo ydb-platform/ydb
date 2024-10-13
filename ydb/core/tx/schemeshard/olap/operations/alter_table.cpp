@@ -45,7 +45,7 @@ public:
         TString pathString = path.PathString();
 
         std::shared_ptr<NOperations::ISSEntity> originalEntity = TColumnTableEntity::GetEntityVerified(context, path);
-        NOperations::TUpdateRestoreContext urContext(&context, (ui64)OperationId.GetTxId(), originalEntity.get());
+        NOperations::TUpdateRestoreContext urContext(originalEntity.get(), &context, (ui64)OperationId.GetTxId());
         std::shared_ptr<NOperations::ISSEntityUpdate> update = originalEntity->RestoreUpdateVerified(urContext);
 
         TSimpleErrorCollector errors;
@@ -116,7 +116,7 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         std::shared_ptr<NOperations::ISSEntity> originalEntity = TColumnTableEntity::GetEntityVerified(context, objPath);
-        NOperations::TUpdateRestoreContext urContext(&context, (ui64)OperationId.GetTxId(), originalEntity.get());
+        NOperations::TUpdateRestoreContext urContext(originalEntity.get(), &context, (ui64)OperationId.GetTxId());
         std::shared_ptr<NOperations::ISSEntityUpdate> update = originalEntity->RestoreUpdateVerified(urContext);
 
         NOperations::TUpdateFinishContext fContext(&objPath, &context, &db, NKikimr::NOlap::TSnapshot(ev->Get()->StepId, ev->Get()->TxId));
@@ -311,7 +311,7 @@ public:
 
         std::shared_ptr<NOperations::ISSEntityUpdate> update;
         {
-            NOperations::TUpdateInitializationContext uContext(&context, &Transaction, (ui64)OperationId.GetTxId(), &*originalEntity);
+            NOperations::TUpdateInitializationContext uContext(&*originalEntity, &context, &Transaction, (ui64)OperationId.GetTxId());
             TConclusion<std::shared_ptr<NOperations::ISSEntityUpdate>> conclusion = originalEntity->CreateUpdate(uContext);
             if (conclusion.IsFail()) {
                 errors.AddError(conclusion.GetErrorMessage());

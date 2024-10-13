@@ -44,11 +44,11 @@ private:
 public:
     static NMetadata::IClassBehaviour::TPtr GetBehaviour();
 
-    bool DeserializeFromProto(const NKikimrSchemeOp::TTieringRuleDescription& proto) {
+    bool DeserializeFromProto(const NKikimrSchemeOp::TTieringRuleProperties& proto) {
         DefaultColumn = proto.GetDefaultColumn();
 
         Intervals.clear();
-        for (const auto& interval : proto.GetIntervals().GetIntervals()) {
+        for (const auto& interval : proto.GetTiers().GetIntervals()) {
             Intervals.emplace_back();
             if (!Intervals.back().DeserializeFromProto(interval)) {
                 return false;

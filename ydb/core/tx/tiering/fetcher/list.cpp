@@ -80,11 +80,11 @@ private:
         }
     }
 
-    void OnObjectFetched(std::optional<NKikimrSchemeOp::TTieringRuleDescription> description, const TPathId& pathId) {
+    void OnObjectFetched(std::optional<NKikimrSchemeOp::TMetadataObjectDescription> description, const TPathId& pathId) {
         AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_lister")("event", "object_fetched")("exists", !!description);
         if (description) {
             TTieringRule tieringRule;
-            AFL_VERIFY(tieringRule.DeserializeFromProto(*description));
+            AFL_VERIFY(tieringRule.DeserializeFromProto(description->GetProperties().GetTieringRule()));
             Result.emplace(description->GetName(), std::move(tieringRule));
         }
         UnfetchedObjects.erase(pathId);

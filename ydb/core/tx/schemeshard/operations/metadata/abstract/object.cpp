@@ -1,21 +1,26 @@
 #include "object.h"
 #include "update.h"
 
-#include <ydb/core/tx/schemeshard/operations/metadata/tiering_rule/object.h>
-
 namespace NKikimr::NSchemeShard::NOperations {
 
-std::shared_ptr<ISSEntity> TMetadataEntity::MakeEntity(const TPath& path) {
-    switch (path->PathType) {
-        case NKikimrSchemeOp::EPathTypeTieringRule:
-            return std::make_shared<TTieringRuleEntity>(path->PathId);
-        default:
-            return nullptr;
-    }
-}
-
 TConclusion<std::shared_ptr<ISSEntityUpdate>> TMetadataEntity::DoCreateUpdate(const TUpdateInitializationContext& context) const {
-    auto update = TMetadataUpdate::MakeUpdate(*context.GetModification());
+    std::shared_ptr<ISSEntityUpdate> update;
+    switch (context.GetModification()->GetOperationType()) {
+        case NKikimrSchemeOp::ESchemeOpCreateMetadataObject:
+            update.reset(TMetadataUpdateCreate::TFactory::Construct(
+                context.GetModification()->GetCreateMetadataObject().GetProperties().GetPropertiesImplCase()));
+            break;
+        case NKikimrSchemeOp::ESchemeOpAlterMetadataObject:
+            update.reset(TMetadataUpdateAlter::TFactory::Construct(
+                context.GetModification()->GetCreateMetadataObject().GetProperties().GetPropertiesImplCase()));
+            break;
+        case NKikimrSchemeOp::ESchemeOpDropMetadataObject:
+            update = GetDropUpdate();
+            break;
+        default:
+            return TConclusionStatus::Fail("Not a metadata operation");
+    }
+    AFL_VERIFY(update);
     if (auto status = update->Initialize(context); status.IsFail()) {
         return status;
     }
@@ -26,15 +31,27 @@ TConclusion<std::shared_ptr<ISSEntityUpdate>> TMetadataEntity::DoRestoreUpdate(c
     return TConclusionStatus::Fail("Restoring updates is not supported for metadata objects");
 }
 
-TConclusion<std::shared_ptr<ISSEntity>> TMetadataEntity::GetEntity(TOperationContext& context, const TPath& path) {
-    auto entity = MakeEntity(path);
+TConclusion<std::shared_ptr<ISSEntityUpdate>> TMetadataEntity::RestoreDropUpdate(const TUpdateRestoreContext& context) const {
+    auto update = GetDropUpdate();
+    AFL_VERIFY(update);
+    NKikimrSchemeOp::TModifyScheme emptyRequest;
+    TUpdateInitializationContext initializationContext(
+        &context.GetOriginalEntity(), context.GetSSOperationContext(), &emptyRequest, context.GetTxId());
+    if (auto status = update->Initialize(initializationContext); status.IsFail()) {
+        return status;
+    }
+    return update;
+}
+
+TConclusion<std::shared_ptr<TMetadataEntity>> TMetadataEntity::GetEntity(TOperationContext& context, const TPath& path) {
+    auto entity = TMetadataEntity::TFactory::MakeHolder(path->PathType, path->PathId);
     if (!entity) {
-        return TConclusionStatus::Fail("Unexpected object type at " + path.PathString());
+        return TConclusionStatus::Fail("Not a metadata object at " + path.PathString());
     }
     if (auto status = entity->Initialize({&context}); status.IsFail()) {
         return status;
     }
-    return entity;
+    return std::shared_ptr<TMetadataEntity>(entity.Release());
 }
 
 }   // namespace NKikimr::NSchemeShard::NOperations

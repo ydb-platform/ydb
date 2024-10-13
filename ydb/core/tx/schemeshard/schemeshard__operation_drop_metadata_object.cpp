@@ -29,9 +29,10 @@ public:
         const TPathElement::TPtr pathPtr = path.Base();
         const TPathElement::TPtr parentDirPtr = path.Parent().Base();
 
-        NOperations::IDropMetadataUpdate::TRestoreContext restoreContext(&path, &context);
-        auto update = NOperations::TMetadataUpdate::RestoreDrop(restoreContext);
-    
+        auto entity = NOperations::TMetadataEntity::GetEntity(context, path).DetachResult();
+        NOperations::TUpdateRestoreContext restoreContext(entity.get(), &context, ev->Get()->TxId);
+        auto update = entity->RestoreDropUpdate(restoreContext).DetachResult();
+        
         NIceDb::TNiceDb db(context.GetDB());
 
         Y_ABORT_UNLESS(!pathPtr->Dropped());
@@ -39,7 +40,7 @@ public:
         context.SS->PersistDropStep(db, pathId, step, OperationId);
 
         NOperations::TUpdateFinishContext finishContext(&path, &context, &db, NOlap::TSnapshot(step.GetValue(), ev->Get()->TxId));
-        update->FinishDrop(finishContext).Validate();
+        update->Finish(finishContext).Validate();
 
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
         domainInfo->DecPathsInside();
@@ -104,7 +105,7 @@ class TDropMetadataObject : public TSubOperation {
         }
     }
 
-    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TOperationContext& /*context*/, const TPath& dstPath, const TPathElement::EPathType expectedPathType) {
+    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TOperationContext& /*context*/, const TPath& dstPath) {
         auto checks = dstPath.Check();
         checks
             .NotEmpty()
@@ -116,16 +117,9 @@ class TDropMetadataObject : public TSubOperation {
             .NotUnderOperation()
             .IsCommonSensePath();
 
-        if (checks) {
-            if (dstPath.Base()->PathType != expectedPathType) {
-                result->SetError(NKikimrScheme::StatusSchemeError, "Object has different type");
-                return false;
-            }
-        }
-
         if (!checks) {
             result->SetError(checks.GetStatus(), checks.GetError());
-            if (dstPath.IsResolved() && dstPath.Base()->PathType == expectedPathType && (dstPath.Base()->PlannedToDrop() || dstPath.Base()->Dropped())) {
+            if (dstPath.IsResolved() && (dstPath.Base()->PlannedToDrop() || dstPath.Base()->Dropped())) {
                 result->SetPathDropTxId(ui64(dstPath.Base()->DropTxId));
                 result->SetPathId(dstPath.Base()->PathId.LocalPathId);
             }
@@ -166,25 +160,18 @@ public:
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         Y_UNUSED(owner);
 
-        auto update = NOperations::TMetadataUpdate::MakeUpdate(Transaction);
-        AFL_VERIFY(update);
-
-        LOG_N("TDropMetadataObject Propose: opId# " << OperationId << ", path# " << update->GetPathString());
+        const TString pathString = NMetadataObject::GetDestinationPath(Transaction);
+        LOG_N("TDropMetadataObject Propose: opId# " << OperationId << ", path# " << pathString);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(context.SS->SelfTabletId()));
 
-        TPath dstPath = TPath::Resolve(update->GetPathString(), context.SS);
+        TPath dstPath = TPath::Resolve(pathString, context.SS);
         TPath parentPath = dstPath.Parent();
         RETURN_RESULT_UNLESS(NMetadataObject::IsParentPathValid(result, parentPath));
-        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, context, dstPath, update->GetObjectPathType()));
+        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, context, dstPath));
         RETURN_RESULT_UNLESS(NMetadataObject::IsApplyIfChecksPassed(Transaction, result, context));
-
-        if (!dstPath.IsResolved()) {
-            result->SetError(NKikimrScheme::StatusSchemeError, "Object does not exist");
-            return result;
-        }
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
         std::shared_ptr<NOperations::ISSEntity> originalEntity;
@@ -197,10 +184,15 @@ public:
             originalEntity = conclusion.GetResult();
         }
 
-        NOperations::TUpdateInitializationContext initializationContext(&context, &Transaction, OperationId.GetTxId().GetValue(), originalEntity.get());
-        if (auto status = update->Initialize(initializationContext); status.IsFail()) {
-            result->SetError(NKikimrScheme::StatusSchemeError, status.GetErrorMessage());
-            return result;
+        std::shared_ptr<NOperations::ISSEntityUpdate> update;
+        {
+            NOperations::TUpdateInitializationContext initializationContext(originalEntity.get(), &context, &Transaction, OperationId.GetTxId().GetValue());
+            auto conclusion = originalEntity->CreateUpdate(initializationContext);
+            if (conclusion.IsFail()) {
+                result->SetError(NKikimrScheme::StatusSchemeError, conclusion.GetErrorMessage());
+                return result;
+            }
+            update = conclusion.GetResult();
         }
 
         NIceDb::TNiceDb db(context.GetDB());

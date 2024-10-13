@@ -3,23 +3,32 @@
 #include <ydb/core/tx/schemeshard/olap/table/table.h>
 
 namespace NKikimr::NSchemeShard::NOperations {
+class TMetadataUpdateDrop;
+}
+
+namespace NKikimr::NSchemeShard::NOperations {
 
 class TMetadataEntity: public ISSEntity {
+public:
+    using TFactory = NObjectFactory::TObjectFactory<TMetadataEntity, NKikimrSchemeOp::EPathType, const TPathId&>;
+
 private:
     using TBase = ISSEntity;
-
-    static std::shared_ptr<ISSEntity> MakeEntity(const TPath& path);
 
 protected:
     TConclusion<std::shared_ptr<ISSEntityUpdate>> DoCreateUpdate(const TUpdateInitializationContext& context) const override;
     TConclusion<std::shared_ptr<ISSEntityUpdate>> DoRestoreUpdate(const TUpdateRestoreContext& context) const override;
+
+    virtual std::shared_ptr<TMetadataUpdateDrop> GetDropUpdate() const = 0;
 
 public:
     TMetadataEntity(const TPathId& pathId)
         : TBase(pathId) {
     }
 
-    static TConclusion<std::shared_ptr<ISSEntity>> GetEntity(TOperationContext& context, const TPath& path);
+    TConclusion<std::shared_ptr<ISSEntityUpdate>> RestoreDropUpdate(const TUpdateRestoreContext& context) const;
+
+    static TConclusion<std::shared_ptr<TMetadataEntity>> GetEntity(TOperationContext& context, const TPath& path);
 };
 
-}
+}   // namespace NKikimr::NSchemeShard::NOperations

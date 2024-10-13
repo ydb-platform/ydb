@@ -539,7 +539,7 @@ private:
 
     void StartIndexTask(std::vector<const NOlap::TCommittedData*>&& dataToIndex, const i64 bytesToIndex);
     void SetupIndexation();
-    void SetupCompaction();
+    void SetupCompaction(const std::set<ui64>& pathIds);
     void StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
     bool SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {});

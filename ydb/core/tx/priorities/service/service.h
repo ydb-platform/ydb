@@ -28,6 +28,10 @@ private:
         Manager->Ask(ev->Get()->GetClientId(), ev->Get()->GetCount(), ev->Get()->GetRequest(), ev->Get()->GetPriority());
     }
 
+    void Handle(TEvExecution::TEvAskMax::TPtr& ev) {
+        Manager->AskMax(ev->Get()->GetClientId(), ev->Get()->GetCount(), ev->Get()->GetRequest(), ev->Get()->GetPriority());
+    }
+
     void Handle(TEvExecution::TEvFree::TPtr& ev) {
         Manager->Free(ev->Get()->GetClientId(), ev->Get()->GetCount());
     }
@@ -39,6 +43,7 @@ public:
             hFunc(TEvExecution::TEvRegisterClient, Handle);
             hFunc(TEvExecution::TEvUnregisterClient, Handle);
             hFunc(TEvExecution::TEvAsk, Handle);
+            hFunc(TEvExecution::TEvAskMax, Handle);
             hFunc(TEvExecution::TEvFree, Handle);
             default:
                 AFL_ERROR(NKikimrServices::TX_PRIORITIES_QUEUE)("problem", "unexpected event for task executor")("ev_type", ev->GetTypeName());

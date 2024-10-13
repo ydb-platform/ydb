@@ -515,7 +515,7 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     SharingSessionsManager->Start(*this);
 
     SetupIndexation();
-    SetupCompaction();
+    SetupCompaction({});
     SetupCleanupPortions();
     SetupCleanupTables();
     SetupTtl();
@@ -726,7 +726,7 @@ public:
 };
 }   // namespace
 
-void TColumnShard::SetupCompaction() {
+void TColumnShard::SetupCompaction(const std::set<ui64>& pathIds) {
     if (!AppDataVerified().ColumnShardConfig.GetCompactionEnabled() ||
         !NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::Compaction)) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_compaction")("reason", "disabled");
@@ -734,9 +734,13 @@ void TColumnShard::SetupCompaction() {
     }
 
     BackgroundController.CheckDeadlines();
-    const ui64 priority = TablesManager.MutablePrimaryIndex().GetCompactionPriority(DataLocksManager);
+    const ui64 priority = TablesManager.MutablePrimaryIndex().GetCompactionPriority(DataLocksManager, pathIds);
     if (priority) {
-        NPrioritiesQueue::TCompServiceOperator::Ask(PrioritizationClientId, priority, std::make_shared<TCompactionAllocated>(SelfId()));
+        if (pathIds.size()) {
+            NPrioritiesQueue::TCompServiceOperator::AskMax(PrioritizationClientId, priority, std::make_shared<TCompactionAllocated>(SelfId()));
+        } else {
+            NPrioritiesQueue::TCompServiceOperator::Ask(PrioritizationClientId, priority, std::make_shared<TCompactionAllocated>(SelfId()));
+        }
     }
 }
 

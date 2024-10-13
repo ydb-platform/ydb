@@ -25,6 +25,10 @@ private:
             : ExternalPriority(priority) {
         }
 
+        ui64 GetExternalPriority() const {
+            return ExternalPriority;
+        }
+
         bool operator<(const TPriority& item) const {
             if (item.ExternalPriority < ExternalPriority) {
                 return true;
@@ -36,7 +40,7 @@ private:
         }
     };
 
-    class TClientStatus {
+    class TClientStatus: TNonCopyable {
     private:
         YDB_READONLY(ui64, ClientId, 0);
         YDB_ACCESSOR(ui32, Count, 0);
@@ -70,11 +74,14 @@ private:
     void AllocateNext();
 
     void RemoveFromQueue(const TClientStatus& client);
+    void AskImpl(TClientStatus& client, TAskRequest&& request);
+    TClientStatus& GetClientVerified(const ui64 clientId);
 
 public:
     TManager(const std::shared_ptr<TCounters>& counters, const TConfig& config, const NActors::TActorId& serviceActorId);
 
     void Ask(const ui64 client, const ui32 count, const std::shared_ptr<IRequest>& request, const ui64 extPriority);
+    void AskMax(const ui64 client, const ui32 count, const std::shared_ptr<IRequest>& request, const ui64 extPriority);
     void Free(const ui64 client, const ui32 count);
 
     void RegisterClient(const ui64 clientId);

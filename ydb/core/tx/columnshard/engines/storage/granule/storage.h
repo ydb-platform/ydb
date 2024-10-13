@@ -180,8 +180,8 @@ public:
     }
 
     std::shared_ptr<TGranuleMeta> GetGranuleForCompaction(const std::shared_ptr<NDataLocks::TManager>& locksManager) const;
-    std::optional<NStorageOptimizer::TOptimizationPriority> GetCompactionPriority(
-        const std::shared_ptr<NDataLocks::TManager>& locksManager, std::shared_ptr<TGranuleMeta>* granuleResult = nullptr) const;
+    std::optional<NStorageOptimizer::TOptimizationPriority> GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& locksManager,
+        const std::set<ui64>& pathIds = Default<std::set<ui64>>(), std::shared_ptr<TGranuleMeta>* granuleResult = nullptr) const;
 };
 
 } // namespace NKikimr::NOlap

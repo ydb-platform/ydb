@@ -4,6 +4,7 @@ If the difference between min and max values exceeds 20%, Hive may start splitti
 
 ## Diagnostics
 
+<!-- The include is added to allow partial overrides in overlays  -->
 {% include notitle [#](_includes/splits-merges.md) %}
 
 ## Recommendations

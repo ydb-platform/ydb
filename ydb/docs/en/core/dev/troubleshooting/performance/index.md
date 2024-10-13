@@ -1,7 +1,5 @@
 # Troubleshooting performance issues
 
-## Overview
-
 Addressing database performance issues often requires a holistic approach, which includes optimizing queries, properly configuring hardware resources, and ensuring that both the database and the application are well-designed. Regular monitoring and maintenance are essential for proactively identifying and resolving these issues.
 
 ## Tools to troubleshoot performance issues
@@ -14,20 +12,26 @@ Troubleshooting performance issues in {{ ydb-short-name }} involves the followin
 
 - [{{ ydb-short-name }} CLI](../../../reference/ydb-cli/index.md)
 
+- [Tracing](../../../reference/observability/tracing/setup.md)
+
+- [Embedded UI](../../../reference/embedded-ui/index.md)
+
+- [Query plans](../../../yql/query_plans.md)
+
 
 ## Classification of {{ ydb-short-name }} performance issues
 
-Database performance issues can be classified into several categories based on their nature:
+Database performance issues can be classified into several categories based on their nature. This documentation section provides a high-level overview of these categories, starting with the lowest layers of the system and going all the way to the client. Below is a separate section for the [actual performance troubleshooting instructions](#instructions).
 
 - **Hardware infrastructure issues**.
 
     - **[Network issues](infrastructure/network.md)**. Insufficient bandwidth or network congestion in data centers can significantly affect {{ ydb-short-name }} performance.
 
-    - **[Data center outages](infrastructure/dc-outage.md)**. Disruptions in the operations of data centers, which can lead to the unavailability of services or data. These outages can stem from various causes, including power failures, natural disasters, cyber attacks, etc. A common fault-tolerant setup of {{ ydb-short-name }} spans three data centers or availability zones (AZ). {{ ydb-short-name }} continues to operate without interruption even if one AZ is lost. However, {{ ydb-short-name }} will start the tablets from the offline AZ on the remaining online nodes. That process will result in temporarily higher query latencies. Distributed transactions that operate with tablets in the offline servers will suffer significant latencies.
+    - **[Data center outages](infrastructure/dc-outage.md)**: Disruptions in data center operations that can cause service or data unavailability. These outages may result from various factors, such as power failures, natural disasters, or cyber-attacks. A common fault-tolerant setup for {{ ydb-short-name }} spans three data centers or availability zones (AZs). {{ ydb-short-name }} can continue operating without interruption, even if one data center and a server rack in another are lost. However, it will initiate the relocation of tablets from the offline AZ to the remaining online nodes, temporarily leading to higher query latencies. Distributed transactions involving tablets that are moving to other nodes might experience increased latencies.
 
-    - **Data center drills**. Planned exercises conducted to prepare personnel for potential emergencies or outages. Depending on drill scenario, {{ ydb-short-name }} cluster may work in degraded mode until the drills are over.
+    - **Data center maintenance and drills**. Planned maintenance or drills, exercises conducted to prepare personnel for potential emergencies or outages, can also affect query performance. Depending on the maintenance scope or drill scenario, some {{ ydb-short-name }} might become unavailable, which leads to the same impact as an outage.
 
-- **[Hardware issues](infrastructure/hardware.md)**. Malfunctioning memory modules and network cards, until replaced, significantly impact database performance up to total unavailability of the affected server.
+    - **[Server hardware issues](infrastructure/hardware.md)**. Malfunctioning CPU, memory modules, and network cards, until replaced, significantly impact database performance up to the total unavailability of the affected server.
 
 - **Insufficient resources**. These issues refer to situations when the workload demands more physical resources — such as CPU, memory, disk space, and network bandwidth — than allocated to a database.
 
@@ -49,9 +53,11 @@ Database performance issues can be classified into several categories based on t
 
 - **Query-related issues**. These issues refer to database queries executing slower than expected because of their inefficient design.
 
-## Most frequent issues that affect {{ ydb-short-name }} performance
+## Instructions {#instructions}
 
-It's recommended to troubleshoot YDB performance issues in the order of their occurrence frequency:
+To troubleshoot {{ ydb-short-name }} performance issues, treat each potential cause as a hypothesis. Systematically review the list of hypotheses and verify whether they apply to your situation. The documentation for each cause provides a description, guidance on how to check diagnostics, and recommendations on what to do if the hypothesis is confirmed.
+
+If any known changes occurred in the system around the time the performance issues first appeared, investigate those first. Otherwise, follow this recommended order for evaluating potential root causes. This order is loosely based on the descending frequency of their occurrence on large production {{ ydb-short-name }} clusters.
 
 1. [Overloaded shards](schemas/overloaded-shards.md)
 1. [Excessive tablet splits and merges](schemas/splits-merges.md)

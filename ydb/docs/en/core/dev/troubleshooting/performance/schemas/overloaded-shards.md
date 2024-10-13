@@ -1,7 +1,5 @@
 # Overloaded shards
 
-## Description
-
 [Data shards](../../../../concepts/glossary.md#data-shard) in {{ ydb-short-name }} may become overloaded for the following reasons:
 
 * A table is created without the [AUTO_PARTITIONING_BY_LOAD](../../../../concepts/datamodel/table.md#AUTO_PARTITIONING_BY_LOAD) clause.
@@ -14,6 +12,7 @@
 
 ## Diagnostics
 
+<!-- The include is added to allow partial overrides in overlays  -->
 {% include notitle [#](_includes/overloaded-shards-diagnostics.md) %}
 
 ## Recommendations for table configuration {#table-config}
@@ -26,4 +25,4 @@ Consider the following solutions to address shard overload:
 
 ## Recommendations for the imbalanced primary key {#pk-recommendations}
 
-Consider modifying the primary key to distribute the load evenly across table partitions.
+Consider modifying the primary key to distribute the load evenly across table partitions. You cannot change the primary key of an existing table. To do that, you will have to create a new table with the modified primary key and then migrate the data to the new table.

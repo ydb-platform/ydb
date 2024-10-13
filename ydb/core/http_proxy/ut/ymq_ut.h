@@ -642,55 +642,55 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestDeleteMessageBatch, THttpProxyTestMock) {
-        auto createQueueReq = CreateSqsCreateQueueRequest();
-        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-        NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
-        UNIT_ASSERT(resultQueueUrl.EndsWith("ExampleQueueName"));
+        DeleteMessageBatch({}, 400);
 
-        NJson::TJsonValue message0;
-        message0["Id"] = "Id-0";
-        message0["MessageBody"] = "MessageBody-0";
-        message0["MessageDeduplicationId"] = "MessageDeduplicationId-0";
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
 
-        NJson::TJsonValue message1;
-        message1["Id"] = "Id-1";
-        message1["MessageBody"] = "MessageBody-1";
-        message1["MessageDeduplicationId"] = "MessageDeduplicationId-1";
+        DeleteMessageBatch({
+            {"QueueUrl", queueUrl}
+        }, 400);
 
-        NJson::TJsonArray entries = {message0, message1};
+        DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", {}}
+        }, 400);
 
-        NJson::TJsonValue sendMessageBatchReq;
-        sendMessageBatchReq["QueueUrl"] = resultQueueUrl;
-        sendMessageBatchReq["Entries"] = entries;
+        DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{}}
+        }, 400);
 
-        res = SendHttpRequest("/Root", "AmazonSQS.SendMessageBatch", std::move(sendMessageBatchReq), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonMap{}}
+        }, 400);
+
+        DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", {""}}
+        }, 400);
+
+        json = SendMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "Id-0"}, {"MessageBody", "MessageBody-0"}, {"MessageDeduplicationId", "MessageDeduplicationId-0"}},
+                NJson::TJsonMap{{"Id", "Id-1"}, {"MessageBody", "MessageBody-1"}, {"MessageDeduplicationId", "MessageDeduplicationId-1"}}
+            }}
+        });
         UNIT_ASSERT(json["Successful"].GetArray().size() == 2);
 
         TVector<NJson::TJsonValue> messages;
         for (int i = 0; i < 20; ++i) {
-            NJson::TJsonValue receiveMessageReq;
-            receiveMessageReq["QueueUrl"] = resultQueueUrl;
-            res = SendHttpRequest("/Root", "AmazonSQS.ReceiveMessage", std::move(receiveMessageReq), FormAuthorizationStr("ru-central1"));
-            if (res.Body != TString("{}")) {
-                NJson::ReadJsonTree(res.Body, &json);
-                if (json["Messages"].GetArray().size() == 2) {
-                    messages.push_back(json["Messages"][0]);
-                    messages.push_back(json["Messages"][1]);
-                    break;
-                }
-                if (json["Messages"].GetArray().size() == 1) {
-                    messages.push_back(json["Messages"][0]);
-                    if (messages.size() == 2) {
-                        break;
-                    }
+            auto json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}});
+            if (!json.GetMapSafe().empty()) {
+                for (auto& m : json["Messages"].GetArray()) {
+                    messages.push_back(m);
                 }
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            if (messages.size() >= 2) {
+                break;
+            }
         }
 
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
@@ -700,32 +700,20 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         auto receiptHandle1 = messages[1]["ReceiptHandle"].GetString();
         UNIT_ASSERT(!receiptHandle1.Empty());
 
-        NJson::TJsonValue deleteMessageBatchReq;
-        deleteMessageBatchReq["QueueUrl"] = resultQueueUrl;
+        json = DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "Id-0"}, {"ReceiptHandle", receiptHandle0}},
+                NJson::TJsonMap{{"Id", "Id-1"}, {"ReceiptHandle", receiptHandle1}}
+            }}
+        });
 
-        NJson::TJsonValue entry0;
-        entry0["Id"] = "Id-0";
-        entry0["ReceiptHandle"] = receiptHandle0;
-
-        NJson::TJsonValue entry1;
-        entry1["Id"] = "Id-1";
-        entry1["ReceiptHandle"] = receiptHandle1;
-
-        NJson::TJsonArray deleteEntries = {entry0, entry1};
-        deleteMessageBatchReq["Entries"] = deleteEntries;
-
-        res = SendHttpRequest("/Root", "AmazonSQS.DeleteMessageBatch", std::move(deleteMessageBatchReq), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
         UNIT_ASSERT_VALUES_EQUAL(json["Successful"].GetArray().size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(json["Successful"][0]["Id"], "Id-0");
         UNIT_ASSERT_VALUES_EQUAL(json["Successful"][1]["Id"], "Id-1");
 
-        NJson::TJsonValue receiveMessageReq;
-        receiveMessageReq["QueueUrl"] = resultQueueUrl;
-        res = SendHttpRequest("/Root", "AmazonSQS.ReceiveMessage", std::move(receiveMessageReq), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+        json = ReceiveMessage({{"QueueUrl", queueUrl}});
+
         UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 0);
 
     }
@@ -851,7 +839,6 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             if (messages.size() >= 2) {
                 break;
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         }
 
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);

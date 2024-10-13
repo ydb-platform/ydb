@@ -1,18 +1,34 @@
 items:
+  - name: Infrastructure issues
+    items:
+      - name: Network issues
+        href: infrastructure/network.md
+      - name: Data center outages
+        href: infrastructure/dc-outage.md
+      - name: Hardware issues
+        href: infrastructure/hardware.md
   - name: Reaching resource limits
     items:
-    - name: CPU
-      href: hardware/cpu-bottleneck.md
-    - name: Memory
-      href: hardware/insufficient-memory.md
-    - name: I/O bandwidth
-      href: hardware/io-bandwidth.md
-    - name: Disk space
-      href: hardware/disk-space.md
+      - name: CPU
+        href: hardware/cpu-bottleneck.md
+      - name: Memory
+        href: hardware/insufficient-memory.md
+      - name: I/O bandwidth
+        href: hardware/io-bandwidth.md
+      - name: Disk space
+        href: hardware/disk-space.md
+  - name: OS and YDB configuration issues
+    items:
+      - name: YDB updates
+        href: system/ydb-updates.md
+      - name: Frequent tablet transfers between nodes
+        href: system/tablets-moved.md
   - name: Schema design issues
     items:
       - name: Overloaded shards
         href: schemas/overloaded-shards.md
+      - name: Excessive tablet splits and merges
+        href: schemas/splits-merges.md
   - name: Query performance issues
     items:
       - name: Transaction lock invalidation

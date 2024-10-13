@@ -1,0 +1,3 @@
+# Data center outages
+
+Disruptions in the operations of data centers, which can lead to the unavailability of services or data. These outages can stem from various causes, including power failures, natural disasters, cyber attacks, etc. A common fault-tolerant setup of {{ ydb-short-name }} spans three data centers or availability zones (AZ). {{ ydb-short-name }} continues to operate without interruption even if one AZ is lost. However, {{ ydb-short-name }} will start the tablets from the offline AZ on the remaining online nodes. That process will result in temporarily higher query latencies. Distributed transactions that operate with tablets in the offline servers will suffer significant latencies.

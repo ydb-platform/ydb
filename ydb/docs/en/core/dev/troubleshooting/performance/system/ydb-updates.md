@@ -1,0 +1,3 @@
+# {{ ydb-short-name }} updates
+
+{{ ydb-short-name }} is a distributed system that supports [rolling restart](../../../../devops/manual/upgrade.md), when database administrators update {{ ydb-short-name }} nodes one by one. This helps keep the {{ ydb-short-name }} cluster up and running during the update process. However, when a {{ ydb-short-name }} node is being restarted, Hive moves the tables that run on this node to other nodes, and that may lead to increased latencies for queries that are processed by the moving tables.

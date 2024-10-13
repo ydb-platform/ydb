@@ -10,7 +10,7 @@
 
     1. In the [Embedded UI](../../../../../reference/embedded-ui/index.md), go to the **Databases** tab and click on the database.
 
-    1. On the **Navigation** tab, ensure the entire database is selected.
+    1. On the **Navigation** tab, ensure the required database is selected.
 
     1. Open the **Diagnostics** tab.
 

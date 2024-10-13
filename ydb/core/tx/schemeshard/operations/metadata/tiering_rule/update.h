@@ -16,8 +16,6 @@ public:
         return NKikimrSchemeOp::EPathTypeTieringRule;
     }
 
-    std::shared_ptr<ISSEntity> MakeEntity(const TPathId& pathId) const override;
-
     TTieringRuleUpdate(const TString& objectPath)
         : TMetadataUpdate(objectPath) {
     }

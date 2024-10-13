@@ -1,9 +1,9 @@
-#include "schemeshard__operation_common_metadata_object.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_common_metadata_object.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/tx/schemeshard/operations/metadata/abstract/object.h>
 #include <ydb/core/tx/schemeshard/operations/metadata/abstract/update.h>
-
 
 namespace NKikimr::NSchemeShard {
 
@@ -140,10 +140,13 @@ public:
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
         std::shared_ptr<NOperations::ISSEntity> originalEntity;
-        originalEntity = update->MakeEntity(dstPath->PathId);
-        if (auto status = originalEntity->Initialize(NOperations::TEntityInitializationContext(&context)); status.IsFail()) {
-            result->SetError(NKikimrScheme::StatusSchemeError, status.GetErrorMessage());
-            return result;
+        {
+            auto conclusion = NOperations::TMetadataEntity::GetEntity(context, dstPath);
+            if (conclusion.IsFail()) {
+                result->SetError(NKikimrScheme::StatusSchemeError, conclusion.GetErrorMessage());
+                return result;
+            }
+            originalEntity = conclusion.GetResult();
         }
 
         NOperations::TUpdateInitializationContext initializationContext(&context, &Transaction, OperationId.GetTxId().GetValue(), originalEntity.get());

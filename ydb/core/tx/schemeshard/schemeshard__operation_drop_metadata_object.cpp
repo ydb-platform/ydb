@@ -1,7 +1,8 @@
-#include "schemeshard__operation_common_metadata_object.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_common_metadata_object.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/tx/schemeshard/operations/metadata/abstract/object.h>
 #include <ydb/core/tx/schemeshard/operations/metadata/abstract/update.h>
 
 namespace NKikimr::NSchemeShard {
@@ -184,13 +185,17 @@ public:
             result->SetError(NKikimrScheme::StatusSchemeError, "Object does not exist");
             return result;
         }
-
-        std::shared_ptr<NOperations::ISSEntity> originalEntity = update->MakeEntity(dstPath->PathId);
-        if (auto status = originalEntity->Initialize(NOperations::TEntityInitializationContext(&context)); status.IsFail()) {
-            result->SetError(NKikimrScheme::StatusSchemeError, status.GetErrorMessage());
-            return result;
-        }
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
+
+        std::shared_ptr<NOperations::ISSEntity> originalEntity;
+        {
+            auto conclusion = NOperations::TMetadataEntity::GetEntity(context, dstPath);
+            if (conclusion.IsFail()) {
+                result->SetError(NKikimrScheme::StatusSchemeError, conclusion.GetErrorMessage());
+                return result;
+            }
+            originalEntity = conclusion.GetResult();
+        }
 
         NOperations::TUpdateInitializationContext initializationContext(&context, &Transaction, OperationId.GetTxId().GetValue(), originalEntity.get());
         if (auto status = update->Initialize(initializationContext); status.IsFail()) {
@@ -220,7 +225,6 @@ public:
 
     void AbortPropose(TOperationContext& context) override {
         LOG_N("TDropMetadataObject AbortPropose: opId# " << OperationId);
-        Y_ABORT("no AbortPropose for TDropMetadataObject");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

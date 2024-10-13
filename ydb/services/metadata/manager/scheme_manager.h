@@ -10,7 +10,7 @@ class IBuildRequestController {
 public:
     using TPtr = std::shared_ptr<IBuildRequestController>;
 
-    virtual void OnBuildFinished(NKikimrSchemeOp::TModifyScheme request, std::optional<NACLib::TUserToken> userToken) = 0;
+    virtual void OnBuildFinished(NKikimrSchemeOp::TMetadataObjectProperties properties) = 0;
     virtual void OnBuildProblem(const TString& errorMessage) = 0;
 
     virtual ~IBuildRequestController() = default;
@@ -31,6 +31,7 @@ protected:
 
     virtual void DoBuildRequestFromSettings(
         const NYql::TObjectSettingsImpl& settings, TInternalModificationContext& context, IBuildRequestController::TPtr controller) const = 0;
+    virtual TString GetStorageDirectory() const = 0;
 
 protected:
     NThreading::TFuture<TYqlConclusionStatus> DoModify(const NYql::TObjectSettingsImpl& settings, const ui32 /*nodeId*/,
@@ -44,31 +45,6 @@ protected:
     NThreading::TFuture<TYqlConclusionStatus> ExecutePrepared(const NKqpProto::TKqpSchemeOperation& /*schemeOperation*/, const ui32 /*nodeId*/,
         const IClassBehaviour::TPtr& /*manager*/, const TExternalModificationContext& /*context*/) const override {
         return NThreading::MakeFuture(TYqlConclusionStatus::Fail("Execute prepared operation is not supported for this object."));
-    }
-
-    static NKikimrSchemeOp::TModifyACL MakeModifyACL(const TString& objectId, const std::optional<NACLib::TUserToken>& owner) {
-        NACLib::TDiffACL diffAcl;
-        for (const TString& usedSid : AppData()->AdministrationAllowedSIDs) {
-            diffAcl.AddAccess(NACLib::EAccessType::Allow, NACLib::EAccessRights::GenericFull, usedSid);
-        }
-
-        auto useAccess = NACLib::EAccessRights::SelectRow | NACLib::EAccessRights::DescribeSchema;
-        for (const auto& userSID : AppData()->DefaultUserSIDs) {
-            diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, userSID);
-        }
-        diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, AppData()->AllAuthenticatedUsers);
-        diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, BUILTIN_ACL_ROOT);
-
-        auto token = MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{});
-        ::NKikimrSchemeOp::TModifyACL modifyACL;
-
-        modifyACL.SetName(objectId);
-        modifyACL.SetDiffACL(diffAcl.SerializeAsString());
-        if (owner) {
-            modifyACL.SetNewOwner(owner->GetUserSID());
-        }
-
-        return modifyACL;
     }
 };
 

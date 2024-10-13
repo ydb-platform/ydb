@@ -1,67 +1,60 @@
 #pragma once
 
 #include <ydb/core/tx/schemeshard/operations/metadata/abstract/update.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 namespace NKikimr::NSchemeShard::NOperations {
 
-class TTieringRuleUpdate: public TMetadataUpdate {
+class TTieringRuleUpdateBase {
 protected:
-    static TString GetStorageDirectory();
-    static TConclusionStatus ApplySettings(const NKikimrSchemeOp::TTieringRuleDescription& settings, TTieringRuleInfo::TPtr object);
+    static TString DoGetStorageDirectory();
+    static TConclusionStatus ApplySettings(const NKikimrSchemeOp::TTieringRuleProperties& settings, TTieringRuleInfo::TPtr object);
     static TConclusionStatus ValidateTieringRule(const TTieringRuleInfo::TPtr& object);
     static void PersistTieringRule(const TPathId& pathId, const TTieringRuleInfo::TPtr& tieringRule, const TUpdateStartContext& context);
+};
+
+class TCreateTieringRule: public TMetadataUpdateCreate, private TTieringRuleUpdateBase {
+private:
+    static TFactory::TRegistrator<TCreateTieringRule> Registrator;
+
+    TTieringRuleInfo::TPtr UpdatedTieringRule;
+    bool Exists;
+
+protected:
+    TConclusionStatus DoInitialize(const TUpdateInitializationContext& context) override;
+    TConclusionStatus Execute(const TUpdateStartContext& context) override;
 
 public:
     TPathElement::EPathType GetObjectPathType() const override {
         return NKikimrSchemeOp::EPathTypeTieringRule;
     }
 
-    TTieringRuleUpdate(const TString& objectPath)
-        : TMetadataUpdate(objectPath) {
-    }
+    std::shared_ptr<TMetadataEntity> MakeEntity(const TPathId& pathId) const override;
 };
 
-class TCreateTieringRule: public TTieringRuleUpdate {
+class TAlterTieringRule: public TMetadataUpdateAlter, private TTieringRuleUpdateBase  {
 private:
-    using TBase = TTieringRuleUpdate;
-    TTieringRuleInfo::TPtr UpdatedTieringRule;
-    bool Exists;
+    static TFactory::TRegistrator<TAlterTieringRule> Registrator;
 
-protected:
-    TConclusionStatus DoInitialize(const TUpdateInitializationContext& context) override;
-    TConclusionStatus DoExecute(const TUpdateStartContext& context) override;
-
-public:
-    using TTieringRuleUpdate::TTieringRuleUpdate;
-};
-
-class TAlterTieringRule: public TTieringRuleUpdate {
-private:
-    using TBase = TTieringRuleUpdate;
     TTieringRuleInfo::TPtr UpdatedTieringRule;
 
 protected:
     TConclusionStatus DoInitialize(const TUpdateInitializationContext& context) override;
-    TConclusionStatus DoExecute(const TUpdateStartContext& context) override;
+    TConclusionStatus Execute(const TUpdateStartContext& context) override;
 
 public:
-    using TTieringRuleUpdate::TTieringRuleUpdate;
 };
 
-class TDropTieringRule: public TTieringRuleUpdate, public IDropMetadataUpdate {
+class TDropTieringRule: public TMetadataUpdateDrop, private TTieringRuleUpdateBase  {
 private:
-    using TBase = TTieringRuleUpdate;
+    static TFactory::TRegistrator<TDropTieringRule> Registrator;
 
 protected:
     TConclusionStatus DoInitialize(const TUpdateInitializationContext& context) override;
-    TConclusionStatus DoExecute(const TUpdateStartContext& context) override;
-
-    void RestoreDrop(const TRestoreContext& /*context*/) override {
-    }
-    TConclusionStatus FinishDrop(const TUpdateFinishContext& context) override;
+    TConclusionStatus DoStart(const TUpdateStartContext& context) override;
+    TConclusionStatus DoFinish(const TUpdateFinishContext& context) override;
 
 public:
-    using TTieringRuleUpdate::TTieringRuleUpdate;
 };
 
 }   // namespace NKikimr::NSchemeShard::NOperations

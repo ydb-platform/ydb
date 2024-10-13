@@ -9,13 +9,15 @@
 namespace NKikimr::NColumnShard::NTiers {
 
 void TTieringRulePreparationActor::StartChecker() {
-    AFL_VERIFY(Tiers && Secrets);
+    if (!Tiers || !Secrets) {
+        return;
+    }
     auto g = PassAwayGuard();
     if (Context.GetActivityType() == NMetadata::NModifications::IOperationsManager::EActivityType::Drop) {
         ReplySuccess();
         return;
     }
-    for (const auto& interval : GetTieringRule().GetIntervals().GetIntervals()) {
+    for (const auto& interval : TieringRule.GetTiers().GetIntervals()) {
         const TString& tierName = interval.GetTierName();
         const auto* tier = Tiers->GetTierConfigs().FindPtr(tierName);
         if (!tier) {
@@ -33,40 +35,10 @@ void TTieringRulePreparationActor::StartChecker() {
     ReplySuccess();
 }
 
-void TTieringRulePreparationActor::AdvanceCheckerState() {
-    switch (State) {
-        case INITIAL:
-            Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
-                new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>()));
-            Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
-                new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TTierSnapshotConstructor>()));
-            State = FETCH_TIERING;
-            break;
-        case FETCH_TIERING:
-            if (Tiers && Secrets) {
-                StartChecker();
-                State = MAKE_RESULT;
-            }
-            break;
-        case MAKE_RESULT:
-            AFL_VERIFY(false);
-    }
-}
-
 void TTieringRulePreparationActor::ReplySuccess() {
-    Controller->OnBuildFinished(std::move(Request), UserToken);
-}
-
-const NKikimrSchemeOp::TTieringRuleDescription& TTieringRulePreparationActor::GetTieringRule() const {
-    switch (Context.GetActivityType()) {
-        case NMetadata::NModifications::IOperationsManager::EActivityType::Undefined:
-        case NMetadata::NModifications::IOperationsManager::EActivityType::Upsert:
-        case NMetadata::NModifications::IOperationsManager::EActivityType::Drop:
-            AFL_VERIFY(false);
-        case NMetadata::NModifications::IOperationsManager::EActivityType::Create:
-        case NMetadata::NModifications::IOperationsManager::EActivityType::Alter:
-            return Request.GetCreateTieringRule();
-    }
+    NKikimrSchemeOp::TMetadataObjectProperties properties;
+    *properties.MutableTieringRule() = std::move(TieringRule);
+    Controller->OnBuildFinished(std::move(properties));
 }
 
 void TTieringRulePreparationActor::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
@@ -77,19 +49,21 @@ void TTieringRulePreparationActor::Handle(NMetadata::NProvider::TEvRefreshSubscr
     } else {
         Y_ABORT_UNLESS(false);
     }
-    AdvanceCheckerState();
+    StartChecker();
 }
 
 void TTieringRulePreparationActor::Bootstrap() {
-    AdvanceCheckerState();
-    Become(&TThis::StateMain);
+    Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
+        new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>()));
+    Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
+        new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TTierSnapshotConstructor>()));
+    Become(&TThis::StateFetchTiering);
 }
 
-TTieringRulePreparationActor::TTieringRulePreparationActor(NKikimrSchemeOp::TModifyScheme request, std::optional<NACLib::TUserToken> userToken,
+TTieringRulePreparationActor::TTieringRulePreparationActor(NKikimrSchemeOp::TTieringRuleProperties tieringRule,
     NMetadata::NModifications::IBuildRequestController::TPtr controller,
     const NMetadata::NModifications::IOperationsManager::TInternalModificationContext& context)
-    : Request(std::move(request))
-    , UserToken(std::move(userToken))
+    : TieringRule(std::move(tieringRule))
     , Controller(controller)
     , Context(context) {
 }

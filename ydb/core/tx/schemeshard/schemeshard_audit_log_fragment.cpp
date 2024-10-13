@@ -242,13 +242,13 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "DROP RESOURCE POOL";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
         return "ALTER RESOURCE POOL";
-    // tiering rule
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTieringRule:
-        return "CREATE TIERING RULE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTieringRule:
-        return "DROP TIERING RULE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTieringRule:
-        return "ALTER TIERING RULE";
+    // metadata object
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateMetadataObject:
+        return "CREATE OBJECT";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropMetadataObject:
+        return "DROP OBJECT";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterMetadataObject:
+        return "ALTER OBJECT";
     // incremental backup
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
@@ -563,14 +563,12 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
         result.emplace_back(tx.GetCreateResourcePool().GetName());
         break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTieringRule:
-        result.emplace_back(tx.GetCreateTieringRule().GetName());
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateMetadataObject:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterMetadataObject:
+        result.emplace_back(tx.GetCreateMetadataObject().GetName());
         break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTieringRule:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropMetadataObject:
         result.emplace_back(tx.GetDrop().GetName());
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTieringRule:
-        result.emplace_back(tx.GetCreateTieringRule().GetName());
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:

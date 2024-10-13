@@ -1,7 +1,8 @@
-#include "schemeshard__operation_common_metadata_object.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_common_metadata_object.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/tx/schemeshard/operations/metadata/abstract/object.h>
 #include <ydb/core/tx/schemeshard/operations/metadata/abstract/update.h>
 
 namespace NKikimr::NSchemeShard {
@@ -145,45 +146,38 @@ public:
     using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
-        auto update = NOperations::TMetadataUpdate::MakeUpdate(Transaction);
-        AFL_VERIFY(update);
-
-        LOG_N("TCreateMetadataObject Propose: opId# " << OperationId << ", path# " << update->GetPathString());
+        const TString pathString = NMetadataObject::GetDestinationPath(Transaction);
+        LOG_N("TCreateMetadataObject Propose: opId# " << OperationId << ", path# " << pathString);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(context.SS->SelfTabletId()));
 
-        TPath dstPath = TPath::Resolve(update->GetPathString(), context.SS);
+        auto update = NOperations::TMetadataUpdateCreate::TFactory::MakeHolder(
+            Transaction.GetCreateMetadataObject().GetProperties().GetPropertiesImplCase());
+
+        TPath dstPath = TPath::Resolve(pathString, context.SS);
         TPath parentPath = dstPath.Parent();
         const TString& acl = Transaction.GetModifyACL().GetDiffACL();
         RETURN_RESULT_UNLESS(NMetadataObject::IsParentPathValid(result, parentPath));
         RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl, !Transaction.GetFailOnExist(), update->GetObjectPathType()));
         RETURN_RESULT_UNLESS(NMetadataObject::IsApplyIfChecksPassed(Transaction, result, context));
+        const bool exists = dstPath.IsResolved();
 
-        std::shared_ptr<NOperations::ISSEntity> originalEntity;
-        if (dstPath.IsResolved()) {
-            originalEntity = update->MakeEntity(dstPath->PathId);
-            if (auto status = originalEntity->Initialize(NOperations::TEntityInitializationContext(&context)); status.IsFail()) {
-                result->SetError(NKikimrScheme::StatusSchemeError, status.GetErrorMessage());
-                return result;
-            }
-        }
+        AddPathInSchemeShard(result, dstPath, owner);
+        const TPathElement::TPtr object = CreatePathElement(dstPath, update->GetObjectPathType());
+        NMetadataObject::CreateTransaction(OperationId, context, object->PathId, TTxState::TxCreateMetadataObject);
+        NMetadataObject::RegisterParentPathDependencies(OperationId, context, parentPath);
 
-        NOperations::TUpdateInitializationContext initializationContext(&context, &Transaction, OperationId.GetTxId().GetValue(), originalEntity.get());
+        std::shared_ptr<NOperations::ISSEntity> originalEntity =
+            exists ? NOperations::TMetadataEntity::GetEntity(context, dstPath).DetachResult() : update->MakeEntity(object->PathId);
+
+        NOperations::TUpdateInitializationContext initializationContext(
+            originalEntity.get(), &context, &Transaction, OperationId.GetTxId().GetValue());
         if (auto status = update->Initialize(initializationContext); status.IsFail()) {
             result->SetError(NKikimrScheme::StatusSchemeError, status.GetErrorMessage());
             return result;
         }
-
-        bool created = false;
-        if (!dstPath.IsResolved()) {
-            AddPathInSchemeShard(result, dstPath, owner);
-            created = true;
-        }
-        const TPathElement::TPtr object = CreatePathElement(dstPath, update->GetObjectPathType());
-        NMetadataObject::CreateTransaction(OperationId, context, object->PathId, TTxState::TxCreateMetadataObject);
-        NMetadataObject::RegisterParentPathDependencies(OperationId, context, parentPath);
 
         NIceDb::TNiceDb db(context.GetDB());
         NOperations::TUpdateStartContext executionContext(&dstPath, &context, &db);
@@ -193,7 +187,7 @@ public:
         }
 
         NMetadataObject::AdvanceTransactionStateToPropose(OperationId, context, db);
-        NMetadataObject::PersistOperation(OperationId, context, db, dstPath.Base(), acl, created);
+        NMetadataObject::PersistOperation(OperationId, context, db, dstPath.Base(), acl, !exists);
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
         UpdatePathSizeCounts(parentPath, dstPath);
         SetState(NextState());

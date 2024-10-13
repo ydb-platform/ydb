@@ -148,7 +148,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropExternalDataSource:
         case NKikimrSchemeOp::ESchemeOpDropView:
         case NKikimrSchemeOp::ESchemeOpDropResourcePool:
-        case NKikimrSchemeOp::ESchemeOpDropTieringRule:
+        case NKikimrSchemeOp::ESchemeOpDropMetadataObject:
             return *modifyScheme.MutableDrop()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterTable:
@@ -375,8 +375,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterTieringRule:
             return *modifyScheme.MutableCreateTieringRule()->MutableName();
 
-        case NKikimrSchemeOp::ESchemeOpCreateTieringRule:
-            return *modifyScheme.MutableCreateTieringRule()->MutableName();
+        case NKikimrSchemeOp::ESchemeOpAlterMetadataObject:
+        case NKikimrSchemeOp::ESchemeOpCreateMetadataObject:
+            return *modifyScheme.MutableCreateMetadataObject()->MutableName();
         }
     }
 
@@ -401,7 +402,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateView:
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
         case NKikimrSchemeOp::ESchemeOpCreateBackupCollection:
-        case NKikimrSchemeOp::ESchemeOpCreateTieringRule:
+        case NKikimrSchemeOp::ESchemeOpCreateMetadataObject:
             return true;
         default:
             return false;
@@ -634,7 +635,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterBlobDepot:
         case NKikimrSchemeOp::ESchemeOpAlterExternalTable:
         case NKikimrSchemeOp::ESchemeOpAlterExternalDataSource:
-        case NKikimrSchemeOp::ESchemeOpAlterTieringRule:
+        case NKikimrSchemeOp::ESchemeOpAlterMetadataObject:
         case NKikimrSchemeOp::ESchemeOpCreateContinuousBackup:
         case NKikimrSchemeOp::ESchemeOpAlterContinuousBackup:
         case NKikimrSchemeOp::ESchemeOpDropContinuousBackup:
@@ -666,7 +667,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropView:
         case NKikimrSchemeOp::ESchemeOpDropResourcePool:
         case NKikimrSchemeOp::ESchemeOpDropBackupCollection:
-        case NKikimrSchemeOp::ESchemeOpDropTieringRule:
+        case NKikimrSchemeOp::ESchemeOpDropMetadataObject:
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
@@ -730,7 +731,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateView:
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
         case NKikimrSchemeOp::ESchemeOpCreateBackupCollection:
-        case NKikimrSchemeOp::ESchemeOpCreateTieringRule:
+        case NKikimrSchemeOp::ESchemeOpCreateMetadataObject:
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = workingDir;

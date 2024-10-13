@@ -45,20 +45,19 @@ void TTieringRulesManager::DoBuildRequestFromSettings(
         return;
     }
 
-    NKikimrSchemeOp::TTieringRuleDescription operation;
+    NKikimrSchemeOp::TTieringRuleProperties properties;
 
     if (settings.GetObjectId().StartsWith("$") || settings.GetObjectId().StartsWith("_")) {
         controller->OnBuildProblem("tiering rule cannot start with '$', '_' characters");
         return;
     }
-    operation.SetName(settings.GetObjectId());
 
     if (auto fValue = settings.GetFeaturesExtractor().Extract(KeyDefaultColumn)) {
         if (fValue->empty()) {
             controller->OnBuildProblem("defaultColumn cannot be empty");
             return;
         }
-        operation.SetDefaultColumn(*fValue);
+        properties.SetDefaultColumn(*fValue);
     }
     if (auto fValue = settings.GetFeaturesExtractor().Extract(KeyDescription)) {
         NJson::TJsonValue jsonDescription;
@@ -71,7 +70,7 @@ void TTieringRulesManager::DoBuildRequestFromSettings(
             controller->OnBuildProblem("Failed to parse description: " + intervals.GetErrorMessage());
             return;
         }
-        *operation.MutableIntervals() = intervals.DetachResult();
+        *properties.MutableTiers() = intervals.DetachResult();
     }
 
     if (!settings.GetFeaturesExtractor().IsFinished()) {
@@ -79,42 +78,12 @@ void TTieringRulesManager::DoBuildRequestFromSettings(
         return;
     }
 
-    NKikimrSchemeOp::TModifyScheme modifyScheme;
-    modifyScheme.SetWorkingDir(TTieringRuleBehaviour().GetStorageTablePath());
-    modifyScheme.SetFailedOnAlreadyExists(!settings.GetExistingOk());
-    modifyScheme.SetSuccessOnNotExist(settings.GetMissingOk());
-    modifyScheme.SetFailOnExist(!settings.GetReplaceIfExists());
-    switch (context.GetActivityType()) {
-        case IOperationsManager::EActivityType::Create:
-            *modifyScheme.MutableCreateTieringRule() = std::move(operation);
-            *modifyScheme.MutableModifyACL() = MakeModifyACL(settings.GetObjectId(), context.GetExternalData().GetUserToken());
-            modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTieringRule);
-            break;
-        case IOperationsManager::EActivityType::Alter:
-            *modifyScheme.MutableCreateTieringRule() = std::move(operation);
-            modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTieringRule);
-            break;
-        case IOperationsManager::EActivityType::Drop:
-            modifyScheme.MutableDrop()->SetName(settings.GetObjectId());
-            modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTieringRule);
-            break;
-        case IOperationsManager::EActivityType::Upsert:
-            controller->OnBuildProblem("Upsert operations are not supported for tiering rules");
-            return;
-        case IOperationsManager::EActivityType::Undefined:
-            controller->OnBuildProblem("Operation type is undefined");
-            return;
-    }
-
-    std::optional<NACLib::TUserToken> userToken;
-    if (context.GetActivityType() == IOperationsManager::EActivityType::Create) {
-        userToken.emplace(NACLib::TSystemUsers::Metadata());
-    } else {
-        userToken = context.GetExternalData().GetUserToken();
-    }
-
     auto* actorSystem = context.GetExternalData().GetActorSystem();
     AFL_VERIFY(actorSystem);
-    actorSystem->Register(new TTieringRulePreparationActor(std::move(modifyScheme), std::move(userToken), controller, context));
+    actorSystem->Register(new TTieringRulePreparationActor(std::move(properties), controller, context));
+}
+
+TString TTieringRulesManager::GetStorageDirectory() const {
+    return TTieringRule::GetBehaviour()->GetStorageTablePath();
 }
 }

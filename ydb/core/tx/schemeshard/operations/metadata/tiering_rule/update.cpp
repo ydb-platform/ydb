@@ -6,24 +6,28 @@
 
 namespace NKikimr::NSchemeShard::NOperations {
 
-TString TTieringRuleUpdate::GetStorageDirectory() {
+TCreateTieringRule::TFactory::TRegistrator<TCreateTieringRule> TCreateTieringRule::Registrator(NKikimrSchemeOp::TMetadataObjectProperties::PropertiesImplCase::kTieringRule);
+TAlterTieringRule::TFactory::TRegistrator<TAlterTieringRule> TAlterTieringRule::Registrator(NKikimrSchemeOp::TMetadataObjectProperties::PropertiesImplCase::kTieringRule);
+TDropTieringRule::TFactory::TRegistrator<TDropTieringRule> TDropTieringRule::Registrator(NKikimrSchemeOp::TMetadataObjectProperties::PropertiesImplCase::kTieringRule);
+
+TString TTieringRuleUpdateBase::DoGetStorageDirectory() {
     return NColumnShard::NTiers::TTieringRuleBehaviour().GetStorageTablePath();
 }
 
-TConclusionStatus TTieringRuleUpdate::ApplySettings(const NKikimrSchemeOp::TTieringRuleDescription& settings, TTieringRuleInfo::TPtr object) {
+TConclusionStatus TTieringRuleUpdateBase::ApplySettings(const NKikimrSchemeOp::TTieringRuleProperties& settings, TTieringRuleInfo::TPtr object) {
     if (settings.HasDefaultColumn()) {
         object->DefaultColumn = settings.GetDefaultColumn();
     }
-    if (settings.HasIntervals()) {
+    if (settings.HasTiers()) {
         object->Intervals.clear();
-        for (const auto& interval : settings.GetIntervals().GetIntervals()) {
+        for (const auto& interval : settings.GetTiers().GetIntervals()) {
             object->Intervals.emplace_back(interval.GetTierName(), TDuration::MilliSeconds(interval.GetEvictionDelayMs()));
         }
     }
     return TConclusionStatus::Success();
 }
 
-TConclusionStatus TTieringRuleUpdate::ValidateTieringRule(const TTieringRuleInfo::TPtr& object) {
+TConclusionStatus TTieringRuleUpdateBase::ValidateTieringRule(const TTieringRuleInfo::TPtr& object) {
     if (object->DefaultColumn.Empty()) {
         return TConclusionStatus::Fail("Empty default column");
     }
@@ -33,7 +37,7 @@ TConclusionStatus TTieringRuleUpdate::ValidateTieringRule(const TTieringRuleInfo
     return TConclusionStatus::Success();
 }
 
-void TTieringRuleUpdate::PersistTieringRule(
+void TTieringRuleUpdateBase::PersistTieringRule(
     const TPathId& pathId, const TTieringRuleInfo::TPtr& tieringRule, const TUpdateStartContext& context) {
     context.GetSSOperationContext()->SS->TieringRules[pathId] = tieringRule;
     context.GetSSOperationContext()->SS->PersistTieringRule(*context.GetDB(), pathId, tieringRule);
@@ -41,32 +45,28 @@ void TTieringRuleUpdate::PersistTieringRule(
 
 TConclusionStatus TCreateTieringRule::DoInitialize(const TUpdateInitializationContext& context) {
     const TString& parentPathStr = context.GetModification()->GetWorkingDir();
-    const TString& tieringRulesDir = GetStorageDirectory();
+    const TString& tieringRulesDir = DoGetStorageDirectory();
     if (!IsEqualPaths(parentPathStr, tieringRulesDir)) {
         return TConclusionStatus::Fail("Tiering rules must be placed in " + tieringRulesDir + ", got :" + parentPathStr);
     }
 
-    TPath dstPath = TPath::Resolve(GetPathString(), context.GetSSOperationContext()->SS);
+    Exists = context.GetOriginalEntity().IsInitialized();
+    TPath dstPath = TPath::Init(context.GetOriginalEntity().GetPathId(), context.GetSSOperationContext()->SS);
 
-    const auto& tieringRuleDescription = context.GetModification()->GetCreateTieringRule();
+    const auto& tieringRuleDescription = context.GetModification()->GetCreateMetadataObject().GetProperties().GetTieringRule();
     UpdatedTieringRule = MakeIntrusive<TTieringRuleInfo>();
-    if (context.HasOriginalEntity()) {
-        UpdatedTieringRule->AlterVersion = context.GetOriginalEntityAsVerified<TTieringRuleEntity>().GetTieringRuleInfo()->AlterVersion;
-    } else {
-        UpdatedTieringRule->AlterVersion = 1;
-    }
+    UpdatedTieringRule->AlterVersion = 1;
     if (auto status = ApplySettings(tieringRuleDescription, UpdatedTieringRule); status.IsFail()) {
         return status;
     }
     if (auto status = ValidateTieringRule(UpdatedTieringRule); status.IsFail()) {
         return status;
     }
-    Exists = context.HasOriginalEntity();
 
     return TConclusionStatus::Success();
 }
 
-TConclusionStatus TCreateTieringRule::DoExecute(const TUpdateStartContext& context) {
+TConclusionStatus TCreateTieringRule::Execute(const TUpdateStartContext& context) {
     PersistTieringRule(context.GetObjectPath()->Base()->PathId, UpdatedTieringRule, context);
     if (!Exists) {
         context.GetSSOperationContext()->SS->TabletCounters->Simple()[COUNTER_TIERING_RULE_COUNT].Add(1);
@@ -74,8 +74,12 @@ TConclusionStatus TCreateTieringRule::DoExecute(const TUpdateStartContext& conte
     return TConclusionStatus::Success();
 }
 
+std::shared_ptr<TMetadataEntity> TCreateTieringRule::MakeEntity(const TPathId& pathId) const {
+    return std::make_shared<TTieringRuleEntity>(pathId);
+}
+
 TConclusionStatus TAlterTieringRule::DoInitialize(const TUpdateInitializationContext& context) {
-    const auto& tieringRuleDescription = context.GetModification()->GetCreateTieringRule();
+    const auto& tieringRuleDescription = context.GetModification()->GetCreateMetadataObject().GetProperties().GetTieringRule();
     const auto& originalTieringRuleInfo = context.GetOriginalEntityAsVerified<TTieringRuleEntity>().GetTieringRuleInfo();
     AFL_VERIFY(originalTieringRuleInfo);
     UpdatedTieringRule = MakeIntrusive<TTieringRuleInfo>(*originalTieringRuleInfo);
@@ -90,7 +94,7 @@ TConclusionStatus TAlterTieringRule::DoInitialize(const TUpdateInitializationCon
     return TConclusionStatus::Success();
 }
 
-TConclusionStatus TAlterTieringRule::DoExecute(const TUpdateStartContext& context) {
+TConclusionStatus TAlterTieringRule::Execute(const TUpdateStartContext& context) {
     PersistTieringRule(context.GetObjectPath()->Base()->PathId, UpdatedTieringRule, context);
     return TConclusionStatus::Success();
 }
@@ -105,12 +109,12 @@ TConclusionStatus TDropTieringRule::DoInitialize(const TUpdateInitializationCont
     return TConclusionStatus::Success();
 }
 
-TConclusionStatus TDropTieringRule::DoExecute(const TUpdateStartContext& context) {
+TConclusionStatus TDropTieringRule::DoStart(const TUpdateStartContext& context) {
     context.GetSSOperationContext()->MemChanges.GrabTieringRule(context.GetSSOperationContext()->SS, context.GetObjectPath()->Base()->PathId);
     return TConclusionStatus::Success();
 }
 
-TConclusionStatus TDropTieringRule::FinishDrop(const TUpdateFinishContext& context) {
+TConclusionStatus TDropTieringRule::DoFinish(const TUpdateFinishContext& context) {
     context.GetSSOperationContext()->SS->TabletCounters->Simple()[COUNTER_TIERING_RULE_COUNT].Sub(1);
     context.GetSSOperationContext()->SS->PersistRemoveTieringRule(*context.GetDB(), context.GetObjectPath()->Base()->PathId);
     return TConclusionStatus::Success();

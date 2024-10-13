@@ -925,11 +925,11 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropBackupCollection, NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection, &NKikimrSchemeOp::TModifyScheme::MutableDropBackupCollection)
     DROP_BY_PATH_ID_HELPERS(DropBackupCollection, NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection)
 
-    // tiering rule
-    GENERIC_HELPERS(CreateTieringRule, NKikimrSchemeOp::EOperationType::ESchemeOpCreateTieringRule, &NKikimrSchemeOp::TModifyScheme::MutableCreateTieringRule)
-    GENERIC_HELPERS(AlterTieringRule, NKikimrSchemeOp::EOperationType::ESchemeOpAlterTieringRule, &NKikimrSchemeOp::TModifyScheme::MutableCreateTieringRule)
-    GENERIC_HELPERS(DropTieringRule, NKikimrSchemeOp::EOperationType::ESchemeOpDropTieringRule, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
-    DROP_BY_PATH_ID_HELPERS(DropTieringRule, NKikimrSchemeOp::EOperationType::ESchemeOpDropTieringRule)
+    // metadata object
+    GENERIC_HELPERS(CreateMetadataObject, NKikimrSchemeOp::EOperationType::ESchemeOpCreateMetadataObject, &NKikimrSchemeOp::TModifyScheme::MutableCreateMetadataObject)
+    GENERIC_HELPERS(AlterMetadataObject, NKikimrSchemeOp::EOperationType::ESchemeOpAlterMetadataObject, &NKikimrSchemeOp::TModifyScheme::MutableCreateMetadataObject)
+    GENERIC_HELPERS(DropMetadataObject, NKikimrSchemeOp::EOperationType::ESchemeOpDropMetadataObject, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    DROP_BY_PATH_ID_HELPERS(DropMetadataObject, NKikimrSchemeOp::EOperationType::ESchemeOpDropMetadataObject)
 
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS

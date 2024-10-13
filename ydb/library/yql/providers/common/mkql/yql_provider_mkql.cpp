@@ -1367,8 +1367,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
     AddCallable("FromBytes", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto arg = MkqlBuildExpr(node.Head(), ctx);
-        const auto schemeType = ParseDataType(node, node.Tail().Content());
-        return ctx.ProgramBuilder.FromBytes(arg, schemeType);
+        const auto type = BuildType(node, *node.GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType(), ctx.ProgramBuilder);
+        return ctx.ProgramBuilder.FromBytes(arg, type);
     });
 
     AddCallable("Convert", [](const TExprNode& node, TMkqlBuildContext& ctx) {

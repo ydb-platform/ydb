@@ -572,6 +572,10 @@ public:
         return NOlap::TSnapshot(LastPlannedStep, LastPlannedTxId);
     }
 
+    NOlap::TSnapshot GetCurrentSnapshotForInternalModification() const {
+        return NOlap::TSnapshot::MaxForPlanStep(GetOutdatedStep());
+    }
+
     const std::shared_ptr<NOlap::NDataSharing::TSessionsManager>& GetSharingSessionsManager() const {
         return SharingSessionsManager;
     }

@@ -15,6 +15,7 @@ private:
 
     using TCurrentCompaction = THashMap<ui64, NOlap::TPlanCompactionInfo>;
     TCurrentCompaction ActiveCompactionInfo;
+    std::optional<ui64> WaitingCompactionPriority;
 
     std::shared_ptr<TBackgroundControllerCounters> Counters;
     bool ActiveCleanupPortions = false;
@@ -27,6 +28,20 @@ public:
     }
     THashSet<NOlap::TPortionAddress> GetConflictTTLPortions() const;
     THashSet<NOlap::TPortionAddress> GetConflictCompactionPortions() const;
+
+    void UpdateWaitingPriority(const ui64 priority) {
+        if (!WaitingCompactionPriority || *WaitingCompactionPriority < priority) {
+            WaitingCompactionPriority = priority;
+        }
+    }
+
+    void ResetWaitingPriority() {
+        WaitingCompactionPriority.reset();
+    }
+
+    std::optional<ui64> GetWaitingPriorityOptional() {
+        return WaitingCompactionPriority;
+    }
 
     void CheckDeadlines();
     void CheckDeadlinesIndexation();

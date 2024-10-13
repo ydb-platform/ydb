@@ -149,7 +149,7 @@ void FillTablesMap(const TKqpTable& table, const TCoAtomList& columns,
     }
 }
 
-void FillTablesMap(const TKqpTable& table, const TVector<TString>& columns,
+void FillTablesMap(const TKqpTable& table, const TVector<TStringBuf>& columns,
     THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
 {
     FillTablesMap(table, tablesMap);
@@ -1098,7 +1098,7 @@ private:
             const auto& structType = listType->GetItemType()->Cast<TStructExprType>();
             YQL_ENSURE(structType);
 
-            TVector<TString> columns;
+            TVector<TStringBuf> columns;
             columns.reserve(structType->GetSize());
             for (const auto& item : structType->GetItems()) {
                 columns.emplace_back(item->GetName());
@@ -1109,9 +1109,9 @@ private:
 
             const auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Cast().Path()).Metadata;
 
-            auto fillColumnProto = [] (TString columnName, const NYql::TKikimrColumnMetadata* column, NKikimrKqp::TKqpColumnMetadataProto* columnProto ) {
+            auto fillColumnProto = [] (TStringBuf columnName, const NYql::TKikimrColumnMetadata* column, NKikimrKqp::TKqpColumnMetadataProto* columnProto ) {
                 columnProto->SetId(column->Id);
-                columnProto->SetName(columnName);
+                columnProto->SetName(TString(columnName));
                 columnProto->SetTypeId(column->TypeInfo.GetTypeId());
 
                 if(NScheme::NTypeIds::IsParametrizedType(column->TypeInfo.GetTypeId())) {
@@ -1121,7 +1121,7 @@ private:
 
             for (const auto& columnName : tableMeta->KeyColumnNames) {
                 const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
-                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + columnName + "\"");
+                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
 
                 auto keyColumnProto = settingsProto.AddKeyColumns();
                 fillColumnProto(columnName, columnMeta, keyColumnProto);
@@ -1129,7 +1129,7 @@ private:
 
             for (const auto& columnName : columns) {
                 const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
-                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + columnName + "\"");
+                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
 
                 auto columnProto = settingsProto.AddColumns();
                 fillColumnProto(columnName, columnMeta, columnProto);

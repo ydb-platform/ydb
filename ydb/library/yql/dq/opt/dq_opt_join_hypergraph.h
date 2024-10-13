@@ -48,7 +48,16 @@ public:
         }
 
         bool AreCondVectorEqual() const {
-            return LeftJoinKeys == RightJoinKeys;
+            TVector<TString> leftAttrNames;
+            TVector<TString> rightAttrNames;
+            for (auto & l : LeftJoinKeys) {
+                leftAttrNames.push_back(l.AttributeName);
+            }
+            for (auto & r : RightJoinKeys) {
+                rightAttrNames.push_back(r.AttributeName);
+            }
+
+            return leftAttrNames == rightAttrNames;
         }
 
         inline bool IsSimple() const {
@@ -70,14 +79,12 @@ public:
         void RemoveAttributeAliases() {
 
             for (auto& leftKey : LeftJoinKeys ) {
-                leftKey.AttributeNameWithAliases = leftKey.AttributeName;
                 if (auto idx = leftKey.AttributeName.find_last_of('.'); idx != TString::npos) {
                     leftKey.AttributeName =  leftKey.AttributeName.substr(idx+1);
                 }
             }
 
             for (auto& rightKey : RightJoinKeys ) {
-                rightKey.AttributeNameWithAliases = rightKey.AttributeName;
                 if (auto idx = rightKey.AttributeName.find_last_of('.'); idx != TString::npos) {
                     rightKey.AttributeName =  rightKey.AttributeName.substr(idx+1);
                 }
@@ -416,8 +423,15 @@ public:
             edges.begin(),
             edges.end(),
             [](const THyperedge& lhs, const THyperedge& rhs) {    
-                auto lhsAttributeNames = lhs.LeftJoinKeys;
-                auto rhsAttributeNames = rhs.LeftJoinKeys;
+                TVector<TString> lhsAttributeNames;
+                TVector<TString> rhsAttributeNames;
+
+                for (auto & l : lhs.LeftJoinKeys ) {
+                    lhsAttributeNames.push_back(l.AttributeName);
+                }
+                for (auto & r : rhs.LeftJoinKeys ) {
+                    rhsAttributeNames.push_back(r.AttributeName);
+                }
 
                 std::sort(lhsAttributeNames.begin(), lhsAttributeNames.end());
                 std::sort(rhsAttributeNames.begin(), rhsAttributeNames.end());
@@ -495,8 +509,16 @@ private:
     }
 
     bool HasOneGroup(const THyperedge& lhs, const THyperedge& rhs) {
-        auto lhsAttributeNames = lhs.LeftJoinKeys;
-        auto rhsAttributeNames = rhs.LeftJoinKeys;
+        TVector<TString> lhsAttributeNames;
+        TVector<TString> rhsAttributeNames;
+
+        for (auto & l : lhs.LeftJoinKeys) {
+            lhsAttributeNames.push_back(l.AttributeName);
+        }
+
+        for (auto & r : rhs.LeftJoinKeys) {
+            rhsAttributeNames.push_back(r.AttributeName);
+        }
 
         std::sort(lhsAttributeNames.begin(), lhsAttributeNames.end());
         std::sort(rhsAttributeNames.begin(), rhsAttributeNames.end());

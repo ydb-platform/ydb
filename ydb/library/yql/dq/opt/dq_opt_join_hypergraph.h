@@ -31,7 +31,8 @@ public:
             bool leftAny,
             bool rightAny,
             bool isCommutative,
-            const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions
+            TVector<TJoinColumn>& leftJoinKeys,
+            TVector<TJoinColumn>& rightJoinKeys
         )
             : Left(left)
             , Right(right)
@@ -39,10 +40,11 @@ public:
             , LeftAny(leftAny)
             , RightAny(rightAny)
             , IsCommutative(isCommutative)
-            , JoinConditions(joinConditions)
+            , LeftJoinKeys(leftJoinKeys)
+            , RightJoinKeys(rightJoinKeys)
             , IsReversed(false)
         {
-            BuildCondVectors();
+            RemoveAttributeAliases();
         }
 
         bool AreCondVectorEqual() const {
@@ -58,32 +60,27 @@ public:
         EJoinKind JoinKind;
         bool LeftAny, RightAny;
         bool IsCommutative;
-        std::set<std::pair<TJoinColumn, TJoinColumn>> JoinConditions;
-        TVector<TString> LeftJoinKeys;
-        TVector<TString> RightJoinKeys;
+        TVector<TJoinColumn> LeftJoinKeys;
+        TVector<TJoinColumn> RightJoinKeys;
 
         // JoinKind may not be commutative, so we need to know which edge is original and which is reversed.
         bool IsReversed;
         int64_t ReversedEdgeId = -1;
 
-        void BuildCondVectors() {
-            LeftJoinKeys.clear();
-            RightJoinKeys.clear();
+        void RemoveAttributeAliases() {
 
-            for (const auto& [left, right] : JoinConditions) {
-                auto leftKey = left.AttributeName;
-                auto rightKey = right.AttributeName;
-
-                if (auto idx = leftKey.find_last_of('.'); idx != TString::npos) {
-                    leftKey =  leftKey.substr(idx+1);
+            for (auto& leftKey : LeftJoinKeys ) {
+                leftKey.AttributeNameWithAliases = leftKey.AttributeName;
+                if (auto idx = leftKey.AttributeName.find_last_of('.'); idx != TString::npos) {
+                    leftKey.AttributeName =  leftKey.AttributeName.substr(idx+1);
                 }
+            }
 
-                if (auto idx = rightKey.find_last_of('.'); idx != TString::npos) {
-                    rightKey =  rightKey.substr(idx+1);
+            for (auto& rightKey : RightJoinKeys ) {
+                rightKey.AttributeNameWithAliases = rightKey.AttributeName;
+                if (auto idx = rightKey.AttributeName.find_last_of('.'); idx != TString::npos) {
+                    rightKey.AttributeName =  rightKey.AttributeName.substr(idx+1);
                 }
-
-                LeftJoinKeys.emplace_back(leftKey);
-                RightJoinKeys.emplace_back(rightKey);
             }
         }
     };
@@ -133,10 +130,30 @@ public:
             };
 
         for (const auto& edge: Edges_) {
+            TString leftKeyStr;
+            TString rightKeyStr;
+
+            for (auto& l: edge.LeftJoinKeys) {
+                leftKeyStr.append(l.RelName);
+                leftKeyStr.append(".");
+                leftKeyStr.append(l.AttributeName);
+                leftKeyStr.append(",");
+            }
+
+            for (auto& r: edge.RightJoinKeys) {
+                rightKeyStr.append(r.RelName);
+                rightKeyStr.append(".");
+                rightKeyStr.append(r.AttributeName);
+                rightKeyStr.append(",");
+            }
             res 
                 .append(edgeSideToString(edge.Left))
                 .append(" -> ")
                 .append(edgeSideToString(edge.Right))
+                .append(" on ")
+                .append(leftKeyStr)
+                .append("==")
+                .append(rightKeyStr)
                 .append("\n");
         }
         
@@ -164,17 +181,12 @@ public:
 
         AddEdgeImpl(edge);
 
-        std::set<std::pair<TJoinColumn, TJoinColumn>> reversedJoinConditions;
-        for (const auto& [lhs, rhs]: edge.JoinConditions) {
-            reversedJoinConditions.insert({rhs, lhs});
-        }
-
         TEdge reversedEdge = std::move(edge);
         std::swap(reversedEdge.Left, reversedEdge.Right);
-        reversedEdge.JoinConditions = std::move(reversedJoinConditions);
+        std::swap(reversedEdge.LeftJoinKeys, reversedEdge.RightJoinKeys);
         reversedEdge.IsReversed = true;
         reversedEdge.ReversedEdgeId = edgeId;
-        reversedEdge.BuildCondVectors();
+        reversedEdge.RemoveAttributeAliases();
     
         AddEdgeImpl(reversedEdge);
     }
@@ -439,8 +451,11 @@ private:
         bool isJoinCommutative = edges[groupBegin].IsCommutative;
 
         TVector<TString> groupConditionUsedAttributes;
-        for (const auto& [lhs, rhs]:  edges[groupBegin].JoinConditions) {
+        for (const auto& lhs:  edges[groupBegin].LeftJoinKeys) {
             groupConditionUsedAttributes.push_back(lhs.AttributeName);
+        }
+        for (const auto& rhs:  edges[groupBegin].RightJoinKeys) {
+            groupConditionUsedAttributes.push_back(rhs.AttributeName);
         }
 
         TDisjointSets connectedComponents(nodeSetSize);
@@ -464,15 +479,15 @@ private:
 
                     TString lhsRelName = nodes[i].RelationOptimizerNode->Labels()[0];
                     TString rhsRelName = nodes[j].RelationOptimizerNode->Labels()[0];
-                    std::set<std::pair<TJoinColumn, TJoinColumn>> joinConditions;
+                    TVector<TJoinColumn> leftKeys;
+                    TVector<TJoinColumn> rightKeys;
+                    
                     for (const auto& attributeName: groupConditionUsedAttributes){
-                        joinConditions.insert({
-                            TJoinColumn(lhsRelName, attributeName), 
-                            TJoinColumn(rhsRelName, attributeName)
-                        });
+                        leftKeys.push_back(TJoinColumn(lhsRelName, attributeName));
+                        rightKeys.push_back(TJoinColumn(rhsRelName, attributeName));
                     }
 
-                    auto e = THyperedge(lhs, rhs, groupJoinKind, false, false, isJoinCommutative, joinConditions);
+                    auto e = THyperedge(lhs, rhs, groupJoinKind, false, false, isJoinCommutative, leftKeys, rightKeys);
                     Graph_.AddEdge(std::move(e));
                 }
             }

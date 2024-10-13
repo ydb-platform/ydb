@@ -21,11 +21,13 @@ namespace NYql::NDq {
 
 inline TVector<TString> GetConditionUsedRelationNames(const std::shared_ptr<TJoinOptimizerNode>& joinNode) {
     TVector<TString> res;
-    res.reserve(joinNode->JoinConditions.size());
+    res.reserve(joinNode->LeftJoinKeys.size());
 
-    for (const auto& [lhsTable, rhsTable]: joinNode->JoinConditions) {
-        res.push_back(lhsTable.RelName);
-        res.push_back(rhsTable.RelName);
+    for (const auto& lhs : joinNode->LeftJoinKeys ) {
+        res.push_back(lhs.RelName);
+    }
+    for (const auto& rhs : joinNode->RightJoinKeys ) {
+        res.push_back(rhs.RelName);
     }
 
     return res;
@@ -57,7 +59,7 @@ typename TJoinHypergraph<TNodeSet>::TEdge MakeHyperedge(
     TNodeSet right = TES & subtreeNodes[joinNode->RightArg];
     
     bool isCommutative = OperatorIsCommutative(joinNode->JoinType) && (joinNode->IsReorderable);
-    return typename TJoinHypergraph<TNodeSet>::TEdge(left, right, joinNode->JoinType, joinNode->LeftAny, joinNode->RightAny, isCommutative, joinNode->JoinConditions);
+    return typename TJoinHypergraph<TNodeSet>::TEdge(left, right, joinNode->JoinType, joinNode->LeftAny, joinNode->RightAny, isCommutative, joinNode->LeftJoinKeys, joinNode->RightJoinKeys);
 }
 
 template<typename TNodeSet>

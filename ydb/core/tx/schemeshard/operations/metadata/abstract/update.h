@@ -71,7 +71,6 @@ protected:
 public:
     static std::shared_ptr<TMetadataUpdate> MakeUpdate(const NKikimrSchemeOp::TModifyScheme& transaction);
     static std::shared_ptr<IDropMetadataUpdate> RestoreDrop(const IDropMetadataUpdate::TRestoreContext& context);
-    virtual std::shared_ptr<ISSEntity> MakeEntity(const TPathId& pathId) const = 0;
 
     virtual TPathElement::EPathType GetObjectPathType() const = 0;
 };

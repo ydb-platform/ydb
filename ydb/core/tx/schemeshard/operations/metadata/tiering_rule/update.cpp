@@ -39,10 +39,6 @@ void TTieringRuleUpdate::PersistTieringRule(
     context.GetSSOperationContext()->SS->PersistTieringRule(*context.GetDB(), pathId, tieringRule);
 }
 
-std::shared_ptr<ISSEntity> TTieringRuleUpdate::MakeEntity(const TPathId& pathId) const {
-    return std::make_shared<TTieringRuleEntity>(pathId);
-}
-
 TConclusionStatus TCreateTieringRule::DoInitialize(const TUpdateInitializationContext& context) {
     const TString& parentPathStr = context.GetModification()->GetWorkingDir();
     const TString& tieringRulesDir = GetStorageDirectory();

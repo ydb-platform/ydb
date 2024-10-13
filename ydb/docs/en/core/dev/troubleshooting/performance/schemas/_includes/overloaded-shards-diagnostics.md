@@ -4,11 +4,11 @@
 
     ![](../_assets/overloaded-shards-dashboard.png)
 
-    The chart shows whether the {{ ydb-short-name }} cluster has overloaded shards, but it does not indicate which specific table shards are overloaded.
+    The chart indicates whether the {{ ydb-short-name }} cluster has overloaded shards, but it does not specify which table shards are overloaded.
 
 1. To identify the table with an overloaded shard, follow these steps:
 
-    1. In the [Embedded UI](../../../../../reference/embedded-ui/index.md), go to the **Databases** tab and click the database.
+    1. In the [Embedded UI](../../../../../reference/embedded-ui/index.md), go to the **Databases** tab and click on the database.
 
     1. On the **Navigation** tab, ensure the entire database is selected.
 
@@ -28,14 +28,14 @@
         ydb scheme describe <table_name>
         ```
 
-    1. In the command output, analyze the **Auto partitioning settings**:
+    2. In the command output, analyze the **Auto partitioning settings**:
 
         * `Partitioning by size`
         * `Partitioning by load`
         * `Max partitions count`
 
-        If the table does not have these options, see [Recommendations for table configuration](../overloaded-shards.md#table-config)
+        If the table does not have these options, see [Recommendations for table configuration](../overloaded-shards.md#table-config).
 
-1. Analyze whether primary key values autoincrement monotonically.
+2. Analyze whether primary key values increment monotonically.
 
-    If they do, see [Recommendations for the imbalanced primary key](../overloaded-shards.md#pk-recommendations)
+    If they do, see [Recommendations for the imbalanced primary key](../overloaded-shards.md#pk-recommendations).

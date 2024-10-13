@@ -10,4 +10,4 @@
 
         ![](../_assets/cpu-row-read-rows.png)
 
-If the spikes on these charts coincide, the increased latencies might be related to the higher number of rows being read from the database. In this case, the available database nodes may not be able to handle the increased load.
+If the spikes on these charts align, the increased latencies may be related to the higher number of rows being read from the database. In this case, the available database nodes might not be sufficient to handle the increased load.

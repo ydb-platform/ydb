@@ -10,7 +10,7 @@ Each transaction in {{ ydb-short-name }} uses [optimistic locking](https://en.wi
 
 The longer a transaction lasts, the higher the likelihood of encountering a *transaction locks invalidated* error.
 
-Avoid interactive transactions. For example, try to avoid the following pattern:
+If possible, avoid interactive transactions. For example, try to avoid the following pattern:
 
 1. Select some data.
 1. Process the selected data in the application.

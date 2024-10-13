@@ -475,13 +475,17 @@ Y_UNIT_TEST_SUITE(TOlap) {
             }
         )";
 
-        TestCreateTieringRule(runtime, ++txId, "/MyRoot", R"(
+        TestCreateMetadataObject(runtime, ++txId, "/MyRoot", R"(
             Name: ".metadata/tiering/rules/Tiering1"
-            DefaultColumn: "timestamp"
-            Intervals: {
-                Intervals: {
-                    TierName: "Tier1"
-                    EvictionDelayMs: 3600000000
+            Properties: {
+                TieringRule: {
+                    DefaultColumn: "timestamp"
+                    Tiers: {
+                        Intervals: {
+                            TierName: "Tier1"
+                            EvictionDelayMs: 3600000000
+                        }
+                    }
                 }
             }
         )");
@@ -640,13 +644,17 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestCreateTieringRule(runtime, ++txId, "/MyRoot", R"(
+        TestCreateMetadataObject(runtime, ++txId, "/MyRoot", R"(
             Name: ".metadata/tiering/rules/Tiering1"
-            DefaultColumn: "timestamp"
-            Intervals: {
-                Intervals: {
-                    TierName: "Tier1"
-                    EvictionDelayMs: 3600000000
+            Properties: {
+                TieringRule: {
+                    DefaultColumn: "timestamp"
+                    Tiers: {
+                        Intervals: {
+                            TierName: "Tier1"
+                            EvictionDelayMs: 3600000000
+                        }
+                    }
                 }
             }
         )");

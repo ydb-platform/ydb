@@ -283,7 +283,7 @@ struct TSchemeCacheNavigate {
 
     struct TTieringRuleInfo : public TAtomicRefCount<TTieringRuleInfo> {
         EKind Kind = KindUnknown;
-        NKikimrSchemeOp::TTieringRuleDescription Description;
+        NKikimrSchemeOp::TMetadataObjectDescription Description;
     };
 
     struct TEntry {

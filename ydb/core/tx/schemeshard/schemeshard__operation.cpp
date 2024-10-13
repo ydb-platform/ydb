@@ -818,8 +818,8 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
         targetName = tx.GetCreateResourcePool().GetName();
         break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTieringRule:
-        targetName = tx.GetCreateTieringRule().GetName();
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateMetadataObject:
+        targetName = tx.GetCreateMetadataObject().GetName();
         break;
     default:
         result.Transactions.push_back(tx);
@@ -914,8 +914,8 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
             create.MutableCreateResourcePool()->SetName(name);
             break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTieringRule:
-            create.MutableCreateTieringRule()->SetName(name);
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateMetadataObject:
+            create.MutableCreateMetadataObject()->SetName(name);
             break;
         default:
             Y_ABORT("Invariant violation");
@@ -1207,7 +1207,7 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxDropBackupCollection:
         return CreateDropBackupCollection(NextPartId(), txState);
 
-    // TieringRule
+    // MetadataObject
     case TTxState::ETxType::TxCreateMetadataObject:
         return CreateNewMetadataObject(NextPartId(), txState);
     case TTxState::ETxType::TxDropMetadataObject:
@@ -1465,12 +1465,12 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
         return {CreateAlterResourcePool(NextPartId(), tx)};
 
-    // TieringRule
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTieringRule:
+    // MetadataObject
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateMetadataObject:
         return {CreateNewMetadataObject(NextPartId(), tx)};
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTieringRule:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropMetadataObject:
         return {CreateDropMetadataObject(NextPartId(), tx)};
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTieringRule:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterMetadataObject:
         return {CreateAlterMetadataObject(NextPartId(), tx)};
 
     // IncrementalBackup

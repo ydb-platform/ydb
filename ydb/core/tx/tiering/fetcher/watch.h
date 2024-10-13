@@ -153,9 +153,9 @@ private:
         }
     }
 
-    void OnTieringRuleFetched(const TString& name, const NKikimrSchemeOp::TTieringRuleDescription& description) {
+    void OnTieringRuleFetched(const TString& name, const NKikimrSchemeOp::TTieringRuleProperties& properties) {
         NTiers::TTieringRule config;
-        AFL_VERIFY(config.DeserializeFromProto(description))("name", name)("proto", description.DebugString());
+        AFL_VERIFY(config.DeserializeFromProto(properties))("name", name)("proto", properties.DebugString());
         Send(Owner, new NTiers::TEvNotifyTieringRuleUpdated(name, config));
     }
 
@@ -218,11 +218,11 @@ public:
         AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_watcher")("event", "object_fetched")("path", ev->Get()->Path);
         const auto& describeResult = *ev->Get()->Result;
         const auto& pathDescription = describeResult.GetPathDescription();
-        const TString& name = pathDescription.GetSelf().GetName();
+        const TString& name = pathDescription.GetTieringRuleDescription().GetName();
 
         switch (pathDescription.GetSelf().GetPathType()) {
             case NKikimrSchemeOp::EPathTypeTieringRule:
-                OnTieringRuleFetched(name, pathDescription.GetTieringRuleDescription());
+                OnTieringRuleFetched(name, pathDescription.GetTieringRuleDescription().GetProperties().GetTieringRule());
                 break;
             default:
                 AFL_VERIFY(false)("issue", "invalid_object_kind")("kind", pathDescription.GetSelf().GetPathType());

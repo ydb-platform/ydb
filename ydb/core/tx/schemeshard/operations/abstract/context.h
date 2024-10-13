@@ -32,10 +32,6 @@ public:
         return TxId;
     }
 
-    bool HasOriginalEntity() const {
-        return !!OriginalEntity;
-    }
-
     const ISSEntity& GetOriginalEntity() const {
         AFL_VERIFY(OriginalEntity);
         return *OriginalEntity;
@@ -51,10 +47,11 @@ public:
     const TOperationContext* GetSSOperationContext() const {
         return SSOperationContext;
     }
-    TUpdateRestoreContext(const TOperationContext* ssOperationContext, const ui64 txId, const ISSEntity* originalEntity = nullptr)
+    TUpdateRestoreContext(const ISSEntity* originalEntity, const TOperationContext* ssOperationContext, const ui64 txId)
         : OriginalEntity(originalEntity)
         , SSOperationContext(ssOperationContext)
         , TxId(txId) {
+        AFL_VERIFY(originalEntity);
         AFL_VERIFY(SSOperationContext);
         AFL_VERIFY(TxId);
     }
@@ -68,8 +65,8 @@ public:
     const NKikimrSchemeOp::TModifyScheme* GetModification() const {
         return Modification;
     }
-    TUpdateInitializationContext(const TOperationContext* ssOperationContext, const NKikimrSchemeOp::TModifyScheme* modification, const ui64 txId, const ISSEntity* originalEntity = nullptr)
-        : TBase(ssOperationContext, txId, originalEntity)
+    TUpdateInitializationContext(const ISSEntity* originalEntity, const TOperationContext* ssOperationContext, const NKikimrSchemeOp::TModifyScheme* modification, const ui64 txId)
+        : TBase(originalEntity, ssOperationContext, txId)
         , Modification(modification) {
         AFL_VERIFY(Modification);
     }

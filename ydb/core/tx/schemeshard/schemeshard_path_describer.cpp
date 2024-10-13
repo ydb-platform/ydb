@@ -1113,9 +1113,10 @@ void TPathDescriber::DescribeTieringRule(TPathId pathId, TPathElement::TPtr path
     entry->SetName(pathEl->Name);
     PathIdFromPathId(pathId, entry->MutablePathId());
     entry->SetVersion(tieringRuleInfo->AlterVersion);
-    entry->SetDefaultColumn(tieringRuleInfo->DefaultColumn);
+    auto* tieringRuleProto = entry->MutableProperties()->MutableTieringRule();
+    tieringRuleProto->SetDefaultColumn(tieringRuleInfo->DefaultColumn);
     for (const auto& interval : tieringRuleInfo->Intervals) {
-        auto* intervalProto = entry->MutableIntervals()->AddIntervals();
+        auto* intervalProto = tieringRuleProto->MutableTiers()->AddIntervals();
         intervalProto->SetTierName(interval.TierName);
         intervalProto->SetEvictionDelayMs(interval.EvictionDelay.MilliSeconds());
     }

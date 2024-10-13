@@ -1597,10 +1597,10 @@ enum EOperationType {
     ESchemeOpAlterBackupCollection = 106;
     ESchemeOpDropBackupCollection = 107;
 
-    // Tiering rule
-    ESchemeOpCreateTieringRule = 108;
-    ESchemeOpDropTieringRule = 109;
-    ESchemeOpAlterTieringRule = 110;
+    // Metadata Object
+    ESchemeOpCreateMetadataObject = 108;
+    ESchemeOpDropMetadataObject = 109;
+    ESchemeOpAlterMetadataObject = 110;
 }
 
 message TApplyIf {
@@ -1789,8 +1789,7 @@ message TModifyScheme {
     optional TBackupCollectionDescription AlterBackupCollection = 75;
     optional TBackupCollectionDescription DropBackupCollection = 76;
 
-    optional TTieringRuleDescription CreateTieringRule = 77;
-    optional TTieringRuleDescription AlterTieringRule = 78;
+    optional TModifyMetadataObject CreateMetadataObject = 77;
 }
 
 message TCopySequence {
@@ -2006,7 +2005,7 @@ message TPathDescription {
     optional TViewDescription ViewDescription = 29;
     optional TResourcePoolDescription ResourcePoolDescription = 30;
     optional TBackupCollectionDescription BackupCollectionDescription = 31;
-    optional TTieringRuleDescription TieringRuleDescription = 32;
+    optional TMetadataObjectDescription TieringRuleDescription = 32;
 }
 
 // For persisting AlterTable Tx description in Schemeshard internal DB
@@ -2184,13 +2183,27 @@ message TBackupCollectionDescription {
     }
 }
 
-message TTieringRuleDescription {
+message TModifyMetadataObject {
+    optional string Name = 1;
+    optional TMetadataObjectProperties Properties = 2;
+}
+
+message TMetadataObjectDescription {
     optional string Name = 1;
     optional NKikimrProto.TPathID PathId = 2;
     optional uint64 Version = 3;
+    optional TMetadataObjectProperties Properties = 4;
+}
 
-    optional string DefaultColumn = 4;
-    optional TTieringIntervals Intervals = 5;
+message TMetadataObjectProperties {
+    oneof PropertiesImpl {
+        TTieringRuleProperties TieringRule = 1;
+    }
+}
+
+message TTieringRuleProperties {
+    optional string DefaultColumn = 1;
+    optional TTieringIntervals Tiers = 2;
 }
 
 message TTieringIntervals {

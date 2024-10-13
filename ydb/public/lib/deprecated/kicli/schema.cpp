@@ -135,7 +135,7 @@ void TSchemaObject::Drop() {
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool);
         break;
     case EPathType::TieringRule:
-        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTieringRule);
+        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropMetadataObject);
         break;
     case EPathType::BackupCollection:
         // FIXME(+active)

@@ -15,14 +15,6 @@ namespace NKikimr::NColumnShard::NTiers {
 
 class TTierPreparationActor: public NActors::TActorBootstrapped<TTierPreparationActor> {
 private:
-    enum EState {
-        INITIAL = 0,
-        FETCH_TIERING,
-        CHECK_PERMISSIONS,
-        MAKE_RESULT,
-    };
-
-    EState State = INITIAL;
     std::vector<TTierConfig> Objects;
     NMetadata::NModifications::IAlterPreparationController<TTierConfig>::TPtr Controller;
     NMetadata::NModifications::IOperationsManager::TInternalModificationContext Context;
@@ -39,15 +31,23 @@ protected:
     void Handle(NSchemeShard::TEvSchemeShard::TEvProcessingResponse::TPtr& ev);
     void Handle(TEvListTieringRulesResult::TPtr& ev);
 public:
-    STATEFN(StateMain) {
+    STATEFN(StateFetchTiering) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
-            hFunc(NSchemeShard::TEvSchemeShard::TEvProcessingResponse, Handle);
             hFunc(TEvListTieringRulesResult, Handle);
             default:
                 break;
         }
     }
+
+    STATEFN(StateCheckPermissions) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NSchemeShard::TEvSchemeShard::TEvProcessingResponse, Handle);
+            default:
+                break;
+        }
+    }
+
     void Bootstrap();
 
     TTierPreparationActor(std::vector<TTierConfig>&& objects,

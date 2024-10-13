@@ -5,13 +5,19 @@
 
 namespace NKikimr::NSchemeShard::NOperations {
 
+TTieringRuleEntity::TFactory::TRegistrator<TTieringRuleEntity> TTieringRuleEntity::Registrator(NKikimrSchemeOp::EPathType::EPathTypeTieringRule);
+
 [[nodiscard]] TConclusionStatus TTieringRuleEntity::DoInitialize(const TEntityInitializationContext& context) {
-    {
-        auto* tieringRule = context.GetSSOperationContext()->SS->TieringRules.FindPtr(GetPathId());
-        AFL_VERIFY(tieringRule);
-        TieringRuleInfo = *tieringRule;
+    auto* tieringRule = context.GetSSOperationContext()->SS->TieringRules.FindPtr(GetPathId());
+    if (!tieringRule) {
+        return TConclusionStatus::Fail("Tiering rule not found");
     }
+    TieringRuleInfo = *tieringRule;
     return TConclusionStatus::Success();
 }
+
+    std::shared_ptr<TMetadataUpdateDrop> TTieringRuleEntity::GetDropUpdate() const {
+        return std::make_shared<TDropTieringRule>();
+    }
 
 }   // namespace NKikimr::NSchemeShard::NOperations

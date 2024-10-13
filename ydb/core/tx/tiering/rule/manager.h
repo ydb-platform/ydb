@@ -15,5 +15,7 @@ private:
 protected:
     void DoBuildRequestFromSettings(const NYql::TObjectSettingsImpl& settings, TInternalModificationContext& context,
         IBuildRequestController::TPtr controller) const override;
+
+    TString GetStorageDirectory() const override;
 };
 }

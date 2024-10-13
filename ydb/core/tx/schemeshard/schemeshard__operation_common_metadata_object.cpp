@@ -70,5 +70,9 @@ void PersistOperation(const TOperationId& operationId, const TOperationContext& 
     context.SS->PersistTxState(db, operationId);
 }
 
+TString GetDestinationPath(const NKikimrSchemeOp::TModifyScheme& transaction) {
+    return JoinPath({transaction.GetWorkingDir(), transaction.GetCreateMetadataObject().GetName()});
+}
+
 
 }   // namespace NKikimr::NSchemeShard::NMetadataObject

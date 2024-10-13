@@ -84,12 +84,11 @@ class TAlterMetadataObject : public TSubOperation {
         }
     }
 
-    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TPath& dstPath, const TString& acl, const TPathElement::EPathType expectedPathType) {
+    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TPath& dstPath, const TString& acl) {
         const auto checks = dstPath.Check();
         checks.IsAtLocalSchemeShard()
             .IsResolved()
             .NotUnderDeleting()
-            .FailOnWrongType(expectedPathType)
             .IsValidLeafName()
             .DepthLimit()
             .PathsLimit()
@@ -122,20 +121,18 @@ public:
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         Y_UNUSED(owner);
 
-        auto update = NOperations::TMetadataUpdate::MakeUpdate(Transaction);
-        AFL_VERIFY(update);
-
-        LOG_N("TAlterMetadataObject Propose: opId# " << OperationId << ", path# " << update->GetPathString());
+        const TString pathString = NMetadataObject::GetDestinationPath(Transaction);
+        LOG_N("TAlterMetadataObject Propose: opId# " << OperationId << ", path# " << pathString);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(context.SS->SelfTabletId()));
 
-        TPath dstPath = TPath::Resolve(update->GetPathString(), context.SS);
+        TPath dstPath = TPath::Resolve(pathString, context.SS);
         TPath parentPath = dstPath.Parent();
         const TString& acl = Transaction.GetModifyACL().GetDiffACL();
         RETURN_RESULT_UNLESS(NMetadataObject::IsParentPathValid(result, parentPath));
-        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl, update->GetObjectPathType()));
+        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl));
         RETURN_RESULT_UNLESS(NMetadataObject::IsApplyIfChecksPassed(Transaction, result, context));
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
@@ -149,10 +146,15 @@ public:
             originalEntity = conclusion.GetResult();
         }
 
-        NOperations::TUpdateInitializationContext initializationContext(&context, &Transaction, OperationId.GetTxId().GetValue(), originalEntity.get());
-        if (auto status = update->Initialize(initializationContext); status.IsFail()) {
-            result->SetError(NKikimrScheme::StatusSchemeError, status.GetErrorMessage());
-            return result;
+        std::shared_ptr<NOperations::ISSEntityUpdate> update;
+        {
+            NOperations::TUpdateInitializationContext initializationContext(originalEntity.get(), &context, &Transaction, OperationId.GetTxId().GetValue());
+            auto conclusion = originalEntity->CreateUpdate(initializationContext);
+            if (conclusion.IsFail()) {
+                result->SetError(NKikimrScheme::StatusSchemeError, conclusion.GetErrorMessage());
+                return result;
+            }
+            update = conclusion.GetResult();
         }
 
         const TPathElement::TPtr object = ReplacePathElement(dstPath);

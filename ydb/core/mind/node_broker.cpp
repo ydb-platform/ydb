@@ -1002,6 +1002,14 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
     ctx.RegisterWithSameMailbox(new TResolveTenantActor(ev, SelfId()));
 }
 
+void TNodeBroker::Handle(TEvNodeBroker::TEvDecommissionRequest::TPtr &ev,
+                         const TActorContext &ctx) {
+    LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER, "Handle TEvNodeBroker::TEvDecommissionRequest"
+        << ": request# " << ev->Get()->Record.ShortDebugString());   
+
+    ProcessTx(CreateTxDecommissionNode(ev), ctx);                     
+}
+
 void TNodeBroker::Handle(TEvNodeBroker::TEvExtendLeaseRequest::TPtr &ev,
                          const TActorContext &ctx)
 {

@@ -79,6 +79,14 @@ message TRegistrationResponse {
   optional uint64 ScopePathId = 4;
 }
 
+message TDecommissionRequest {
+
+}
+
+message TDecomissionResponse {
+
+}
+
 message TExtendLeaseRequest {
   optional uint32 NodeId = 1;
 }

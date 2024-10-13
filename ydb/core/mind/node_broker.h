@@ -81,12 +81,14 @@ struct TEvNodeBroker {
         EvListNodes = EventSpaceBegin(TKikimrEvents::ES_NODE_BROKER),
         EvResolveNode,
         EvRegistrationRequest,
+        EvDecommissionRequest,
         EvExtendLeaseRequest,
 
         // responses
         EvNodesInfo,
         EvResolvedNode,
         EvRegistrationResponse,
+        EvDecommissionResponse,
         EvExtendLeaseResponse,
 
         // config
@@ -125,6 +127,11 @@ struct TEvNodeBroker {
                                                     EvRegistrationRequest> {
     };
 
+    struct TEvDecommissionRequest : public TEventPB<TEvDecommissionRequest,
+                                                    NKikimrNodeBroker::TDecommissionRequest,
+                                                    EvDecommissionRequest> {
+    };
+
     struct TEvExtendLeaseRequest : public TEventPB<TEvExtendLeaseRequest,
                                                    NKikimrNodeBroker::TExtendLeaseRequest,
                                                    EvExtendLeaseRequest> {
@@ -154,6 +161,11 @@ struct TEvNodeBroker {
     struct TEvRegistrationResponse : public TEventPB<TEvRegistrationResponse,
                                                      NKikimrNodeBroker::TRegistrationResponse,
                                                      EvRegistrationResponse> {
+    };
+
+    struct TEvDecommissionResponse : public TEventPB<TEvDecommissionResponse,
+                                                     NKikimrNodeBroker::TEvDecommissionResponse,
+                                                     EvDecommissionResponse> {
     };
 
     struct TEvExtendLeaseResponse : public TEventPB<TEvExtendLeaseResponse,

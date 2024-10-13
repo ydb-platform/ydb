@@ -148,6 +148,7 @@ private:
     class TTxInitScheme;
     class TTxLoadState;
     class TTxRegisterNode;
+    class TTxDecommissionNode;
     class TTxUpdateConfig;
     class TTxUpdateConfigSubscription;
     class TTxUpdateEpoch;
@@ -156,6 +157,7 @@ private:
     ITransaction *CreateTxInitScheme();
     ITransaction *CreateTxLoadState();
     ITransaction *CreateTxRegisterNode(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev);
+    ITransaction *CreateTxDecommissionNode(TEvNodeBroker::TEvDecommissionRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfig(TEvNodeBroker::TEvSetConfigRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfigSubscription(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev);
@@ -202,6 +204,7 @@ private:
             HFuncTraced(TEvNodeBroker::TEvListNodes, Handle);
             HFuncTraced(TEvNodeBroker::TEvResolveNode, Handle);
             HFuncTraced(TEvNodeBroker::TEvRegistrationRequest, Handle);
+            HFuncTraced(TEvNodeBroker::TEvDecommissionRequest, Handle);
             HFuncTraced(TEvNodeBroker::TEvExtendLeaseRequest, Handle);
             HFuncTraced(TEvNodeBroker::TEvCompactTables, Handle);
             HFuncTraced(TEvNodeBroker::TEvGetConfigRequest, Handle);
@@ -299,6 +302,8 @@ private:
                 const TActorContext &ctx);
     void Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                 const TActorContext &ctx);
+    void Handle(TEvNodeBroker::TEvDecommissionRequest::TPtr &ev,
+                const TActorContext &ctx);
     void Handle(TEvNodeBroker::TEvExtendLeaseRequest::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvNodeBroker::TEvCompactTables::TPtr &ev,
@@ -322,6 +327,7 @@ private:
     // Maps tenant to its slot indexes pool.
     std::unordered_map<TSubDomainKey, TSlotIndexesPool, THash<TSubDomainKey>> SlotIndexesPools;
     bool EnableStableNodeNames = false;
+    bool EnableDecomissionNode = false;
     // Epoch info.
     TEpochInfo Epoch;
     // Current config.

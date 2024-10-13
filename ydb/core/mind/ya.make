@@ -14,6 +14,7 @@ SRCS(
     lease_holder.h
     local.cpp
     local.h
+    node_broker__decommission_node.cpp
     node_broker.cpp
     node_broker.h
     node_broker_impl.h

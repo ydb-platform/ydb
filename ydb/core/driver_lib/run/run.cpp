@@ -65,6 +65,7 @@
 
 #include <ydb/core/mind/local.h>
 #include <ydb/core/mind/tenant_pool.h>
+#include <ydb/core/mind/node_broker.h>
 #include <ydb/core/base/hive.h>
 
 #include <ydb/core/base/tablet_resolver.h>
@@ -1732,7 +1733,14 @@ void TKikimrRunner::KikimrStart() {
 }
 
 void TKikimrRunner::KikimrStop(bool graceful) {
-    Y_UNUSED(graceful);
+
+    if (graceful) {
+        NTabletPipe::TClientConfig pipeConfig;
+        pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
+        auto pipe = NTabletPipe::CreateClient({}, MakeNodeBrokerID(), pipeConfig);
+        TActorId nodeBrokerPipe = ActorSystem->Register(pipe);
+        ActorSystem->Send(new IEventHandle(nodeBrokerPipe, {}, new NKikimr::NNodeBroker::TEvNodeBroker::TEvDecommissionRequest));
+    }
 
     if (EnabledGrpcService) {
         ActorSystem->Send(new IEventHandle(NGRpcService::CreateGrpcPublisherServiceActorId(), {}, new TEvents::TEvPoisonPill));

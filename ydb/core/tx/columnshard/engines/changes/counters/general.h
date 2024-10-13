@@ -59,18 +59,18 @@ public:
     }
 
     static void OnRepackPortions(const i64 portionsCount, const i64 portionBlobBytes, const i64 portionRawBytes) {
-        Singleton<TGeneralCompactionCounters>()->RepackPortions->OnData(portionsCount, portionBlobBytes, portionRawBytes);
+        Singleton<TGeneralCompactionCounters>()->RepackPortions.OnData(portionsCount, portionBlobBytes, portionRawBytes);
         Singleton<TGeneralCompactionCounters>()->HistogramRepackPortionsCount->Collect(portionsCount);
         Singleton<TGeneralCompactionCounters>()->HistogramRepackPortionsBlobBytes->Collect(portionBlobBytes);
         Singleton<TGeneralCompactionCounters>()->HistogramRepackPortionsRawBytes->Collect(portionRawBytes);
     }
 
     static void OnRepackInsertedPortions(const i64 portionsCount, const i64 portionBlobBytes, const i64 portionRawBytes) {
-        Singleton<TGeneralCompactionCounters>()->RepackInsertedPortions->OnData(portionsCount, portionBlobBytes, portionRawBytes);
+        Singleton<TGeneralCompactionCounters>()->RepackInsertedPortions.OnData(portionsCount, portionBlobBytes, portionRawBytes);
     }
 
     static void OnRepackCompactedPortions(const i64 portionsCount, const i64 portionBlobBytes, const i64 portionRawBytes) {
-        Singleton<TGeneralCompactionCounters>()->RepackCompactedPortions->OnData(portionsCount, portionBlobBytes, portionRawBytes);
+        Singleton<TGeneralCompactionCounters>()->RepackCompactedPortions.OnData(portionsCount, portionBlobBytes, portionRawBytes);
     }
 
     static void OnSplittedBlobAppend(const i64 bytes) {

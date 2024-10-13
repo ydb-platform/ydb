@@ -44,7 +44,7 @@ void TManager::Free(const ui64 clientId, const ui32 count) {
     AllocateNext();
 }
 
-TClientStatus& TManager::GetClientVerified(const ui64 clientId) {
+TManager::TClientStatus& TManager::GetClientVerified(const ui64 clientId) {
     auto it = Clients.find(clientId);
     AFL_VERIFY(it != Clients.end());
     return it->second;
@@ -53,7 +53,7 @@ TClientStatus& TManager::GetClientVerified(const ui64 clientId) {
 void TManager::Ask(const ui64 clientId, const ui32 count, const std::shared_ptr<IRequest>& request, const ui64 extPriority) {
     AFL_VERIFY(request);
     Counters->Ask->Inc();
-    AskImpl(GetClientVerified(clientId), TAskRequest(clientId, request, count));
+    AskImpl(GetClientVerified(clientId), extPriority, TAskRequest(clientId, request, count));
 }
 
 void TManager::AskMax(const ui64 clientId, const ui32 count, const std::shared_ptr<IRequest>& request, const ui64 extPriority) {
@@ -63,21 +63,21 @@ void TManager::AskMax(const ui64 clientId, const ui32 count, const std::shared_p
     if (client.GetLastPriority() && extPriority < client.GetLastPriority()->GetExternalPriority()) {
         return;
     }
-    AskImpl(client, TAskRequest(clientId, request, count));
+    AskImpl(client, extPriority, TAskRequest(clientId, request, count));
 }
 
-void TManager::AskImpl(TClientStatus& client, TAskRequest&& request) {
+void TManager::AskImpl(TClientStatus& client, const ui64 extPriority, TAskRequest&& request) {
     RemoveFromQueue(client);
-    AFL_VERIFY(count <= Config.GetLimit())("requested", count)("limit", Config.GetLimit());
+    AFL_VERIFY(request.GetSize() <= Config.GetLimit())("requested", request.GetSize())("limit", Config.GetLimit());
     TPriority priority(extPriority);
-    it->second.SetLastPriority(priority);
+    client.SetLastPriority(priority);
     AFL_VERIFY(WaitingQueue.emplace(priority, std::move(request)).second);
     AllocateNext();
 }
 
 void TManager::RegisterClient(const ui64 clientId) {
     Counters->Register->Inc();
-    AFL_VERIFY(Clients.emplace(clientId, TClientStatus(clientId)).second);
+    AFL_VERIFY(Clients.emplace(clientId, clientId).second);
     Counters->Clients->Set(Clients.size());
 }
 

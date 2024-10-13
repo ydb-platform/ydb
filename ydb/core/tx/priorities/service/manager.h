@@ -74,7 +74,7 @@ private:
     void AllocateNext();
 
     void RemoveFromQueue(const TClientStatus& client);
-    void AskImpl(TClientStatus& client, TAskRequest&& request);
+    void AskImpl(TClientStatus& client, const ui64 extPriority, TAskRequest&& request);
     TClientStatus& GetClientVerified(const ui64 clientId);
 
 public:

@@ -4,6 +4,7 @@
 
 ## Diagnostics
 
+<!-- The include is added to allow partial overrides in overlays  -->
 {% include notitle [#](_includes/tablets-moved.md) %}
 
 

@@ -4,6 +4,7 @@ High CPU usage can lead to slow query processing and increased response times. W
 
 ## Diagnostics
 
+<!-- The include is added to allow partial overrides in overlays  -->
 {% include notitle [#](_includes/cpu-bottleneck.md) %}
 
 ## Recommendation

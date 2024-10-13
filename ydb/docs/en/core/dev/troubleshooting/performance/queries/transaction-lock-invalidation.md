@@ -4,6 +4,7 @@ Each transaction in {{ ydb-short-name }} uses [optimistic locking](https://en.wi
 
 ## Diagnostics
 
+<!-- The include is added to allow partial overrides in overlays  -->
 {% include notitle [#](_includes/transaction-lock-invalidation.md) %}
 
 ## Recommendations

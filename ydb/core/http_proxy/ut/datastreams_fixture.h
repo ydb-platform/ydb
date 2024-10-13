@@ -427,7 +427,18 @@ public:
         return json;
     }
 
-    bool WaitQueueAttributes(TString queueUrl, size_t retries, std::function<bool (NJson::TJsonMap json)> predicate) {
+    void WaitQueueAttributes(TString queueUrl, size_t retries, NJson::TJsonMap attributes) {
+        WaitQueueAttributes(queueUrl, retries, [&attributes](NJson::TJsonMap json) {
+            for (const auto& [k, v] : attributes.GetMapSafe()) {
+                if (json["Attributes"][k] != v) {
+                    return false;
+                }
+            }
+            return true;
+        });
+    }
+
+    void WaitQueueAttributes(TString queueUrl, size_t retries, std::function<bool (NJson::TJsonMap json)> predicate) {
         for (size_t i = 0; i < retries; ++i) {
             auto json = GetQueueAttributes({
                 {"QueueUrl", queueUrl},
@@ -435,14 +446,14 @@ public:
             });
 
             if (predicate(json)) {
-                return true;
+                return;
             }
 
             if (i + 1 < retries) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(1000));
             }
         }
-        return false;
+        UNIT_FAIL("WaitQueueAttributes: predicate is still false");
     }
 
     NJson::TJsonMap ChangeMessageVisibility(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {

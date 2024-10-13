@@ -440,8 +440,17 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestDeleteMessage, THttpProxyTestMock) {
+        DeleteMessage({}, 400);
+        DeleteMessage({{"QueueUrl", "wrong-queue-url"}}, 400);
+        DeleteMessage({{"QueueUrl", 123}}, 400);
+
         auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
         TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        DeleteMessage({{"QueueUrl", queueUrl}}, 400);
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", "unknown-receipt-handle"}}, 400);
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", ""}}, 400);
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", 123}}, 400);
 
         auto body = "MessageBody-0";
         SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", body}});
@@ -453,10 +462,16 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         auto receiptHandle = json["Messages"][0]["ReceiptHandle"].GetString();
         UNIT_ASSERT(!receiptHandle.Empty());
 
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", receiptHandle}, {"UnknownParameter", 123}}, 400);
+
         DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", receiptHandle}});
 
-        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 1}});
-        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 0);
+        WaitQueueAttributes(queueUrl, 10, {
+            {"ApproximateNumberOfMessages", "0"},
+            {"ApproximateNumberOfMessagesNotVisible", "0"}
+        });
+
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", receiptHandle}});
     }
 
     Y_UNIT_TEST_F(TestPurgeQueue, THttpProxyTestMock) {
@@ -474,19 +489,15 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         // Set VisibilityTimeout to large value to be sure the message is in-flight during the test.
         ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 1}, {"VisibilityTimeout", 43000}});  // ~12 hours
 
-        UNIT_ASSERT(
-            WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
-                return json["Attributes"]["ApproximateNumberOfMessages"] == "2" && json["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "1";
-            })
-        );
+        WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
+            return json["Attributes"]["ApproximateNumberOfMessages"] == "2" && json["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "1";
+        });
 
         PurgeQueue({{"QueueUrl", queueUrl}});
 
-        UNIT_ASSERT(
-            WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
-                return json["Attributes"]["ApproximateNumberOfMessages"] == "0" && json["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "0";
-            })
-        );
+        WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
+            return json["Attributes"]["ApproximateNumberOfMessages"] == "0" && json["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "0";
+        });
     }
 
     Y_UNIT_TEST_F(TestDeleteQueue, THttpProxyTestMock) {
@@ -550,16 +561,14 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
         SetQueueAttributes({{"QueueUrl", queueUrl}, {"Attributes", attributes}});
 
-        UNIT_ASSERT(
-            WaitQueueAttributes(queueUrl, 10, [&attributes](NJson::TJsonMap json) {
-                for (auto& [k, v] : attributes.GetMapSafe()) {
-                    if (json["Attributes"][k].GetStringSafe() != v) {
-                        return false;
-                    }
+        WaitQueueAttributes(queueUrl, 10, [&attributes](NJson::TJsonMap json) {
+            for (auto& [k, v] : attributes.GetMapSafe()) {
+                if (json["Attributes"][k].GetStringSafe() != v) {
+                    return false;
                 }
-                return true;
-            })
-        );
+            }
+            return true;
+        });
 
         SetQueueAttributes({
             {"QueueUrl", queueUrl},
@@ -571,11 +580,9 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             {"Attributes", NJson::TJsonMap{{"DelaySeconds", "901"}}}
         }, 400);
 
-        UNIT_ASSERT(
-            WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
-                return json["Attributes"]["DelaySeconds"] == "2";
-            })
-        );
+        WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
+            return json["Attributes"]["DelaySeconds"] == "2";
+        });
 
         json = SetQueueAttributes({
             {"QueueUrl", queueUrl},
@@ -809,11 +816,9 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             {"VisibilityTimeout", 1}
         });
 
-        UNIT_ASSERT(
-            WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
-                return json["Attributes"]["ApproximateNumberOfMessages"] == "1" && json["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "0";
-            })
-        );
+        WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
+            return json["Attributes"]["ApproximateNumberOfMessages"] == "1" && json["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "0";
+        });
 
         ChangeMessageVisibility({
             {"QueueUrl", queueUrl},

@@ -164,7 +164,7 @@ struct TEvNodeBroker {
     };
 
     struct TEvDecommissionResponse : public TEventPB<TEvDecommissionResponse,
-                                                     NKikimrNodeBroker::TEvDecommissionResponse,
+                                                     NKikimrNodeBroker::TDecommissionResponse,
                                                      EvDecommissionResponse> {
     };
 

@@ -52,4 +52,5 @@ enum ETxTypes {
     TXTYPE_UPDATE_CONFIG = 4                [(TxTypeOpts) = {Name: "TTxUpdateConfig"}];
     TXTYPE_UPDATE_CONFIG_SUBSCRIPTION = 5   [(TxTypeOpts) = {Name: "TTxUpdateConfigSubscription"}];
     TXTYPE_UPDATE_EPOCH = 6                 [(TxTypeOpts) = {Name: "TTxUpdateEpoch"}];
+    TXTYPE_DECOMMISSION_NODE = 7            [(TxTypeOpts) = {Name: "TTxDecommissionNode"}];
 }

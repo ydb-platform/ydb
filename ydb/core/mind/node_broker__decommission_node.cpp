@@ -75,7 +75,7 @@ private:
     TEvNodeBroker::TEvDecommissionRequest::TPtr Event;
     //const std::optional<ui32> SlotIndex;
     //const TSubDomainKey ServicedSubDomain;
-    TAutoPtr<TEvNodeBroker::TEvDecommissionRequest> Response;
+    TAutoPtr<TEvNodeBroker::TEvDecommissionResponse> Response;
 };
 
 ITransaction *TNodeBroker::CreateTxDecommissionNode(TEvNodeBroker::TEvDecommissionRequest::TPtr &ev)

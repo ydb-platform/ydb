@@ -80,11 +80,14 @@ message TRegistrationResponse {
 }
 
 message TDecommissionRequest {
-
+  optional string Host = 1;
+  optional uint32 Port = 2;
+  optional string Address = 3;
 }
 
-message TDecomissionResponse {
-
+message TDecommissionResponse {
+  optional TStatus Status = 1;
+  optional TNodeInfo Node = 2;
 }
 
 message TExtendLeaseRequest {

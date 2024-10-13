@@ -1,6 +1,6 @@
 # CPU bottleneck
 
-High CPU usage can result in slow query processing and increased response times. When CPU resources are limited, the database may struggle to handle complex queries or large transaction loads.
+High CPU usage can lead to slow query processing and increased response times. When CPU resources are constrained, the database may have difficulty handling complex queries or large transaction volumes.
 
 ## Diagnostics
 
@@ -8,4 +8,4 @@ High CPU usage can result in slow query processing and increased response times.
 
 ## Recommendation
 
-Add more [database nodes](../../../../concepts/glossary.md#database-node).
+Add additional [database nodes](../../../../concepts/glossary.md#database-node) or allocate more CPU cores to the existing nodes.

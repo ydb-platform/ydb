@@ -2,15 +2,15 @@
 
 ## Description
 
-[Data shards](../../../../concepts/glossary.md#data-shard) in {{ ydb-short-name }} might get overloaded for the following reasons:
+[Data shards](../../../../concepts/glossary.md#data-shard) in {{ ydb-short-name }} may become overloaded for the following reasons:
 
 * A table is created without the [AUTO_PARTITIONING_BY_LOAD](../../../../concepts/datamodel/table.md#AUTO_PARTITIONING_BY_LOAD) clause.
 
-    In this case {{ ydb-short-name }} does not split overloaded shards. If a shard has to process too many queries, it will use up all its CPU resources and, consequently, query response times will increase.
+    In this case, {{ ydb-short-name }} does not split overloaded shards. If a shard has to process too many queries, it will consume all its CPU resources, leading to increased query response times.
 
-* A table was created with the [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT](../../../../concepts/datamodel/table.md#AUTO_PARTITIONING_MAX_PARTITIONS_COUNT) setting and has already reached the partition limit.
+* A table was created with the [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT](../../../../concepts/datamodel/table.md#AUTO_PARTITIONING_MAX_PARTITIONS_COUNT) setting and has already reached its partition limit.
 
-* Inefficient primary key that results in the imbalance of queries between shards. A typical example is ingestion with a monotonically increasing (autoincrementing) primary key that might overload the "last" partition.
+* An inefficient primary key that causes an imbalance in the distribution of queries across shards. A typical example is ingestion with a monotonically increasing primary key, which may overload the "last" partition. For example, this could occur with an autoincrementing primary key using the [serial](../../../../yql/reference/types/serial.md) data type.
 
 ## Diagnostics
 
@@ -18,12 +18,12 @@
 
 ## Recommendations for table configuration {#table-config}
 
-Consider the following solutions to address the shard overload issue:
+Consider the following solutions to address shard overload:
 
-* If the problem table is not partitioned by load, enable partitioning by load.
+* If the problematic table is not partitioned by load, enable partitioning by load.
 
 * If the table has reached the maximum number of partitions, increase the partition limit.
 
 ## Recommendations for the imbalanced primary key {#pk-recommendations}
 
-Consider changing the primary key to evenly distribute the load between table partitions.
+Consider modifying the primary key to distribute the load evenly across table partitions.

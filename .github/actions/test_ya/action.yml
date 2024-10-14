@@ -150,7 +150,7 @@ runs:
         MIME_TYPES_LINE="text/plain                                      out err log"
         MIME_TYPES_LINE='/etc/mime.types'
         # add if not exists
-        grep -qF -- "$MIME_TYPES_LINE" "$MIME_TYPES_LINE" || sudo echo "$MIME_TYPES_LINE" >> "$MIME_TYPES_LINE"
+        sudo 'grep -qF -- "$MIME_TYPES_LINE" "$MIME_TYPES_LINE" || echo "$MIME_TYPES_LINE" >> "$MIME_TYPES_LINE"'
 
     - name: Setup cache
       shell: bash

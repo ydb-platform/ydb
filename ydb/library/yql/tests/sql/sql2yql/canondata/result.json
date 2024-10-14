@@ -11780,6 +11780,13 @@
             "uri": "https://{canondata_backend}/1937001/6c1efa96a2ae4050b12a9381285624ab71389741/resource.tar.gz#test_sql2yql.test_order_by-order_by_missing_project_column_as_table_/sql.yql"
         }
     ],
+    "test_sql2yql.test[order_by-order_by_missing_project_column_ignored]": [
+        {
+            "checksum": "f844bc6856fa7358172cb5bf2442f9e6",
+            "size": 6492,
+            "uri": "https://{canondata_backend}/1871182/b560fdc93cb96ca9e574901b22abd265bdefb213/resource.tar.gz#test_sql2yql.test_order_by-order_by_missing_project_column_ignored_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[order_by-order_by_missing_project_column_join2]": [
         {
             "checksum": "98039874784e044ceb5ba77e2e8158b8",
@@ -31497,6 +31504,13 @@
             "checksum": "3871b5da70e1df6c78a572ec4b842b75",
             "size": 408,
             "uri": "https://{canondata_backend}/1937001/6c1efa96a2ae4050b12a9381285624ab71389741/resource.tar.gz#test_sql_format.test_order_by-order_by_missing_project_column_as_table_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[order_by-order_by_missing_project_column_ignored]": [
+        {
+            "checksum": "f3d38e1afa4667e4a86dbe72c0a9de94",
+            "size": 779,
+            "uri": "https://{canondata_backend}/1871182/b560fdc93cb96ca9e574901b22abd265bdefb213/resource.tar.gz#test_sql_format.test_order_by-order_by_missing_project_column_ignored_/formatted.sql"
         }
     ],
     "test_sql_format.test[order_by-order_by_missing_project_column_join2]": [

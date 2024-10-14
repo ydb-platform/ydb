@@ -159,6 +159,7 @@ PEERDIR(
     ydb/services/deprecated/persqueue_v0
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
+    ydb/services/view
     ydb/services/ydb
 )
 

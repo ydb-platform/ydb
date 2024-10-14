@@ -112,17 +112,15 @@ public:
     }
 
     bool IsReady() const {
-        if (!Buffer.IsReady()) {
-            return false;
-        }
-        return Buffer.GetSize() >= BatchSize || TInstant::Now() - Buffer.CreationStartTime >= BatchCreationTimeout;
+        return Buffer.IsReady() && (Buffer.GetSize() >= BatchSize || TInstant::Now() - Buffer.CreationStartTime >= BatchCreationTimeout);
     }
 
     TInstant GetCreationDeadline() const {
-        if (!Buffer.IsReady()) {
-            return TInstant::Zero();
-        }
-        return Buffer.CreationStartTime + BatchCreationTimeout;
+        return Buffer.IsReady() ? Buffer.CreationStartTime + BatchCreationTimeout : TInstant::Zero();
+    }
+
+    size_t GetNumberValues() const {
+        return Buffer.IsReady() ? Buffer.NumberValues : 0;
     }
 
     const TVector<ui64>& GetOffsets() {
@@ -141,6 +139,8 @@ public:
     }
 
     const TVector<TVector<std::string_view>>& Parse() {
+        Y_ENSURE(Buffer.IsReady(), "Nothing to parse");
+
         const auto [values, size] = Buffer.Finish();
         LOG_ROW_DISPATCHER_TRACE("Parse values:\n" << values);
 
@@ -258,6 +258,10 @@ bool TJsonParser::IsReady() const {
 
 TInstant TJsonParser::GetCreationDeadline() const {
     return Impl->GetCreationDeadline();
+}
+
+size_t TJsonParser::GetNumberValues() const {
+    return Impl->GetNumberValues();
 }
 
 const TVector<ui64>& TJsonParser::GetOffsets() const {

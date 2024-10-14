@@ -184,7 +184,7 @@ private:
     void CloseTopicSession();
     void SubscribeOnNextEvent();
     void SendToParsing(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
-    void DoParsing();
+    void DoParsing(bool force = false);
     void DoFiltering(const TVector<ui64>& offsets, const TVector<TVector<std::string_view>>& parsedValues);
     void SendData(ClientsInfo& info);
     void UpdateParser();
@@ -550,14 +550,18 @@ void TTopicSession::SendToParsing(const TVector<NYdb::NTopic::TReadSessionEvent:
     DoParsing();
 }
 
-void TTopicSession::DoParsing() {
-    if (!Parser->IsReady()) {
+void TTopicSession::DoParsing(bool force) {
+    if (!Parser->IsReady() && !force) {
         const TInstant batchCreationDeadline = Parser->GetCreationDeadline();
         LOG_ROW_DISPATCHER_TRACE("Collecting data to parse, skip parsing, creation deadline " << batchCreationDeadline);
         if (!IsStartParsingScheduled && batchCreationDeadline) {
             IsStartParsingScheduled = true;
             Schedule(batchCreationDeadline, new TEvPrivate::TEvStartParsing());
         }
+        return;
+    }
+
+    if (!Parser->GetNumberValues()) {
         return;
     }
 
@@ -579,7 +583,7 @@ void TTopicSession::DoFiltering(const TVector<ui64>& offsets, const TVector<TVec
     for (auto& [actorId, info] : Clients) {
         try {
             if (info.Filter) {
-                info.Filter->Push(offsets, parsedValues);
+                info.Filter->Push(offsets, RebuildJson(info, parsedValues));
             }
         } catch (const std::exception& e) {
             FatalError(e.what(), &info.Filter);
@@ -654,6 +658,11 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto types = GetVector(ev->Get()->Record.GetSource().GetColumnTypes());
 
     try {
+        if (Parser) {
+            // Parse remains data before adding new client
+            DoParsing(true);
+        }
+
         auto& clientInfo = Clients.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(ev->Sender), 

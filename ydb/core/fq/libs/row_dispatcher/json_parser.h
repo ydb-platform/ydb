@@ -11,6 +11,7 @@ public:
 
     bool IsReady() const;
     TInstant GetCreationDeadline() const;
+    size_t GetNumberValues() const;
     const TVector<ui64>& GetOffsets() const;
 
     void AddMessages(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);

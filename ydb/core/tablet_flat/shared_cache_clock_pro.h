@@ -36,8 +36,8 @@ class TClockProCache : public ICacheCache<TPage> {
     struct TPageKeyHash {
         using is_transparent = void;
         
-        inline size_t operator()(const THolder<TPageEntry>& entry) const {
-            return TPageTraits::GetHash(entry->Key);
+        inline size_t operator()(const TPageEntry& entry) const {
+            return TPageTraits::GetHash(entry.Key);
         }
 
         inline size_t operator()(const TPageKey& key) const {
@@ -48,12 +48,12 @@ class TClockProCache : public ICacheCache<TPage> {
     struct TPageKeyEqual {
         using is_transparent = void;
         
-        inline bool operator()(const THolder<TPageEntry>& left, const THolder<TPageEntry>& right) const {
-            return TPageTraits::Equals(left->Key, right->Key);
+        inline bool operator()(const TPageEntry& left, const TPageEntry& right) const {
+            return TPageTraits::Equals(left.Key, right.Key);
         }
 
-        inline bool operator()(const THolder<TPageEntry>& left, const TPageKey& right) const {
-            return TPageTraits::Equals(left->Key, right);
+        inline bool operator()(const TPageEntry& left, const TPageKey& right) const {
+            return TPageTraits::Equals(left.Key, right);
         }
     };
 
@@ -86,7 +86,7 @@ public:
             return {};
         } else if (auto it = Entries.find(TPageTraits::GetKey(page)); it != Entries.end()) {
             // transforms a 'Cold non-resident' ('Test') page to a 'Hot' page:
-            TPageEntry* entry = it->Get();
+            TPageEntry* entry = AsEntry(it);
             Y_ABORT_UNLESS(!entry->Page);
             return Fill(entry, page);
         } else {
@@ -97,7 +97,7 @@ public:
 
     void Erase(TPage* page) override {
         if (auto it = Entries.find(TPageTraits::GetKey(page)); it != Entries.end()) {
-            TPageEntry* entry = it->Get();
+            TPageEntry* entry = AsEntry(it);
 
             EraseEntry(entry);
 
@@ -129,7 +129,7 @@ public:
             TPageEntry* entry = ptr->Node();
             auto it = Entries.find(entry->Key);
             Y_DEBUG_ABORT_UNLESS(it != Entries.end());
-            Y_DEBUG_ABORT_UNLESS(it->Get() == entry);
+            Y_DEBUG_ABORT_UNLESS(AsEntry(it) == entry);
 
             if (count != 0) result << ", ";
             if (entry == HandHot) result << "Hot>";
@@ -187,10 +187,9 @@ private:
     TIntrusiveList<TPage> Add(TPage* page) {
         Y_DEBUG_ABORT_UNLESS(TPageTraits::GetLocation(page) == EClockProPageLocation::None);
 
-        auto entry_ = MakeHolder<TPageEntry>(TPageTraits::GetKey(page), page, TPageTraits::GetSize(page));
-        auto inserted = Entries.emplace(std::move(entry_));
+        auto inserted = Entries.emplace(TPageTraits::GetKey(page), page, TPageTraits::GetSize(page));
         Y_ABORT_UNLESS(inserted.second);
-        TPageEntry* entry = inserted.first->Get();
+        TPageEntry* entry = AsEntry(inserted.first);
 
         LinkEntry(entry);
 
@@ -319,7 +318,7 @@ private:
 
             auto it = Entries.find(entry->Key);
             Y_ABORT_UNLESS(it != Entries.end());
-            Y_ABORT_UNLESS(it->Get() == entry);
+            Y_ABORT_UNLESS(AsEntry(it) == entry);
             Entries.erase(it);
         }
 
@@ -396,14 +395,18 @@ private:
         if (ptr) {
             ptr = ptr->Next()->Node();
         }
-    } 
+    }
+
+    TPageEntry* AsEntry(THashSet<TPageEntry, TPageKeyHash, TPageKeyEqual>::iterator it) const {
+        return const_cast<TPageEntry*>(&*it);
+    }
 
 private:
     ui64 Limit;
     ui64 ColdTarget;
 
     // TODO: unify this with TPageMap
-    THashSet<THolder<TPageEntry>, TPageKeyHash, TPageKeyEqual> Entries;
+    THashSet<TPageEntry, TPageKeyHash, TPageKeyEqual> Entries;
 
     TPageEntry* HandHot = nullptr;
     TPageEntry* HandCold = nullptr;

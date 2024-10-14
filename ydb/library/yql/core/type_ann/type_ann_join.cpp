@@ -899,11 +899,13 @@ namespace NTypeAnnImpl {
             }
             else if (optionName == "join_algo") {
                 // do nothing
-            } else if (optionName == "compact") {
+            }
+            else if (optionName == "compact") {
                 if (!EnsureTupleSize(*child, 1, ctx.Expr)) {
                      return IGraphTransformer::TStatus::Error;
                  }
-            } else {
+            }
+            else {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() <<
                     "Unknown option name: " << optionName));
                 return IGraphTransformer::TStatus::Error;

@@ -433,7 +433,6 @@ private:
         }
 
         std::optional<TIssues> operator()(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent& ev) {
-
             //Y_ABORT_UNLESS(!Self.ContinuationToken);
 
             if (*Self.Metrics.FirstContinuationTokenMs == 0) {

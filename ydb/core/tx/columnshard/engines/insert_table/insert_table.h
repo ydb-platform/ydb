@@ -15,6 +15,7 @@ class IDbWrapper;
 
 class TInsertTableAccessor {
 protected:
+    std::shared_ptr<NOlap::TVersionCounts> VersionCounts;
     TInsertionSummary Summary;
     THashMap<TUnifiedBlobId, ui32> BlobLinks;
 
@@ -26,6 +27,11 @@ protected:
     bool RemoveBlobLinkOnComplete(const TUnifiedBlobId& blobId);
 
 public:
+    TInsertTableAccessor(std::shared_ptr<NOlap::TVersionCounts>& versionCounts)
+        : VersionCounts(versionCounts)
+        , Summary(VersionCounts)
+    {
+    }
     TPathInfo& RegisterPathInfo(const ui64 pathId) {
         return Summary.RegisterPathInfo(pathId);
     }
@@ -69,7 +75,7 @@ public:
             AddBlobLink(data.GetBlobRange().BlobId);
         }
         const ui64 pathId = data.GetPathId();
-        return Summary.GetPathInfoVerified(pathId).AddCommitted(std::move(data), load);
+        return Summary.GetPathInfoVerified(pathId).AddCommitted(std::move(data), load, &*VersionCounts);
     }
     bool HasPathIdData(const ui64 pathId) const {
         return Summary.HasPathIdData(pathId);
@@ -95,11 +101,10 @@ class TInsertTable: public TInsertTableAccessor {
 private:
     bool Loaded = false;
     TInsertWriteId LastWriteId = TInsertWriteId{ 0 };
-    std::shared_ptr<NOlap::TVersionCounts> VersionCounts;
 
 public:
     TInsertTable(std::shared_ptr<NOlap::TVersionCounts>& versionCounts)
-        : VersionCounts(versionCounts)
+        : TInsertTableAccessor(versionCounts)
     {
     }
     static constexpr const TDuration WaitCommitDelay = TDuration::Minutes(10);
@@ -128,9 +133,6 @@ public:
 
     TInsertWriteId BuildNextWriteId(NTabletFlatExecutor::TTransactionContext& txc);
     TInsertWriteId BuildNextWriteId(NIceDb::TNiceDb& db);
-    void CalcVersionCounts() {
-        Summary.CalcVersionCounts(&*VersionCounts);
-    }
 };
 
 }   // namespace NKikimr::NOlap

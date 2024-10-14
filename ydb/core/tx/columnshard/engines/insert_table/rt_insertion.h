@@ -133,6 +133,7 @@ private:
 
     TInsertedContainer Inserted;
     THashMap<TInsertWriteId, TInsertedData> Aborted;
+    std::shared_ptr<TVersionCounts> VersionCounts;
 
     std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>> Priorities;
     THashMap<ui64, TPathInfo> PathInfo;
@@ -146,6 +147,11 @@ private:
     static TAtomicCounter CriticalInserted;
 
 public:
+    TInsertionSummary(std::shared_ptr<TVersionCounts>& versionCounts)
+        : VersionCounts(versionCounts)
+    {
+    }
+
     bool HasPathIdData(const ui64 pathId) const {
         auto it = PathInfo.find(pathId);
         if (it == PathInfo.end()) {
@@ -182,14 +188,14 @@ public:
     }
 
     const TInsertedData* AddAborted(TInsertedData&& data, const bool load = false);
-    bool EraseAborted(const TInsertWriteId writeId, TVersionCounts* versionCounts = nullptr);
+    bool EraseAborted(const TInsertWriteId writeId);
     bool HasAborted(const TInsertWriteId writeId);
 
-    bool EraseCommitted(const TCommittedData& data, TVersionCounts* versionCounts = nullptr);
+    bool EraseCommitted(const TCommittedData& data);
     bool HasCommitted(const TCommittedData& data);
 
-    const TInsertedData* AddInserted(TInsertedData&& data, const bool load = false, TVersionCounts* versionCounts = nullptr);
-    std::optional<TInsertedData> ExtractInserted(const TInsertWriteId id, TVersionCounts* versionCounts = nullptr);
+    const TInsertedData* AddInserted(TInsertedData&& data, const bool load = false);
+    std::optional<TInsertedData> ExtractInserted(const TInsertWriteId id);
 
     const TCounters& GetCountersPrepared() const {
         return StatsPrepared;
@@ -223,8 +229,6 @@ public:
     const std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>>& GetPathPriorities() const {
         return Priorities;
     }
-
-    void CalcVersionCounts(TVersionCounts* versionCounts);
 };
 
 }   // namespace NKikimr::NOlap

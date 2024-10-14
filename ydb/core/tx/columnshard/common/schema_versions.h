@@ -35,7 +35,11 @@ private:
 
 public:
     void VersionAddRef(ui64 version, ui32 source = 0) {
-        ui32 count = ++VersionCounters[version];
+        ui32& count = VersionCounters[version];
+        if (count == 0) {
+            VersionsToErase.erase(version);
+        }
+        count++;
         Y_UNUSED(count);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "version_addref")("source", source)("version", version)("ref_count", count);
     }

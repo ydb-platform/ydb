@@ -32,7 +32,7 @@ void TPathInfo::AddInsertedSize(const i64 size, const ui64 overloadLimit) {
 bool TPathInfo::EraseCommitted(const TCommittedData& data, TVersionCounts* versionCounts) {
     Summary->RemovePriority(*this);
     const bool result = Committed.erase(data);
-    if ((versionCounts != nullptr) && result) {
+    if (result) {
         versionCounts->VersionRemoveRef(data.GetSchemaVersion(), 1);
     }
     AddCommittedSize(-1 * (i64)data.BlobSize(), TCompactionLimits::OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID);
@@ -52,7 +52,7 @@ bool TPathInfo::AddCommitted(TCommittedData&& data, const bool load, TVersionCou
     AddCommittedSize(data.BlobSize(), TCompactionLimits::OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID);
     ui64 version = data.GetSchemaVersion();
     bool result = Committed.emplace(std::move(data)).second;
-    if ((versionCounts != nullptr) && result) {
+    if (result) {
         versionCounts->VersionAddRef(version, 1);
     }
     Summary->AddPriority(*this);

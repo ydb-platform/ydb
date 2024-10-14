@@ -178,119 +178,118 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestReceiveMessage, THttpProxyTestMock) {
-        auto createQueueReq = CreateSqsCreateQueueRequest();
-        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", createQueueReq, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-        NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
-        UNIT_ASSERT(resultQueueUrl.EndsWith("ExampleQueueName"));
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
 
-        NJson::TJsonValue sendMessageReq;
-        sendMessageReq["QueueUrl"] = resultQueueUrl;
         auto body0 = "MessageBody-0";
-        sendMessageReq["MessageBody"] = body0;
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", body0}});
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}});
 
-        res = SendHttpRequest("/Root", "AmazonSQS.SendMessage", sendMessageReq, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-
-        NJson::TJsonValue receiveMessageReq;
-        receiveMessageReq["QueueUrl"] = resultQueueUrl;
-        for (int i = 0; i < 20; ++i) {
-            res = SendHttpRequest("/Root", "AmazonSQS.ReceiveMessage", receiveMessageReq, FormAuthorizationStr("ru-central1"));
-            if (res.Body != "{}") {
-                break;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        }
-
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
         UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], body0);
+
+        for (size_t i = 1; i <= 10; ++i) {
+            auto body = TStringBuilder() << "MessageBody-" << i;
+            SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", body}});
+        }
+
+        WaitQueueAttributes(queueUrl, 10, {{"ApproximateNumberOfMessages", "11"}});
+
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}, {"MaxNumberOfMessages", 10}});
+        UNIT_ASSERT_GE(json["Messages"].GetArray().size(), 1);
     }
 
     Y_UNIT_TEST_F(TestReceiveMessageWithAttributes, THttpProxyTestMock) {
         // Test if we process AttributeNames, MessageSystemAttributeNames, MessageAttributeNames correctly.
 
-        auto createQueueReq = CreateSqsCreateQueueRequest();
-        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", createQueueReq, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-        NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
-        UNIT_ASSERT(resultQueueUrl.EndsWith("ExampleQueueName"));
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
 
-        auto sendMessage = [this, resultQueueUrl](const TString& body) {
-            NJson::TJsonValue sendMessageReq;
-            sendMessageReq["QueueUrl"] = resultQueueUrl;
-            sendMessageReq["MessageBody"] = body;
+        TString messageBody = "MessageBody-0";
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", messageBody},
+            {"MessageAttributes", NJson::TJsonMap{
+                {"SomeAttribute", NJson::TJsonMap{
+                    {"StringValue", "1"},
+                    {"DataType", "String"}
+                }},
+                {"AnotherAttribute", NJson::TJsonMap{
+                    {"StringValue", "2"},
+                    {"DataType", "String"}
+                }}
+            }}
+        });
 
-            auto res = SendHttpRequest("/Root", "AmazonSQS.SendMessage", sendMessageReq, FormAuthorizationStr("ru-central1"));
-            NJson::TJsonValue json;
-            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-            UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
-            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-        };
-
-        TString body = "MessageBody-0";
-        sendMessage(body);
-
-        auto receiveMessage = [this](NJson::TJsonValue request, const TString& expectedBody) -> NJson::TJsonValue {
+        auto receiveMessage = [&, this](NJson::TJsonMap request, ui32 expectedStatus = 200) -> NJson::TJsonMap {
             request["VisibilityTimeout"] = 0;  // Keep the message visible for next ReceiveMessage requests.
-            THttpResult res;
-            for (int i = 0; i < 20; ++i) {
-                res = SendHttpRequest("/Root", "AmazonSQS.ReceiveMessage", request, FormAuthorizationStr("ru-central1"));
-                if (res.Body != "{}") {
-                    break;
-                }
-                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-            }
-
-            NJson::TJsonValue json;
-            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+            request["QueueUrl"] = queueUrl;
+            request["WaitTimeSeconds"] = 20;
+            json = ReceiveMessage(request, expectedStatus);
             UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], expectedBody);
+            UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], messageBody);
             return json;
         };
 
         {
+            // Test deprecated AttributeNames field.
+
             // Request SentTimestamp message system attribute using deprecated AttributeNames field.
-            NJson::TJsonValue receiveMessageReq;
-            receiveMessageReq["QueueUrl"] = resultQueueUrl;
-            receiveMessageReq["AttributeNames"] = NJson::TJsonArray{"SentTimestamp"};
-            json = receiveMessage(receiveMessageReq, body);
+            json = receiveMessage({{"AttributeNames", NJson::TJsonArray{"SentTimestamp"}}});
             UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
-        }
 
-        {
-            // Request SentTimestamp message system attribute using MessageSystemAttributeNames field.
-            NJson::TJsonValue receiveMessageReq;
-            receiveMessageReq["QueueUrl"] = resultQueueUrl;
-            receiveMessageReq["MessageSystemAttributeNames"] = NJson::TJsonArray{"SentTimestamp"};
-            json = receiveMessage(receiveMessageReq, body);
-            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
-        }
-
-        {
             // Request All message system attributes using deprecated AttributeNames field.
-            NJson::TJsonValue receiveMessageReq;
-            receiveMessageReq["QueueUrl"] = resultQueueUrl;
-            receiveMessageReq["AttributeNames"] = NJson::TJsonArray{"All"};
-            json = receiveMessage(receiveMessageReq, body);
+            json = receiveMessage({{"AttributeNames", NJson::TJsonArray{"All"}}});
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
+
+            // Request message system attributes using AttributeNames field.
+            json = receiveMessage({{"AttributeNames", NJson::TJsonArray{
+                "SenderId", "SentTimestamp", "ApproximateReceiveCount", "ApproximateFirstReceiveTimestamp", "SequenceNumber"
+                "MessageDeduplicationId", "MessageGroupId", "AWSTraceHeader", "DeadLetterQueueSourceArn"
+            }}});
             UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
         }
 
         {
-            // Request All message system attributes using MessageSystemAttributeNames field.
-            NJson::TJsonValue receiveMessageReq;
-            receiveMessageReq["QueueUrl"] = resultQueueUrl;
-            receiveMessageReq["MessageSystemAttributeNames"] = NJson::TJsonArray{"All"};
-            json = receiveMessage(receiveMessageReq, body);
+            // Test MessageSystemAttributeNames field.
+
+            // Request SentTimestamp.
+            json = receiveMessage({{"MessageSystemAttributeNames", NJson::TJsonArray{"SentTimestamp"}}});
             UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
+
+            // Request All message system attributes.
+            json = receiveMessage({{"MessageSystemAttributeNames", NJson::TJsonArray{"All"}}});
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
+
+            // Request message system attributes.
+            json = receiveMessage({{"MessageSystemAttributeNames", NJson::TJsonArray{
+                "SenderId", "SentTimestamp", "ApproximateReceiveCount", "ApproximateFirstReceiveTimestamp", "SequenceNumber"
+                "MessageDeduplicationId", "MessageGroupId", "AWSTraceHeader", "DeadLetterQueueSourceArn"
+            }}});
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
+        }
+
+        {
+            // Test MessageAttributeNames
+
+            json = receiveMessage({{"MessageAttributeNames", NJson::TJsonArray{}}});
+            auto attrs = json["Messages"][0]["MessageAttributes"];
+
+            UNIT_ASSERT_VALUES_EQUAL(attrs.GetMapSafe().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(attrs["SomeAttribute"]["StringValue"].GetString(), "1");
+            UNIT_ASSERT_VALUES_EQUAL(attrs["AnotherAttribute"]["StringValue"].GetString(), "2");
+
+            json = receiveMessage({{"MessageAttributeNames", NJson::TJsonArray{"All"}}});
+            UNIT_ASSERT_VALUES_EQUAL(attrs.GetMapSafe().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(attrs["SomeAttribute"]["StringValue"].GetString(), "1");
+            UNIT_ASSERT_VALUES_EQUAL(attrs["AnotherAttribute"]["StringValue"].GetString(), "2");
+
+            json = receiveMessage({{"MessageAttributeNames", NJson::TJsonArray{"SomeAttribute"}}});
+
+            // We return all attributes, no matter what MessageAttributeNames are in the request. Should be fixed and uncommented:
+            //     UNIT_ASSERT_VALUES_EQUAL(attrs.GetMapSafe().size(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(attrs["SomeAttribute"]["StringValue"].GetString(), "1");
         }
     }
 

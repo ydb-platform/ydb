@@ -368,6 +368,7 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
         NJson::TJsonMap json;
         UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
         return json;
     }
 

@@ -3,13 +3,15 @@
 #include "export_yt.h"
 #include "yt_wrapper.h"
 
-#include <contrib/ydb/core/protos/flat_scheme_op.pb.h>
-#include <contrib/ydb/library/services/services.pb.h>
-#include <contrib/ydb/core/tablet_flat/flat_row_state.h>
-#include <contrib/ydb/core/tx/datashard/export_common.h>
-#include <contrib/ydb/library/binary_json/read.h>
-#include <contrib/ydb/library/actors/core/actor_bootstrapped.h>
-#include <contrib/ydb/library/actors/core/hfunc.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/core/tablet_flat/flat_row_state.h>
+#include <ydb/core/tx/datashard/export_common.h>
+#include <ydb/library/binary_json/read.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 
 #include <yt/yt/client/table_client/config.h>
 #include <yt/yt/client/table_client/name_table.h>
@@ -158,12 +160,16 @@ class TYtUploader: public TActorBootstrapped<TYtUploader> {
                 return {};
             }
 
-            return NYT::TError(NCustomErrorCodes::InvalidNodeType, TStringBuilder() << "Invalid type of " << path
-                << ": expected \"" << expected << "\""
-                << ", actual \"" << actual << "\"");
+            return NYT::TError(
+                NCustomErrorCodes::InvalidNodeType,
+                "Invalid type of %v"
+                ": expected %Qv"
+                ", actual %Qv",
+                path,
+                expected,
+                actual);
         } catch (const yexception& ex) {
-            return NYT::TError(TStringBuilder() << "Error while checking type of " << path
-                << ": " << ex.what());
+            return NYT::TError("Error while checking type of %v: %v", path, ex.what());
         }
     }
 
@@ -460,7 +466,7 @@ private:
 
 class TYtBuffer: public IBuffer {
     struct TColumn {
-        NScheme::TTypeId Type;
+        NScheme::TTypeInfo Type;
         int Id; // in name table
     };
 
@@ -472,78 +478,113 @@ class TYtBuffer: public IBuffer {
 
         int i = 0;
         for (const auto& [tag, column] : columns) {
-            // TODO: support pg types
-            Y_ABORT_UNLESS(column.Type.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
-            result[tag] = {column.Type.GetTypeId(), i++};
+            result[tag] = {column.Type, i++};
         }
 
         return result;
     }
 
-    static TUnversionedValue ConvertValue(NScheme::TTypeId type, const TCell& cell, int id, bool useTypeV3, TString& buffer) {
+    bool ConvertValue(NScheme::TTypeInfo type, const TCell& cell, int id, bool useTypeV3, TString& buffer, TUnversionedValue& value) {
+        bool isSuccess = true;
         if (cell.IsNull()) {
-            return MakeUnversionedNullValue(id);
+            value = MakeUnversionedNullValue(id);
+            return isSuccess;
         }
 
-        switch (type) {
+        switch (type.GetTypeId()) {
         case NScheme::NTypeIds::Int32:
-            return MakeUnversionedInt64Value(cell.AsValue<i32>(), id);
+            value = MakeUnversionedInt64Value(cell.AsValue<i32>(), id);
+            break;
         case NScheme::NTypeIds::Uint32:
-            return MakeUnversionedUint64Value(cell.AsValue<ui32>(), id);
+            value = MakeUnversionedUint64Value(cell.AsValue<ui32>(), id);
+            break;
         case NScheme::NTypeIds::Int64:
-            return MakeUnversionedInt64Value(cell.AsValue<i64>(), id);
+            value = MakeUnversionedInt64Value(cell.AsValue<i64>(), id);
+            break;
         case NScheme::NTypeIds::Uint64:
-            return MakeUnversionedUint64Value(cell.AsValue<ui64>(), id);
+            value = MakeUnversionedUint64Value(cell.AsValue<ui64>(), id);
+            break;
         case NScheme::NTypeIds::Uint8:
         //case NScheme::NTypeIds::Byte:
-            return MakeUnversionedUint64Value(cell.AsValue<ui8>(), id);
+            value = MakeUnversionedUint64Value(cell.AsValue<ui8>(), id);
+            break;
         case NScheme::NTypeIds::Int8:
-            return MakeUnversionedInt64Value(cell.AsValue<i8>(), id);
+            value = MakeUnversionedInt64Value(cell.AsValue<i8>(), id);
+            break;
         case NScheme::NTypeIds::Int16:
-            return MakeUnversionedInt64Value(cell.AsValue<i16>(), id);
+            value = MakeUnversionedInt64Value(cell.AsValue<i16>(), id);
+            break;
         case NScheme::NTypeIds::Uint16:
-            return MakeUnversionedUint64Value(cell.AsValue<ui16>(), id);
+            value = MakeUnversionedUint64Value(cell.AsValue<ui16>(), id);
+            break;
         case NScheme::NTypeIds::Bool:
-            return MakeUnversionedBooleanValue(cell.AsValue<bool>(), id);
+            value = MakeUnversionedBooleanValue(cell.AsValue<bool>(), id);
+            break;
         case NScheme::NTypeIds::Double:
-            return MakeUnversionedDoubleValue(cell.AsValue<double>(), id);
+            value = MakeUnversionedDoubleValue(cell.AsValue<double>(), id);
+            break;
         case NScheme::NTypeIds::Float:
-            return MakeUnversionedDoubleValue(cell.AsValue<float>(), id);
+            value = MakeUnversionedDoubleValue(cell.AsValue<float>(), id);
+            break;
+        case NScheme::NTypeIds::Pg: {
+            auto pgResult = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), type.GetTypeDesc());
+            if (pgResult.Error) {
+                ErrorString.swap(*pgResult.Error);
+                isSuccess = false;
+                break;
+            }
+            buffer.swap(pgResult.Str);
+            value = MakeUnversionedStringValue(buffer, id);
+            break;
+        }
         default:
             if (useTypeV3) {
-                switch (type) {
+                switch (type.GetTypeId()) {
                 case NScheme::NTypeIds::Date:
-                    return MakeUnversionedUint64Value(cell.AsValue<ui16>(), id);
+                    value = MakeUnversionedUint64Value(cell.AsValue<ui16>(), id);
+                    break;
                 case NScheme::NTypeIds::Datetime:
-                    return MakeUnversionedUint64Value(cell.AsValue<ui32>(), id);
+                    value = MakeUnversionedUint64Value(cell.AsValue<ui32>(), id);
+                    break;
                 case NScheme::NTypeIds::Timestamp:
-                    return MakeUnversionedUint64Value(cell.AsValue<ui64>(), id);
+                    value = MakeUnversionedUint64Value(cell.AsValue<ui64>(), id);
+                    break;
                 case NScheme::NTypeIds::Interval:
-                    return MakeUnversionedInt64Value(cell.AsValue<i64>(), id);
+                    value = MakeUnversionedInt64Value(cell.AsValue<i64>(), id);
+                    break;
                 case NScheme::NTypeIds::Date32:
-                    return MakeUnversionedInt64Value(cell.AsValue<i32>(), id);
+                    value = MakeUnversionedInt64Value(cell.AsValue<i32>(), id);
+                    break;
                 case NScheme::NTypeIds::Datetime64:
                 case NScheme::NTypeIds::Timestamp64:
                 case NScheme::NTypeIds::Interval64:
-                    return MakeUnversionedInt64Value(cell.AsValue<i64>(), id);
+                    value = MakeUnversionedInt64Value(cell.AsValue<i64>(), id);
+                    break;
                 case NScheme::NTypeIds::Decimal:
                     buffer = NDataShard::DecimalToString(cell.AsValue<std::pair<ui64, i64>>());
-                    return MakeUnversionedStringValue(buffer, id);
+                    value = MakeUnversionedStringValue(buffer, id);
+                    break;
                 case NScheme::NTypeIds::DyNumber:
                     buffer = NDataShard::DyNumberToString(cell.AsBuf());
-                    return MakeUnversionedStringValue(buffer, id);
+                    value = MakeUnversionedStringValue(buffer, id);
+                    break;
                 case NScheme::NTypeIds::Yson:
-                    return MakeUnversionedAnyValue(cell.AsBuf(), id);
+                    value = MakeUnversionedAnyValue(cell.AsBuf(), id);
+                    break;
                 case NScheme::NTypeIds::JsonDocument:
                     buffer = NBinaryJson::SerializeToJson(cell.AsBuf());
-                    return MakeUnversionedStringValue(buffer, id);
+                    value = MakeUnversionedStringValue(buffer, id);
+                    break;
                 default:
-                    return MakeUnversionedStringValue(cell.AsBuf(), id);
+                    value = MakeUnversionedStringValue(cell.AsBuf(), id);
+                    break;
                 }
             } else {
-                return MakeUnversionedStringValue(cell.AsBuf(), id);
+                value = MakeUnversionedStringValue(cell.AsBuf(), id);
+                break;
             }
         }
+        return isSuccess;
     }
 
 public:
@@ -579,7 +620,10 @@ public:
             const auto& cell = (*row)[i];
 
             TString buffer;
-            const auto value = ConvertValue(column.Type, cell, column.Id, UseTypeV3, buffer);
+            TUnversionedValue value;
+            if (!ConvertValue(column.Type, cell, column.Id, UseTypeV3, buffer, value)) {
+                return false;
+            }
 
             rowBuilder.AddValue(value);
             BytesRead += cell.Size();
@@ -613,7 +657,7 @@ public:
     }
 
     TString GetError() const override {
-        Y_ABORT("unreachable");
+        return ErrorString;
     }
 
 private:
@@ -627,6 +671,8 @@ private:
     TVector<TUnversionedOwningRow> Buffer;
     ui64 BytesRead;
     ui64 BytesSent;
+
+    TString ErrorString;
 
 }; // TYtBuffer
 

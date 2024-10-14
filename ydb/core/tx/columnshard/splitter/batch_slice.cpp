@@ -99,6 +99,8 @@ bool TGeneralSerializedSlice::GroupBlobsImpl(const NSplitter::TGroupFeatures& fe
                         chunksInProgress.PopFront(i);
                         hasNoSplitChanges = true;
                     } else {
+                        // in this case chunksInProgress[i] size >= Max - Min for case nextPartSize >= features.GetSplitSettings().GetMaxBlobSize()
+                        // in this case chunksInProgress[i] size >= Max - 2 * Min for case nextOtherSize < features.GetSplitSettings().GetMinBlobSize()
                         Y_ABORT_UNLESS((i64)chunksInProgress[i]->GetPackedSize() > features.GetSplitSettings().GetMinBlobSize() - partSize);
                         Y_ABORT_UNLESS(otherSize - (features.GetSplitSettings().GetMinBlobSize() - partSize) >= features.GetSplitSettings().GetMinBlobSize());
 

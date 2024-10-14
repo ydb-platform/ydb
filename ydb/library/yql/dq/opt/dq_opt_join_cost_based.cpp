@@ -83,7 +83,8 @@ std::shared_ptr<TJoinOptimizerNode> ConvertToJoinTree(
         right =  *it;
     }
 
-    std::set<std::pair<TJoinColumn, TJoinColumn>> joinConds;
+    TVector<TJoinColumn> leftKeys;
+    TVector<TJoinColumn> rightKeys;
 
     size_t joinKeysCount = joinTuple.LeftKeys().Size() / 2;
     for (size_t i = 0; i < joinKeysCount; ++i) {
@@ -91,15 +92,15 @@ std::shared_ptr<TJoinOptimizerNode> ConvertToJoinTree(
 
         auto leftScope = joinTuple.LeftKeys().Item(keyIndex).StringValue();
         auto leftColumn = joinTuple.LeftKeys().Item(keyIndex + 1).StringValue();
+        leftKeys.push_back(TJoinColumn(leftScope, leftColumn));
+
         auto rightScope = joinTuple.RightKeys().Item(keyIndex).StringValue();
         auto rightColumn = joinTuple.RightKeys().Item(keyIndex + 1).StringValue();
-
-        joinConds.insert( std::make_pair( TJoinColumn(leftScope, leftColumn),
-            TJoinColumn(rightScope, rightColumn)));
+        rightKeys.push_back(TJoinColumn(rightScope, rightColumn));
     }
 
     const auto linkSettings = GetEquiJoinLinkSettings(joinTuple.Options().Ref());
-    return std::make_shared<TJoinOptimizerNode>(left, right, joinConds, ConvertToJoinKind(joinTuple.Type().StringValue()), EJoinAlgoType::Undefined,
+    return std::make_shared<TJoinOptimizerNode>(left, right, leftKeys, rightKeys, ConvertToJoinKind(joinTuple.Type().StringValue()), EJoinAlgoType::Undefined,
         linkSettings.LeftHints.contains("any"), linkSettings.RightHints.contains("any"));
 }
 
@@ -139,11 +140,13 @@ TExprBase BuildTree(TExprContext& ctx, const TCoEquiJoin& equiJoin,
     TVector<TExprBase> rightJoinColumns;
 
     // Build join conditions
-    for( auto pair : reorderResult->JoinConditions) {
-        leftJoinColumns.push_back(BuildAtom(pair.first.RelName, equiJoin.Pos(), ctx));
-        leftJoinColumns.push_back(BuildAtom(pair.first.AttributeName, equiJoin.Pos(), ctx));
-        rightJoinColumns.push_back(BuildAtom(pair.second.RelName, equiJoin.Pos(), ctx));
-        rightJoinColumns.push_back(BuildAtom(pair.second.AttributeName, equiJoin.Pos(), ctx));
+    for( auto leftKey : reorderResult->LeftJoinKeys) {
+        leftJoinColumns.push_back(BuildAtom(leftKey.RelName, equiJoin.Pos(), ctx));
+        leftJoinColumns.push_back(BuildAtom(leftKey.AttributeNameWithAliases, equiJoin.Pos(), ctx));
+    }
+    for( auto rightKey : reorderResult->RightJoinKeys) {
+        rightJoinColumns.push_back(BuildAtom(rightKey.RelName, equiJoin.Pos(), ctx));
+        rightJoinColumns.push_back(BuildAtom(rightKey.AttributeNameWithAliases, equiJoin.Pos(), ctx));
     }
 
     TExprNode::TListType options(1U,

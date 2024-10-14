@@ -91,6 +91,7 @@ namespace NActors {
             ELogFormat Format;
             TString ShortHostName;
             TString ClusterName;
+            TString TenantName;
             TString MessagePrefix;
 
             // The best way to provide minVal, maxVal and func is to have

@@ -494,6 +494,8 @@ namespace NActors {
                     .WriteString(Settings->ClusterName)
                     .WriteKey("priority")
                     .WriteString(PriorityToString(priority))
+                    .WriteKey("tenant")
+                    .WriteString(Settings->TenantName ? Settings->TenantName : "static")
                     .WriteKey("npriority")
                     .WriteInt((int)priority)
                     .WriteKey("component")

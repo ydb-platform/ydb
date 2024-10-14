@@ -10,7 +10,7 @@ namespace NKikimr::NColumnShard {
 
 TEngineLogsCounters::TEngineLogsCounters()
     : TBase("EngineLogs")
-    , GranuleDataAgent("EngineLogs")
+    , GranuleDataAgent(*this)
 {
     const std::map<i64, TString> borders = {{0, "0"}, {512 * 1024, "512kb"}, {1024 * 1024, "1Mb"},
         {2 * 1024 * 1024, "2Mb"}, {4 * 1024 * 1024, "4Mb"},

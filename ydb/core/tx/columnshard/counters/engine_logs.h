@@ -1,6 +1,7 @@
 #pragma once
 #include "common/owner.h"
 #include "common/histogram.h"
+#include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/string/builder.h>
@@ -73,8 +74,8 @@ private:
     std::shared_ptr<TValueAggregationAgent> PortionsSize;
     std::shared_ptr<TValueAggregationAgent> PortionsCount;
 public:
-    TAgentDataClassCounters(const TString& baseName, const TString& signalId)
-        : TBase(baseName)
+    TAgentDataClassCounters(const TCommonCountersOwner& base, const TString& signalId)
+        : TBase(base)
     {
         PortionsSize = TBase::GetValueAutoAggregations(signalId + "/Bytes");
         PortionsCount = TBase::GetValueAutoAggregations(signalId + "/Chunks");
@@ -105,11 +106,49 @@ public:
     }
 };
 
+class TTiersDataCounters {
+public:
+    class IClientRegistrator {
+    public:
+        virtual TDataClassCounters RegisterClient(const std::optional<TString>& tier) = 0;
+        virtual ~IClientRegistrator() = default;
+    };
+
+private:
+    std::shared_ptr<IClientRegistrator> ClientRegistrator;
+    mutable std::map<std::optional<TString>, TDataClassCounters> Tiers;
+
+private:
+    TDataClassCounters& GetCounter(const std::optional<TString>& tier) const {
+        if (auto findCounter = Tiers.find(tier); findCounter != Tiers.end()) {
+            return findCounter->second;
+        }
+        return Tiers.emplace(tier, ClientRegistrator->RegisterClient(tier)).first->second;
+    }
+
+public:
+    TTiersDataCounters(const std::shared_ptr<IClientRegistrator>& registrator)
+        : ClientRegistrator(registrator) {
+    }
+
+    void OnPortionsInfo(const std::map<std::optional<TString>, TBaseGranuleDataClassSummary>& dataInfo) const {
+        for (const auto& [tier, info] : dataInfo) {
+            GetCounter(tier).OnPortionsInfo(info);
+        }
+        for (const auto& [tier, info] : Tiers) {
+            if (!dataInfo.contains(tier)) {
+                info.OnPortionsInfo({});
+            }
+        }
+    }
+};
+
 class TGranuleDataCounters {
 private:
     const TDataClassCounters InsertedData;
     const TDataClassCounters CompactedData;
     const TDataClassCounters FullData;
+    const TTiersDataCounters DataByTier;
     const TPortionsIndexCounters PortionsIndexCounters;
 
 public:
@@ -118,17 +157,20 @@ public:
     }
 
     TGranuleDataCounters(const TDataClassCounters& insertedData, const TDataClassCounters& compactedData, const TDataClassCounters& fullData,
-        TPortionsIndexCounters&& portionsIndexCounters)
+        const TTiersDataCounters& dataByTier, TPortionsIndexCounters&& portionsIndexCounters)
         : InsertedData(insertedData)
         , CompactedData(compactedData)
         , FullData(fullData)
+        , DataByTier(dataByTier)
         , PortionsIndexCounters(std::move(portionsIndexCounters)) {
     }
 
-    void OnPortionsDataRefresh(const TBaseGranuleDataClassSummary& inserted, const TBaseGranuleDataClassSummary& compacted) const {
+    void OnPortionsDataRefresh(const TBaseGranuleDataClassSummary& inserted, const TBaseGranuleDataClassSummary& compacted,
+        const std::map<std::optional<TString>, TBaseGranuleDataClassSummary>& byTier) const {
         FullData.OnPortionsInfo(inserted + compacted);
         InsertedData.OnPortionsInfo(inserted);
         CompactedData.OnPortionsInfo(compacted);
+        DataByTier.OnPortionsInfo(byTier);
     }
 };
 
@@ -167,25 +209,56 @@ public:
     }
 };
 
+class TTiersDataAgentsCounters: public TCommonCountersOwner,
+                                public TTiersDataCounters::IClientRegistrator {
+private:
+    using TBase = TCommonCountersOwner;
+    static const inline TString DefaultStorageId = NOlap::NBlobOperations::TGlobal::DefaultStorageId;
+    std::map<std::optional<TString>, TAgentDataClassCounters> AgentsByTier;
+
+private:
+    TAgentDataClassCounters& GetAgent(const std::optional<TString>& tier) {
+        if (auto findAgent = AgentsByTier.find(tier); findAgent != AgentsByTier.end()) {
+            return findAgent->second;
+        }
+        TAgentDataClassCounters agent(TBase::CreateSubGroup("tier", tier.value_or(DefaultStorageId)), "Full");
+        return AgentsByTier.emplace(tier, std::move(agent)).first->second;
+    }
+
+public:
+    TTiersDataAgentsCounters(const TCommonCountersOwner& base, const TString& signalId)
+        : TBase(base, signalId) {
+    }
+
+    TDataClassCounters RegisterClient(const std::optional<TString>& tier) override {
+        return GetAgent(tier).RegisterClient();
+    }
+
+    static TTiersDataCounters BuildCounters(const std::shared_ptr<TTiersDataAgentsCounters>& self) {
+        return TTiersDataCounters(self);
+    }
+};
+
 class TAgentGranuleDataCounters {
 private:
     TAgentDataClassCounters InsertedData;
     TAgentDataClassCounters CompactedData;
     TAgentDataClassCounters FullData;
     TPortionsIndexAgentsCounters PortionsIndex;
+    std::shared_ptr<TTiersDataAgentsCounters> DataByTier;
 
 public:
-    TAgentGranuleDataCounters(const TString& ownerId)
-        : InsertedData(ownerId, "ByGranule/Inserted")
-        , CompactedData(ownerId, "ByGranule/Compacted")
-        , FullData(ownerId, "ByGranule/Full")
+    TAgentGranuleDataCounters(const TCommonCountersOwner& base)
+        : InsertedData(base, "ByGranule/Inserted")
+        , CompactedData(base, "ByGranule/Compacted")
+        , FullData(base, "ByGranule/Full")
         , PortionsIndex("ByGranule/PortionsIndex")
-    {
+        , DataByTier(std::make_shared<TTiersDataAgentsCounters>(base, "ByGranule/Tier")) {
     }
 
     TGranuleDataCounters RegisterClient() const {
-        return TGranuleDataCounters(
-            InsertedData.RegisterClient(), CompactedData.RegisterClient(), FullData.RegisterClient(), PortionsIndex.BuildCounters());
+        return TGranuleDataCounters(InsertedData.RegisterClient(), CompactedData.RegisterClient(), FullData.RegisterClient(),
+            DataByTier->BuildCounters(DataByTier), PortionsIndex.BuildCounters());
     }
 };
 

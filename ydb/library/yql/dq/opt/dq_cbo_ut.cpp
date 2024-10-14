@@ -118,7 +118,7 @@ Y_UNIT_TEST(JoinSearch3Rels) {
     res->Print(ss);
     Cout << ss.str() << '\n';
 
-    TString expected = R"__(Join: (InnerJoin,MapJoin,LeftAny) a.1=b.1,a.1=c.1,
+    TString expected = R"__(Join: (InnerJoin,MapJoin,LeftAny) a.1=b.1,
 Type: ManyManyJoin, Nrows: 4e+13, Ncols: 3, ByteSize: 0, Cost: 4.004e+13, Sel: 1, Storage: NA
     Join: (InnerJoin,MapJoin) b.1=a.1,
     Type: ManyManyJoin, Nrows: 2e+10, Ncols: 2, ByteSize: 0, Cost: 2.00112e+10, Sel: 1, Storage: NA

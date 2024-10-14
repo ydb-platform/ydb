@@ -21,7 +21,6 @@ void MarkSrcDropped(NIceDb::TNiceDb& db,
     Y_ABORT_UNLESS(txState.PlanStep);
     srcPath->SetDropped(txState.PlanStep, operationId.GetTxId());
     context.SS->PersistDropStep(db, srcPath->PathId, txState.PlanStep, operationId);
-    context.SS->PersistSequenceRemove(db, srcPath->PathId);
 
     srcPath.Parent()->DecAliveChildren();
     srcPath.DomainInfo()->DecPathsInside();
@@ -44,7 +43,7 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), {
-            TEvHive::TEvCreateTabletReply::EventType,
+            TEvHive::TEvCreateTabletReply::EventType
         });
     }
 
@@ -98,7 +97,6 @@ public:
         if (txState->ShardsInProgress.empty()) {
             NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
-            context.OnComplete.ActivateTx(OperationId);
             return true;
         }
 
@@ -162,7 +160,7 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), {
-            NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::EventType,
+            TEvHive::TEvCreateTabletReply::EventType, NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::EventType
         });
     }
 
@@ -248,19 +246,7 @@ public:
     TWaitRenamedPathPublication(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType, TEvPrivate::TEvOperationPlan::EventType});
-    }
-
-    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvDataShard::TEvSchemaChanged"
-                               << ", save it"
-                               << ", at schemeshard: " << ssId);
-
-        NTableState::CollectSchemaChanged(OperationId, ev, context);
-        return false;
+        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::EventType, TEvPrivate::TEvOperationPlan::EventType});
     }
 
     bool HandleReply(TEvPrivate::TEvCompletePublication::TPtr& ev, TOperationContext& context) override {
@@ -329,8 +315,8 @@ public:
     TDeleteTableBarrier(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvPrivate::TEvOperationPlan::EventType,
-            NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::EventType,});
+        IgnoreMessages(DebugHint(), {TEvPrivate::TEvCompletePublication::EventType,
+            TEvHive::TEvCreateTabletReply::EventType, NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::EventType, TEvPrivate::TEvOperationPlan::EventType});
     }
 
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
@@ -345,6 +331,9 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
+
+        TPath srcPath = TPath::Init(txState->SourcePathId, context.SS);
+        MarkSrcDropped(db, context, OperationId, *txState, srcPath);
 
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedMoveSequence);
         return true;
@@ -396,7 +385,9 @@ public:
         IgnoreMessages(DebugHint(), {
             TEvPrivate::TEvOperationPlan::EventType,
             TEvPrivate::TEvCompleteBarrier::EventType,
+            TEvPrivate::TEvCompletePublication::EventType,
             NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::EventType,
+            TEvHive::TEvCreateTabletReply::EventType
         });
     }
     bool HandleReply(NSequenceShard::TEvSequenceShard::TEvRestoreSequenceResult::TPtr& ev, TOperationContext& context) override {
@@ -451,7 +442,6 @@ public:
         context.SS->PersistSequence(db, pathId, *sequenceInfo);
 
         context.SS->ChangeTxState(db, OperationId, TTxState::DropParts);
-        context.OnComplete.ActivateTx(OperationId);
         return true;
     }
     bool HandleReply(NSequenceShard::TEvSequenceShard::TEvGetSequenceResult::TPtr& ev, TOperationContext& context) override {
@@ -563,7 +553,9 @@ public:
         IgnoreMessages(DebugHint(), {
             TEvPrivate::TEvOperationPlan::EventType,
             TEvPrivate::TEvCompleteBarrier::EventType,
+            TEvPrivate::TEvCompletePublication::EventType,
             NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::EventType,
+            TEvHive::TEvCreateTabletReply::EventType,
             NSequenceShard::TEvSequenceShard::TEvRestoreSequenceResult::EventType,
             NSequenceShard::TEvSequenceShard::TEvGetSequenceResult::EventType
         });
@@ -618,13 +610,10 @@ public:
 
         if (txState->ShardsInProgress.empty()) {
             NIceDb::TNiceDb db(context.GetDB());
-            TPath srcPath = TPath::Init(txState->SourcePathId, context.SS);
 
-            MarkSrcDropped(db, context, OperationId, *txState, srcPath);
+            context.SS->PersistSequenceRemove(db, txState->SourcePathId);
 
             context.SS->ChangeTxState(db, OperationId, TTxState::Done);
-            context.OnComplete.ActivateTx(OperationId);
-
             return true;
         }
 
@@ -707,8 +696,6 @@ public:
 
         // clear resources on src
         NIceDb::TNiceDb db(context.GetDB());
-        TPathElement::TPtr srcPath = context.SS->PathsById.at(txState->SourcePathId);
-        context.OnComplete.ReleasePathState(OperationId, srcPath->PathId, TPathElement::EPathState::EPathStateNotExist);
 
         TPathElement::TPtr dstPath = context.SS->PathsById.at(txState->TargetPathId);
         context.OnComplete.ReleasePathState(OperationId, dstPath->PathId, TPathElement::EPathState::EPathStateNoChanges);

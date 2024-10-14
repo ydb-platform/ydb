@@ -4,6 +4,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
+#include <library/cpp/testing/unittest/gtest.h>
 
 #include <thread>
 
@@ -50,7 +52,8 @@ struct TFixture : public TPqIoTestFixture {
                 LocalRowDispatcherId,
                 actor.GetHolderFactory(),
                 MakeIntrusive<NMonitoring::TDynamicCounters>(),
-                freeSpace);
+                freeSpace
+                );
 
             actor.InitAsyncInput(dqSource, dqSourceAsActor);
         });
@@ -191,8 +194,8 @@ struct TFixture : public TPqIoTestFixture {
     }
 
 
-    void StartSession() {
-        InitRdSource(BuildPqTopicSourceSettings("topicName"));
+    void StartSession(i64 freeSpace = 1_MB) {
+        InitRdSource(BuildPqTopicSourceSettings("topicName"), freeSpace);
         SourceRead<TString>(UVParser);
         ExpectCoordinatorChangesSubscribe();
     
@@ -339,6 +342,30 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         MockAck(RowDispatcher2);
 
         ProcessSomeJsons(3, {Json4}, RowDispatcher2);
+    }
+
+    Y_UNIT_TEST_F(Backpressure, TFixture) {
+        StartSession(2_KB);
+
+        TString json(900, 'c');
+        ProcessSomeJsons(0, {json}, RowDispatcher1);
+
+        MockNewDataArrived(RowDispatcher1);
+        ExpectGetNextBatch(RowDispatcher1);
+        MockMessageBatch(0, {json, json, json}, RowDispatcher1);
+
+        MockNewDataArrived(RowDispatcher1);
+        ASSERT_THROW(
+            CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvGetNextBatch>(RowDispatcher1, TDuration::Seconds(0)),
+            NActors::TEmptyEventQueueException);
+
+        auto result = SourceReadDataUntil<TString>(UVParser, 3);
+        AssertDataWithWatermarks(result, {json, json, json}, {});
+        ExpectGetNextBatch(RowDispatcher1);
+
+        MockMessageBatch(3, {Json1}, RowDispatcher1);
+        result = SourceReadDataUntil<TString>(UVParser, 1);
+        AssertDataWithWatermarks(result, {Json1}, {});
     }
 
     Y_UNIT_TEST_F(RowDispatcherIsRestarted, TFixture) {

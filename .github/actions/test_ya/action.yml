@@ -148,9 +148,9 @@ runs:
         # specify mime type for correct content-type in s3cmd sync 
         # we want to .out/.err files treat as text
         MIME_TYPES_LINE="text/plain                                      out err log"
-        MIME_TYPES_LINE='/etc/mime.types'
+        MIME_TYPES_FILE='/etc/mime.types'
         # add if not exists
-        sudo 'grep -qF -- "$MIME_TYPES_LINE" "$MIME_TYPES_LINE" || echo "$MIME_TYPES_LINE" >> "$MIME_TYPES_LINE"'
+        sudo bash -c "grep -qF -- '$MIME_TYPES_LINE' '$MIME_TYPES_FILE' || echo '$MIME_TYPES_LINE' >> '$MIME_TYPES_FILE'"
 
     - name: Setup cache
       shell: bash

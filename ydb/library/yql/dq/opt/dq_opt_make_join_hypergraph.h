@@ -68,6 +68,10 @@ typename TJoinHypergraph<TNodeSet>::TEdge MakeHyperedge(
     return typename TJoinHypergraph<TNodeSet>::TEdge(left, right, joinNode->JoinType, joinNode->LeftAny, joinNode->RightAny, isCommutative, leftJoinKeys, rightJoinKeys);
 }
 
+/* 
+ * In this routine we decompose AND condition for equijoin into many edges, instead of one hyperedge.
+ * We group conditions with same relations into one (for example A.id = B.id, A.z = B.z).
+ */
 template<typename TNodeSet>
 void AddCycle(
     TJoinHypergraph<TNodeSet>& graph,

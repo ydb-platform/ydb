@@ -36,13 +36,13 @@ std::shared_ptr<IBaseOptimizerNode> CreateChain(size_t size, TString onAttribute
 }
 
 template <typename TProviderContext = TBaseProviderContext>
-std::shared_ptr<IBaseOptimizerNode> Enumerate(const std::shared_ptr<IBaseOptimizerNode>& root) {
+std::shared_ptr<IBaseOptimizerNode> Enumerate(const std::shared_ptr<IBaseOptimizerNode>& root, const TOptimizerHints& hints = {}) {
     auto ctx = TProviderContext();
     auto optimizer = 
         std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(ctx, std::numeric_limits<ui32>::max()));
     
     Y_ENSURE(root->Kind == EOptimizerNodeKind::JoinNodeType);
-    auto res = optimizer->JoinSearch(std::static_pointer_cast<TJoinOptimizerNode>(root));
+    auto res = optimizer->JoinSearch(std::static_pointer_cast<TJoinOptimizerNode>(root), hints);
     Cout << "Optimized Tree:" << Endl;
     std::stringstream ss; res->Print(ss);
     Cout << ss.str() << Endl;
@@ -73,6 +73,13 @@ bool HaveSameConditions(const std::shared_ptr<IBaseOptimizerNode>& actual, std::
     return 
         std::unordered_set<TJoinColumn, TJoinColumn::THashFunction>(actualConds.begin(), actualConds.end()) == 
         std::unordered_set<TJoinColumn, TJoinColumn::THashFunction>(expectedConds.begin(), expectedConds.end());
+}
+
+bool HasSameConditionCount(const std::shared_ptr<IBaseOptimizerNode>& actual, std::shared_ptr<IBaseOptimizerNode> expected) {
+    auto actualConds = CollectConditions(actual);
+    auto expectedConds = CollectConditions(expected);
+    
+    return actualConds.size() == expectedConds.size();
 }
 
 Y_UNIT_TEST_SUITE(HypergraphBuild) {
@@ -368,8 +375,12 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
             UNIT_ASSERT(e.IsSimple());
         }
 
+        auto A = graph.GetNodesByRelNames({"A"});
+        auto C = graph.GetNodesByRelNames({"C"});
+        UNIT_ASSERT(graph.FindEdgeBetween(A, C));
+
         auto optimizedJoin = Enumerate(join);
-        UNIT_ASSERT(HaveSameConditions(optimizedJoin, join));
+        UNIT_ASSERT(HasSameConditionCount(optimizedJoin, join));
     }
 
     Y_UNIT_TEST(CondsThatMayCauseATransitiveClosureButTheyMustNot) {
@@ -394,8 +405,12 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
             UNIT_ASSERT(e.IsSimple());
         }
 
-        auto optimizedJoin = Enumerate(join);
-        UNIT_ASSERT(HaveSameConditions(optimizedJoin, join));
+        auto B = graph.GetNodesByRelNames({"B"});
+        auto C = graph.GetNodesByRelNames({"C"});
+        UNIT_ASSERT(graph.FindEdgeBetween(B, C));
+
+        auto optimizedJoin = Enumerate(join, TOptimizerHints::Parse("Rows(B C # 0)"));
+        UNIT_ASSERT(HasSameConditionCount(optimizedJoin, join));
     }
 
     auto MakeClique(size_t size) {

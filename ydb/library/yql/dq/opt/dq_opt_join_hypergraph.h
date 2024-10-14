@@ -18,29 +18,6 @@
 
 namespace NYql::NDq {
 
-class TJoinColumnEquivalenceClasses {
-public:
-    TJoinColumnEquivalenceClasses() = default;
-
-    TJoinColumnEquivalenceClasses(
-        THashMap<TJoinColumn, size_t, TJoinColumn::THashFunction> idByJoinCond,
-        TDisjointSets connectedComponents
-    )
-        : IdByJoinCond(std::move(idByJoinCond))
-        , ConnectedComponents(std::move(connectedComponents)) 
-    {}
-
-    bool IsOneClass(const TJoinColumn& lhs, const TJoinColumn& rhs) {
-        return 
-            ConnectedComponents->CanonicSetElement(IdByJoinCond[lhs]) == 
-            ConnectedComponents->CanonicSetElement(IdByJoinCond[rhs]);
-    }
-
-private:
-    THashMap<TJoinColumn, size_t, TJoinColumn::THashFunction> IdByJoinCond;
-    std::optional<TDisjointSets> ConnectedComponents;
-};
-
 /* 
  * JoinHypergraph - a graph, whose edge connects two sets of nodes.
  * It represents relation between tables and ordering constraints.
@@ -245,7 +222,7 @@ public:
         return Nodes_;
     }
 
-    inline const TVector<TEdge>& GetEdges() const {
+    inline TVector<TEdge>& GetEdges() {
         return Edges_;
     }
 
@@ -283,11 +260,16 @@ public:
                 !Overlaps(edge.Right, lhs)
             ) {
                 for (const auto& [lhsEdgeCond, rhsEdgeCond]: Zip(edge.LeftJoinKeys, edge.RightJoinKeys)) {
+                    bool hasSameEquivClass = false;
                     for (const auto& lhsResJoinKey: resLeftJoinKeys) {
-                        if (!JoinColumnEquivalenceSet.IsOneClass(lhsEdgeCond, lhsResJoinKey)) {
-                            resLeftJoinKeys.push_back(lhsEdgeCond);
-                            resRightJoinKeys.push_back(rhsEdgeCond);
+                        if (lhsEdgeCond.EquivalenceClass.has_value() && lhsEdgeCond.EquivalenceClass == lhsResJoinKey.EquivalenceClass) {
+                            hasSameEquivClass = true; break; 
                         }
+                    }
+                    
+                    if (!hasSameEquivClass) {
+                        resLeftJoinKeys.push_back(lhsEdgeCond);
+                        resRightJoinKeys.push_back(rhsEdgeCond);
                     }
                 }
 
@@ -342,7 +324,6 @@ private:
 
 public:
     bool HasCycles = false;
-    TJoinColumnEquivalenceClasses JoinColumnEquivalenceSet;
 private:
     THashMap<TString, size_t> NodeIdByRelationName_;
 
@@ -471,11 +452,21 @@ public:
 
 private:
     void ConstructImpl(const TVector<THyperedge>& edges) {
+        /* 
+         * How many join conditions have an edge with given TJoinColumn 
+         * When we will create an edge for JoinColumn with > 1 conditions, we may 
+         * lose an edge during DPHyp and lose a condition, so we must turn on ProcessCycle 
+         * mode for DPHyp.
+         */
+        THashMap<TJoinColumn, size_t, TJoinColumn::THashFunction> edgeConditionCountByJoinCond; 
+
         std::vector<TJoinColumn> joinCondById;
         for (const auto& edge: edges) {
             for (const auto& [lhs, rhs]: Zip(edge.LeftJoinKeys, edge.RightJoinKeys)) {
                 joinCondById.push_back(lhs);
+                edgeConditionCountByJoinCond[lhs] = std::max(edgeConditionCountByJoinCond[lhs], edge.LeftJoinKeys.size());
                 joinCondById.push_back(rhs);
+                edgeConditionCountByJoinCond[rhs] = std::max(edgeConditionCountByJoinCond[rhs], edge.RightJoinKeys.size());
             }
         }
         std::sort(joinCondById.begin(), joinCondById.end());
@@ -493,11 +484,27 @@ private:
             }
         }
 
+        for (auto& edge: Graph_.GetEdges()) {
+            for (auto& lhs : edge.LeftJoinKeys) {
+                if (idByJoinCond.contains(lhs)) {
+                    lhs.EquivalenceClass = connectedComponents.CanonicSetElement(idByJoinCond[lhs]);
+                }
+            }
+
+            for (auto& rhs : edge.RightJoinKeys) {
+                if (idByJoinCond.contains(rhs)) {
+                    rhs.EquivalenceClass = connectedComponents.CanonicSetElement(idByJoinCond[rhs]);
+                }
+            }
+        }
+
+        for (size_t i = 0; i < joinCondById.size(); ++i) {
+            joinCondById[i].EquivalenceClass = connectedComponents.CanonicSetElement(i);
+        }
+
         for (size_t i = 0; i < joinCondById.size(); ++i) {
             for (size_t j = 0; j < i; ++j) {
-                auto iGroup = connectedComponents.CanonicSetElement(i);
-                auto jGroup = connectedComponents.CanonicSetElement(j);
-                if (iGroup == jGroup && joinCondById[i].RelName != joinCondById[j].RelName) {
+                if (joinCondById[i].EquivalenceClass == joinCondById[j].EquivalenceClass && joinCondById[i].RelName != joinCondById[j].RelName) {
                     auto iNode = Graph_.GetNodesByRelNames({joinCondById[i].RelName});
                     auto jNode = Graph_.GetNodesByRelNames({joinCondById[j].RelName});
 
@@ -505,12 +512,14 @@ private:
                         continue; 
                     }
 
+                    if (edgeConditionCountByJoinCond[joinCondById[i]] > 1 || edgeConditionCountByJoinCond[joinCondById[j]] > 1) {
+                        Graph_.HasCycles = true;
+                    }
+
                     Graph_.AddEdge(THyperedge(iNode, jNode, InnerJoin, false, false, true, {joinCondById[i]}, {joinCondById[j]}));
                 }
             }
         }
-
-        Graph_.JoinColumnEquivalenceSet = TJoinColumnEquivalenceClasses(std::move(idByJoinCond), std::move(connectedComponents));
     }
 
 private:

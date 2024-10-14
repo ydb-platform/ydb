@@ -2,7 +2,6 @@
 
 #include "column_engine.h"
 #include "defs.h"
-=======
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>

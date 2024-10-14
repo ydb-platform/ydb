@@ -321,9 +321,9 @@ namespace {
             else if (option.IsAtom("forceSortedMerge") || option.IsAtom("forceStreamLookup")) {
                 if (option.IsAtom("forceStreamLookup")) { // FIXME RESOLVE BEFORE MERGE
                 } else {
-                if (!EnsureTupleSize(*child, 1, ctx)) {
-                    return IGraphTransformer::TStatus::Error;
-                }
+                    if (!EnsureTupleSize(*child, 1, ctx)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
                 }
                 if (hasJoinStrategyHint) {
                     ctx.AddError(TIssue(ctx.GetPosition(option.Pos()), TStringBuilder() <<

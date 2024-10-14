@@ -517,12 +517,12 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
                 }
             }
         } else {
-        for (auto i = 0U; i < input->Tail().ChildrenSize(); ++i) {
-            if (const auto& flag = *input->Tail().Child(i); !flag.IsAtom({"LeftAny", "RightAny"})) {
-                ctx.AddError(TIssue(ctx.GetPosition(flag.Pos()), TStringBuilder() << "Unsupported DQ join option: " << flag.Content()));
-                return nullptr;
+            for (auto i = 0U; i < input->Tail().ChildrenSize(); ++i) {
+                if (const auto& flag = *input->Tail().Child(i); !flag.IsAtom({"LeftAny", "RightAny"})) {
+                    ctx.AddError(TIssue(ctx.GetPosition(flag.Pos()), TStringBuilder() << "Unsupported DQ join option: " << flag.Content()));
+                    return nullptr;
+                }
             }
-        }
         }
     }
 

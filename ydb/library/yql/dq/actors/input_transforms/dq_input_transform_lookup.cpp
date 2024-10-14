@@ -68,11 +68,6 @@ public:
         , CacheTtl(cacheTtl)
         , ReadyQueue(OutputRowType)
     {
-        Cerr << "StreamLookup"
-            << " cacheTtl=" << cacheTtl.count()
-            << " maxDelay=" << maxDelay
-            << " cacheLimit=" << cacheLimit
-            << Endl;
         Y_ABORT_UNLESS(Alloc);
         for (size_t i = 0; i != LookupInputIndexes.size(); ++i) {
             Y_DEBUG_ABORT_UNLESS(LookupInputIndexes[i] < InputRowType->GetElementsCount());

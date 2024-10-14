@@ -4393,7 +4393,7 @@ void TDataShard::ScanComplete(NTable::EAbort,
 
         noTxScan->OnFinished(this);
         prod.Destroy();
-    } else {
+    } else if (cookie != 0 && cookie != Max<ui64>()) {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                     "FullScan complete at " << TabletID());
 

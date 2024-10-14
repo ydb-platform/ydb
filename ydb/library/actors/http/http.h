@@ -198,7 +198,7 @@ public:
 };
 
 template <typename HeaderType, typename BufferType>
-class THttpBase : public virtual HeaderType, public virtual BufferType {
+class THttpBase : public HeaderType, public BufferType {
 public:
     TStringBuf GetRawData() const {
         return TStringBuf(BufferType::Data(), BufferType::Size());
@@ -285,8 +285,7 @@ public:
     std::optional<size_t> TotalSize;
 
     THttpParser(const THttpParser& src)
-        : HeaderType(src)
-        , BufferType(src)
+        : THttpBase<HeaderType, BufferType>(src)
         , Stage(src.Stage)
         , LastSuccessStage(src.LastSuccessStage)
         , Line()

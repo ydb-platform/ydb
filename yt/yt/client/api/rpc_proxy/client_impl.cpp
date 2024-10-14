@@ -8,6 +8,7 @@
 #include "timestamp_provider.h"
 #include "transaction.h"
 
+#include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/helpers.h>
 #include <yt/yt/client/api/rowset.h>
 #include <yt/yt/client/api/transaction.h>
@@ -752,12 +753,14 @@ TFuture<void> TClient::AlterReplicationCard(
     return req->Invoke().As<void>();
 }
 
-TFuture<ITableWriterPtr> TClient::CreateParticipantTableWriter(
-    const TDistributedWriteCookiePtr& cookie,
-    const TParticipantTableWriterOptions& options)
+TFuture<ITableWriterPtr> TClient::CreateFragmentTableWriter(
+    const TFragmentWriteCookiePtr& cookie,
+    const TFragmentTableWriterOptions& options)
 {
+    using TRspPtr = TIntrusivePtr<NRpc::TTypedClientResponse<NProto::TRspWriteTableFragment>>;
+
     auto proxy = CreateApiServiceProxy();
-    auto req = proxy.ParticipantWriteTable();
+    auto req = proxy.WriteTableFragment();
     InitStreamingRequest(*req);
 
     FillRequest(req.Get(), cookie, options);
@@ -768,12 +771,15 @@ TFuture<ITableWriterPtr> TClient::CreateParticipantTableWriter(
         BIND ([=] (const TSharedRef& metaRef) {
             NApi::NRpcProxy::NProto::TWriteTableMeta meta;
             if (!TryDeserializeProto(&meta, metaRef)) {
-                THROW_ERROR_EXCEPTION("Failed to deserialize schema for participant table writer");
+                THROW_ERROR_EXCEPTION("Failed to deserialize schema for fragment table writer");
             }
 
             FromProto(schema.Get(), meta.schema());
+        }),
+        BIND([=] (TRspPtr&& rsp) mutable {
+            Deserialize(*cookie, ConvertToNode(TYsonString(rsp->cookie())));
         }))
-        .Apply(BIND([=] (IAsyncZeroCopyOutputStreamPtr outputStream) {
+        .ApplyUnique(BIND([=] (IAsyncZeroCopyOutputStreamPtr&& outputStream) {
             return NRpcProxy::CreateTableWriter(std::move(outputStream), std::move(schema));
         })).As<ITableWriterPtr>();
 }

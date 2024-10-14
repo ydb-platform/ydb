@@ -856,9 +856,9 @@ public:
         const TDistributedWriteSessionFinishOptions& options),
         (std::move(session), options))
 
-    DELEGATE_METHOD(TFuture<ITableWriterPtr>, CreateParticipantTableWriter, (
-        const TDistributedWriteCookiePtr& cookie,
-        const TParticipantTableWriterOptions& options),
+    DELEGATE_METHOD(TFuture<ITableWriterPtr>, CreateFragmentTableWriter, (
+        const TFragmentWriteCookiePtr& cookie,
+        const TFragmentTableWriterOptions& options),
         (cookie, options))
 
     // Shuffle Service

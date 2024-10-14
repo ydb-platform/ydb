@@ -30,6 +30,10 @@ void ToProto(
     NProto::TTransactionalOptions* proto,
     const NApi::TTransactionalOptions& options);
 
+void FromProto(
+    NApi::TTransactionalOptions* options,
+    const NProto::TTransactionalOptions& proto);
+
 void ToProto(
     NProto::TPrerequisiteOptions* proto,
     const NApi::TPrerequisiteOptions& options);
@@ -287,17 +291,10 @@ void FillRequest(
     const NYPath::TRichYPath& path,
     const TDistributedWriteSessionStartOptions& options);
 
-void FromProto(
+void ParseRequest(
+    NYPath::TRichYPath* mutablePath,
     TDistributedWriteSessionStartOptions* mutableOptions,
     const TReqStartDistributedWriteSession& req);
-
-void FromProto(
-    TDistributedWriteSession* mutableSession,
-    TRspStartDistributedWriteSession&& rsp);
-
-void ToProto(
-    TRspStartDistributedWriteSession* rsp,
-    const TDistributedWriteSessionPtr& session);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -306,32 +303,22 @@ void FillRequest(
     TDistributedWriteSessionPtr session,
     const TDistributedWriteSessionFinishOptions& options);
 
-void FromProto(
+void ParseRequest(
+    TDistributedWriteSessionPtr* mutableSession,
     TDistributedWriteSessionFinishOptions* mutableOptions,
-    const TReqFinishDistributedWriteSession& req);
-
-void FromProto(
-    TDistributedWriteSession* mutableSession,
     const TReqFinishDistributedWriteSession& req);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void FillRequest(
-    TReqParticipantWriteTable* req,
-    const TDistributedWriteCookiePtr& cookie,
-    const TParticipantTableWriterOptions& options);
+    TReqWriteTableFragment* req,
+    const TFragmentWriteCookiePtr& cookie,
+    const TFragmentTableWriterOptions& options);
 
-void FromProto(
-    TParticipantTableWriterOptions* mutableOptions,
-    const TReqParticipantWriteTable& req);
-
-void FromProto(
-    TDistributedWriteCookie* cookie,
-    const TReqParticipantWriteTable& req);
-
-void ToProto(
-    TRspParticipantWriteTable* rsp,
-    const TDistributedWriteCookiePtr& cookie);
+void ParseRequest(
+    TFragmentWriteCookiePtr* mutableCookie,
+    TFragmentTableWriterOptions* mutableOptions,
+    const TReqWriteTableFragment& req);
 
 } // namespace NProto
 

@@ -130,9 +130,9 @@ public:
         const TAlterReplicationCardOptions& options = {}) override;
 
     // Distributed table client
-    TFuture<ITableWriterPtr> CreateParticipantTableWriter(
-        const TDistributedWriteCookiePtr& cookie,
-        const TParticipantTableWriterOptions& options) override;
+    TFuture<ITableWriterPtr> CreateFragmentTableWriter(
+        const TFragmentWriteCookiePtr& cookie,
+        const TFragmentTableWriterOptions& options) override;
 
     // Queues.
     TFuture<NQueueClient::IQueueRowsetPtr> PullQueue(

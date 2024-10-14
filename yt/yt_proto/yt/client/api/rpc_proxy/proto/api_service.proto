@@ -3409,15 +3409,14 @@ message TRspGetQueryTrackerInfo
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// NB(arkady-e1ppa): Under construction.
 // Distributed table client
 ////////////////////////////////////////////////////////////////////////////////
 
 message TReqStartDistributedWriteSession
 {
-    optional string path = 1;
-
-    // TDistributedWriteSessionStartOptions contents...
+    required string path = 1;
+    
+    optional TTransactionalOptions transactional_options = 100;
 }
 
 message TRspStartDistributedWriteSession
@@ -3427,29 +3426,27 @@ message TRspStartDistributedWriteSession
 
 message TReqFinishDistributedWriteSession
 {
-    required bytes session = 2; // YSON-serialized TDistributedWriteSession
+    required bytes session = 1; // YSON-serialized TDistributedWriteSession
 
-    // TDistributedWriteSessionFinishOptions contents...
+    required int32 max_children_per_attach_request = 2;
 }
 
 message TRspFinishDistributedWriteSession
 {
 }
 
-message TReqParticipantWriteTable
+message TReqWriteTableFragment
 {
     optional bytes config = 1; // YSON-serialized TTableWriterConfig
 
     optional bytes format = 2; // YSON-serialized TFormat
 
-    required bytes cookie = 3; // YSON-serialized TDistributedWriteCookie
-
-    // TParticipantTableWriterOptions contents...
+    required bytes cookie = 3; // YSON-serialized TFragmentWriteCookie
 }
 
-message TRspParticipantWriteTable
+message TRspWriteTableFragment
 {
-    required bytes cookie = 1; // YSON-serialized TDistributedWriteCookie
+    required bytes cookie = 1; // YSON-serialized TFragmentWriteCookie
 }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -8,15 +8,15 @@ namespace NKikimr::NNodeBroker {
 
 using namespace NKikimrNodeBroker;
 
-class TNodeBroker::TTxDecommissionNode : public TTransactionBase<TNodeBroker> {
+class TNodeBroker::TTxGracefulShutdown : public TTransactionBase<TNodeBroker> {
 public:
-    TTxDecommissionNode(TNodeBroker *self, TEvNodeBroker::TEvDecommissionRequest::TPtr &ev)
+    TTxGracefulShutdown(TNodeBroker *self, TEvNodeBroker::TEvGracefulShutdownRequest::TPtr &ev)
         : TBase(self)
         , Event(ev)
     {
     }
 
-    TTxType GetTxType() const override { return TXTYPE_DECOMMISSION_NODE; }
+    TTxType GetTxType() const override { return TXTYPE_GRACESFUL_SHUTDOWN; }
 
     bool Error(TStatus::ECode code,
                const TString &reason,
@@ -26,7 +26,7 @@ public:
         auto host = rec.GetHost();
         auto port = rec.GetPort();
         LOG_ERROR_S(ctx, NKikimrServices::NODE_BROKER,
-                    "Cannot Decommission node " << host << ":" << port << ": " << code << ": " << reason);
+                    "Cannot Graceful Shutdown " << host << ":" << port << ": " << code << ": " << reason);
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(reason);
@@ -41,16 +41,18 @@ public:
         ui16 port = (ui16)rec.GetPort();
         TString addr = rec.GetAddress();
 
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxDecommissionNode Execute");
+        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxGracefulShutdown Execute");
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                    "Decommission request from " << host << ":" << port << " ");
+                    "Graceful Shutdown request from " << host << ":" << port << " ");
+
+        Response = new TEvNodeBroker::TEvGracefulShutdownResponse;
 
         auto it = Self->Hosts.find(std::make_tuple(host, addr, port));
         if (it != Self->Hosts.end()) {
             auto &node = Self->Nodes.find(it->second)->second;
 
             Self->SlotIndexesPools[node.ServicedSubDomain].Release(node.SlotIndex.value());
-            Self->DbUpdateSlotIndexToNull(node, txc);
+            Self->DbReleaseSlotIndex(node, txc);
             
             return true;
         }
@@ -62,19 +64,18 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxDecommissionNode Complete");
-
+        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxGracefulShutdown Complete");
         ctx.Send(Event->Sender, Response.Release());
     }
 
 private:
-    TEvNodeBroker::TEvDecommissionRequest::TPtr Event;
-    TAutoPtr<TEvNodeBroker::TEvDecommissionResponse> Response;
+    TEvNodeBroker::TEvGracefulShutdownRequest::TPtr Event;
+    TAutoPtr<TEvNodeBroker::TEvGracefulShutdownResponse> Response;
 };
 
-ITransaction *TNodeBroker::CreateTxDecommissionNode(TEvNodeBroker::TEvDecommissionRequest::TPtr &ev)
+ITransaction *TNodeBroker::CreateTxGracefulShutdown(TEvNodeBroker::TEvGracefulShutdownRequest::TPtr &ev)
 {
-    return new TTxDecommissionNode(this, ev);
+    return new TTxGracefulShutdown(this, ev);
 }
 
 } // NKikimr::NNodeBroker

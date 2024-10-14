@@ -79,13 +79,13 @@ message TRegistrationResponse {
   optional uint64 ScopePathId = 4;
 }
 
-message TDecommissionRequest {
+message TGracefulShutdownRequest {
   optional string Host = 1;
   optional uint32 Port = 2;
   optional string Address = 3;
 }
 
-message TDecommissionResponse {
+message TGracefulShutdownResponse {
   optional TStatus Status = 1;
 }
 

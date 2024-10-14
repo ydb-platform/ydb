@@ -148,7 +148,7 @@ private:
     class TTxInitScheme;
     class TTxLoadState;
     class TTxRegisterNode;
-    class TTxDecommissionNode;
+    class TTxGracefulShutdown;
     class TTxUpdateConfig;
     class TTxUpdateConfigSubscription;
     class TTxUpdateEpoch;
@@ -157,7 +157,7 @@ private:
     ITransaction *CreateTxInitScheme();
     ITransaction *CreateTxLoadState();
     ITransaction *CreateTxRegisterNode(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev);
-    ITransaction *CreateTxDecommissionNode(TEvNodeBroker::TEvDecommissionRequest::TPtr &ev);
+    ITransaction *CreateTxGracefulShutdown(TEvNodeBroker::TEvGracefulShutdownRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfig(TEvNodeBroker::TEvSetConfigRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfigSubscription(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev);
@@ -204,7 +204,7 @@ private:
             HFuncTraced(TEvNodeBroker::TEvListNodes, Handle);
             HFuncTraced(TEvNodeBroker::TEvResolveNode, Handle);
             HFuncTraced(TEvNodeBroker::TEvRegistrationRequest, Handle);
-            HFuncTraced(TEvNodeBroker::TEvDecommissionRequest, Handle);
+            HFuncTraced(TEvNodeBroker::TEvGracefulShutdownRequest, Handle);
             HFuncTraced(TEvNodeBroker::TEvExtendLeaseRequest, Handle);
             HFuncTraced(TEvNodeBroker::TEvCompactTables, Handle);
             HFuncTraced(TEvNodeBroker::TEvGetConfigRequest, Handle);
@@ -291,7 +291,7 @@ private:
                            TTransactionContext &txc);
     void DbUpdateNodeLocation(const TNodeInfo &node,
                               TTransactionContext &txc);
-    void DbUpdateSlotIndexToNull(const TNodeInfo &node,
+    void DbReleaseSlotIndex(const TNodeInfo &node,
                                        TTransactionContext &txc);
 
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
@@ -304,7 +304,7 @@ private:
                 const TActorContext &ctx);
     void Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                 const TActorContext &ctx);
-    void Handle(TEvNodeBroker::TEvDecommissionRequest::TPtr &ev,
+    void Handle(TEvNodeBroker::TEvGracefulShutdownRequest::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvNodeBroker::TEvExtendLeaseRequest::TPtr &ev,
                 const TActorContext &ctx);

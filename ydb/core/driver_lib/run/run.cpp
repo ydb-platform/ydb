@@ -1734,14 +1734,17 @@ void TKikimrRunner::KikimrStart() {
 
 void TKikimrRunner::KikimrStop(bool graceful) {
 
-    EnableDecomissionNode = AppData->FeatureFlags.GetEnableDecomissionNode();
+    bool enableReleaseNodeNameOnGracefulShutdown = AppData->FeatureFlags.GetEnableReleaseNodeNameOnGracefulShutdown();
 
-    if (graceful && EnableDecomissionNode) {
+    if (graceful && enableReleaseNodeNameOnGracefulShutdown) {
+        using namespace NKikimr::NNodeBroker;
+        
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
         auto pipe = NTabletPipe::CreateClient({}, MakeNodeBrokerID(), pipeConfig);
         TActorId nodeBrokerPipe = ActorSystem->Register(pipe);
-        ActorSystem->Send(new IEventHandle(nodeBrokerPipe, {}, new NKikimr::NNodeBroker::TEvNodeBroker::TEvDecommissionRequest));
+
+        ActorSystem->Send(new IEventHandle(nodeBrokerPipe, {}, new TEvNodeBroker::TEvGracefulShutdownRequest));
     }
 
     if (EnabledGrpcService) {

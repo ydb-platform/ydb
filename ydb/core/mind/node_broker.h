@@ -81,14 +81,12 @@ struct TEvNodeBroker {
         EvListNodes = EventSpaceBegin(TKikimrEvents::ES_NODE_BROKER),
         EvResolveNode,
         EvRegistrationRequest,
-        EvDecommissionRequest,
         EvExtendLeaseRequest,
 
         // responses
         EvNodesInfo,
         EvResolvedNode,
         EvRegistrationResponse,
-        EvDecommissionResponse,
         EvExtendLeaseResponse,
 
         // config
@@ -96,6 +94,10 @@ struct TEvNodeBroker {
         EvGetConfigResponse,
         EvSetConfigRequest,
         EvSetConfigResponse,
+
+        // decommission
+        EvGracefulShutdownRequest,
+        EvGracefulShutdownResponse,
 
         // TODO: remove
         // internal
@@ -127,9 +129,9 @@ struct TEvNodeBroker {
                                                     EvRegistrationRequest> {
     };
 
-    struct TEvDecommissionRequest : public TEventPB<TEvDecommissionRequest,
-                                                    NKikimrNodeBroker::TDecommissionRequest,
-                                                    EvDecommissionRequest> {
+    struct TEvGracefulShutdownRequest : public TEventPB<TEvGracefulShutdownRequest,
+                                                    NKikimrNodeBroker::TGracefulShutdownRequest,
+                                                    EvGracefulShutdownRequest> {
     };
 
     struct TEvExtendLeaseRequest : public TEventPB<TEvExtendLeaseRequest,
@@ -163,9 +165,9 @@ struct TEvNodeBroker {
                                                      EvRegistrationResponse> {
     };
 
-    struct TEvDecommissionResponse : public TEventPB<TEvDecommissionResponse,
-                                                     NKikimrNodeBroker::TDecommissionResponse,
-                                                     EvDecommissionResponse> {
+    struct TEvGracefulShutdownResponse : public TEventPB<TEvGracefulShutdownResponse,
+                                                     NKikimrNodeBroker::TGracefulShutdownResponse,
+                                                     EvGracefulShutdownResponse> {
     };
 
     struct TEvExtendLeaseResponse : public TEventPB<TEvExtendLeaseResponse,

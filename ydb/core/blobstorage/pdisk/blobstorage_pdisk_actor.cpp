@@ -1136,7 +1136,7 @@ public:
     void Handle(NMon::TEvHttpInfo::TPtr &ev) {
         const TCgiParameters &cgi = ev->Get()->Request.GetPostParams();
 
-        bool enableChunkLocking = Cfg->FeatureFlags.GetEnableChunkLocking();
+        bool enableChunkLocking = AppData()->FeatureFlags.GetEnableChunkLocking();
 
         if (enableChunkLocking) {
             using TColor = NKikimrBlobStorage::TPDiskSpaceColor;

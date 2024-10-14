@@ -84,10 +84,8 @@ private:
         bool leftAny,
         bool rightAny,
         bool isCommutative,
-        const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
-        const std::set<std::pair<TJoinColumn, TJoinColumn>>& reversedJoinConditions,
-        const TVector<TString>& leftJoinKeys,
-        const TVector<TString>& rightJoinKeys,
+        const TVector<TJoinColumn>& leftJoinKeys,
+        const TVector<TJoinColumn>& rightJoinKeys,
         IProviderContext& ctx,
         TCardinalityHints::TCardinalityHint* maybeCardHint,
         TJoinAlgoHints::TJoinAlgoHint* maybeJoinHint
@@ -414,17 +412,15 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
     bool leftAny,
     bool rightAny,
     bool isCommutative,
-    const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
-    const std::set<std::pair<TJoinColumn, TJoinColumn>>& reversedJoinConditions,
-    const TVector<TString>& leftJoinKeys,
-    const TVector<TString>& rightJoinKeys,
+    const TVector<TJoinColumn>& leftJoinKeys,
+    const TVector<TJoinColumn>& rightJoinKeys,
     IProviderContext& ctx,
     TCardinalityHints::TCardinalityHint* maybeCardHint,
     TJoinAlgoHints::TJoinAlgoHint* maybeJoinAlgoHint
 ) {
     if (maybeJoinAlgoHint) {
         maybeJoinAlgoHint->Applied = true;
-        return MakeJoinInternal(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinKind, maybeJoinAlgoHint->Algo, leftAny, rightAny, ctx, maybeCardHint);
+        return MakeJoinInternal(left, right, leftJoinKeys, rightJoinKeys, joinKind, maybeJoinAlgoHint->Algo, leftAny, rightAny, ctx, maybeCardHint);
     }
 
     double bestCost = std::numeric_limits<double>::infinity();
@@ -432,7 +428,7 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
     bool bestJoinIsReversed = false;
 
     for (auto joinAlgo : AllJoinAlgos) {
-        if (ctx.IsJoinApplicable(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind)){
+        if (ctx.IsJoinApplicable(left, right, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind)){
             auto cost = ctx.ComputeJoinStats(*left->Stats, *right->Stats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeCardHint).Cost;
             if (cost < bestCost) {
                 bestCost = cost;
@@ -442,7 +438,7 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
         }
 
         if (isCommutative) {
-            if (ctx.IsJoinApplicable(right, left, reversedJoinConditions, rightJoinKeys, leftJoinKeys, joinAlgo, joinKind)){
+            if (ctx.IsJoinApplicable(right, left, rightJoinKeys, leftJoinKeys, joinAlgo, joinKind)){
                 auto cost = ctx.ComputeJoinStats(*right->Stats, *left->Stats,  rightJoinKeys, leftJoinKeys, joinAlgo, joinKind, maybeCardHint).Cost;
                 if (cost < bestCost) {
                     bestCost = cost;
@@ -456,10 +452,10 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
     Y_ENSURE(bestAlgo != EJoinAlgoType::Undefined, "No join was chosen!");
 
     if (bestJoinIsReversed) {
-        return MakeJoinInternal(right, left, reversedJoinConditions, rightJoinKeys, leftJoinKeys, joinKind, bestAlgo, rightAny, leftAny, ctx, maybeCardHint);
+        return MakeJoinInternal(right, left, rightJoinKeys, leftJoinKeys, joinKind, bestAlgo, rightAny, leftAny, ctx, maybeCardHint);
     }
     
-    return MakeJoinInternal(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinKind, bestAlgo, leftAny, rightAny, ctx, maybeCardHint);
+    return MakeJoinInternal(left, right, leftJoinKeys, rightJoinKeys, joinKind, bestAlgo, leftAny, rightAny, ctx, maybeCardHint);
 }
 
 /* 
@@ -493,8 +489,6 @@ template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeS
         csgCmpEdge->LeftAny,
         csgCmpEdge->RightAny,
         csgCmpEdge->IsCommutative,
-        csgCmpEdge->JoinConditions,
-        reversedEdge->JoinConditions,
         csgCmpEdge->LeftJoinKeys,
         csgCmpEdge->RightJoinKeys,
         Pctx_,

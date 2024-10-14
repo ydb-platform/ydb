@@ -2128,6 +2128,11 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         if (proto.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
             continue; //TODO - no such chunks must be on prod
         }
+
+        if (!proto.has_codec()) {
+            proto.set_codec(NPersQueueCommon::RAW);
+        }
+
         TString sourceId = "";
         if (!r.GetSourceId().empty()) {
             if (!NPQ::NSourceIdEncoding::IsValidEncoded(r.GetSourceId())) {

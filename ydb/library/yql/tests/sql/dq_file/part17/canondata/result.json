@@ -765,9 +765,9 @@
     ],
     "test.test[dq-join_cbo_native_3_tables--Debug]": [
         {
-            "checksum": "91570a2f667516ba1f3f28642698441f",
-            "size": 4802,
-            "uri": "https://{canondata_backend}/1942278/d3f67196e7e0096e289743f5dbfd5dc2f990f9e6/resource.tar.gz#test.test_dq-join_cbo_native_3_tables--Debug_/opt.yql_patched"
+            "checksum": "bc4f0d3c80bc05fdb553d9d07ed58fd2",
+            "size": 4846,
+            "uri": "https://{canondata_backend}/1597364/aa2251cc1cffd9f5ef1d8d1793ee54509ab8cdfc/resource.tar.gz#test.test_dq-join_cbo_native_3_tables--Debug_/opt.yql_patched"
         }
     ],
     "test.test[dq-join_cbo_native_3_tables--Plan]": [

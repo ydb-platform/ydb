@@ -45,15 +45,14 @@ Y_UNIT_TEST(JoinSearch2Rels) {
     auto rel2 = std::make_shared<TRelOptimizerNode>("b",
         std::make_shared<TOptimizerStatistics>(BaseTable, 1000000, 1, 0, 9000009));
 
-    std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>> joinConditions;
-    joinConditions.insert({
-        NDq::TJoinColumn("a", "1"),
-        NDq::TJoinColumn("b", "1")
-    });
+    TVector<NDq::TJoinColumn> leftKeys = {NDq::TJoinColumn("a", "1")};
+    TVector<NDq::TJoinColumn> rightKeys ={NDq::TJoinColumn("b", "1")};
+
     auto op = std::make_shared<TJoinOptimizerNode>(
         std::static_pointer_cast<IBaseOptimizerNode>(rel1),
         std::static_pointer_cast<IBaseOptimizerNode>(rel2),
-        joinConditions,
+        leftKeys,
+        rightKeys,
         InnerJoin,
         EJoinAlgoType::GraceJoin,
         true,
@@ -86,30 +85,28 @@ Y_UNIT_TEST(JoinSearch3Rels) {
     auto rel3 = std::make_shared<TRelOptimizerNode>("c",
         std::make_shared<TOptimizerStatistics>(BaseTable, 10000, 1, 0, 9009));
 
-    std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>> joinConditions;
-    joinConditions.insert({
-        NDq::TJoinColumn("a", "1"),
-        NDq::TJoinColumn("b", "1")
-    });
+    TVector<NDq::TJoinColumn> leftKeys = {NDq::TJoinColumn("a", "1")};
+    TVector<NDq::TJoinColumn> rightKeys ={NDq::TJoinColumn("b", "1")};
+
     auto op1 = std::make_shared<TJoinOptimizerNode>(
         std::static_pointer_cast<IBaseOptimizerNode>(rel1),
         std::static_pointer_cast<IBaseOptimizerNode>(rel2),
-        joinConditions,
+        leftKeys,
+        rightKeys,
         InnerJoin,
         EJoinAlgoType::GraceJoin,
         false,
         false
     );
 
-    joinConditions.insert({
-        NDq::TJoinColumn("a", "1"),
-        NDq::TJoinColumn("c", "1")
-    });
+    leftKeys.push_back(NDq::TJoinColumn("a", "1"));
+    rightKeys.push_back(NDq::TJoinColumn("c", "1"));
 
     auto op2 = std::make_shared<TJoinOptimizerNode>(
         std::static_pointer_cast<IBaseOptimizerNode>(op1),
         std::static_pointer_cast<IBaseOptimizerNode>(rel3),
-        joinConditions,
+        leftKeys,
+        rightKeys,
         InnerJoin,
         EJoinAlgoType::GraceJoin,
         true,

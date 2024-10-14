@@ -17,7 +17,7 @@ class TestClickbench(LoadSuiteBase):
         if getenv('NO_VERIFY_DATA', '0') == '1' or getenv('NO_VERIFY_DATA_CLICKBECNH', '0') == '1':
             return
 
-        self.check_tables_size(folder=None, tables={'clickbench/hits': 99997497})
+        self.check_tables_size(self, folder=None, tables={'clickbench/hits': 99997497})
 
         fail_count = 0
         for query_num in range(0, 43):

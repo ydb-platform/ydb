@@ -355,5 +355,11 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
 
         ProcessSomeJsons(2, {Json3}, RowDispatcher1);
     }
+
+    Y_UNIT_TEST_F(IgnoreMessageIfNoSessions, TFixture) {
+        StartSession();
+        MockCoordinatorChanged(Coordinator2Id);
+        MockSessionError();
+    }
 }
 } // NYql::NDq

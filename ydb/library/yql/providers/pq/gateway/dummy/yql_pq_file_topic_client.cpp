@@ -57,7 +57,6 @@ public:
         with_lock(Mutex_) {
             Stopped_ = true;
             
-            // Events_.push_back(std::make_pair(NYdb::NTopic::TSessionClosedEvent(NYdb::EStatus::SUCCESS, {}), 0));
             CanPop_.BroadCast();
             CanPush_.BroadCast();
         }

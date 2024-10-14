@@ -386,14 +386,12 @@ private:
 
     struct TTopicEventProcessor {
         std::optional<TIssues> operator()(NYdb::NTopic::TSessionClosedEvent& ev) {
-            Cerr << "TSessionClosedEvent: " << ev.DebugString() << Endl;
             TIssues issues;
             issues.AddIssue(TStringBuilder() << "Write session to topic \"" << Self.SinkParams.GetTopicPath() << "\" was closed: " << ev.DebugString());
             return issues;
         }
 
         std::optional<TIssues> operator()(NYdb::NTopic::TWriteSessionEvent::TAcksEvent& ev) {
-            Cerr << "TAcksEvent: " << ev.DebugString() << Endl;
             if (ev.Acks.empty()) {
                 LOG_D(Self.LogPrefix << "Empty ack");
                 return std::nullopt;
@@ -435,7 +433,6 @@ private:
         }
 
         std::optional<TIssues> operator()(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent& ev) {
-            Cerr << "ReadyToAcceptEvent: " << ev.DebugString() << Endl;
 
             //Y_ABORT_UNLESS(!Self.ContinuationToken);
 

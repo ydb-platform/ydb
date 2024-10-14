@@ -152,7 +152,7 @@ TGranuleMeta::TGranuleMeta(
     ActualizationIndex = std::make_shared<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex);
 }
 
-std::shared_ptr<TPortionInfo> TGranuleMeta::UpsertPortionOnLoad(TPortionInfo&& portion, TVersionCounts* versionCounts) {
+std::shared_ptr<TPortionInfo> TGranuleMeta::UpsertPortionOnLoad(TPortionInfo&& portion, TVersionCounts& versionCounts) {
     auto portionId = portion.GetPortionId();
     auto schemaVersionOpt = portion.GetSchemaVersionOptional();
     if (schemaVersionOpt.has_value()) {

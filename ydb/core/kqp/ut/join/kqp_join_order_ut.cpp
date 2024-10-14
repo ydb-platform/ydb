@@ -97,18 +97,18 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
 }
 
 void PrintPlan(const TString& plan) {
-    Cout << plan << Endl;
-    NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
-    queryPlanPrinter.Print(plan);
+    // Cout << plan << Endl;
+    // NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
+    // queryPlanPrinter.Print(plan);
 
     std::string joinOrder = GetJoinOrder(plan).GetStringRobust();
 
     Cout << "JoinOrder: " << joinOrder << Endl;
-    std::replace(joinOrder.begin(), joinOrder.end(), '[', '(');
-    std::replace(joinOrder.begin(), joinOrder.end(), ']', ')');
-    std::replace(joinOrder.begin(), joinOrder.end(), ',', ' ');
-    joinOrder.erase(std::remove(joinOrder.begin(), joinOrder.end(), '\"'), joinOrder.end());
-    Cout << "JoinOrder" << joinOrder << Endl;
+    // std::replace(joinOrder.begin(), joinOrder.end(), '[', '(');
+    // std::replace(joinOrder.begin(), joinOrder.end(), ']', ')');
+    // std::replace(joinOrder.begin(), joinOrder.end(), ',', ' ');
+    // joinOrder.erase(std::remove(joinOrder.begin(), joinOrder.end(), '\"'), joinOrder.end());
+    // Cout << "JoinOrder" << joinOrder << Endl;
 }
 
 class TChainTester {

@@ -87,7 +87,6 @@ message TDecommissionRequest {
 
 message TDecommissionResponse {
   optional TStatus Status = 1;
-  optional TNodeInfo Node = 2;
 }
 
 message TExtendLeaseRequest {

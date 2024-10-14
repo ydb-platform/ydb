@@ -4,8 +4,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/counters_node_broker.pb.h>
 
-namespace NKikimr {
-namespace NNodeBroker {
+namespace NKikimr::NNodeBroker {
 
 using namespace NKikimrNodeBroker;
 
@@ -37,8 +36,6 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
-        Y_UNUSED(txc);
-
         auto &rec = Event->Get()->Record;
         auto host = rec.GetHost();
         ui16 port = (ui16)rec.GetPort();
@@ -52,10 +49,9 @@ public:
         if (it != Self->Hosts.end()) {
             auto &node = Self->Nodes.find(it->second)->second;
 
-            if (Self->EnableDecomissionNode) {
-                Self->SlotIndexesPools[node.ServicedSubDomain].Release(node.SlotIndex.value());
-                Self->DbUpdateSlotIndexToNull(node, txc);
-            }
+            Self->SlotIndexesPools[node.ServicedSubDomain].Release(node.SlotIndex.value());
+            Self->DbUpdateSlotIndexToNull(node, txc);
+            
             return true;
         }
 
@@ -81,5 +77,4 @@ ITransaction *TNodeBroker::CreateTxDecommissionNode(TEvNodeBroker::TEvDecommissi
     return new TTxDecommissionNode(this, ev);
 }
 
-} // NNodeBroker
-} // NKikimr
+} // NKikimr::NNodeBroker

@@ -43,6 +43,8 @@ protected:
 
     bool EnabledGrpcService = false;
     bool GracefulShutdownSupported = false;
+    bool EnabledDecommisionNode = false;
+    
     TDuration MinDelayBeforeShutdown;
     THolder<NSQS::TAsyncHttpServer> SqsHttp;
 

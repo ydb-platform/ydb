@@ -329,7 +329,6 @@ private:
     // Maps tenant to its slot indexes pool.
     std::unordered_map<TSubDomainKey, TSlotIndexesPool, THash<TSubDomainKey>> SlotIndexesPools;
     bool EnableStableNodeNames = false;
-    bool EnableDecomissionNode = false;
     // Epoch info.
     TEpochInfo Epoch;
     // Current config.

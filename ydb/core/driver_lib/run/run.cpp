@@ -1734,7 +1734,9 @@ void TKikimrRunner::KikimrStart() {
 
 void TKikimrRunner::KikimrStop(bool graceful) {
 
-    if (graceful) {
+    EnableDecomissionNode = AppData->FeatureFlags.GetEnableDecomissionNode();
+
+    if (graceful && EnableDecomissionNode) {
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
         auto pipe = NTabletPipe::CreateClient({}, MakeNodeBrokerID(), pipeConfig);

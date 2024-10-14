@@ -1128,7 +1128,6 @@ private:
             | EYtSettingType::SortLimitBy
             | EYtSettingType::SortBy
             | EYtSettingType::JoinReduce
-            | EYtSettingType::CompactJoin
             | EYtSettingType::FirstAsPrimary
             | EYtSettingType::Flow
             | EYtSettingType::KeepSorted

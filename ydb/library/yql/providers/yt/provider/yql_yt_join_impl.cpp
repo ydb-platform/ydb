@@ -1152,7 +1152,7 @@ TYtSection SectionApplyAdditionalSort(const TYtSection& section, const TYtEquiJo
 
 bool RewriteYtMergeJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoinNodeOp& op,
     const TYtJoinNodeLeaf& leftLeaf, const TYtJoinNodeLeaf& rightLeaf, const TYtState::TPtr& state, TExprContext& ctx,
-    bool swapTables, bool joinReduce, bool compactJoin, bool tryFirstAsPrimary, bool joinReduceForSecond,
+    bool swapTables, bool joinReduce, bool tryFirstAsPrimary, bool joinReduceForSecond,
     const TMergeJoinSortInfo sortInfo, bool& skipped)
 {
     skipped = false;
@@ -1389,15 +1389,6 @@ bool RewriteYtMergeJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoin
                     .Value(ToString(EYtSettingType::JoinReduce), TNodeFlags::Default)
                 .Build()
             .Build();
-
-        if (compactJoin) {
-            settingsBuilder
-            .Add()
-                .Name()
-                    .Value(ToString(EYtSettingType::CompactJoin), TNodeFlags::Default)
-                .Build()
-            .Build();
-        }
     }
 
     if (tryFirstAsPrimary) {
@@ -3317,47 +3308,49 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
         bool useJoinReduceForSecond = false;
         bool tryFirstAsPrimary = false;
 
-        if (allowPrimaryLeft != allowPrimaryRight) {
-            swapTables = allowPrimaryLeft;
-            auto primary = swapTables ? TChoice::Left : TChoice::Right;
-            useJoinReduce = !HasNonTrivialAny(linkSettings, mapSettings, primary);
-        } else if (allowPrimaryLeft) {
-            YQL_ENSURE(allowPrimaryRight);
-            // both tables can be chosen as primary
-            bool biggerHasUniqueKeys = mapSettings.RightSize > mapSettings.LeftSize ?
-                                       mapSettings.RightUnique : mapSettings.LeftUnique;
+        if (!linkSettings.Compact) {
+            if (allowPrimaryLeft != allowPrimaryRight) {
+                swapTables = allowPrimaryLeft;
+                auto primary = swapTables ? TChoice::Left : TChoice::Right;
+                useJoinReduce = !HasNonTrivialAny(linkSettings, mapSettings, primary);
+            } else if (allowPrimaryLeft) {
+                YQL_ENSURE(allowPrimaryRight);
+                // both tables can be chosen as primary
+                bool biggerHasUniqueKeys = mapSettings.RightSize > mapSettings.LeftSize ?
+                                        mapSettings.RightUnique : mapSettings.LeftUnique;
 
-            if (biggerHasUniqueKeys) {
-                // it is safe to use smaller table as primary
-                swapTables = mapSettings.RightSize > mapSettings.LeftSize;
-            } else if (mergeUseSmallAsPrimary) {
-                // explicit setting
-                if (*mergeUseSmallAsPrimary) {
-                    // use smaller table as primary
+                if (biggerHasUniqueKeys) {
+                    // it is safe to use smaller table as primary
                     swapTables = mapSettings.RightSize > mapSettings.LeftSize;
+                } else if (mergeUseSmallAsPrimary) {
+                    // explicit setting
+                    if (*mergeUseSmallAsPrimary) {
+                        // use smaller table as primary
+                        swapTables = mapSettings.RightSize > mapSettings.LeftSize;
+                    } else {
+                        // use bigger table as primary
+                        swapTables = mapSettings.LeftSize > mapSettings.RightSize;
+                    }
                 } else {
-                    // use bigger table as primary
+                    // make bigger table last one, and try first (smaller) as primary
                     swapTables = mapSettings.LeftSize > mapSettings.RightSize;
+                    tryFirstAsPrimary = true;
+                }
+
+                auto primary = swapTables ? TChoice::Left : TChoice::Right;
+                if (tryFirstAsPrimary) {
+                    useJoinReduceForSecond = !HasNonTrivialAny(linkSettings, mapSettings, primary);
+                    useJoinReduce = !HasNonTrivialAny(linkSettings, mapSettings, Invert(primary));
+                } else {
+                    useJoinReduce = !HasNonTrivialAny(linkSettings, mapSettings, primary);
                 }
             } else {
-                // make bigger table last one, and try first (smaller) as primary
-                swapTables = mapSettings.LeftSize > mapSettings.RightSize;
-                tryFirstAsPrimary = true;
-            }
-
-            auto primary = swapTables ? TChoice::Left : TChoice::Right;
-            if (tryFirstAsPrimary) {
-                useJoinReduceForSecond = !HasNonTrivialAny(linkSettings, mapSettings, primary);
-                useJoinReduce = !HasNonTrivialAny(linkSettings, mapSettings, Invert(primary));
-            } else {
-                useJoinReduce = !HasNonTrivialAny(linkSettings, mapSettings, primary);
-            }
-        } else {
-            // try to move non-fat table to the left, otherwise keep them as is
-            if (mapSettings.LeftUnique != mapSettings.RightUnique) {
-                swapTables = mapSettings.RightUnique;
-            } else {
-                swapTables = mapSettings.LeftSize > mapSettings.RightSize;
+                // try to move non-fat table to the left, otherwise keep them as is
+                if (mapSettings.LeftUnique != mapSettings.RightUnique) {
+                    swapTables = mapSettings.RightUnique;
+                } else {
+                    swapTables = mapSettings.LeftSize > mapSettings.RightSize;
+                }
             }
         }
 
@@ -3372,7 +3365,7 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
         if (!RewriteYtMergeJoin(equiJoin, labels, op,
                                 swapTables ? rightLeaf : leftLeaf,
                                 swapTables ? leftLeaf : rightLeaf,
-                                state, ctx, swapTables, useJoinReduce, linkSettings.Compact, tryFirstAsPrimary, useJoinReduceForSecond,
+                                state, ctx, swapTables, useJoinReduce, tryFirstAsPrimary, useJoinReduceForSecond,
                                 swapTables ? Invert(sortInfo) : sortInfo,
                                 skipped))
         {

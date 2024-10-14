@@ -137,9 +137,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduce(TExprBase no
                                                              EYtSettingType::FirstAsPrimary |
                                                              EYtSettingType::SortBy |
                                                              EYtSettingType::KeepSorted |
-                                                             EYtSettingType::NoDq | 
-                                                             EYtSettingType::JoinReduce |
-                                                             EYtSettingType::CompactJoin)) {
+                                                             EYtSettingType::NoDq)) {
         return node;
     }
 
@@ -147,10 +145,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduce(TExprBase no
                                                             EYtSettingType::ReduceBy |
                                                             EYtSettingType::FirstAsPrimary |
                                                             EYtSettingType::NoDq |
-                                                            EYtSettingType::SortBy |
-                                                            EYtSettingType::JoinReduce |
-                                                            EYtSettingType::KeepSorted |
-                                                            EYtSettingType::CompactJoin)) {
+                                                            EYtSettingType::SortBy)) {
         return node;
     }
 

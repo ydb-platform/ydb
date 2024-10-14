@@ -430,7 +430,6 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
         case EYtSettingType::Sharded:
         case EYtSettingType::XLock:
         case EYtSettingType::JoinReduce:
-        case EYtSettingType::CompactJoin:
         case EYtSettingType::Unordered:
         case EYtSettingType::NonUnique:
         case EYtSettingType::KeepSorted:

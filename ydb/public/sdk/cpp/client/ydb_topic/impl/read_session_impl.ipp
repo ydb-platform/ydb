@@ -1965,7 +1965,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::TrySubscribeOnTransact
             }
 
             if (auto self = cbContext->LockShared()) {
-                self->Txs.erase(txId);
+                self->DeleteTx(txId);
             }
 
             return client->UpdateOffsetsInTransaction(txId,
@@ -1994,6 +1994,14 @@ auto TSingleClusterReadSessionImpl<UseMigrationProtocol>::GetOrCreateTxInfo(cons
             p = Txs.find(txId);
         }
         return p->second;
+    }
+}
+
+template <bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::DeleteTx(const TTransactionId& txId)
+{
+    with_lock (Lock) {
+        Txs.erase(txId);
     }
 }
 

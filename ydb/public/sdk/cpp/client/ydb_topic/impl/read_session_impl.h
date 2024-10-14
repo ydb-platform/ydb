@@ -1329,6 +1329,7 @@ private:
     void TrySubscribeOnTransactionCommit(NTable::TTransaction& tx,
                                          std::shared_ptr<TTopicClient::TImpl> client);
     TTransactionInfoPtr GetOrCreateTxInfo(const TTransactionId& txId);
+    void DeleteTx(const TTransactionId& txId);
 
     const TAReadSessionSettings<UseMigrationProtocol> Settings;
     const TString Database;

@@ -424,8 +424,7 @@ private:
     void CancelTransactions();
     TTransactionInfoPtr GetOrCreateTxInfo(const TTransactionId& txId);
     void TrySignalAllAcksReceived(ui64 seqNo);
-
-    void OnTransactionCommit();
+    void DeleteTx(const TTransactionId& txId);
 
 private:
     TWriteSessionSettings Settings;

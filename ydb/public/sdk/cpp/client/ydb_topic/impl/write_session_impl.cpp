@@ -506,10 +506,6 @@ NThreading::TFuture<void> TWriteSessionImpl::WaitEvent() {
     return EventsQueue->WaitEvent();
 }
 
-void TWriteSessionImpl::OnTransactionCommit()
-{
-}
-
 void TWriteSessionImpl::TrySubscribeOnTransactionCommit(TTransaction* tx)
 {
     if (!tx) {
@@ -538,7 +534,7 @@ void TWriteSessionImpl::TrySubscribeOnTransactionCommit(TTransaction* tx)
             if (txInfo->WriteCount == txInfo->AckCount) {
                 txInfo->AllAcksReceived.SetValue(MakeCommitTransactionSuccess());
                 if (auto self = cbContext->LockShared()) {
-                    self->Txs.erase(txId);
+                    self->DeleteTx(txId);
                 }
                 return txInfo->AllAcksReceived.GetFuture();
             }
@@ -593,6 +589,13 @@ auto TWriteSessionImpl::GetOrCreateTxInfo(const TTransactionId& txId) -> TTransa
         p = Txs.find(txId);
     }
     return p->second;
+}
+
+void TWriteSessionImpl::DeleteTx(const TTransactionId& txId)
+{
+    with_lock (Lock) {
+        Txs.erase(txId);
+    }
 }
 
 void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& message) {

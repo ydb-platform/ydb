@@ -252,6 +252,38 @@ protected:
         if (!left) {
             return node;
         }
+        TExprNode::TPtr TTL = nullptr;
+        TExprNode::TPtr MaxCachedRows = nullptr;
+        TExprNode::TPtr MaxDelay = nullptr;
+        if (const auto maybeFlags = join.Flags()) {
+            TExprNode::TPtr* pval = nullptr;
+            for (auto&& flag: maybeFlags.Cast().Ref().Children()) {
+                if (pval) {
+                    *pval = flag;
+                    pval = nullptr;
+                } else {
+                    auto&& content = flag->Content();
+                    if (content == "TTL") {
+                        pval = &TTL;
+                    } else if (content == "MaxCachedRows") {
+                        pval = &MaxCachedRows;
+                    } else if (content == "MaxDelay") {
+                        pval = &MaxDelay;
+                    } else {
+                        assert(false); // FIXME RESOLVE BEFORE MERGE
+                    }
+                }
+            }
+        }
+        if (!TTL) {
+            TTL = ctx.NewAtom(pos, 300);
+        }
+        if (!MaxCachedRows) {
+            MaxCachedRows = ctx.NewAtom(pos, 1'000'000);
+        }
+        if (!MaxDelay) {
+            MaxDelay = ctx.NewAtom(pos, 1'000'000);
+        }
         auto cn = Build<TDqCnStreamLookup>(ctx, pos)
             .Output(left.Output().Cast())
             .LeftLabel(join.LeftLabel().Cast<NNodes::TCoAtom>())
@@ -261,9 +293,9 @@ protected:
             .JoinType(join.JoinType())
             .LeftJoinKeyNames(join.LeftJoinKeyNames())
             .RightJoinKeyNames(join.RightJoinKeyNames())
-            .TTL(ctx.NewAtom(pos, 300)) //TODO configure me
-            .MaxCachedRows(ctx.NewAtom(pos, 1'000'000)) //TODO configure me
-            .MaxDelay(ctx.NewAtom(pos, 1'000'000)) //Configure me
+            .TTL(TTL)
+            .MaxCachedRows(MaxCachedRows)
+            .MaxDelay(MaxDelay)
         .Done();
 
         auto lambda = Build<TCoLambda>(ctx, pos)

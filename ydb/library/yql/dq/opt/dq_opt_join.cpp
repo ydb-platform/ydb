@@ -219,7 +219,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
         rightJoinKeyNames.emplace_back(rightColumnName);
     }
 
-    if (EHashJoinMode::Off == mode || EHashJoinMode::Map == mode || !(leftAny || rightAny)) {
+    if (EHashJoinMode::Off == mode || EHashJoinMode::Map == mode || !(leftAny || rightAny || !linkSettings.Options.empty())) {
         auto dqJoin = Build<TDqJoin>(ctx, joinTuple.Pos())
             .LeftInput(BuildDqJoinInput(ctx, joinTuple.Pos(), left->Input, leftJoinKeys, leftAny))
             .LeftLabel(leftTableLabel)
@@ -242,6 +242,9 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
             flags.emplace_back(ctx.NewAtom(joinTuple.Pos(), "LeftAny", TNodeFlags::Default));
         if (rightAny)
             flags.emplace_back(ctx.NewAtom(joinTuple.Pos(), "RightAny", TNodeFlags::Default));
+        for (auto&& option: linkSettings.Options) {
+            flags.emplace_back(ctx.NewAtom(joinTuple.Pos(), option, TNodeFlags::Default));
+        }
 
         auto dqJoin = Build<TDqJoin>(ctx, joinTuple.Pos())
             .LeftInput(BuildDqJoinInput(ctx, joinTuple.Pos(), left->Input, leftJoinKeys, false))

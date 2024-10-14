@@ -2,7 +2,7 @@
 
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 
-#include <library/cpp/yt/misc/concepts.h>
+#include <concepts>
 
 namespace NYT {
 
@@ -32,12 +32,12 @@ public:
     bool CompareExchange(T& expected, const T& desired);
 
     //! Atomically transforms the value with function #func.
-    template <class R = void, CInvocable<R(T&)> F>
-    R Transform(const F& func);
+    template <std::invocable<T&> F>
+    std::invoke_result_t<F, T&> Transform(const F& func);
 
     //! Atomicaly reads the value with function #func.
-    template <class R = void, CInvocable<R(const T&)> F>
-    R Read(const F& func) const;
+    template <std::invocable<const T&> F>
+    std::invoke_result_t<F, const T&> Read(const F& func) const;
 
     T Load() const;
 

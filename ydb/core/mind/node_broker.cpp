@@ -844,6 +844,15 @@ void TNodeBroker::DbUpdateNodeLocation(const TNodeInfo &node,
     db.Table<T>().Key(node.NodeId).Update<T::Location>(node.Location.GetSerializedLocation());
 }
 
+void TNodeBroker::DbUpdateSlotIndexToNull(const TNodeInfo &node,
+                                       TTransactionContext &txc) 
+{
+    NIceDb::TNiceDb db(txc.DB);
+    using T = Schema::Nodes;
+    db.Table<T>().Key(node.NodeId)
+    .UpdateToNull<T::SlotIndex>();
+}
+
 void TNodeBroker::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                          const TActorContext &ctx)
 {   

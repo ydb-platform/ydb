@@ -54,11 +54,7 @@ public:
 
             if (Self->EnableDecomissionNode) {
                 Self->SlotIndexesPools[node.ServicedSubDomain].Release(node.SlotIndex.value());
-                
-                NIceDb::TNiceDb db(txc.DB);
-                using T = Schema::Nodes;
-                db.Table<T>().Key(node.NodeId)
-                .UpdateToNull<T::SlotIndex>();
+                Self->DbUpdateSlotIndexToNull(node, txc);
             }
             return true;
         }

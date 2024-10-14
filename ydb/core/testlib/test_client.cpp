@@ -666,7 +666,7 @@ namespace Tests {
         {
             // Compaction policy:
             NLocalDb::TCompactionPolicyPtr defaultPolicy = NLocalDb::CreateDefaultUserTablePolicy();
-            NKikimrSchemeOp::TCompactionPolicy defaultflatSchemePolicy;
+            NKikimrCompaction::TCompactionPolicy defaultflatSchemePolicy;
             defaultPolicy->Serialize(defaultflatSchemePolicy);
             auto &defaultCompactionPolicy = *profiles.AddCompactionPolicies();
             defaultCompactionPolicy.SetName("default");
@@ -674,7 +674,7 @@ namespace Tests {
 
             NLocalDb::TCompactionPolicy policy1;
             policy1.Generations.push_back({ 0, 8, 8, 128 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), true });
-            NKikimrSchemeOp::TCompactionPolicy flatSchemePolicy1;
+            NKikimrCompaction::TCompactionPolicy flatSchemePolicy1;
             policy1.Serialize(flatSchemePolicy1);
             auto &compactionPolicy1 = *profiles.AddCompactionPolicies();
             compactionPolicy1.SetName("compaction1");
@@ -683,7 +683,7 @@ namespace Tests {
             NLocalDb::TCompactionPolicy policy2;
             policy2.Generations.push_back({ 0, 8, 8, 128 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), true });
             policy2.Generations.push_back({ 40 * 1024 * 1024, 5, 16, 512 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(2), false });
-            NKikimrSchemeOp::TCompactionPolicy flatSchemePolicy2;
+            NKikimrCompaction::TCompactionPolicy flatSchemePolicy2;
             policy2.Serialize(flatSchemePolicy2);
             auto &compactionPolicy2 = *profiles.AddCompactionPolicies();
             compactionPolicy2.SetName("compaction2");

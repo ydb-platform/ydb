@@ -199,7 +199,7 @@ struct TPartitionConfigMerger {
         );
 
     static bool VerifyCompactionPolicy(
-        const NKikimrSchemeOp::TCompactionPolicy& policy,
+        const NKikimrCompaction::TCompactionPolicy& policy,
         TString& err);
 
     static bool VerifyCommandOnFrozenTable(

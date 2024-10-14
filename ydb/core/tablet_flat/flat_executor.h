@@ -615,11 +615,11 @@ class TExecutor
     void CommitCompactionChanges(
             ui32 tableId,
             const NTable::TCompactionChanges& changes,
-            NKikimrSchemeOp::ECompactionStrategy strategy);
+            NKikimrCompaction::ECompactionStrategy strategy);
     void ApplyCompactionChanges(
             TCompactionChangesCtx& ctx,
             const NTable::TCompactionChanges& changes,
-            NKikimrSchemeOp::ECompactionStrategy strategy);
+            NKikimrCompaction::ECompactionStrategy strategy);
 
 public:
     void Describe(IOutputStream &out) const noexcept override

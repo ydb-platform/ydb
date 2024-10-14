@@ -65,7 +65,7 @@ struct TRequestWithBody: public TGenericRequest<TDerived, EventType, T> {
     using TBase = TRequestWithBody<TDerived, EventType, T>;
 };
 
-template <typename TDerived, ui32 EventType, typename T, typename U = T>
+template <typename TDerived, ui32 EventType, typename T, typename U = T, bool HasKey = true>
 struct TGenericResponse: public NActors::TEventLocal<TDerived, EventType> {
 private:
     IRequestContext::TPtr RequestContext;
@@ -90,6 +90,7 @@ public:
         , Key(key)
         , Result(TDerived::ResultFromOutcome(outcome))
     {
+        static_assert(HasKey, "Object has no key");
     }
 
     bool IsSuccess() const {
@@ -114,11 +115,17 @@ public:
         return outcome;
     }
 
+    virtual TString ToStringBody() const {
+        auto result = TStringBuilder();
+        if constexpr (HasKey) {
+            result << " Key: " << (Key ? "null" : *Key);
+        }
+        result << " Result: " << Result;
+        return result;
+    }
+
     TString ToString() const override {
-        return TStringBuilder() << this->ToStringHeader() << " {"
-            << " Key: " << (Key ? "null" : *Key)
-            << " Result: " << Result
-            << " }";
+        return TStringBuilder() << this->ToStringHeader() << " {" << ToStringBody() << " }";
     }
 };
 
@@ -143,12 +150,10 @@ public:
     {
     }
 
-    TString ToString() const override {
-        return TStringBuilder() << this->ToStringHeader() << " {"
-            << " Key: " << (this->Key ? "null" : *this->Key)
-            << " Result: " << this->Result
-            << " Body: " << Body.size() << "b"
-            << " }";
+    TString ToStringBody() const override {
+        return TStringBuilder()
+            << TBase::ToStringBody()
+            << " Body: " << Body.size() << "b";
     }
 };
 
@@ -160,27 +165,26 @@ public:
 #define DEFINE_GENERIC_REQUEST(name) \
     DEFINE_REQUEST(name, TGenericRequest)
 
-#define DECLARE_GENERIC_RESPONSE(name) \
-    struct TEv##name##Response: public TGenericResponse<TEv##name##Response, Ev##name##Response, Aws::S3::Model::name##Result> { \
+#define DECLARE_GENERIC_RESPONSE_K(name, hasKey) \
+    struct TEv##name##Response: public TGenericResponse<TEv##name##Response, Ev##name##Response, Aws::S3::Model::name##Result, Aws::S3::Model::name##Result, hasKey> { \
     private: \
-        using TBase = TGenericResponse<TEv##name##Response, Ev##name##Response, Aws::S3::Model::name##Result>; \
+        using TBase = TGenericResponse<TEv##name##Response, Ev##name##Response, Aws::S3::Model::name##Result, Aws::S3::Model::name##Result, hasKey>; \
     public: \
         using TBase::TBase;
 
-#define DECLARE_RESPONSE_WITH_BODY(name, result_t) \
-    struct TEv##name##Response: public TResponseWithBody<TEv##name##Response, Ev##name##Response, Aws::S3::Model::name##Result, result_t> { \
-    private: \
-        using TBase = TResponseWithBody<TEv##name##Response, Ev##name##Response, Aws::S3::Model::name##Result, result_t>; \
-    public: \
-        using TBase::TBase;
-
-#define DEFINE_GENERIC_RESPONSE(name) \
-    DECLARE_GENERIC_RESPONSE(name) \
+#define DEFINE_GENERIC_RESPONSE_K(name, hasKey) \
+    DECLARE_GENERIC_RESPONSE_K(name, hasKey) \
     }
 
-#define DEFINE_GENERIC_REQUEST_RESPONSE(name) \
+#define DEFINE_GENERIC_RESPONSE(name) \
+    DEFINE_GENERIC_RESPONSE_K(name, true)
+
+#define DEFINE_GENERIC_REQUEST_RESPONSE_K(name, hasKey) \
     DEFINE_GENERIC_REQUEST(name); \
-    DEFINE_GENERIC_RESPONSE(name)
+    DEFINE_GENERIC_RESPONSE_K(name, hasKey)
+
+#define DEFINE_GENERIC_REQUEST_RESPONSE(name) \
+    DEFINE_GENERIC_REQUEST_RESPONSE_K(name, true)
 
 DEFINE_REQUEST(PutObject, TRequestWithBody);
 DEFINE_GENERIC_RESPONSE(PutObject);
@@ -188,20 +192,21 @@ DEFINE_GENERIC_RESPONSE(PutObject);
 DEFINE_REQUEST(UploadPart, TRequestWithBody);
 DEFINE_GENERIC_RESPONSE(UploadPart);
 
-DEFINE_GENERIC_REQUEST_RESPONSE(HeadObject);
-DEFINE_GENERIC_REQUEST_RESPONSE(DeleteObject);
-DEFINE_GENERIC_REQUEST_RESPONSE(CreateMultipartUpload);
-DEFINE_GENERIC_REQUEST_RESPONSE(CompleteMultipartUpload);
 DEFINE_GENERIC_REQUEST_RESPONSE(AbortMultipartUpload);
-
-DEFINE_GENERIC_REQUEST(UploadPartCopy);
-DEFINE_GENERIC_RESPONSE(UploadPartCopy);
+DEFINE_GENERIC_REQUEST_RESPONSE(CompleteMultipartUpload);
+DEFINE_GENERIC_REQUEST_RESPONSE(CreateMultipartUpload);
+DEFINE_GENERIC_REQUEST_RESPONSE(DeleteObject);
+DEFINE_GENERIC_REQUEST_RESPONSE_K(DeleteObjects, false);
+DEFINE_GENERIC_REQUEST_RESPONSE(HeadObject);
+DEFINE_GENERIC_REQUEST_RESPONSE_K(ListObjects, false);
+DEFINE_GENERIC_REQUEST_RESPONSE(UploadPartCopy);
 
 #undef DEFINE_REQUEST
 #undef DEFINE_GENERIC_REQUEST
-#undef DECLARE_GENERIC_RESPONSE
-#undef DECLARE_RESPONSE_WITH_BODY
+#undef DECLARE_GENERIC_RESPONSE_K
 #undef DEFINE_GENERIC_RESPONSE
+#undef DEFINE_GENERIC_RESPONSE_K
 #undef DEFINE_GENERIC_REQUEST_RESPONSE
+#undef DEFINE_GENERIC_REQUEST_RESPONSE_K
 
 }

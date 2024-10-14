@@ -88,6 +88,7 @@ YT_DEFINE_ERROR_ENUM(
     ((DiskHealthCheckFailed)                 (759))
     ((TooManyChunksToFetch)                  (760))
     ((TotalMemoryLimitExceeded)              (761))
+    ((ForbiddenErasureCodec)                 (762))
 );
 
 using TChunkId = NObjectClient::TObjectId;

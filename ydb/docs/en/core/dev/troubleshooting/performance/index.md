@@ -35,19 +35,21 @@ Database performance issues can be classified into several categories based on t
 
 - **Insufficient resources**. These issues refer to situations when the workload demands more physical resources — such as CPU, memory, disk space, and network bandwidth — than allocated to a database.
 
-    - **CPU bottlenecks**. High CPU usage can result in slow query processing and increased response times. When CPU resources are limited, the database may struggle to handle complex queries or large transaction loads.
+    - **[CPU bottlenecks](hardware/cpu-bottleneck.md)**. High CPU usage can result in slow query processing and increased response times. When CPU resources are limited, the database may struggle to handle complex queries or large transaction loads.
 
-    - **Insufficient disk space**. A lack of available disk space can prevent the database from storing new data, resulting in the database becoming read-only. This can also cause slowdowns as the system tries to reclaim disk space by compacting existing data more aggressively.
+    - **[Insufficient disk space](hardware/disk-space.md)**. A lack of available disk space can prevent the database from storing new data, resulting in the database becoming read-only. This can also cause slowdowns as the system tries to reclaim disk space by compacting existing data more aggressively.
 
-    - **Insufficient memory (RAM)**. If swap is disabled, insufficient memory can trigger [OOM killer](https://en.wikipedia.org/wiki/Out_of_memory) that terminates the most memory-hungry processes (for servers running databases, it's often the database itself). If swap is enabled, insufficient memory can cause the database to rely heavily on disk I/O for operations, which is significantly slower than accessing data from memory. This can lead to increased latencies in query execution and data retrieval.
+    - **[Insufficient memory (RAM)](hardware/insufficient-memory.md)**. If swap is disabled, insufficient memory can trigger [OOM killer](https://en.wikipedia.org/wiki/Out_of_memory) that terminates the most memory-hungry processes (for servers running databases, it's often the database itself). If swap is enabled, insufficient memory can cause the database to rely heavily on disk I/O for operations, which is significantly slower than accessing data from memory. This can lead to increased latencies in query execution and data retrieval.
 
-    - **Insufficient disk I/O bandwidth**. High read/write operations can overwhelm disk subsystems, leading to increased latencies in data access. When the system cannot read or write data quickly enough, queries that require disk access will be delayed.
+    - **[Insufficient disk I/O bandwidth](hardware/io-bandwidth.md)**. High read/write operations can overwhelm disk subsystems, leading to increased latencies in data access. When the system cannot read or write data quickly enough, queries that require disk access will be delayed.
 
 - **OS and YDB-related issues**.
 
     - **[YDB updates](system/ydb-updates.md)**. YDB is a distributed system that supports rolling restart, when database administrators update YDB nodes one by one. This helps keep the YDB cluster up and running during the update process. However, when a YDB node is being restarted, Hive moves the tables that run on this node to other nodes, and that may lead to increased latencies for queries that are processed by the moving tables.
 
     - **Hardware resource allocation issues**. Suboptimal allocation of resources, for example poorly configured control groups (cgroups), may result in insufficient resources for {{ ydb-short-name }} and increase query latencies even though physical hardware resources are still available on the database server.
+
+    - **[System clock drift](system/system-clock-drift.md)**. If system clocks on the {{ ydb-short-name }} servers start to drift too much, distributed transactions might be processed with higher latencies. In some cases {{ ydb-short-name }} might even fail to process distributed transactions and return errors.
 
 - **Schema design issues**. These issues stem from inefficient decisions made during the creation of tables and indices. They can significantly impact query performance.
 
@@ -69,7 +71,7 @@ If any known changes occurred in the system around the time the performance issu
 1. [Hardware issues](infrastructure/hardware.md) and [data center outages](infrastructure/dc-outage.md)
 1. [Network issues](infrastructure/network.md)
 1. [{{ ydb-short-name }} updates](system/ydb-updates.md)
-1. Time mismatch between nodes
+1. [System clock drift](system/system-clock-drift.md)
 
 
 

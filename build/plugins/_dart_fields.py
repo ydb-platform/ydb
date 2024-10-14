@@ -31,7 +31,14 @@ class DartValueError(ValueError):
 
 
 def create_dart_record(fields, *args):
-    return reduce(operator.or_, (value for field in fields if (value := field(*args))), {})
+    try:
+        return reduce(operator.or_, (value for field in fields if (value := field(*args))), {})
+    except Exception as e:
+        if str(e) != "":
+            ymake.report_configure_error("Exception: {}".format(e))
+        else:
+            raise (e)
+        return None
 
 
 def with_fields(fields):

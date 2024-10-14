@@ -64,6 +64,10 @@ TEngineLogsCounters::TEngineLogsCounters()
 
     GranuleOptimizerLocked = TBase::GetDeriviative("Optimizer/Granules/Locked");
 
+    PortionsLoadingTimeCounter = TBase::GetDeriviative("Startup/PortionsLoadingTime");
+    ColumnsLoadingTimeCounter  = TBase::GetDeriviative("Startup/ColumnsLoadingTime");
+    IndexesLoadingTimeCounter = TBase::GetDeriviative("Startup/IndexesLoadingTime");
+
     IndexMetadataUsageBytes = TBase::GetValue("IndexMetadata/Usage/Bytes");
 
     StatUsageForTTLCount = TBase::GetDeriviative("Ttl/StatUsageForTTLCount/Count");

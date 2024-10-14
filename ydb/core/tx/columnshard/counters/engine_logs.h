@@ -223,6 +223,10 @@ private:
 
     NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataUsageBytes;
 
+    NMonitoring::TDynamicCounters::TCounterPtr PortionsLoadingTimeCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr ColumnsLoadingTimeCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr IndexesLoadingTimeCounter;
+
     TAgentGranuleDataCounters GranuleDataAgent;
     std::vector<std::shared_ptr<TIncrementalHistogram>> BlobSizeDistribution;
     std::vector<std::shared_ptr<TIncrementalHistogram>> PortionSizeDistribution;
@@ -327,6 +331,18 @@ public:
 
     void OnGranuleOptimizerLocked() const {
         GranuleOptimizerLocked->Add(1);
+    }
+
+    void SetPortionLoadingTime(ui64 microSeconds) const {
+        PortionsLoadingTimeCounter->Set(microSeconds);
+    }
+
+    void SetColumnLoadingTime(ui64 microSeconds) const {
+        ColumnsLoadingTimeCounter->Set(microSeconds);
+    }
+
+    void SetIndexesLoadingTime(ui64 microSeconds) const {
+        IndexesLoadingTimeCounter->Set(microSeconds);
     }
 
     TEngineLogsCounters();

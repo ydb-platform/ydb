@@ -45,16 +45,19 @@ bool TTablesManager::FillMonitoringReport(NTabletFlatExecutor::TTransactionConte
 
 bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
     THashMap<ui32, TSchemaPreset> schemaPresets;
+    TInstant start = TInstant::Now();
     {
         TMemoryProfileGuard g("TTablesManager/InitFromDB::Tables");
         auto rowset = db.Table<Schema::TableInfo>().Select();
         if (!rowset.IsReady()) {
+            LOG_S_CRIT("Load: tables rowset is not ready");
             return false;
         }
 
         while (!rowset.EndOfSet()) {
             TTableInfo table;
             if (!table.InitFromDB(rowset)) {
+                LOG_S_CRIT("Load: can not init table");
                 return false;
             }
             if (table.IsDropped()) {
@@ -64,16 +67,20 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             AFL_VERIFY(Tables.emplace(table.GetPathId(), std::move(table)).second);
 
             if (!rowset.Next()) {
+                LOG_S_CRIT("Load: tables next failed");
                 return false;
             }
         }
     }
+
+    TInstant tablesLoaded = TInstant::Now();
 
     bool isFakePresetOnly = true;
     {
         TMemoryProfileGuard g("TTablesManager/InitFromDB::SchemaPresets");
         auto rowset = db.Table<Schema::SchemaPresetInfo>().Select();
         if (!rowset.IsReady()) {
+            LOG_S_CRIT("Load: schemapreset rowset is not ready");
             return false;
         }
 
@@ -90,15 +97,19 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             AFL_VERIFY(schemaPresets.emplace(preset.GetId(), preset).second);
             AFL_VERIFY(SchemaPresetsIds.emplace(preset.GetId()).second);
             if (!rowset.Next()) {
+                LOG_S_CRIT("Load: schemapreset next failed");
                 return false;
             }
         }
     }
 
+    TInstant schemaPresetLoaded = TInstant::Now();
+
     {
         TMemoryProfileGuard g("TTablesManager/InitFromDB::Versions");
         auto rowset = db.Table<Schema::TableVersionInfo>().Select();
         if (!rowset.IsReady()) {
+            LOG_S_CRIT("Load: table versions is not ready");
             return false;
         }
 
@@ -132,15 +143,19 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             }
             table.AddVersion(version);
             if (!rowset.Next()) {
+                LOG_S_CRIT("Load: table versions next failed");
                 return false;
             }
         }
     }
 
+    TInstant tableVersionsLoaded = TInstant::Now();
+
     {
         TMemoryProfileGuard g("TTablesManager/InitFromDB::PresetVersions");
         auto rowset = db.Table<Schema::SchemaPresetVersionInfo>().Select();
         if (!rowset.IsReady()) {
+            LOG_S_CRIT("Load: schema preset versions is not ready");
             return false;
         }
 
@@ -156,10 +171,18 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "load_preset")("preset_id", id)("snapshot", version)("version", info.HasSchema() ? info.GetSchema().GetVersion() : -1);
             preset.AddVersion(version, info);
             if (!rowset.Next()) {
+                LOG_S_CRIT("Load: schema preset next failed");
                 return false;
             }
         }
     }
+    TInstant schemaPresetVersionsLoaded = TInstant::Now();
+
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "init_from_db")("tables_loading_time", tablesLoaded - start)("schema_preset_loading_time", schemaPresetLoaded - tablesLoaded)("table_versions_loading_time", tableVersionsLoaded - schemaPresetLoaded)("schema_preset_versions_loading_time", schemaPresetVersionsLoaded - tableVersionsLoaded);
+    LoadTimeCounters->SetTablesLoadingTime((tablesLoaded - start).MicroSeconds());
+    LoadTimeCounters->SetSchemaPresetLoadingTime((schemaPresetLoaded - tablesLoaded).MicroSeconds());
+    LoadTimeCounters->SetTableVersionsLoadingTime((tableVersionsLoaded - schemaPresetLoaded).MicroSeconds());
+    LoadTimeCounters->SetSchemaPresetVersionsLoadingTime((schemaPresetVersionsLoaded - tableVersionsLoaded).MicroSeconds());
 
     TMemoryProfileGuard g("TTablesManager/InitFromDB::Other");
     for (auto& [id, preset] : schemaPresets) {
@@ -340,7 +363,9 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
 
 TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId)
     : StoragesManager(storagesManager)
-    , TabletId(tabletId) {
+    , LoadTimeCounters(std::make_unique<TLoadTimeSignals>())
+    , TabletId(tabletId)
+{
 }
 
 bool TTablesManager::TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const ui64 pathId) const {

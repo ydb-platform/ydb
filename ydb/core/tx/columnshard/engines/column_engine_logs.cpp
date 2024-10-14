@@ -207,6 +207,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
 
 bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
     TPortionConstructors constructors;
+    TInstant start = TInstant::Now();
     {
         TMemoryProfileGuard g("TTxInit/LoadColumns/Portions");
         if (!db.LoadPortions([&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
@@ -217,6 +218,8 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
             return false;
         }
     }
+
+    TInstant portionsLoaded = TInstant::Now();
 
     {
         TMemoryProfileGuard g("TTxInit/LoadColumns/Records");
@@ -229,6 +232,9 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
             return false;
         }
     }
+
+    TInstant columnsLoaded = TInstant::Now();
+
     {
         TMemoryProfileGuard g("TTxInit/LoadColumns/Indexes");
         if (!db.LoadIndexes([&](const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext& loadContext) {
@@ -238,6 +244,13 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
             return false;
         };
     }
+
+    TInstant indexesLoaded = TInstant::Now();
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "load_columns")("portions_loading_time", portionsLoaded - start)("columns_loading_time", columnsLoaded - portionsLoaded)("indexes_loading_time", indexesLoaded - columnsLoaded);
+    SignalCounters.SetPortionLoadingTime((portionsLoaded - start).MicroSeconds());
+    SignalCounters.SetColumnLoadingTime((columnsLoaded - portionsLoaded).MicroSeconds());
+    SignalCounters.SetIndexesLoadingTime((indexesLoaded - columnsLoaded).MicroSeconds());
+
     {
         TMemoryProfileGuard g("TTxInit/LoadColumns/Constructors");
         for (auto&& [granuleId, pathConstructors] : constructors) {

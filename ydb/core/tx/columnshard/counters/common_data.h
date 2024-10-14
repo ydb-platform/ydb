@@ -53,4 +53,39 @@ public:
 
 };
 
+class TLoadTimeSignals: public TCommonCountersOwner {
+private:
+    using TBase = TCommonCountersOwner;
+    NMonitoring::TDynamicCounters::TCounterPtr TablesLoadingTimeCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr SchemaPresetLoadingTimeCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr TableVersionsLoadingTimeCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr SchemaPresetVersionsLoadingTimeCounter;
+
+public:
+    TLoadTimeSignals()
+        : TBase("Startup")
+    {
+        TablesLoadingTimeCounter = TBase::GetDeriviative("Startup/TablesLoadingTime");;
+        SchemaPresetLoadingTimeCounter = TBase::GetDeriviative("Startup/SchemaPresetLoadingTime");;
+        TableVersionsLoadingTimeCounter = TBase::GetDeriviative("Startup/TableVersionsLoadingTime");;
+        SchemaPresetVersionsLoadingTimeCounter = TBase::GetDeriviative("Startup/SchemaPreseVersionstLoadingTime");;
+    }
+
+    void SetTablesLoadingTime(ui64 microSeconds) {
+        TablesLoadingTimeCounter->Set(microSeconds);
+    }
+
+    void SetSchemaPresetLoadingTime(ui64 microSeconds) {
+        SchemaPresetLoadingTimeCounter->Set(microSeconds);
+    }
+
+    void SetTableVersionsLoadingTime(ui64 microSeconds) {
+        TableVersionsLoadingTimeCounter->Set(microSeconds);
+    }
+
+    void SetSchemaPresetVersionsLoadingTime(ui64 microSeconds) {
+        SchemaPresetVersionsLoadingTimeCounter->Set(microSeconds);
+    }
+};
+
 }

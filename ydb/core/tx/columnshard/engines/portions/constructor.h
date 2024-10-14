@@ -15,6 +15,7 @@ class TGranuleShardingInfo;
 
 class TPortionInfoConstructor {
 private:
+    bool Constructed = false;
     YDB_ACCESSOR(ui64, PathId, 0);
     std::optional<ui64> PortionId;
 

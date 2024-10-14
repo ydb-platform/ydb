@@ -93,22 +93,18 @@ void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> por
 
 void TGranuleMeta::OnCompactionFinished() {
     AllowInsertionFlag = false;
-    Y_ABORT_UNLESS(Activity.erase(EActivity::GeneralCompaction));
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnCompactionFinished")("info", DebugString());
     Stats->UpdateGranuleInfo(*this);
 }
 
 void TGranuleMeta::OnCompactionFailed(const TString& reason) {
     AllowInsertionFlag = false;
-    Y_ABORT_UNLESS(Activity.erase(EActivity::GeneralCompaction));
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "OnCompactionFailed")("reason", reason)("info", DebugString());
     Stats->UpdateGranuleInfo(*this);
 }
 
 void TGranuleMeta::OnCompactionStarted() {
     AllowInsertionFlag = false;
-    Y_ABORT_UNLESS(Activity.empty());
-    Activity.emplace(EActivity::GeneralCompaction);
 }
 
 void TGranuleMeta::RebuildAdditiveMetrics() const {

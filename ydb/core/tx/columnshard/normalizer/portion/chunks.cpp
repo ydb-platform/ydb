@@ -60,7 +60,7 @@ protected:
 
             TPortionInfo::TAssembleBlobInfo assembleBlob(blobData);
             assembleBlob.SetExpectedRecordsCount(chunkInfo.GetRecordsCount());
-            auto batch = assembleBlob.BuildRecordBatch(*columnLoader);
+            auto batch = assembleBlob.BuildRecordBatch(*columnLoader).DetachResult();
             Y_ABORT_UNLESS(!!batch);
 
             chunkInfo.MutableUpdate().SetNumRows(batch->GetRecordsCount());

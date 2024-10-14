@@ -83,10 +83,9 @@ TTxWriteIndex::TTxWriteIndex(TColumnShard* self, TEvPrivate::TEvWriteIndex::TPtr
 {
     AFL_VERIFY(Ev && Ev->Get()->IndexChanges);
 
-    NOlap::TSnapshot snapshot(Self->LastPlannedStep, Self->LastPlannedTxId);
     auto changes = Ev->Get()->IndexChanges;
     if (Ev->Get()->GetPutStatus() == NKikimrProto::OK) {
-        AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnTxCreate(changes, snapshot));
+        AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnTxCreate(changes, Self->GetCurrentSnapshotForInternalModification()));
     }
 }
 

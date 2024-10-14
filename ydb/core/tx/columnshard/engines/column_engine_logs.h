@@ -5,8 +5,8 @@
 
 #include "changes/actualization/controller/controller.h"
 #include "scheme/tier_info.h"
-#include "storage/granule.h"
-#include "storage/storage.h"
+#include "storage/granule/granule.h"
+#include "storage/granule/storage.h"
 
 #include <ydb/core/tx/columnshard/columnshard_ttl.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
@@ -113,6 +113,8 @@ public:
     }
 
     std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TCommittedData>&& dataToIndex) noexcept override;
+    ui64 GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<ui64>& pathIds,
+        const std::optional<ui64> waitingPriority) noexcept override;
     std::shared_ptr<TColumnEngineChanges> StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
     std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshot& snapshot, const THashSet<ui64>& pathsToDrop,
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;

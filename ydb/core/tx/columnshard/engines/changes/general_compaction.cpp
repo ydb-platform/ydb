@@ -1,11 +1,12 @@
 
 #include "general_compaction.h"
 
-#include "counters/general.h"
 #include "compaction/merger.h"
+#include "counters/general.h"
 
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/priorities/usage/service.h>
 
 namespace NKikimr::NOlap::NCompaction {
 
@@ -138,7 +139,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
 
             for (auto&& i : portions) {
                 auto blobsSchema = i.GetPortionInfo().GetSchema(context.SchemaVersions);
-                auto batch = i.RestoreBatch(*blobsSchema, *resultFiltered, seqDataColumnIds);
+                auto batch = i.RestoreBatch(*blobsSchema, *resultFiltered, seqDataColumnIds).DetachResult();
                 std::shared_ptr<NArrow::TColumnFilter> filter =
                     BuildPortionFilter(shardingActual, batch, i.GetPortionInfo(), usedPortionIds, resultFiltered);
                 merger.AddBatch(batch, filter);
@@ -157,24 +158,30 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
 }
 
 TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {
-    i64 portionsSize = 0;
-    i64 portionsCount = 0;
-    i64 insertedPortionsSize = 0;
-    i64 compactedPortionsSize = 0;
-    i64 otherPortionsSize = 0;
+    i64 insertedPortionsCount = 0;
+    i64 insertedPortionsRawSize = 0;
+    i64 insertedPortionsBlobSize = 0;
+
+    i64 compactedPortionsCount = 0;
+    i64 compactedPortionsRawSize = 0;
+    i64 compactedPortionsBlobSize = 0;
     for (auto&& i : SwitchedPortions) {
         if (i.GetMeta().GetProduced() == TPortionMeta::EProduced::INSERTED) {
-            insertedPortionsSize += i.GetTotalBlobBytes();
+            insertedPortionsBlobSize += i.GetTotalBlobBytes();
+            insertedPortionsRawSize += i.GetTotalRawBytes();
+            ++insertedPortionsCount;
         } else if (i.GetMeta().GetProduced() == TPortionMeta::EProduced::SPLIT_COMPACTED) {
-            compactedPortionsSize += i.GetTotalBlobBytes();
+            compactedPortionsBlobSize += i.GetTotalBlobBytes();
+            compactedPortionsRawSize += i.GetTotalRawBytes();
+            ++compactedPortionsCount;
         } else {
-            otherPortionsSize += i.GetTotalBlobBytes();
+            AFL_VERIFY(false);
         }
-        portionsSize += i.GetTotalBlobBytes();
-        ++portionsCount;
     }
-    NChanges::TGeneralCompactionCounters::OnPortionsKind(insertedPortionsSize, compactedPortionsSize, otherPortionsSize);
-    NChanges::TGeneralCompactionCounters::OnRepackPortions(portionsCount, portionsSize);
+    NChanges::TGeneralCompactionCounters::OnRepackPortions(insertedPortionsCount + compactedPortionsCount,
+        insertedPortionsBlobSize + compactedPortionsBlobSize, insertedPortionsRawSize + compactedPortionsRawSize);
+    NChanges::TGeneralCompactionCounters::OnRepackInsertedPortions(insertedPortionsCount, insertedPortionsBlobSize, insertedPortionsRawSize);
+    NChanges::TGeneralCompactionCounters::OnRepackCompactedPortions(compactedPortionsCount, compactedPortionsBlobSize, compactedPortionsRawSize);
 
     {
         std::vector<TReadPortionInfoWithBlobs> portions =
@@ -211,6 +218,7 @@ void TGeneralCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TC
 }
 
 void TGeneralCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
+    AFL_VERIFY(PrioritiesAllocationGuard);
     TBase::DoStart(self);
     auto& g = *GranuleMeta;
     self.Counters.GetCSCounters().OnSplitCompactionInfo(
@@ -221,8 +229,7 @@ NColumnShard::ECumulativeCounters TGeneralCompactColumnEngineChanges::GetCounter
     return isSuccess ? NColumnShard::COUNTER_COMPACTION_SUCCESS : NColumnShard::COUNTER_COMPACTION_FAIL;
 }
 
-void TGeneralCompactColumnEngineChanges::AddCheckPoint(
-    const NArrow::NMerger::TSortableBatchPosition& position, const bool include) {
+void TGeneralCompactColumnEngineChanges::AddCheckPoint(const NArrow::NMerger::TSortableBatchPosition& position, const bool include) {
     CheckPoints.InsertPosition(position, include);
 }
 

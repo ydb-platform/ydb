@@ -38,15 +38,6 @@ def build_pdisk_statistics(base_config, pdisk_map, vsolts):
     return pdisks_statistics
 
 
-def get_donors_per_vdisk(base_config):
-    donors_per_vdisk = defaultdict(int)
-    for vslot in base_config.VSlot:
-        for donor in vslot.Donors:
-            pdisk_id = common.get_pdisk_id(donor.VSlotId)
-            donors_per_vdisk[pdisk_id] += 1
-    return donors_per_vdisk
-
-
 def do(args):
     while True:
         common.flush_cache()
@@ -136,14 +127,14 @@ def do(args):
                 print(f"Storage pool {args.storage_pool} not found in existing storage pools: {existing_storage_pools}")
                 sys.exit(1)
             candidate_vslots = [vslot for vslot in candidate_vslots if group_id_to_storage_pool_name_map[vslot.GroupId] == args.storage_pool]
-            common.print_if_not_quiet(args, f'Found {len(healthy_vslots)} vdisks in {args.storage_pool} sotrage pool', sys.stdout)
+            common.print_if_not_quiet(args, f'Found {len(candidate_vslots)} vdisks in {args.storage_pool} sotrage pool', sys.stdout)
 
         if args.max_donors_per_pdisk > 0:
-            donors_per_vdisk = get_donors_per_vdisk(base_config)
-            candidate_vslots = [vslot for vslot in candidate_vslots if donors_per_vdisk[common.get_pdisk_id(vslot.VSlotId)] < args.max_donors_per_pdisk]
-            common.print_if_not_quiet(args, f'Found {len(healthy_vslots)} vdisks with donors per pdisk < {args.max_donors_per_pdisk}', sys.stdout)
+            donors_per_pdisk = common.build_donors_per_pdisk_map(base_config)
+            candidate_vslots = [vslot for vslot in candidate_vslots if donors_per_pdisk[common.get_pdisk_id(vslot.VSlotId)] < args.max_donors_per_pdisk]
+            common.print_if_not_quiet(args, f'Found {len(candidate_vslots)} vdisks with donors per pdisk < {args.max_donors_per_pdisk}', sys.stdout)
 
-        if len(candidate_vslots) == 0:  # candidate_vslots is empty
+        if len(candidate_vslots) == 0:
             common.print_if_not_quiet(args, 'No vdisks suitable for relocation found, waiting..', sys.stdout)
             time.sleep(10)
             continue

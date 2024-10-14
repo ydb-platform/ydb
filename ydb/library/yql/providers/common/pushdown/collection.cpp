@@ -144,6 +144,17 @@ bool IsDyNumberType(NYql::NUdf::TDataTypeId t) {
     return t == NYql::NProto::DyNumber;
 }
 
+bool IsIntegerType(NYql::NUdf::TDataTypeId t) {
+    return t == NYql::NProto::Int8
+        || t == NYql::NProto::Int16
+        || t == NYql::NProto::Int32
+        || t == NYql::NProto::Int64
+        || t == NYql::NProto::Uint8
+        || t == NYql::NProto::Uint16
+        || t == NYql::NProto::Uint32
+        || t == NYql::NProto::Uint64;
+}
+
 bool IsComparableTypes(const TExprBase& leftNode, const TExprBase& rightNode, bool equality,
     const TTypeAnnotationNode* inputType, const TSettings& settings)
 {
@@ -212,6 +223,12 @@ bool IsComparableTypes(const TExprBase& leftNode, const TExprBase& rightNode, bo
          */
         if (leftTypeId == NYql::NProto::Uint32 && rightTypeId == NYql::NProto::Date) {
             return ECompareOptions::Comparable;
+        }
+
+        if (settings.IsEnabled(TSettings::EFeatureFlag::ImplicitConversionSignedAndUnsignedInt)) {
+            if (IsIntegerType(leftTypeId) && IsIntegerType(rightTypeId)) {
+                return ECompareOptions::Comparable;
+            }
         }
 
         /*

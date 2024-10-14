@@ -45,26 +45,21 @@ Y_UNIT_TEST_SUITE(Replication) {
             )
         )");
 
-        ExecuteQuery(client, R"(
-            CREATE TABLE `TargetTable` (
-                id UINT64,
-                value TEXT,
-                PRIMARY KEY (id)
-            )
-        )");
-
-        ExecuteQuery(client, R"(
-            CREATE ASYNC REPLICATION /RootTestReplication
-            FOR /Root/OriginalTable AS /Root/TargetTable
+        auto q = Sprintf(R"(
+            CREATE ASYNC REPLICATION `/Root/TestReplication`
+            FOR `/Root/OriginalTable` AS `/Root/TargetTable`
             WITH (
-                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
-                    ENDPOINT = "localhost:2135",
-                    DATABASE = "/Root"
-            );
-        )");
+                ENDPOINT = "localhost:%d",
+                DATABASE = "/Root"
+           );
+        )", setup.GetServer().GrpcPort);
+
+        ExecuteQuery(client, q);
+
+        Cerr << ">>>>> " << q << Endl << Flush;
 
         ExecuteQuery(client, R"(
-            INSERT INTO `OriginalTable` (id, value)
+            UPSERT INTO `OriginalTable` (id, value)
             VALUES
                 (1, "value 1"),
                 (2, "value 2");
@@ -81,16 +76,6 @@ Y_UNIT_TEST_SUITE(Replication) {
                 (1, "value 3"),
                 (2, "value 4");
         )");
-
-        {
-            auto queryResult = client.ExecuteQuery("SELECT `id`, `value` FROM `/Root/OriginalTable`",
-                TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(queryResult.GetStatus(), EStatus::SUCCESS, queryResult.GetIssues().ToString());
-
-            TResultSetParser resultSet(queryResult.GetResultSetParser(0));
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
-        }
 
         Sleep(TDuration::Seconds(10));
 

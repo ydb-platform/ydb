@@ -299,7 +299,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
                 IndexDescription {
                     Name: "ByValue"
                     KeyColumnNames: ["value"]
-                    IndexImplTableDescriptions {
+                    IndexImplTableDescription {
                         SplitBoundary { KeyPrefix { Tuple { Optional { Text: "A" } } } }
                         SplitBoundary { KeyPrefix { Tuple { Optional { Text: "B" } } } }
                         SplitBoundary { KeyPrefix { Tuple { Optional { Text: "C" } } } }

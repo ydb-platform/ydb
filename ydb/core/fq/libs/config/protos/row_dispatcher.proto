@@ -13,11 +13,18 @@ message TRowDispatcherCoordinatorConfig {
     string CoordinationNodePath = 2;
     bool LocalMode = 3;                     // Use only local row_dispatcher.
 }
+
+message TJsonParserConfig {
+    uint64 BatchSizeBytes = 1; // default = 1 MiB
+    uint64 BatchCreationTimeoutMs = 2; // default = 1 second
+}
+
 message TRowDispatcherConfig {
     bool Enabled = 1;
     uint64 TimeoutBeforeStartSessionSec = 2;
     uint64 SendStatusPeriodSec = 3;
     uint64 MaxSessionUsedMemory = 4; 
     bool WithoutConsumer = 5;
+    TJsonParserConfig JsonParser = 7;
     TRowDispatcherCoordinatorConfig Coordinator = 6;
 }

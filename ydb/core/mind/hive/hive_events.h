@@ -33,6 +33,7 @@ struct TEvPrivate {
         EvStorageBalancerOut,
         EvDeleteNode,
         EvCanMoveTablets,
+        EvUpdateBalanceCounters,
         EvUpdateDataCenterFollowers,
         EvEnd
     };
@@ -121,6 +122,8 @@ struct TEvPrivate {
     };
 
     struct TEvCanMoveTablets : TEventLocal<TEvCanMoveTablets, EvCanMoveTablets> {};
+
+    struct TEvUpdateBalanceCounters : TEventLocal<TEvUpdateBalanceCounters, EvUpdateBalanceCounters> {};
 
     struct TEvUpdateDataCenterFollowers : TEventLocal<TEvUpdateDataCenterFollowers, EvUpdateDataCenterFollowers> {
         TDataCenterId DataCenter;

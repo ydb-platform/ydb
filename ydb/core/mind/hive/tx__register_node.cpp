@@ -51,6 +51,18 @@ public:
  
             node.BecomeDisconnected();
             if (node.LastSeenServicedDomains != servicedDomains) {
+                for (const auto& domain : node.LastSeenServicedDomains) {
+                    auto domainIt = Self->Domains.find(domain);
+                    if (domainIt != Self->Domains.end()) {
+                        domainIt->second.Nodes.erase(nodeId);
+                    }
+                }
+                for (const auto& domain : servicedDomains) {
+                    auto domainIt = Self->Domains.find(domain);
+                    if (domainIt != Self->Domains.end()) {
+                        domainIt->second.Nodes.insert(nodeId);
+                    }
+                }
                 // new tenant - new rules
                 node.SetDown(false);
                 node.SetFreeze(false);

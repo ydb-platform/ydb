@@ -472,7 +472,7 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
     auto worker = GetOrCreateWorker(id);
     worker->SetDataEnded(true);
 
-    auto allParentsEnded = std::all_of(record.GetAdjacentPartitionsIds().begin(), record.GetAdjacentPartitionsIds().end(), [&](auto partitionId) {
+    auto allParentsEnded = AllOf(record.GetAdjacentPartitionsIds(), [&](auto partitionId) {
         auto worker = Workers.find(TWorkerId{id.ReplicationId(), id.TargetId(), partitionId});
         if (worker == Workers.end()) {
             return false;

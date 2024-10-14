@@ -33,8 +33,7 @@ bool TSessionInfo::HasWorker(const TWorkerId& id) const {
     return Workers.contains(id);
 }
 
-TWorkerInfo::TWorkerInfo(NKikimrReplication::TRunWorkerCommand* cmd)
-    : DataEnded(false) {
+TWorkerInfo::TWorkerInfo(NKikimrReplication::TRunWorkerCommand* cmd) {
     SetCommand(cmd);
 }
 

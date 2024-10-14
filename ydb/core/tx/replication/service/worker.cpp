@@ -80,7 +80,8 @@ TString TEvWorker::TEvStatus::ToString() const {
 TEvWorker::TEvDataEnd::TEvDataEnd(ui64 partitionId, TVector<ui64>&& adjacentPartitionsIds, TVector<ui64>&& childPartitionsIds)
     : PartitionId(partitionId)
     , AdjacentPartitionsIds(std::move(adjacentPartitionsIds))
-    , ChildPartitionsIds(std::move(childPartitionsIds)) {
+    , ChildPartitionsIds(std::move(childPartitionsIds))
+{
 }
 
 TString TEvWorker::TEvDataEnd::ToString() const {
@@ -211,7 +212,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void Handle(TEvWorker::TEvDataEnd::TPtr& ev) {
-        Forward(ev, Parent);
+        Send(ev->Forward(Parent));
     }
 
     void Handle(TEvWorker::TEvGone::TPtr& ev) {

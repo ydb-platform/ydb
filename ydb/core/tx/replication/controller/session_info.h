@@ -48,7 +48,7 @@ public:
 private:
     THolder<NKikimrReplication::TRunWorkerCommand> Command;
     TMaybe<ui32> Session;
-    bool DataEnded;
+    bool DataEnded = false;
 };
 
 }

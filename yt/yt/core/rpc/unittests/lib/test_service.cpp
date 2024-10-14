@@ -21,6 +21,7 @@ using namespace NConcurrency;
 ////////////////////////////////////////////////////////////////////////////////
 
 YT_DEFINE_GLOBAL(std::unique_ptr<NThreading::TEvent>, Latch_);
+YT_DEFINE_GLOBAL(std::atomic<int>, ConcurrentCalls_, 0);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -202,6 +203,10 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, RequestBytesThrottledCall)
     {
+        THROW_ERROR_EXCEPTION_UNLESS(ConcurrentCalls_().fetch_add(1) == 0, "Too many concurrent calls on entry!");
+        Sleep(TDuration::MilliSeconds(100));
+        THROW_ERROR_EXCEPTION_UNLESS(ConcurrentCalls_().fetch_sub(1) == 1, "Too many concurrent calls on exit!");
+
         context->Reply();
     }
 

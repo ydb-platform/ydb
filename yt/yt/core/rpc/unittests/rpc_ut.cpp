@@ -661,7 +661,7 @@ TYPED_TEST(TNotGrpcTest, RequestBytesThrottling)
                 methods = {
                     RequestBytesThrottledCall = {
                         request_bytes_throttler = {
-                            limit = 1000000;
+                            limit = 100000;
                         }
                     }
                 }
@@ -675,18 +675,16 @@ TYPED_TEST(TNotGrpcTest, RequestBytesThrottling)
 
     auto makeCall = [&] {
         auto req = proxy.RequestBytesThrottledCall();
-        req->Attachments().push_back(TSharedMutableRef::Allocate(100'000));
+        req->Attachments().push_back(TSharedMutableRef::Allocate(60'000));
         return req->Invoke().AsVoid();
     };
 
     std::vector<TFuture<void>> futures;
-    for (int i = 0; i < 30; ++i) {
+    for (int i = 0; i < 5; ++i) {
         futures.push_back(makeCall());
     }
 
-    NProfiling::TWallTimer timer;
     EXPECT_TRUE(AllSucceeded(std::move(futures)).Get().IsOK());
-    EXPECT_LE(std::abs(static_cast<i64>(timer.GetElapsedTime().MilliSeconds()) - 3000), 200);
 }
 
 // Now test different types of errors.

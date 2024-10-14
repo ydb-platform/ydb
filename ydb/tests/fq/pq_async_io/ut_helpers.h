@@ -125,5 +125,6 @@ void AddReadRule(
     const TString& streamName);
 
 std::vector<TString> UVParser(const NUdf::TUnboxedValue& item);
+std::vector<TString> UVParserWithMetadatafields(const NUdf::TUnboxedValue& item);
 
 }

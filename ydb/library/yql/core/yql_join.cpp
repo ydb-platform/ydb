@@ -319,7 +319,12 @@ namespace {
                 }
             }
             else if (option.IsAtom("forceSortedMerge") || option.IsAtom("forceStreamLookup")) {
-                if (option.IsAtom("forceStreamLookup")) { // FIXME RESOLVE BEFORE MERGE
+                if (option.IsAtom("forceStreamLookup")) {
+                    if (child->ChildrenSize() % 2 == 0) {
+                        ctx.AddError(TIssue(ctx.GetPosition(option.Pos()), TStringBuilder() <<
+                                    "Odd number of options for forceStreamLookup"));
+                        return IGraphTransformer::TStatus::Error;
+                    }
                 } else {
                     if (!EnsureTupleSize(*child, 1, ctx)) {
                         return IGraphTransformer::TStatus::Error;

@@ -372,10 +372,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             else if (name == "timestamp" || name == "uid") {
                 UNIT_ASSERT(!column.HasDataAccessorConstructor());
             } else {
-                UNIT_ASSERT_C(column.HasDataAccessorConstructor() == isSparsed,
-                    TStringBuilder() << "Sparsed for column \'" << column.GetName() << "\' is"
-                                     << (column.HasDataAccessorConstructor() ? "" : " not") << " set but must be" << (isSparsed ? "" : " not")
-                                     << " set");
+                UNIT_ASSERT(column.HasDataAccessorConstructor() == isSparsed);
                 if (column.HasDataAccessorConstructor()) {
                     UNIT_ASSERT_EQUAL(column.GetDataAccessorConstructor().GetClassName(), "SPARSED");
                 }
@@ -399,10 +396,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
                 else if (name == "timestamp" || name == "uid") {
                     UNIT_ASSERT(!column.HasDataAccessorConstructor());
                 } else {
-                    UNIT_ASSERT_C(column.HasDataAccessorConstructor() == isSparsed,
-                        TStringBuilder() << "Sparsed for column \'" << column.GetName() << "\' is"
-                                         << (column.HasDataAccessorConstructor() ? "" : " not") << " set but must be"
-                                         << (isSparsed ? "" : " not") << " set");
+                    UNIT_ASSERT(column.HasDataAccessorConstructor() == isSparsed);
                     if (column.HasDataAccessorConstructor()) {
                         UNIT_ASSERT_EQUAL(column.GetDataAccessorConstructor().GetClassName(), "SPARSED");
                     }

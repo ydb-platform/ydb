@@ -124,7 +124,6 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
             }
         }
         Self->TablesManager = std::move(tManagerLocal);
-        Self->InsertTable->CalcVersionCounts();
 
         Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, Self->TablesManager.GetTables().size());
         Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, Self->TablesManager.GetSchemaPresets().size());

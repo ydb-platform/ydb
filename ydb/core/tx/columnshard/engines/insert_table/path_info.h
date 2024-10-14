@@ -69,14 +69,14 @@ public:
 
     TPathInfoIndexPriority GetIndexationPriority() const;
 
-    bool EraseCommitted(const TCommittedData& data, TVersionCounts* versionCounts = nullptr);
+    bool EraseCommitted(const TCommittedData& data, TVersionCounts* versionCounts);
     bool HasCommitted(const TCommittedData& data);
 
     const TSet<TCommittedData>& GetCommitted() const {
         return Committed;
     }
 
-    bool AddCommitted(TCommittedData&& data, const bool load = false, TVersionCounts* versionCounts = nullptr);
+    bool AddCommitted(TCommittedData&& data, const bool load, TVersionCounts* versionCounts);
 
     bool IsOverloaded() const {
         return CommittedOverload || InsertedOverload;

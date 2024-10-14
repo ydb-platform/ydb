@@ -8,7 +8,7 @@
 namespace NKikimr::NOlap {
 
 bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data) {
-    if (auto* dataPtr = Summary.AddInserted(std::move(data), false, &*VersionCounts)) {
+    if (auto* dataPtr = Summary.AddInserted(std::move(data))) {
         AddBlobLink(dataPtr->GetBlobRange().BlobId);
         dbTable.Insert(*dataPtr);
         return true;
@@ -45,7 +45,7 @@ TInsertionSummary::TCounters TInsertTable::Commit(
             auto committed = data->Commit(planStep, txId);
             dbTable.Commit(committed);
 
-            pathInfo->AddCommitted(std::move(committed));
+            pathInfo->AddCommitted(std::move(committed), false, &*VersionCounts);
         } else {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "abort_insertion")("path_id", data->GetPathId())(
                 "blob_range", data->GetBlobRange().ToString());
@@ -78,7 +78,7 @@ void TInsertTable::Abort(IDbWrapper& dbTable, const THashSet<TInsertWriteId>& wr
 
     for (auto writeId : writeIds) {
         // There could be inconsistency with txs and writes in case of bugs. So we could find no record for writeId.
-        if (std::optional<TInsertedData> data = Summary.ExtractInserted(writeId, &*VersionCounts)) {
+        if (std::optional<TInsertedData> data = Summary.ExtractInserted(writeId)) {
             AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "abort_insertion")("path_id", data->GetPathId())(
                 "blob_range", data->GetBlobRange().ToString())("write_id", writeId);
             dbTable.EraseInserted(*data);
@@ -101,7 +101,7 @@ void TInsertTable::EraseCommittedOnExecute(
 }
 
 void TInsertTable::EraseCommittedOnComplete(const TCommittedData& data) {
-    if (Summary.EraseCommitted(data), &*VersionCounts) {
+    if (Summary.EraseCommitted(data)) {
         RemoveBlobLinkOnComplete(data.GetBlobRange().BlobId);
     }
 }
@@ -115,7 +115,7 @@ void TInsertTable::EraseAbortedOnExecute(
 }
 
 void TInsertTable::EraseAbortedOnComplete(const TInsertedData& data) {
-    if (Summary.EraseAborted(data.GetInsertWriteId(), &*VersionCounts)) {
+    if (Summary.EraseAborted(data.GetInsertWriteId())) {
         RemoveBlobLinkOnComplete(data.GetBlobRange().BlobId);
     }
 }

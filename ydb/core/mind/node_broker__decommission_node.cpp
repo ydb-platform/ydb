@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/counters_node_broker.pb.h>
+
 namespace NKikimr {
 namespace NNodeBroker {
 
@@ -13,8 +14,6 @@ public:
     TTxDecommissionNode(TNodeBroker *self, TEvNodeBroker::TEvDecommissionRequest::TPtr &ev)
         : TBase(self)
         , Event(ev)
-        //, SlotIndex(resolvedEv->Get()->SlotIndex)
-        //, ServicedSubDomain(resolvedEv->Get()->ServicedSubDomain)
     {
     }
 
@@ -78,8 +77,6 @@ public:
 
 private:
     TEvNodeBroker::TEvDecommissionRequest::TPtr Event;
-    //const std::optional<ui32> SlotIndex;
-    //const TSubDomainKey ServicedSubDomain;
     TAutoPtr<TEvNodeBroker::TEvDecommissionResponse> Response;
 };
 

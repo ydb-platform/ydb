@@ -757,6 +757,14 @@ def build_vslot_map(base_config):
     return vslot_map
 
 
+def build_group_map(base_config):
+    vslot_map = {
+        group.GroupId: group
+        for group in base_config.Group
+    }
+    return vslot_map
+
+
 def message_to_string(m):
     return text_format.MessageToString(m, as_one_line=True)
 

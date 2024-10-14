@@ -18,36 +18,18 @@ namespace NYdb::NTopic {
 
 class TOffsetsCollector {
 public:
+    TVector<TTopicOffsets> GetOffsets() const;
+
+    void CollectOffsets(const TVector<TReadSessionEvent::TEvent>& events);
+    void CollectOffsets(const TReadSessionEvent::TEvent& event);
+
+private:
     // topic -> partition -> (begin, end)
     using TOffsetRanges = THashMap<TString, THashMap<ui64, TDisjointIntervalTree<ui64>>>;
 
-    struct TTransactionInfo {
-        TSpinLock Lock;
-        bool IsActive = false;
-        bool Subscribed = false;
-        TOffsetRanges Ranges;
-    };
+    void CollectOffsets(const TReadSessionEvent::TDataReceivedEvent& event);
 
-    using TTransactionInfoPtr = std::shared_ptr<TTransactionInfo>;
-
-    TTransactionInfoPtr GetOrCreateTransactionInfo(const TTransactionId& txId);
-
-    TVector<TTopicOffsets> ExtractOffsets(const TTransactionId& txId);
-
-    void CollectOffsets(const TTransactionId& txId,
-                        const TVector<TReadSessionEvent::TEvent>& events);
-    void CollectOffsets(const TTransactionId& txId,
-                        const TReadSessionEvent::TEvent& event);
-
-private:
-    using TTransactionMap = THashMap<TTransactionId, TTransactionInfoPtr>;
-
-    void CollectOffsets(TTransactionInfoPtr txInfo,
-                        const TReadSessionEvent::TEvent& event);
-    void CollectOffsets(TTransactionInfoPtr txInfo,
-                        const TReadSessionEvent::TDataReceivedEvent& event);
-
-    TTransactionMap Txs;
+    TOffsetRanges Ranges;
 };
 
 }

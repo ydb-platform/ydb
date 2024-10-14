@@ -2,33 +2,11 @@
 
 namespace NYdb::NTopic {
 
-void TOffsetsCollector::CollectOffsets(const TTransactionId& txId,
-                                       const TVector<TReadSessionEvent::TEvent>& events)
+TVector<TTopicOffsets> TOffsetsCollector::GetOffsets() const
 {
-    TTransactionInfoPtr txInfo = GetOrCreateTransactionInfo(txId);
-    for (auto& event : events) {
-        CollectOffsets(txInfo, event);
-    }
-}
-
-void TOffsetsCollector::CollectOffsets(const TTransactionId& txId,
-                                       const TReadSessionEvent::TEvent& event)
-{
-    TTransactionInfoPtr txInfo = GetOrCreateTransactionInfo(txId);
-    CollectOffsets(txInfo, event);
-}
-
-TVector<TTopicOffsets> TOffsetsCollector::ExtractOffsets(const TTransactionId& txId)
-{
-    auto p = Txs.find(txId);
-    Y_ABORT_UNLESS(p != Txs.end(), "txId=%s", GetTxId(txId).data());
-
-    const TTransactionInfoPtr txInfo = p->second;
-    Y_ABORT_UNLESS(txInfo);
-
     TVector<TTopicOffsets> topics;
 
-    for (auto& [path, partitions] : txInfo->Ranges) {
+    for (auto& [path, partitions] : Ranges) {
         TTopicOffsets topic;
         topic.Path = path;
 
@@ -53,49 +31,40 @@ TVector<TTopicOffsets> TOffsetsCollector::ExtractOffsets(const TTransactionId& t
         }
     }
 
-    Txs.erase(txId);
-
     return topics;
 }
 
-auto TOffsetsCollector::GetOrCreateTransactionInfo(const TTransactionId& txId) -> TTransactionInfoPtr
+void TOffsetsCollector::CollectOffsets(const TVector<TReadSessionEvent::TEvent>& events)
 {
-    auto p = Txs.find(txId);
-    if (p == Txs.end()) {
-        TTransactionInfoPtr& txInfo = Txs[txId];
-        txInfo = std::make_shared<TTransactionInfo>();
-        txInfo->Subscribed = false;
-        p = Txs.find(txId);
+    for (auto& event : events) {
+        if (auto* e = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&event)) {
+            CollectOffsets(*e);
+        }
     }
-    return p->second;
 }
 
-void TOffsetsCollector::CollectOffsets(TTransactionInfoPtr txInfo,
-                                       const TReadSessionEvent::TEvent& event)
+void TOffsetsCollector::CollectOffsets(const TReadSessionEvent::TEvent& event)
 {
     if (auto* e = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&event)) {
-        CollectOffsets(txInfo, *e);
+        CollectOffsets(*e);
     }
 }
 
-void TOffsetsCollector::CollectOffsets(TTransactionInfoPtr txInfo,
-                                       const TReadSessionEvent::TDataReceivedEvent& event)
+void TOffsetsCollector::CollectOffsets(const TReadSessionEvent::TDataReceivedEvent& event)
 {
     const auto& session = *event.GetPartitionSession();
     const TString& topicPath = session.GetTopicPath();
     ui32 partitionId = session.GetPartitionId();
 
-    with_lock (txInfo->Lock) {
-        if (event.HasCompressedMessages()) {
-            for (auto& message : event.GetCompressedMessages()) {
-                ui64 offset = message.GetOffset();
-                txInfo->Ranges[topicPath][partitionId].InsertInterval(offset, offset + 1);
-            }
-        } else {
-            for (auto& message : event.GetMessages()) {
-                ui64 offset = message.GetOffset();
-                txInfo->Ranges[topicPath][partitionId].InsertInterval(offset, offset + 1);
-            }
+    if (event.HasCompressedMessages()) {
+        for (auto& message : event.GetCompressedMessages()) {
+            ui64 offset = message.GetOffset();
+            Ranges[topicPath][partitionId].InsertInterval(offset, offset + 1);
+        }
+    } else {
+        for (auto& message : event.GetMessages()) {
+            ui64 offset = message.GetOffset();
+            Ranges[topicPath][partitionId].InsertInterval(offset, offset + 1);
         }
     }
 }

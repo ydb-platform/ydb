@@ -1315,8 +1315,20 @@ private:
     };
 
 private:
+    struct TTransactionInfo {
+        TSpinLock Lock;
+        bool IsActive = false;
+        bool Subscribed = false;
+        bool CommitCalled = false;
+        TOffsetsCollector OffsetsCollector;
+    };
+
+    using TTransactionInfoPtr = std::shared_ptr<TTransactionInfo>;
+    using TTransactionMap = THashMap<TTransactionId, TTransactionInfoPtr>;
+
     void TrySubscribeOnTransactionCommit(NTable::TTransaction& tx,
                                          std::shared_ptr<TTopicClient::TImpl> client);
+    TTransactionInfoPtr GetOrCreateTxInfo(const TTransactionId& txId);
 
     const TAReadSessionSettings<UseMigrationProtocol> Settings;
     const TString Database;
@@ -1366,7 +1378,7 @@ private:
     std::unordered_map<ui32, std::vector<TParentInfo>> HierarchyData;
     std::unordered_set<ui64> ReadingFinishedData;
 
-    TOffsetsCollector OffsetsCollector;
+    TTransactionMap Txs;
 };
 
 }  // namespace NYdb::NTopic

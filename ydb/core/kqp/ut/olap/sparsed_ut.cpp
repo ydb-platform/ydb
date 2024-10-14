@@ -1,14 +1,17 @@
-#include "helpers/local.h"
-#include "helpers/writer.h"
-#include "helpers/typed_local.h"
-#include "helpers/query_executor.h"
 #include "helpers/get_value.h"
+#include "helpers/local.h"
+#include "helpers/query_executor.h"
+#include "helpers/typed_local.h"
+#include "helpers/writer.h"
+
+#include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/tx/columnshard/blobs_action/common/const.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/wrappers/fake_storage.h>
+
+#include <ydb/library/formats/arrow/protos/accessor.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
-#include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/wrappers/fake_storage.h>
-#include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 
 namespace NKikimr::NKqp {
 
@@ -343,6 +346,80 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         }
     }
 
+    // Only for standalone table
+    void SparsedByDefaultForNonPKColumn(bool enableSparsed, bool enableSparsedByDefaultForNonPKColumn) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.SetEnableSparsedColumns(enableSparsed);
+        settings.SetEnableSparsedByDefaultForNonPKColumn(enableSparsedByDefaultForNonPKColumn);
+        bool isSparsed = enableSparsedByDefaultForNonPKColumn && enableSparsed;
+        TKikimrRunner kikimr(settings);
+        TLocalHelper helper(kikimr);
+        auto& server = kikimr.GetTestServer();
+        TActorId sender = server.GetRuntime()->AllocateEdgeActor();
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        helper.CreateTestOlapTableWithoutStore("olapStandaloneTable");
+
+        auto describeResult = DescribeTable(&server, sender, "/Root/olapStandaloneTable");
+        auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+        for (const auto& column : schema.GetColumns()) {
+            auto name = column.GetName();
+            // Sparsed in scheme
+            if (name == "resource_id") {
+                UNIT_ASSERT(column.HasDataAccessorConstructor());
+            }
+            // PK columns
+            else if (name == "timestamp" || name == "uid") {
+                UNIT_ASSERT(!column.HasDataAccessorConstructor());
+            } else {
+                UNIT_ASSERT_C(column.HasDataAccessorConstructor() == isSparsed,
+                    TStringBuilder() << "Sparsed for column \'" << column.GetName() << "\' is"
+                                     << (column.HasDataAccessorConstructor() ? "" : " not") << " set but must be" << (isSparsed ? "" : " not")
+                                     << " set");
+                if (column.HasDataAccessorConstructor()) {
+                    UNIT_ASSERT_EQUAL(column.GetDataAccessorConstructor().GetClassName(), "SPARSED");
+                }
+            }
+        }
+
+        auto result = session.ExecuteSchemeQuery("ALTER TABLE `/Root/olapStandaloneTable` ADD COLUMN newColumn Uint64;").GetValueSync();
+        if (!enableSparsed) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            auto describeResult = DescribeTable(&server, sender, "/Root/olapStandaloneTable");
+            auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+            for (const auto& column : schema.GetColumns()) {
+                auto name = column.GetName();
+                // Sparsed in scheme
+                if (name == "resource_id") {
+                    UNIT_ASSERT(column.HasDataAccessorConstructor());
+                }
+                // PK columns
+                else if (name == "timestamp" || name == "uid") {
+                    UNIT_ASSERT(!column.HasDataAccessorConstructor());
+                } else {
+                    UNIT_ASSERT_C(column.HasDataAccessorConstructor() == isSparsed,
+                        TStringBuilder() << "Sparsed for column \'" << column.GetName() << "\' is"
+                                         << (column.HasDataAccessorConstructor() ? "" : " not") << " set but must be"
+                                         << (isSparsed ? "" : " not") << " set");
+                    if (column.HasDataAccessorConstructor()) {
+                        UNIT_ASSERT_EQUAL(column.GetDataAccessorConstructor().GetClassName(), "SPARSED");
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(DisabledDefaultSparsedForNotPKColumn) {
+        SparsedByDefaultForNonPKColumn(false, false);
+        SparsedByDefaultForNonPKColumn(true, false);
+        SparsedByDefaultForNonPKColumn(false, true);
+    }
+
+    Y_UNIT_TEST(EnabledDefaultSparsedForNotPKColumn) {
+        SparsedByDefaultForNonPKColumn(true, true);
+    }
 }
 
 } // namespace

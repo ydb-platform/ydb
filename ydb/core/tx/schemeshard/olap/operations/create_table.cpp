@@ -1,11 +1,12 @@
-#include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
-#include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
-#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
-
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/tx/sharding/sharding.h>
 #include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/sharding/sharding.h>
+
+#include <ydb/library/formats/arrow/accessor/common/const.h>
 
 #include <util/random/shuffle.h>
 
@@ -555,6 +556,20 @@ class TCreateColumnTable: public TSubOperation {
         }
     }
 
+    void SetSparsedByDefaultForNonPKColumn(NKikimrSchemeOp::TColumnTableDescription& createDescription) {
+        auto mutableSchema = createDescription.MutableSchema();
+        TSet<TString> keyColumns;
+            for (const auto& name : mutableSchema->GetKeyColumnNames()) {
+                Y_VERIFY(keyColumns.insert(name).second);
+            }
+        for (ui32 i = 0; i < mutableSchema->ColumnsSize(); i++) {
+            auto mutableColumn = mutableSchema->MutableColumns(i);
+            if (!keyColumns.contains(mutableColumn->GetName()) && !mutableColumn->HasDataAccessorConstructor()) {
+                mutableColumn->MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName);
+            }
+        }
+    }
+
 public:
     using TSubOperation::TSubOperation;
 
@@ -564,11 +579,18 @@ public:
         const auto acceptExisted = !Transaction.GetFailOnExist();
         const TString& parentPathStr = Transaction.GetWorkingDir();
 
-        // Copy CreateColumnTable for changes. Update default sharding if not set.
+        // Copy CreateColumnTable for changes. Update default sharding if not set and set sparsed by default for non PK column
         auto createDescription = Transaction.GetCreateColumnTable();
         if (!createDescription.HasColumnShardCount()) {
             createDescription.SetColumnShardCount(TTableConstructorBase::DEFAULT_SHARDS_COUNT);
         }
+
+        bool isSparsedByDefaultForNonPKColumn =
+            AppData()->FeatureFlags.GetEnableSparsedColumns() && AppData()->FeatureFlags.GetEnableSparsedByDefaultForNonPKColumn();
+        if (isSparsedByDefaultForNonPKColumn) {
+            SetSparsedByDefaultForNonPKColumn(createDescription);
+        }
+
         const TString& name = createDescription.GetName();
         const ui32 shardsCount = Max(ui32(1), createDescription.GetColumnShardCount());
         auto opTxId = OperationId.GetTxId();

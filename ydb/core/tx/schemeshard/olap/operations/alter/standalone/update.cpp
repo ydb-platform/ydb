@@ -5,6 +5,13 @@
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
+void SetSparsedByDefaultForNonPKColumn(NKikimrSchemeOp::TAlterColumnTableSchema& alterSchema) {
+    for (ui32 i = 0; i < alterSchema.AddColumnsSize(); i++) {
+        alterSchema.MutableAddColumns(i)->MutableDataAccessorConstructor()->SetClassName(
+            NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName);
+    }
+}
+
 NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpdateInitializationContext& context) {
     const auto& originalTable = context.GetOriginalEntityAsVerified<TStandaloneTable>();
     auto alter = TConverterModifyToAlter().Convert(*context.GetModification());
@@ -13,6 +20,9 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
     }
     auto alterCS = alter.DetachResult();
     if (alterCS.HasAlterSchema()) {
+        if (AppData()->FeatureFlags.GetEnableSparsedByDefaultForNonPKColumn()) {
+            SetSparsedByDefaultForNonPKColumn(*alterCS.MutableAlterSchema());
+        }
         TSimpleErrorCollector collector;
         TOlapSchemaUpdate schemaUpdate;
         if (!schemaUpdate.Parse(alterCS.GetAlterSchema(), collector)) {

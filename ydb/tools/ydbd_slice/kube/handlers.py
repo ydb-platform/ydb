@@ -79,6 +79,9 @@ def get_all_manifests(directory):
         logger.error('Cluster from kubeconfig requires NodeClaim object to be created. '
                      'Please create NodeClaim mainfest')
         sys.exit(2)
+    
+    if not result:
+        raise Exception(f'failed to find any manifests in {os.path.abspath(directory)}') 
 
     return result
 

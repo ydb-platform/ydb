@@ -1352,11 +1352,11 @@ TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings) {
 
     result.ForceSortedMerge = HasSetting(linkSettings, "forceSortedMerge");
     
-    if(HasSetting(linkSettings, "forceStreamLookup")) {
+    if (HasSetting(linkSettings, "forceStreamLookup")) {
         result.JoinAlgo = EJoinAlgoType::StreamLookupJoin;
     }
 
-    if(HasSetting(linkSettings, "compact")) {
+    if (HasSetting(linkSettings, "compact")) {
         result.Compact = true;
     }
 

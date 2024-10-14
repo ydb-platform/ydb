@@ -15,6 +15,7 @@ SRCS(
     modification_controller.cpp
     object.cpp
     fetch_database.cpp
+    scheme_manager.cpp
 )
 
 PEERDIR(
@@ -31,5 +32,7 @@ PEERDIR(
 )
 
 GENERATE_ENUM_SERIALIZATION(abstract.h)
+
+YQL_LAST_ABI_VERSION()
 
 END()

@@ -253,6 +253,7 @@ public:
     THashMap<TPathId, TExternalDataSourceInfo::TPtr> ExternalDataSources;
     THashMap<TPathId, TViewInfo::TPtr> Views;
     THashMap<TPathId, TResourcePoolInfo::TPtr> ResourcePools;
+    THashMap<TPathId, TTieringRuleInfo::TPtr> TieringRules;
 
     TTempDirsState TempDirsState;
 
@@ -822,6 +823,10 @@ public:
     // ResourcePool
     void PersistResourcePool(NIceDb::TNiceDb& db, TPathId pathId, const TResourcePoolInfo::TPtr resourcePool);
     void PersistRemoveResourcePool(NIceDb::TNiceDb& db, TPathId pathId);
+
+    // TieringRule
+    void PersistTieringRule(NIceDb::TNiceDb& db, TPathId pathId, const TTieringRuleInfo::TPtr tieringRule);
+    void PersistRemoveTieringRule(NIceDb::TNiceDb& db, TPathId pathId);
 
     TTabletId GetGlobalHive(const TActorContext& ctx) const;
 

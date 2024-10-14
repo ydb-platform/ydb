@@ -5,7 +5,7 @@
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
-NKikimr::TConclusionStatus TInStoreShardsTransfer::DoInitializeImpl(const TUpdateInitializationContext& context) {
+NKikimr::TConclusionStatus TInStoreShardsTransfer::DoInitializeImpl(const NOperations::TUpdateInitializationContext& context) {
     if (!context.GetModification()->GetAlterColumnTable().GetAlterShards().GetTransfer().GetTransfers().size()) {
         return TConclusionStatus::Fail("hasn't data about shards transfer");
     }
@@ -36,7 +36,7 @@ NKikimr::TConclusionStatus TInStoreShardsTransfer::DoInitializeImpl(const TUpdat
     const auto& inStoreOriginal = context.GetOriginalEntityAsVerified<TInStoreTable>();
     auto targetInfo = std::make_shared<TColumnTableInfo>(inStoreOriginal.GetTableInfoVerified().AlterVersion,
         inStoreOriginal.GetTableInfoVerified().Description, TMaybe<NKikimrSchemeOp::TColumnStoreSharding>(), context.GetModification()->GetAlterColumnTable());
-    TEntityInitializationContext eContext(context.GetSSOperationContext());
+    NOperations::TEntityInitializationContext eContext(context.GetSSOperationContext());
     TargetInStoreTable = std::make_shared<TInStoreTable>(context.GetOriginalEntity().GetPathId(), targetInfo, eContext);
 
     return TConclusionStatus::Success();

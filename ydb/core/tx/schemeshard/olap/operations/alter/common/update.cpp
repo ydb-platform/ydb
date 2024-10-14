@@ -1,9 +1,10 @@
 #include "update.h"
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/tiering/rule/object.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
-TConclusionStatus TColumnTableUpdate::DoStart(const TUpdateStartContext& context) {
+TConclusionStatus TColumnTableUpdate::DoStart(const NOperations::TUpdateStartContext& context) {
     auto conclusion = DoStartImpl(context);
     if (conclusion.IsFail()) {
         return conclusion;
@@ -15,7 +16,7 @@ TConclusionStatus TColumnTableUpdate::DoStart(const TUpdateStartContext& context
     return TConclusionStatus::Success();
 }
 
-TConclusionStatus TColumnTableUpdate::DoFinish(const TUpdateFinishContext& context) {
+TConclusionStatus TColumnTableUpdate::DoFinish(const NOperations::TUpdateFinishContext& context) {
     auto conclusion = DoFinishImpl(context);
     if (conclusion.IsFail()) {
         return conclusion;
@@ -28,4 +29,4 @@ TConclusionStatus TColumnTableUpdate::DoFinish(const TUpdateFinishContext& conte
     return TConclusionStatus::Success();
 }
 
-}
+}   // namespace NKikimr::NSchemeShard::NOlap::NAlter

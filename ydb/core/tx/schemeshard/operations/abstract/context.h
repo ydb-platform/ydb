@@ -5,7 +5,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_path.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 
-namespace NKikimr::NSchemeShard::NOlap::NAlter {
+namespace NKikimr::NSchemeShard::NOperations {
 
 class ISSEntity;
 
@@ -33,6 +33,7 @@ public:
     }
 
     const ISSEntity& GetOriginalEntity() const {
+        AFL_VERIFY(OriginalEntity);
         return *OriginalEntity;
     }
 
@@ -50,7 +51,7 @@ public:
         : OriginalEntity(originalEntity)
         , SSOperationContext(ssOperationContext)
         , TxId(txId) {
-        AFL_VERIFY(OriginalEntity);
+        AFL_VERIFY(originalEntity);
         AFL_VERIFY(SSOperationContext);
         AFL_VERIFY(TxId);
     }

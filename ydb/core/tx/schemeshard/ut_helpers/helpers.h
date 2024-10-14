@@ -294,6 +294,12 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropResourcePool);
     DROP_BY_PATH_ID_HELPERS(DropResourcePool);
 
+    // metadata object
+    GENERIC_HELPERS(CreateMetadataObject);
+    GENERIC_HELPERS(AlterMetadataObject);
+    GENERIC_HELPERS(DropMetadataObject);
+    DROP_BY_PATH_ID_HELPERS(DropMetadataObject);
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS

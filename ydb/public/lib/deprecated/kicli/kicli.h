@@ -587,7 +587,8 @@ public:
         ExternalTable,
         ExternalDataSource,
         View,
-        ResourcePool
+        ResourcePool,
+        TieringRule
     };
 
     TSchemaObject(TSchemaObject&&) = default;

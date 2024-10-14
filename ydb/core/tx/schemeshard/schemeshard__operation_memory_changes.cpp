@@ -108,6 +108,10 @@ void TMemoryChanges::GrabResourcePool(TSchemeShard* ss, const TPathId& pathId) {
     Grab<TResourcePoolInfo>(pathId, ss->ResourcePools, ResourcePools);
 }
 
+void TMemoryChanges::GrabTieringRule(TSchemeShard* ss, const TPathId& pathId) {
+    Grab<TTieringRuleInfo>(pathId, ss->TieringRules, TieringRules);
+}
+
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // be aware of the order of grab & undo ops
     // stack is the best way to manage it right
@@ -243,6 +247,16 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->ResourcePools.erase(id);
         }
         ResourcePools.pop();
+    }
+
+    while (TieringRules) {
+        const auto& [id, elem] = TieringRules.top();
+        if (elem) {
+            ss->TieringRules[id] = elem;
+        } else {
+            ss->TieringRules.erase(id);
+        }
+        TieringRules.pop();
     }
 }
 

@@ -1669,6 +1669,11 @@ enum EOperationType {
 
     ESchemeOpRestoreIncrementalBackup = 103;
     ESchemeOpRestoreIncrementalBackupAtTable = 104;
+
+    // Metadata Object
+    ESchemeOpCreateMetadataObject = 105;
+    ESchemeOpDropMetadataObject = 106;
+    ESchemeOpAlterMetadataObject = 107;
 }
 
 message TApplyIf {
@@ -1852,6 +1857,8 @@ message TModifyScheme {
     optional TResourcePoolDescription CreateResourcePool = 72;
 
     optional TRestoreIncrementalBackup RestoreIncrementalBackup = 73;
+
+    optional TModifyMetadataObject CreateMetadataObject = 74;
 }
 
 message TCopySequence {
@@ -1917,6 +1924,7 @@ enum EPathType {
     EPathTypeExternalDataSource = 19;
     EPathTypeView = 20;
     EPathTypeResourcePool = 21;
+    EPathTypeTieringRule = 22;
 }
 
 enum EPathSubType {
@@ -1973,6 +1981,7 @@ message TPathVersion {
     optional uint64 ExternalDataSourceVersion = 28;
     optional uint64 ViewVersion = 29;
     optional uint64 ResourcePoolVersion = 30;
+    optional uint64 TieringRuleVersion = 31;
 }
 
 // Describes single path
@@ -2062,6 +2071,7 @@ message TPathDescription {
     optional TExternalDataSourceDescription ExternalDataSourceDescription = 28;
     optional TViewDescription ViewDescription = 29;
     optional TResourcePoolDescription ResourcePoolDescription = 30;
+    optional TMetadataObjectDescription TieringRuleDescription = 31;
 }
 
 // For persisting AlterTable Tx description in Schemeshard internal DB
@@ -2201,4 +2211,36 @@ message TResourcePoolDescription {
     optional NKikimrProto.TPathID PathId = 2;
     optional uint64 Version = 3;
     optional TResourcePoolProperties Properties = 4;
+}
+
+message TModifyMetadataObject {
+    optional string Name = 1;
+    optional TMetadataObjectProperties Properties = 2;
+}
+
+message TMetadataObjectDescription {
+    optional string Name = 1;
+    optional NKikimrProto.TPathID PathId = 2;
+    optional uint64 Version = 3;
+    optional TMetadataObjectProperties Properties = 4;
+}
+
+message TMetadataObjectProperties {
+    oneof PropertiesImpl {
+        TTieringRuleProperties TieringRule = 1;
+    }
+}
+
+message TTieringRuleProperties {
+    optional string DefaultColumn = 1;
+    optional TTieringIntervals Tiers = 2;
+}
+
+message TTieringIntervals {
+    message TTieringInterval {
+        optional string TierName = 1;
+        optional uint64 EvictionDelayMs = 2;
+    }
+
+    repeated TTieringInterval Intervals = 1;
 }

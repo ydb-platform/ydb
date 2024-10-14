@@ -235,6 +235,10 @@ bool TPathElement::IsResourcePool() const {
     return PathType == EPathType::EPathTypeResourcePool;
 }
 
+bool TPathElement::IsTieringRule() const {
+    return PathType == EPathType::EPathTypeTieringRule;
+}
+
 void TPathElement::SetDropped(TStepId step, TTxId txId) {
     PathState = EPathState::EPathStateNotExist;
     StepDropped = step;

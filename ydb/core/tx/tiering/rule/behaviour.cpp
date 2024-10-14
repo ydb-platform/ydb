@@ -1,7 +1,7 @@
 #include "behaviour.h"
-#include "initializer.h"
-#include "checker.h"
 #include "manager.h"
+
+#include <ydb/services/metadata/abstract/initialization.h>
 
 namespace NKikimr::NColumnShard::NTiers {
 
@@ -12,7 +12,7 @@ TString TTieringRuleBehaviour::GetInternalStorageTablePath() const {
 }
 
 NMetadata::NInitializer::IInitializationBehaviour::TPtr TTieringRuleBehaviour::ConstructInitializer() const {
-    return std::make_shared<TTierRulesInitializer>();
+    return nullptr;
 }
 
 NMetadata::NModifications::IOperationsManager::TPtr TTieringRuleBehaviour::ConstructOperationsManager() const {

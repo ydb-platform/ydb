@@ -23,6 +23,8 @@ items:
         href: system/ydb-updates.md
       - name: Frequent tablet transfers between nodes
         href: system/tablets-moved.md
+      - name: System clock drift
+        href: system/system-clock-drift.md
   - name: Schema design issues
     items:
       - name: Overloaded shards

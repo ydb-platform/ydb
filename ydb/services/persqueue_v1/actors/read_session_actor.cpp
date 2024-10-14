@@ -1763,7 +1763,6 @@ i64 TFormedReadResponse<TServerMessage>::ApplyResponse(TServerMessage&& resp) {
         auto* partition_data = resp.mutable_data_batch()->mutable_partition_data(0);
         Y_ABORT_UNLESS(partition_data != nullptr && partition_data->batches_size() > 0);
 
-        // Проходим по всем батчам и устанавливаем codec в 0, если он равен -1
         for (auto& batch : *partition_data->mutable_batches()) {
             for (auto& message_data : *batch.mutable_message_data()) {
                 if (message_data.codec() == Ydb::PersQueue::V1::CODEC_UNSPECIFIED) {
@@ -1777,7 +1776,6 @@ i64 TFormedReadResponse<TServerMessage>::ApplyResponse(TServerMessage&& resp) {
         auto* partition_data = resp.mutable_read_response()->mutable_partition_data(0);
         Y_ABORT_UNLESS(partition_data != nullptr && partition_data->batches_size() > 0);
 
-        // Проходим по всем батчам и устанавливаем codec в 0, если он равен -1
         for (auto& batch : *partition_data->mutable_batches()) {
             if (batch.codec() == Ydb::Topic::CODEC_UNSPECIFIED) {
                 batch.set_codec(Ydb::Topic::CODEC_RAW);

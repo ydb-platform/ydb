@@ -7,7 +7,7 @@
 #include <ydb/library/arrow_parquet/result_set_parquet_printer.h>
 
 #include <iomanip>
-#include <strstream>
+#include <sstream>
 #include <regex>
 
 namespace NYdb {

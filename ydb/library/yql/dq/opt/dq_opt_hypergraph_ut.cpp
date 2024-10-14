@@ -16,19 +16,13 @@ using namespace NYql::NDq;
 
 std::shared_ptr<IBaseOptimizerNode> CreateChain(size_t size, TString onAttribute, TString tablePrefix="e") {
     std::shared_ptr<IBaseOptimizerNode> root = std::make_shared<TRelOptimizerNode>(tablePrefix + "1", std::make_shared<TOptimizerStatistics>());
-<<<<<<< HEAD
     root->Stats->Labels = std::make_shared<TVector<TString>>(TVector<TString>{tablePrefix + "1"});
-=======
->>>>>>> d2b896d3c5d (Don't lose 'any' flag after CBO. (#8674))
     for (size_t i = 1; i < size; ++i) {
         auto eiStr = tablePrefix + ToString(i + 1);
         auto eiPrevStr = tablePrefix + ToString(i);
 
         auto ei = std::make_shared<TRelOptimizerNode>(eiStr, std::make_shared<TOptimizerStatistics>());
-<<<<<<< HEAD
         ei->Stats->Labels = std::make_shared<TVector<TString>>(TVector<TString>{eiStr});
-=======
->>>>>>> d2b896d3c5d (Don't lose 'any' flag after CBO. (#8674))
 
         std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>> joinConditions;
         joinConditions.insert({TJoinColumn(eiPrevStr, onAttribute), TJoinColumn(eiStr, onAttribute)});

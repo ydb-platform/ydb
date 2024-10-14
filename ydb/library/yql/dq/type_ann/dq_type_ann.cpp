@@ -502,12 +502,27 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
         ? join.RightLabel().Cast<TCoAtom>().Value()
         : TStringBuf("");
 
-    if (input->ChildrenSize() > 9U && 0 && !input->Child(TDqJoin::idx_JoinType)->IsAtom("StreamLookupJoin") /*FIXME RESOLVE BEFORE MERGE */) {
+    if (input->ChildrenSize() > 9U) {
+        const auto& flags = *input->Child(TDqJoin::idx_Flags);
+        if (input->Child(TDqJoin::idx_JoinAlgo)->IsAtom("StreamLookupJoin")) {
+            if ((flags.ChildrenSize() % 2)) {
+                ctx.AddError(TIssue(ctx.GetPosition(flags.Pos()), TStringBuilder() << "DqJoin/StreamLookupJoin: Expected even number of options, but got " << flags.ChildrenSize()));
+                return nullptr;
+            }
+            for (ui32 i = 0; i < flags.ChildrenSize(); i += 2) {
+                const auto& flag = *input->Tail().Child(i);
+                if ( !flag.IsAtom({"TTL", "MaxCachedRows", "MaxDelay"})) {
+                    ctx.AddError(TIssue(ctx.GetPosition(flag.Pos()), TStringBuilder() << "DqJoin/StreamLookupJoin: Unsupported DQ join option: " << flag.Content()));
+                    return nullptr;
+                }
+            }
+        } else {
         for (auto i = 0U; i < input->Tail().ChildrenSize(); ++i) {
             if (const auto& flag = *input->Tail().Child(i); !flag.IsAtom({"LeftAny", "RightAny"})) {
                 ctx.AddError(TIssue(ctx.GetPosition(flag.Pos()), TStringBuilder() << "Unsupported DQ join option: " << flag.Content()));
                 return nullptr;
             }
+        }
         }
     }
 

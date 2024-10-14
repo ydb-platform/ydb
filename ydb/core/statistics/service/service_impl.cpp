@@ -15,6 +15,7 @@
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/protos/statistics.pb.h>
 #include <ydb/core/protos/data_events.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>

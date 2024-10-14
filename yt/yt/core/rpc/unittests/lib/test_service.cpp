@@ -187,7 +187,7 @@ public:
     {
         try {
             context->SetRequestInfo();
-            TDelayedExecutor::WaitForDuration(TDuration::Seconds(2));
+            TDelayedExecutor::WaitForDuration(TDuration::Max());
             context->Reply();
         } catch (const TFiberCanceledException&) {
             SlowCallCanceled_.Set();

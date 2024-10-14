@@ -529,7 +529,7 @@ void TWriteSessionImpl::TrySubscribeOnTransactionCommit(TTransaction* tx)
         txInfo->AllAcksReceived = NThreading::NewPromise<TStatus>();
     }
 
-    auto callback = [txInfo]() {
+    auto callback = [cbContext = this->SelfContext, txId, txInfo]() {
         with_lock(txInfo->Lock) {
             Y_ABORT_UNLESS(!txInfo->CommitCalled);
 
@@ -537,15 +537,18 @@ void TWriteSessionImpl::TrySubscribeOnTransactionCommit(TTransaction* tx)
 
             if (txInfo->WriteCount == txInfo->AckCount) {
                 txInfo->AllAcksReceived.SetValue(MakeCommitTransactionSuccess());
+                if (auto self = cbContext->LockShared()) {
+                    self->Txs.erase(txId);
+                }
                 return txInfo->AllAcksReceived.GetFuture();
             }
 
             if (txInfo->IsActive) {
                 return txInfo->AllAcksReceived.GetFuture();
             }
-
-            return NThreading::MakeFuture(MakeSessionExpiredError());
         }
+
+        return NThreading::MakeFuture(MakeSessionExpiredError());
     };
 
     tx->AddPrecommitCallback(std::move(callback));

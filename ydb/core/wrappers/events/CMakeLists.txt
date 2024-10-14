@@ -21,10 +21,10 @@ target_link_libraries(core-wrappers-events PUBLIC
   yutil
   libs-aws-sdk-cpp-aws-cpp-sdk-s3
   contrib-libs-curl
-  library-actors-core
   ydb-core-base
   ydb-core-protos
   core-wrappers-ut_helpers
+  library-actors-core
 )
 
 target_sources(core-wrappers-events PRIVATE

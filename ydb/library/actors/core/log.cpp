@@ -486,6 +486,8 @@ namespace NActors {
                 j.BeginObject()
                     .WriteKey("@timestamp")
                     .WriteString(Settings->UseLocalTimestamps ? FormatLocalTimestamp(time, buf) : time.ToString().data())
+                    .WriteKey("@log_type")
+                    .WriteString("debug")
                     .WriteKey("microseconds")
                     .WriteULongLong(time.MicroSeconds())
                     .WriteKey("host")

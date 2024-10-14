@@ -314,7 +314,7 @@ namespace Tests {
             }
         }
         void StartDummyTablets();
-        TVector<ui64> StartPQTablets(ui32 pqTabletsN);
+        TVector<ui64> StartPQTablets(ui32 pqTabletsN, bool wait = true);
         TTestActorRuntime* GetRuntime() const;
         const TServerSettings& GetSettings() const;
         const NScheme::TTypeRegistry* GetTypeRegistry();

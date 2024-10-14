@@ -3,9 +3,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/wrappers/events/abstract.h>
 #include <ydb/core/wrappers/events/common.h>
-#include <ydb/core/wrappers/events/delete_objects.h>
 #include <ydb/core/wrappers/events/get_object.h>
-#include <ydb/core/wrappers/events/list_objects.h>
 #include <ydb/core/wrappers/events/object_exists.h>
 
 #include <memory>

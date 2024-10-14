@@ -73,7 +73,9 @@ private:
     int PrintCoordinationNodeResponseProtoJsonBase64(const NYdb::NCoordination::TNodeDescription& result) const;
 
     int DescribeView(const TDriver& driver);
+    int PrintViewResponse(const NYdb::NView::TDescribeViewResult& result) const;
     int PrintViewResponsePretty(const NYdb::NView::TDescribeViewResult& result) const;
+    int PrintViewResponseProtoJsonBase64(const NYdb::NView::TDescribeViewResult& result) const;
 
     template<typename TDescriptionType>
     void PrintPermissionsIfNeeded(const TDescriptionType& description) {

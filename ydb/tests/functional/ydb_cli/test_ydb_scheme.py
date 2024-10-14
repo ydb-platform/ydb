@@ -35,7 +35,7 @@ def execute_ydb_cli_command(node, database, args, stdin=None):
 def create_view(session, view, query="SELECT 42"):
     session.execute_scheme(
         f"""
-        CREATE VIEW {view} WITH security_invoker = TRUE AS {query};
+        CREATE VIEW {view} WITH (security_invoker = TRUE) AS {query};
         """
     )
 

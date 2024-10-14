@@ -427,17 +427,50 @@ int TCommandDescribe::DescribeCoordinationNode(const TDriver& driver) {
     return PrintCoordinationNodeResponse(description);
 }
 
+int TCommandDescribe::PrintViewResponse(const NYdb::NView::TDescribeViewResult& result) const {
+    switch (OutputFormat) {
+        case EOutputFormat::Default:
+        case EOutputFormat::Pretty:
+            return PrintViewResponsePretty(result);
+        case EOutputFormat::Json:
+            Cerr << "Warning! Option --json is deprecated and will be removed soon. "
+                 << "Use \"--format proto-json-base64\" option instead." << Endl;
+            [[fallthrough]];
+        case EOutputFormat::ProtoJsonBase64:
+            return PrintViewResponseProtoJsonBase64(result);
+        default:
+            throw TMisuseException() << "This command doesn't support " << OutputFormat << " output format";
+    }
+    return EXIT_SUCCESS;
+}
+
 int TCommandDescribe::PrintViewResponsePretty(const NYdb::NView::TDescribeViewResult& result) const {
     Cout << "\nQuery text:\n" << result.GetViewDescription().GetQueryText() << Endl;
     return EXIT_SUCCESS;
+}
+
+int TCommandDescribe::PrintViewResponseProtoJsonBase64(const NYdb::NView::TDescribeViewResult& result) const {
+    TString json;
+    google::protobuf::util::JsonPrintOptions jsonOpts;
+    jsonOpts.preserve_proto_field_names = true;
+    auto conversionStatus = google::protobuf::util::MessageToJsonString(
+        NYdb::TProtoAccessor::GetProto(result),
+        &json,
+        jsonOpts
+    );
+    if (conversionStatus.ok()) {
+        Cout << json << Endl;
+        return EXIT_SUCCESS;
+    }
+    Cerr << "Error occurred while converting result proto to json: " << TString(conversionStatus.message().ToString()) << Endl;
+    return EXIT_FAILURE;
 }
 
 int TCommandDescribe::DescribeView(const TDriver& driver) {
     NView::TViewClient client(driver);
     auto result = client.DescribeView(Path, {}).ExtractValueSync();
     ThrowOnError(result);
-
-    return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintViewResponsePretty);
+    return PrintViewResponse(result);
 }
 
 namespace {

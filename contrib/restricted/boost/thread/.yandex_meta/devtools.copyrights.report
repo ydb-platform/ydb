@@ -1,0 +1,986 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 00306b5bf840cff6a0c995cf8f997dcc
+BELONGS ya.make
+    License text:
+        //  (C) Copyright 2006-7 Anthony Williams
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/once.hpp [6:6]
+        include/boost/thread/win32/recursive_mutex.hpp [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 02fd0bffdaa1688b60dc1f4a812b1f2f
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2014 Ian Forbed
+        // Copyright (C) 2014-2015 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/executors/detail/scheduled_executor_base.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 03fc205eb6fb14f22d2d4775df350ecf
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2001-2003
+        // William E. Kempf
+        // (C) Copyright 2008-9 Anthony Williams
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0419fdd63b42fd26712eab44faf73a27
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2008-2009,2012 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/strict_lock.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 04c0ce13b53ae65fb4aacbc3f256260b
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2002-2003
+        // David Moore, William E. Kempf
+        // Copyright (C) 2007-8 Anthony Williams
+        // (C) Copyright 2013 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/barrier.hpp [1:4]
+        include/boost/thread/xtime.hpp [1:3]
+        src/pthread/thread.cpp [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 05adeceb37523fe0339d6f28b148cbe2
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2013 Ruslan Baratov
+        // Copyright (C) 2014 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/csbl/memory/shared_ptr.hpp [1:1]
+        include/boost/thread/executors/detail/priority_executor_base.hpp [1:2]
+        include/boost/thread/executors/generic_executor_ref.hpp [1:1]
+        include/boost/thread/executors/inline_executor.hpp [1:1]
+        include/boost/thread/executors/scheduled_thread_pool.hpp [1:2]
+        include/boost/thread/executors/scheduler.hpp [1:1]
+        include/boost/thread/executors/scheduling_adaptor.hpp [1:2]
+        include/boost/thread/executors/thread_executor.hpp [1:1]
+        include/boost/thread/with_lock_guard.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 14ca74a6c57686dced35dc7c6c99c615
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2012 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/detail/delete.hpp [1:1]
+        include/boost/thread/detail/invoker.hpp [1:1]
+        include/boost/thread/detail/log.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 15236ff1a242179fe99b3db6441bef51
+BELONGS ya.make
+    License text:
+        // Copyright Howard Hinnant 2007-2010.
+        // Copyright Vicente J. Botet Escriba 2012.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/v2/shared_mutex.hpp [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 16032898d1264a298670223659b54ff0
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2015 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/csbl/queue.hpp [1:1]
+        include/boost/thread/executors/serial_executor_cont.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 160f7dd82fcdd6e80a6e06d84c5a5cca
+BELONGS ya.make
+    License text:
+        // Copyright Howard Hinnant 2007-2010.
+        // Copyright Vicente J. Botet Escriba 2012.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/v2/shared_mutex.hpp [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 18b9bbddbcb28f4b2be6c0306fb4568c
+BELONGS ya.make
+    License text:
+        // Copyright 2023 Peter Dimov
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/detail/string_to_unsigned.hpp [4:6]
+        include/boost/thread/detail/string_trim.hpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 19a141ac32c2d6744e67364352a18f40
+BELONGS ya.make
+    License text:
+        //  (C) Copyright 2008 Anthony Williams 
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/detail/thread_heap_alloc.hpp [6:6]
+        include/boost/thread/pthread/thread_heap_alloc.hpp [4:6]
+        include/boost/thread/win32/mfc_thread_init.hpp [6:7]
+        include/boost/thread/win32/thread_data.hpp [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 19a677ea551d13c9ed7c1861dbc9551b
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2014 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/exceptional_ptr.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1df4aa5e098ec150d661f196ac67b29d
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2013,2014 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/executors/executor.hpp [1:1]
+        include/boost/thread/executors/executor_adaptor.hpp [1:1]
+        include/boost/thread/executors/loop_executor.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 271724fafcb242b0c0f0c421b755f5aa
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2002-2003
+        // David Moore, William E. Kempf
+        // Copyright (C) 2007-8 Anthony Williams
+        // (C) Copyright 2013 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/barrier.hpp [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 29ef0d00b2aae64d2f0f466fcb3faa99
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2011 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/cv_status.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2a14a3997f9ef4f008c150826158909e
+BELONGS ya.make
+    License text:
+        //  (C) Copyright 2008-10 Anthony Williams
+        //  (C) Copyright 2011-2015 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/future.hpp [1:2]
+        include/boost/thread/futures/future_error.hpp [1:2]
+        include/boost/thread/futures/future_error_code.hpp [1:2]
+        include/boost/thread/futures/future_status.hpp [1:2]
+        include/boost/thread/futures/is_future_type.hpp [1:2]
+        include/boost/thread/futures/launch.hpp [1:2]
+        include/boost/thread/futures/wait_for_all.hpp [1:2]
+        include/boost/thread/futures/wait_for_any.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 36fea81184c5ae64a7624098ffc18c64
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2001-2003
+        // William E. Kempf
+        // (C) Copyright 2008-9 Anthony Williams
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread.hpp [1:3]
+        include/boost/thread/detail/config.hpp [1:3]
+        include/boost/thread/exceptions.hpp [1:4]
+        include/boost/thread/xtime.hpp [1:3]
+        src/pthread/thread.cpp [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 410d88c2deabcc121514205f7b161f95
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2007-2010 Anthony Williams
+        // (C) Copyright 2011-2012 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/detail/thread.hpp [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 41b036495e268c76ccf3abe1eba9c58c
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2001-2003
+        // Mac Murrett
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/detail/force_cast.hpp [1:2]
+        include/boost/thread/detail/singleton.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 42a0e4b1cd46bc22e0b4299f63e2804a
+BELONGS ya.make
+    License text:
+        //  (C) Copyright 2018 Andrey Semashev
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/win32/thread_primitives.cpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 465f2d3c2e755301a28bad2a637bfebe
+BELONGS ya.make
+    License text:
+        //  (C) Copyright 2006-8 Anthony Williams
+        //  (C) Copyright 2011-2012,2017-2018 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/win32/basic_recursive_mutex.hpp [6:7]
+        include/boost/thread/win32/shared_mutex.hpp [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4b3a6c1fe0a4a17b8d5433d346ee3069
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2009-2012 Anthony Williams
+        // (C) Copyright 2012 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/scoped_thread.hpp [4:5]
+        include/boost/thread/thread_functors.hpp [4:5]
+        include/boost/thread/thread_guard.hpp [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 516975262145468c54f49513bc0bd39b
+BELONGS ya.make
+    License text:
+        //  (C) Copyright 2008-10 Anthony Williams
+        //  (C) Copyright 2011-2012,2015 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/futures/future_error_code.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5a55975c544a17d902b5b7a6165934ba
+BELONGS ya.make
+    License text:
+        //  (C) Copyright 2008-10 Anthony Williams
+        //  (C) Copyright 2011-2015 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/future.hpp [1:2]
+        include/boost/thread/futures/future_error.hpp [1:2]
+        include/boost/thread/futures/future_status.hpp [1:2]
+        include/boost/thread/futures/is_future_type.hpp [1:2]
+        include/boost/thread/futures/launch.hpp [1:2]
+        include/boost/thread/futures/wait_for_all.hpp [1:2]
+        include/boost/thread/futures/wait_for_any.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 66c7426a103b2c0266f29cccdf5f2272
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2002-2003
+        // David Moore, William E. Kempf
+        // Copyright (C) 2007-8 Anthony Williams
+        // (C) Copyright 2013 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/barrier.hpp [1:4]
+        include/boost/thread/completion_latch.hpp [4:4]
+        include/boost/thread/detail/counter.hpp [4:4]
+        include/boost/thread/interruption.hpp [1:3]
+        include/boost/thread/latch.hpp [4:4]
+        include/boost/thread/ostream_buffer.hpp [1:3]
+        include/boost/thread/pthread/once_atomic.hpp [6:7]
+        include/boost/thread/thread_only.hpp [6:6]
+        src/pthread/once_atomic.cpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6805e61dcffc0a494c7cc43bd2a4bf37
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/pthread/mutex.hpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 69bcb4be33af6a68ee5b2402e22c8a3b
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2007 Anthony Williams
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/pthread/once.cpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6e091bbf03d7f6fa9276d2cfcaddde71
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2007-9 Anthony Williams
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/detail/thread_group.hpp [6:6]
+        include/boost/thread/detail/thread_interruption.hpp [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 78f52b44d5b893e606b8a11043d0353f
+BELONGS ya.make
+    License text:
+        //  (C) Copyright 2005-8 Anthony Williams
+        //  (C) Copyright 2012 Vicente J. Botet Escriba
+        //  (C) Copyright 2017 Andrey Semashev
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/win32/interlocked_read.hpp [6:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7cae218a2138076c155d8b50261bee77
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/concurrent_queues/detail/sync_deque_base.hpp [6:8]
+        include/boost/thread/concurrent_queues/detail/sync_queue_base.hpp [6:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7d3641595f7238247355f3c0357d25ef
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/experimental/parallel/v2/task_region.hpp [6:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8125ae3214a419e15087b23ef1f51e4e
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2001-2003
+        // William E. Kempf
+        // Copyright (C) 2007-9 Anthony Williams
+        // (C) Copyright 2011-2012 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/exceptions.hpp [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 85b21f7669ee2771cecab63ce53d186a
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2014 Ian Forbed
+        // Copyright (C) 2014-2017 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/concurrent_queues/sync_priority_queue.hpp [1:2]
+        include/boost/thread/concurrent_queues/sync_timed_queue.hpp [1:2]
+        include/boost/thread/executors/detail/priority_executor_base.hpp [1:2]
+        include/boost/thread/executors/detail/scheduled_executor_base.hpp [1:2]
+        include/boost/thread/executors/scheduled_thread_pool.hpp [1:2]
+        include/boost/thread/executors/scheduling_adaptor.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8b05c90361e2a6041cc75977d659ee19
+BELONGS ya.make
+    License text:
+        //  (C) Copyright 2005-7 Anthony Williams
+        //  (C) Copyright 2005 John Maddock
+        //  (C) Copyright 2011-2013 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/win32/once.hpp [6:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9304e817615e1bf062335597b6b77996
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2001-2003
+        // William E. Kempf
+        // Copyright (C) 2011-2013 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/detail/config.hpp [1:3]
+        include/boost/thread/detail/is_convertible.hpp [3:3]
+        include/boost/thread/detail/memory.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 93093325a4c1f221f10cc90fc3ded37c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/win32/tss_pe.cpp [2:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 94fb57d812bbd9c0831aa55e0e55380b
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2013 Ruslan Baratov
+        // Copyright (C) 2014 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/with_lock_guard.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 959e826399beb3963888a03796ddf093
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2013,2015 Vicente J. Botet Escriba
+        // Distributed under the Boost Software License, Version 1.0. (See
+        // accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/caller_context.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9f5828e268910c36bf70e0636b1a5d36
+BELONGS ya.make
+    License text:
+        // (C) Copyright Michael Glassford 2004.
+        // Use, modification and distribution are subject to the
+        // Boost Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/detail/tss_hooks.hpp [1:3]
+        src/win32/tss_dll.cpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a0cd3454bb19643561108cce72a3dc59
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2001-2003
+        // William E. Kempf
+        // Copyright (C) 2007-9 Anthony Williams
+        // (C) Copyright 2011-2012 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/detail/move.hpp [4:5]
+        include/boost/thread/detail/thread.hpp [6:7]
+        include/boost/thread/exceptions.hpp [1:4]
+        include/boost/thread/lock_algorithms.hpp [4:5]
+        include/boost/thread/lock_guard.hpp [4:5]
+        include/boost/thread/lock_options.hpp [4:5]
+        include/boost/thread/lock_types.hpp [4:5]
+        include/boost/thread/lockable_traits.hpp [4:5]
+        include/boost/thread/locks.hpp [4:5]
+        include/boost/thread/pthread/condition_variable.hpp [6:7]
+        include/boost/thread/pthread/condition_variable_fwd.hpp [6:7]
+        include/boost/thread/pthread/once.hpp [6:7]
+        include/boost/thread/pthread/recursive_mutex.hpp [3:6]
+        include/boost/thread/pthread/thread_data.hpp [6:7]
+        include/boost/thread/shared_mutex.hpp [6:7]
+        include/boost/thread/win32/basic_timed_mutex.hpp [6:7]
+        include/boost/thread/win32/condition_variable.hpp [6:7]
+        include/boost/thread/win32/mfc_thread_init.hpp [6:7]
+        include/boost/thread/win32/mutex.hpp [3:6]
+        include/boost/thread/win32/thread_data.hpp [6:7]
+        src/pthread/thread.cpp [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a2ef13fa73a7e85b38cf6bc4b10345aa
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2007-10 Anthony Williams
+        // (C) Copyright 2011-2012 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/pthread/condition_variable.hpp [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a9d1fd602f0c19f310f168a4ca8ae204
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/win32/tss_pe.cpp [2:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ae8ac6d67230cc94903efa59b420c903
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2007 Anthony Williams
+        // (C) Copyright 2007 David Deakins
+        // (C) Copyright 2011-2018 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/win32/thread.cpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b28d2fde6ba5b098618944cd7d0b3376
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/win32/mutex.hpp [3:6]
+        include/boost/thread/win32/once.hpp [6:8]
+        include/boost/thread/win32/thread_primitives.hpp [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b4926da9285e9a7d8815bc373325f082
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2012-2013 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/detail/invoke.hpp [1:1]
+        include/boost/thread/detail/make_tuple_indices.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b7a8a4916fe446a46dfd7a3665c2a01f
+BELONGS ya.make
+    License text:
+        //  (C) Copyright 2005-8 Anthony Williams
+        //  (C) Copyright 2012 Vicente J. Botet Escriba
+        //  (C) Copyright 2017 Andrey Semashev
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/win32/interlocked_read.hpp [6:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b8547beed83546072ae6f84e3538f2ff
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/synchronized_value.hpp [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL baa6d964f4d73195dec9a2283827c156
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2012 Vicente J. Botet Escriba
+        // Distributed under the Boost Software License, Version 1.0. (See
+        // accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/detail/lockable_wrapper.hpp [4:4]
+        include/boost/thread/detail/platform_time.hpp [3:4]
+        include/boost/thread/detail/thread_interruption.hpp [6:7]
+        include/boost/thread/externally_locked.hpp [1:3]
+        include/boost/thread/externally_locked_stream.hpp [1:3]
+        include/boost/thread/is_locked_by_this_thread.hpp [1:3]
+        include/boost/thread/lock_factories.hpp [4:4]
+        include/boost/thread/pthread/shared_mutex.hpp [4:5]
+        include/boost/thread/reverse_lock.hpp [4:4]
+        include/boost/thread/scoped_thread.hpp [4:5]
+        include/boost/thread/shared_lock_guard.hpp [4:4]
+        include/boost/thread/synchronized_value.hpp [1:4]
+        include/boost/thread/testable_mutex.hpp [1:3]
+        include/boost/thread/thread_functors.hpp [4:5]
+        include/boost/thread/thread_guard.hpp [4:5]
+        include/boost/thread/win32/interlocked_read.hpp [6:8]
+        src/future.cpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bf641215d684707e5ad94b61496844f2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/lockable_adapter.hpp [3:5]
+        include/boost/thread/null_mutex.hpp [3:5]
+        include/boost/thread/poly_lockable.hpp [3:5]
+        include/boost/thread/poly_lockable_adapter.hpp [3:5]
+        include/boost/thread/poly_shared_lockable.hpp [3:5]
+        include/boost/thread/poly_shared_lockable_adapter.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c22913d29a72689a4dc05182fbd952c3
+BELONGS ya.make
+    License text:
+        //  (C) Copyright 2013,2014 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/executors/work.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c4522d1369b94279fbb23ab0ac17f56f
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2013-2014 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/csbl/memory/unique_ptr.hpp [1:1]
+        include/boost/thread/executors/basic_thread_pool.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c709b7e0fb1043b3cbf5a01d9703ab0b
+BELONGS ya.make
+    License text:
+        //  (C) Copyright 2007-8 Anthony Williams
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/detail/move.hpp [4:5]
+        include/boost/thread/detail/platform_time.hpp [3:4]
+        include/boost/thread/pthread/condition_variable_fwd.hpp [6:7]
+        include/boost/thread/pthread/mutex.hpp [3:6]
+        include/boost/thread/pthread/once.hpp [6:7]
+        include/boost/thread/pthread/pthread_mutex_scoped_lock.hpp [3:3]
+        include/boost/thread/pthread/recursive_mutex.hpp [3:6]
+        include/boost/thread/thread.hpp [6:6]
+        include/boost/thread/tss.hpp [6:6]
+        include/boost/thread/win32/condition_variable.hpp [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ccb190d60bb3bd793e2d9eb5fc91fb71
+BELONGS ya.make
+    License text:
+        //  (C) Copyright 2007 Anthony Williams
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/condition.hpp [3:3]
+        include/boost/thread/condition_variable.hpp [6:6]
+        include/boost/thread/detail/platform.hpp [1:4]
+        include/boost/thread/lock_algorithms.hpp [4:5]
+        include/boost/thread/lock_guard.hpp [4:5]
+        include/boost/thread/lock_options.hpp [4:5]
+        include/boost/thread/lock_types.hpp [4:5]
+        include/boost/thread/lockable_traits.hpp [4:5]
+        include/boost/thread/locks.hpp [4:5]
+        include/boost/thread/mutex.hpp [6:6]
+        include/boost/thread/pthread/thread_data.hpp [6:7]
+        include/boost/thread/recursive_mutex.hpp [6:6]
+        include/boost/thread/shared_mutex.hpp [6:7]
+        include/boost/thread/thread_time.hpp [3:3]
+        include/boost/thread/win32/thread_heap_alloc.hpp [4:6]
+        src/win32/thread.cpp [4:6]
+        src/win32/tss_pe.cpp [2:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d4d3b84605f6db76e76a70a7f3101696
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2012 Vicente Botet
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/lock_concepts.hpp [1:1]
+        include/boost/thread/lockable_concepts.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d63fdf414caaa23ffde811fd7c826e92
+BELONGS ya.make
+    License text:
+        //  (C) Copyright 2005-7 Anthony Williams
+        //  (C) Copyright 2005 John Maddock
+        //  (C) Copyright 2011-2013 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/win32/once.hpp [6:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d706b4945aea7b91948639454fe2562e
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2013 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/csbl/deque.hpp [1:1]
+        include/boost/thread/csbl/devector.hpp [1:1]
+        include/boost/thread/csbl/functional.hpp [1:1]
+        include/boost/thread/csbl/list.hpp [1:1]
+        include/boost/thread/csbl/memory.hpp [1:1]
+        include/boost/thread/csbl/memory/allocator_arg.hpp [1:1]
+        include/boost/thread/csbl/memory/allocator_traits.hpp [1:1]
+        include/boost/thread/csbl/memory/config.hpp [1:1]
+        include/boost/thread/csbl/memory/default_delete.hpp [1:1]
+        include/boost/thread/csbl/memory/pointer_traits.hpp [1:1]
+        include/boost/thread/csbl/memory/scoped_allocator.hpp [1:1]
+        include/boost/thread/csbl/tuple.hpp [1:1]
+        include/boost/thread/csbl/vector.hpp [1:1]
+        include/boost/thread/detail/atomic_redef_macros.hpp [1:1]
+        include/boost/thread/detail/atomic_undef_macros.hpp [1:1]
+        include/boost/thread/detail/function_wrapper.hpp [1:1]
+        include/boost/thread/detail/nullary_function.hpp [1:1]
+        include/boost/thread/detail/variadic_footer.hpp [1:1]
+        include/boost/thread/detail/variadic_header.hpp [1:1]
+        include/boost/thread/executor.hpp [1:1]
+        include/boost/thread/executors/serial_executor.hpp [1:1]
+        include/boost/thread/thread_pool.hpp [1:1]
+        include/boost/thread/user_scheduler.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d746f25f7b87dc815ab804cbdd5ee875
+BELONGS ya.make
+    License text:
+        //  (C) Copyright 2013 Andrey Semashev
+        //  (C) Copyright 2013 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/pthread/once_atomic.hpp [6:7]
+        src/pthread/once_atomic.cpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e10cb8d2c225a3e0c9808754430d0602
+BELONGS ya.make
+    License text:
+        // Copyright 2006 Roland Schwarz.
+        // (C) Copyright 2007 Anthony Williams
+        // Distributed under the Boost Software License, Version 1.0. (See
+        // accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/detail/platform.hpp [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e20ed79246192f741a7943dd114bd714
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2017
+        // Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/pthread/pthread_helpers.hpp [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e48b4e47d76d88b5aebcf8c8588596c0
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2014 Ian Forbed
+        // Copyright (C) 2014-2017 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/concurrent_queues/sync_priority_queue.hpp [1:2]
+        include/boost/thread/concurrent_queues/sync_timed_queue.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL eddab603f446c4316fdb122bfdbc8e84
+BELONGS ya.make
+    License text:
+        //  (C) Copyright 2006-8 Anthony Williams
+        //  (C) Copyright 2012 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/pthread/shared_mutex.hpp [4:5]
+        include/boost/thread/win32/basic_recursive_mutex.hpp [6:7]
+        include/boost/thread/win32/basic_timed_mutex.hpp [6:7]
+        include/boost/thread/win32/shared_mutex.hpp [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f1833f35f2f6f9d7db5a9bac86c50bf4
+BELONGS ya.make
+    License text:
+        //  (C) Copyright 2005-7 Anthony Williams
+        //  (C) Copyright 2007 David Deakins
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/win32/thread_primitives.hpp [6:7]
+        src/win32/thread.cpp [4:6]
+        src/win32/tss_pe.cpp [2:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f2e8fa2c7f3eaab9a7c6f279d4ecb902
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/concurrent_queues/deque_adaptor.hpp [6:8]
+        include/boost/thread/concurrent_queues/deque_base.hpp [6:8]
+        include/boost/thread/concurrent_queues/deque_views.hpp [6:8]
+        include/boost/thread/concurrent_queues/queue_adaptor.hpp [6:8]
+        include/boost/thread/concurrent_queues/queue_base.hpp [6:8]
+        include/boost/thread/concurrent_queues/queue_op_status.hpp [6:8]
+        include/boost/thread/concurrent_queues/queue_views.hpp [6:8]
+        include/boost/thread/experimental/config/inline_namespace.hpp [6:8]
+        include/boost/thread/experimental/exception_list.hpp [6:8]
+        include/boost/thread/experimental/parallel/v1/exception_list.hpp [6:8]
+        include/boost/thread/experimental/parallel/v1/inline_namespace.hpp [6:8]
+        include/boost/thread/experimental/parallel/v2/inline_namespace.hpp [6:8]
+        include/boost/thread/experimental/task_region.hpp [6:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f8bb10155b581266fee4384d92ffbd4b
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2009-2012 Vicente J. Botet Escriba
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/lock_traits.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fae7f98b6a716f76e1a04de0592d1b47
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/thread/concurrent_queues/sync_bounded_queue.hpp [6:8]
+        include/boost/thread/concurrent_queues/sync_deque.hpp [6:8]
+        include/boost/thread/concurrent_queues/sync_queue.hpp [6:8]
+        include/boost/thread/sync_bounded_queue.hpp [6:8]
+        include/boost/thread/sync_queue.hpp [6:8]

@@ -1,0 +1,97 @@
+--- contrib/python/pyrsistent/py2/tests/checked_map_test.py	(index)
++++ contrib/python/pyrsistent/py2/tests/checked_map_test.py	(working tree)
+@@ -125,10 +125,9 @@ def test_pickling():
+ class FloatVector(CheckedPVector):
+     __type__ = float
+ 
+-
+ class VectorToSetMap(CheckedPMap):
+-    __key_type__ = 'checked_map_test.FloatVector'
+-    __value_type__ = 'checked_map_test.FloatSet'
++    __key_type__ = '__tests__.checked_map_test.FloatVector'
++    __value_type__ = '__tests__.checked_map_test.FloatSet'
+ 
+ 
+ def test_type_check_with_string_specification():
+--- contrib/python/pyrsistent/py2/tests/checked_vector_test.py	(index)
++++ contrib/python/pyrsistent/py2/tests/checked_vector_test.py	(working tree)
+@@ -184,7 +184,7 @@ def test_multiple_optional_types():
+ 
+ 
+ class NaturalsVectorStr(CheckedPVector):
+-    __type__ = 'checked_vector_test.Naturals'
++    __type__ = '__tests__.checked_vector_test.Naturals'
+ 
+ 
+ def test_check_with_string_specification():
+--- contrib/python/pyrsistent/py2/tests/class_test.py	(index)
++++ contrib/python/pyrsistent/py2/tests/class_test.py	(working tree)
+@@ -272,8 +272,8 @@ class Numbers(CheckedPVector):
+ 
+ 
+ class LinkedList(PClass):
+-    value = field(type='class_test.Numbers')
+-    next = field(type=optional('class_test.LinkedList'))
++    value = field(type='__tests__.class_test.Numbers')
++    next = field(type=optional('__tests__.class_test.LinkedList'))
+ 
+ 
+ def test_string_as_type_specifier():
+--- contrib/python/pyrsistent/py2/tests/record_test.py	(index)
++++ contrib/python/pyrsistent/py2/tests/record_test.py	(working tree)
+@@ -512,7 +512,7 @@ def test_pset_field_name_string_type():
+     The created set class name is based on the type of items specified by name
+     """
+     class Record(PRecord):
+-        value = pset_field("record_test.Something")
++        value = pset_field("__tests__.record_test.Something")
+     assert Record().value.__class__.__name__ == "SomethingPSet"
+ 
+ 
+@@ -522,7 +522,7 @@ def test_pset_multiple_string_types_field_name():
+     items in the set specified by name
+     """
+     class Record(PRecord):
+-        value = pset_field(("record_test.Something", "record_test.Another"))
++        value = pset_field(("__tests__.record_test.Something", "__tests__.record_test.Another"))
+ 
+     assert Record().value.__class__.__name__ == "SomethingAnotherPSet"
+ 
+@@ -649,7 +649,7 @@ def test_pvector_field_name_string_type():
+     specified by name.
+     """
+     class Record(PRecord):
+-        value = pvector_field("record_test.Something")
++        value = pvector_field("__tests__.record_test.Something")
+     assert Record().value.__class__.__name__ == "SomethingPVector"
+ 
+ def test_pvector_multiple_string_types_field_name():
+@@ -658,7 +658,7 @@ def test_pvector_multiple_string_types_field_name():
+     items in the vector.
+     """
+     class Record(PRecord):
+-        value = pvector_field(("record_test.Something", "record_test.Another"))
++        value = pvector_field(("__tests__.record_test.Something", "__tests__.record_test.Another"))
+ 
+     assert Record().value.__class__.__name__ == "SomethingAnotherPVector"
+ 
+@@ -800,7 +800,7 @@ def test_pmap_field_name_string_type():
+     specified by name.
+     """
+     class Record(PRecord):
+-        value = pmap_field("record_test.Something", "record_test.Another")
++        value = pmap_field("__tests__.record_test.Something", "__tests__.record_test.Another")
+     assert Record().value.__class__.__name__ == "SomethingToAnotherPMap"
+ 
+ def test_pmap_field_name_multiple_string_types():
+@@ -809,8 +809,8 @@ def test_pmap_field_name_multiple_string_types():
+     including when there are multiple supported types.
+     """
+     class Record(PRecord):
+-        value = pmap_field(("record_test.Something", "record_test.Another"), int)
+-        value2 = pmap_field(str, ("record_test.Something", "record_test.Another"))
++        value = pmap_field(("__tests__.record_test.Something", "__tests__.record_test.Another"), int)
++        value2 = pmap_field(str, ("__tests__.record_test.Something", "__tests__.record_test.Another"))
+     assert ((Record().value.__class__.__name__,
+              Record().value2.__class__.__name__) ==
+             ("SomethingAnotherToIntPMap", "StrToSomethingAnotherPMap"))

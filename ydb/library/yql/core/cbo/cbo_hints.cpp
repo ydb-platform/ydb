@@ -10,7 +10,7 @@ class TOptimizerHintsParser {
 public:
     TOptimizerHintsParser(const TString& text) 
         : Pos(-1)
-        , Size(static_cast<i32>(text.Size()) - 1)
+        , Size(static_cast<i32>(text.size()) - 1)
         , Text(text)
     {}
 
@@ -30,7 +30,7 @@ private:
             } else if (hintType == "Rows"){
                 Rows();
             } else {
-                ParseError(Sprintf("Undefined hints type: %s", hintType.c_str()), Pos - hintType.Size());
+                ParseError(Sprintf("Undefined hints type: %s", hintType.c_str()), Pos - hintType.size());
             }
 
             SkipWhiteSpaces();
@@ -70,7 +70,7 @@ private:
             }
         }
        
-        ParseError(Sprintf("Unknown JoinType: '%s', supported algos: [%s]", reqJoinAlgoStr.c_str(), JoinSeq(", ", joinAlgosStr).c_str()), Pos - reqJoinAlgoStr.Size());
+        ParseError(Sprintf("Unknown JoinType: '%s', supported algos: [%s]", reqJoinAlgoStr.c_str(), JoinSeq(", ", joinAlgosStr).c_str()), Pos - reqJoinAlgoStr.size());
         Y_UNREACHABLE();
     }
 
@@ -162,7 +162,7 @@ private:
             }
         }
 
-        if (term.Empty()) {
+        if (term.empty()) {
             ParseError("Expected a term!", Pos);
         }
         return term;
@@ -216,10 +216,10 @@ private:
 
         for (const auto& keyword: keywords) {
             size_t lowInclude = Pos + 1;
-            size_t highExclude = lowInclude + keyword.Size();
+            size_t highExclude = lowInclude + keyword.size();
 
             if (Text.substr(lowInclude, highExclude - lowInclude).equal(keyword)) {
-                Pos += keyword.Size();
+                Pos += keyword.size();
                 return keyword;
             }
         }
@@ -241,7 +241,7 @@ private:
         try {
             return std::stod(term);
         } catch (...) {
-            ParseError(Sprintf("Expected a number, got [%s]", term.c_str()), Pos - term.Size());
+            ParseError(Sprintf("Expected a number, got [%s]", term.c_str()), Pos - term.size());
         }
         Y_UNREACHABLE();
     }
@@ -290,7 +290,7 @@ private:
         i32 Line = 0;
         i32 LinePos = 0;
 
-        for (i32 i = 0; i <= pos && i < static_cast<i32>(Text.Size()); ++i) {
+        for (i32 i = 0; i <= pos && i < static_cast<i32>(Text.size()); ++i) {
             if (Text[i] == '\n') {
                 LinePos = 0;
                 ++Line;

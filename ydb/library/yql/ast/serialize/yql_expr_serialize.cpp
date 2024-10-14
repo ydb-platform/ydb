@@ -232,8 +232,8 @@ class TReader {
 public:
     TReader(TPosition pos, TStringBuf buffer, TExprContext& ctx)
         : Pos_(pos)
-        , Current_(buffer.Data())
-        , End_(buffer.Data() + buffer.Size())
+        , Current_(buffer.data())
+        , End_(buffer.data() + buffer.size())
         , Ctx_(ctx)
         , Components_(0)
     {

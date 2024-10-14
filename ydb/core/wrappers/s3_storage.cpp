@@ -148,7 +148,7 @@ private:
 
     public:
         explicit TOutputStreamBuf(TString& buffer)
-            : TOutputStreamBuf(buffer.Detach(), buffer.Size())
+            : TOutputStreamBuf(buffer.Detach(), buffer.size())
         {
         }
     };
@@ -251,30 +251,40 @@ private:
 
 }; // TInputStreamContext
 
-template <typename TEvRequest, typename TEvResponse>
-class TPutInputStreamContext: public TInputStreamContext<TEvRequest, TEvResponse> {
+template <typename TEvRequest, typename TEvResponse, template <typename, typename> typename TContext = TContextBase>
+class TContextWithStorageClass : public TContext<TEvRequest, TEvResponse> {
 private:
-    using TBase = TInputStreamContext<TEvRequest, TEvResponse>;
+    using TBase = TContext<TEvRequest, TEvResponse>;
+
 public:
     using TBase::TBase;
 
     const typename TBase::TRequest& PrepareRequest(typename TEvRequest::TPtr& ev) override {
         auto& request = ev->Get()->MutableRequest();
-        auto storageClass = TBase::StorageClass;
-
-        // workaround for minio.
-        // aws s3 treats NOT_SET as STANDARD
-        // but internally sdk just doesn't set corresponding header, while adds it to SignedHeaders
-        // and minio implementation treats it as error, returning to client error
-        // which literally can't be debugged e.g. "There were headers present in the request which were not signed"
-        if (storageClass == Aws::S3::Model::StorageClass::NOT_SET) {
-            storageClass = Aws::S3::Model::StorageClass::STANDARD;
+        if (TBase::StorageClass != Aws::S3::Model::StorageClass::NOT_SET) {
+            request.WithStorageClass(TBase::StorageClass);
         }
-
-        request.WithStorageClass(storageClass);
         return TBase::PrepareRequest(ev);
     }
+}; // TContextWithStorageClass
+
+template <typename TEvRequest, typename TEvResponse>
+class TPutInputStreamContext: public TContextWithStorageClass<TEvRequest, TEvResponse, TInputStreamContext> {
+private:
+    using TBase = TContextWithStorageClass<TEvRequest, TEvResponse, TInputStreamContext>;
+
+public:
+    using TBase::TBase;
 }; // TPutInputStreamContext
+
+template <typename TEvRequest, typename TEvResponse>
+class TCreateMultipartUploadContext: public TContextWithStorageClass<TEvRequest, TEvResponse> {
+private:
+    using TBase = TContextWithStorageClass<TEvRequest, TEvResponse>;
+
+public:
+    using TBase::TBase;
+}; // TCreateMultipartUploadContext
 
 } // anonymous
 
@@ -342,7 +352,7 @@ void TS3ExternalStorage::Execute(TEvDeleteObjectsRequest::TPtr& ev) const {
 }
 
 void TS3ExternalStorage::Execute(TEvCreateMultipartUploadRequest::TPtr& ev) const {
-    Call<TEvCreateMultipartUploadRequest, TEvCreateMultipartUploadResponse, TContextBase>(
+    Call<TEvCreateMultipartUploadRequest, TEvCreateMultipartUploadResponse, TCreateMultipartUploadContext>(
 #if AWS_SDK_VERSION_MAJOR == 1 && AWS_SDK_VERSION_MINOR >= 11
         ev, &S3Client::CreateMultipartUploadAsync<>);
 #else

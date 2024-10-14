@@ -10,7 +10,7 @@ namespace NYT::NStatisticPath {
 
 TError CheckStatisticPathLiteral(const TStatisticPathType& literal)
 {
-    if (literal.Empty()) {
+    if (literal.empty()) {
         return TError("Empty statistic path literal");
     }
     constexpr static TChar invalidCharacters[2]{Delimiter, 0};
@@ -158,7 +158,7 @@ TStatisticPath::const_iterator::value_type TStatisticPath::Back() const noexcept
 void TStatisticPath::PopBack()
 {
     YT_VERIFY(!Empty());
-    Path_.resize(Path_.size() - Back().Size() - 1);
+    Path_.resize(Path_.size() - Back().size() - 1);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

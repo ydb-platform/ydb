@@ -1254,7 +1254,7 @@ public:
         } else if (key == "amname") {
             CurrDesc_.AmName = value;
         } else if (key == "amtype") {
-            Y_ENSURE(value.Size() == 1);
+            Y_ENSURE(value.size() == 1);
             if ((char)EAmType::Index == value[0]) {
                 CurrDesc_.AmType = EAmType::Index;
             } else if ((char)EAmType::Table == value[0]) {
@@ -1931,7 +1931,7 @@ struct TCatalog : public IExtensionSqlBuilder {
 
         TString line = TStringBuilder() << "\"" << name << "\",\n";
         with_lock(ExportGuard) {
-            ExportFile->Write(line.Data(), line.Size());
+            ExportFile->Write(line.data(), line.size());
         }
     }
 

@@ -3624,8 +3624,8 @@ void PgValueToNativeBinaryImpl(const NUdf::TUnboxedValuePod& value, ui32 pgTypeI
         Y_ENSURE(!callInfo->isnull);
 
         auto s = GetVarBuf(x);
-        ui32 len = s.Size();
-        f(TStringBuf(s.Data(), s.Size()));
+        ui32 len = s.size();
+        f(TStringBuf(s.data(), s.size()));
     }
 }
 
@@ -3713,8 +3713,8 @@ void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::T
         const auto x = (const text*)PointerDatumFromPod(value);
         auto s = GetVarBuf(x);
         buf.Write(StringMarker);
-        buf.WriteVarI32(s.Size());
-        buf.WriteMany(s.Data(), s.Size());
+        buf.WriteVarI32(s.size());
+        buf.WriteMany(s.data(), s.size());
         break;
     }
     case CSTRINGOID: {
@@ -3728,8 +3728,8 @@ void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::T
     default:
         buf.Write(StringMarker);
         PgValueToNativeBinaryImpl(value, type->GetTypeId(), true, [&buf](TStringBuf b) {
-            buf.WriteVarI32(b.Size());
-            buf.WriteMany(b.Data(), b.Size());
+            buf.WriteVarI32(b.size());
+            buf.WriteMany(b.data(), b.size());
         });
         break;
     }
@@ -3821,9 +3821,9 @@ NUdf::TUnboxedValue PgValueFromNativeBinary(const TStringBuf binary, ui32 pgType
 
     TPAllocScope call;
     StringInfoData stringInfo;
-    stringInfo.data = (char*)binary.Data();
-    stringInfo.len = binary.Size();
-    stringInfo.maxlen = binary.Size();
+    stringInfo.data = (char*)binary.data();
+    stringInfo.len = binary.size();
+    stringInfo.maxlen = binary.size();
     stringInfo.cursor = 0;
 
     const auto& typeInfo = NPg::LookupType(pgTypeId);
@@ -4108,9 +4108,9 @@ void WriteSkiffPg(TPgType* type, const NUdf::TUnboxedValuePod& value, NCommon::T
     case TEXTOID: {
         const auto x = (const text*)PointerDatumFromPod(value);
         auto s = GetVarBuf(x);
-        ui32 len = s.Size();
+        ui32 len = s.size();
         buf.WriteMany((const char*)&len, sizeof(len));
-        buf.WriteMany(s.Data(), len);
+        buf.WriteMany(s.data(), len);
         break;
     }
     case CSTRINGOID: {
@@ -4122,9 +4122,9 @@ void WriteSkiffPg(TPgType* type, const NUdf::TUnboxedValuePod& value, NCommon::T
     }
     default:
         PgValueToNativeBinaryImpl(value, type->GetTypeId(), true, [&buf](TStringBuf b) {
-            ui32 len = b.Size();
+            ui32 len = b.size();
             buf.WriteMany((const char*)&len, sizeof(len));
-            buf.WriteMany(b.Data(), len);
+            buf.WriteMany(b.data(), len);
         });
     }
 }
@@ -4364,8 +4364,8 @@ void DoPGPack(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& va
     case TEXTOID: {
         const auto x = (const text*)PointerDatumFromPod(value);
         auto s = GetVarBuf(x);
-        NDetails::PackUInt32(s.Size(), buf);
-        buf.Append(s.Data(), s.Size());
+        NDetails::PackUInt32(s.size(), buf);
+        buf.Append(s.data(), s.size());
         break;
     }
     case CSTRINGOID: {
@@ -4377,8 +4377,8 @@ void DoPGPack(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& va
     }
     default:
         NYql::NCommon::PgValueToNativeBinaryImpl(value, type->GetTypeId(), stable, [&buf](TStringBuf b) {
-            NDetails::PackUInt32(b.Size(), buf);
-            buf.Append(b.Data(), b.Size());
+            NDetails::PackUInt32(b.size(), buf);
+            buf.Append(b.data(), b.size());
         });
     }
 }
@@ -5366,7 +5366,7 @@ public:
                 callInfo->nargs = 3;
                 callInfo->fncollation = DEFAULT_COLLATION_OID;
                 callInfo->isnull = false;
-                callInfo->args[0] = { (Datum)str.Data(), false };
+                callInfo->args[0] = { (Datum)str.data(), false };
                 callInfo->args[1] = { ObjectIdGetDatum(NMiniKQL::MakeTypeIOParam(*this)), false };
                 callInfo->args[2] = { Int32GetDatum(-1), false };
 
@@ -5408,7 +5408,7 @@ public:
             }
         };
         try {
-            datum = Receive(binary.Data(), binary.Size());
+            datum = Receive(binary.data(), binary.size());
             FmgrInfo finfo;
             InitFunc(OutFuncId, &finfo, 1, 1);
             LOCAL_FCINFO(callInfo, 1);
@@ -5527,7 +5527,7 @@ public:
             }
         };
         try {
-            datum = Receive(binary.Data(), binary.Size());
+            datum = Receive(binary.data(), binary.size());
             return {};
         } catch (const yexception& e) {
             TStringBuilder errMsg;
@@ -5582,7 +5582,7 @@ private:
         };
         try {
             if (isSourceBinary) {
-                datum = Receive(binary.Data(), binary.Size());
+                datum = Receive(binary.data(), binary.size());
             }
 
             if (IsArray()) {

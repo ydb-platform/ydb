@@ -1,4 +1,9 @@
+#include "node_warden.h"
 #include "node_warden_impl.h"
+
+#include <ydb/core/blob_depot/agent/agent.h>
+
+#include <util/random/entropy.h>
 
 namespace NKikimr::NStorage {
 

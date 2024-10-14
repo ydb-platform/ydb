@@ -1,0 +1,9 @@
+requirements:
+  - contrib/libs/pybind11
+copy:
+  - src/*
+cython_templates:
+  - contourpy/*.py.in
+exclude:
+  - contourpy/*.build
+  - src/*.build

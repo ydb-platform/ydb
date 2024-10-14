@@ -526,7 +526,7 @@ public:
         Append(": ");
         AppendParsedValue<name>(value);
         Append("\r\n");
-        HeaderType::Headers = TStringBuf(HeaderType::Headers.Data(), BufferType::Pos() - HeaderType::Headers.Data());
+        HeaderType::Headers = TStringBuf(HeaderType::Headers.data(), BufferType::Pos() - HeaderType::Headers.data());
     }
 
     void Set(TStringBuf name, TStringBuf value) {
@@ -540,7 +540,7 @@ public:
             (this->*cit->second) = TStringBuf(data, BufferType::Pos());
         }
         Append("\r\n");
-        HeaderType::Headers = TStringBuf(HeaderType::Headers.Data(), BufferType::Pos() - HeaderType::Headers.Data());
+        HeaderType::Headers = TStringBuf(HeaderType::Headers.data(), BufferType::Pos() - HeaderType::Headers.data());
     }
 
     void Set(const THeaders& headers) {
@@ -548,7 +548,7 @@ public:
         for (const auto& [name, value] : headers.Headers) {
             Set(name, value);
         }
-        HeaderType::Headers = TStringBuf(HeaderType::Headers.Data(), BufferType::Pos() - HeaderType::Headers.Data());
+        HeaderType::Headers = TStringBuf(HeaderType::Headers.data(), BufferType::Pos() - HeaderType::Headers.data());
     }
 
     static constexpr TStringBuf ALLOWED_CONTENT_ENCODINGS[] = {"deflate"};
@@ -562,7 +562,7 @@ public:
 
     void FinishHeader() {
         Append("\r\n");
-        HeaderType::Headers = TStringBuf(HeaderType::Headers.Data(), BufferType::Pos() - HeaderType::Headers.Data());
+        HeaderType::Headers = TStringBuf(HeaderType::Headers.data(), BufferType::Pos() - HeaderType::Headers.data());
         Stage = ERenderStage::Body;
     }
 

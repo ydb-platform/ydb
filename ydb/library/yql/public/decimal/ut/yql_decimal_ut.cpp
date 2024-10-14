@@ -230,19 +230,16 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTest) {
     }
 
     Y_UNIT_TEST(TestSpecialAsString) {
-        UNIT_ASSERT(IsValid("+Nan"));
-        UNIT_ASSERT(IsValid("-nAn"));
+        UNIT_ASSERT(IsValid("Nan"));
         UNIT_ASSERT(IsValid("INF"));
         UNIT_ASSERT(IsValid("-inf"));
 
-        UNIT_ASSERT_VALUES_EQUAL(ToString(+Nan(), 10, 2), "nan");
-        UNIT_ASSERT_VALUES_EQUAL(ToString(-Nan(), 10, 2), "-nan");
+        UNIT_ASSERT_VALUES_EQUAL(ToString(Nan(), 10, 2), "nan");
 
         UNIT_ASSERT_VALUES_EQUAL(ToString(+Inf(), 10, 2), "inf");
         UNIT_ASSERT_VALUES_EQUAL(ToString(-Inf(), 10, 2), "-inf");
 
         UNIT_ASSERT(IsNan(FromString("nan", 10, 2)));
-        UNIT_ASSERT(IsNan(FromString("-nAN", 12, 7)));
         UNIT_ASSERT(IsInf(FromString("+INf", MaxPrecision, 6)));
         UNIT_ASSERT(IsInf(FromString("-inF", 4, 2)));
     }

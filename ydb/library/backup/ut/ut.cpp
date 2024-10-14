@@ -90,7 +90,7 @@ Y_UNIT_TEST(ParseValuesFromFile) {
             }
         }
         TString str = ss.Str();
-        dataFile.Write(str.Detach(), str.Size());
+        dataFile.Write(str.Detach(), str.size());
     }
 
     auto tableDesc = NTable::TTableBuilder()

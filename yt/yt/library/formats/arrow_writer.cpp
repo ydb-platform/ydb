@@ -1435,7 +1435,7 @@ private:
                 output->Write(&metadataAlignSize, sizeof(ui32));
                 output->Write(metadataPtr, metadataSize);
 
-                output->Write(AlignmentString.Data(), metadataAlignSize - metadataSize);
+                output->Write(AlignmentString.data(), metadataAlignSize - metadataSize);
 
                 // Body
                 if (message.BodyWriter) {

@@ -835,11 +835,11 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             batch.BaseSequence = 5;
             batch.Magic = 2; // Current supported
             batch.Records.resize(1);
-            batch.Records[0].Key = TKafkaRawBytes(key.Data(), key.Size());
-            batch.Records[0].Value = TKafkaRawBytes(value.Data(), value.Size());
+            batch.Records[0].Key = TKafkaRawBytes(key.data(), key.size());
+            batch.Records[0].Value = TKafkaRawBytes(value.data(), value.size());
             batch.Records[0].Headers.resize(1);
-            batch.Records[0].Headers[0].Key = TKafkaRawBytes(headerKey.Data(), headerKey.Size());
-            batch.Records[0].Headers[0].Value = TKafkaRawBytes(headerValue.Data(), headerValue.Size());
+            batch.Records[0].Headers[0].Key = TKafkaRawBytes(headerKey.data(), headerKey.size());
+            batch.Records[0].Headers[0].Value = TKafkaRawBytes(headerValue.data(), headerValue.size());
 
             auto msg = client.Produce(topicName, 0, batch);
 
@@ -1079,11 +1079,11 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             batch.BaseSequence = 5;
             batch.Magic = 2; // Current supported
             batch.Records.resize(1);
-            batch.Records[0].Key = TKafkaRawBytes(key.Data(), key.Size());
-            batch.Records[0].Value = TKafkaRawBytes(value.Data(), value.Size());
+            batch.Records[0].Key = TKafkaRawBytes(key.data(), key.size());
+            batch.Records[0].Value = TKafkaRawBytes(value.data(), value.size());
             batch.Records[0].Headers.resize(1);
-            batch.Records[0].Headers[0].Key = TKafkaRawBytes(headerKey.Data(), headerKey.Size());
-            batch.Records[0].Headers[0].Value = TKafkaRawBytes(headerValue.Data(), headerValue.Size());
+            batch.Records[0].Headers[0].Key = TKafkaRawBytes(headerKey.data(), headerKey.size());
+            batch.Records[0].Headers[0].Value = TKafkaRawBytes(headerValue.data(), headerValue.size());
 
             auto msg = client.Produce(topicName, 0, batch);
 
@@ -1524,8 +1524,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             batch.Records.resize(recordsCount);
 
             for (auto i = 0; i < recordsCount; i++) {
-                batch.Records[i].Key = TKafkaRawBytes(key.Data(), key.Size());
-                batch.Records[i].Value = TKafkaRawBytes(value.Data(), value.Size());
+                batch.Records[i].Key = TKafkaRawBytes(key.data(), key.size());
+                batch.Records[i].Value = TKafkaRawBytes(value.data(), value.size());
             }
 
             auto msg = client.Produce(firstTopicName, 0, batch);

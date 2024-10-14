@@ -343,7 +343,7 @@ struct TTestHelper {
             runtime.GrabEdgeEventRethrow<TEvLoad::TEvLoadTestFinished>(handle);
             UNIT_ASSERT(handle);
             auto response = IEventHandle::Release<TEvLoad::TEvLoadTestFinished>(handle);
-            UNIT_ASSERT(response->ErrorReason.Empty());
+            UNIT_ASSERT(response->ErrorReason.empty());
 
             return std::unique_ptr<TEvLoad::TEvLoadTestFinished>(response.Release());
         }

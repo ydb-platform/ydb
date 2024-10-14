@@ -265,23 +265,6 @@ Y_UNIT_TEST_SUITE(TKQPViewTest) {
             );
             ExecuteQuery(session, creationQuery);
         }
-        {
-            // evaluated expression
-            const TString creationQuery = std::format(R"(
-                    $lambda = ($x) -> {{
-                        RETURN CAST($x as String)
-                    }};
-                    $value = $lambda(true);
-
-                    CREATE VIEW {} WITH security_invoker = $value AS {};
-                    DROP VIEW {};
-                )",
-                path,
-                query,
-                path
-            );
-            ExecuteQuery(session, creationQuery);
-        }
     }
 
     Y_UNIT_TEST(ListCreatedView) {

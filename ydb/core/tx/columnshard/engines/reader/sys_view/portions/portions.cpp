@@ -16,7 +16,7 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
     NArrow::Append<arrow::UInt64Type>(*builders[6], portion.GetColumnBlobBytes());
     NArrow::Append<arrow::UInt64Type>(*builders[7], portion.GetIndexBlobBytes());
     NArrow::Append<arrow::UInt64Type>(*builders[8], portion.GetPortionId());
-    NArrow::Append<arrow::UInt8Type>(*builders[9], !portion.IsRemovedFor(ReadMetadata->GetRequestSnapshot()));
+    NArrow::Append<arrow::UInt8Type>(*builders[9], !portion.HasRemoveSnapshot());
 
     auto tierName = portion.GetTierNameDef(NBlobOperations::TGlobal::DefaultStorageId);
     NArrow::Append<arrow::StringType>(*builders[10], arrow::util::string_view(tierName.data(), tierName.size()));

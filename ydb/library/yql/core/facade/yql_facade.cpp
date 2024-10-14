@@ -387,6 +387,10 @@ TProgram::TProgram(
                 cleaned.MutableYqlCore()->CopyFrom(GatewaysConfig_->GetYqlCore());
             }
 
+            if (GatewaysConfig_->HasSqlCore()) {
+                cleaned.MutableSqlCore()->CopyFrom(GatewaysConfig_->GetSqlCore());
+            }
+
             if (GatewaysConfig_->HasDq()) {
                 cleaned.MutableDq()->CopyFrom(GatewaysConfig_->GetDq());
             }

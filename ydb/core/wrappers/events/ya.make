@@ -7,9 +7,7 @@ IF (OS_WINDOWS)
 ELSE()
     SRCS(
         common.cpp
-        list_objects.cpp
         object_exists.cpp
-        delete_objects.cpp
         get_object.cpp
         s3_out.cpp
         abstract.cpp

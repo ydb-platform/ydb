@@ -1648,12 +1648,9 @@ namespace NKikimr::NDataStreams::V1 {
                 record->set_approximate_arrival_timestamp(r.GetCreateTimestampMS());
                 record->set_partition_key(r.GetPartitionKey());
                 record->set_sequence_number(std::to_string(r.GetOffset()).c_str());
-
                 if (proto.GetCodec() > 0) {
                     record->set_codec(proto.GetCodec() + 1);
                 }
-
-                record->set_codec(proto.GetCodec() + 1);
             }
             if (!results.empty()) {
                 auto last = results.rbegin();

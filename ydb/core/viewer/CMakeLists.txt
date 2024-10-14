@@ -67,6 +67,7 @@ target_link_libraries(ydb-core-viewer PUBLIC
   api-protos
   lib-deprecated-kicli
   public-lib-json_value
+  common
   api-grpc
   cpp-client-ydb_types
   contrib-libs-yaml-cpp
@@ -214,6 +215,7 @@ target_link_libraries(ydb-core-viewer.global PUBLIC
   api-protos
   lib-deprecated-kicli
   public-lib-json_value
+  common
   api-grpc
   cpp-client-ydb_types
   contrib-libs-yaml-cpp

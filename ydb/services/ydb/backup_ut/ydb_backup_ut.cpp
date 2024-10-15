@@ -419,33 +419,33 @@ void TestRestoreTableWithSerial(
 
 const char* ConvertIndexTypeToSQL(NKikimrSchemeOp::EIndexType indexType) {
     switch (indexType) {
-    case NKikimrSchemeOp::EIndexTypeGlobal:
-        return "GLOBAL";
-    case NKikimrSchemeOp::EIndexTypeGlobalAsync:
-        return "GLOBAL ASYNC";
-    case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-        return "GLOBAL UNIQUE";
-    case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-        return "GLOBAL UNIQUE";
-    default:
-        UNIT_FAIL("No conversion to SQL for this index type");
-        return nullptr;
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+            return "GLOBAL";
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+            return "GLOBAL ASYNC";
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            return "GLOBAL UNIQUE";
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            return "GLOBAL UNIQUE";
+        default:
+            UNIT_FAIL("No conversion to SQL for this index type");
+            return nullptr;
     }
 }
 
 NYdb::NTable::EIndexType ConvertIndexTypeToAPI(NKikimrSchemeOp::EIndexType indexType) {
     switch (indexType) {
-    case NKikimrSchemeOp::EIndexTypeGlobal:
-        return NYdb::NTable::EIndexType::GlobalSync;
-    case NKikimrSchemeOp::EIndexTypeGlobalAsync:
-        return NYdb::NTable::EIndexType::GlobalAsync;
-    case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-        return NYdb::NTable::EIndexType::GlobalUnique;
-    case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-        return NYdb::NTable::EIndexType::GlobalVectorKMeansTree;
-    default:
-        UNIT_FAIL("No conversion to API for this index type");
-        return NYdb::NTable::EIndexType::Unknown;
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+            return NYdb::NTable::EIndexType::GlobalSync;
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+            return NYdb::NTable::EIndexType::GlobalAsync;
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            return NYdb::NTable::EIndexType::GlobalUnique;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            return NYdb::NTable::EIndexType::GlobalVectorKMeansTree;
+        default:
+            UNIT_FAIL("No conversion to API for this index type");
+            return NYdb::NTable::EIndexType::Unknown;
     }
 }
 

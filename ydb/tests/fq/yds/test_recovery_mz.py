@@ -22,7 +22,7 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 @pytest.fixture
 def kikimr():
     kikimr_conf = StreamingOverKikimrConfig(
-        cloud_mode=True, node_count={"/cp": TenantConfig(1), "/compute": TenantConfig(8)}
+        cloud_mode=True, node_count={"/cp": TenantConfig(1), "/compute": TenantConfig(2)}
     )
     kikimr = StreamingOverKikimr(kikimr_conf)
     # control

@@ -544,7 +544,7 @@ class TestPqRowDispatcher(TestYdsBase):
         self.write_stream(data)
 
         kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 10     # long sleep to send status from topic_session to read_actor
         )
         stop_yds_query(client, query_id)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)

@@ -199,11 +199,13 @@ public:
 
 template <typename HeaderType, typename BufferType>
 class THttpBase : public HeaderType, public BufferType {
-public:
+protected:
+    // Returns raw, non-obfuscated data
     TStringBuf GetRawData() const {
         return TStringBuf(BufferType::Data(), BufferType::Size());
     }
 
+public:
     TString GetObfuscatedData() const {
         THeaders headers(HeaderType::Headers);
         TStringBuf authorization(headers["Authorization"]);

@@ -560,32 +560,32 @@ void SimdJsonToJsonIndex(const simdjson::dom::element& value, TBinaryJsonCallbac
     switch (value.type()) {
         case simdjson::dom::element_type::STRING: {
             std::string_view v;
-            Y_ABORT_UNLESS(value.get(v));
+            Y_ABORT_UNLESS(value.get(v) == simdjson::SUCCESS);
             callbacks.OnString(v);
             break;
         }
         case simdjson::dom::element_type::BOOL: {
             bool v;
-            Y_ABORT_UNLESS(value.get(v));
+            Y_ABORT_UNLESS(value.get(v) == simdjson::SUCCESS);
             callbacks.OnBoolean(v);
             break;
         }
         case simdjson::dom::element_type::INT64: {
             i64 v;
-            Y_ABORT_UNLESS(value.get(v));
+            Y_ABORT_UNLESS(value.get(v) == simdjson::SUCCESS);
             callbacks.OnInteger(v);
             break;
         }
         case simdjson::dom::element_type::UINT64: {
             ui64 v;
-            Y_ABORT_UNLESS(value.get(v));
+            Y_ABORT_UNLESS(value.get(v) == simdjson::SUCCESS);
             callbacks.OnUInteger(v);
             break;
         }
         case simdjson::dom::element_type::DOUBLE: {
             double v;
-            Y_ABORT_UNLESS(value.get(v));
-            callbacks.OnUInteger(v);
+            Y_ABORT_UNLESS(value.get(v) == simdjson::SUCCESS);
+            callbacks.OnDouble(v);
             break;
         }
         case simdjson::dom::element_type::NULL_VALUE:
@@ -595,7 +595,7 @@ void SimdJsonToJsonIndex(const simdjson::dom::element& value, TBinaryJsonCallbac
             callbacks.OnOpenArray();
 
             simdjson::dom::array v;
-            Y_ABORT_UNLESS(value.get(v));
+            Y_ABORT_UNLESS(value.get(v) == simdjson::SUCCESS);
             for (const auto& item : v) {
                 SimdJsonToJsonIndex(item, callbacks);
             }
@@ -607,7 +607,7 @@ void SimdJsonToJsonIndex(const simdjson::dom::element& value, TBinaryJsonCallbac
             callbacks.OnOpenMap();
 
             simdjson::dom::object v;
-            Y_ABORT_UNLESS(value.get(v));
+            Y_ABORT_UNLESS(value.get(v) == simdjson::SUCCESS);
             for (const auto& item : v) {
                 callbacks.OnMapKey(item.key);
                 SimdJsonToJsonIndex(item.value, callbacks);

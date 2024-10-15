@@ -1,5 +1,5 @@
 #include "serialization.h"
-#include <ydb/core/formats/arrow/switch/switch_type.h>
+#include <ydb/library/formats/arrow/switch/switch_type.h>
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NArrow::NScalar {

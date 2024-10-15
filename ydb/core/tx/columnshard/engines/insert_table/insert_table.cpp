@@ -123,7 +123,7 @@ std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const std::optional<
     }
 
     std::vector<TCommittedBlob> result;
-    result.reserve(pInfo->GetCommitted().size() + pInfo->GetInserted().size());
+    result.reserve(pInfo->GetCommitted().size() + Summary.GetInserted().size());
 
     for (const auto& data : pInfo->GetCommitted()) {
         if (lockId || data.GetSnapshot() <= reqSnapshot) {
@@ -137,7 +137,10 @@ std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const std::optional<
         }
     }
     if (lockId) {
-        for (const auto& [writeId, data] : pInfo->GetInserted()) {
+        for (const auto& [writeId, data] : Summary.GetInserted()) {
+            if (data.GetPathId() != pathId) {
+                continue;
+            }
             auto start = data.GetMeta().GetFirstPK(pkSchema);
             auto finish = data.GetMeta().GetLastPK(pkSchema);
             if (pkRangesFilter && pkRangesFilter->IsPortionInPartialUsage(start, finish) == TPKRangeFilter::EUsageClass::DontUsage) {

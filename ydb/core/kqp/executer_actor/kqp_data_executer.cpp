@@ -1208,7 +1208,7 @@ private:
                     ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
                         res->Record.GetTxLocks(0).GetSchemeShard(),
                         res->Record.GetTxLocks(0).GetPathId());
-                    return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
+                    ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                 }
                 CheckExecutionComplete();
                 return;

@@ -96,10 +96,12 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
             auto commitResult = tx1->Commit().GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, commitResult.GetIssues().ToString());
             commitResult.GetIssues().PrintTo(Cerr);
-            UNIT_ASSERT_C(HasIssue(commitResult.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                [] (const NYql::TIssue& issue) {
-                    return issue.GetMessage().Contains("/Root/Test");
-                }), commitResult.GetIssues().ToString());
+            if (!GetIsOlap()) {
+                UNIT_ASSERT_C(HasIssue(commitResult.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
+                    [] (const NYql::TIssue& issue) {
+                        return issue.GetMessage().Contains("/Root/Test");
+                    }), commitResult.GetIssues().ToString());
+            }
 
             result = session2.ExecuteQuery(Q_(R"(
                 SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;

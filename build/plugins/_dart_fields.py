@@ -847,12 +847,8 @@ class TestClasspath:
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        test_classpath_origins = unit.get('TEST_CLASSPATH_VALUE')
         ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
-        if test_classpath_origins:
-            value = '${TEST_CLASSPATH_MANAGED}'
-            return {cls.KEY: value}
-        elif ymake_java_test:
+        if ymake_java_test:
             value = '${DART_CLASSPATH}'
             return {cls.KEY: value}
 
@@ -862,9 +858,8 @@ class TestClasspathDeps:
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        test_classpath_origins = unit.get('TEST_CLASSPATH_VALUE')
         ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
-        if not test_classpath_origins and ymake_java_test:
+        if ymake_java_test:
             return {cls.KEY: '${DART_CLASSPATH_DEPS}'}
 
 
@@ -873,9 +868,7 @@ class TestClasspathOrigins:
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        test_classpath_origins = unit.get('TEST_CLASSPATH_VALUE')
-        if test_classpath_origins:
-            return {cls.KEY: test_classpath_origins}
+        return None
 
 
 class TestCwd:
@@ -1234,9 +1227,8 @@ class TestJar:
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        test_classpath_origins = unit.get('TEST_CLASSPATH_VALUE')
         ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
-        if not test_classpath_origins and ymake_java_test:
+        if ymake_java_test:
             if unit.get('UNITTEST_DIR'):
                 value = '${UNITTEST_MOD}'
             else:

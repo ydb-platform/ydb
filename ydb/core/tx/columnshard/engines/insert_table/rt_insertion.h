@@ -142,8 +142,10 @@ private:
 
     void OnNewCommitted(const ui64 dataSize, const bool load = false) noexcept;
     void OnEraseCommitted(TPathInfo& pathInfo, const ui64 dataSize) noexcept;
-    void OnNewInserted(TPathInfo& pathInfo, const ui64 dataSize, const bool load) noexcept;
-    void OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize) noexcept;
+    void OnNewInserted(TPathInfo& pathInfo, const ui64 dataSize, ui64 version, const bool load) noexcept;
+    void OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize, ui64 version) noexcept;
+    void OnNewAborted(ui64 version);
+    void OnEraseAborted(ui64 version);
     static TAtomicCounter CriticalInserted;
 
 public:

@@ -248,6 +248,10 @@ TDataReceivedEvent::TDataReceivedEvent(TVector<TMessage> messages, TVector<TComp
 }
 
 void TDataReceivedEvent::Commit() {
+    if (ReadInTransaction) {
+        ythrow yexception() << "Offsets cannot be promoted when reading in a transaction";
+    }
+
     for (auto [from, to] : OffsetRanges) {
         static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())->Commit(from, to);
     }

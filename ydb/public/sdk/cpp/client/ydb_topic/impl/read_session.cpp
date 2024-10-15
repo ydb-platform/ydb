@@ -11,6 +11,13 @@ namespace NYdb::NTopic {
 
 static const TString DRIVER_IS_STOPPING_DESCRIPTION = "Driver is stopping";
 
+void SetReadInTransaction(TReadSessionEvent::TEvent& event)
+{
+    if (auto* e = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&event)) {
+        e->SetReadInTransaction();
+    }
+}
+
 TReadSession::TReadSession(const TReadSessionSettings& settings,
              std::shared_ptr<TTopicClient::TImpl> client,
              std::shared_ptr<TGRpcConnectionsImpl> connections,
@@ -137,6 +144,9 @@ TVector<TReadSessionEvent::TEvent> TReadSession::GetEvents(const TReadSessionGet
     if (!events.empty() && settings.Tx_) {
         auto& tx = settings.Tx_->get();
         CbContext->TryGet()->CollectOffsets(tx, events, Client);
+        for (auto& event : events) {
+            SetReadInTransaction(event);
+        }
     }
     return events;
 }
@@ -155,6 +165,7 @@ TMaybe<TReadSessionEvent::TEvent> TReadSession::GetEvent(const TReadSessionGetEv
     if (event && settings.Tx_) {
         auto& tx = settings.Tx_->get();
         CbContext->TryGet()->CollectOffsets(tx, *event, Client);
+        SetReadInTransaction(*event);
     }
     return event;
 }

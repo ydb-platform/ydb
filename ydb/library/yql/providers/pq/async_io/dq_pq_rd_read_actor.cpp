@@ -150,8 +150,10 @@ private:
             const TTxId& txId,
             const NActors::TActorId selfId,
             TActorId rowDispatcherActorId,
+            ui64 partitionId,
             ui64 eventQueueId)
-            : RowDispatcherActorId(rowDispatcherActorId) {
+            : RowDispatcherActorId(rowDispatcherActorId)
+            , PartitionId(partitionId) {
             EventsQueue.Init(txId, selfId, selfId, eventQueueId, /* KeepAlive */ true);
             EventsQueue.OnNewRecipientId(rowDispatcherActorId);
         }
@@ -160,12 +162,15 @@ private:
         ui64 NextOffset = 0;
         bool IsWaitingRowDispatcherResponse = false;
         NYql::NDq::TRetryEventsQueue EventsQueue;
-        bool NewDataArrived = false;
+        bool HasPendingData = false;
         TActorId RowDispatcherActorId;
+        ui64 PartitionId;
     };
     
     TMap<ui64, SessionInfo> Sessions;
     const THolderFactory& HolderFactory;
+    const i64 MaxBufferSize;
+    i64 ReadyBufferSizeBytes = 0;
 
 public:
     TDqPqRdReadActor(
@@ -179,7 +184,8 @@ public:
         const NActors::TActorId& computeActorId,
         const NActors::TActorId& localRowDispatcherActorId,
         const TString& token,
-        const ::NMonitoring::TDynamicCounterPtr& counters);
+        const ::NMonitoring::TDynamicCounterPtr& counters,
+        i64 bufferSize);
 
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr& ev);
@@ -233,6 +239,7 @@ public:
     void StopSessions();
     void ReInit(const TString& reason);
     void PrintInternalState();
+    void TrySendGetNextBatch(SessionInfo& sessionInfo);
 };
 
 TDqPqRdReadActor::TDqPqRdReadActor(
@@ -246,13 +253,15 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         const NActors::TActorId& computeActorId,
         const NActors::TActorId& localRowDispatcherActorId,
         const TString& token,
-        const ::NMonitoring::TDynamicCounterPtr& counters)
+        const ::NMonitoring::TDynamicCounterPtr& counters,
+        i64 bufferSize)
         : TActor<TDqPqRdReadActor>(&TDqPqRdReadActor::StateFunc)
         , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId)
         , Token(token)
         , LocalRowDispatcherActorId(localRowDispatcherActorId)
         , Metrics(txId, taskId, counters)
         , HolderFactory(holderFactory)
+        , MaxBufferSize(bufferSize)
 {
     MetadataFields.reserve(SourceParams.MetadataFieldsSize());
     TPqMetaExtractor fieldsExtractor;
@@ -375,7 +384,6 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
     buffer.clear();
     do {
         auto& readyBatch = ReadyBuffer.front();
-        SRC_LOG_T("Return " << readyBatch.Data.size() << " items");
 
         for (const auto& message : readyBatch.Data) {
             auto [item, size] = CreateItem(message);
@@ -383,15 +391,21 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
         }
         usedSpace += readyBatch.UsedSpace;
         freeSpace -= readyBatch.UsedSpace;
-        SRC_LOG_T("usedSpace " << usedSpace);
-        SRC_LOG_T("freeSpace " << freeSpace);
-
         TPartitionKey partitionKey{TString{}, readyBatch.PartitionId};
         PartitionToOffset[partitionKey] = readyBatch.NextOffset;
         SRC_LOG_T("NextOffset " << readyBatch.NextOffset);
         ReadyBuffer.pop();
     } while (freeSpace > 0 && !ReadyBuffer.empty());
 
+    ReadyBufferSizeBytes -= usedSpace;
+    SRC_LOG_T("Return " << buffer.RowCount() << " rows, buffer size " << ReadyBufferSizeBytes << ", free space " << freeSpace << ", result size " << usedSpace);
+
+    if (!ReadyBuffer.empty()) {
+        Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+    }
+    for (auto& [partitionId, sessionInfo] : Sessions) {
+        TrySendGetNextBatch(sessionInfo);
+    }
     ProcessState();
     return usedSpace;
 }
@@ -490,11 +504,8 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev
         SRC_LOG_W("Wrong seq num ignore message, seqNo " << meta.GetSeqNo());
         return;
     }
-    sessionInfo.NewDataArrived = true;
-    Metrics.InFlyGetNextBatch->Inc();
-    auto event = std::make_unique<NFq::TEvRowDispatcher::TEvGetNextBatch>();
-    event->Record.SetPartitionId(partitionId);
-    sessionInfo.EventsQueue.Send(event.release());
+    sessionInfo.HasPendingData = true;
+    TrySendGetNextBatch(sessionInfo);
 }
 
 void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {
@@ -578,7 +589,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr&
                 Sessions.emplace(
                     std::piecewise_construct,
                     std::forward_as_tuple(partitionId),
-                    std::forward_as_tuple(TxId, SelfId(), rowDispatcherActorId, partitionId));
+                    std::forward_as_tuple(TxId, SelfId(), rowDispatcherActorId, partitionId, partitionId));
             }
         }
     }
@@ -637,11 +648,12 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
     for (const auto& message : ev->Get()->Record.GetMessages()) {
         SRC_LOG_T("Json: " << message.GetJson());    
         activeBatch.Data.emplace_back(message.GetJson());
-        activeBatch.UsedSpace += message.GetJson().size();
         sessionInfo.NextOffset = message.GetOffset() + 1;
         bytes += message.GetJson().size();
         SRC_LOG_T("TEvMessageBatch NextOffset " << sessionInfo.NextOffset);
     }
+    activeBatch.UsedSpace = bytes;
+    ReadyBufferSizeBytes += bytes;
     IngressStats.Bytes += bytes;
     IngressStats.Chunks++;
     activeBatch.NextOffset = ev->Get()->Record.GetNextMessageOffset();
@@ -697,6 +709,20 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvProcessState::TPtr&) {
     ProcessState();
 }
 
+void TDqPqRdReadActor::TrySendGetNextBatch(SessionInfo& sessionInfo) {
+    if (!sessionInfo.HasPendingData) {
+        return;
+    }
+    if (ReadyBufferSizeBytes > MaxBufferSize) {
+        return;
+    }
+    Metrics.InFlyGetNextBatch->Inc();
+    auto event = std::make_unique<NFq::TEvRowDispatcher::TEvGetNextBatch>();
+    sessionInfo.HasPendingData = false;
+    event->Record.SetPartitionId(sessionInfo.PartitionId);
+    sessionInfo.EventsQueue.Send(event.release());
+}
+
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     NPq::NProto::TDqPqTopicSource&& settings,
     ui64 inputIndex,
@@ -709,7 +735,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     const NActors::TActorId& localRowDispatcherActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    i64 /*bufferSize*/) // TODO
+    i64 bufferSize)
 {
     auto taskParamsIt = taskParams.find("pq");
     YQL_ENSURE(taskParamsIt != taskParams.end(), "Failed to get pq task params");
@@ -731,7 +757,8 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
         computeActorId,
         localRowDispatcherActorId,
         token,
-        counters
+        counters,
+        bufferSize
     );
 
     return {actor, actor};

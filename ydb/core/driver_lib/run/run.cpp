@@ -1738,13 +1738,16 @@ void TKikimrRunner::KikimrStop(bool graceful) {
 
     if (graceful && enableReleaseNodeNameOnGracefulShutdown) {
         using namespace NKikimr::NNodeBroker;
+        using TEvent = TEvNodeBroker::TEvGracefulShutdownRequest;
         
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
         auto pipe = NTabletPipe::CreateClient({}, MakeNodeBrokerID(), pipeConfig);
         TActorId nodeBrokerPipe = ActorSystem->Register(pipe);
 
-        ActorSystem->Send(new IEventHandle(nodeBrokerPipe, {}, new TEvNodeBroker::TEvGracefulShutdownRequest));
+        TAutoPtr<TEvent> event = new TEvent;
+
+        ActorSystem->Send(new IEventHandle(nodeBrokerPipe, {}, event.Release()));
     }
 
     if (EnabledGrpcService) {

@@ -65,6 +65,7 @@ public:
     void Complete(const TActorContext &ctx) override
     {
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxGracefulShutdown Complete");
+        Response->Record.MutableStatus()->SetCode(TStatus::OK);
         ctx.Send(Event->Sender, Response.Release());
     }
 

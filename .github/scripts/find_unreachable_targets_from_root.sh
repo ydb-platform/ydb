@@ -6,7 +6,7 @@
 set -e
 
 # find all modules+tests from ydb/ya.make
-./ya make -Gj0 -ttt ydb --build release -k --cache-tests --build-all  > output_dump2
+./ya make -Gj0 -ttt ydb --build release -k --cache-tests --build-all > output_dump
 cat output_dump | jq '.graph[]' | jq 'select( ."node-type"=="test")' | jq -r ".kv.path" | sort | uniq | sed -E 's/\/[^/]*$//g;/^null$/d'  | sort | uniq | { grep "^ydb" || true; } > tests.txt
 cat output_dump | jq '.graph[]' | jq -r 'select( ."target_properties"."module_type" != null) | select( ( ."target_properties"."module_tag" // "-" | strings | contains("proto") ) | not ) | .target_properties.module_dir' | sort | uniq | { grep "^ydb" || true; } > modules.txt
 cat modules.txt tests.txt | (echo 'RECURSE(';cat;echo ')') > ya.make

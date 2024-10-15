@@ -1018,7 +1018,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EIndexTypeGlobalAsync:
                 TestTableWithIndexBackupRestore(Type);
                 break;
-             case EIndexTypeGlobalUnique:
+            case EIndexTypeGlobalUnique:
                 break; // https://github.com/ydb-platform/ydb/issues/10468
             case EIndexTypeGlobalVectorKmeansTree:
                 break; // https://github.com/ydb-platform/ydb/issues/10469

@@ -400,7 +400,7 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
     ReadyBufferSizeBytes -= usedSpace;
     SRC_LOG_T("Return " << buffer.RowCount() << " rows, buffer size " << ReadyBufferSizeBytes << ", free space " << freeSpace << ", result size " << usedSpace);
 
-    if (ReadyBufferSizeBytes > MaxBufferSize) {
+    if (!ReadyBuffer.empty()) {
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
     for (auto& [partitionId, sessionInfo] : Sessions) {

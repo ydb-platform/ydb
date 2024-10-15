@@ -2998,6 +2998,18 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         // progress
         ui32 Level = 0;
         ui32 Parent = 0;
+    
+        static ui32 BinPow(ui32 k, ui32 l) {
+            ui32 r = 1;
+            while (l != 0) {
+                if (l % 2 != 0) {
+                    r *= k;
+                }
+                k *= k;
+                l /= 2;
+            }
+            return r;
+        }
 
         bool NeedsAnotherLevel() const {
             return Level < Levels;

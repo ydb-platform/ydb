@@ -64,18 +64,7 @@ static std::tuple<ui32, ui32, ui32> ComputeKMeansBoundaries(const NSchemeShard::
     const auto& kmeans = buildInfo.KMeans;
     Y_ASSERT(kmeans.K != 0);
     Y_ASSERT((kmeans.K & (kmeans.K - 1)) == 0);
-    auto pow = [](ui32 k, ui32 l) {
-        ui32 r = 1;
-        while (l != 0) {
-            if (l % 2 != 0) {
-                r *= k;
-            }
-            k *= k;
-            l /= 2;
-        }
-        return r;
-    };
-    const auto count = pow(kmeans.K, kmeans.Level + 1);
+    const auto count = TIndexBuildInfo::TKMeans::BinPow(kmeans.K, kmeans.Level + 1);
     ui32 step = 1;
     auto parts = count;
     auto shards = tableInfo.GetShard2PartitionIdx().size();
@@ -112,6 +101,7 @@ protected:
     TActorId Uploader;
     ui32 RetryCount = 0;
     ui32 RowsBytes = 0;
+    ui32 Child = 0;
 
     NDataShard::TUploadStatus UploadStatus;
 
@@ -155,9 +145,9 @@ public:
         Rows->reserve(Init.size());
         std::array<TCell, 2> PrimaryKeys;
         PrimaryKeys[0] = TCell::Make(ui32{0});
-        for (ui32 i = 1; auto& [_, row] : Init) {
+        for (auto& [_, row] : Init) {
             RowsBytes += row.size();
-            PrimaryKeys[1] = TCell::Make(ui32{i++});
+            PrimaryKeys[1] = TCell::Make(ui32{Child++});
             // TODO(mbkkt) we can avoid serialization of PrimaryKeys every iter
             Rows->emplace_back(TSerializedCellVec{PrimaryKeys}, std::move(row));
         }
@@ -201,15 +191,14 @@ private:
               << " Uploader: " << Uploader.ToString()
               << " ev->Sender: " << ev->Sender.ToString());
 
-        if (Uploader) {
-            Y_VERIFY_S(Uploader == ev->Sender,
-                       LogPrefix << "Mismatch"
-                                 << " Uploader: " << Uploader.ToString()
-                                 << " ev->Sender: " << ev->Sender.ToString()
-                                 << Debug());
-        } else {
+        if (!Uploader) {
             return;
         }
+        Y_VERIFY_S(Uploader == ev->Sender,
+                   LogPrefix << "Mismatch"
+                             << " Uploader: " << Uploader.ToString()
+                             << " ev->Sender: " << ev->Sender.ToString()
+                             << Debug());
 
         UploadStatus.StatusCode = ev->Get()->Status;
         UploadStatus.Issues = std::move(ev->Get()->Issues);
@@ -927,12 +916,15 @@ public:
         TTableInfo::TPtr table = Self->Tables.at(buildInfo.TablePathId);
 
         auto tableColumns = NTableIndex::ExtractInfo(table); // skip dropped columns
-        const TSerializedTableRange infiniteRange = InfiniteRange(tableColumns.Keys.size());
+        TSerializedTableRange shardRange = InfiniteRange(tableColumns.Keys.size());
 
         for (const auto& x: table->GetPartitions()) {
             Y_ABORT_UNLESS(Self->ShardInfos.contains(x.ShardIdx));
+            TSerializedCellVec bound{x.EndOfRange};
+            shardRange.To = bound;
+            buildInfo.Shards.emplace(x.ShardIdx, TIndexBuildInfo::TShardStatus{std::move(shardRange), ""});
+            shardRange.From = std::move(bound);
 
-            buildInfo.Shards.emplace(x.ShardIdx, TIndexBuildInfo::TShardStatus(infiniteRange, ""));
             Self->PersistBuildIndexUploadInitiate(db, buildInfo, x.ShardIdx);
         }
     }
@@ -1038,7 +1030,7 @@ public:
         {
             // reschedule shard
             if (buildInfo.InProgressShards.erase(shardIdx)) {
-                buildInfo.ToUploadShards.push_front(shardIdx);
+                buildInfo.ToUploadShards.emplace_front(shardIdx);
 
                 Self->IndexBuildPipes.Close(buildId, tabletId, ctx);
 
@@ -1121,7 +1113,7 @@ public:
             auto recordSeqNo = std::pair<ui64, ui64>(record.GetRequestSeqNoGeneration(), record.GetRequestSeqNoRound());
 
             if (actualSeqNo != recordSeqNo) {
-                LOG_D("TTxReply : TEvBuildIndexProgressResponse"
+                LOG_D("TTxReply : TEvSampleKResponse"
                       << " ignore progress message by seqNo"
                       << ", TIndexBuildInfo: " << buildInfo
                       << ", actual seqNo for the shard " << shardId << " (" << shardIdx << ") is: "  << Self->Generation() << ":" <<  shardStatus.SeqNoRound
@@ -1172,7 +1164,7 @@ public:
             case  NKikimrIndexBuilder::EBuildStatus::ABORTED:
                 // datashard gracefully rebooted, reschedule shard
                 if (buildInfo.InProgressShards.erase(shardIdx)) {
-                    buildInfo.ToUploadShards.push_front(shardIdx);
+                    buildInfo.ToUploadShards.emplace_front(shardIdx);
 
                     Self->IndexBuildPipes.Close(buildId, shardId, ctx);
 
@@ -1360,27 +1352,25 @@ public:
             if (record.HasLastKeyAck()) {
                 if (shardStatus.LastKeyAck) {
                     //check that all LastKeyAcks are monotonously increase
-                    TTableInfo::TPtr tableInfo = Self->Tables.at(buildInfo.TablePathId);
-                    TVector<NScheme::TTypeInfo> keyTypes;
-                    for (ui32 keyPos: tableInfo->KeyColumnIds) {
-                        keyTypes.push_back(tableInfo->Columns.at(keyPos).PType);
+                    const auto& tableInfo = *Self->Tables.at(buildInfo.TablePathId);
+                    std::vector<NScheme::TTypeInfo> keyTypes;
+                    keyTypes.reserve(tableInfo.KeyColumnIds.size());
+                    for (ui32 keyPos: tableInfo.KeyColumnIds) {
+                        keyTypes.emplace_back(tableInfo.Columns.at(keyPos).PType);
                     }
 
-                    TSerializedCellVec last;
-                    last.Parse(shardStatus.LastKeyAck);
+                    TSerializedCellVec next{shardStatus.LastKeyAck};
+                    TSerializedCellVec prev{record.GetLastKeyAck()};
 
-                    TSerializedCellVec update;
-                    update.Parse(record.GetLastKeyAck());
-
-                    int cmp = CompareBorders<true, true>(last.GetCells(),
-                                                         update.GetCells(),
+                    int cmp = CompareBorders<true, true>(next.GetCells(),
+                                                         prev.GetCells(),
                                                          true,
                                                          true,
                                                          keyTypes);
                     Y_VERIFY_S(cmp < 0,
                                "check that all LastKeyAcks are monotonously increase"
-                                   << ", last: " << DebugPrintPoint(keyTypes, last.GetCells(), *AppData()->TypeRegistry)
-                                   << ", update: " <<  DebugPrintPoint(keyTypes, update.GetCells(), *AppData()->TypeRegistry));
+                                   << ", next: " << DebugPrintPoint(keyTypes, next.GetCells(), *AppData()->TypeRegistry)
+                                   << ", prev: " << DebugPrintPoint(keyTypes, prev.GetCells(), *AppData()->TypeRegistry));
                 }
 
                 shardStatus.LastKeyAck = record.GetLastKeyAck();
@@ -1423,7 +1413,7 @@ public:
             case  NKikimrIndexBuilder::EBuildStatus::ABORTED:
                 // datashard gracefully rebooted, reschedule shard
                 if (buildInfo.InProgressShards.erase(shardIdx)) {
-                    buildInfo.ToUploadShards.push_front(shardIdx);
+                    buildInfo.ToUploadShards.emplace_front(shardIdx);
 
                     Self->IndexBuildPipes.Close(buildId, shardId, ctx);
 

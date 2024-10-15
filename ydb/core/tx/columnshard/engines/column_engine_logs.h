@@ -195,7 +195,7 @@ public:
     }
     void UpsertPortion(const TPortionInfo& portionInfo, const TPortionInfo* exInfo = nullptr);
 
-    void RemoveSchemaVersion(ui64 version) {
+    void RemoveSchemaVersion(ui64 version) override {
         VersionedIndex.RemoveVersion(version);
     }
 
@@ -205,11 +205,6 @@ public:
 
     bool HasUnusedSchemaVersions() const override {
         return VersionCounters->HasUnusedSchemaVersionsExcept(LastSchemaVersion());
-    }
-
-    void RemoveSchemaVersionAndDeleteErased(ui64 version) override {
-        RemoveSchemaVersion(version);
-        VersionCounters->DeleteErasedVersion(version);
     }
 
 private:

@@ -29,7 +29,8 @@ void TTxSchemaVersionsCleanup::Complete(const TActorContext& /*ctx*/) {
 
     for (ui64 version: VersionsToRemove) {
         LOG_S_DEBUG("Removing schema version from memory " << version << " tablet id " << Self->TabletID());
-        Self->TablesManager.MutablePrimaryIndex().RemoveSchemaVersionAndDeleteErased(version);
+        Self->TablesManager.MutablePrimaryIndex().RemoveSchemaVersion(version);
+        Self->VersionCounters->DeleteErasedVersion(version);
     }
     VersionsToRemove.clear();
 

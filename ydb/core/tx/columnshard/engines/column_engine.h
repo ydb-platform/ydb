@@ -300,7 +300,7 @@ public:
 
     virtual ui64 LastSchemaVersion () const = 0;
 
-    virtual void RemoveSchemaVersionAndDeleteErased(ui64) = 0;
+    virtual void RemoveSchemaVersion(ui64 version) = 0;
 
     virtual const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const = 0;
     virtual const TColumnEngineStats& GetTotalStats() = 0;

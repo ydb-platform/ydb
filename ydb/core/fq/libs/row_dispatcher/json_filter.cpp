@@ -16,11 +16,24 @@ using TCallback = NFq::TJsonFilter::TCallback;
 const char* OffsetFieldName = "_offset";
 TString LogPrefix = "JsonFilter: ";
 
+NYT::TNode CreateTypeNode(const TString& fieldType) {
+    return NYT::TNode::CreateList()
+        .Add("DataType")
+        .Add(fieldType);
+}
+
 void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldType) {
     node.Add(
         NYT::TNode::CreateList()
             .Add(fieldName)
-            .Add(NYT::TNode::CreateList().Add("DataType").Add(fieldType))
+            .Add(CreateTypeNode(fieldType))
+    );
+}
+
+void AddOptionalField(NYT::TNode& node, const TString& fieldName, const TString& fieldType) {
+    node.Add(NYT::TNode::CreateList()
+        .Add(fieldName)
+        .Add(NYT::TNode::CreateList().Add("OptionalType").Add(CreateTypeNode(fieldType)))
     );
 }
 
@@ -28,7 +41,7 @@ NYT::TNode MakeInputSchema(const TVector<TString>& columns) {
     auto structMembers = NYT::TNode::CreateList();
     AddField(structMembers, OffsetFieldName, "Uint64");
     for (const auto& col : columns) {
-        AddField(structMembers, col, "String");
+        AddOptionalField(structMembers, col, "String");
     }
     return NYT::TNode::CreateList().Add("StructType").Add(std::move(structMembers));
 }
@@ -112,7 +125,9 @@ public:
 
                 size_t fieldId = 0;
                 for (const auto& column : values.second) {
-                    items[FieldsPositions[fieldId++]] = NKikimr::NMiniKQL::MakeString(column[rowId]);
+                    items[FieldsPositions[fieldId++]] = column[rowId].data()  // Check that std::string_view was initialized in json_parser
+                        ? NKikimr::NMiniKQL::MakeString(column[rowId]).MakeOptional()
+                        : NKikimr::NUdf::TUnboxedValuePod();
                 }
 
                 Worker->Push(std::move(result));
@@ -264,7 +279,13 @@ private:
             } else if (columnType == "Optional<Json>") {
                 columnType = "Optional<String>";
             }
-            str << "CAST(" << columnNames[i] << " as " << columnType << ") as " << columnNames[i] << ((i != columnNames.size() - 1) ? "," : "");
+
+            if (columnType.StartsWith("Optional")) {
+                str << "IF(" << columnNames[i] << " IS NOT NULL, Unwrap(CAST(" << columnNames[i] << " as " << columnType << ")), NULL)";
+            } else {
+                str << "Unwrap(CAST(" << columnNames[i] << " as " << columnType << "))";
+            }
+            str << " as " << columnNames[i] << ((i != columnNames.size() - 1) ? "," : "");
         }
         str << " FROM Input;\n";
         str << "$filtered = SELECT * FROM $fields " << whereFilter << ";\n";

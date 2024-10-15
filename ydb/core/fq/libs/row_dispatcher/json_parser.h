@@ -14,7 +14,7 @@ public:
     size_t GetNumberValues() const;
     const TVector<ui64>& GetOffsets() const;
 
-    void AddMessages(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
+    void AddMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
     const TVector<TVector<std::string_view>>& Parse();
 
     TString GetDescription() const;

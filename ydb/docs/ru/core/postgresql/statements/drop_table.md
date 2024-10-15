@@ -8,7 +8,7 @@
 DROP TABLE [IF EXISTS] <table name>;
 ```
 
-Инструкция `DROP TABLE <table name>;` предназначена для удаления таблицы. Например: `DROP TABLE people;`. Если удаляемая таблица отсутствует – будет выведено сообщение об ошибки:
+Инструкция `DROP TABLE <table name>;` предназначена для удаления таблиц. Например: `DROP TABLE people;`. Если удаляемая таблица отсутствует – будет выведено сообщение об ошибки:
 
 ```text
 Error: Cannot find table '...' because it does not exist or you do not have access permissions. Please check correctness of table path and user permissions., code: 2003

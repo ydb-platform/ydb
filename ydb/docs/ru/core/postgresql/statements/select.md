@@ -1,4 +1,4 @@
-# SELECT (Чтение строк из таблицы)
+# SELECT (Чтение строк из строковой таблицы)
 
 {% include [../_includes/alert_preview.md)](../_includes/alert_preview.md) %}
 

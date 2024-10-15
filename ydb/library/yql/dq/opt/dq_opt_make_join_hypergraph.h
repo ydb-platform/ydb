@@ -87,7 +87,6 @@ void AddCycle(
         return lhs.first.RelName == rhs.first.RelName && lhs.second.RelName == rhs.second.RelName;
     };
 
-    size_t groupCnt = 0;
     for (size_t i = 0; i < joinConds.size();) {
         size_t groupBegin = i;
         TVector<TJoinColumn> curGroupLhsJoinKeys, curGroupRhsJoinKeys;
@@ -100,11 +99,6 @@ void AddCycle(
         TNodeSet conditionUsedRels{};
         conditionUsedRels = graph.GetNodesByRelNames(GetConditionUsedRelationNames(curGroupLhsJoinKeys, curGroupRhsJoinKeys));
         graph.AddEdge(MakeHyperedge(joinNode, conditionUsedRels,subtreeNodes, curGroupLhsJoinKeys, curGroupRhsJoinKeys));
-        ++groupCnt;
-    }
-
-    if (groupCnt > 1) {
-        graph.HasCycles = true;
     }
 }
 

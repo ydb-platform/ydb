@@ -109,10 +109,6 @@ private:
     THashMap<TNodeSet, std::shared_ptr<IBaseOptimizerNode>, std::hash<TNodeSet>> DpTable_;
     THashMap<TNodeSet, TCardinalityHints::TCardinalityHint*, std::hash<TNodeSet>> CardHintsTable_;
     THashMap<TNodeSet, TJoinAlgoHints::TJoinAlgoHint*, std::hash<TNodeSet>> JoinAlgoHintsTable_;
-    
-    using TEdge = TJoinHypergraph<TNodeSet>::TEdge;
-    /* The container, which owns edges. We need it in case of ProcessCycles=true, because we create a new edge and TJoinInternalOptimizerNode doesn't own an object. */
-    std::list<TEdge> Storage_;
 };
 
 /*
@@ -336,18 +332,8 @@ template <typename TNodeSet, bool ProcessCycles> void TDPHypSolver<TNodeSet, Pro
             TNodeSet s2{};
             s2[i] = 1;
 
-            if constexpr (ProcessCycles) {
-                if (auto edge = Graph_.FindEdgeWithAllConditionsBetween(s1, s2)) {
-                    Storage_.push_back(std::move(edge.value()));
-                    const auto* e = &Storage_.back();
-                    Storage_.push_back(e->CreateReversed(-1));
-                    const auto* rev = &Storage_.back();
-                    EmitCsgCmp(s1, s2, e, rev);
-                }
-            } else {
-                if (auto* edge = Graph_.FindEdgeBetween(s1, s2)) {
-                    EmitCsgCmp(s1, s2, edge, &Graph_.GetEdge(edge->ReversedEdgeId));
-                }
+            if (auto* edge = Graph_.FindEdgeBetween(s1, s2)) {
+                EmitCsgCmp(s1, s2, edge, &Graph_.GetEdge(edge->ReversedEdgeId));
             }
 
             EnumerateCmpRec(s1, s2, x | MakeB(neighs, GetLowestSetBit(s2)));
@@ -375,18 +361,8 @@ template <typename TNodeSet, bool ProcessCycles> void TDPHypSolver<TNodeSet, Pro
         next = NextBitset(prev, neighs);
 
         if (DpTable_.contains(s2 | next)) {
-            if constexpr (ProcessCycles) {
-                if (auto edge = Graph_.FindEdgeWithAllConditionsBetween(s1, s2 | next)) {
-                    Storage_.push_back(std::move(edge.value()));
-                    const auto* e = &Storage_.back();
-                    Storage_.push_back(e->CreateReversed(-1));
-                    const auto* rev = &Storage_.back();
-                    EmitCsgCmp(s1, s2 | next, e, rev);
-                }
-            } else {
-                if (auto* edge = Graph_.FindEdgeBetween(s1, s2 | next)) {
-                    EmitCsgCmp(s1, s2 | next, edge, &Graph_.GetEdge(edge->ReversedEdgeId));
-                }
+            if (auto* edge = Graph_.FindEdgeBetween(s1, s2 | next)) {
+                EmitCsgCmp(s1, s2 | next, edge, &Graph_.GetEdge(edge->ReversedEdgeId));
             }
         }
 

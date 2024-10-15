@@ -75,11 +75,13 @@ bool HaveSameConditions(const std::shared_ptr<IBaseOptimizerNode>& actual, std::
         std::unordered_set<TJoinColumn, TJoinColumn::THashFunction>(expectedConds.begin(), expectedConds.end());
 }
 
-bool HasSameConditionCount(const std::shared_ptr<IBaseOptimizerNode>& actual, std::shared_ptr<IBaseOptimizerNode> expected) {
+bool HaveSameConditionCount(const std::shared_ptr<IBaseOptimizerNode>& actual, std::shared_ptr<IBaseOptimizerNode> expected) {
     auto actualConds = CollectConditions(actual);
     auto expectedConds = CollectConditions(expected);
     
-    return actualConds.size() == expectedConds.size();
+    return actualConds.size() == expectedConds.size() &&
+        std::unordered_set<TJoinColumn, TJoinColumn::THashFunction>(actualConds.begin(), actualConds.end()).size() == 
+        std::unordered_set<TJoinColumn, TJoinColumn::THashFunction>(expectedConds.begin(), expectedConds.end()).size();
 }
 
 Y_UNIT_TEST_SUITE(HypergraphBuild) {
@@ -380,7 +382,7 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
         UNIT_ASSERT(graph.FindEdgeBetween(A, C));
 
         auto optimizedJoin = Enumerate(join);
-        UNIT_ASSERT(HasSameConditionCount(optimizedJoin, join));
+        UNIT_ASSERT(HaveSameConditionCount(optimizedJoin, join));
     }
 
     Y_UNIT_TEST(CondsThatMayCauseATransitiveClosureButTheyMustNot) {
@@ -397,20 +399,23 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
     }
 
     Y_UNIT_TEST(TransitiveClosureManyCondsBetweenJoin) {
-        auto join = Join(Join("A", "B", "A.ID=B.ID,A.LOL=B.LOL"), "C", "A.ID=C.ID,A.KEK=C.KEK");
+        auto join = FullJoin(Join(Join("A", "B", "A.ID=B.ID,A.LOL=B.LOL"), "C", "A.ID=C.ID,A.KEK=C.KEK"), "D", "A.ID=D.ID");
 
         auto graph = MakeJoinHypergraph<TNodeSet64>(join);
         Cout << graph.String() << Endl;
-        for (const auto& e: graph.GetEdges()) {
-            UNIT_ASSERT(e.IsSimple());
-        }
 
         auto B = graph.GetNodesByRelNames({"B"});
         auto C = graph.GetNodesByRelNames({"C"});
         UNIT_ASSERT(graph.FindEdgeBetween(B, C));
 
-        auto optimizedJoin = Enumerate(join, TOptimizerHints::Parse("Rows(B C # 0)"));
-        UNIT_ASSERT(HasSameConditionCount(optimizedJoin, join));
+        {
+            auto optimizedJoin = Enumerate(join, TOptimizerHints::Parse("Rows(B C # 0)"));
+            UNIT_ASSERT(HaveSameConditionCount(optimizedJoin, join));
+        }
+        {
+            auto optimizedJoin = Enumerate(join, TOptimizerHints::Parse("JoinOrder((A B) C)"));
+            UNIT_ASSERT(HaveSameConditions(optimizedJoin, join));
+        }
     }
 
     auto MakeClique(size_t size) {

@@ -243,15 +243,16 @@ public:
     }
 
     /* 
-     * This functions gets an [edge] with all conditions without redundancy between lhs and rhs 
-     * (The edge with condition of all edge conditions between lhs and rhs). 
+     * This functions returns all conditions without redundancy between lhs and rhs 
      * Many conditions can cause in a graph with cycles, but transitive closure conditions in one eq. class
      * will be redudant, so we consider only one of condition from eq. class.
      */
-    std::optional<TEdge> FindEdgeWithAllConditionsBetween(const TNodeSet& lhs, const TNodeSet& rhs) {
-        TVector<TJoinColumn> resLeftJoinKeys, resRightJoinKeys;
-        const TEdge* res = nullptr;
-
+    void FindAllConditionsBetween(
+        const TNodeSet& lhs, 
+        const TNodeSet& rhs, 
+        TVector<TJoinColumn>& resLeftJoinKeys,
+        TVector<TJoinColumn>& resRightJoinKeys
+    ) {
         for (const auto& edge: Edges_) {
             if (
                 IsSubset(edge.Left, lhs) &&
@@ -262,7 +263,7 @@ public:
                 for (const auto& [lhsEdgeCond, rhsEdgeCond]: Zip(edge.LeftJoinKeys, edge.RightJoinKeys)) {
                     bool hasSameEquivClass = false;
                     for (const auto& lhsResJoinKey: resLeftJoinKeys) {
-                        if (lhsEdgeCond.EquivalenceClass.has_value() && lhsEdgeCond.EquivalenceClass == lhsResJoinKey.EquivalenceClass) {
+                        if (lhsEdgeCond.EquivalenceClass.has_value() && lhsEdgeCond.EquivalenceClass == lhsResJoinKey.EquivalenceClass || lhsEdgeCond == lhsResJoinKey) {
                             hasSameEquivClass = true; break; 
                         }
                     }
@@ -272,24 +273,8 @@ public:
                         resRightJoinKeys.push_back(rhsEdgeCond);
                     }
                 }
-
-                if (res == nullptr) {
-                    res = &edge;
-                    resLeftJoinKeys = res->LeftJoinKeys;
-                    resRightJoinKeys = res->RightJoinKeys;
-                }
             }
         }
-
-        if (res == nullptr) {
-            return std::nullopt;
-        }
-        
-        TEdge e = *res;
-        e.LeftJoinKeys = std::move(resLeftJoinKeys);
-        e.RightJoinKeys = std::move(resRightJoinKeys);
-        e.ReversedEdgeId = -1;
-        return e;
     }
 
     void UpdateEdgeSides(size_t idx, TNodeSet newLeft, TNodeSet newRight) {
@@ -452,21 +437,11 @@ public:
 
 private:
     void ConstructImpl(const TVector<THyperedge>& edges) {
-        /* 
-         * How many join conditions have an edge with given TJoinColumn 
-         * When we will create an edge for JoinColumn with > 1 conditions, we may 
-         * lose an edge during DPHyp and lose a condition, so we must turn on ProcessCycle 
-         * mode for DPHyp.
-         */
-        THashMap<TJoinColumn, size_t, TJoinColumn::THashFunction> edgeConditionCountByJoinCond; 
-
         std::vector<TJoinColumn> joinCondById;
         for (const auto& edge: edges) {
             for (const auto& [lhs, rhs]: Zip(edge.LeftJoinKeys, edge.RightJoinKeys)) {
                 joinCondById.push_back(lhs);
-                edgeConditionCountByJoinCond[lhs] = std::max(edgeConditionCountByJoinCond[lhs], edge.LeftJoinKeys.size());
                 joinCondById.push_back(rhs);
-                edgeConditionCountByJoinCond[rhs] = std::max(edgeConditionCountByJoinCond[rhs], edge.RightJoinKeys.size());
             }
         }
         std::sort(joinCondById.begin(), joinCondById.end());
@@ -510,10 +485,6 @@ private:
 
                     if (Graph_.FindEdgeBetween(iNode, jNode)) {
                         continue; 
-                    }
-
-                    if (edgeConditionCountByJoinCond[joinCondById[i]] > 1 || edgeConditionCountByJoinCond[joinCondById[j]] > 1) {
-                        Graph_.HasCycles = true;
                     }
 
                     Graph_.AddEdge(THyperedge(iNode, jNode, InnerJoin, false, false, true, {joinCondById[i]}, {joinCondById[j]}));

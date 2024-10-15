@@ -270,20 +270,7 @@ private:
         const TOptimizerHints& hints = {}
     ) {
         TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree, hints);
-        if (hypergraph.HasCycles) {
-            return Solve<TNodeSet, /*ProcessCycles=*/true>(hypergraph, joinTree, hints);
-        } else {
-            return Solve<TNodeSet, /*ProcessCycles=*/false>(hypergraph, joinTree, hints);
-        }
-    }
-
-    template <typename TNodeSet, bool ProcessCycles>
-    std::shared_ptr<TJoinOptimizerNode> Solve(
-        TJoinHypergraph<TNodeSet>& hypergraph,
-        const std::shared_ptr<TJoinOptimizerNode>& joinTree, 
-        const TOptimizerHints& hints = {}
-    ) {
-        TDPHypSolver<TNodeSet, ProcessCycles> solver(hypergraph, this->Pctx);
+        TDPHypSolver<TNodeSet, false> solver(hypergraph, this->Pctx);
 
         if (solver.CountCC(MaxDPhypTableSize_) >= MaxDPhypTableSize_) {
             YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded";
@@ -292,8 +279,30 @@ private:
         }
 
         auto bestJoinOrder = solver.Solve(hints);
-        return ConvertFromInternal(bestJoinOrder);
+        auto resTree = ConvertFromInternal(bestJoinOrder);
+        AddMissingConditions(hypergraph, resTree);
+        return resTree;
     }
+
+    /* Due to cycles we can miss some conditions in edges, because DPHyp enumerates trees */
+    template <typename TNodeSet>
+    void AddMissingConditions(
+        TJoinHypergraph<TNodeSet>& hypergraph,
+        const std::shared_ptr<IBaseOptimizerNode>& node
+    ) {
+        if (node->Kind != EOptimizerNodeKind::JoinNodeType) {
+            return;
+        }
+
+        auto joinNode = std::static_pointer_cast<TJoinOptimizerNode>(node);
+        AddMissingConditions(hypergraph, joinNode->LeftArg);
+        AddMissingConditions(hypergraph, joinNode->RightArg);
+        TNodeSet lhs = hypergraph.GetNodesByRelNames(joinNode->LeftArg->Labels());
+        TNodeSet rhs = hypergraph.GetNodesByRelNames(joinNode->RightArg->Labels());
+
+        hypergraph.FindAllConditionsBetween(lhs, rhs, joinNode->LeftJoinKeys, joinNode->RightJoinKeys);
+    }
+
 private:
     ui32 MaxDPhypTableSize_;
 };

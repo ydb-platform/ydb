@@ -28,6 +28,10 @@ struct TYdbPqCodes {
         PQCode(PQCode) {}
 };
 
+namespace Ydb::Topic {
+    class CreateTopicRequest;
+    class AlterTopicRequest;
+}
 
 namespace NKikimr::NGRpcProxy::V1 {
 

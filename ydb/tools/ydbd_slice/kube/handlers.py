@@ -1,4 +1,4 @@
-import re
+xfimport re
 import os
 import sys
 import logging
@@ -81,7 +81,7 @@ def get_all_manifests(directory):
         sys.exit(2)
 
     if not result:
-        raise RuntimeError(f'failed to find any manifests in {os.path.abspath(directory)}') 
+        raise RuntimeError(f'failed to find any manifests in {os.path.abspath(directory)}')
 
     return result
 

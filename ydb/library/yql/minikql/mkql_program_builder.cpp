@@ -5726,6 +5726,9 @@ TRuntimeNode TProgramBuilder::BlockBitCast(TRuntimeNode value, TType* targetType
 
 TRuntimeNode TProgramBuilder::BuildBlockCombineAll(const std::string_view& callableName, TRuntimeNode input, std::optional<ui32> filterColumn,
         const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
+    const auto inputType = input.GetStaticType();
+    MKQL_ENSURE(inputType->IsStream() || inputType->IsFlow(), "Expected either stream or flow as input type");
+    MKQL_ENSURE(returnType->IsStream() || returnType->IsFlow(), "Expected either stream or flow as return type");
     TCallableBuilder builder(Env, callableName, returnType);
     builder.Add(input);
 
@@ -5769,6 +5772,9 @@ TRuntimeNode TProgramBuilder::BlockCombineAll(TRuntimeNode stream, std::optional
 
 TRuntimeNode TProgramBuilder::BuildBlockCombineHashed(const std::string_view& callableName, TRuntimeNode input, std::optional<ui32> filterColumn,
     const TArrayRef<ui32>& keys, const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
+    const auto inputType = input.GetStaticType();
+    MKQL_ENSURE(inputType->IsStream() || inputType->IsFlow(), "Expected either stream or flow as input type");
+    MKQL_ENSURE(returnType->IsStream() || returnType->IsFlow(), "Expected either stream or flow as return type");
     TCallableBuilder builder(Env, callableName, returnType);
     builder.Add(input);
 
@@ -5818,6 +5824,9 @@ TRuntimeNode TProgramBuilder::BlockCombineHashed(TRuntimeNode stream, std::optio
 
 TRuntimeNode TProgramBuilder::BuildBlockMergeFinalizeHashed(const std::string_view& callableName, TRuntimeNode input, const TArrayRef<ui32>& keys,
     const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
+    const auto inputType = input.GetStaticType();
+    MKQL_ENSURE(inputType->IsStream() || inputType->IsFlow(), "Expected either stream or flow as input type");
+    MKQL_ENSURE(returnType->IsStream() || returnType->IsFlow(), "Expected either stream or flow as return type");
     TCallableBuilder builder(Env, callableName, returnType);
     builder.Add(input);
 

@@ -38,9 +38,14 @@ namespace NDq {
 struct TJoinColumn {
     TString RelName;
     TString AttributeName;
+    TString AttributeNameWithAliases;
+    ui32 EquivalenceClass = 0;
+    bool IsConstant = false;
 
-    TJoinColumn(TString relName, TString attributeName) : RelName(relName),
-        AttributeName(std::move(attributeName)) {}
+    TJoinColumn(TString relName, TString attributeName) : 
+        RelName(relName),
+        AttributeName(attributeName),
+        AttributeNameWithAliases(attributeName) {}
 
     bool operator == (const TJoinColumn& other) const {
         return RelName == other.RelName && AttributeName == other.AttributeName;

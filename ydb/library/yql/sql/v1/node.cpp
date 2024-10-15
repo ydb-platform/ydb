@@ -294,6 +294,10 @@ void INode::UseAsInner() {
     AsInner = true;
 }
 
+void INode::DisableSort() {
+    DisableSort_ = true;
+}
+
 bool INode::UsedSubquery() const {
     return false;
 }

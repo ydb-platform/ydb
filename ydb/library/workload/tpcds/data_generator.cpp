@@ -86,15 +86,6 @@ TStringBuilder& TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TCon
     return Csv;
 }
 
-namespace {
-    const TString FormatString = [] () {
-        Ydb::Formats::CsvSettings settings;
-        settings.set_delimiter("|");
-        settings.set_header(true);
-        settings.mutable_quoting()->set_disabled(true);
-        return settings.SerializeAsString();
-    } ();
-}
 void TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TContext::AppendPortions(TDataPortions& result) {
     const auto name = getTdefsByNumber(TableNum)->name;
     const auto path = Owner.GetFullTableName(name);
@@ -113,7 +104,7 @@ void TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TContext::Appen
             Owner.Owner.StateProcessor.Get(),
             path,
             name,
-            TDataPortion::TCsv(std::move(Csv), FormatString),
+            TDataPortion::TCsv(std::move(Csv), TWorkloadGeneratorBase::PsvFormatString),
             Start - 1,
             Count
         ));
@@ -144,35 +135,34 @@ TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TDataPortions TTpcds
         ctxs.emplace_back(*this, tdef->nParam);
     }
 
-    with_lock(Lock) {
-        ds_key_t firstRow;
-        ds_key_t rowCount;
-        split_work(TableNum, &firstRow, &rowCount);
-        if (!Generated) {
-            ui32 toSkip = firstRow - 1;
-            if (!!Owner.StateProcessor && Owner.StateProcessor->GetState().contains(GetName())) {
-                Generated = Owner.StateProcessor->GetState().at(TString(GetName())).Position;
-                toSkip += Generated;
-            }
-            if (toSkip) {
-                row_skip(TableNum, toSkip);
-                if (tdef->flags & FL_PARENT) {
-                    row_skip(tdef->nParam, toSkip);
-                }
-            }
-            if (tdef->flags & FL_SMALL) {
-                resetCountCount();
+    auto g = Guard(Lock);
+    ds_key_t firstRow;
+    ds_key_t rowCount;
+    split_work(TableNum, &firstRow, &rowCount);
+    if (!Generated) {
+        ui32 toSkip = firstRow - 1;
+        if (!!Owner.StateProcessor && Owner.StateProcessor->GetState().contains(GetName())) {
+            Generated = Owner.StateProcessor->GetState().at(TString(GetName())).Position;
+            toSkip += Generated;
+        }
+        if (toSkip) {
+            row_skip(TableNum, toSkip);
+            if (tdef->flags & FL_PARENT) {
+                row_skip(tdef->nParam, toSkip);
             }
         }
-        const auto count = TableSize > Generated ? std::min(ui64(TableSize - Generated), Owner.Params.BulkSize) : 0;
-        if (!count) {
-            return result;
+        if (tdef->flags & FL_SMALL) {
+            resetCountCount();
         }
-        ctxs.front().SetCount(count);
-        ctxs.front().SetStart(firstRow + Generated);
-        Generated += count;
-        GenerateRows(ctxs);
     }
+    const auto count = TableSize > Generated ? std::min(ui64(TableSize - Generated), Owner.Params.BulkSize) : 0;
+    if (!count) {
+        return result;
+    }
+    ctxs.front().SetCount(count);
+    ctxs.front().SetStart(firstRow + Generated);
+    Generated += count;
+    GenerateRows(ctxs, std::move(g));
     for(auto& ctx: ctxs) {
         ctx.AppendPortions(result);
     }

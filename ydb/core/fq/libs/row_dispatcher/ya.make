@@ -35,6 +35,8 @@ YQL_LAST_ABI_VERSION()
 
 END()
 
+RECURSE(purecalc_no_pg_wrapper)
+
 IF(NOT EXPORT_CMAKE)
     RECURSE_FOR_TESTS(
         ut

@@ -1,3 +1,8 @@
+RECURSE(
+    json
+    yaml
+)
+
 RECURSE_FOR_TESTS(
     ut
 )

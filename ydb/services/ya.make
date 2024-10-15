@@ -20,6 +20,7 @@ RECURSE(
     persqueue_v1
     rate_limiter
     replication
+    view
     ydb
     ymq
 )

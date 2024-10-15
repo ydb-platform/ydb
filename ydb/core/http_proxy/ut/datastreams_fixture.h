@@ -637,6 +637,54 @@ private:
            "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"Offset\"]"
         );
 
+        client.CreateTable("/Root/SQS/.FIFO",
+           "Name: \"Deduplication\""
+           "Columns { Name: \"QueueIdNumberHash\"     Type: \"Uint64\"}"
+           "Columns { Name: \"QueueIdNumber\"         Type: \"Uint64\"}"
+           "Columns { Name: \"DedupId\"               Type: \"String\"}"
+           "Columns { Name: \"Deadline\"              Type: \"Uint64\"}"
+           "Columns { Name: \"Offset\"                Type: \"Uint64\"}"
+           "Columns { Name: \"MessageId\"             Type: \"String\"}"
+           "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"DedupId\"]"
+        );
+
+        client.CreateTable("/Root/SQS/.FIFO",
+           "Name: \"Groups\""
+           "Columns { Name: \"QueueIdNumberHash\"     Type: \"Uint64\"}"
+           "Columns { Name: \"QueueIdNumber\"         Type: \"Uint64\"}"
+           "Columns { Name: \"GroupId\"               Type: \"String\"}"
+           "Columns { Name: \"VisibilityDeadline\"    Type: \"Uint64\"}"
+           "Columns { Name: \"RandomId\"              Type: \"Uint64\"}"
+           "Columns { Name: \"Head\"                  Type: \"Uint64\"}"
+           "Columns { Name: \"Tail\"                  Type: \"Uint64\"}"
+           "Columns { Name: \"ReceiveAttemptId\"      Type: \"Utf8\"}"
+           "Columns { Name: \"LockTimestamp\"         Type: \"Uint64\"}"
+           "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"GroupId\"]"
+        );
+
+        client.CreateTable("/Root/SQS/.FIFO",
+           "Name: \"Data\""
+           "Columns { Name: \"QueueIdNumberHash\"     Type: \"Uint64\"}"
+           "Columns { Name: \"QueueIdNumber\"         Type: \"Uint64\"}"
+           "Columns { Name: \"RandomId\"              Type: \"Uint64\"}"
+           "Columns { Name: \"Offset\"                Type: \"Uint64\"}"
+           "Columns { Name: \"SenderId\"              Type: \"String\"}"
+           "Columns { Name: \"DedupId\"               Type: \"String\"}"
+           "Columns { Name: \"Attributes\"            Type: \"String\"}"
+           "Columns { Name: \"Data\"                  Type: \"String\"}"
+           "Columns { Name: \"MessageId\"             Type: \"String\"}"
+           "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"RandomId\", \"Offset\"]"
+        );
+
+        client.CreateTable("/Root/SQS/.FIFO",
+           "Name: \"Reads\""
+           "Columns { Name: \"QueueIdNumberHash\"     Type: \"Uint64\"}"
+           "Columns { Name: \"QueueIdNumber\"         Type: \"Uint64\"}"
+           "Columns { Name: \"ReceiveAttemptId\"      Type: \"Utf8\"}"
+           "Columns { Name: \"Deadline\"              Type: \"Uint64\"}"
+           "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"ReceiveAttemptId\"]"
+        );
+
         client.CreateTable("/Root/SQS",
            "Name: \".Settings\""
            "Columns { Name: \"Account\"               Type: \"Utf8\"}"
@@ -741,12 +789,17 @@ private:
            << sentTimestampIdxCommonColumns
            << sendTimestampIdsKeys
         );
+
         client.CreateTable("/Root/SQS/.FIFO",
-           TStringBuilder()
-           << "Name: \"SentTimestampIdx\""
-           << "Columns { Name: \"GroupId\"  Type: \"String\"}"
-           << sentTimestampIdxCommonColumns
-           << sendTimestampIdsKeys
+           "Name: \"SentTimestampIdx\""
+           "Columns { Name: \"QueueIdNumberHash\"      Type: \"Uint64\"}"
+           "Columns { Name: \"QueueIdNumber\"          Type: \"Uint64\"}"
+           "Columns { Name: \"SentTimestamp\"          Type: \"Uint64\"}"
+           "Columns { Name: \"Offset\"                 Type: \"Uint64\"}"
+           "Columns { Name: \"GroupId\"                Type: \"String\"}"
+           "Columns { Name: \"RandomId\"               Type: \"Uint64\"}"
+           "Columns { Name: \"DelayDeadline\"          Type: \"Uint64\"}"
+           "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"SentTimestamp\", \"Offset\"]"
         );
 
         client.CreateTable("/Root/SQS/.STD",

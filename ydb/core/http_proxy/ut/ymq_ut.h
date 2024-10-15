@@ -293,6 +293,36 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         }
     }
 
+    Y_UNIT_TEST_F(TestReceiveMessageWithAttemptId, THttpProxyTestMock) {
+        auto json = CreateQueue({
+            {"QueueName", "ExampleQueueName.fifo"},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"},
+                {"VisibilityTimeout", "0"}
+            }}
+        });
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "message-body-0"},
+            {"MessageGroupId", "message-group-0"},
+            {"MessageDeduplicationId", "MessageDeduplicationId-0"}
+        });
+
+        auto json1 = ReceiveMessage({{"QueueUrl", queueUrl}, {"ReceiveRequestAttemptId", "attempt-0"}, {"VisibilityTimeout", 40000}});
+        auto messageId = json1["Messages"][0]["MessageId"];
+        auto json2 = ReceiveMessage({{"QueueUrl", queueUrl}, {"ReceiveRequestAttemptId", "attempt-0"}, {"VisibilityTimeout", 40000}});
+
+        UNIT_ASSERT_VALUES_UNEQUAL(json1["Messages"][0]["ReceiptHandle"].GetStringSafe(), json2["Messages"][0]["ReceiptHandle"].GetStringSafe());
+        UNIT_ASSERT_VALUES_EQUAL(messageId.GetStringSafe(), json2["Messages"][0]["MessageId"].GetStringSafe());
+
+        // ReceiveMessage with ReceiveRequestAttemptId should reset VisibilityTimeout.
+        // As we created the queue with VisibilityTimeout = 0, the message should immediately reappear in the queue.
+        auto json3 = ReceiveMessage({{"QueueUrl", queueUrl}, {"ReceiveRequestAttemptId", "attempt-0"}});
+        auto json4 = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 1}});
+    }
+
     Y_UNIT_TEST_F(TestGetQueueAttributes, THttpProxyTestMock) {
         auto json1 = CreateQueue({{"QueueName", "queue-1.fifo"}, {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}});
         auto attributes1 = GetQueueAttributes({

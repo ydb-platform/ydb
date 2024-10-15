@@ -1,9 +1,10 @@
 #include "write.h"
 
-#include <contrib/libs/simdjson/include/simdjson/dom/element-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/dom/object-inl.h>
 #include <contrib/libs/simdjson/include/simdjson/dom/array-inl.h>
+#include <contrib/libs/simdjson/include/simdjson/dom/document-inl.h>
+#include <contrib/libs/simdjson/include/simdjson/dom/element-inl.h>
 #include <contrib/libs/simdjson/include/simdjson/dom/parser-inl.h>
+#include <contrib/libs/simdjson/include/simdjson/dom/object-inl.h>
 #include <library/cpp/json/json_reader.h>
 
 #include <util/generic/vector.h>

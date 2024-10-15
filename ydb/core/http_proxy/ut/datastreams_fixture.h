@@ -347,93 +347,58 @@ public:
         return json;
     }
 
-    NJson::TJsonMap DeleteQueue(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
-        auto res = SendHttpRequest("/Root", "AmazonSQS.DeleteQueue", request, FormAuthorizationStr("ru-central1"));
+    NJson::TJsonMap SendJsonRequest(TString method, NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto res = SendHttpRequest("/Root", TStringBuilder() << "AmazonSQS." << method, request, FormAuthorizationStr("ru-central1"));
         UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
         NJson::TJsonMap json;
         UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
         return json;
+    }
+
+    NJson::TJsonMap DeleteQueue(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("DeleteQueue", request, expectedHttpCode);
     }
 
     NJson::TJsonMap GetQueueAttributes(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
-        auto res = SendHttpRequest("/Root", "AmazonSQS.GetQueueAttributes", request, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
-        NJson::TJsonMap json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        return json;
+        return SendJsonRequest("GetQueueAttributes", request, expectedHttpCode);
     }
 
     NJson::TJsonMap SendMessage(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
-        auto res = SendHttpRequest("/Root", "AmazonSQS.SendMessage", request, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
-        NJson::TJsonMap json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        auto json = SendJsonRequest("SendMessage", request, expectedHttpCode);
         UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
         return json;
     }
 
     NJson::TJsonMap SendMessageBatch(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
-        auto res = SendHttpRequest("/Root", "AmazonSQS.SendMessageBatch", request, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
-        NJson::TJsonMap json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        return json;
+        return SendJsonRequest("SendMessageBatch", request, expectedHttpCode);
     }
 
     NJson::TJsonMap ReceiveMessage(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
-        auto res = SendHttpRequest("/Root", "AmazonSQS.ReceiveMessage", request, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
-        NJson::TJsonMap json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        return json;
+        return SendJsonRequest("ReceiveMessage", request, expectedHttpCode);
     }
 
     NJson::TJsonMap DeleteMessage(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
-        auto res = SendHttpRequest("/Root", "AmazonSQS.DeleteMessage", request, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
-        NJson::TJsonMap json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        return json;
+        return SendJsonRequest("DeleteMessage", request, expectedHttpCode);
     }
 
     NJson::TJsonMap DeleteMessageBatch(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
-        auto res = SendHttpRequest("/Root", "AmazonSQS.DeleteMessageBatch", request, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
-        NJson::TJsonMap json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        return json;
+        return SendJsonRequest("DeleteMessageBatch", request, expectedHttpCode);
     }
 
     NJson::TJsonMap GetQueueUrl(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
-        auto res = SendHttpRequest("/Root", "AmazonSQS.GetQueueUrl", request, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
-        NJson::TJsonMap json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        return json;
+        return SendJsonRequest("GetQueueUrl", request, expectedHttpCode);
     }
 
     NJson::TJsonMap ListQueues(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
-        auto res = SendHttpRequest("/Root", "AmazonSQS.ListQueues", request, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
-        NJson::TJsonMap json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        return json;
+        return SendJsonRequest("ListQueues", request, expectedHttpCode);
     }
 
     NJson::TJsonMap PurgeQueue(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
-        auto res = SendHttpRequest("/Root", "AmazonSQS.PurgeQueue", request, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
-        NJson::TJsonMap json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        return json;
+        return SendJsonRequest("PurgeQueue", request, expectedHttpCode);
     }
 
     NJson::TJsonMap SetQueueAttributes(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
-        auto res = SendHttpRequest("/Root", "AmazonSQS.SetQueueAttributes", request, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
-        NJson::TJsonMap json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        return json;
+        return SendJsonRequest("SetQueueAttributes", request, expectedHttpCode);
     }
 
     void WaitQueueAttributes(TString queueUrl, size_t retries, NJson::TJsonMap attributes) {
@@ -466,19 +431,11 @@ public:
     }
 
     NJson::TJsonMap ChangeMessageVisibility(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
-        auto res = SendHttpRequest("/Root", "AmazonSQS.ChangeMessageVisibility", request, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
-        NJson::TJsonMap json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        return json;
+        return SendJsonRequest("ChangeMessageVisibility", request, expectedHttpCode);
     }
 
     NJson::TJsonMap ChangeMessageVisibilityBatch(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
-        auto res = SendHttpRequest("/Root", "AmazonSQS.ChangeMessageVisibilityBatch", request, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
-        NJson::TJsonMap json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        return json;
+        return SendJsonRequest("ChangeMessageVisibilityBatch", request, expectedHttpCode);
     }
 
 private:

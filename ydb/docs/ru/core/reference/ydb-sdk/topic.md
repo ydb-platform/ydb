@@ -103,7 +103,7 @@
   const logger = getDefaultLogger();
   const authService = getCredentialsFromEnv(logger);
   const db = new YDB({
-    endpoint: ENDPOINT, // i.e.: grc(s)://<x.x.x.x>
+    endpoint: ENDPOINT, // i.e.: grpc(s)://<hostname>
     database: DATABASE, // i.e.: '/local'
     authService, logger
   });

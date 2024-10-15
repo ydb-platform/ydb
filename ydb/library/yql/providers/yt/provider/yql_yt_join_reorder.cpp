@@ -296,16 +296,18 @@ private:
                 stat->ByteSize += tableStat->DataSize;
                 stat->Nrows += tableStat->RecordsCount;
             }
-            auto sorted = section.Ref().GetConstraint<TSortedConstraintNode>();
-            if (sorted) {
-                TVector<TString> key;
-                for (const auto& item : sorted->GetContent()) {
-                    for (const auto& path : item.first) {
-                        const auto& column = path.front();
-                        key.push_back(TString(column));
+            if (section.Ref().GetState() >= TExprNode::EState::ConstrComplete) {
+                auto sorted = section.Ref().GetConstraint<TSortedConstraintNode>();
+                if (sorted) {
+                    TVector<TString> key;
+                    for (const auto& item : sorted->GetContent()) {
+                        for (const auto& path : item.first) {
+                            const auto& column = path.front();
+                            key.push_back(TString(column));
+                        }
                     }
+                    providerStats->SortColumns = key;
                 }
-                providerStats->SortColumns = key;
             }
         }
 

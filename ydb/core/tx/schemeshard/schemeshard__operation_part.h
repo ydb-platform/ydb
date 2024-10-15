@@ -83,12 +83,12 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-class TSchemeShard;
+struct TSchemeshardState;
 class TPath;
 
 struct TOperationContext {
 public:
-    TSchemeShard* SS;
+    TSchemeshardState* SS;
     const TActorContext& Ctx;
     TSideEffects& OnComplete;
     TMemoryChanges& MemChanges;
@@ -107,21 +107,13 @@ public:
             TSchemeShard* ss,
             NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx,
             TSideEffects& onComplete, TMemoryChanges& memChanges, TStorageChanges& dbChange,
-            TMaybe<NACLib::TUserToken>&& userToken)
-        : SS(ss)
-        , Ctx(ctx)
-        , OnComplete(onComplete)
-        , MemChanges(memChanges)
-        , DbChanges(dbChange)
-        , UserToken(userToken)
-        , Txc(txc)
-    {}
+            TMaybe<NACLib::TUserToken>&& userToken
+    );
     TOperationContext(
             TSchemeShard* ss,
             NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx,
-            TSideEffects& onComplete, TMemoryChanges& memChanges, TStorageChanges& dbChange)
-        : TOperationContext(ss, txc, ctx, onComplete, memChanges, dbChange, Nothing())
-    {}
+            TSideEffects& onComplete, TMemoryChanges& memChanges, TStorageChanges& dbChange
+    );
 
     NTable::TDatabase& GetDB() {
         Y_VERIFY_S(ProtectDB == false,
@@ -514,7 +506,7 @@ ISubOperation::TPtr CreateSubDomain(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateAlterSubDomain(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAlterSubDomain(TOperationId id, TTxState::ETxState state);
 
-ISubOperation::TPtr CreateCompatibleSubdomainDrop(TSchemeShard* ss, TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateCompatibleSubdomainDrop(TSchemeshardState* ss, TOperationId id, const TTxTransaction& tx);
 TVector<ISubOperation::TPtr> CreateCompatibleSubdomainAlter(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateUpgradeSubDomain(TOperationId id, const TTxTransaction& tx);

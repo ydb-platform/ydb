@@ -1,5 +1,5 @@
 #include "schemeshard__operation_memory_changes.h"
-#include "schemeshard_impl.h"
+#include "schemeshard__operation_iface.h"
 
 namespace NKikimr::NSchemeShard {
 
@@ -15,38 +15,38 @@ static void Grab(const I& id, const C& cont, H& holder) {
     holder.emplace(id, new T(*cont.at(id)));
 }
 
-void TMemoryChanges::GrabNewTxState(TSchemeShard* ss, const TOperationId& opId) {
+void TMemoryChanges::GrabNewTxState(TSchemeshardState* ss, const TOperationId& opId) {
     GrabNew(opId, ss->TxInFlight, TxStates);
 }
 
-void TMemoryChanges::GrabNewPath(TSchemeShard* ss, const TPathId& pathId) {
+void TMemoryChanges::GrabNewPath(TSchemeshardState* ss, const TPathId& pathId) {
     GrabNew(pathId, ss->PathsById, Paths);
 }
 
-void TMemoryChanges::GrabPath(TSchemeShard* ss, const TPathId& pathId) {
+void TMemoryChanges::GrabPath(TSchemeshardState* ss, const TPathId& pathId) {
     Grab<TPathElement>(pathId, ss->PathsById, Paths);
 }
 
-void TMemoryChanges::GrabNewTable(TSchemeShard* ss, const TPathId& pathId) {
+void TMemoryChanges::GrabNewTable(TSchemeshardState* ss, const TPathId& pathId) {
     GrabNew(pathId, ss->Tables, Tables);
 }
 
-void TMemoryChanges::GrabTable(TSchemeShard* ss, const TPathId& pathId) {
+void TMemoryChanges::GrabTable(TSchemeshardState* ss, const TPathId& pathId) {
     Grab<TTableInfo>(pathId, ss->Tables, Tables);
 }
 
-void TMemoryChanges::GrabNewShard(TSchemeShard*, const TShardIdx& shardId) {
+void TMemoryChanges::GrabNewShard(TSchemeshardState*, const TShardIdx& shardId) {
     Shards.emplace(shardId, nullptr);
 }
 
-void TMemoryChanges::GrabShard(TSchemeShard *ss, const TShardIdx &shardId) {
+void TMemoryChanges::GrabShard(TSchemeshardState *ss, const TShardIdx &shardId) {
     Y_ABORT_UNLESS(ss->ShardInfos.contains(shardId));
 
     const auto& shard = ss->ShardInfos.at(shardId);
     Shards.emplace(shardId, MakeHolder<TShardInfo>(shard));
 }
 
-void TMemoryChanges::GrabDomain(TSchemeShard* ss, const TPathId& pathId) {
+void TMemoryChanges::GrabDomain(TSchemeshardState* ss, const TPathId& pathId) {
     // Copy TSubDomainInfo from ss->SubDomains to local SubDomains.
     // Make sure that copy will be made only when needed.
     const auto found = ss->SubDomains.find(pathId);
@@ -56,71 +56,71 @@ void TMemoryChanges::GrabDomain(TSchemeShard* ss, const TPathId& pathId) {
     }
 }
 
-void TMemoryChanges::GrabNewIndex(TSchemeShard* ss, const TPathId& pathId) {
+void TMemoryChanges::GrabNewIndex(TSchemeshardState* ss, const TPathId& pathId) {
     GrabNew(pathId, ss->Indexes, Indexes);
 }
 
-void TMemoryChanges::GrabIndex(TSchemeShard* ss, const TPathId& pathId) {
+void TMemoryChanges::GrabIndex(TSchemeshardState* ss, const TPathId& pathId) {
     Grab<TTableIndexInfo>(pathId, ss->Indexes, Indexes);
 }
 
-void TMemoryChanges::GrabNewSequence(TSchemeShard* ss, const TPathId& pathId) {
+void TMemoryChanges::GrabNewSequence(TSchemeshardState* ss, const TPathId& pathId) {
     GrabNew(pathId, ss->Sequences, Sequences);
 }
 
-void TMemoryChanges::GrabSequence(TSchemeShard* ss, const TPathId& pathId) {
+void TMemoryChanges::GrabSequence(TSchemeshardState* ss, const TPathId& pathId) {
     Grab<TSequenceInfo>(pathId, ss->Sequences, Sequences);
 }
 
-void TMemoryChanges::GrabNewCdcStream(TSchemeShard* ss, const TPathId& pathId) {
+void TMemoryChanges::GrabNewCdcStream(TSchemeshardState* ss, const TPathId& pathId) {
     GrabNew(pathId, ss->CdcStreams, CdcStreams);
 }
 
-void TMemoryChanges::GrabCdcStream(TSchemeShard* ss, const TPathId& pathId) {
+void TMemoryChanges::GrabCdcStream(TSchemeshardState* ss, const TPathId& pathId) {
     Grab<TCdcStreamInfo>(pathId, ss->CdcStreams, CdcStreams);
 }
 
-void TMemoryChanges::GrabNewTableSnapshot(TSchemeShard* ss, const TPathId& pathId, TTxId snapshotTxId) {
+void TMemoryChanges::GrabNewTableSnapshot(TSchemeshardState* ss, const TPathId& pathId, TTxId snapshotTxId) {
     Y_ABORT_UNLESS(!ss->TablesWithSnapshots.contains(pathId));
     TablesWithSnapshots.emplace(pathId, snapshotTxId);
 }
 
-void TMemoryChanges::GrabNewLongLock(TSchemeShard* ss, const TPathId& pathId) {
+void TMemoryChanges::GrabNewLongLock(TSchemeshardState* ss, const TPathId& pathId) {
     Y_ABORT_UNLESS(!ss->LockedPaths.contains(pathId));
     LockedPaths.emplace(pathId, InvalidTxId); // will be removed on UnDo()
 }
 
-void TMemoryChanges::GrabLongLock(TSchemeShard* ss, const TPathId& pathId, TTxId lockTxId) {
+void TMemoryChanges::GrabLongLock(TSchemeshardState* ss, const TPathId& pathId, TTxId lockTxId) {
     Y_ABORT_UNLESS(ss->LockedPaths.contains(pathId));
     Y_ABORT_UNLESS(ss->LockedPaths.at(pathId) == lockTxId);
     LockedPaths.emplace(pathId, lockTxId); // will be restored on UnDo()
 }
 
-void TMemoryChanges::GrabExternalTable(TSchemeShard* ss, const TPathId& pathId) {
+void TMemoryChanges::GrabExternalTable(TSchemeshardState* ss, const TPathId& pathId) {
     Grab<TExternalTableInfo>(pathId, ss->ExternalTables, ExternalTables);
 }
 
-void TMemoryChanges::GrabExternalDataSource(TSchemeShard* ss, const TPathId& pathId) {
+void TMemoryChanges::GrabExternalDataSource(TSchemeshardState* ss, const TPathId& pathId) {
     Grab<TExternalDataSourceInfo>(pathId, ss->ExternalDataSources, ExternalDataSources);
 }
 
-void TMemoryChanges::GrabNewView(TSchemeShard* ss, const TPathId& pathId) {
+void TMemoryChanges::GrabNewView(TSchemeshardState* ss, const TPathId& pathId) {
     GrabNew(pathId, ss->Views, Views);
 }
 
-void TMemoryChanges::GrabView(TSchemeShard* ss, const TPathId& pathId) {
+void TMemoryChanges::GrabView(TSchemeshardState* ss, const TPathId& pathId) {
     Grab<TViewInfo>(pathId, ss->Views, Views);
 }
 
-void TMemoryChanges::GrabResourcePool(TSchemeShard* ss, const TPathId& pathId) {
+void TMemoryChanges::GrabResourcePool(TSchemeshardState* ss, const TPathId& pathId) {
     Grab<TResourcePoolInfo>(pathId, ss->ResourcePools, ResourcePools);
 }
 
-void TMemoryChanges::GrabBackupCollection(TSchemeShard* ss, const TPathId& pathId) {
+void TMemoryChanges::GrabBackupCollection(TSchemeshardState* ss, const TPathId& pathId) {
     Grab<TBackupCollectionInfo>(pathId, ss->BackupCollections, BackupCollections);
 }
 
-void TMemoryChanges::UnDo(TSchemeShard* ss) {
+void TMemoryChanges::UnDo(TSchemeshardState* ss) {
     // be aware of the order of grab & undo ops
     // stack is the best way to manage it right
 

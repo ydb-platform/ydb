@@ -1,6 +1,6 @@
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 
 namespace {
 
@@ -94,7 +94,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    "TAlterUserAttrs ProgressState"
                        << ", opId: " << OperationId
-                       << ", at schemeshard: " << context.SS->TabletID());
+                       << ", at schemeshard: " << context.SS->SelfTabletId());
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -151,7 +151,7 @@ public:
                      "TAlterUserAttrs AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->SelfTabletId());
 
         context.OnComplete.DoneOperation(OperationId);
     }

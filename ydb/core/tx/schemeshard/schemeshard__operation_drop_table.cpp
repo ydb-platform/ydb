@@ -1,6 +1,6 @@
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
@@ -613,7 +613,7 @@ public:
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TDropTable AbortPropose"
                          << ", opId: " << OperationId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->SelfTabletId());
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

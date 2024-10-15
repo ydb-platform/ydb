@@ -1,5 +1,5 @@
 #include "schemeshard__operation_part.h"
-#include "schemeshard_impl.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common_subdomain.h"
 
 #include <ydb/core/base/hive.h>

@@ -1,7 +1,7 @@
+#include "schemeshard__operation_part.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_drop_cdc_stream.h"
-#include "schemeshard__operation_part.h"
-#include "schemeshard_impl.h"
 
 #include <ydb/core/tx/schemeshard/backup/constants.h>
 

@@ -35,7 +35,7 @@ struct TRestore {
                         "Propose restore"
                             << ", datashard: " << datashardId
                             << ", opId: " <<  opId
-                            << ", at schemeshard: " << context.SS->TabletID());
+                            << ", at schemeshard: " << context.SS->SelfTabletId());
 
             NKikimrTxDataShard::TFlatSchemeTransaction tx;
             context.SS->FillSeqNo(tx, seqNo);

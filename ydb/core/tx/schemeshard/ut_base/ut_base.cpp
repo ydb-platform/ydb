@@ -1,6 +1,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_effective_acl.h>
 
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -23,6 +24,24 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     Y_UNIT_TEST(Boot) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+
+        // Initial root subdomain state must be:
+        // - no children
+        // - general version 3, which is a sum of:
+        //   - children info version 1
+        //   - subdomain version 1
+        //   - user attributes version 1
+        //
+        auto d = DescribePath(runtime, "/MyRoot");
+
+        TestDescribeResult(d, {NLs::NoChildren});
+
+        const auto& version = d.GetPathDescription().GetSelf().GetVersion();
+        UNIT_ASSERT_EQUAL(version.GetGeneralVersion(), 3);
+        UNIT_ASSERT_EQUAL(version.GetChildrenVersion(), 1);
+        UNIT_ASSERT_EQUAL(version.GetSubDomainVersion(), 1);
+        UNIT_ASSERT_EQUAL(version.GetUserAttrsVersion(), 1);
+
     }
 
     Y_UNIT_TEST(InitRootAgain) {

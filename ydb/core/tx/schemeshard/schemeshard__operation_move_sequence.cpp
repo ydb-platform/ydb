@@ -727,7 +727,7 @@ class TMoveSequence: public TSubOperation {
         case TTxState::ProposedMoveSequence:
             return TTxState::DropParts;
         case TTxState::DropParts:
-            return TTxState::Done;        
+            return TTxState::Done;
         default:
             return TTxState::Invalid;
         }
@@ -993,7 +993,7 @@ public:
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TMoveSequence AbortPropose"
                          << ", opId: " << OperationId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->SelfTabletId());
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
@@ -1001,7 +1001,7 @@ public:
                      "TMoveSequence AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->SelfTabletId());
 
         context.OnComplete.DoneOperation(OperationId);
     }

@@ -1,8 +1,8 @@
 #pragma once
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_billing_helpers.h"
-#include "schemeshard_impl.h"
 #include "schemeshard_types.h"
 
 #include <ydb/core/base/subdomain.h>
@@ -24,7 +24,7 @@ class TConfigurePart: public TSubOperationState {
                 << ", opId: " << OperationId;
     }
 
-    static TVirtualTimestamp GetSnapshotTime(const TSchemeShard* ss, const TPathId& pathId) {
+    static TVirtualTimestamp GetSnapshotTime(const TSchemeshardState* ss, const TPathId& pathId) {
         Y_ABORT_UNLESS(ss->PathsById.contains(pathId));
         TPathElement::TPtr path = ss->PathsById.at(pathId);
         return TVirtualTimestamp(path->StepCreated, path->CreateTxId);
@@ -348,7 +348,7 @@ public:
                         TKind::Name() << " Abort"
                             << ", on datashard: " << datashardId
                             << ", opId: " << OperationId
-                            << ", at schemeshard: " << context.SS->TabletID());
+                            << ", at schemeshard: " << context.SS->SelfTabletId());
 
             auto event = MakeHolder<TEvCancel>(ui64(OperationId.GetTxId()), txState->TargetPathId.LocalPathId);
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, event.Release());
@@ -654,7 +654,7 @@ public:
                      TKind::Name() << " AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->SelfTabletId());
 
         context.OnComplete.DoneOperation(OperationId);
     }

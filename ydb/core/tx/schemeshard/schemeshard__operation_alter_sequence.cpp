@@ -1,6 +1,6 @@
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
@@ -179,7 +179,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvOperationPlan"
                                << ", step: " << step
-                               << ", at schemeshard: " << context.SS->TabletID());
+                               << ", at schemeshard: " << context.SS->SelfTabletId());
 
         TTxState* txState = context.SS->FindTx(OperationId);
         if (!txState) {
@@ -540,7 +540,7 @@ public:
                      "TAlterSequence AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->SelfTabletId());
 
         context.OnComplete.DoneOperation(OperationId);
     }

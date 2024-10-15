@@ -1,6 +1,6 @@
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 
 #include <ydb/core/protos/blob_depot_config.pb.h>
 #include <ydb/core/blob_depot/events.h>
@@ -93,7 +93,7 @@ namespace NKikimr::NSchemeShard {
 
                     return !txState->ShardsInProgress;
                 }
-                
+
                 TString DebugHint() const override {
                     return TStringBuilder() << "TConfigureBlobDepotParts id# " << OperationId;
                 }
@@ -176,7 +176,7 @@ namespace NKikimr::NSchemeShard {
                 LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TBlobDepot::AbortUnsafe"
                     << " OperationId# " << OperationId
                     << " forceDropId# " << forceDropTxId
-                    << " at schemeshard# " << context.SS->TabletID());
+                    << " at schemeshard# " << context.SS->SelfTabletId());
 
                 context.OnComplete.DoneOperation(OperationId);
             }
@@ -202,7 +202,7 @@ namespace NKikimr::NSchemeShard {
 
                 LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TBlobDepot::StateDone"
                     << " OperationId# " << OperationId
-                    << " at schemeshard# " << context.SS->TabletID()
+                    << " at schemeshard# " << context.SS->SelfTabletId()
                     << " State# " << TTxState::StateName(GetState())
                     << " next State# " << TTxState::StateName(it->second));
 
@@ -380,7 +380,7 @@ namespace NKikimr::NSchemeShard {
                 parentPath->IncAliveChildren();
 
                 SetState(TTxState::CreateParts);
-                
+
                 auto resp = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, txId, ssId);
                 resp->SetPathId(pathId.LocalPathId);
                 return resp;

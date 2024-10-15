@@ -1,3 +1,4 @@
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
 
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
@@ -168,7 +169,7 @@ THolder<TEvPersQueue::TEvProposeTransaction> MakeEvProposeTransaction(
 {
     auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
     event->Record.SetTxId(ui64(txId));
-    ActorIdToProto(context.SS->SelfId(), event->Record.MutableSourceActor());
+    ActorIdToProto(context.SS->SelfActorId(), event->Record.MutableSourceActor());
 
     MakePQTabletConfig(context,
                       *event->Record.MutableConfig()->MutableTabletConfig(),

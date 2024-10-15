@@ -1,6 +1,6 @@
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/blockstore/core/blockstore.h>
@@ -219,7 +219,7 @@ public:
             double rate = 0;
             double capacity = 0;
             auto& attrs = domainDir->UserAttrs->Attrs;
-            if (TryFromString(attrs[RateLimiterRateAttrName], rate) && 
+            if (TryFromString(attrs[RateLimiterRateAttrName], rate) &&
                 TryFromString(attrs[RateLimiterCapacityAttrName], capacity))
             {
                 rateLimiter.SetRate(rate);

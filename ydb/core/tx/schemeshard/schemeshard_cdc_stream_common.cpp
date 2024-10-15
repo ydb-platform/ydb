@@ -1,9 +1,10 @@
+#include "schemeshard__operation_part.h"
+#include "schemeshard__operation_iface.h"
+
 #include "schemeshard_cdc_stream_common.h"
 
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
-#include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
-#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 namespace NKikimr::NSchemeShard::NCdcStreamAtTable {
 

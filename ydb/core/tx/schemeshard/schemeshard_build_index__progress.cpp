@@ -245,9 +245,9 @@ private:
 };
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
-    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+    TSchemeshardState* ss, const TIndexBuildInfo& buildInfo)
 {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.LockTxId), ss->TabletID());
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.LockTxId), ui64(ss->SelfTabletId()));
     propose->Record.SetFailOnExist(false);
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
@@ -262,9 +262,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> InitiatePropose(
-    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+    TSchemeshardState* ss, const TIndexBuildInfo& buildInfo)
 {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.InitiateTxId), ss->TabletID());
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.InitiateTxId), ui64(ss->SelfTabletId()));
     propose->Record.SetFailOnExist(true);
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
@@ -286,11 +286,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> InitiatePropose(
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropBuildPropose(
-    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+    TSchemeshardState* ss, const TIndexBuildInfo& buildInfo)
 {
     Y_ASSERT(buildInfo.IsBuildVectorIndex());
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ui64(ss->SelfTabletId()));
     propose->Record.SetFailOnExist(true);
 
     auto path = TPath::Init(buildInfo.TablePathId, ss).Dive(buildInfo.IndexName);
@@ -306,11 +306,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropBuildPropose(
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
-    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+    TSchemeshardState* ss, const TIndexBuildInfo& buildInfo)
 {
     Y_ASSERT(buildInfo.IsBuildVectorIndex());
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ui64(ss->SelfTabletId()));
     propose->Record.SetFailOnExist(true);
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
     modifyScheme.SetInternal(true);
@@ -370,11 +370,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
-    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+    TSchemeshardState* ss, const TIndexBuildInfo& buildInfo)
 {
     Y_ABORT_UNLESS(buildInfo.IsBuildColumns(), "Unknown operation kind while building AlterMainTablePropose");
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.AlterMainTableTxId), ss->TabletID());
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.AlterMainTableTxId), ui64(ss->SelfTabletId()));
     propose->Record.SetFailOnExist(true);
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
@@ -415,9 +415,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
-    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+    TSchemeshardState* ss, const TIndexBuildInfo& buildInfo)
 {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ui64(ss->SelfTabletId()));
     propose->Record.SetFailOnExist(true);
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
@@ -442,9 +442,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose(
-    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+    TSchemeshardState* ss, const TIndexBuildInfo& buildInfo)
 {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.UnlockTxId), ss->TabletID());
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.UnlockTxId), ui64(ss->SelfTabletId()));
     propose->Record.SetFailOnExist(true);
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
@@ -463,9 +463,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose(
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CancelPropose(
-    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+    TSchemeshardState* ss, const TIndexBuildInfo& buildInfo)
 {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ui64(ss->SelfTabletId()));
     propose->Record.SetFailOnExist(true);
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();

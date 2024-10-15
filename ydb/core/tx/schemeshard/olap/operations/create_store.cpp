@@ -1,6 +1,6 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_iface.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
-#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard__op_traits.h>
 
 #include <ydb/core/base/subdomain.h>
@@ -17,7 +17,7 @@ namespace {
 
 void ApplySharding(TTxId txId, TPathId pathId, TOlapStoreInfo::TPtr storeInfo,
                    const TChannelsBindings& channelsBindings,
-                   TTxState& txState, TSchemeShard* ss)
+                   TTxState& txState, TSchemeshardState* ss)
 {
     ui32 numShards = storeInfo->GetColumnShards().size();
     txState.Shards.reserve(numShards);
@@ -96,7 +96,7 @@ public:
             if (shard.TabletType == ETabletType::ColumnShard) {
                 auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
                     NKikimrTxColumnShard::TX_KIND_SCHEMA,
-                    context.SS->TabletID(),
+                    ui64(context.SS->SelfTabletId()),
                     context.Ctx.SelfID,
                     ui64(OperationId.GetTxId()),
                     columnShardTxBody, seqNo,
@@ -518,7 +518,7 @@ public:
                      "TCreateOlapStore AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->SelfTabletId());
 
         context.OnComplete.DoneOperation(OperationId);
     }

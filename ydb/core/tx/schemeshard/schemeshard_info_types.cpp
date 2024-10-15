@@ -2158,7 +2158,7 @@ TIndexBuildInfo::TShardStatus::TShardStatus(TSerializedTableRange range, TString
     , LastKeyAck(std::move(lastKeyAck))
 {}
 
-void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndexBuildConfig* result) const {
+void TIndexBuildInfo::SerializeToProto(TSchemeshardState* ss, NKikimrSchemeOp::TIndexBuildConfig* result) const {
     Y_ABORT_UNLESS(IsBuildIndex());
     result->SetTable(TPath::Init(TablePathId, ss).PathString());
 
@@ -2186,7 +2186,7 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
     }
 }
 
-void TIndexBuildInfo::SerializeToProto([[maybe_unused]] TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
+void TIndexBuildInfo::SerializeToProto([[maybe_unused]] TSchemeshardState* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
     Y_ABORT_UNLESS(IsBuildColumns());
     Y_ASSERT(!TargetName.empty());
     result->SetTable(TargetName);

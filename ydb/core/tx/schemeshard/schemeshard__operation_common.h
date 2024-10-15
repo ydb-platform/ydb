@@ -1,7 +1,6 @@
 #pragma once
 
 #include "schemeshard__operation_part.h"
-#include "schemeshard_impl.h"
 
 #include "schemeshard_private.h"
 
@@ -13,11 +12,11 @@ namespace NKikimr::TEvHive {
 
 namespace NKikimr::NSchemeShard {
 
-class TSchemeShard;
+struct TSchemeshardState;
 
 TSet<ui32> AllIncomingEvents();
 
-void IncParentDirAlterVersionWithRepublishSafeWithUndo(const TOperationId& opId, const TPath& path, TSchemeShard* ss, TSideEffects& onComplete);
+void IncParentDirAlterVersionWithRepublishSafeWithUndo(const TOperationId& opId, const TPath& path, TSchemeshardState* ss, TSideEffects& onComplete);
 void IncParentDirAlterVersionWithRepublish(const TOperationId& opId, const TPath& path, TOperationContext& context);
 
 NKikimrSchemeOp::TModifyScheme MoveTableTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst);
@@ -39,7 +38,7 @@ void AckAllSchemaChanges(const TOperationId& operationId, TTxState& txState, TOp
 bool CheckPartitioningChangedForTableModification(TTxState& txState, TOperationContext& context);
 void UpdatePartitioningForTableModification(TOperationId txId, TTxState& txState, TOperationContext& context);
 
-TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo& templateDatashardInfo, TTableInfo::TPtr srcTableInfo, TTxState& txState, TSchemeShard* ss);
+TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo& templateDatashardInfo, TTableInfo::TPtr srcTableInfo, TTxState& txState, TSchemeshardState* ss);
 
 bool SourceTablePartitioningChangedForCopyTable(const TTxState& txState, TOperationContext& context);
 void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState& txState, TOperationContext& context);

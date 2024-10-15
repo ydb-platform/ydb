@@ -1,3 +1,4 @@
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
 
 #include <ydb/core/blob_depot/events.h>
@@ -953,7 +954,7 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
     txState.TxShardsListFinalized = true;
 }
 
-TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo &templateDatashardInfo, TTableInfo::TPtr srcTableInfo, TTxState &txState, TSchemeShard *ss) {
+TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo &templateDatashardInfo, TTableInfo::TPtr srcTableInfo, TTxState &txState, TSchemeshardState *ss) {
     TVector<TTableShardInfo> dstPartitions = srcTableInfo->GetPartitions();
 
     // Source table must not be altered or drop while we are performing copying. So we put it into a special state.
@@ -1138,7 +1139,7 @@ void ValidateNoTransactionOnPaths(TOperationId operationId, const THashSet<TPath
 
 }  // namespace NForceDrop
 
-void IncParentDirAlterVersionWithRepublishSafeWithUndo(const TOperationId& opId, const TPath& path, TSchemeShard* ss, TSideEffects& onComplete) {
+void IncParentDirAlterVersionWithRepublishSafeWithUndo(const TOperationId& opId, const TPath& path, TSchemeshardState* ss, TSideEffects& onComplete) {
     auto parent = path.Parent();
     if (parent.Base()->IsDirectory() || parent.Base()->IsDomainRoot()) {
         ++parent.Base()->DirAlterVersion;
@@ -1199,7 +1200,7 @@ void AbortUnsafeDropOperation(const TOperationId& opId, const TTxId& txId, TOper
         << TTxState::TypeName(txState->TxType) << " AbortUnsafe"
         << ": opId# " << opId
         << ", txId# " << txId
-        << ", ssId# " << context.SS->TabletID());
+        << ", ssId# " << context.SS->SelfTabletId());
 
     const auto& pathId = txState->TargetPathId;
     Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));

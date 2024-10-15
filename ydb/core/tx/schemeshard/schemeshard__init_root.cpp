@@ -1,4 +1,5 @@
 #include "schemeshard_impl.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard_path_describer.h"
 
 #include <ydb/core/tablet/tablet_exception.h>
@@ -40,7 +41,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
         Y_VERIFY_S(rootPathElements.size() == 1, "invalid root name in domain config: " << rootName << " parts count: " << rootPathElements.size());
 
         TString owner;
-        const NKikimrConfig::TDomainsConfig::TSecurityConfig& securityConfig = Self->GetDomainsConfig().GetSecurityConfig();
+        const NKikimrConfig::TDomainsConfig::TSecurityConfig& securityConfig = NSchemeShard::GetDomainsConfig().GetSecurityConfig();
 
         for (const auto& defaultUser : securityConfig.GetDefaultUsers()) {
             auto response = Self->LoginProvider.CreateUser({

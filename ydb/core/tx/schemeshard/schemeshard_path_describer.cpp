@@ -1301,7 +1301,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     return DescribePath(self, ctx, pathId, options);
 }
 
-void TSchemeShard::DescribeTable(
+void TSchemeshardState::DescribeTable(
         const TTableInfo& tableInfo,
         const NScheme::TTypeRegistry* typeRegistry,
         bool fillConfig,
@@ -1340,10 +1340,10 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
     Y_ABORT_UNLESS(it, "TableIndex is not found");
     TTableIndexInfo::TPtr indexInfo = *it;
 
-    DescribeTableIndex(pathId, name, indexInfo, fillConfig, fillBoundaries, entry);
+    TSchemeshardState::DescribeTableIndex(pathId, name, indexInfo, fillConfig, fillBoundaries, entry);
 }
 
-void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name, TTableIndexInfo::TPtr indexInfo,
+void TSchemeshardState::DescribeTableIndex(const TPathId& pathId, const TString& name, TTableIndexInfo::TPtr indexInfo,
     bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TIndexDescription& entry) const
 {
     Y_ABORT_UNLESS(indexInfo, "Empty index info");
@@ -1415,10 +1415,10 @@ void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
     Y_VERIFY_S(CdcStreams.contains(pathId), "Cdc stream not found"
         << ": pathId# " << pathId
         << ", name# " << name);
-    DescribeCdcStream(pathId, name, CdcStreams.at(pathId), desc);
+    TSchemeshardState::DescribeCdcStream(pathId, name, CdcStreams.at(pathId), desc);
 }
 
-void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name, TCdcStreamInfo::TPtr info,
+void TSchemeshardState::DescribeCdcStream(const TPathId& pathId, const TString& name, TCdcStreamInfo::TPtr info,
         NKikimrSchemeOp::TCdcStreamDescription& desc)
 {
     Y_VERIFY_S(info, "Empty cdc stream info"
@@ -1452,7 +1452,7 @@ void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
 }
 
 void TSchemeShard::DescribeSequence(const TPathId& pathId, const TString& name,
-        NKikimrSchemeOp::TSequenceDescription& desc, bool fillSetVal)
+        NKikimrSchemeOp::TSequenceDescription& desc, bool fillSetVal) const
 {
     auto it = Sequences.find(pathId);
     Y_VERIFY_S(it != Sequences.end(), "Sequence not found"
@@ -1462,7 +1462,7 @@ void TSchemeShard::DescribeSequence(const TPathId& pathId, const TString& name,
 }
 
 void TSchemeShard::DescribeSequence(const TPathId& pathId, const TString& name, TSequenceInfo::TPtr info,
-        NKikimrSchemeOp::TSequenceDescription& desc, bool fillSetVal)
+        NKikimrSchemeOp::TSequenceDescription& desc, bool fillSetVal) const
 {
     Y_VERIFY_S(info, "Empty sequence info"
         << " pathId# " << pathId

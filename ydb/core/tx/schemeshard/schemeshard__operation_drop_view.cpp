@@ -1,6 +1,6 @@
-#include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
-#include "schemeshard_impl.h"
+#include "schemeshard__operation_iface.h"
+#include "schemeshard__operation_common.h"
 
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
@@ -107,7 +107,7 @@ public:
     using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
-        const ui64 ssId = context.SS->TabletID();
+        const ui64 ssId = ui64(context.SS->SelfTabletId());
         const auto& drop = Transaction.GetDrop();
 
         const TString& workingDir = Transaction.GetWorkingDir();

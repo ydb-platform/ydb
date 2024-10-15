@@ -4,6 +4,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/schemeshard/schemeshard_limits.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
@@ -178,7 +179,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         env.TestWaitNotification(runtime, txId);
 
         for (const auto& rp : {TDuration::Hours(12), TDuration::Days(7), TDuration::Days(60)}) {
-            const auto status = rp.Seconds() <= TSchemeShard::MaxPQLifetimeSeconds
+            const auto status = rp.Seconds() <= NSchemeShard::MaxPQLifetimeSeconds
                 ? NKikimrScheme::StatusAccepted
                 : NKikimrScheme::StatusInvalidParameter;
 

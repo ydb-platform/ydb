@@ -1,6 +1,6 @@
 #include "schemeshard__operation_common_resource_pool.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 #include "schemeshard__op_traits.h"
 
 

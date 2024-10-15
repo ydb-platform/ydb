@@ -1,5 +1,5 @@
 #include "schemeshard__operation.h"
-#include "schemeshard_impl.h"
+#include "schemeshard__operation_iface.h"
 
 namespace {
 
@@ -36,7 +36,7 @@ public:
             << ": opId# " << OperationId
             << ", target opId# " << TargetOperationId);
 
-        auto proposeResult = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
+        auto proposeResult = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(context.SS->SelfTabletId()));
         auto result = MakeHolder<TEvSchemeShard::TEvCancelTxResult>(ui64(TargetOperationId.GetTxId()), ui64(OperationId.GetTxId()));
 
         auto found = context.SS->FindTx(TargetOperationId);

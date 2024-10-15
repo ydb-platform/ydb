@@ -1,14 +1,15 @@
 #pragma once
 
 #include "schemeshard__operation_part.h"
-#include "schemeshard_impl.h"
+#include "schemeshard_path.h"
 
+#include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_iter.h>
 
 #include <utility>
 
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
+#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
 #define RETURN_RESULT_UNLESS(x) if (!(x)) return result;
 
 namespace NKikimr::NSchemeShard::NExternalTable {

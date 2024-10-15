@@ -1,8 +1,6 @@
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation_iface.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_path_element.h"
-
-#include "schemeshard_impl.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/mind/hive/hive.h>
@@ -78,7 +76,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvOperationPlan"
                                << ", step: " << step
-                               << ", at schemeshard: " << context.SS->TabletID());
+                               << ", at schemeshard: " << context.SS->SelfTabletId());
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -103,7 +101,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << context.SS->TabletID());
+                               << ", at schemeshard: " << context.SS->SelfTabletId());
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -365,7 +363,7 @@ public:
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TDropTableIndex AbortPropose"
                          << ", opId: " << OperationId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->SelfTabletId());
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
@@ -373,7 +371,7 @@ public:
                      "TDropTableIndex AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+                         << ", at schemeshard: " << context.SS->SelfTabletId());
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -399,7 +397,7 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
     const TString parentPathStr = tx.GetWorkingDir();
 
     TPath table = dropOperation.HasId()
-        ? TPath::Init(TPathId(context.SS->TabletID(), dropOperation.GetId()), context.SS)
+        ? TPath::Init(TPathId(ui64(context.SS->SelfTabletId()), dropOperation.GetId()), context.SS)
         : TPath::Resolve(parentPathStr, context.SS).Dive(dropOperation.GetName());
 
     {
@@ -427,7 +425,7 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
                     .NotUnderDeleting()
                     .NotUnderOperation();
                 if (!table.Parent()->IsTableIndex() || !NTableIndex::IsBuildImplTable(table.LeafName())) {
-                    checks.IsCommonSensePath();                    
+                    checks.IsCommonSensePath();
                 }
             }
         }

@@ -9,7 +9,7 @@
 
 namespace NKikimr::NSchemeShard {
 
-class TSchemeShard;
+struct TSchemeshardState;
 
 class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TPathState = std::pair<TPathId, TPathElement::TPtr>;
@@ -64,45 +64,45 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
 public:
     ~TMemoryChanges() = default;
 
-    void GrabNewTxState(TSchemeShard* ss, const TOperationId& op);
+    void GrabNewTxState(TSchemeshardState* ss, const TOperationId& op);
 
-    void GrabNewPath(TSchemeShard* ss, const TPathId& pathId);
-    void GrabPath(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewPath(TSchemeshardState* ss, const TPathId& pathId);
+    void GrabPath(TSchemeshardState* ss, const TPathId& pathId);
 
-    void GrabNewTable(TSchemeShard* ss, const TPathId& pathId);
-    void GrabTable(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewTable(TSchemeshardState* ss, const TPathId& pathId);
+    void GrabTable(TSchemeshardState* ss, const TPathId& pathId);
 
-    void GrabNewShard(TSchemeShard* ss, const TShardIdx& shardId);
-    void GrabShard(TSchemeShard* ss, const TShardIdx& shardId);
+    void GrabNewShard(TSchemeshardState* ss, const TShardIdx& shardId);
+    void GrabShard(TSchemeshardState* ss, const TShardIdx& shardId);
 
-    void GrabDomain(TSchemeShard* ss, const TPathId& pathId);
+    void GrabDomain(TSchemeshardState* ss, const TPathId& pathId);
 
-    void GrabNewIndex(TSchemeShard* ss, const TPathId& pathId);
-    void GrabIndex(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewIndex(TSchemeshardState* ss, const TPathId& pathId);
+    void GrabIndex(TSchemeshardState* ss, const TPathId& pathId);
 
-    void GrabNewSequence(TSchemeShard* ss, const TPathId& pathId);
-    void GrabSequence(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewSequence(TSchemeshardState* ss, const TPathId& pathId);
+    void GrabSequence(TSchemeshardState* ss, const TPathId& pathId);
 
-    void GrabNewCdcStream(TSchemeShard* ss, const TPathId& pathId);
-    void GrabCdcStream(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewCdcStream(TSchemeshardState* ss, const TPathId& pathId);
+    void GrabCdcStream(TSchemeshardState* ss, const TPathId& pathId);
 
-    void GrabNewTableSnapshot(TSchemeShard* ss, const TPathId& pathId, TTxId snapshotTxId);
+    void GrabNewTableSnapshot(TSchemeshardState* ss, const TPathId& pathId, TTxId snapshotTxId);
 
-    void GrabNewLongLock(TSchemeShard* ss, const TPathId& pathId);
-    void GrabLongLock(TSchemeShard* ss, const TPathId& pathId, TTxId lockTxId);
+    void GrabNewLongLock(TSchemeshardState* ss, const TPathId& pathId);
+    void GrabLongLock(TSchemeshardState* ss, const TPathId& pathId, TTxId lockTxId);
 
-    void GrabExternalTable(TSchemeShard* ss, const TPathId& pathId);
+    void GrabExternalTable(TSchemeshardState* ss, const TPathId& pathId);
 
-    void GrabExternalDataSource(TSchemeShard* ss, const TPathId& pathId);
+    void GrabExternalDataSource(TSchemeshardState* ss, const TPathId& pathId);
 
-    void GrabNewView(TSchemeShard* ss, const TPathId& pathId);
-    void GrabView(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewView(TSchemeshardState* ss, const TPathId& pathId);
+    void GrabView(TSchemeshardState* ss, const TPathId& pathId);
 
-    void GrabResourcePool(TSchemeShard* ss, const TPathId& pathId);
+    void GrabResourcePool(TSchemeshardState* ss, const TPathId& pathId);
 
-    void GrabBackupCollection(TSchemeShard* ss, const TPathId& pathId);
+    void GrabBackupCollection(TSchemeshardState* ss, const TPathId& pathId);
 
-    void UnDo(TSchemeShard* ss);
+    void UnDo(TSchemeshardState* ss);
 };
 
 }

@@ -61,7 +61,14 @@ protected:
     void StartPartitionSession(TTopicReadSessionPtr reader, NTable::TTransaction& tx, ui64 offset);
     void StartPartitionSession(TTopicReadSessionPtr reader, ui64 offset);
 
-    void ReadMessage(TTopicReadSessionPtr reader, NTable::TTransaction& tx, ui64 offset, bool commit = false);
+    struct TReadMessageSettings {
+        NTable::TTransaction& Tx;
+        bool Commit = false;
+        TMaybe<ui64> Offset;
+    };
+
+    void ReadMessage(TTopicReadSessionPtr reader, NTable::TTransaction& tx, ui64 offset);
+    void ReadMessage(TTopicReadSessionPtr reader, const TReadMessageSettings& settings);
 
     void WriteMessage(const TString& message);
     void WriteMessages(const TVector<TString>& messages,
@@ -303,11 +310,23 @@ void TFixture::StartPartitionSession(TTopicReadSessionPtr reader, ui64 offset)
     event.Confirm();
 }
 
-void TFixture::ReadMessage(TTopicReadSessionPtr reader, NTable::TTransaction& tx, ui64 offset, bool commit)
+void TFixture::ReadMessage(TTopicReadSessionPtr reader, NTable::TTransaction& tx, ui64 offset)
 {
-    auto event = ReadEvent<NTopic::TReadSessionEvent::TDataReceivedEvent>(reader, tx);
-    UNIT_ASSERT_VALUES_EQUAL(event.GetMessages()[0].GetOffset(), offset);
-    if (commit) {
+    TReadMessageSettings settings {
+        .Tx = tx,
+        .Commit = false,
+        .Offset = offset
+    };
+    ReadMessage(reader, settings);
+}
+
+void TFixture::ReadMessage(TTopicReadSessionPtr reader, const TReadMessageSettings& settings)
+{
+    auto event = ReadEvent<NTopic::TReadSessionEvent::TDataReceivedEvent>(reader, settings.Tx);
+    if (settings.Offset.Defined()) {
+        UNIT_ASSERT_VALUES_EQUAL(event.GetMessages()[0].GetOffset(), *settings.Offset);
+    }
+    if (settings.Commit) {
         event.Commit();
     }
 }
@@ -519,7 +538,7 @@ Y_UNIT_TEST_F(Offsets_Cannot_Be_Promoted_When_Reading_In_A_Transaction, TFixture
     auto reader = CreateReader();
     StartPartitionSession(reader, tx, 0);
 
-    UNIT_ASSERT_EXCEPTION(ReadMessage(reader, tx, 0, true), yexception);
+    UNIT_ASSERT_EXCEPTION(ReadMessage(reader, {.Tx = tx, .Commit = true}), yexception);
 }
 
 //Y_UNIT_TEST_F(WriteToTopic_Invalid_Session, TFixture)

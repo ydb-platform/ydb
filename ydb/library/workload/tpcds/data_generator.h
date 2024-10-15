@@ -50,7 +50,7 @@ public:
 
         using TContexts = TVector<TContext>;
 
-        virtual void GenerateRows(TContexts& ctxs) = 0;
+        virtual void GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) = 0;
 
         int TableNum;
         ui64 Generated = 0;

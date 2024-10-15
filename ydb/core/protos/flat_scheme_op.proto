@@ -423,9 +423,6 @@ message TTableDescription {
     // on table creation to allow system column names (started with __ydb_)
     // It won't be present on describes and won't be preserved
     optional bool SystemColumnNamesAllowed = 42;
-
-    // again create only
-    optional TCreateCdcStream CreateCdcStream = 44;
 }
 
 message TDictionaryEncodingSettings {

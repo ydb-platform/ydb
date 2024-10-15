@@ -22,13 +22,14 @@ NKikimrSchemeOp::TModifyScheme CopyTableTask(
     auto scheme = TransactionTemplate(dstWorkingDir, NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
     scheme.SetFailOnExist(true);
 
-    auto operation = scheme.MutableCreateTable();
+    auto* operation = scheme.MutableCreateTable();
     operation->SetName(dstLeaf);
     operation->SetCopyFromTable(src.PathString());
     operation->SetOmitFollowers(omitFollowers);
     operation->SetIsBackup(isBackup);
     if (descr.HasCreateCdcStream()) {
-        operation->MutableCreateCdcStream()->CopyFrom(descr.GetCreateCdcStream());
+        auto* coOp = scheme.MutableCreateCdcStream();
+        coOp->CopyFrom(descr.GetCreateCdcStream());
     }
 
     return scheme;

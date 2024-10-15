@@ -693,7 +693,7 @@ public:
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCopyTable, newTable->PathId, srcPath.Base()->PathId);
         txState.State = TTxState::CreateParts;
-        if (Transaction.GetCreateTable().HasCreateCdcStream()) {
+        if (Transaction.HasCreateCdcStream()) {
             txState.CdcPathId = srcPath.Base()->PathId;
         }
 
@@ -801,6 +801,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
 
     auto copying = tx.GetCreateTable();
     Y_ABORT_UNLESS(copying.HasCopyFromTable());
+    auto coOp = tx.HasCreateCdcStream() ? &tx.GetCreateCdcStream() : nullptr;
 
     TPath srcPath = TPath::Resolve(copying.GetCopyFromTable(), context.SS);
     {
@@ -854,8 +855,8 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         operation->SetOmitFollowers(copying.GetOmitFollowers());
         operation->SetIsBackup(copying.GetIsBackup());
         operation->MutablePartitionConfig()->CopyFrom(copying.GetPartitionConfig());
-        if (copying.HasCreateCdcStream()) {
-            operation->MutableCreateCdcStream()->CopyFrom(copying.GetCreateCdcStream());
+        if (coOp) {
+            schema.MutableCreateCdcStream()->CopyFrom(*coOp);
         }
 
         result.push_back(CreateCopyTable(NextPartId(nextId, result), schema, sequences));

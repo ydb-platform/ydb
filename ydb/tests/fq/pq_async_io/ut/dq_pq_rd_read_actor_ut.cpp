@@ -398,4 +398,5 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         StartSession(source);
         ProcessSomeJsons(0, {Json1}, RowDispatcher1, UVParserWithMetadatafields);  
     }
+}
 } // NYql::NDq

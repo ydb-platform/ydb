@@ -484,9 +484,9 @@
     ],
     "test.test[blocks-combine_hashed_pg--Peephole]": [
         {
-            "checksum": "7aeece3b4d327a2ba2f7aa0debc47c58",
-            "size": 6167,
-            "uri": "https://{canondata_backend}/1889210/8fb1581e45c0d5fdd2176e6235cc92579ba918f7/resource.tar.gz#test.test_blocks-combine_hashed_pg--Peephole_/opt.yql"
+            "checksum": "44f4557f8602e6367b7cff827ac89234",
+            "size": 6379,
+            "uri": "https://{canondata_backend}/1880306/c85931dc2ddfc9372ac5287e031731a861495fb0/resource.tar.gz#test.test_blocks-combine_hashed_pg--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_hashed_pg--Plan]": [

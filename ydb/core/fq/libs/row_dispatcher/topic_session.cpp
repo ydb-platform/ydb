@@ -183,7 +183,7 @@ private:
     void CreateTopicSession();
     void CloseTopicSession();
     void SubscribeOnNextEvent();
-    void SendToParsing(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
+    void SendToParsing(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
     void DoParsing(bool force = false);
     void DoFiltering(const TVector<ui64>& offsets, const TVector<TVector<std::string_view>>& parsedValues);
     void SendData(ClientsInfo& info);
@@ -527,7 +527,7 @@ TString TTopicSession::GetSessionId() const {
     return ReadSession ? TString{ReadSession->GetSessionId()} : TString{"empty"};
 }
 
-void TTopicSession::SendToParsing(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) {
+void TTopicSession::SendToParsing(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) {
     for (const auto& readActorId : ClientsWithoutPredicate) {
         const auto it = Clients.find(readActorId);
         Y_ENSURE(it != Clients.end(), "Internal error: unknown client");
@@ -538,7 +538,7 @@ void TTopicSession::SendToParsing(const TVector<NYdb::NTopic::TReadSessionEvent:
 
         for (const auto& message : messages) {
             LOG_ROW_DISPATCHER_TRACE("Send message with offset " << message.GetOffset() << " to client " << info.ReadActorId <<" without parsing/filtering");
-            AddDataToClient(info, message.GetOffset(), message.GetData());
+            AddDataToClient(info, message.GetOffset(), TString{message.GetData()});
         }
     }
 

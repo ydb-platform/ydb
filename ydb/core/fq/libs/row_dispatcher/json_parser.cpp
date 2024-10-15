@@ -29,7 +29,7 @@ struct TJsonParserBuffer {
         Offsets.reserve(numberValues);
     }
 
-    void AddMessages(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) {
+    void AddMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) {
         Y_ENSURE(!Finished, "Cannot add messages into finished buffer");
 
         size_t messagesSize = 0;
@@ -127,7 +127,7 @@ public:
         return Buffer.Offsets;
     }
 
-    void AddMessages(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) {
+    void AddMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) {
         if (messages.empty()) {
             return;
         }
@@ -248,7 +248,7 @@ TJsonParser::TJsonParser(const TVector<TString>& columns, const TVector<TString>
 TJsonParser::~TJsonParser() {
 }
 
-void TJsonParser::AddMessages(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) {
+void TJsonParser::AddMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) {
     Impl->AddMessages(messages);
 }
 

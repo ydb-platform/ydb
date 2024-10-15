@@ -207,13 +207,15 @@ class ResponseSource:
 
             def lz_decompress(c: deque) -> Tuple[Optional[bytes], int]:
                 read_amt = 0
-                while lz4_decom.needs_input:
-                    data = c.popleft()
-                    read_amt += len(data)
-                    if lz4_decom.unused_data:
-                        data = lz4_decom.unused_data + data
-                    return lz4_decom.decompress(data), read_amt
-                return None, 0
+                data = c.popleft()
+                read_amt += len(data)
+                if lz4_decom.unused_data:
+                    read_amt += len(lz4_decom.unused_data)
+                    data = lz4_decom.unused_data + data
+                block = lz4_decom.decompress(data)
+                if lz4_decom.unused_data:
+                    read_amt -= len(lz4_decom.unused_data)
+                return block, read_amt
 
             decompress = lz_decompress
 
@@ -225,13 +227,15 @@ class ResponseSource:
             current_size = 0
             read_gen = response.read_chunked(chunk_size, decompress is None)
             while True:
-                while not done and current_size < buffer_size:
-                    chunk = next(read_gen, None)
+                while not done:
+                    chunk = next(read_gen, None) # Always try to read at least one chunk if there are any left
                     if not chunk:
                         done = True
                         break
                     chunks.append(chunk)
                     current_size += len(chunk)
+                    if current_size > buffer_size:
+                        break
                 if len(chunks) == 0:
                     return
                 if decompress:

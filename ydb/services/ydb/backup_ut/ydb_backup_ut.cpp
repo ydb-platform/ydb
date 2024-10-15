@@ -20,6 +20,7 @@
 
 using namespace NYdb;
 using namespace NYdb::NOperation;
+using namespace NYdb::NScheme;
 using namespace NYdb::NTable;
 
 namespace NYdb::NTable {
@@ -39,6 +40,35 @@ bool operator==(const TKeyRange& lhs, const TKeyRange& rhs) {
 }
 
 namespace {
+
+#define Y_UNIT_TEST_ALL_SCHEME_OBJECT_TYPES(N)                                                                     \
+    template <NKikimrSchemeOp::EPathType Type>                                                                     \
+    struct TTestCase##N : public TCurrentTestCase {                                                                \
+        TString ParametrizedTestName = #N "-" + NKikimrSchemeOp::EPathType_Name(Type);                             \
+                                                                                                                   \
+        TTestCase##N() : TCurrentTestCase() {                                                                      \
+            Name_ = ParametrizedTestName.c_str();                                                                  \
+        }                                                                                                          \
+                                                                                                                   \
+        static THolder<NUnitTest::TBaseTestCase> Create()  { return ::MakeHolder<TTestCase##N<Type>>();  }         \
+        void Execute_(NUnitTest::TTestContext&) override;                                                          \
+    };                                                                                                             \
+    struct TTestRegistration##N {                                                                                  \
+        template <int I, int End>                                                                                  \
+        static constexpr void AddTestsForPathTypeEnumRange() {                                                     \
+            if constexpr (I < End) {                                                                               \
+                TCurrentTest::AddTest(TTestCase##N<static_cast<NKikimrSchemeOp::EPathType>(I)>::Create);           \
+                AddTestsForPathTypeEnumRange<I + 1, End>();                                                        \
+            }                                                                                                      \
+        }                                                                                                          \
+                                                                                                                   \
+        TTestRegistration##N() {                                                                                   \
+            AddTestsForPathTypeEnumRange<1, NKikimrSchemeOp::EPathType_ARRAYSIZE>();                               \
+        }                                                                                                          \
+    };                                                                                                             \
+    static TTestRegistration##N testRegistration##N;                                                               \
+    template <NKikimrSchemeOp::EPathType Type>                                                                     \
+    void TTestCase##N<Type>::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
 
 #define DEBUG_HINT (TStringBuilder() << "at line " << __LINE__)
 
@@ -381,6 +411,43 @@ void TestRestoreTableWithSerial(
     CompareResults(GetTableContent(session, table), originalContent);
 }
 
+void TestRestoreTableWithIndex(const char* table, const char* index, TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore) {
+    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+            CREATE TABLE `%s` (
+                Key Uint32,
+                Value Uint32,
+                PRIMARY KEY (Key),
+                INDEX %s GLOBAL ON (Value)
+            );
+        )",
+        table, index
+    ));
+
+    backup(table);
+
+    // restore deleted table
+    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+            DROP TABLE `%s`;
+        )", table
+    ));
+    
+    restore(table);
+
+    CheckTableDescription(session, table, CreateHasIndexChecker(index));
+}
+
+void TestRestoreDirectory(const char* directory, TSchemeClient& client, TBackupFunction&& backup, TRestoreFunction&& restore) {
+    UNIT_ASSERT(client.MakeDirectory(directory).GetValueSync().IsSuccess());
+    backup(directory);
+
+    UNIT_ASSERT(client.RemoveDirectory(directory).GetValueSync().IsSuccess());
+    restore(directory);
+
+    auto result = client.DescribePath(directory).GetValueSync();
+    UNIT_ASSERT(result.IsSuccess());
+    UNIT_ASSERT_VALUES_EQUAL(result.GetEntry().Type, ESchemeEntryType::Directory);
+}
+
 }
 
 Y_UNIT_TEST_SUITE(BackupRestore) {
@@ -404,24 +471,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             NDump::TClient backupClient(driver);
             Restore(backupClient, pathToBackup, "/Root");
         };
-    }
-
-    Y_UNIT_TEST(RestoreTableContent) {
-        TKikimrWithGrpcAndRootSchema server;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
-        TTableClient tableClient(driver);
-        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
-        TTempDir tempDir;
-        const auto& pathToBackup = tempDir.Path();
-
-        constexpr const char* table = "/Root/table";
-
-        TestTableContentIsPreserved(
-            table,
-            session,
-            CreateBackupLambda(driver, pathToBackup),
-            CreateRestoreLambda(driver, pathToBackup)
-        );
     }
 
     Y_UNIT_TEST(RestoreTablePartitioningSettings) {
@@ -488,44 +537,45 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     // TO DO: test index impl table split boundaries restoration from a backup
 
-    Y_UNIT_TEST(BasicRestoreTableWithIndex) {
+    void TestTableBackupRestore() {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* table = "/Root/table";
+
+        TestTableContentIsPreserved(
+            table,
+            session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
+    void TestTableWithIndexBackupRestore() {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
         TTableClient tableClient(driver);
         auto session = tableClient.GetSession().ExtractValueSync().GetSession();
-
-        constexpr const char* table = "/Root/table";
-        constexpr const char* index = "byValue";
-        ExecuteDataDefinitionQuery(session, Sprintf(R"(
-                CREATE TABLE `%s` (
-                    Key Uint32,
-                    Value Uint32,
-                    PRIMARY KEY (Key),
-                    INDEX %s GLOBAL ON (Value)
-                );
-            )",
-            table, index
-        ));
-  
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
-        // TO DO: implement NDump::TClient::Dump and call it instead of BackupFolder
-        NYdb::NBackup::BackupFolder(driver, "/Root", ".", pathToBackup, {}, false, false);
+        constexpr const char* table = "/Root/table";
+        constexpr const char* index = "byValue";
         
-        NDump::TClient backupClient(driver);
-
-        // restore deleted table
-        ExecuteDataDefinitionQuery(session, Sprintf(R"(
-                DROP TABLE `%s`;
-            )", table
-        ));
-        Restore(backupClient, pathToBackup, "/Root");
-
-        CheckTableDescription(session, table, CreateHasIndexChecker(index));
+        TestRestoreTableWithIndex(
+            table,
+            index,
+            session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
         CheckBuildIndexOperationsCleared(driver);
     }
 
-    Y_UNIT_TEST(BasicRestoreTableWithSerial) {
+    void TestTableWithSerialBackupRestore() {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
         TTableClient tableClient(driver);
@@ -540,6 +590,72 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup)
         );
+    }
+
+    void TestDirectoryBackupRestore() {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
+        TSchemeClient schemeClient(driver);
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+        constexpr const char* directory = "/Root/dir";
+
+        TestRestoreDirectory(
+            directory,
+            schemeClient,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
+    Y_UNIT_TEST_ALL_SCHEME_OBJECT_TYPES(TestAllSchemeObjectTypes) {
+        using namespace NKikimrSchemeOp;
+    
+        switch (Type) {
+            case EPathTypeTable:
+                TestTableBackupRestore();
+                break;
+            case EPathTypeTableIndex:
+                TestTableWithIndexBackupRestore();
+                break;
+            case EPathTypeSequence:
+                TestTableWithSerialBackupRestore();
+                break;
+            case EPathTypeDir:
+                TestDirectoryBackupRestore();
+                break;
+            case EPathTypePersQueueGroup:
+                break; // https://github.com/ydb-platform/ydb/issues/10431
+            case EPathTypeSubDomain:
+            case EPathTypeExtSubDomain:
+                break; // https://github.com/ydb-platform/ydb/issues/10432
+            case EPathTypeView:
+                break; // https://github.com/ydb-platform/ydb/issues/10433
+            case EPathTypeCdcStream:
+                break; // https://github.com/ydb-platform/ydb/issues/7054
+            case EPathTypeReplication:
+                break; // https://github.com/ydb-platform/ydb/issues/10436
+            case EPathTypeExternalTable:
+                break; // https://github.com/ydb-platform/ydb/issues/10438
+            case EPathTypeExternalDataSource:
+                break; // https://github.com/ydb-platform/ydb/issues/10439
+            case EPathTypeResourcePool:
+                break; // https://github.com/ydb-platform/ydb/issues/10440
+            case EPathTypeKesus:
+                break; // https://github.com/ydb-platform/ydb/issues/10444
+            case EPathTypeColumnStore:
+            case EPathTypeColumnTable:
+                break; // column stuff
+            case EPathTypeBlobDepot:
+                break; // not applicable
+            case EPathTypeRtmrVolume:
+            case EPathTypeBlockStoreVolume:
+            case EPathTypeSolomonVolume:
+            case EPathTypeFileStore:
+                break; // other projects
+            default:
+                UNIT_FAIL("Client backup/restore were not implemented for this scheme object");
+        }
     }
 }
 
@@ -675,18 +791,6 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         };
     }
 
-    Y_UNIT_TEST(RestoreTableContent) {
-        TS3TestEnv testEnv;
-        constexpr const char* table = "/Root/table";
-
-        TestTableContentIsPreserved(
-            table,
-            testEnv.GetSession(),
-            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
-            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())
-        );
-    }
-
     Y_UNIT_TEST(RestoreTablePartitioningSettings) {
         TS3TestEnv testEnv;
         constexpr const char* table = "/Root/table";
@@ -747,7 +851,33 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
-    Y_UNIT_TEST(RestoreTableWithSerial) {
+    void TestTableBackupRestore() {
+        TS3TestEnv testEnv;
+        constexpr const char* table = "/Root/table";
+
+        TestTableContentIsPreserved(
+            table,
+            testEnv.GetSession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())
+        );
+    }
+
+    void TestTableWithIndexBackupRestore() {
+        TS3TestEnv testEnv;
+        constexpr const char* table = "/Root/table";
+        constexpr const char* index = "value_idx";
+
+        TestRestoreTableWithIndex(
+            table,
+            index,
+            testEnv.GetSession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())
+        );
+    }
+
+    void TestTableWithSerialBackupRestore() {
         TS3TestEnv testEnv;
         constexpr const char* table = "/Root/table";
 
@@ -759,4 +889,52 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
+    Y_UNIT_TEST_ALL_SCHEME_OBJECT_TYPES(TestAllSchemeObjectTypes) {
+        using namespace NKikimrSchemeOp;
+    
+        switch (Type) {
+            case EPathTypeTable:
+                TestTableBackupRestore();
+                break;
+            case EPathTypeTableIndex:
+                TestTableWithIndexBackupRestore();
+                break;
+            case EPathTypeSequence:
+                TestTableWithSerialBackupRestore();
+                break;
+            case EPathTypeDir:
+                break; // https://github.com/ydb-platform/ydb/issues/10430
+            case EPathTypePersQueueGroup:
+                break; // https://github.com/ydb-platform/ydb/issues/10431
+            case EPathTypeSubDomain:
+            case EPathTypeExtSubDomain:
+                break; // https://github.com/ydb-platform/ydb/issues/10432
+            case EPathTypeView:
+                break; // https://github.com/ydb-platform/ydb/issues/10433
+            case EPathTypeCdcStream:
+                break; // https://github.com/ydb-platform/ydb/issues/7054
+            case EPathTypeReplication:
+                break; // https://github.com/ydb-platform/ydb/issues/10436
+            case EPathTypeExternalTable:
+                break; // https://github.com/ydb-platform/ydb/issues/10438
+            case EPathTypeExternalDataSource:
+                break; // https://github.com/ydb-platform/ydb/issues/10439
+            case EPathTypeResourcePool:
+                break; // https://github.com/ydb-platform/ydb/issues/10440
+            case EPathTypeKesus:
+                break; // https://github.com/ydb-platform/ydb/issues/10444
+            case EPathTypeColumnStore:
+            case EPathTypeColumnTable:
+                break; // column stuff
+            case EPathTypeBlobDepot:
+                break; // not applicable
+            case EPathTypeRtmrVolume:
+            case EPathTypeBlockStoreVolume:
+            case EPathTypeSolomonVolume:
+            case EPathTypeFileStore:
+                break; // other projects
+            default:
+                UNIT_FAIL("S3 backup/restore were not implemented for this scheme object");
+        }
+    }
 }

@@ -227,6 +227,9 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
                     {"StringValue", "2.7182818284"}
                 }}
             }},
+
+            // From Amazon SQS docs: "Currently, the only supported message system attribute is AWSTraceHeader".
+            // We do not support the attribute, but need to check that it doesn't lead to fails.
             {"MessageSystemAttributes", NJson::TJsonMap{
                 {"AWSTraceHeader", NJson::TJsonMap{
                     {"DataType", "String"},
@@ -684,47 +687,37 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             {"QueueUrl", queueUrl},
             {"Attributes", NJson::TJsonMap{{"UnknownAttribute", "value"}}}
         }, 400);
-
-
     }
 
     Y_UNIT_TEST_F(TestSendMessageBatch, THttpProxyTestMock) {
-        auto createQueueReq = CreateSqsCreateQueueRequest();
-        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-        NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
-        UNIT_ASSERT(resultQueueUrl.EndsWith("ExampleQueueName"));
+        auto json = CreateQueue({
+            {"QueueName", "ExampleQueueName.fifo"},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"},
+                {"ContentBasedDeduplication", "true"}
+            }}
+        });
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
 
-        NJson::TJsonValue message0;
-        message0["Id"] = "Id-0";
-        message0["MessageBody"] = "MessageBody-0";
-        message0["MessageDeduplicationId"] = "MessageDeduplicationId-0";
+        json = SendMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{
+                    {"Id", "Id-0"},
+                    {"MessageBody", "MessageBody-0"},
+                    {"MessageGroupId", "MessageGroupId-0"},
+                    {"MessageAttributes", NJson::TJsonMap{
+                        {"SomeAttribute", NJson::TJsonMap{
+                            {"DataType", "String"},
+                            {"StringValue", "1"}
+                        }}
+                    }}
+                },
+                NJson::TJsonMap{{"Id", "Id-1"}, {"MessageBody", "MessageBody-1"}, {"MessageGroupId", "MessageGroupId-1"}},
+                NJson::TJsonMap{{"Id", "Id-2"}, {"MessageBody", "MessageBody-2"}},
+            }}
+        });
 
-        NJson::TJsonValue delaySeconds;
-        delaySeconds["StringValue"] = "1";
-        delaySeconds["DataType"] = "String";
-
-        NJson::TJsonValue attributes;
-        attributes["DelaySeconds"] = delaySeconds;
-
-        message0["MessageAttributes"] = attributes;
-
-        NJson::TJsonValue message1;
-        message1["Id"] = "Id-1";
-        message1["MessageBody"] = "MessageBody-1";
-        message1["MessageDeduplicationId"] = "MessageDeduplicationId-1";
-
-        NJson::TJsonArray entries = {message0, message1};
-
-        NJson::TJsonValue sendMessageBatchReq;
-        sendMessageBatchReq["QueueUrl"] = resultQueueUrl;
-        sendMessageBatchReq["Entries"] = entries;
-
-        res = SendHttpRequest("/Root", "AmazonSQS.SendMessageBatch", std::move(sendMessageBatchReq), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
         UNIT_ASSERT(json["Successful"].GetArray().size() == 2);
         auto succesful0 = json["Successful"][0];
         UNIT_ASSERT(succesful0["Id"] == "Id-0");
@@ -732,9 +725,9 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT(!GetByPath<TString>(succesful0, "MD5OfMessageBody").empty());
         UNIT_ASSERT(!GetByPath<TString>(succesful0, "MessageId").empty());
 
-        NJson::TJsonValue receiveMessageReq;
-        receiveMessageReq["QueueUrl"] = resultQueueUrl;
-        res = SendHttpRequest("/Root", "AmazonSQS.ReceiveMessage", std::move(receiveMessageReq), FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT(json["Successful"][1]["Id"] == "Id-1");
+
+        UNIT_ASSERT(json["Failed"].GetArray().size() == 1);
     }
 
     Y_UNIT_TEST_F(TestDeleteMessageBatch, THttpProxyTestMock) {

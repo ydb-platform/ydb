@@ -28,9 +28,9 @@ public:
 
 public:
     TVersionToKey VersionToKey;
-    THashSet<ui64> VersionsToErase;
 
 private:
+    THashSet<ui64> VersionsToErase;
     THashMap<ui64, ui32> VersionCounters;
 
 public:
@@ -68,6 +68,10 @@ public:
                 processor(version, key);
             }
         }
+    }
+
+    void DeleteErasedVersion(ui64 version) {
+        VersionsToErase.erase(version);
     }
 };
 

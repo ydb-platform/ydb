@@ -1,5 +1,0 @@
-<tmp_path>/program.sql:<main>: Warning: Table metadata loading
-
-    <tmp_path>/program.sql:<main>: Warning: Table InputC
-    
-        <tmp_path>/program.sql:<main>: Warning: Table attribute '_yql_row_spec' hides fields: val

@@ -1313,9 +1313,6 @@
             "checksum": "d82c8404b2e5e9d195a44f1854920a79",
             "size": 8924,
             "uri": "https://{canondata_backend}/1917492/efca0b22909e8f13c90177011781c9dd7fd1ac08/resource.tar.gz#test.test_join-cbo_4tables--Results_/results.txt"
-        },
-        {
-            "uri": "file://test.test_join-cbo_4tables--Results_/extracted"
         }
     ],
     "test.test[join-equi_join_three_asterisk_eval--Debug]": [

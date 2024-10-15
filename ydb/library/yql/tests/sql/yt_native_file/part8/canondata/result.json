@@ -1662,9 +1662,6 @@
             "checksum": "d82c8404b2e5e9d195a44f1854920a79",
             "size": 8924,
             "uri": "https://{canondata_backend}/1937027/d7ef390dc6145d15232b81ecd96487479c77441a/resource.tar.gz#test.test_join-cbo_4tables_only_sorted_merge--Results_/results.txt"
-        },
-        {
-            "uri": "file://test.test_join-cbo_4tables_only_sorted_merge--Results_/extracted"
         }
     ],
     "test.test[join-convert_check_key_mem--Debug]": [

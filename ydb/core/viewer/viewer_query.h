@@ -470,7 +470,7 @@ private:
                     valueParser.OpenDict();
                     while (valueParser.TryNextDictItem()) {
                         valueParser.DictKey();
-                        TString key = valueParser.GetString();
+                        auto key = TString{valueParser.GetString()};
                         valueParser.DictPayload();
                         jsonDict[key] = ColumnValueToJsonValue(valueParser);
                     }

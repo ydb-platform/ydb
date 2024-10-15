@@ -472,9 +472,9 @@
     ],
     "test.test[blocks-combine_all_max--Peephole]": [
         {
-            "checksum": "311b380d0cf9a03f17b5be896eb75d52",
-            "size": 6265,
-            "uri": "https://{canondata_backend}/1936273/2e12f403b84f544db0dddee878135eb165520afe/resource.tar.gz#test.test_blocks-combine_all_max--Peephole_/opt.yql"
+            "checksum": "578d8413e4f0938c5c51ddbd50c7ffde",
+            "size": 6267,
+            "uri": "https://{canondata_backend}/1942100/1b0eecc460579a62c09a8328b78b1c3d0737be71/resource.tar.gz#test.test_blocks-combine_all_max--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_all_max--Plan]": [
@@ -500,9 +500,9 @@
     ],
     "test.test[blocks-combine_all_minmax_nested--Peephole]": [
         {
-            "checksum": "a0294d39683e7ad6fa80cfeb34bbf0a0",
-            "size": 3407,
-            "uri": "https://{canondata_backend}/1936273/2e12f403b84f544db0dddee878135eb165520afe/resource.tar.gz#test.test_blocks-combine_all_minmax_nested--Peephole_/opt.yql"
+            "checksum": "1d3e6826662dae4130959c4b1e4d197c",
+            "size": 3427,
+            "uri": "https://{canondata_backend}/1942100/1b0eecc460579a62c09a8328b78b1c3d0737be71/resource.tar.gz#test.test_blocks-combine_all_minmax_nested--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_all_minmax_nested--Plan]": [
@@ -724,9 +724,9 @@
     ],
     "test.test[blocks-lazy_nonstrict_with_scalar_ctx--Peephole]": [
         {
-            "checksum": "5f260ad4f10c1e79d9bec7361e08d388",
-            "size": 3760,
-            "uri": "https://{canondata_backend}/1936273/2e12f403b84f544db0dddee878135eb165520afe/resource.tar.gz#test.test_blocks-lazy_nonstrict_with_scalar_ctx--Peephole_/opt.yql"
+            "checksum": "526263536048e247185473b3e7e22a71",
+            "size": 3708,
+            "uri": "https://{canondata_backend}/1942100/1b0eecc460579a62c09a8328b78b1c3d0737be71/resource.tar.gz#test.test_blocks-lazy_nonstrict_with_scalar_ctx--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-lazy_nonstrict_with_scalar_ctx--Plan]": [
@@ -752,9 +752,9 @@
     ],
     "test.test[blocks-minmax_strings_filter--Peephole]": [
         {
-            "checksum": "49f57f9a0332cdad3d817c127230660f",
-            "size": 4036,
-            "uri": "https://{canondata_backend}/1920236/0b8929411f995ee81d269f8519a2b62822b5b0f7/resource.tar.gz#test.test_blocks-minmax_strings_filter--Peephole_/opt.yql"
+            "checksum": "f0048f669753144b52457204bff26d18",
+            "size": 4056,
+            "uri": "https://{canondata_backend}/1942100/1b0eecc460579a62c09a8328b78b1c3d0737be71/resource.tar.gz#test.test_blocks-minmax_strings_filter--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-minmax_strings_filter--Plan]": [

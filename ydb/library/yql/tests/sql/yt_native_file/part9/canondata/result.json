@@ -429,9 +429,9 @@
     ],
     "test.test[blocks-combine_all_count--Peephole]": [
         {
-            "checksum": "d065efb0530ef025a6a377c7e583607d",
-            "size": 3141,
-            "uri": "https://{canondata_backend}/1936273/078595a3559c5c438ed530f67006a92558087996/resource.tar.gz#test.test_blocks-combine_all_count--Peephole_/opt.yql"
+            "checksum": "a05d2b4951425b78494384e3966a40a7",
+            "size": 3205,
+            "uri": "https://{canondata_backend}/1775319/7897edc8408eb00cc6ed290a2f889d4524ac2280/resource.tar.gz#test.test_blocks-combine_all_count--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_all_count--Plan]": [
@@ -457,9 +457,9 @@
     ],
     "test.test[blocks-combine_all_sum_filter--Peephole]": [
         {
-            "checksum": "a08ca9ef70405bb6a580d476ca3972f2",
-            "size": 2052,
-            "uri": "https://{canondata_backend}/1936273/078595a3559c5c438ed530f67006a92558087996/resource.tar.gz#test.test_blocks-combine_all_sum_filter--Peephole_/opt.yql"
+            "checksum": "bd161548e7817d6c81c75cf0318f8e42",
+            "size": 2095,
+            "uri": "https://{canondata_backend}/1775319/7897edc8408eb00cc6ed290a2f889d4524ac2280/resource.tar.gz#test.test_blocks-combine_all_sum_filter--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_all_sum_filter--Plan]": [
@@ -513,9 +513,9 @@
     ],
     "test.test[blocks-distinct_pure_keys--Peephole]": [
         {
-            "checksum": "230a3751451f8e6fbf236d12a5fd3b3e",
-            "size": 6938,
-            "uri": "https://{canondata_backend}/1871102/d4092e58bfb3465cc6e1385e1e0fb9ddf349664c/resource.tar.gz#test.test_blocks-distinct_pure_keys--Peephole_/opt.yql"
+            "checksum": "5a124ce37da8b898226286c987ad5df1",
+            "size": 6946,
+            "uri": "https://{canondata_backend}/1775319/7897edc8408eb00cc6ed290a2f889d4524ac2280/resource.tar.gz#test.test_blocks-distinct_pure_keys--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-distinct_pure_keys--Plan]": [

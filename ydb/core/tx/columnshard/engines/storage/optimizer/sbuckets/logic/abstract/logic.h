@@ -2,7 +2,7 @@
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/sbuckets/common/optimizer.h>
 
-#include <ydb/core/formats/arrow/replace_key.h>
+#include <ydb/library/formats/arrow/replace_key.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {
 

@@ -3,7 +3,7 @@
 
 #include <ydb/core/tx/long_tx_service/public/types.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/modifier/subset.h>
+#include <ydb/library/formats/arrow/modifier/subset.h>
 #include <ydb/library/accessor/accessor.h>
 
 #include <ydb/library/actors/core/monotonic.h>

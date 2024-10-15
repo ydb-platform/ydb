@@ -1,8 +1,8 @@
 #include "calcer.h"
-#include "xx_hash.h"
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/formats/arrow/hash/xx_hash.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
 #include <ydb/library/actors/core/log.h>
 #include <util/string/join.h>

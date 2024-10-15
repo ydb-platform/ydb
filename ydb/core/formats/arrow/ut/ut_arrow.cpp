@@ -185,11 +185,6 @@ struct TDataRow {
     }
 };
 
-
-std::shared_ptr<arrow::Array> GetColumn(const arrow::Table& table, int i, int chunk = 0) {
-    return table.column(i)->chunk(chunk);
-}
-
 std::shared_ptr<arrow::Array> GetColumn(const arrow::RecordBatch& batch, int i) {
     return batch.column(i);
 }
@@ -526,22 +521,6 @@ bool CheckSorted(const std::shared_ptr<arrow::RecordBatch>& batch, bool desc = f
 }
 
 Y_UNIT_TEST_SUITE(ArrowTest) {
-    Y_UNIT_TEST(Basic) {
-        std::vector<TDataRow> rows = TestRows();
-
-        std::shared_ptr<arrow::Table> table = TDataRowTableBuilder::Build(rows);
-
-        auto expectedSchema = TDataRow::MakeArrowSchema();
-        UNIT_ASSERT_EQUAL(expectedSchema->Equals(*table->schema()), true);
-
-        std::vector<TDataRow> readRows = ToVector(table);
-
-        UNIT_ASSERT_EQUAL(rows.size(), readRows.size());
-        for (size_t i = 0; i < rows.size(); ++i) {
-            UNIT_ASSERT_EQUAL(rows[i], readRows[i]);
-        }
-    }
-
     Y_UNIT_TEST(BatchBuilder) {
         std::vector<TDataRow> rows = TestRows();
 

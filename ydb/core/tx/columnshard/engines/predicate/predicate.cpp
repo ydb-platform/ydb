@@ -2,7 +2,7 @@
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/switch_type.h>
+#include <ydb/library/formats/arrow/switch_type.h>
 
 #include <ydb/library/actors/core/log.h>
 

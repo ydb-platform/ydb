@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/formats/arrow/simple_arrays_cache.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 #include <ydb/core/tx/columnshard/counters/splitter.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction/common/context.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction/common/result.h>

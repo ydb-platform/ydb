@@ -2,11 +2,12 @@ LIBRARY()
 
 PEERDIR(
     contrib/libs/apache/arrow
-    ydb/core/formats/arrow/common
+    ydb/library/actors/core
 )
 
 SRCS(
-    accessor.cpp
+    switch_type.cpp
+    compare.cpp
 )
 
 END()

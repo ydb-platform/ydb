@@ -6,8 +6,8 @@
 
 #include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
-#include <ydb/core/formats/arrow/simple_builder/array.h>
-#include <ydb/core/formats/arrow/simple_builder/filler.h>
+#include <ydb/library/formats/arrow/simple_builder/array.h>
+#include <ydb/library/formats/arrow/simple_builder/filler.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 
 namespace NKikimr::NOlap::NCompaction {

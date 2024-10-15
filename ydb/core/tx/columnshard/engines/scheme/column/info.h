@@ -1,11 +1,11 @@
 #pragma once
 #include <ydb/core/formats/arrow/accessor/abstract/constructor.h>
-#include <ydb/core/formats/arrow/common/validation.h>
+#include <ydb/library/formats/arrow/common/validation.h>
 #include <ydb/core/formats/arrow/dictionary/object.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/save_load/saver.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
-#include <ydb/core/formats/arrow/transformer/abstract.h>
+#include <ydb/library/formats/arrow/transformer/abstract.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/defaults/common/scalar.h>
 

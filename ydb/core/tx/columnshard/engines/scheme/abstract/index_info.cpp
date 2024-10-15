@@ -1,7 +1,7 @@
 #include "index_info.h"
 #include <ydb/core/sys_view/common/path.h>
 #include <ydb/core/sys_view/common/schema.h>
-#include <ydb/core/formats/arrow/simple_arrays_cache.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>

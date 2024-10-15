@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/formats/arrow/protos/fields.pb.h>
+#include <ydb/library/formats/arrow/protos/fields.pb.h>
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/actors/core/log.h>
 

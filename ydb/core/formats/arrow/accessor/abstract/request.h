@@ -1,8 +1,7 @@
 #pragma once
 #include "constructor.h"
 
-#include <ydb/core/formats/arrow/protos/accessor.pb.h>
-
+#include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
 #include <ydb/services/metadata/abstract/request_features.h>
 

@@ -5,9 +5,9 @@
 
 #include <ydb/core/formats/arrow/accessor/composite_serial/accessor.h>
 #include <ydb/core/formats/arrow/special_keys.h>
-#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/common/container.h>
-#include <ydb/core/formats/arrow/splitter/stats.h>
+#include <ydb/library/formats/arrow/splitter/stats.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>

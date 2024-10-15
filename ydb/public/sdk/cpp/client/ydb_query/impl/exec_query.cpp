@@ -104,6 +104,9 @@ public:
     }
 
     TAsyncExecuteQueryPart ReadNext(std::shared_ptr<TSelf> self) {
+        if (!Session_)
+            return DoReadNext(std::move(self));
+
         return NSessionPool::InjectSessionStatusInterception(
             Session_->SessionImpl_,
             DoReadNext(std::move(self)),

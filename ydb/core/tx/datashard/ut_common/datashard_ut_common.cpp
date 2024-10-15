@@ -2531,7 +2531,7 @@ namespace {
             if (pg.IsNull()) {
                 out << "(pg null)";
             } else {
-                out << pg.Content_.Quote();
+                out << TString{pg.Content_}.Quote();
             }
         }
 

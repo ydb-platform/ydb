@@ -71,7 +71,6 @@ public:
     FEATURE_FLAG_SETTER(EnableSparsedColumns)
     FEATURE_FLAG_SETTER(EnableParameterizedDecimal)
     FEATURE_FLAG_SETTER(EnableTopicAutopartitioningForCDC)
-    FEATURE_FLAG_SETTER(EnableSparsedByDefaultForNonPKColumn)
 
     #undef FEATURE_FLAG_SETTER
 };

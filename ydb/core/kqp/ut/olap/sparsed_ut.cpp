@@ -346,60 +346,81 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         }
     }
 
-    // Only for standalone table
-    void SparsedByDefaultForNonPKColumn(bool enableSparsed, bool enableSparsedByDefaultForNonPKColumn) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.SetEnableSparsedColumns(enableSparsed);
-        settings.SetEnableSparsedByDefaultForNonPKColumn(enableSparsedByDefaultForNonPKColumn);
-        bool isSparsed = enableSparsedByDefaultForNonPKColumn && enableSparsed;
+    void SparsedByDefaultForNonPKColumn(bool isStandalone, bool enableSparsed) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetEnableSparsedColumns(enableSparsed);
         TKikimrRunner kikimr(settings);
-        TLocalHelper helper(kikimr);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        TString tableName = "StandaloneTable";
+        TString tableStoreName = "TableStore";
+        TString tablePath = TStringBuilder() << "/Root/" << (isStandalone ? "" : (tableStoreName + "/")) << tableName;
+
+        if (!isStandalone) {
+            auto createStore = R"(
+            CREATE TABLESTORE `/Root/TableStore` (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                level Int32,
+                message Utf8,
+                PRIMARY KEY (timestamp, uid)
+            )
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+            );)";
+            auto result = session.ExecuteSchemeQuery(createStore).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto createTable = TStringBuilder() << R"(
+            CREATE TABLE `/Root/)" << (isStandalone ? "" : "TableStore/")
+                                            << R"(StandaloneTable` (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                level Int32,
+                message Utf8,
+                PRIMARY KEY (timestamp, uid)
+            )
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+            );)";
+
+        auto result = session.ExecuteSchemeQuery(createTable).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
         auto& server = kikimr.GetTestServer();
         TActorId sender = server.GetRuntime()->AllocateEdgeActor();
-        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
-        helper.CreateTestOlapTableWithoutStore("olapStandaloneTable");
-
-        auto describeResult = DescribeTable(&server, sender, "/Root/olapStandaloneTable");
+        auto describeResult = DescribeTable(&server, sender, tablePath);
         auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
         for (const auto& column : schema.GetColumns()) {
             auto name = column.GetName();
-            // Sparsed in scheme
-            if (name == "resource_id") {
-                UNIT_ASSERT(column.HasDataAccessorConstructor());
-            }
             // PK columns
-            else if (name == "timestamp" || name == "uid") {
+            if (name == "timestamp" || name == "uid") {
                 UNIT_ASSERT(!column.HasDataAccessorConstructor());
             } else {
-                UNIT_ASSERT(column.HasDataAccessorConstructor() == isSparsed);
+                UNIT_ASSERT(column.HasDataAccessorConstructor() == enableSparsed);
                 if (column.HasDataAccessorConstructor()) {
                     UNIT_ASSERT_EQUAL(column.GetDataAccessorConstructor().GetClassName(), "SPARSED");
                 }
             }
         }
 
-        auto result = session.ExecuteSchemeQuery("ALTER TABLE `/Root/olapStandaloneTable` ADD COLUMN newColumn Uint64;").GetValueSync();
-        if (!enableSparsed) {
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-            auto describeResult = DescribeTable(&server, sender, "/Root/olapStandaloneTable");
-            auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
-            for (const auto& column : schema.GetColumns()) {
-                auto name = column.GetName();
-                // Sparsed in scheme
-                if (name == "resource_id") {
-                    UNIT_ASSERT(column.HasDataAccessorConstructor());
-                }
-                // PK columns
-                else if (name == "timestamp" || name == "uid") {
-                    UNIT_ASSERT(!column.HasDataAccessorConstructor());
-                } else {
-                    UNIT_ASSERT(column.HasDataAccessorConstructor() == isSparsed);
-                    if (column.HasDataAccessorConstructor()) {
-                        UNIT_ASSERT_EQUAL(column.GetDataAccessorConstructor().GetClassName(), "SPARSED");
-                    }
+        auto addNewColumnQuery = TStringBuilder() << "ALTER " << (isStandalone ? "TABLE" : "TABLESTORE") << "`/Root/"
+                                                  << (isStandalone ? tableName : tableStoreName) << "` ADD COLUMN newColumn Uint64;";
+        result = session.ExecuteSchemeQuery(addNewColumnQuery).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        describeResult = DescribeTable(&server, sender, tablePath);
+        schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+        for (const auto& column : schema.GetColumns()) {
+            if (column.GetName() == "newColumn") {
+                UNIT_ASSERT(column.HasDataAccessorConstructor() == enableSparsed);
+                if (column.HasDataAccessorConstructor()) {
+                    UNIT_ASSERT_EQUAL(column.GetDataAccessorConstructor().GetClassName(), "SPARSED");
                 }
             }
         }
@@ -408,10 +429,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
     Y_UNIT_TEST(DisabledDefaultSparsedForNotPKColumn) {
         SparsedByDefaultForNonPKColumn(false, false);
         SparsedByDefaultForNonPKColumn(true, false);
-        SparsedByDefaultForNonPKColumn(false, true);
     }
 
     Y_UNIT_TEST(EnabledDefaultSparsedForNotPKColumn) {
+        SparsedByDefaultForNonPKColumn(false, true);
         SparsedByDefaultForNonPKColumn(true, true);
     }
 }

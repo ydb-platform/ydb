@@ -166,5 +166,4 @@ message TFeatureFlags {
     optional bool EnableInsertWriteIdSpecialColumnCompatibility = 147 [default = false];
     optional bool EnableTopicAutopartitioningForCDC = 148 [default = false];
     optional bool EnableWritePortionsOnInsert = 149 [default = false];
-    optional bool EnableSparsedByDefaultForNonPKColumn = 150 [default = false]; // Only for standalone tables
 }

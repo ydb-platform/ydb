@@ -20,7 +20,7 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
     }
     auto alterCS = alter.DetachResult();
     if (alterCS.HasAlterSchema()) {
-        if (AppData()->FeatureFlags.GetEnableSparsedByDefaultForNonPKColumn()) {
+        if (AppData()->FeatureFlags.GetEnableSparsedColumns()) {
             SetSparsedByDefaultForNonPKColumn(*alterCS.MutableAlterSchema());
         }
         TSimpleErrorCollector collector;

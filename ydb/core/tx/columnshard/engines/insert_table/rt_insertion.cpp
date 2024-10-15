@@ -139,6 +139,7 @@ const TInsertedData* TInsertionSummary::AddAborted(TInsertedData&& data, const b
     const TInsertWriteId writeId = data.GetInsertWriteId();
     Counters.Aborted.Add(data.BlobSize(), load);
     AFL_VERIFY_DEBUG(!Inserted.contains(writeId));
+    VersionCounters->VersionAddRef(data.GetSchemaVersion(), 1);
     auto insertInfo = Aborted.emplace(writeId, std::move(data));
     AFL_VERIFY(insertInfo.second)("write_id", writeId);
     return &insertInfo.first->second;
@@ -150,7 +151,7 @@ std::optional<TInsertedData> TInsertionSummary::ExtractInserted(const TInsertWri
         auto pathInfo = GetPathInfoOptional(result->GetPathId());
         if (pathInfo) {
             OnEraseInserted(*pathInfo, result->BlobSize());
-            VersionCounters->VersionRemoveRef(result->GetSchemaVersion());
+            VersionCounters->VersionRemoveRef(result->GetSchemaVersion(), 1);
         }
     }
     return result;

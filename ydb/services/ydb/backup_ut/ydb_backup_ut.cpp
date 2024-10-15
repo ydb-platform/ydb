@@ -41,10 +41,10 @@ bool operator==(const TKeyRange& lhs, const TKeyRange& rhs) {
 
 namespace {
 
-#define Y_UNIT_TEST_ALL_SCHEME_OBJECT_TYPES(N)                                                                     \
-    template <NKikimrSchemeOp::EPathType Type>                                                                     \
+#define Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(N, ENUM_TYPE)                                                            \
+    template <ENUM_TYPE Type>                                                                                      \
     struct TTestCase##N : public TCurrentTestCase {                                                                \
-        TString ParametrizedTestName = #N "-" + NKikimrSchemeOp::EPathType_Name(Type);                             \
+        TString ParametrizedTestName = #N "-" + ENUM_TYPE##_Name(Type);                                            \
                                                                                                                    \
         TTestCase##N() : TCurrentTestCase() {                                                                      \
             Name_ = ParametrizedTestName.c_str();                                                                  \
@@ -55,20 +55,26 @@ namespace {
     };                                                                                                             \
     struct TTestRegistration##N {                                                                                  \
         template <int I, int End>                                                                                  \
-        static constexpr void AddTestsForPathTypeEnumRange() {                                                     \
+        static constexpr void AddTestsForEnumRange() {                                                             \
             if constexpr (I < End) {                                                                               \
-                TCurrentTest::AddTest(TTestCase##N<static_cast<NKikimrSchemeOp::EPathType>(I)>::Create);           \
-                AddTestsForPathTypeEnumRange<I + 1, End>();                                                        \
+                TCurrentTest::AddTest(TTestCase##N<static_cast<ENUM_TYPE>(I)>::Create);                            \
+                AddTestsForEnumRange<I + 1, End>();                                                                \
             }                                                                                                      \
         }                                                                                                          \
                                                                                                                    \
         TTestRegistration##N() {                                                                                   \
-            AddTestsForPathTypeEnumRange<1, NKikimrSchemeOp::EPathType_ARRAYSIZE>();                               \
+            AddTestsForEnumRange<1, ENUM_TYPE##_ARRAYSIZE>();                                                      \
         }                                                                                                          \
     };                                                                                                             \
     static TTestRegistration##N testRegistration##N;                                                               \
-    template <NKikimrSchemeOp::EPathType Type>                                                                     \
+    template <ENUM_TYPE Type>                                                                                      \
     void TTestCase##N<Type>::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
+
+#define Y_UNIT_TEST_ALL_SCHEME_OBJECT_TYPES(N) \
+        Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(N, NKikimrSchemeOp::EPathType)
+
+#define Y_UNIT_TEST_ALL_INDEX_TYPES(N) \
+        Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(N, NKikimrSchemeOp::EIndexType)                                                     
 
 #define DEBUG_HINT (TStringBuilder() << "at line " << __LINE__)
 
@@ -130,10 +136,10 @@ auto CreateMinPartitionsChecker(ui32 expectedMinPartitions, const TString& debug
     };
 }
 
-auto CreateHasIndexChecker(const TString& indexName) {
+auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType) {
     return [=](const TTableDescription& tableDescription) {
         for (const auto& indexDesc : tableDescription.GetIndexDescriptions()) {
-            if (indexDesc.GetIndexName() == indexName) {
+            if (indexDesc.GetIndexName() == indexName && indexDesc.GetIndexType() == indexType) {
                 return true;
             }
         }
@@ -411,16 +417,51 @@ void TestRestoreTableWithSerial(
     CompareResults(GetTableContent(session, table), originalContent);
 }
 
-void TestRestoreTableWithIndex(const char* table, const char* index, TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore) {
+const char* ConvertIndexTypeToSQL(NKikimrSchemeOp::EIndexType indexType) {
+    switch (indexType) {
+    case NKikimrSchemeOp::EIndexTypeGlobal:
+        return "GLOBAL";
+    case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+        return "GLOBAL ASYNC";
+    case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+        return "GLOBAL UNIQUE";
+    case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        return "GLOBAL UNIQUE";
+    default:
+        UNIT_FAIL("No conversion to SQL for this index type");
+        return nullptr;
+    }
+}
+
+NYdb::NTable::EIndexType ConvertIndexTypeToAPI(NKikimrSchemeOp::EIndexType indexType) {
+    switch (indexType) {
+    case NKikimrSchemeOp::EIndexTypeGlobal:
+        return NYdb::NTable::EIndexType::GlobalSync;
+    case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+        return NYdb::NTable::EIndexType::GlobalAsync;
+    case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+        return NYdb::NTable::EIndexType::GlobalUnique;
+    case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        return NYdb::NTable::EIndexType::GlobalVectorKMeansTree;
+    default:
+        UNIT_FAIL("No conversion to API for this index type");
+        return NYdb::NTable::EIndexType::Unknown;
+    }
+}
+
+void TestRestoreTableWithIndex(
+    const char* table, const char* index, NKikimrSchemeOp::EIndexType indexType, TSession& session,
+    TBackupFunction&& backup, TRestoreFunction&& restore
+) {
     ExecuteDataDefinitionQuery(session, Sprintf(R"(
             CREATE TABLE `%s` (
                 Key Uint32,
                 Value Uint32,
                 PRIMARY KEY (Key),
-                INDEX %s GLOBAL ON (Value)
+                INDEX %s %s ON (Value)
             );
         )",
-        table, index
+        table, index, ConvertIndexTypeToSQL(indexType)
     ));
 
     backup(table);
@@ -433,19 +474,29 @@ void TestRestoreTableWithIndex(const char* table, const char* index, TSession& s
     
     restore(table);
 
-    CheckTableDescription(session, table, CreateHasIndexChecker(index));
+    CheckTableDescription(session, table, CreateHasIndexChecker(index, ConvertIndexTypeToAPI(indexType)));
 }
 
 void TestRestoreDirectory(const char* directory, TSchemeClient& client, TBackupFunction&& backup, TRestoreFunction&& restore) {
-    UNIT_ASSERT(client.MakeDirectory(directory).GetValueSync().IsSuccess());
+    {
+        const auto result = client.MakeDirectory(directory).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
     backup(directory);
 
-    UNIT_ASSERT(client.RemoveDirectory(directory).GetValueSync().IsSuccess());
+    {
+        const auto result = client.RemoveDirectory(directory).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
     restore(directory);
 
-    auto result = client.DescribePath(directory).GetValueSync();
-    UNIT_ASSERT(result.IsSuccess());
-    UNIT_ASSERT_VALUES_EQUAL(result.GetEntry().Type, ESchemeEntryType::Directory);
+    {
+        const auto result = client.DescribePath(directory).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetEntry().Type, ESchemeEntryType::Directory);
+    }
 }
 
 }
@@ -555,7 +606,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-    void TestTableWithIndexBackupRestore() {
+    void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal) {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
         TTableClient tableClient(driver);
@@ -568,6 +619,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TestRestoreTableWithIndex(
             table,
             index,
+            indexType,
             session,
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup)
@@ -656,6 +708,23 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 break; // other projects
             default:
                 UNIT_FAIL("Client backup/restore were not implemented for this scheme object");
+        }
+    }
+
+    Y_UNIT_TEST_ALL_INDEX_TYPES(TestAllIndexTypes) {
+        using namespace NKikimrSchemeOp;
+    
+        switch (Type) {
+            case EIndexTypeGlobal:
+            case EIndexTypeGlobalAsync:
+                TestTableWithIndexBackupRestore(Type);
+                break;
+            case EIndexTypeGlobalUnique:
+                break; // https://github.com/ydb-platform/ydb/issues/10468
+            case EIndexTypeGlobalVectorKmeansTree:
+                break; // https://github.com/ydb-platform/ydb/issues/10469
+            default:
+                UNIT_FAIL("Client backup/restore were not implemented for this index type");
         }
     }
 }
@@ -864,7 +933,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
-    void TestTableWithIndexBackupRestore() {
+    void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal) {
         TS3TestEnv testEnv;
         constexpr const char* table = "/Root/table";
         constexpr const char* index = "value_idx";
@@ -872,6 +941,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         TestRestoreTableWithIndex(
             table,
             index,
+            indexType,
             testEnv.GetSession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())
@@ -937,6 +1007,23 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                 break; // other projects
             default:
                 UNIT_FAIL("S3 backup/restore were not implemented for this scheme object");
+        }
+    }
+
+    Y_UNIT_TEST_ALL_INDEX_TYPES(TestAllIndexTypes) {
+        using namespace NKikimrSchemeOp;
+    
+        switch (Type) {
+            case EIndexTypeGlobal:
+            case EIndexTypeGlobalAsync:
+                TestTableWithIndexBackupRestore(Type);
+                break;
+             case EIndexTypeGlobalUnique:
+                break; // https://github.com/ydb-platform/ydb/issues/10468
+            case EIndexTypeGlobalVectorKmeansTree:
+                break; // https://github.com/ydb-platform/ydb/issues/10469
+            default:
+                UNIT_FAIL("S3 backup/restore were not implemented for this index type");
         }
     }
 }

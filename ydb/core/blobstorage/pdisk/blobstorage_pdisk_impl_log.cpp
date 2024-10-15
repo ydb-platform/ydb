@@ -707,16 +707,32 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Common log writing
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void TPDisk::ProcessLogWriteQueueAndCommits() {
-    if (JointLogWrites.empty()) {
-        LWTRACK(PDiskProcessLogWriteQueue, UpdateCycleOrbit, PCtx->PDiskId, JointLogWrites.size(), JointCommits.size());
+void TPDisk::ProcessLogWriteQueue() {
+    while (JointLogWrites.size()) {
+        TVector<TLogWrite*> logWrites;
+        TVector<TLogWrite*> commits;
+        size_t batchSizeBytes = 0;
+        while (JointLogWrites.size() && logWrites.size() < 50 && batchSizeBytes < (size_t)ForsetiOpPieceSizeCached) {
+            auto *log = static_cast<TLogWrite*>(JointLogWrites.front());
+            JointLogWrites.pop();
+
+            logWrites.push_back(log);
+            batchSizeBytes += log->Data.Size();
+            if (log->Signature.HasCommitRecord()) {
+                commits.push_back(log);
+            }
+        }
+        LWTRACK(PDiskProcessLogWriteQueue, UpdateCycleOrbit, PCtx->PDiskId, JointLogWrites.size(), logWrites.size(), commits.size());
+        ProcessLogWriteBatch(std::move(logWrites), std::move(commits));
+    }
+}
+
+void TPDisk::ProcessLogWriteBatch(TVector<TLogWrite*> logWrites, TVector<TLogWrite*> commits) {
+    if (logWrites.empty()) {
         return;
     }
 
-    NHPTimer::STime now = HPNow();
-    for (TLogWrite *logCommit : JointCommits) {
-        Mon.LogQueueTime.Increment(logCommit->LifeDurationMs(now));
-
+    for (TLogWrite *logCommit : commits) {
         TStringStream errorReason;
         NKikimrProto::EReplyStatus status = ValidateRequest(logCommit, errorReason);
         if (status == NKikimrProto::OK) {
@@ -726,10 +742,12 @@ void TPDisk::ProcessLogWriteQueueAndCommits() {
             PrepareLogError(logCommit, errorReason, status);
         }
     }
+    NHPTimer::STime now = HPNow();
     NWilson::TTraceId traceId;
     size_t logOperationSizeBytes = 0;
     TVector<ui32> logChunksToCommit;
-    for (TLogWrite *logWrite : JointLogWrites) {
+    for (TLogWrite *logWrite : logWrites) {
+        Mon.LogQueueTime.Increment(logWrite->LifeDurationMs(now));
         Y_DEBUG_ABORT_UNLESS(logWrite);
         logWrite->SpanStack.PopOk();
         logOperationSizeBytes += logWrite->Data.size();
@@ -746,20 +764,17 @@ void TPDisk::ProcessLogWriteQueueAndCommits() {
             PrepareLogError(logWrite, errorReason, status);
         }
     }
-    for (TLogWrite *logWrite : JointLogWrites) {
+    for (TLogWrite *logWrite : logWrites) {
         LWTRACK(PDiskLogWriteFlush, logWrite->Orbit, PCtx->PDiskId, logWrite->ReqId.Id, HPSecondsFloat(logWrite->CreationTime),
                 double(logWrite->Cost) / 1000000.0, HPSecondsFloat(logWrite->Deadline),
                 logWrite->Owner, logWrite->IsFast, logWrite->PriorityClass);
     }
-    LWTRACK(PDiskProcessLogWriteQueue, UpdateCycleOrbit, PCtx->PDiskId, JointLogWrites.size(), JointCommits.size());
-    TReqId reqId = JointLogWrites.back()->ReqId;
+    LWTRACK(PDiskProcessLogWriteBatch, UpdateCycleOrbit, PCtx->PDiskId, logWrites.size(), commits.size());
+    TReqId reqId = logWrites.back()->ReqId;
     auto write = MakeHolder<TCompletionLogWrite>(
-        this, std::move(JointLogWrites), std::move(JointCommits), std::move(logChunksToCommit));
+        this, std::move(logWrites), std::move(commits), std::move(logChunksToCommit));
     LogFlush(write.Get(), write->GetCommitedLogChunksPtr(), reqId, &traceId);
     Y_UNUSED(write.Release());
-
-    JointCommits.clear();
-    JointLogWrites.clear();
 
     // Check if we can TRIM some chunks that were deleted
     TryTrimChunk(false, 0, NWilson::TSpan{});

@@ -364,6 +364,46 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         ldapServer.Stop();
     }
 
+    Y_UNIT_TEST(LdapAuthWithEmptyPassword) {
+        TString login = "ldapUser";
+        TString password = "";
+
+        LdapMock::TLdapMockResponses responses;
+        responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}}, {.Status = LdapMock::EStatus::SUCCESS}});
+
+        LdapMock::TSearchRequestInfo fetchUserSearchRequestInfo {
+            {
+                .BaseDn = "dc=search,dc=yandex,dc=net",
+                .Scope = 2,
+                .DerefAliases = 0,
+                .Filter = {.Type = LdapMock::EFilterType::LDAP_FILTER_EQUALITY, .Attribute = "uid", .Value = login},
+                .Attributes = {"1.1"}
+            }
+        };
+
+        std::vector<LdapMock::TSearchEntry> fetchUserSearchResponseEntries {
+            {
+                .Dn = "uid=" + login + ",dc=search,dc=yandex,dc=net"
+            }
+        };
+
+        LdapMock::TSearchResponseInfo fetchUserSearchResponseInfo {
+            .ResponseEntries = fetchUserSearchResponseEntries,
+            .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
+        };
+        responses.SearchResponses.push_back({fetchUserSearchRequestInfo, fetchUserSearchResponseInfo});
+
+        TLoginClientConnection loginConnection(InitLdapSettings);
+        LdapMock::TLdapSimpleServer ldapServer(loginConnection.GetLdapPort(), responses);
+
+        auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
+        auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
+        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "User is unauthorized in LDAP server. Empty password");
+
+        loginConnection.Stop();
+        ldapServer.Stop();
+    }
+
     Y_UNIT_TEST(LdapAuthSetIncorrectDomain) {
         TString login = "ldapuser";
         TString password = "ldapUserPassword";

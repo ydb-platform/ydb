@@ -45,6 +45,7 @@ protected:
 
 public:
     virtual TPathElement::EPathType GetObjectPathType() const = 0;
+    virtual TString GetStorageDirectory() const = 0;
     virtual std::shared_ptr<TMetadataEntity> MakeEntity(const TPathId& pathId) const = 0;
 };
 

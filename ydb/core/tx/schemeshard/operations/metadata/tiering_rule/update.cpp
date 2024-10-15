@@ -44,12 +44,6 @@ void TTieringRuleUpdateBase::PersistTieringRule(
 }
 
 TConclusionStatus TCreateTieringRule::DoInitialize(const TUpdateInitializationContext& context) {
-    const TString& parentPathStr = context.GetModification()->GetWorkingDir();
-    const TString& tieringRulesDir = DoGetStorageDirectory();
-    if (!IsEqualPaths(parentPathStr, tieringRulesDir)) {
-        return TConclusionStatus::Fail("Tiering rules must be placed in " + tieringRulesDir + ", got :" + parentPathStr);
-    }
-
     Exists = context.GetOriginalEntity().IsInitialized();
     TPath dstPath = TPath::Init(context.GetOriginalEntity().GetPathId(), context.GetSSOperationContext()->SS);
 

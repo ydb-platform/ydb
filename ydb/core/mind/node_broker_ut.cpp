@@ -369,6 +369,32 @@ void CheckRegistration(TTestActorRuntime &runtime,
                       false, path, Nothing(), name);
 }
 
+TAutoPtr<TEvNodeBroker::TEvGracefulShutdownRequest>
+MakeEventGracefulShutdown (const TString& host,
+                           ui16 port,
+                           const TString& address) 
+{
+    TAutoPtr<TEvNodeBroker::TEvGracefulShutdownRequest> eventGracefulShutdown = new TEvNodeBroker::TEvGracefulShutdownRequest;
+    eventGracefulShutdown->Record.SetHost(host);
+    eventGracefulShutdown->Record.SetPort(port);
+    eventGracefulShutdown->Record.SetAddress(address);
+    return eventGracefulShutdown;
+}
+
+void CheckGracefulShutdown(TTestActorRuntime &runtime,
+                           TActorId sender,
+                           const TString &host,
+                           ui16 port,
+                           const TString &address)
+{   
+    auto eventGracefulShutdown = MakeEventGracefulShutdown(host, port, address);
+    TAutoPtr<IEventHandle> handle;
+    runtime.SendToPipe(MakeNodeBrokerID(), sender, eventGracefulShutdown.Release(), 0, GetPipeConfigWithRetries());
+    auto replyGracefulShutdown = runtime.GrabEdgeEventRethrow<TEvNodeBroker::TEvGracefulShutdownResponse>(handle);
+
+    UNIT_ASSERT_VALUES_EQUAL(replyGracefulShutdown->Record.GetStatus().GetCode(), TStatus::OK);
+}
+
 NKikimrNodeBroker::TEpoch GetEpoch(TTestActorRuntime &runtime,
                                    TActorId sender)
 {
@@ -1796,32 +1822,6 @@ Y_UNIT_TEST_SUITE(TSlotIndexesPoolTest) {
         UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(pool.Capacity(), 128);
     }
-}
-
-TAutoPtr<TEvNodeBroker::TEvGracefulShutdownRequest>
-MakeEventGracefulShutdown (const TString& host,
-                           ui16 port,
-                           const TString& address) 
-{
-    TAutoPtr<TEvNodeBroker::TEvGracefulShutdownRequest> eventGracefulShutdown = new TEvNodeBroker::TEvGracefulShutdownRequest;
-    eventGracefulShutdown->Record.SetHost(host);
-    eventGracefulShutdown->Record.SetPort(port);
-    eventGracefulShutdown->Record.SetAddress(address);
-    return eventGracefulShutdown;
-}
-
-void CheckGracefulShutdown(TTestActorRuntime &runtime,
-                           TActorId sender,
-                           const TString &host,
-                           ui16 port,
-                           const TString &address)
-{   
-    auto eventGracefulShutdown = MakeEventGracefulShutdown(host, port, address);
-    TAutoPtr<IEventHandle> handle;
-    runtime.SendToPipe(MakeNodeBrokerID(), sender, eventGracefulShutdown.Release(), 0, GetPipeConfigWithRetries());
-    auto replyGracefulShutdown = runtime.GrabEdgeEventRethrow<TEvNodeBroker::TEvGracefulShutdownResponse>(handle);
-
-    UNIT_ASSERT_VALUES_EQUAL(replyGracefulShutdown->Record.GetStatus().GetCode(), TStatus::OK);
 }
 
 Y_UNIT_TEST_SUITE(GracefulShutdown) {

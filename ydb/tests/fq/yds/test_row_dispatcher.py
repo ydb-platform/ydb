@@ -496,7 +496,7 @@ class TestPqRowDispatcher(TestYdsBase):
         assert self.read_stream(len(expected), topic_path=output_topic) == expected
 
         kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
         )
         stop_yds_query(client, query_id)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
@@ -544,7 +544,7 @@ class TestPqRowDispatcher(TestYdsBase):
         self.write_stream(data)
 
         kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 10
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
         )
         stop_yds_query(client, query_id)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
@@ -594,7 +594,7 @@ class TestPqRowDispatcher(TestYdsBase):
         assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
 
         kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
         )
 
         wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
@@ -611,7 +611,7 @@ class TestPqRowDispatcher(TestYdsBase):
         expected = ['103', '104']
         assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
         kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
         )
 
         node_index = 1
@@ -674,7 +674,7 @@ class TestPqRowDispatcher(TestYdsBase):
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
 
         kikimr.compute_plane.wait_completed_checkpoints(
-            query_id1, kikimr.compute_plane.get_completed_checkpoints(query_id1) + 1
+            query_id1, kikimr.compute_plane.get_completed_checkpoints(query_id1) + 2
         )
         stop_yds_query(client, query_id1)
 

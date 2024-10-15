@@ -25,8 +25,8 @@ protected:
     virtual ui64 DoCalcMemoryForUsage() const override {
         return 0;
     }
-    virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const override {
-        return std::make_shared<NDataLocks::TListTablesLock>(TypeString() + "::" + GetTaskIdentifier(), TablesToDrop);
+    virtual std::unique_ptr<NDataLocks::ILock> DoBuildDataLock() const override {
+        return std::make_unique<NDataLocks::TListTablesLock>(TypeString() + "::" + GetTaskIdentifier(), TablesToDrop);
     }
 
 public:

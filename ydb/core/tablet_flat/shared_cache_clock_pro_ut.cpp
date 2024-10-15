@@ -7,6 +7,8 @@ namespace NKikimr::NCache {
 
 namespace {
 
+    using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
+
     struct TPage : public TIntrusiveListItem<TPage> {
         ui32 Id;
         size_t Size;
@@ -98,7 +100,8 @@ Y_UNIT_TEST_SUITE(TClockProCache) {
     }
 
     Y_UNIT_TEST(Touch) {
-        TClockProCache<TPage, TPageTraits> cache(10);
+        TCounterPtr coldTargetCounter = new NMonitoring::TCounterForPtr;
+        TClockProCache<TPage, TPageTraits> cache(10, coldTargetCounter);
 
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "ColdTarget: 10");
 
@@ -128,7 +131,8 @@ Y_UNIT_TEST_SUITE(TClockProCache) {
     }
 
     Y_UNIT_TEST(Lifecycle) {
-        TClockProCache<TPage, TPageTraits> cache(10);
+        TCounterPtr coldTargetCounter = new NMonitoring::TCounterForPtr;
+        TClockProCache<TPage, TPageTraits> cache(10, coldTargetCounter);
 
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "ColdTarget: 10");
 
@@ -160,7 +164,8 @@ Y_UNIT_TEST_SUITE(TClockProCache) {
     }
 
     Y_UNIT_TEST(EvictNext) {
-        TClockProCache<TPage, TPageTraits> cache(10);
+        TCounterPtr coldTargetCounter = new NMonitoring::TCounterForPtr;
+        TClockProCache<TPage, TPageTraits> cache(10, coldTargetCounter);
 
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "ColdTarget: 10");
 
@@ -197,7 +202,8 @@ Y_UNIT_TEST_SUITE(TClockProCache) {
     }
 
     Y_UNIT_TEST(UpdateLimit) {
-        TClockProCache<TPage, TPageTraits> cache(10);
+        TCounterPtr coldTargetCounter = new NMonitoring::TCounterForPtr;
+        TClockProCache<TPage, TPageTraits> cache(10, coldTargetCounter);
         
         TPage page1{1, 1};
         TPage page2{2, 2};
@@ -220,7 +226,8 @@ Y_UNIT_TEST_SUITE(TClockProCache) {
     }
 
     Y_UNIT_TEST(Erase) {
-        TClockProCache<TPage, TPageTraits> cache(10);
+        TCounterPtr coldTargetCounter = new NMonitoring::TCounterForPtr;
+        TClockProCache<TPage, TPageTraits> cache(10, coldTargetCounter);
 
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "ColdTarget: 10");
 
@@ -251,7 +258,8 @@ Y_UNIT_TEST_SUITE(TClockProCache) {
     }
 
     Y_UNIT_TEST(Random) {
-        TClockProCache<TPage, TPageTraits> cache(100);
+        TCounterPtr coldTargetCounter = new NMonitoring::TCounterForPtr;
+        TClockProCache<TPage, TPageTraits> cache(100, coldTargetCounter);
 
         TVector<THolder<TPage>> pages;
         for (ui32 pageId : xrange(500)) {

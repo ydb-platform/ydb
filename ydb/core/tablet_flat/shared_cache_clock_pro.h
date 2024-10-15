@@ -20,6 +20,7 @@ enum class EClockProPageLocation {
 template <typename TPage, typename TPageTraits>
 class TClockProCache : public ICacheCache<TPage> {
     using TPageKey = typename TPageTraits::TPageKey;
+    using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
 
     struct TPageEntry : public TIntrusiveListItem<TPageEntry> {
         TPageKey Key;
@@ -58,9 +59,10 @@ class TClockProCache : public ICacheCache<TPage> {
     };
 
 public:
-    TClockProCache(ui64 limit)
+    TClockProCache(ui64 limit, const TCounterPtr &coldTargetCounter)
         : Limit(limit)
         , ColdTarget(limit)
+        , ColdTargetCounter(coldTargetCounter)
     {}
 
     TIntrusiveList<TPage> EvictNext() override {
@@ -409,6 +411,7 @@ private:
 private:
     ui64 Limit;
     ui64 ColdTarget;
+    TCounterPtr ColdTargetCounter;
 
     // TODO: unify this with TPageMap
     THashSet<TPageEntry, TPageKeyHash, TPageKeyEqual> Entries;

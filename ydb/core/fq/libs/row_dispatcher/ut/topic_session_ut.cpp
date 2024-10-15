@@ -1,3 +1,5 @@
+#include <ydb/core/base/backtrace.h>
+
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/events/events.h>
 
@@ -32,6 +34,8 @@ public:
         Runtime.Initialize(app->Unwrap());
         Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_TRACE);
         Runtime.SetDispatchTimeout(TDuration::Seconds(5));
+
+        NKikimr::EnableYDBBacktraceFormat();
 
         ReadActorId1 = Runtime.AllocateEdgeActor();
         ReadActorId2 = Runtime.AllocateEdgeActor();
@@ -386,7 +390,8 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
         TString json1 = "{\"dt\":101,\"value\":\"value1\", \"field1\":\"field1\"}";
         TString json2 = "{\"dt\":102,\"value\":\"value2\", \"field1\":\"field2\"}";
-    
+
+        Sleep(TDuration::Seconds(3));
         PQWrite({ json1, json2 }, topicName);
         ExpectNewDataArrived({ReadActorId1, ReadActorId2});
         ExpectMessageBatch(ReadActorId1, { "{\"dt\":101,\"value\":\"value1\"}", "{\"dt\":102,\"value\":\"value2\"}" });

@@ -9,6 +9,7 @@ YQL_ABI_VERSION(
 PEERDIR(
     library/cpp/json
     ydb/library/yql/minikql/dom
+    contrib/libs/simdjson
 )
 
 SRCS(

@@ -1,5 +1,9 @@
 #include "write.h"
 
+#include <contrib/libs/simdjson/include/simdjson/dom/element-inl.h>
+#include <contrib/libs/simdjson/include/simdjson/dom/object-inl.h>
+#include <contrib/libs/simdjson/include/simdjson/dom/array-inl.h>
+#include <contrib/libs/simdjson/include/simdjson/dom/parser-inl.h>
 #include <library/cpp/json/json_reader.h>
 
 #include <util/generic/vector.h>
@@ -551,17 +555,81 @@ void DomToJsonIndex(const NUdf::TUnboxedValue& value, TBinaryJsonCallbacks& call
     }
 }
 
+void SimdJsonToJsonIndex(const simdjson::dom::element& value, TBinaryJsonCallbacks& callbacks) {
+    switch (value.type()) {
+        case simdjson::dom::element_type::STRING: {
+            std::string_view v;
+            Y_ABORT_UNLESS(value.get(v));
+            callbacks.OnString(v);
+            break;
+        }
+        case simdjson::dom::element_type::BOOL: {
+            bool v;
+            Y_ABORT_UNLESS(value.get(v));
+            callbacks.OnBoolean(v);
+            break;
+        }
+        case simdjson::dom::element_type::INT64: {
+            i64 v;
+            Y_ABORT_UNLESS(value.get(v));
+            callbacks.OnInteger(v);
+            break;
+        }
+        case simdjson::dom::element_type::UINT64: {
+            ui64 v;
+            Y_ABORT_UNLESS(value.get(v));
+            callbacks.OnUInteger(v);
+            break;
+        }
+        case simdjson::dom::element_type::DOUBLE: {
+            double v;
+            Y_ABORT_UNLESS(value.get(v));
+            callbacks.OnUInteger(v);
+            break;
+        }
+        case simdjson::dom::element_type::NULL_VALUE:
+            callbacks.OnNull();
+            break;
+        case simdjson::dom::element_type::ARRAY: {
+            callbacks.OnOpenArray();
+
+            simdjson::dom::array v;
+            Y_ABORT_UNLESS(value.get(v));
+            for (const auto& item : v) {
+                SimdJsonToJsonIndex(item, callbacks);
+            }
+
+            callbacks.OnCloseArray();
+            break;
+        }
+        case simdjson::dom::element_type::OBJECT: {
+            callbacks.OnOpenMap();
+
+            simdjson::dom::object v;
+            Y_ABORT_UNLESS(value.get(v));
+            for (const auto& item : v) {
+                callbacks.OnMapKey(item.key);
+                SimdJsonToJsonIndex(item.value, callbacks);
+            }
+
+            callbacks.OnCloseMap();
+            break;
+        }
+    }
+}
+
 }
 
 TMaybe<TBinaryJson> SerializeToBinaryJsonImpl(const TStringBuf json) {
-    TMemoryInput input(json.data(), json.size());
-    TBinaryJsonCallbacks callbacks(/* throwException */ false);
-    if (!ReadJson(&input, &callbacks)) {
+    simdjson::dom::parser parser;
+    auto doc = parser.parse(json);
+    if (doc.error() != simdjson::SUCCESS) {
         return Nothing();
     }
+    TBinaryJsonCallbacks callbacks(/* throwException */ false);
+    SimdJsonToJsonIndex(doc.value(), callbacks);
     TBinaryJsonSerializer serializer(std::move(callbacks).GetResult());
     return std::move(serializer).Serialize();
-
 }
 
 TMaybe<TBinaryJson> SerializeToBinaryJson(const TStringBuf json) {

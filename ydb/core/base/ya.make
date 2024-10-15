@@ -87,7 +87,6 @@ PEERDIR(
     library/cpp/lwtrace/mon
     library/cpp/random_provider
     library/cpp/time_provider
-    ydb/core/base/generated
     ydb/core/base/services
     ydb/core/debug
     ydb/core/erasure
@@ -114,9 +113,14 @@ GENERATE_ENUM_SERIALIZATION(memory_controller_iface.h)
 
 END()
 
-RECURSE(
-    generated
-)
+IF(NOT EXPORT_CMAKE)
+    PEERDIR(
+        ydb/core/base/generated
+    )
+    RECURSE(
+        generated
+    )
+ENDIF()
 
 RECURSE_FOR_TESTS(
     ut

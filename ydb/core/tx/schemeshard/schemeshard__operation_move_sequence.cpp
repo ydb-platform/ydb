@@ -148,6 +148,7 @@ public:
 class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
+    TTxState::ETxState& NextState;
 
     TString DebugHint() const override {
         return TStringBuilder()
@@ -156,8 +157,9 @@ private:
     }
 
 public:
-    TPropose(TOperationId id)
+    TPropose(TOperationId id, TTxState::ETxState& nextState)
         : OperationId(id)
+        , NextState(nextState)
     {
         IgnoreMessages(DebugHint(), {
             TEvHive::TEvCreateTabletReply::EventType, NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::EventType
@@ -178,8 +180,10 @@ public:
         }
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxMoveSequence);
 
+        auto srcPath = TPath::Init(txState->SourcePathId, context.SS);
+        auto dstPath = TPath::Init(txState->TargetPathId, context.SS);
+
         TPathId pathId = txState->TargetPathId;
-        TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
         Y_VERIFY_S(context.SS->Sequences.contains(pathId), "Sequence not found. PathId: " << pathId);
         TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
@@ -196,20 +200,15 @@ public:
         context.SS->PersistSequenceAlterRemove(db, pathId);
         context.SS->PersistSequence(db, pathId, *alterData);
 
-        auto parentDir = context.SS->PathsById.at(path->ParentPathId);
-        if (parentDir->IsLikeDirectory()) {
-            ++parentDir->DirAlterVersion;
-            context.SS->PersistPathDirAlterVersion(db, parentDir);
-        }
-        context.SS->ClearDescribePathCaches(parentDir);
-        context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
+        dstPath->StepCreated = step;
+        context.SS->PersistCreateStep(db, pathId, step);
 
-        context.SS->ClearDescribePathCaches(path);
-        context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
+        dstPath.DomainInfo()->IncPathsInside();
 
-        path->StepCreated = step;
-        context.SS->PersistCreateStep(db, path->PathId, step);
+        dstPath.Activate();
+        IncParentDirAlterVersionWithRepublish(OperationId, dstPath, context);
 
+        NextState = TTxState::WaitShadowPathPublication;
         context.SS->ChangeTxState(db, OperationId, TTxState::WaitShadowPathPublication);
         return true;
     }
@@ -238,7 +237,7 @@ private:
 
     TString DebugHint() const override {
         return TStringBuilder()
-                << "TMoveTableIndex TWaitRenamedPathPublication"
+                << "TMoveSequence TWaitRenamedPathPublication"
                 << " operationId: " << OperationId;
     }
 
@@ -307,7 +306,7 @@ private:
 
     TString DebugHint() const override {
         return TStringBuilder()
-                << "TMoveTableIndex TDeleteTableBarrier"
+                << "TMoveSequence TDeleteTableBarrier"
                 << " operationId: " << OperationId;
     }
 
@@ -706,6 +705,7 @@ public:
 };
 
 class TMoveSequence: public TSubOperation {
+    TTxState::ETxState AfterPropose = TTxState::Invalid;
 
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
@@ -719,7 +719,7 @@ class TMoveSequence: public TSubOperation {
         case TTxState::ConfigureParts:
             return TTxState::Propose;
         case TTxState::Propose:
-            return TTxState::WaitShadowPathPublication;
+            return AfterPropose;
         case TTxState::WaitShadowPathPublication:
             return TTxState::DeletePathBarrier;
         case TTxState::DeletePathBarrier:
@@ -743,7 +743,7 @@ class TMoveSequence: public TSubOperation {
         case TTxState::ConfigureParts:
             return TPtr(new TConfigureParts(OperationId));
         case TTxState::Propose:
-            return TPtr(new TPropose(OperationId));
+            return TPtr(new TPropose(OperationId, AfterPropose));
         case TTxState::WaitShadowPathPublication:
             return MakeHolder<TWaitRenamedPathPublication>(OperationId);
         case TTxState::DeletePathBarrier:
@@ -772,7 +772,7 @@ public:
         const TString& dstPathStr = moveSequence.GetDstPath();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TMoveTableIndex Propose"
+                     "TMoveSequence Propose"
                          << ", from: "<< srcPathStr
                          << ", to: " << dstPathStr
                          << ", opId: " << OperationId
@@ -952,7 +952,7 @@ public:
 
         TTxState& txState =
             context.SS->CreateTx(OperationId, TTxState::TxMoveSequence, dstPath.Base()->PathId, srcPath.Base()->PathId);
-        txState.State = TTxState::Propose;
+        txState.State = TTxState::CreateParts;
 
         Y_ABORT_UNLESS(context.SS->Sequences.contains(srcPath.Base()->PathId));
         TSequenceInfo::TPtr srcSequence = context.SS->Sequences.at(srcPath.Base()->PathId);

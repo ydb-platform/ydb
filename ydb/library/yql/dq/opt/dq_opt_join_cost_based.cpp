@@ -270,7 +270,7 @@ private:
         const TOptimizerHints& hints = {}
     ) {
         TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree, hints);
-        TDPHypSolver<TNodeSet, false> solver(hypergraph, this->Pctx);
+        TDPHypSolver<TNodeSet> solver(hypergraph, this->Pctx);
 
         if (solver.CountCC(MaxDPhypTableSize_) >= MaxDPhypTableSize_) {
             YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded";

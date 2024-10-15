@@ -79,6 +79,8 @@ Y_UNIT_TEST_SUITE(TJsonFilterTests) {
         Filter->Push({6}, {{"101"}, {"hello2"}});
         UNIT_ASSERT_VALUES_EQUAL(1, result.size());
         UNIT_ASSERT_VALUES_EQUAL(R"({"a1":"hello2","a2":101})", result[6]);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(Filter->Push({7}, {{"102"}, {std::string_view()}}), yexception, "Failed to unwrap empty optional");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(Filter->Push({8}, {{"str"}, {"hello3"}}), yexception, "Failed to unwrap empty optional");
     }
 
     Y_UNIT_TEST_F(ManyValues, TFixture) {
@@ -98,18 +100,19 @@ Y_UNIT_TEST_SUITE(TJsonFilterTests) {
     Y_UNIT_TEST_F(NullValues, TFixture) {
         TMap<ui64, TString> result;
         MakeFilter(
-            {"a1"},
-            {"Optional<String>"},
+            {"a1", "a2"},
+            {"Optional<UInt64>", "String"},
             "where a1 is null",
             [&](ui64 offset, const TString& json) {
                 result[offset] = json;
             });
-        Filter->Push({5}, {{std::string_view()}});
+        Filter->Push({5}, {{std::string_view()}, {"str"}});
         UNIT_ASSERT_VALUES_EQUAL(1, result.size());
-        UNIT_ASSERT_VALUES_EQUAL(R"({"a1":null})", result[5]);
+        UNIT_ASSERT_VALUES_EQUAL(R"({"a1":null,"a2":"str"})", result[5]);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(Filter->Push({5}, {{"hello1"}, {"str"}}), yexception, "Failed to unwrap empty optional");
     }
 
-    Y_UNIT_TEST_F(ThrowExceptionByError, TFixture) { 
+    Y_UNIT_TEST_F(ThrowExceptionByError, TFixture) {
         MakeFilter(
             {"a1", "a2"},
             {"String", "UInt64"},
@@ -120,4 +123,3 @@ Y_UNIT_TEST_SUITE(TJsonFilterTests) {
 }
 
 }
-

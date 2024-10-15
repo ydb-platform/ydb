@@ -267,6 +267,11 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
         return Join(lhsArg, rhsArg, on, EJoinKind::LeftJoin);
     }
 
+    template<typename TLhsArg, typename TRhsArg>
+    std::shared_ptr<IBaseOptimizerNode> CrossJoin(const TLhsArg& lhsArg, const TRhsArg& rhsArg, TString on="") {
+        return Join(lhsArg, rhsArg, on, EJoinKind::Cross);
+    }
+
     Y_UNIT_TEST(AnyJoinWithTransitiveClosure) {
         auto root = Join("A", Join("B", Join("C", "D", "C.id=D.id"), "B.id=C.id"), "A.id=B.id");
         std::static_pointer_cast<TJoinOptimizerNode>(root)->LeftAny = true;

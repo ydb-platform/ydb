@@ -4203,6 +4203,17 @@ select FormatType($f());
                                           "<main>:6:39: Error: Unknown correlation name: t\n");
     }
 
+    Y_UNIT_TEST(ErrOrderByIgnoredButCheckedForMissingColumns) {
+        auto req = "$src = SELECT key FROM (SELECT 1 as key, 2 as subkey) ORDER BY x; SELECT * FROM $src;";
+        ExpectFailWithError(req, "<main>:1:8: Warning: ORDER BY without LIMIT in subquery will be ignored, code: 4504\n"
+                                 "<main>:1:64: Error: Column x is not in source column set\n");
+
+        req = "$src = SELECT key FROM plato.Input ORDER BY x; SELECT * FROM $src;";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Warning: ORDER BY without LIMIT in subquery will be ignored, code: 4504\n");
+    }
+
     Y_UNIT_TEST(InvalidTtlInterval) {
         auto req = R"(
             USE plato;

@@ -182,6 +182,7 @@ namespace NSQLTranslationV1 {
         virtual bool SetViewName(TContext& ctx, TPosition pos, const TString& view);
         virtual bool SetPrimaryView(TContext& ctx, TPosition pos);
         void UseAsInner();
+        void DisableSort();
         virtual bool UsedSubquery() const;
         virtual bool IsSelect() const;
         virtual bool HasSelectResult() const;
@@ -273,6 +274,7 @@ namespace NSQLTranslationV1 {
         bool ImplicitLabel = false;
         mutable TNodeState State;
         bool AsInner = false;
+        bool DisableSort_ = false;
     };
     typedef INode::TPtr TNodePtr;
 

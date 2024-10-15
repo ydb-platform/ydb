@@ -89,9 +89,9 @@ class TestPqRowDispatcher(TestYdsBase):
         )
         connections = client.list_connections(fq.Acl.Visibility.PRIVATE).result.connection
         assert len(connections) == 1
-        assert connections[0].content.setting.data_streams.shared_reading == True
+        assert connections[0].content.setting.data_streams.shared_reading
 
-        self.init_topics("test_read_raw_format_without_row_dispatcher", create_output=False)
+        self.init_topics("test_read_raw_format_with_row_dispatcher", create_output=False)
         output_topic = "pq_test_pq_read_write_output"
         create_stream(output_topic, partitions_count=1)
         create_read_rule(output_topic, self.consumer_name)
@@ -106,7 +106,7 @@ class TestPqRowDispatcher(TestYdsBase):
         assert self.read_stream(len(data), topic_path=output_topic) == data
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
         stop_yds_query(client, query_id)
-        
+
         sql2 = Rf'''INSERT INTO {YDS_CONNECTION}.`{output_topic}`
                     SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}` WITH (format=raw, SCHEMA (data String NOT NULL))
                     WHERE data != "romashka";'''
@@ -290,7 +290,7 @@ class TestPqRowDispatcher(TestYdsBase):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
-        self.init_topics("test_filter")
+        self.init_topics("test_filter_missing_fields")
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -525,9 +525,9 @@ class TestPqRowDispatcher(TestYdsBase):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
-        self.init_topics("test_stop_start", create_output=False)
+        self.init_topics("test_stop_start_with_filter", create_output=False)
 
-        output_topic = "test_stop_start"
+        output_topic = "test_stop_start_with_filter"
         create_stream(output_topic, partitions_count=1)
         create_read_rule(output_topic, self.consumer_name)
 
@@ -717,7 +717,7 @@ class TestPqRowDispatcher(TestYdsBase):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
-        self.init_topics("test_simple_not_null", partitions_count=4)
+        self.init_topics("test_many_partitions", partitions_count=4)
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`

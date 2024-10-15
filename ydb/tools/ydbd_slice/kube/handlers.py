@@ -1,4 +1,4 @@
-xfimport re
+import re
 import os
 import sys
 import logging

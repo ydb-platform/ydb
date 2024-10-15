@@ -13,13 +13,15 @@ TTpcDSGeneratorCallCenter::TTpcDSGeneratorCallCenter(const TTpcdsWorkloadDataIni
     : TBulkDataGenerator(owner, CALL_CENTER)
 {}
 
-void TTpcDSGeneratorCallCenter::GenerateRows(TContexts& ctxs) {
+void TTpcDSGeneratorCallCenter::GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) {
     TVector<CALL_CENTER_TBL> callCenterList(ctxs.front().GetCount());
     for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
         mk_w_call_center(NULL, ctxs.front().GetStart() + i);
         callCenterList[i] = g_w_call_center;
         tpcds_row_stop(TableNum);
     }
+    g.Release();
+
     TCsvItemWriter<CALL_CENTER_TBL> writer(ctxs.front().GetCsv().Out);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writer, cc_call_center_sk);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, cc_call_center_id);

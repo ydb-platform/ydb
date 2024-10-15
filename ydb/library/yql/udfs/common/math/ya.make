@@ -82,10 +82,6 @@ ELSE ()
     END()
 ENDIF ()
 
-RECURSE(
-   math
-)
-
 RECURSE_FOR_TESTS(
    test
 )

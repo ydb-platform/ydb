@@ -327,7 +327,7 @@ void TPDisk::Stop() {
         auto& req = JointChunkReads.front();
         Y_VERIFY_DEBUG_S(req->GetType() == ERequestType::RequestChunkReadPiece,
                 "Unexpected request type# " << TypeName(*req));
-        TRequestBase::AbortDelete(req.Release(), PCtx->ActorSystem);
+        TRequestBase::AbortDelete(req.Get(), PCtx->ActorSystem);
         JointChunkReads.pop();
     }
 

@@ -8,6 +8,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/cms/console/config_helpers.h>
 #include <ydb/core/protos/counters_node_broker.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -59,8 +60,6 @@ void TNodeBroker::OnActivateExecutor(const TActorContext &ctx)
     }
 
     const auto *appData = AppData(ctx);
-
-    Y_ABORT_UNLESS(appData->FeatureFlags.GetEnableNodeBrokerSingleDomainMode());
 
     MaxStaticId = Min(appData->DynamicNameserviceConfig->MaxStaticNodeId, TActorId::MaxNodeId);
     MinDynamicId = Max(MaxStaticId + 1, (ui64)Min(appData->DynamicNameserviceConfig->MinDynamicNodeId, TActorId::MaxNodeId));

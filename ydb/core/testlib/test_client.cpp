@@ -4,6 +4,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
+#include <ydb/core/base/feature_flags_service.h>
 #include <ydb/core/driver_lib/run/auto_config_initializer.h>
 #include <ydb/core/driver_lib/run/config_helpers.h>
 #include <ydb/core/viewer/viewer.h>
@@ -50,6 +51,7 @@
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/feature_flags_configurator.h>
 #include <ydb/core/cms/console/immediate_controls_configurator.h>
 #include <ydb/core/cms/console/jaeger_tracing_configurator.h>
 #include <ydb/core/formats/clickhouse_block.h>
@@ -521,7 +523,7 @@ namespace Tests {
         app.AddDomain(domain.Release());
     }
 
-    TVector<ui64> TServer::StartPQTablets(ui32 pqTabletsN) {
+    TVector<ui64> TServer::StartPQTablets(ui32 pqTabletsN, bool wait) {
         auto getChannelBind = [](const TString& storagePool) {
             TChannelBind bind;
             bind.SetStoragePoolName(storagePool);
@@ -556,7 +558,7 @@ namespace Tests {
             UNIT_ASSERT_EQUAL_C(createTabletReply->Record.GetOwner(), tabletId,
                                 createTabletReply->Record.GetOwner() << " != " << tabletId);
             ui64 id = createTabletReply->Record.GetTabletID();
-            while (true) {
+            while (wait) {
                 auto tabletCreationResult =
                     Runtime->GrabEdgeEventRethrow<TEvHive::TEvTabletCreationResult>(handle);
                 UNIT_ASSERT(tabletCreationResult);
@@ -801,6 +803,12 @@ namespace Tests {
                     });
             auto aid = Runtime->Register(dispatcher, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
+            if (Settings->EnableFeatureFlagsConfigurator) {
+                Runtime->RegisterService(
+                    MakeFeatureFlagsServiceID(),
+                    Runtime->Register(NConsole::CreateFeatureFlagsConfigurator(), nodeIdx),
+                    nodeIdx);
+            }
         }
         if (Settings->IsEnableMetadataProvider()) {
             NKikimrConfig::TMetadataProviderConfig cfgProto;

@@ -12,12 +12,14 @@ TTpcDSGeneratorCustomer::TTpcDSGeneratorCustomer(const TTpcdsWorkloadDataInitial
     : TBulkDataGenerator(owner, CUSTOMER)
 {}
 
-void TTpcDSGeneratorCustomer::GenerateRows(TContexts& ctxs) {
+void TTpcDSGeneratorCustomer::GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) {
     TVector<W_CUSTOMER_TBL> customerList(ctxs.front().GetCount());
     for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
         mk_w_customer(&customerList[i], ctxs.front().GetStart() + i);
         tpcds_row_stop(TableNum);
     }
+    g.Release();
+
     TCsvItemWriter<W_CUSTOMER_TBL> writer(ctxs.front().GetCsv().Out);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writer, c_customer_sk);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, c_customer_id);

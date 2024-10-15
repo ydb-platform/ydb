@@ -138,4 +138,5 @@ CFLAGS(
     -Dpg_prng_seed_check=yql_pg_prng_seed_check
     -Dpg_prng_seed=yql_pg_prng_seed
     -Dpg_prng_double_normal=yql_pg_prng_double_normal
+    -Djson_errdetail=yql_json_errdetail
 )

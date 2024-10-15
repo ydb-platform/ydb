@@ -268,7 +268,7 @@ public:
                     }
                 }
 
-                sharedReading = sharedReading && (format == "json_each_row" || (format == "raw"));
+                sharedReading = sharedReading && (format == "json_each_row" || format == "raw");
                 TString predicateSql = NYql::FormatWhere(predicateProto);
                 if (sharedReading) {
                     if (format == "json_each_row") {

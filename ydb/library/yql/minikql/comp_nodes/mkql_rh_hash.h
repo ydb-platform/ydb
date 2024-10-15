@@ -1,6 +1,7 @@
 #pragma once
 #include <util/system/compiler.h>
 #include <util/system/types.h>
+#include <util/generic/bitops.h>
 #include <util/generic/yexception.h>
 #include <vector>
 #include <span>

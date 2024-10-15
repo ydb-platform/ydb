@@ -13,13 +13,15 @@ TTpcDSGeneratorReason::TTpcDSGeneratorReason(const TTpcdsWorkloadDataInitializer
     : TBulkDataGenerator(owner, REASON)
 {}
 
-void TTpcDSGeneratorReason::GenerateRows(TContexts& ctxs) {
+void TTpcDSGeneratorReason::GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) {
     TVector<W_REASON_TBL> reasonList(ctxs.front().GetCount());
     for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
         mk_w_reason(NULL, ctxs.front().GetStart() + i);
         reasonList[i] = g_w_reason;
         tpcds_row_stop(TableNum);
     }
+    g.Release();
+
     TCsvItemWriter<W_REASON_TBL> writer(ctxs.front().GetCsv().Out);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writer, r_reason_sk);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, r_reason_id);

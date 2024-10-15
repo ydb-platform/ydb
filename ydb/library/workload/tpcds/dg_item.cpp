@@ -13,12 +13,14 @@ TTpcDSGeneratorItem::TTpcDSGeneratorItem(const TTpcdsWorkloadDataInitializerGene
     : TBulkDataGenerator(owner, ITEM)
 {}
 
-void TTpcDSGeneratorItem::GenerateRows(TContexts& ctxs) {
+void TTpcDSGeneratorItem::GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) {
     TVector<W_ITEM_TBL> itemList(ctxs.front().GetCount());
     for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
         mk_w_item(&itemList[i], ctxs.front().GetStart() + i);
         tpcds_row_stop(TableNum);
     }
+    g.Release();
+
     TCsvItemWriter<W_ITEM_TBL> writer(ctxs.front().GetCsv().Out);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writer, i_item_sk);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, i_item_id);

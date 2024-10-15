@@ -223,7 +223,7 @@ class TRealBlockDevice : public IBlockDevice {
         TRealBlockDevice &Device;
         std::shared_ptr<TPDiskCtx> &PCtx;
         TCountedQueueOneOne<IAsyncIoOperation*, 4 << 10> OperationsToBeSubmit;
-        static constexpr TAtomicBase SubmitInFlightBytesMax = 1ull << 15;
+        static constexpr TAtomicBase SubmitInFlightBytesMax = 1ull << 17;
         TMutex SubmitMtx;
         TCondVar SubmitCondVar;
         TAtomicBlockCounter SubmitQuitCounter;

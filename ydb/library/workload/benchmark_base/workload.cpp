@@ -16,6 +16,15 @@ const TString TWorkloadGeneratorBase::TsvFormatString = [] () {
     return settings.SerializeAsString();
 } ();
 
+const TString TWorkloadGeneratorBase::PsvDelimiter = "|";
+const TString TWorkloadGeneratorBase::PsvFormatString = [] () {
+    Ydb::Formats::CsvSettings settings;
+    settings.set_delimiter(PsvDelimiter);
+    settings.set_header(true);
+    settings.mutable_quoting()->set_disabled(true);
+    return settings.SerializeAsString();
+} ();
+
 const TString TWorkloadGeneratorBase::CsvDelimiter = ",";
 const TString TWorkloadGeneratorBase::CsvFormatString = [] () {
     Ydb::Formats::CsvSettings settings;

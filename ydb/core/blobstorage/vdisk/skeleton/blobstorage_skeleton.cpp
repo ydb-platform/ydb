@@ -93,10 +93,10 @@ namespace NKikimr {
             ctx.Send(NodeWardenServiceId,
                      new TEvBlobStorage::TEvControllerUpdateDiskStatus(
                          SelfVDiskId,
-                         OverloadHandler ? OverloadHandler->GetIntegralRankPercent() : 0,
                          SelfId().NodeId(),
                          Config->BaseInfo.PDiskId,
-                         Config->BaseInfo.VDiskSlotId));
+                         Config->BaseInfo.VDiskSlotId,
+                         OverloadHandler ? OverloadHandler->GetIntegralRankPercent() : 0));
             // repeat later
             ctx.Schedule(Config->WhiteboardUpdateInterval, new TEvTimeToUpdateWhiteboard());
         }

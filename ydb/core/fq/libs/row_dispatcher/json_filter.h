@@ -18,7 +18,7 @@ public:
 
     ~TJsonFilter();
 
-    void Push(ui64 offset, const TVector<TVector<std::string_view>>& values);
+    void Push(const TVector<ui64>& offsets, const TVector<TVector<std::string_view>>& values);
     TString GetSql();
 
 private:

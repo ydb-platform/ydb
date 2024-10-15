@@ -6,6 +6,8 @@
 #include <ydb/library/actors/core/mailbox.h>
 #include <ydb/core/util/simple_cache.h>
 
+#include <grpcpp/support/status.h>
+
 namespace NGrpcActorClient {
 
 template <typename TEventRequestType, typename TEventResponseType>

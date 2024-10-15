@@ -21,6 +21,7 @@
 #include "viewer_netinfo.h"
 #include "viewer_nodelist.h"
 #include "viewer_nodes.h"
+#include "viewer_plan2svg.h"
 #include "viewer_pqconsumerinfo.h"
 #include "viewer_query.h"
 #include "viewer_render.h"
@@ -270,6 +271,10 @@ void InitViewerFeatureFlagsJsonHandler(TJsonHandlers& handlers) {
     handlers.AddHandler("/viewer/feature_flags", new TJsonHandler<TJsonFeatureFlags>(TJsonFeatureFlags::GetSwagger()), 2);
 }
 
+void InitViewerPlan2SvgJsonHandler(TJsonHandlers& handlers) {
+    handlers.AddHandler("/viewer/plan2svg", new TJsonHandler<TJsonPlanToSvg>(TJsonPlanToSvg::GetSwagger()));
+}
+
 void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     InitViewerCapabilitiesJsonHandler(jsonHandlers);
     InitViewerNodelistJsonHandler(jsonHandlers);
@@ -309,6 +314,7 @@ void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     InitViewerAutocompleteJsonHandler(jsonHandlers);
     InitViewerCheckAccessJsonHandler(jsonHandlers);
     InitViewerFeatureFlagsJsonHandler(jsonHandlers);
+    InitViewerPlan2SvgJsonHandler(jsonHandlers);
 }
 
 }

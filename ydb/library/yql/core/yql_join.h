@@ -60,6 +60,7 @@ struct TJoinOptions {
 
     bool Flatten = false;
     bool StrictKeys = false;
+    bool Compact = false;
 };
 
 IGraphTransformer::TStatus ValidateEquiJoinOptions(
@@ -147,6 +148,7 @@ struct TEquiJoinLinkSettings {
     // JOIN implementation may ignore this flags if SortedMerge strategy is not supported
     bool ForceSortedMerge = false;
     TVector<TString> Options;
+    bool Compact = false;
 };
 
 TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings);

@@ -3,6 +3,7 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
+#include <ydb/core/mind/hive/hive_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -1836,6 +1837,110 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     Y_UNIT_TEST(ShardsNoLimit) {
         ShardsQuotaTest(105, 0, 0, Ydb::Monitoring::StatusFlag::GREEN);
+    }
+
+    bool HasDeadTabletIssue(const Ydb::Monitoring::SelfCheckResult& result) {
+       for (const auto& issue_log : result.issue_log()) {
+            if (issue_log.level() == 4 && issue_log.type() == "TABLET") {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    Y_UNIT_TEST(TestTabletIsDead) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(2)
+                .SetDynamicNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+
+        TClient client(settings);
+
+        TTestActorRuntime* runtime = server.GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+
+        server.SetupDynamicLocalService(2, "Root");
+        server.StartPQTablets(1);
+        server.DestroyDynamicLocalService(2);
+        runtime->AdvanceCurrentTime(TDuration::Minutes(5));
+
+        TAutoPtr<IEventHandle> handle;
+        runtime->Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, new NHealthCheck::TEvSelfCheckRequest(), 0));
+        auto result = runtime->GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+        Cerr << result.ShortDebugString();
+
+        UNIT_ASSERT(HasDeadTabletIssue(result));
+    }
+
+    Y_UNIT_TEST(TestBootingTabletIsNotDead) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(2)
+                .SetDynamicNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+
+        TClient client(settings);
+
+        TTestActorRuntime* runtime = server.GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+
+        auto blockBoot = runtime->AddObserver<NHive::TEvPrivate::TEvProcessBootQueue>([](auto&& ev) { ev.Reset(); });
+
+        server.SetupDynamicLocalService(2, "Root");
+        server.StartPQTablets(1, false);
+        runtime->AdvanceCurrentTime(TDuration::Minutes(5));
+
+        TAutoPtr<IEventHandle> handle;
+        runtime->Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, new NHealthCheck::TEvSelfCheckRequest(), 0));
+        auto result = runtime->GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+        Cerr << result.ShortDebugString();
+
+        UNIT_ASSERT(!HasDeadTabletIssue(result));
+    }
+
+    Y_UNIT_TEST(TestReBootingTabletIsDead) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(2)
+                .SetDynamicNodeCount(2)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+
+        TClient client(settings);
+
+        TTestActorRuntime* runtime = server.GetRuntime();
+        runtime->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_TRACE);
+        TActorId sender = runtime->AllocateEdgeActor();
+
+
+        server.SetupDynamicLocalService(2, "Root");
+        server.StartPQTablets(1, true);
+        server.SetupDynamicLocalService(3, "Root");
+        auto blockBoot = runtime->AddObserver<NHive::TEvPrivate::TEvProcessBootQueue>([](auto&& ev) { ev.Reset(); });
+        server.DestroyDynamicLocalService(2);
+        runtime->AdvanceCurrentTime(TDuration::Minutes(5));
+
+        TAutoPtr<IEventHandle> handle;
+        runtime->Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, new NHealthCheck::TEvSelfCheckRequest(), 0));
+        auto result = runtime->GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+        Cerr << result.ShortDebugString();
+
+        UNIT_ASSERT(HasDeadTabletIssue(result));
     }
 }
 }

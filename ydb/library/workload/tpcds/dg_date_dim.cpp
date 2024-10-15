@@ -14,13 +14,15 @@ TTpcDSGeneratorDateDim::TTpcDSGeneratorDateDim(const TTpcdsWorkloadDataInitializ
     : TBulkDataGenerator(owner, DATE)
 {}
 
-void TTpcDSGeneratorDateDim::GenerateRows(TContexts& ctxs) {
+void TTpcDSGeneratorDateDim::GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) {
     TVector<W_DATE_TBL> dateList(ctxs.front().GetCount());
     for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
         mk_w_date(NULL, ctxs.front().GetStart() + i);
         dateList[i] = g_w_date;
         tpcds_row_stop(TableNum);
     }
+    g.Release();
+
     TCsvItemWriter<W_DATE_TBL> writer(ctxs.front().GetCsv().Out);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writer, d_date_sk);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, d_date_id);

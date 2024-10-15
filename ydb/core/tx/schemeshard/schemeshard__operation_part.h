@@ -645,5 +645,14 @@ ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& resul
 
 TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 
+// BackupCollection
+// Create
+ISubOperation::TPtr CreateNewBackupCollection(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewBackupCollection(TOperationId id, TTxState::ETxState state);
+// Drop
+ISubOperation::TPtr CreateDropBackupCollection(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateDropBackupCollection(TOperationId id, TTxState::ETxState state);
+
+
 }
 }

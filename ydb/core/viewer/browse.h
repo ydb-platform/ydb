@@ -62,6 +62,7 @@ public:
         switch (type) {
         case NKikimrSchemeOp::EPathType::EPathTypeDir:
         case NKikimrSchemeOp::EPathType::EPathTypeColumnStore: // TODO
+        case NKikimrSchemeOp::EPathType::EPathTypeBackupCollection: // TODO
             return NKikimrViewer::EObjectType::Directory;
         case NKikimrSchemeOp::EPathType::EPathTypeRtmrVolume:
             return NKikimrViewer::EObjectType::RtmrVolume;

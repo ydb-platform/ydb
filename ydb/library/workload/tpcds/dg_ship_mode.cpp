@@ -13,13 +13,15 @@ TTpcDSGeneratorShipMode::TTpcDSGeneratorShipMode(const TTpcdsWorkloadDataInitial
     : TBulkDataGenerator(owner, SHIP_MODE)
 {}
 
-void TTpcDSGeneratorShipMode::GenerateRows(TContexts& ctxs) {
+void TTpcDSGeneratorShipMode::GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) {
     TVector<W_SHIP_MODE_TBL> shipModeList(ctxs.front().GetCount());
     for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
         mk_w_ship_mode(NULL, ctxs.front().GetStart() + i);
         shipModeList[i] = g_w_ship_mode;
         tpcds_row_stop(TableNum);
     }
+    g.Release();
+
     TCsvItemWriter<W_SHIP_MODE_TBL> writer(ctxs.front().GetCsv().Out);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writer, sm_ship_mode_sk);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, sm_ship_mode_id);

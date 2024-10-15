@@ -17,6 +17,7 @@
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config_units.pb.h>
 #include <ydb/core/protos/counters_cms.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
 #include <ydb/library/actors/core/actor.h>

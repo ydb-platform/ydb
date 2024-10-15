@@ -173,6 +173,7 @@ namespace NSQLTranslationV1 {
         };
         EStrategy Strategy = EStrategy::Default;
         TVector<TString> Values;
+        bool Compact = false;
     };
 
     class IJoin: public ISource {

@@ -210,7 +210,7 @@ public:
     TRuntimeNode FromString(TRuntimeNode data, TType* type);
     TRuntimeNode StrictFromString(TRuntimeNode data, TType* type);
     TRuntimeNode ToBytes(TRuntimeNode data);
-    TRuntimeNode FromBytes(TRuntimeNode data, NUdf::TDataTypeId schemeType);
+    TRuntimeNode FromBytes(TRuntimeNode data, TType* type);
     TRuntimeNode InversePresortString(TRuntimeNode data);
     TRuntimeNode InverseString(TRuntimeNode data);
     TRuntimeNode Random(const TArrayRef<const TRuntimeNode>& dependentNodes);

@@ -12,7 +12,7 @@
 
 namespace NKikimr::NOlap {
 
-void TGranuleMeta::UpsertPortion(const TPortionInfo& info, TVersionCounts& versionCounts) {
+void TGranuleMeta::UpsertPortion(const TPortionInfo& info, TVersionCounters& versionCounters) {
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info.DebugString())("path_id", GetPathId());
     auto it = Portions.find(info.GetPortion());
     AFL_VERIFY(info.GetPathId() == GetPathId())("event", "incompatible_granule")("portion", info.DebugString())("path_id", GetPathId());
@@ -28,7 +28,7 @@ void TGranuleMeta::UpsertPortion(const TPortionInfo& info, TVersionCounts& versi
         it = Portions.emplace(portionNew->GetPortion(), portionNew).first;
         auto schemaVersionOpt = info.GetSchemaVersionOptional();
         if (schemaVersionOpt.has_value()) {
-            versionCounts.VersionAddRef(*schemaVersionOpt);
+            versionCounters.VersionAddRef(*schemaVersionOpt);
         }
     } else {
         OnBeforeChangePortion(it->second);
@@ -37,7 +37,7 @@ void TGranuleMeta::UpsertPortion(const TPortionInfo& info, TVersionCounts& versi
     OnAfterChangePortion(it->second, nullptr);
 }
 
-bool TGranuleMeta::ErasePortion(const ui64 portion, TVersionCounts& versionCounts) {
+bool TGranuleMeta::ErasePortion(const ui64 portion, TVersionCounters& versionCounters) {
     auto it = Portions.find(portion);
     if (it == Portions.end()) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased_already")("portion_id", portion)("pathId", PathId);
@@ -46,7 +46,7 @@ bool TGranuleMeta::ErasePortion(const ui64 portion, TVersionCounts& versionCount
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased")("portion_info", it->second->DebugString())("pathId", PathId);
         auto schemaVersionOpt = it->second->GetSchemaVersionOptional();
         if (schemaVersionOpt.has_value()) {
-            versionCounts.VersionRemoveRef(*schemaVersionOpt);
+            versionCounters.VersionRemoveRef(*schemaVersionOpt);
         }
     }
     OnBeforeChangePortion(it->second);
@@ -152,15 +152,22 @@ TGranuleMeta::TGranuleMeta(
     ActualizationIndex = std::make_shared<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex);
 }
 
-std::shared_ptr<TPortionInfo> TGranuleMeta::UpsertPortionOnLoad(TPortionInfo&& portion, TVersionCounts& versionCounts) {
-    auto portionId = portion.GetPortionId();
+std::shared_ptr<TPortionInfo> TGranuleMeta::UpsertPortionOnLoad(TPortionInfo&& portion, TVersionCounters& versionCounters) {
     auto schemaVersionOpt = portion.GetSchemaVersionOptional();
     if (schemaVersionOpt.has_value()) {
-        versionCounts.VersionAddRef(*schemaVersionOpt);
+        versionCounters.VersionAddRef(*schemaVersionOpt);
     }
-    auto emplaceInfo = Portions.emplace(portionId, std::make_shared<TPortionInfo>(std::move(portion)));
-    AFL_VERIFY(emplaceInfo.second);
-    return emplaceInfo.first->second;
+    if (portion.HasInsertWriteId() && !portion.HasCommitSnapshot()) {
+        const TInsertWriteId insertWriteId = portion.GetInsertWriteIdVerified();
+        auto emplaceInfo = InsertedPortions.emplace(insertWriteId, std::make_shared<TPortionInfo>(std::move(portion)));
+        AFL_VERIFY(emplaceInfo.second);
+        return emplaceInfo.first->second;
+    } else {
+        auto portionId = portion.GetPortionId();
+        auto emplaceInfo = Portions.emplace(portionId, std::make_shared<TPortionInfo>(std::move(portion)));
+        AFL_VERIFY(emplaceInfo.second);
+        return emplaceInfo.first->second;
+    }
 }
 
 void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const {

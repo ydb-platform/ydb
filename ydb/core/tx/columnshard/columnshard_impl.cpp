@@ -81,11 +81,11 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , PeriodicWakeupActivationPeriod(NYDBTest::TControllers::GetColumnShardController()->GetPeriodicWakeupActivationPeriod())
     , StatsReportInterval(NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval())
     , InFlightReadsTracker(StoragesManager, Counters.GetRequestsTracingCounters())
-    , VersionCounts(std::make_shared<NOlap::TVersionCounts>())
-    , TablesManager(StoragesManager, info->TabletID, VersionCounts)
+    , VersionCounters(std::make_shared<NOlap::TVersionCounters>())
+    , TablesManager(StoragesManager, info->TabletID, VersionCounters)
     , Subscribers(std::make_shared<NSubscriber::TManager>(*this))
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
-    , InsertTable(std::make_unique<NOlap::TInsertTable>(VersionCounts))
+    , InsertTable(std::make_unique<NOlap::TInsertTable>(VersionCounters))
     , InsertTaskSubscription(NOlap::TInsertColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , CompactTaskSubscription(NOlap::TCompactColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
@@ -896,7 +896,7 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCompaction::TPtr& ev, const TActor
 }
 
 void TColumnShard::SetupCleanupUnusedSchemaVersions() {
-    if (TablesManager.GetPrimaryIndexSafe().IsEmpty()) {
+    if (!TablesManager.GetPrimaryIndexSafe().HasUnusedSchemaVersions()) {
         return;
     }
     if (BackgroundController.IsActiveCleanupUnusedSchemaVersions()) {
@@ -1236,26 +1236,6 @@ const NKikimr::NColumnShard::NTiers::TManager* TColumnShard::GetTierManagerPoint
 
 TDuration TColumnShard::GetMaxReadStaleness() {
     return NYDBTest::TControllers::GetColumnShardController()->GetReadTimeoutClean();
-}
-
-void TColumnShard::ExecuteSchemaVersionsCleanup(NIceDb::TNiceDb& db, THashSet<ui64>& removedSchemaVersions) {
-    auto table = db.Table<NKikimr::NColumnShard::Schema::SchemaPresetVersionInfo>();
-    ui64 lastVersion = TablesManager.MutablePrimaryIndex().LastSchemaVersion();
-    VersionCounts->EnumerateVersionsToErase([&](ui64 version, auto& key) {
-        if (version != lastVersion) {
-            LOG_S_DEBUG("Removing schema version from db " << version << " tablet id " << TabletID());
-            removedSchemaVersions.insert(version);
-            table.Key(key.Id, key.PlanStep, key.TxId).Delete();
-        }
-    });
-}
-
-void TColumnShard::CompleteSchemaVersionsCleanup(THashSet<ui64>& removedSchemaVersions) {
-    for (ui64 version: removedSchemaVersions) {
-        LOG_S_DEBUG("Removing schema version from memory " << version << " tablet id " << TabletID());
-        TablesManager.MutablePrimaryIndex().EraseSchemaVersion(version);
-    }
-    removedSchemaVersions.clear();
 }
 
 }

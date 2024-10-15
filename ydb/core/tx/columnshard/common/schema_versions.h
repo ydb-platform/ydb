@@ -4,7 +4,7 @@
 
 namespace NKikimr::NOlap {
 
-class TVersionCounts {
+class TVersionCounters {
 public:
 
     class TSchemaKey {
@@ -26,14 +26,16 @@ public:
 
     using TVersionToKey = THashMap<ui64, std::vector<TSchemaKey>>;
 
-public:
-    TVersionToKey VersionToKey;
-
 private:
+    TVersionToKey VersionToKey;
     THashSet<ui64> VersionsToErase;
     THashMap<ui64, ui32> VersionCounters;
 
 public:
+    TVersionToKey& GetVersionToKey() {
+        return VersionToKey;
+    }
+
     void VersionAddRef(ui64 version, ui32 source = 0) {
         ui32& count = VersionCounters[version];
         if (count == 0) {
@@ -55,8 +57,8 @@ public:
         return count;
     }
 
-    bool IsEmpty(ui64 lastVersion) const {
-        return VersionsToErase.empty() || ((VersionsToErase.size() == 1) && (*VersionsToErase.begin() == lastVersion));
+    bool HasUnusedSchemaVersionsExcept(ui64 lastVersion) const {
+        return !VersionsToErase.empty() && ((VersionsToErase.size() > 1) || (*VersionsToErase.begin() != lastVersion));
     }
 
     template<class Processor>

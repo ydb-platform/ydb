@@ -476,7 +476,7 @@ private:
     std::vector<TActorId> ActorsToStop;
 
     TInFlightReadsTracker InFlightReadsTracker;
-    std::shared_ptr<NOlap::TVersionCounts> VersionCounts;
+    std::shared_ptr<NOlap::TVersionCounters> VersionCounters;
     TTablesManager TablesManager;
     std::shared_ptr<NSubscriber::TManager> Subscribers;
     std::shared_ptr<TTiersManager> Tiers;
@@ -643,9 +643,6 @@ public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_COLUMNSHARD_ACTOR;
     }
-
-    void ExecuteSchemaVersionsCleanup(NIceDb::TNiceDb& db, THashSet<ui64>& versionsToRemove);
-    void CompleteSchemaVersionsCleanup(THashSet<ui64>& versionsToRemove);
 
     TColumnShard(TTabletStorageInfo* info, const TActorId& tablet);
 };

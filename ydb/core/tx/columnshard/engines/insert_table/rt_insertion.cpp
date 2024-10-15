@@ -98,7 +98,7 @@ bool TInsertionSummary::EraseAborted(const TInsertWriteId writeId) {
     if (it == Aborted.end()) {
         return false;
     }
-    VersionCounts->VersionRemoveRef(it->second.GetSchemaVersion(), 1);
+    VersionCounters->VersionRemoveRef(it->second.GetSchemaVersion(), 1);
     Counters.Aborted.Erase(it->second.BlobSize());
     Aborted.erase(it);
     return true;
@@ -119,7 +119,7 @@ bool TInsertionSummary::EraseCommitted(const TCommittedData& data) {
         return false;
     }
 
-    if (!pathInfo->EraseCommitted(data, &*VersionCounts)) {
+    if (!pathInfo->EraseCommitted(data, &*VersionCounters)) {
         Counters.Committed.SkipErase(data.BlobSize());
         return false;
     } else {
@@ -150,7 +150,7 @@ std::optional<TInsertedData> TInsertionSummary::ExtractInserted(const TInsertWri
         auto pathInfo = GetPathInfoOptional(result->GetPathId());
         if (pathInfo) {
             OnEraseInserted(*pathInfo, result->BlobSize());
-            VersionCounts->VersionRemoveRef(result->GetSchemaVersion());
+            VersionCounters->VersionRemoveRef(result->GetSchemaVersion());
         }
     }
     return result;
@@ -158,7 +158,7 @@ std::optional<TInsertedData> TInsertionSummary::ExtractInserted(const TInsertWri
 
 const TInsertedData* TInsertionSummary::AddInserted(TInsertedData&& data, const bool load /*= false*/) {
     auto* insertInfo = Inserted.AddVerified(std::move(data));
-    VersionCounts->VersionAddRef(insertInfo->GetSchemaVersion(), 1);
+    VersionCounters->VersionAddRef(insertInfo->GetSchemaVersion(), 1);
     AFL_VERIFY_DEBUG(!Aborted.contains(insertInfo->GetInsertWriteId()));
     OnNewInserted(GetPathInfoVerified(insertInfo->GetPathId()), insertInfo->BlobSize(), load);
     return insertInfo;

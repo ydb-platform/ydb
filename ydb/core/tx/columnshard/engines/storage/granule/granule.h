@@ -330,7 +330,7 @@ public:
     void OnCompactionFailed(const TString& reason);
     void OnCompactionFinished();
 
-    void UpsertPortion(const TPortionInfo& info, TVersionCounts& versionCounts);
+    void UpsertPortion(const TPortionInfo& info, TVersionCounters& versionCounters);
 
     TString DebugString() const {
         return TStringBuilder() << "(granule:" << GetPathId() << ";"
@@ -341,7 +341,7 @@ public:
             ;
     }
 
-    std::shared_ptr<TPortionInfo> UpsertPortionOnLoad(TPortionInfo&& portion, TVersionCounts& versionCounts);
+    std::shared_ptr<TPortionInfo> UpsertPortionOnLoad(TPortionInfo&& portion, TVersionCounters& versionCounters);
 
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
         return Portions;
@@ -377,7 +377,7 @@ public:
         return it->second;
     }
 
-    bool ErasePortion(const ui64 portion, TVersionCounts& versionCounts);
+    bool ErasePortion(const ui64 portion, TVersionCounters& versionCounters);
 
     explicit TGranuleMeta(const ui64 pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex);
 

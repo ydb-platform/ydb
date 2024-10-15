@@ -27,11 +27,11 @@
 namespace NKikimr::NOlap {
 
 TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager,
-    const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema, std::shared_ptr<TVersionCounts>& versionCounts)
+    const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema, std::shared_ptr<TVersionCounters>& versionCounters)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
     , StoragesManager(storagesManager)
     , TabletId(tabletId)
-    , VersionCounts(versionCounts)
+    , VersionCounters(versionCounters)
     , LastPortion(0)
     , LastGranule(0)
 {
@@ -40,11 +40,11 @@ TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<
 }
 
 TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager,
-    const TSnapshot& snapshot, TIndexInfo&& schema, std::shared_ptr<TVersionCounts>& versionCounts)
+    const TSnapshot& snapshot, TIndexInfo&& schema, std::shared_ptr<TVersionCounters>& versionCounters)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
     , StoragesManager(storagesManager)
     , TabletId(tabletId)
-    , VersionCounts(versionCounts)
+    , VersionCounters(versionCounters)
     , LastPortion(0)
     , LastGranule(0)
 {
@@ -254,7 +254,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
         for (auto&& [granuleId, pathConstructors] : constructors) {
             auto g = GetGranulePtrVerified(granuleId);
             for (auto&& [portionId, constructor] : pathConstructors) {
-                g->UpsertPortionOnLoad(constructor.Build(false), *VersionCounts);
+                g->UpsertPortionOnLoad(constructor.Build(false), *VersionCounters);
             }
         }
     }
@@ -506,7 +506,7 @@ void TColumnEngineForLogs::UpsertPortion(const TPortionInfo& portionInfo, const 
         UpdatePortionStats(portionInfo, EStatsUpdateType::ADD);
     }
 
-    GetGranulePtrVerified(portionInfo.GetPathId())->UpsertPortion(portionInfo, *VersionCounts);
+    GetGranulePtrVerified(portionInfo.GetPathId())->UpsertPortion(portionInfo, *VersionCounters);
 }
 
 bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool updateStats) {
@@ -521,7 +521,7 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
         if (updateStats) {
             UpdatePortionStats(*p, EStatsUpdateType::ERASE);
         }
-        Y_ABORT_UNLESS(spg.ErasePortion(portion, *VersionCounts));
+        Y_ABORT_UNLESS(spg.ErasePortion(portion, *VersionCounters));
         return true;
     }
 }

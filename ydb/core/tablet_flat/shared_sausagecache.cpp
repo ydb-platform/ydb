@@ -3,6 +3,7 @@
 #include "flat_bio_events.h"
 #include "flat_bio_actor.h"
 #include "util_fmt_logger.h"
+#include <ydb/core/tablet_flat/shared_cache_clock_pro.h>
 #include <ydb/core/tablet_flat/shared_cache_s3fifo.h>
 #include <ydb/core/util/cache_cache.h>
 #include <ydb/core/util/page_map.h>
@@ -330,6 +331,55 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
     };
 
+    struct TClockProPageTraits {
+        struct TPageKey {
+            TLogoBlobID LogoBlobID;
+            ui32 PageId;
+        };
+        
+        static ui64 GetSize(const TPage* page) {
+            return sizeof(TPage) + page->Size;
+        }
+
+        static TPageKey GetKey(const TPage* page) {
+            return {page->Collection->MetaId, page->PageId};
+        }
+
+        static size_t GetHash(const TPageKey& key) {
+            return MultiHash(key.LogoBlobID.Hash(), key.PageId);
+        }
+
+        static bool Equals(const TPageKey& left, const TPageKey& right) {
+            return left.PageId == right.PageId && left.LogoBlobID == right.LogoBlobID;
+        }
+
+        static TString ToString(const TPageKey& key) {
+            return TStringBuilder() << "LogoBlobID: " << key.LogoBlobID.ToString() << " PageId: " << key.PageId;
+        }
+
+        static TString GetKeyToString(const TPage* page) {
+            return ToString(GetKey(page));
+        }
+
+        static EClockProPageLocation GetLocation(const TPage* page) {
+            return static_cast<EClockProPageLocation>(page->CacheFlags1);
+        }
+
+        static void SetLocation(TPage* page, EClockProPageLocation location) {
+            ui32 location_ = static_cast<ui32>(location);
+            Y_ABORT_UNLESS(location_ < (1 << 4));
+            page->CacheFlags1 = location_;
+        }
+
+        static bool GetReferenced(const TPage* page) {
+            return page->CacheFlags2;
+        }
+
+        static void SetReferenced(TPage* page, bool referenced) {
+            page->CacheFlags2 = static_cast<ui32>(referenced);
+        }
+    };
+
     struct TRequest : public TSimpleRefCount<TRequest> {
         TRequest(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, NWilson::TTraceId &&traceId)
             : Label(pageCollection->Label())
@@ -425,6 +475,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         switch (Config->ReplacementPolicy) {
             case NKikimrSharedCache::S3FIFO:
                 return MakeHolder<TS3FIFOCache<TPage, TS3FIFOPageTraits>>(1);
+            case NKikimrSharedCache::ClockPro:
+                return MakeHolder<TClockProCache<TPage, TClockProPageTraits>>(1);
             case NKikimrSharedCache::ThreeLeveledLRU:
             default: {
                 TCacheCacheConfig cacheCacheConfig(1, Config->Counters->FreshBytes, Config->Counters->StagingBytes, Config->Counters->WarmBytes);
@@ -470,7 +522,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             if (!page) {
                 break;
             }
-            EvictNow(page, recheck);
+            while (!pages.Empty()) {
+                TPage* page = pages.PopFront();
+                EvictNow(page, recheck);
+            }
         }
         if (recheck) {
             CheckExpiredCollections(std::move(recheck));
@@ -561,12 +616,15 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         Cache.Swap(oldCache);
         ActualizeCacheSizeLimit();
 
-        while (auto page = oldCache->EvictNext()) {
-            page->EnsureNoCacheFlags();
-            
-            // touch each page multiple times to make it warm
-            for (ui32 touchTimes = 0; touchTimes < 3; touchTimes++) {
-                Evict(Cache->Touch(page));
+        while (auto pages = oldCache->EvictNext()) {
+            while (!pages.Empty()) {
+                TPage* page = pages.PopFront();
+                page->EnsureNoCacheFlags();
+                
+                // touch each page multiple times to make it warm
+                for (ui32 touchTimes = 0; touchTimes < 3; touchTimes++) {
+                    Evict(Cache->Touch(page));
+                }
             }
         }
 

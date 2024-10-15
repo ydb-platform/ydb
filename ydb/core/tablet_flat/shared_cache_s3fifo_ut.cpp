@@ -172,14 +172,15 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
         return result;
     }
 
-    std::optional<ui32> EvictNext(auto& cache) {
+    TVector<ui32> EvictNext(auto& cache) {
         auto evicted = cache.EvictNext();
-        if (evicted) {
-            UNIT_ASSERT_VALUES_EQUAL(evicted->CacheFlags1, 0);
-            UNIT_ASSERT_VALUES_EQUAL(evicted->CacheFlags2, 0);
-            return evicted->Id;
+        TVector<ui32> result;
+        for (auto& p : evicted) {
+            UNIT_ASSERT_VALUES_EQUAL(p.CacheFlags1, 0);
+            UNIT_ASSERT_VALUES_EQUAL(p.CacheFlags2, 0);
+            result.push_back(p.Id);
         }
-        return {};
+        return result;
     }
 
     Y_UNIT_TEST(Touch) {
@@ -324,31 +325,31 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
             << "MainQueue: {2 0f 30b}, {1 1f 20b}, {3 0f 40b}" << Endl
             << "GhostQueue: "));
         
-        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), 4);
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{4});
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
             << "SmallQueue: " << Endl
             << "MainQueue: {2 0f 30b}, {1 1f 20b}, {3 0f 40b}" << Endl
             << "GhostQueue: {4 10b}"));
         
-        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), 2);
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{2});
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
             << "SmallQueue: " << Endl
             << "MainQueue: {1 1f 20b}, {3 0f 40b}" << Endl
             << "GhostQueue: {4 10b}"));
         
-        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), 3);
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{3});
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
             << "SmallQueue: " << Endl
             << "MainQueue: {1 0f 20b}" << Endl
             << "GhostQueue: {4 10b}"));
 
-        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), 1);
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{1});
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
             << "SmallQueue: " << Endl
             << "MainQueue: " << Endl
             << "GhostQueue: {4 10b}"));
 
-        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), std::optional<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
             << "SmallQueue: " << Endl
             << "MainQueue: " << Endl
@@ -401,6 +402,95 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
             << "GhostQueue: "));
     }
 
+    Y_UNIT_TEST(Erase) {
+        TS3FIFOCache<TPage, TPageTraits> cache(100);
+
+        TPage page1{1, 20};
+        TPage page2{2, 30};
+        TPage page3{3, 40};
+        TPage page4{4, 10};
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{1});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{2});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{3});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
+            << "SmallQueue: " << Endl
+            << "MainQueue: " << Endl
+            << "GhostQueue: {1 20b}, {2 30b}, {3 40b}"));
+        
+        // Erase from Ghost Queue:
+        cache.Erase(&page2);
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
+            << "SmallQueue: " << Endl
+            << "MainQueue: " << Endl
+            << "GhostQueue: {1 20b}, {3 40b}"));
+        
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{2});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
+            << "SmallQueue: " << Endl
+            << "MainQueue: " << Endl
+            << "GhostQueue: {1 20b}, {3 40b}, {2 30b}"));
+
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
+            << "SmallQueue: " << Endl
+            << "MainQueue: {1 0f 20b}, {2 0f 30b}, {3 0f 40b}" << Endl
+            << "GhostQueue: "));
+        
+        // Erase from Main Queue:
+        cache.Erase(&page2);
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
+            << "SmallQueue: " << Endl
+            << "MainQueue: {1 0f 20b}, {3 0f 40b}" << Endl
+            << "GhostQueue: "));
+
+        page2.Size = 6;  
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
+            << "SmallQueue: {2 0f 6b}" << Endl
+            << "MainQueue: {1 0f 20b}, {3 0f 40b}" << Endl
+            << "GhostQueue: "));
+        
+        // Erase non-existing:
+        TPage page42{42, 1};
+        cache.Erase(&page42);
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
+            << "SmallQueue: {2 0f 6b}" << Endl
+            << "MainQueue: {1 0f 20b}, {3 0f 40b}" << Endl
+            << "GhostQueue: "));
+
+        // Erase from Small Queue:
+        cache.Erase(&page2);
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
+            << "SmallQueue: " << Endl
+            << "MainQueue: {1 0f 20b}, {3 0f 40b}" << Endl
+            << "GhostQueue: "));
+    }
+
+    Y_UNIT_TEST(Random) {
+        TS3FIFOCache<TPage, TPageTraits> cache(100);
+
+        TVector<THolder<TPage>> pages;
+        for (ui32 pageId : xrange(500)) {
+            pages.push_back(MakeHolder<TPage>(pageId, 1));
+        }
+
+        ui32 hits = 0, misses = 0;
+
+        for (ui32 i = 0; i < 100000; i++) {
+            ui32 pageId = std::sqrt(RandomNumber<ui32>(pages.size() * pages.size()));
+            TPage* page = pages[pageId].Get();
+            if (TPageTraits::GetLocation(page) != ES3FIFOPageLocation::None) {
+                hits++;
+            } else {
+                misses++;
+            }
+            cache.Touch(page);
+        }
+
+        Cerr << 1.0 * hits / (hits + misses) << Endl;
+    }
 }
 
 }

@@ -4,6 +4,7 @@ option java_package = "ru.yandex.kikimr.proto";
 enum TReplacementPolicy {
     ThreeLeveledLRU = 0;
     S3FIFO = 1;
+    ClockPro = 2;
 }
 
 message TSharedCacheConfig {

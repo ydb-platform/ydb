@@ -1,3 +1,5 @@
+#include <ydb/core/base/backtrace.h>
+
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/events/events.h>
 
@@ -23,6 +25,8 @@ public:
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.Initialize(app->Unwrap());
         Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_DEBUG);
+
+        NKikimr::EnableYDBBacktraceFormat();
     }
 
     void TearDown(NUnitTest::TTestContext& /* context */) override {
@@ -89,6 +93,20 @@ Y_UNIT_TEST_SUITE(TJsonFilterTests) {
         Filter->Push({5, 6}, {{"hello1", "hello2"}, {"99", "101"}});
         UNIT_ASSERT_VALUES_EQUAL(1, result.size());
         UNIT_ASSERT_VALUES_EQUAL(R"({"a1":"hello2","a2":101})", result[6]);
+    }
+
+    Y_UNIT_TEST_F(NullValues, TFixture) {
+        TMap<ui64, TString> result;
+        MakeFilter(
+            {"a1"},
+            {"Optional<String>"},
+            "where a1 is null",
+            [&](ui64 offset, const TString& json) {
+                result[offset] = json;
+            });
+        Filter->Push({5}, {{std::string_view()}});
+        UNIT_ASSERT_VALUES_EQUAL(1, result.size());
+        UNIT_ASSERT_VALUES_EQUAL(R"({"a1":null})", result[5]);
     }
 
     Y_UNIT_TEST_F(ThrowExceptionByError, TFixture) { 

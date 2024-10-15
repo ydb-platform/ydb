@@ -1,11 +1,9 @@
-# WARNING: THIS IS SUPER MEGA EXTRA ALPHA VERSION OF C++ DRIVER FOR YDB!!!
-# Don't use it in production environment!
+# YDB C++ SDK
+## This is a pre-release version of the C++ driver for [YDB](https://github.com/ydb-platform/ydb), backward compatibility is not guaranteed!
 
-If you ok with this warning, then...
+## Building YDB C++ SDK from sources
 
-# Building YDB C++ SDK from sources
-
-## Prerequisites
+### Prerequisites
 
 - cmake 3.22+
 - clang 16+
@@ -15,7 +13,7 @@ If you ok with this warning, then...
 - yasm
 - protoc
 
-## Library dependencies
+### Library dependencies
 
 - gRPC
 - protobuf
@@ -33,17 +31,17 @@ If you ok with this warning, then...
 - double-conversion
 - jwt-cpp
 
-## Runtime requirements
+### Runtime requirements
 
 - libidn11-dev (IDN)
 - libiconv (Iconv)
 
-## Testing requirements
+### Testing requirements
 
 - gtest
 - gmock
 
-## Install dependencies
+### Install dependencies
 
 ```bash
 sudo apt-get -y update
@@ -81,14 +79,14 @@ cmake -DCMAKE_BUILD_TYPE=Release ..
 sudo cmake --build . --config Release --target install
 ```
 
-## Create the work directory
+### Create the work directory
 
 ```bash
 mkdir ~/ydbwork && cd ~/ydbwork
 mkdir build
 ```
 
-## Install ccache
+### Install ccache
 
 Install `ccache` into `/usr/local/bin/`. The recommended version is `4.8.1` or above, the minimum required version is `4.7`.
 
@@ -97,13 +95,13 @@ Install `ccache` into `/usr/local/bin/`. The recommended version is `4.8.1` or a
 sudo tar -xJ -C /usr/local/bin/ --strip-components=1 --no-same-owner ccache-${V}-linux-x86_64/ccache)
 ```
 
-## Clone the ydb-cpp-sdk repository
+### Clone the ydb-cpp-sdk repository
 
 ```bash
 git clone --recurse-submodules https://github.com/ydb-platform/ydb-cpp-sdk.git
 ```
 
-## Configure
+### Configure
 
 Generate build configuration using the `release` preset. `ccache` is located automatically, but if you get the warning that it's not been found, specify its location by passing `-DCCACHE_PATH=path/to/bin`
 
@@ -112,13 +110,13 @@ cd ydb-cpp-sdk
 cmake --preset release
 ```
 
-## Build
+### Build
 
 ```bash
 cmake --build --preset release
 ```
 
-## Test
+### Test
 
 Specify a level of parallelism by passing the `-j<level>` option into the command below (e.g. `-j$(nproc)`)
 

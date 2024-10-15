@@ -13,6 +13,7 @@ target_sources(client-draft PRIVATE
   ydb_dynamic_config.cpp
   ydb_replication.cpp
   ydb_scripting.cpp
+  ydb_view.cpp
 )
 
 generate_enum_serilization(client-draft

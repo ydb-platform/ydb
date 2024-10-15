@@ -2,9 +2,9 @@
 
 namespace NYdb::NTopic {
 
-TVector<TTopicOffsets> TOffsetsCollector::GetOffsets() const
+std::vector<TTopicOffsets> TOffsetsCollector::GetOffsets() const
 {
-    TVector<TTopicOffsets> topics;
+    std::vector<TTopicOffsets> topics;
 
     for (auto& [path, partitions] : Ranges) {
         TTopicOffsets topic;
@@ -34,7 +34,7 @@ TVector<TTopicOffsets> TOffsetsCollector::GetOffsets() const
     return topics;
 }
 
-void TOffsetsCollector::CollectOffsets(const TVector<TReadSessionEvent::TEvent>& events)
+void TOffsetsCollector::CollectOffsets(const std::vector<TReadSessionEvent::TEvent>& events)
 {
     for (auto& event : events) {
         if (auto* e = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&event)) {
@@ -53,17 +53,17 @@ void TOffsetsCollector::CollectOffsets(const TReadSessionEvent::TEvent& event)
 void TOffsetsCollector::CollectOffsets(const TReadSessionEvent::TDataReceivedEvent& event)
 {
     const auto& session = *event.GetPartitionSession();
-    const TString& topicPath = session.GetTopicPath();
-    ui32 partitionId = session.GetPartitionId();
+    const std::string& topicPath = session.GetTopicPath();
+    uint32_t partitionId = session.GetPartitionId();
 
     if (event.HasCompressedMessages()) {
         for (auto& message : event.GetCompressedMessages()) {
-            ui64 offset = message.GetOffset();
+            uint64_t offset = message.GetOffset();
             Ranges[topicPath][partitionId].InsertInterval(offset, offset + 1);
         }
     } else {
         for (auto& message : event.GetMessages()) {
-            ui64 offset = message.GetOffset();
+            uint64_t offset = message.GetOffset();
             Ranges[topicPath][partitionId].InsertInterval(offset, offset + 1);
         }
     }

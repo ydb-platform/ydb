@@ -6,6 +6,7 @@ SRCS(
     ydb_dynamic_config.cpp
     ydb_replication.cpp
     ydb_scripting.cpp
+    ydb_view.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h)

@@ -676,7 +676,7 @@ namespace {
 
             case TTypeParser::ETypeKind::Decimal:
                 EnsureType(jsonValue, NJson::JSON_STRING);
-                ValueBuilder.Decimal(std::string(jsonValue.GetString()));
+                ValueBuilder.Decimal(TDecimalValue(std::string{jsonValue.GetString()}, 22, 9));
                 break;
 
             case TTypeParser::ETypeKind::Pg:

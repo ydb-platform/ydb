@@ -31,7 +31,7 @@ private:
     std::string TxId_;
 
     bool ChangesAreAccepted = true; // haven't called Commit or Rollback yet
-    std::vector<TPrecommitTransactionCallback> PrecommitCallbacks;
+    mutable std::vector<TPrecommitTransactionCallback> PrecommitCallbacks;
 };
 
 }

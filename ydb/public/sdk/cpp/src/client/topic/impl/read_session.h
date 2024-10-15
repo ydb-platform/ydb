@@ -63,18 +63,6 @@ private:
     void AbortImpl(EStatus statusCode, const std::string& message, TDeferredActions<false>& deferred);
 
 private:
-    using TOffsetRanges = std::unordered_map<std::string, std::unordered_map<ui64, TDisjointIntervalTree<ui64>>>;
-
-    void CollectOffsets(NTable::TTransaction& tx,
-                        const TReadSessionEvent::TDataReceivedEvent& event);
-    void CollectOffsets(NTable::TTransaction& tx,
-                        const std::string& topicPath, ui32 partitionId, ui64 offset);
-    void UpdateOffsets(const NTable::TTransaction& tx);
-
-    //
-    // (session, tx) -> topic -> partition -> (begin, end)
-    //
-    std::unordered_map<std::pair<std::string, std::string>, TOffsetRanges, THash<std::pair<std::string, std::string>>> OffsetRanges;
 
     TReadSessionSettings Settings;
     const std::string SessionId;

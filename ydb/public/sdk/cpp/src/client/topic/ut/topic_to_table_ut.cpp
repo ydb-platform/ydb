@@ -489,9 +489,7 @@ Y_UNIT_TEST_F(TwoSessionOneConsumer, TFixture)
 
     {
         auto reader = CreateReader();
-
         StartPartitionSession(reader, tx1, 0);
-
         ReadMessage(reader, tx1, 0);
     }
 
@@ -500,9 +498,7 @@ Y_UNIT_TEST_F(TwoSessionOneConsumer, TFixture)
 
     {
         auto reader = CreateReader();
-
         StartPartitionSession(reader, tx2, 0);
-
         ReadMessage(reader, tx2, 0);
     }
 
@@ -1948,10 +1944,12 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_27, TFixture)
 
         auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), &tx, 0);
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+
         WriteToTopic("topic_C", TEST_MESSAGE_GROUP_ID, messages[0], &tx, 0);
 
         messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2), &tx, 0);
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+
         WriteToTopic("topic_C", TEST_MESSAGE_GROUP_ID, messages[0], &tx, 0);
 
         CommitTx(tx, EStatus::SUCCESS);

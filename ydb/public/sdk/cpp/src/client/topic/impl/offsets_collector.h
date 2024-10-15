@@ -3,8 +3,8 @@
 #include "topic_impl.h"
 #include "transaction.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/include/read_events.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/topic/read_events.h>
 
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
@@ -18,14 +18,14 @@ namespace NYdb::NTopic {
 
 class TOffsetsCollector {
 public:
-    TVector<TTopicOffsets> GetOffsets() const;
+    std::vector<TTopicOffsets> GetOffsets() const;
 
-    void CollectOffsets(const TVector<TReadSessionEvent::TEvent>& events);
+    void CollectOffsets(const std::vector<TReadSessionEvent::TEvent>& events);
     void CollectOffsets(const TReadSessionEvent::TEvent& event);
 
 private:
     // topic -> partition -> (begin, end)
-    using TOffsetRanges = THashMap<TString, THashMap<ui64, TDisjointIntervalTree<ui64>>>;
+    using TOffsetRanges = std::unordered_map<std::string, std::unordered_map<uint64_t, TDisjointIntervalTree<uint64_t>>>;
 
     void CollectOffsets(const TReadSessionEvent::TDataReceivedEvent& event);
 

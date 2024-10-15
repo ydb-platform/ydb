@@ -1889,7 +1889,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         CoordinatorSelector = new TCoordinators(ProcessingParams);
     }
 
-    void AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartitionStats& newAggr, const TPartitionStats& oldAggr = {});
+    void AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartitionStats& newAggr, const TActorContext& ctx, const TPartitionStats& oldAggr = {});
 
     void AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopicStats& oldAggr = {});
 

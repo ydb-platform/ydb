@@ -350,7 +350,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
     if (updateSubdomainInfo) {
         auto subDomainId = Self->ResolvePathIdForDomain(pathId);
-        subDomainInfo->AggrDiskSpaceUsage(Self, newAggrStats, oldAggrStats);
+        subDomainInfo->AggrDiskSpaceUsage(Self, newAggrStats, ctx, oldAggrStats);
         if (subDomainInfo->CheckDiskSpaceQuotas(Self)) {
             Self->PersistSubDomainState(db, subDomainId, *subDomainInfo);
             // Publish is done in a separate transaction, so we may call this directly

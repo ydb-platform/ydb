@@ -68,4 +68,28 @@ public:
     }
 };
 
+class TInsertTableLoadCounters: public TCommonCountersOwner {
+private:
+    using TBase = TCommonCountersOwner;
+
+    NMonitoring::TDynamicCounters::TCounterPtr InsertTableLoadingTimeCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr InsertTableLoadingFailCounter;
+
+public:
+    TInsertTableLoadCounters()
+        : TBase("InsertTableLoad")
+    {
+        InsertTableLoadingTimeCounter = TBase::GetDeriviative("Startup/InsertTableLoadingTime");;
+        InsertTableLoadingFailCounter = TBase::GetDeriviative("Startup/InsertTableLoadFails");;
+    }
+
+    void SetInsertTableLoadingTime(ui64 microSeconds) {
+        InsertTableLoadingTimeCounter->Set(microSeconds);
+    }
+
+    void AddInsertTableLoadFail() {
+        InsertTableLoadingFailCounter->Add(1);
+    }
+};
+
 }

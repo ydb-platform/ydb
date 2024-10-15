@@ -2273,7 +2273,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         Y_ABORT_UNLESS(Self->Tables.contains(prevTableId));
                         TTableInfo::TPtr tableInfo = Self->Tables.at(prevTableId);
                         if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
-                            Self->ResolveDomainInfo(prevTableId)->AggrDiskSpaceUsage(Self, tableInfo->GetStats().Aggregated);
+                            Self->ResolveDomainInfo(prevTableId)->AggrDiskSpaceUsage(Self, tableInfo->GetStats().Aggregated, ctx);
                         }
                     }
 
@@ -2367,7 +2367,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_ABORT_UNLESS(Self->Tables.contains(prevTableId));
                 TTableInfo::TPtr tableInfo = Self->Tables.at(prevTableId);
                 if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
-                    Self->ResolveDomainInfo(prevTableId)->AggrDiskSpaceUsage(Self, tableInfo->GetStats().Aggregated);
+                    Self->ResolveDomainInfo(prevTableId)->AggrDiskSpaceUsage(Self, tableInfo->GetStats().Aggregated, ctx);
                 }
             }
         }

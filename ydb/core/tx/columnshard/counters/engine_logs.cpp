@@ -67,6 +67,9 @@ TEngineLogsCounters::TEngineLogsCounters()
     PortionsLoadingTimeCounter = TBase::GetDeriviative("Startup/PortionsLoadingTime");
     ColumnsLoadingTimeCounter  = TBase::GetDeriviative("Startup/ColumnsLoadingTime");
     IndexesLoadingTimeCounter = TBase::GetDeriviative("Startup/IndexesLoadingTime");
+    LoadPortionsFailCounter = TBase::GetDeriviative("Startup/LoadPortionFailCount");
+    LoadColumnsFailCounter = TBase::GetDeriviative("Startup/LoadColumnFailCount");
+    LoadIndexFailCounter = TBase::GetDeriviative("Startup/LoadIndexFailCount");
 
     IndexMetadataUsageBytes = TBase::GetValue("IndexMetadata/Usage/Bytes");
 

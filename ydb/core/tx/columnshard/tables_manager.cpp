@@ -51,6 +51,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
         auto rowset = db.Table<Schema::TableInfo>().Select();
         if (!rowset.IsReady()) {
             LOG_S_CRIT("Load: tables rowset is not ready");
+            LoadTimeCounters->AddLoadingTablesFail();
             return false;
         }
 
@@ -67,6 +68,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             AFL_VERIFY(Tables.emplace(table.GetPathId(), std::move(table)).second);
 
             if (!rowset.Next()) {
+                LoadTimeCounters->AddLoadingTablesFail();
                 LOG_S_CRIT("Load: tables next failed");
                 return false;
             }
@@ -80,6 +82,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
         TMemoryProfileGuard g("TTablesManager/InitFromDB::SchemaPresets");
         auto rowset = db.Table<Schema::SchemaPresetInfo>().Select();
         if (!rowset.IsReady()) {
+            LoadTimeCounters->AddLoadingSchemaPresetFail();
             LOG_S_CRIT("Load: schemapreset rowset is not ready");
             return false;
         }
@@ -97,6 +100,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             AFL_VERIFY(schemaPresets.emplace(preset.GetId(), preset).second);
             AFL_VERIFY(SchemaPresetsIds.emplace(preset.GetId()).second);
             if (!rowset.Next()) {
+                LoadTimeCounters->AddLoadingSchemaPresetFail();
                 LOG_S_CRIT("Load: schemapreset next failed");
                 return false;
             }
@@ -109,6 +113,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
         TMemoryProfileGuard g("TTablesManager/InitFromDB::Versions");
         auto rowset = db.Table<Schema::TableVersionInfo>().Select();
         if (!rowset.IsReady()) {
+            LoadTimeCounters->AddLoadingTableVersionsFail();
             LOG_S_CRIT("Load: table versions is not ready");
             return false;
         }
@@ -143,6 +148,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             }
             table.AddVersion(version);
             if (!rowset.Next()) {
+                LoadTimeCounters->AddLoadingTableVersionsFail();
                 LOG_S_CRIT("Load: table versions next failed");
                 return false;
             }
@@ -155,6 +161,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
         TMemoryProfileGuard g("TTablesManager/InitFromDB::PresetVersions");
         auto rowset = db.Table<Schema::SchemaPresetVersionInfo>().Select();
         if (!rowset.IsReady()) {
+            LoadTimeCounters->AddLoadingSchemaPresetVersionsFail();
             LOG_S_CRIT("Load: schema preset versions is not ready");
             return false;
         }
@@ -171,6 +178,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "load_preset")("preset_id", id)("snapshot", version)("version", info.HasSchema() ? info.GetSchema().GetVersion() : -1);
             preset.AddVersion(version, info);
             if (!rowset.Next()) {
+                LoadTimeCounters->AddLoadingSchemaPresetVersionsFail();
                 LOG_S_CRIT("Load: schema preset next failed");
                 return false;
             }

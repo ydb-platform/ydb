@@ -61,6 +61,12 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr TableVersionsLoadingTimeCounter;
     NMonitoring::TDynamicCounters::TCounterPtr SchemaPresetVersionsLoadingTimeCounter;
 
+    NMonitoring::TDynamicCounters::TCounterPtr TablesLoadingFailCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr SchemaPresetLoadingFailCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr TableVersionsLoadingFailCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr SchemaPresetVersionsLoadingFailCounter;
+
+
 public:
     TLoadTimeSignals()
         : TBase("Startup")
@@ -69,6 +75,11 @@ public:
         SchemaPresetLoadingTimeCounter = TBase::GetDeriviative("Startup/SchemaPresetLoadingTime");;
         TableVersionsLoadingTimeCounter = TBase::GetDeriviative("Startup/TableVersionsLoadingTime");;
         SchemaPresetVersionsLoadingTimeCounter = TBase::GetDeriviative("Startup/SchemaPreseVersionstLoadingTime");;
+
+        TablesLoadingFailCounter = TBase::GetDeriviative("Startup/TablesLoadingFailCount");;
+        SchemaPresetLoadingFailCounter = TBase::GetDeriviative("Startup/SchemaPresetLoadingFailCount");;
+        TableVersionsLoadingFailCounter = TBase::GetDeriviative("Startup/TableVersionsLoadingFailCount");;
+        SchemaPresetVersionsLoadingFailCounter = TBase::GetDeriviative("Startup/SchemaPreseVersionstLoadingFailCount");;
     }
 
     void SetTablesLoadingTime(ui64 microSeconds) {
@@ -85,6 +96,22 @@ public:
 
     void SetSchemaPresetVersionsLoadingTime(ui64 microSeconds) {
         SchemaPresetVersionsLoadingTimeCounter->Set(microSeconds);
+    }
+
+    void AddLoadingTablesFail() {
+        TablesLoadingFailCounter->Add(1);
+    }
+
+    void AddLoadingSchemaPresetFail() {
+        SchemaPresetLoadingFailCounter->Add(1);
+    }
+
+    void AddLoadingTableVersionsFail() {
+        TableVersionsLoadingFailCounter->Add(1);
+    }
+
+    void AddLoadingSchemaPresetVersionsFail() {
+        SchemaPresetVersionsLoadingFailCounter->Add(1);
     }
 };
 

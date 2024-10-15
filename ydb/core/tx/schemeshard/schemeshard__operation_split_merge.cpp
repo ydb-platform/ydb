@@ -302,7 +302,7 @@ public:
             auto newAggrStats = tableInfo->GetStats().Aggregated;
             auto subDomainId = context.SS->ResolvePathIdForDomain(tableId);
             auto subDomainInfo = context.SS->ResolveDomainInfo(tableId);
-            subDomainInfo->AggrDiskSpaceUsage(context.SS, newAggrStats, oldAggrStats);
+            subDomainInfo->AggrDiskSpaceUsage(context.SS, newAggrStats, context.Ctx, oldAggrStats);
             if (subDomainInfo->CheckDiskSpaceQuotas(context.SS)) {
                 context.SS->PersistSubDomainState(db, subDomainId, *subDomainInfo);
                 context.OnComplete.PublishToSchemeBoard(OperationId, subDomainId);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
+#include <ydb/public/api/protos/draft/ydb_view.pb.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
@@ -10,6 +11,7 @@
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
 #include <ydb-cpp-sdk/client/draft/ydb_replication.h>
+#include <ydb-cpp-sdk/client/draft/ydb_view.h>
 #include <ydb-cpp-sdk/client/coordination/coordination.h>
 #include <ydb-cpp-sdk/client/export/export.h>
 #include <ydb-cpp-sdk/client/import/import.h>
@@ -46,6 +48,7 @@ public:
     static const Ydb::Monitoring::SelfCheckResult& GetProto(const NYdb::NMonitoring::TSelfCheckResult& selfCheckResult);
     static const Ydb::Coordination::DescribeNodeResult& GetProto(const NYdb::NCoordination::TNodeDescription &describeNodeResult);
     static const Ydb::Replication::DescribeReplicationResult& GetProto(const NYdb::NReplication::TDescribeReplicationResult& desc);
+    static const Ydb::View::DescribeViewResult& GetProto(const NYdb::NView::TDescribeViewResult& desc);
 
     static NTable::TQueryStats FromProto(const Ydb::TableStats::QueryStats& queryStats);
     static NTable::TTableDescription FromProto(const Ydb::Table::CreateTableRequest& request);

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "transaction.h"
+
 #include <src/client/topic/impl/common.h>
 
 #define INCLUDE_YDB_INTERNAL_H
@@ -329,15 +331,15 @@ public:
             TRpcRequestSettings::Make(settings));
     }
 
-    TAsyncStatus UpdateOffsetsInTransaction(const NTable::TTransaction& tx,
+    TAsyncStatus UpdateOffsetsInTransaction(const TTransactionId& tx,
                                             const std::vector<TTopicOffsets>& topics,
                                             const std::string& consumerName,
                                             const TUpdateOffsetsInTransactionSettings& settings)
     {
         auto request = MakeOperationRequest<Ydb::Topic::UpdateOffsetsInTransactionRequest>(settings);
 
-        request.mutable_tx()->set_id(TStringType{tx.GetId()});
-        request.mutable_tx()->set_session(TStringType{tx.GetSession().GetId()});
+        request.mutable_tx()->set_id(TStringType{GetTxId(tx)});
+        request.mutable_tx()->set_session(TStringType{GetSessionId(tx)});
 
         for (auto& t : topics) {
             auto* topic = request.mutable_topics()->Add();

@@ -9,7 +9,7 @@ runs:
       run: |
         mkdir -p ../build
         rm -rf ../build/*
-        cmake -DYDB_SDK_TESTS=On -DYDB_SDK_EXAMPLES=On --preset release
+        cmake --preset release-test-with-ccache-basedir
     - name: Build
       shell: bash
       run: |

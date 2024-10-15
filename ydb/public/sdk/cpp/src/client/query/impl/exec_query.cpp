@@ -1,9 +1,11 @@
 #define INCLUDE_YDB_INTERNAL_H
 #include "exec_query.h"
+#include "client_session.h"
 
 #include <ydb-cpp-sdk/client/query/client.h>
 #include <src/client/impl/ydb_internal/make_request/make.h>
 #include <src/client/impl/ydb_internal/kqp_session_common/kqp_session_common.h>
+#include <src/client/impl/ydb_internal/session_pool/session_pool.h>
 #include <src/client/common_client/impl/client.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
@@ -59,7 +61,7 @@ public:
         return Finished_;
     }
 
-    TAsyncExecuteQueryPart ReadNext(std::shared_ptr<TSelf> self) {
+    TAsyncExecuteQueryPart DoReadNext(std::shared_ptr<TSelf> self) {
         auto promise = NThreading::NewPromise<TExecuteQueryPart>();
         // Capture self - guarantee no dtor call during the read
         auto readCb = [self, promise](TGRpcStatus&& grpcStatus) mutable {
@@ -100,6 +102,18 @@ public:
         StreamProcessor_->Read(&Response_, readCb);
         return promise.GetFuture();
     }
+
+    TAsyncExecuteQueryPart ReadNext(std::shared_ptr<TSelf> self) {
+        if (!Session_)
+            return DoReadNext(std::move(self));
+
+        return NSessionPool::InjectSessionStatusInterception(
+            Session_->SessionImpl_,
+            DoReadNext(std::move(self)),
+            false, // no need to ping stream session
+            TDuration::Zero());
+    }
+
 private:
     TStreamProcessorPtr StreamProcessor_;
     TResponse Response_;

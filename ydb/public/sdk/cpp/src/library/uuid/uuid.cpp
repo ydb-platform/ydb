@@ -57,6 +57,16 @@ void UuidBytesToString(const std::string& in, IOutputStream& out) {
     NUuid::UuidToString(dw, out);
 }
 
+void UuidHalfsToString(ui64 low, ui64 hi, IOutputStream& out) {
+    union {
+        ui16 dw[8];
+        ui64 half[2];
+    } buf;
+    buf.half[0] = low;
+    buf.half[1] = hi;
+    NUuid::UuidToString(buf.dw, out);
+}
+
 void UuidHalfsToByteString(ui64 low, ui64 hi, IOutputStream& out) {
     union {
         char bytes[16];

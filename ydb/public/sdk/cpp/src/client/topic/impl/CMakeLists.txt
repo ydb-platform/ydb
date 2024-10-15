@@ -27,12 +27,14 @@ target_sources(client-ydb_topic-impl
     common.cpp
     deferred_commit.cpp
     event_handlers.cpp
+    offsets_collector.cpp
     read_session_event.cpp
     read_session.cpp
-    write_session.cpp
-    write_session_impl.cpp
     topic_impl.cpp
     topic.cpp
+    transaction.cpp
+    write_session_impl.cpp
+    write_session.cpp
 )
 
 _ydb_sdk_install_targets(TARGETS client-ydb_topic-impl)

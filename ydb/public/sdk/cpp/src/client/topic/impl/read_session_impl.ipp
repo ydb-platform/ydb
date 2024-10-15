@@ -1909,6 +1909,95 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
     }
 }
 
+template <bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CollectOffsets(NTable::TTransaction& tx,
+                                                                         const std::vector<TReadSessionEvent::TEvent>& events,
+                                                                         std::shared_ptr<TTopicClient::TImpl> client)
+{
+    auto txInfo = GetOrCreateTxInfo(MakeTransactionId(tx));
+    TrySubscribeOnTransactionCommit(tx, std::move(client));
+    with_lock (txInfo->Lock) {
+        txInfo->OffsetsCollector.CollectOffsets(events);
+    }
+}
+
+template <bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CollectOffsets(NTable::TTransaction& tx,
+                                                                         const TReadSessionEvent::TEvent& event,
+                                                                         std::shared_ptr<TTopicClient::TImpl> client)
+{
+    auto txInfo = GetOrCreateTxInfo(MakeTransactionId(tx));
+    TrySubscribeOnTransactionCommit(tx, std::move(client));
+    with_lock (txInfo->Lock) {
+        txInfo->OffsetsCollector.CollectOffsets(event);
+    }
+}
+
+template <bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::TrySubscribeOnTransactionCommit(NTable::TTransaction& tx,
+                                                                                          std::shared_ptr<TTopicClient::TImpl> client)
+{
+    const TTransactionId txId = MakeTransactionId(tx);
+    auto txInfo = GetOrCreateTxInfo(txId);
+    Y_ABORT_UNLESS(txInfo);
+
+    with_lock (txInfo->Lock) {
+        if (txInfo->Subscribed) {
+            return;
+        }
+
+        auto callback = [cbContext = this->SelfContext, txId, txInfo, consumer = Settings.ConsumerName_, client]() {
+            std::vector<TTopicOffsets> offsets;
+            
+            with_lock (txInfo->Lock) {
+                Y_ABORT_UNLESS(!txInfo->CommitCalled);
+
+                txInfo->CommitCalled = true;
+
+                offsets = txInfo->OffsetsCollector.GetOffsets();
+            }
+
+            if (auto self = cbContext->LockShared()) {
+                self->DeleteTx(txId);
+            }
+
+            return client->UpdateOffsetsInTransaction(txId,
+                                                      offsets,
+                                                      consumer,
+                                                      {});
+        };
+
+        tx.AddPrecommitCallback(std::move(callback));
+
+        txInfo->IsActive = true;
+        txInfo->Subscribed = true;
+    }
+}
+
+template <bool UseMigrationProtocol>
+auto TSingleClusterReadSessionImpl<UseMigrationProtocol>::GetOrCreateTxInfo(const TTransactionId& txId) -> TTransactionInfoPtr
+{
+    with_lock (Lock) {
+        auto p = Txs.find(txId);
+        if (p == Txs.end()) {
+            TTransactionInfoPtr& txInfo = Txs[txId];
+            txInfo = std::make_shared<TTransactionInfo>();
+            txInfo->Subscribed = false;
+            txInfo->CommitCalled = false;
+            p = Txs.find(txId);
+        }
+        return p->second;
+    }
+}
+
+template <bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::DeleteTx(const TTransactionId& txId)
+{
+    with_lock (Lock) {
+        Txs.erase(txId);
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TReadSessionEventInfo
 

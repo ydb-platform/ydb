@@ -21,9 +21,9 @@ private:
 protected:
     virtual bool DoUseBlob(const TUnifiedBlobId& blobId) override;
     virtual bool DoFreeBlob(const TUnifiedBlobId& blobId) override;
+    virtual void OnBlobFree(const TUnifiedBlobId& blobId) = 0;
 public:
     virtual bool IsBlobInUsage(const NOlap::TUnifiedBlobId& blobId) const override;
-    virtual void OnBlobFree(const TUnifiedBlobId& blobId) = 0;
 };
 
 class IBlobsStorageOperator {

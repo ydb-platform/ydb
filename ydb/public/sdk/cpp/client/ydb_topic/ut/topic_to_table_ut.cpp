@@ -61,7 +61,7 @@ protected:
     void StartPartitionSession(TTopicReadSessionPtr reader, NTable::TTransaction& tx, ui64 offset);
     void StartPartitionSession(TTopicReadSessionPtr reader, ui64 offset);
 
-    void ReadMessage(TTopicReadSessionPtr reader, NTable::TTransaction& tx, ui64 offset);
+    void ReadMessage(TTopicReadSessionPtr reader, NTable::TTransaction& tx, ui64 offset, bool commit = false);
 
     void WriteMessage(const TString& message);
     void WriteMessages(const TVector<TString>& messages,
@@ -303,10 +303,13 @@ void TFixture::StartPartitionSession(TTopicReadSessionPtr reader, ui64 offset)
     event.Confirm();
 }
 
-void TFixture::ReadMessage(TTopicReadSessionPtr reader, NTable::TTransaction& tx, ui64 offset)
+void TFixture::ReadMessage(TTopicReadSessionPtr reader, NTable::TTransaction& tx, ui64 offset, bool commit)
 {
     auto event = ReadEvent<NTopic::TReadSessionEvent::TDataReceivedEvent>(reader, tx);
     UNIT_ASSERT_VALUES_EQUAL(event.GetMessages()[0].GetOffset(), offset);
+    if (commit) {
+        event.Commit();
+    }
 }
 
 template<class E>
@@ -504,6 +507,19 @@ Y_UNIT_TEST_F(TwoSessionOneConsumer, TFixture)
 
     CommitTx(tx2, EStatus::SUCCESS);
     CommitTx(tx1, EStatus::ABORTED);
+}
+
+Y_UNIT_TEST_F(Offsets_Cannot_Be_Promoted_When_Reading_In_A_Transaction, TFixture)
+{
+    WriteMessage("message");
+
+    auto session = CreateTableSession();
+    auto tx = BeginTx(session);
+
+    auto reader = CreateReader();
+    StartPartitionSession(reader, tx, 0);
+
+    UNIT_ASSERT_EXCEPTION(ReadMessage(reader, tx, 0, true), yexception);
 }
 
 //Y_UNIT_TEST_F(WriteToTopic_Invalid_Session, TFixture)

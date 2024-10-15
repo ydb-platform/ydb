@@ -63,7 +63,7 @@ protected:
 
     struct TReadMessageSettings {
         NTable::TTransaction& Tx;
-        bool Commit = false;
+        bool CommitOffsets = false;
         TMaybe<ui64> Offset;
     };
 
@@ -314,7 +314,7 @@ void TFixture::ReadMessage(TTopicReadSessionPtr reader, NTable::TTransaction& tx
 {
     TReadMessageSettings settings {
         .Tx = tx,
-        .Commit = false,
+        .CommitOffsets = false,
         .Offset = offset
     };
     ReadMessage(reader, settings);
@@ -326,7 +326,7 @@ void TFixture::ReadMessage(TTopicReadSessionPtr reader, const TReadMessageSettin
     if (settings.Offset.Defined()) {
         UNIT_ASSERT_VALUES_EQUAL(event.GetMessages()[0].GetOffset(), *settings.Offset);
     }
-    if (settings.Commit) {
+    if (settings.CommitOffsets) {
         event.Commit();
     }
 }
@@ -538,7 +538,7 @@ Y_UNIT_TEST_F(Offsets_Cannot_Be_Promoted_When_Reading_In_A_Transaction, TFixture
     auto reader = CreateReader();
     StartPartitionSession(reader, tx, 0);
 
-    UNIT_ASSERT_EXCEPTION(ReadMessage(reader, {.Tx = tx, .Commit = true}), yexception);
+    UNIT_ASSERT_EXCEPTION(ReadMessage(reader, {.Tx = tx, .CommitOffsets = true}), yexception);
 }
 
 //Y_UNIT_TEST_F(WriteToTopic_Invalid_Session, TFixture)

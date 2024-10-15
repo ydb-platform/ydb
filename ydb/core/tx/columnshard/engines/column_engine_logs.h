@@ -209,7 +209,7 @@ public:
 
     void EraseSchemaVersion(ui64 version) override {
         RemoveSchemaVersion(version);
-        VersionCounts->VersionsToErase.erase(version);
+        VersionCounts->DeleteErasedVersion(version);
     }
 
 private:

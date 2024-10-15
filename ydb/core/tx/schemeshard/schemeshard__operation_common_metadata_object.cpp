@@ -20,9 +20,9 @@ bool IsParentPathValid(const THolder<TProposeResponse>& result, const TPath& par
     const auto checks = IsParentPathValid(parentPath);
     if (!checks) {
         result->SetError(checks.GetStatus(), checks.GetError());
+        return false;
     }
-
-    return static_cast<bool>(checks);
+    return true;
 }
 
 bool IsApplyIfChecksPassed(const TTxTransaction& transaction, const THolder<TProposeResponse>& result, const TOperationContext& context) {

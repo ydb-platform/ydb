@@ -29,6 +29,10 @@ public:
         return NKikimrSchemeOp::EPathTypeTieringRule;
     }
 
+    TString GetStorageDirectory() const override {
+        return DoGetStorageDirectory();
+    }
+
     std::shared_ptr<TMetadataEntity> MakeEntity(const TPathId& pathId) const override;
 };
 

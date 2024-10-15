@@ -927,8 +927,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EPathTypeColumnStore:
             case EPathTypeColumnTable:
                 break; // column stuff
-            case EPathTypeBlobDepot:
             case EPathTypeBackupCollection:
+            case EPathTypeBlobDepot:
                 break; // not applicable
             case EPathTypeRtmrVolume:
             case EPathTypeBlockStoreVolume:

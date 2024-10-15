@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
             ALTER TABLE `/Root/ScriptingCreateAndAlterTableTest` SET (AUTO_PARTITIONING_BY_SIZE = ENABLED);
         )").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-    
+
         result = client.ExecuteYqlScript(R"(
             ALTER TABLE `/Root/ScriptingCreateAndAlterTableTest` SET (AUTO_PARTITIONING_BY_SIZE = ENABLED);
             COMMIT;
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
             ALTER TABLE `/Root/ScriptingCreateAndAlterTableTest` SET (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4);
         )").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-    
+
         result = client.ExecuteYqlScript(R"(
             ALTER TABLE `/Root/ScriptingCreateAndAlterTableTest` SET (AUTO_PARTITIONING_BY_SIZE = ENABLED);
             COMMIT;
@@ -989,7 +989,36 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
             [[[101u]];[[201u]];[[301u]];[[401u]];[[501u]];[[601u]];[[701u]];[[801u]]];
             [[8u]];
             [[8u]];
-            [[8u]]])", StreamResultToYson(it));
+            [[8u]]
+        ])", StreamResultToYson(it));
+    }
+
+    Y_UNIT_TEST(SelectNullType) {
+        TKikimrRunner kikimr;
+        TScriptingClient client(kikimr.GetDriver());
+        {
+            auto result = client.ExecuteYqlScript(R"(
+                CREATE TABLE demo1(id Text, PRIMARY KEY(id));
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteYqlScript(R"(
+                UPSERT INTO demo1(id) VALUES("a"),("b"),("c");
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteYqlScript(R"(
+                SELECT NULL auto_proc_ FROM demo1 LIMIT 10;
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [#];[#];[#]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
     }
 
     Y_UNIT_TEST(StreamExecuteYqlScriptLeadingEmptyScan) {
@@ -1206,7 +1235,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
 
     Y_UNIT_TEST(StreamExecuteYqlScriptPg) {
         TKikimrRunner kikimr;
-        
+
         auto settings = TExecuteYqlRequestSettings()
             .Syntax(Ydb::Query::SYNTAX_PG);
 

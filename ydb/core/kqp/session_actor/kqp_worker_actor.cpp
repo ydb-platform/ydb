@@ -960,7 +960,7 @@ private:
                 // If we have result it must be allocated on protobuf arena
                 Y_ASSERT(result->GetArena());
                 Y_ASSERT(resp->GetArena() == result->GetArena());
-                resp->AddResults()->Swap(result);
+                resp->AddYdbResults()->Swap(result);
             }
         } else {
             auto resp = ev.MutableResponse();

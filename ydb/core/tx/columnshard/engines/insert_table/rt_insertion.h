@@ -133,7 +133,7 @@ private:
 
     TInsertedContainer Inserted;
     THashMap<TInsertWriteId, TInsertedData> Aborted;
-    std::shared_ptr<TVersionCounts> VersionCounts;
+    std::shared_ptr<TVersionCounters> VersionCounters;
 
     std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>> Priorities;
     THashMap<ui64, TPathInfo> PathInfo;
@@ -147,8 +147,8 @@ private:
     static TAtomicCounter CriticalInserted;
 
 public:
-    TInsertionSummary(std::shared_ptr<TVersionCounts>& versionCounts)
-        : VersionCounts(versionCounts)
+    TInsertionSummary(std::shared_ptr<TVersionCounters>& versionCounters)
+        : VersionCounters(versionCounters)
     {
     }
 

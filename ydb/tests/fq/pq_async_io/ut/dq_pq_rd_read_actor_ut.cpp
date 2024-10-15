@@ -361,15 +361,16 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
     }
 
     Y_UNIT_TEST_F(IgnoreMessageIfNoSessions, TFixture) {
-        StartSession();
+        StartSession(Source1);
         MockCoordinatorChanged(Coordinator2Id);
         MockSessionError();
     }
 
-     Y_UNIT_TEST_F(MetadataFields, TFixture) {
+    Y_UNIT_TEST_F(MetadataFields, TFixture) {
         auto source = BuildPqTopicSourceSettings("topicName");
         source.AddMetadataFields("_yql_sys_create_time");
         StartSession(source);
         ProcessSomeJsons(0, {Json1}, RowDispatcher1, UVParserWithMetadatafields);  
     }
+}
 } // NYql::NDq

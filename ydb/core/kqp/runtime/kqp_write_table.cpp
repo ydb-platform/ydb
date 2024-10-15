@@ -1213,9 +1213,10 @@ private:
                 auto& shard = ShardsInfo.GetShard(shardId);
                 while (true) {
                     auto batch = Serializer->FlushBatch(shardId);
-                    if (batch && !batch->IsEmpty()) {
-                        shard.PushBatch(std::move(batch));
+                    if (!batch || batch->IsEmpty()) {
+                        break;
                     }
+                    shard.PushBatch(std::move(batch));
                 }
             }
         }

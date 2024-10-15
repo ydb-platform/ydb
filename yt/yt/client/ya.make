@@ -127,6 +127,7 @@ SRCS(
     table_client/schemaless_buffered_dynamic_table_writer.cpp
     table_client/schemaless_dynamic_table_writer.cpp
     table_client/serialize.cpp
+    table_client/table_upload_options.cpp
     table_client/logical_type.cpp
     table_client/merge_table_schemas.cpp
     table_client/name_table.cpp

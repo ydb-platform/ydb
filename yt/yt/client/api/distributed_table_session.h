@@ -2,7 +2,7 @@
 
 #include "public.h"
 
-#include <yt/yt/ytlib/table_client/table_upload_options.h>
+#include <yt/yt/client/table_client/table_upload_options.h>
 
 #include <yt/yt/client/chunk_client/public.h>
 

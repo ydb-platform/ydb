@@ -91,6 +91,12 @@ YT_DEFINE_ERROR_ENUM(
     ((ForbiddenErasureCodec)                 (762))
 );
 
+DEFINE_ENUM(EUpdateMode,
+    ((None)                     (0))
+    ((Append)                   (1))
+    ((Overwrite)                (2))
+);
+
 using TChunkId = NObjectClient::TObjectId;
 extern const TChunkId NullChunkId;
 

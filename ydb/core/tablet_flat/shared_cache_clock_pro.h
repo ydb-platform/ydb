@@ -9,8 +9,6 @@ namespace NKikimr::NCache {
 
 // TODO: remove template args and make some page base class
 
-// TODO: metrics
-
 enum class EClockProPageLocation {
     None,
     Hot,
@@ -63,7 +61,9 @@ public:
         : Limit(limit)
         , ColdTarget(limit)
         , ColdTargetCounter(coldTargetCounter)
-    {}
+    {
+        ColdTargetCounter->Set(ColdTarget);
+    }
 
     TIntrusiveList<TPage> EvictNext() override {
         if (SizeHot + SizeCold == 0) {
@@ -118,6 +118,7 @@ public:
             Limit = limit;
             ColdTarget = Min(ColdTarget, Limit);
         }
+        ColdTargetCounter->Set(ColdTarget);
     }
 
     TString Dump() const {
@@ -213,6 +214,7 @@ private:
         Entries.erase(entryIt);
 
         ColdTarget = Min(ColdTarget + entry->Size, Limit);
+        ColdTargetCounter->Set(ColdTarget);
 
         auto result = EvictWhileFull();
 
@@ -320,6 +322,7 @@ private:
             SizeTest -= entry->Size;
 
             ColdTarget -= Min(ColdTarget, entry->Size);
+            ColdTargetCounter->Set(ColdTarget);
 
             UnlinkEntry(entry);
 

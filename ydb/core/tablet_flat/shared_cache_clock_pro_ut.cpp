@@ -258,6 +258,8 @@ Y_UNIT_TEST_SUITE(TClockProCache) {
     }
 
     Y_UNIT_TEST(Random) {
+        SetRandomSeed(314);
+
         TCounterPtr coldTargetCounter = new NMonitoring::TCounterForPtr;
         TClockProCache<TPage, TPageTraits> cache(100, coldTargetCounter);
 

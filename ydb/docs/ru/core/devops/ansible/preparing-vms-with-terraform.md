@@ -8,6 +8,62 @@
 
 ![AiC_scheme](./_assets/terraform/AiC_scheme.png)
 
+## Установка Terraform {#terraform-install}
+
+Скачать и установить Terraform можно следуя [инструкции](https://developer.hashicorp.com/terraform/install) на сайте HashiCorp, однако доступ к официальным репозиториям для скачивания может быть ограничен для пользователей из России.
+
+Скачать и установить Terraform можно с зеркала Yandex Cloud:
+
+{% list tabs %}
+
+- Linux/macOS
+
+1. Перейдите по [ссылке](https://hashicorp-releases.yandexcloud.net/terraform/) и выберите подходящую вам версию Terraform.
+
+1. Скачайте архив:
+
+```
+
+sudo curl -L -o <archive_name>.zip \
+https://hashicorp-releases.yandexcloud.net/terraform/<terraform_version>/ \
+<terraform_version_architecture_and_os>.zip
+
+```
+
+1. Распакуйте архив с помощью команды `unzip <archive_name>.zip`. Будет распакован бинарный файл Terraform и сопроводительные файлы. Установить `unzip` можно командой `apt update && apt install unzip`.
+
+1. Создайте _alias_ для Terraform (способ создания сокращений для команд):
+
+* Откройте в текстовом редакторе конфигурационный файл оболочки (`~/.bashrc` или `~/.zshrc`) и добавьте в конец файла `alias terraform='<path_to_binary_file_terraform>'`;
+* Сохраните изменения и перечитайте конфигурацию командой `source ~/.bashrc` или `source ~/.zshrc`;
+
+1. Проверьте работоспособность Terraform, выполнив команду `terraform -version`.
+
+- macOS
+
+1. Перейдите по [ссылке](https://hashicorp-releases.yandexcloud.net/terraform/) и выберите подходящую вам версию Terraform.
+
+1. Скачайте архив и распакуйте его с помощью стандартных средств macOS. Будет распакован бинарный файл Terraform и сопроводительные файлы.
+
+1. Создайте _alias_ для Terraform (способ создания сокращений для команд):
+
+* Откройте в текстовом редакторе конфигурационный файл оболочки (`~/.bashrc` или `~/.zshrc`) и добавьте в конец файла `alias terraform='<path_to_binary_file_terraform>'`;
+* Сохраните изменения и перечитайте конфигурацию командой `source ~/.bashrc` или `source ~/.zshrc`;
+
+1. Проверьте работоспособность Terraform, выполнив команду `terraform -version`.
+
+- Windows
+
+1. Перейдите по [ссылке](https://hashicorp-releases.yandexcloud.net/terraform/) и выберите подходящую вам версию Terraform и скачайте архив.
+
+1. Распакуйте архив стандартными средствами Windows в удобную вам директорию.
+
+1. Откройте командную строку PowerShell и проверьте работоспособность terraform, выполнив команду `terraform -version` в директории, куда был распакован Terraform.
+
+{% endlist %}
+
+## Структура файлов Terraform и их синтаксис {#terraform-files-structure}
+
 Конфигурация настройки окружения ВМ описывается в YAML-формате, а инфраструктурный код пишется на [HCL](https://github.com/hashicorp/hcl) (язык конфигурации Terraform). Основной логической единицей записи в HCL является «блок». Блок состоит из ключевого слова, идентифицирующего его тип, названия и фигурных скобок, обозначающих тело блока. Например, так может выглядеть блок управления виртуальным сервером в AWS:
 
 <!-- markdownlint-disable blanks-around-fences -->
@@ -112,11 +168,12 @@ provider_installation {
     exclude = ["registry.terraform.io/*/*"]
     exclude = ["terraform.storage.ydb.tech/*/*"]
   }
+}
 ```
 
 Если уже используются Terraform-провайдеры, представленные в [официальном репозитории](https://registry.terraform.io/browse/providers), они продолжат работать.
 
-## Обзор разворачиваемой инфраструктуры
+## Обзор разворачиваемой инфраструктуры {#infrastructure-review}
 
 Далее приведены пошаговые инструкции создания инфраструктуры в [AWS](#aws-cluster), [Azure](#azure-cluster), [GCP](#gcp-cluster), [Yandex Cloud](#yc-cluster). Предложенные примеры Terraform-сценариев развертывают однотипную инфраструктуру:
 

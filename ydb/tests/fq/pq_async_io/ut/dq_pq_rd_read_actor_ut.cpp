@@ -22,7 +22,7 @@ struct TFixture : public TPqIoTestFixture {
     }
 
     void InitRdSource(
-        NYql::NPq::NProto::TDqPqTopicSource&& settings,
+        const NYql::NPq::NProto::TDqPqTopicSource& settings,
         i64 freeSpace = 1_MB)
     {
         CaSetup->Execute([&](TFakeActor& actor) {
@@ -38,8 +38,9 @@ struct TFixture : public TPqIoTestFixture {
             const THashMap<TString, TString> secureParams;
             const THashMap<TString, TString> taskParams { {"pq", serializedParams} };
 
+            NYql::NPq::NProto::TDqPqTopicSource copySettings = settings;
             auto [dqSource, dqSourceAsActor] = CreateDqPqRdReadActor(
-                std::move(settings),
+                std::move(copySettings),
                 0,
                 NYql::NDq::TCollectStatsLevel::None,
                 "query_1",
@@ -191,8 +192,8 @@ struct TFixture : public TPqIoTestFixture {
     }
 
 
-    void StartSession() {
-        InitRdSource(BuildPqTopicSourceSettings("topicName"));
+    void StartSession(NYql::NPq::NProto::TDqPqTopicSource& settings) {
+        InitRdSource(settings);
         SourceRead<TString>(UVParser);
         ExpectCoordinatorChangesSubscribe();
     
@@ -204,13 +205,14 @@ struct TFixture : public TPqIoTestFixture {
         MockAck(RowDispatcher1);
     }
 
-    void ProcessSomeJsons(ui64 offset, const std::vector<TString>& jsons, NActors::TActorId rowDispatcherId) {
+    void ProcessSomeJsons(ui64 offset, const std::vector<TString>& jsons, NActors::TActorId rowDispatcherId,
+        std::function<std::vector<TString>(const NUdf::TUnboxedValue&)> uvParser = UVParser) {
         MockNewDataArrived(rowDispatcherId);
         ExpectGetNextBatch(rowDispatcherId);
 
         MockMessageBatch(offset, jsons, rowDispatcherId);
 
-        auto result = SourceReadDataUntil<TString>(UVParser, jsons.size());
+        auto result = SourceReadDataUntil<TString>(uvParser, jsons.size());
         AssertDataWithWatermarks(result, jsons, {});
     } 
 
@@ -218,6 +220,8 @@ struct TFixture : public TPqIoTestFixture {
     const TString Json2 = "{\"dt\":200,\"value\":\"value2\"}";
     const TString Json3 = "{\"dt\":300,\"value\":\"value3\"}";
     const TString Json4 = "{\"dt\":400,\"value\":\"value4\"}";
+
+    NYql::NPq::NProto::TDqPqTopicSource Source1 = BuildPqTopicSourceSettings("topicName");
 
     NActors::TActorId LocalRowDispatcherId;
     NActors::TActorId Coordinator1Id;
@@ -228,12 +232,12 @@ struct TFixture : public TPqIoTestFixture {
 
 Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
     Y_UNIT_TEST_F(TestReadFromTopic, TFixture) {
-        StartSession();
+        StartSession(Source1);
         ProcessSomeJsons(0, {Json1, Json2}, RowDispatcher1);
     }
 
     Y_UNIT_TEST_F(SessionError, TFixture) {
-        StartSession();
+        StartSession(Source1);
 
         TInstant deadline = Now() + TDuration::Seconds(5);
         auto future = CaSetup->AsyncInputPromises.FatalError.GetFuture();
@@ -252,7 +256,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
     }
 
     Y_UNIT_TEST_F(ReadWithFreeSpace, TFixture) {
-        StartSession();
+        StartSession(Source1);
 
         MockNewDataArrived(RowDispatcher1);
         ExpectGetNextBatch(RowDispatcher1);
@@ -275,7 +279,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
  
         {
             TFixture f;
-            f.StartSession();
+            f.StartSession(f.Source1);
             f.ProcessSomeJsons(0, {f.Json1, f.Json2}, f.RowDispatcher1);  // offsets: 0, 1
 
             f.SaveSourceState(CreateCheckpoint(), state);
@@ -283,7 +287,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         }
         {
             TFixture f;
-            f.InitRdSource(BuildPqTopicSourceSettings("topicName"));
+            f.InitRdSource(f.Source1);
             f.SourceRead<TString>(UVParser);
             f.LoadSource(state);
             f.SourceRead<TString>(UVParser);
@@ -303,7 +307,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         }
         {
             TFixture f;
-            f.InitRdSource(BuildPqTopicSourceSettings("topicName"));
+            f.InitRdSource(f.Source1);
             f.SourceRead<TString>(UVParser);
             f.LoadSource(state);
             f.SourceRead<TString>(UVParser);
@@ -321,7 +325,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
     }
 
     Y_UNIT_TEST_F(CoordinatorChanged, TFixture) {
-        StartSession();
+        StartSession(Source1);
         ProcessSomeJsons(0, {Json1, Json2}, RowDispatcher1);
         MockMessageBatch(2, {Json3}, RowDispatcher1);
 
@@ -342,7 +346,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
     }
 
     Y_UNIT_TEST_F(RowDispatcherIsRestarted, TFixture) {
-        StartSession();
+        StartSession(Source1);
         ProcessSomeJsons(0, {Json1, Json2}, RowDispatcher1);
         MockDisconnected();
         MockConnected();
@@ -361,5 +365,11 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         MockCoordinatorChanged(Coordinator2Id);
         MockSessionError();
     }
-}
+
+     Y_UNIT_TEST_F(MetadataFields, TFixture) {
+        auto source = BuildPqTopicSourceSettings("topicName");
+        source.AddMetadataFields("_yql_sys_create_time");
+        StartSession(source);
+        ProcessSomeJsons(0, {Json1}, RowDispatcher1, UVParserWithMetadatafields);  
+    }
 } // NYql::NDq

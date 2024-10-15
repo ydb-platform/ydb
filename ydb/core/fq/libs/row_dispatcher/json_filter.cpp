@@ -125,7 +125,7 @@ public:
 
                 size_t fieldId = 0;
                 for (const auto& column : values.second) {
-                    items[FieldsPositions[fieldId++]] = column[rowId].data()
+                    items[FieldsPositions[fieldId++]] = column[rowId].data()  // Check that std::string_view was initialized in json_parser
                         ? NKikimr::NMiniKQL::MakeString(column[rowId]).MakeOptional()
                         : NKikimr::NUdf::TUnboxedValuePod();
                 }

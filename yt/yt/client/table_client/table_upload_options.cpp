@@ -359,8 +359,6 @@ TTableUploadOptions GetFileUploadOptions(
     auto enableStripedErasure = cypressTableAttributes.Get<bool>("enable_striped_erasure", false);
     auto erasureCodec = cypressTableAttributes.Get<NErasure::ECodec>("erasure_codec", NErasure::ECodec::None);
 
-    TTableUploadOptions result;
-
     if (path.GetAppend()) {
         THROW_ERROR_EXCEPTION("Attribute \"append\" is not supported for files")
             << TErrorAttribute("path", path);
@@ -374,13 +372,11 @@ TTableUploadOptions GetFileUploadOptions(
             << TErrorAttribute("path", path);
     }
 
+    TTableUploadOptions result;
     result.CompressionCodec = compressionCodec;
     result.ErasureCodec = erasureCodec;
     result.EnableStripedErasure = enableStripedErasure;
     result.SecurityTags = path.GetSecurityTags();
-    result.LockMode = ELockMode::Exclusive;
-    result.UpdateMode = EUpdateMode::Overwrite;
-
     return result;
 }
 

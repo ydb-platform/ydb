@@ -392,7 +392,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         MockSessionError();
     }
 
-     Y_UNIT_TEST_F(MetadataFields, TFixture) {
+    Y_UNIT_TEST_F(MetadataFields, TFixture) {
         auto source = BuildPqTopicSourceSettings("topicName");
         source.AddMetadataFields("_yql_sys_create_time");
         StartSession(source);

@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -1330,15 +1331,22 @@ uint64_t roaring_bitmap_get_cardinality(const roaring_bitmap_t *r) {
 uint64_t roaring_bitmap_range_cardinality(const roaring_bitmap_t *r,
                                           uint64_t range_start,
                                           uint64_t range_end) {
-    const roaring_array_t *ra = &r->high_low_container;
-
-    if (range_end > UINT32_MAX) {
-        range_end = UINT32_MAX + UINT64_C(1);
-    }
-    if (range_start >= range_end) {
+    if (range_start >= range_end || range_start > (uint64_t)UINT32_MAX + 1) {
         return 0;
     }
-    range_end--;  // make range_end inclusive
+    return roaring_bitmap_range_cardinality_closed(r, (uint32_t)range_start,
+                                                   (uint32_t)(range_end - 1));
+}
+
+uint64_t roaring_bitmap_range_cardinality_closed(const roaring_bitmap_t *r,
+                                                 uint32_t range_start,
+                                                 uint32_t range_end) {
+    const roaring_array_t *ra = &r->high_low_container;
+
+    if (range_start > range_end) {
+        return 0;
+    }
+
     // now we have: 0 <= range_start <= range_end <= UINT32_MAX
 
     uint16_t minhb = (uint16_t)(range_start >> 16);
@@ -2005,11 +2013,18 @@ static void inplace_fully_flip_container(roaring_array_t *x1_arr, uint16_t hb) {
 roaring_bitmap_t *roaring_bitmap_flip(const roaring_bitmap_t *x1,
                                       uint64_t range_start,
                                       uint64_t range_end) {
-    if (range_start >= range_end) {
+    if (range_start >= range_end || range_start > (uint64_t)UINT32_MAX + 1) {
         return roaring_bitmap_copy(x1);
     }
-    if (range_end >= UINT64_C(0x100000000)) {
-        range_end = UINT64_C(0x100000000);
+    return roaring_bitmap_flip_closed(x1, (uint32_t)range_start,
+                                      (uint32_t)(range_end - 1));
+}
+
+roaring_bitmap_t *roaring_bitmap_flip_closed(const roaring_bitmap_t *x1,
+                                             uint32_t range_start,
+                                             uint32_t range_end) {
+    if (range_start > range_end) {
+        return roaring_bitmap_copy(x1);
     }
 
     roaring_bitmap_t *ans = roaring_bitmap_create();
@@ -2017,8 +2032,8 @@ roaring_bitmap_t *roaring_bitmap_flip(const roaring_bitmap_t *x1,
 
     uint16_t hb_start = (uint16_t)(range_start >> 16);
     const uint16_t lb_start = (uint16_t)range_start;  // & 0xFFFF;
-    uint16_t hb_end = (uint16_t)((range_end - 1) >> 16);
-    const uint16_t lb_end = (uint16_t)(range_end - 1);  // & 0xFFFF;
+    uint16_t hb_end = (uint16_t)(range_end >> 16);
+    const uint16_t lb_end = (uint16_t)range_end;  // & 0xFFFF;
 
     ra_append_copies_until(&ans->high_low_container, &x1->high_low_container,
                            hb_start, is_cow(x1));
@@ -2059,17 +2074,24 @@ roaring_bitmap_t *roaring_bitmap_flip(const roaring_bitmap_t *x1,
 
 void roaring_bitmap_flip_inplace(roaring_bitmap_t *x1, uint64_t range_start,
                                  uint64_t range_end) {
-    if (range_start >= range_end) {
-        return;  // empty range
+    if (range_start >= range_end || range_start > (uint64_t)UINT32_MAX + 1) {
+        return;
     }
-    if (range_end >= UINT64_C(0x100000000)) {
-        range_end = UINT64_C(0x100000000);
+    roaring_bitmap_flip_inplace_closed(x1, (uint32_t)range_start,
+                                       (uint32_t)(range_end - 1));
+}
+
+void roaring_bitmap_flip_inplace_closed(roaring_bitmap_t *x1,
+                                        uint32_t range_start,
+                                        uint32_t range_end) {
+    if (range_start > range_end) {
+        return;  // empty range
     }
 
     uint16_t hb_start = (uint16_t)(range_start >> 16);
     const uint16_t lb_start = (uint16_t)range_start;
-    uint16_t hb_end = (uint16_t)((range_end - 1) >> 16);
-    const uint16_t lb_end = (uint16_t)(range_end - 1);
+    uint16_t hb_end = (uint16_t)(range_end >> 16);
+    const uint16_t lb_end = (uint16_t)range_end;
 
     if (hb_start == hb_end) {
         inplace_flip_container(&x1->high_low_container, hb_start, lb_start,
@@ -2827,15 +2849,28 @@ bool roaring_bitmap_contains(const roaring_bitmap_t *r, uint32_t val) {
  */
 bool roaring_bitmap_contains_range(const roaring_bitmap_t *r,
                                    uint64_t range_start, uint64_t range_end) {
-    if (range_end >= UINT64_C(0x100000000)) {
-        range_end = UINT64_C(0x100000000);
+    if (range_start >= range_end || range_start > (uint64_t)UINT32_MAX + 1) {
+        return true;
     }
-    if (range_start >= range_end)
-        return true;  // empty range are always contained!
-    if (range_end - range_start == 1)
+    return roaring_bitmap_contains_range_closed(r, (uint32_t)range_start,
+                                                (uint32_t)(range_end - 1));
+}
+
+/**
+ * Check whether a range of values from range_start (included) to range_end
+ * (included) is present
+ */
+bool roaring_bitmap_contains_range_closed(const roaring_bitmap_t *r,
+                                          uint32_t range_start,
+                                          uint32_t range_end) {
+    if (range_start > range_end) {
+        return true;
+    }  // empty range are always contained!
+    if (range_end == range_start) {
         return roaring_bitmap_contains(r, (uint32_t)range_start);
+    }
     uint16_t hb_rs = (uint16_t)(range_start >> 16);
-    uint16_t hb_re = (uint16_t)((range_end - 1) >> 16);
+    uint16_t hb_re = (uint16_t)(range_end >> 16);
     const int32_t span = hb_re - hb_rs;
     const int32_t hlc_sz = ra_get_size(&r->high_low_container);
     if (hlc_sz < span + 1) {
@@ -2847,7 +2882,7 @@ bool roaring_bitmap_contains_range(const roaring_bitmap_t *r,
         return false;
     }
     const uint32_t lb_rs = range_start & 0xFFFF;
-    const uint32_t lb_re = ((range_end - 1) & 0xFFFF) + 1;
+    const uint32_t lb_re = (range_end & 0xFFFF) + 1;
     uint8_t type;
     container_t *c =
         ra_get_container_at_index(&r->high_low_container, (uint16_t)is, &type);

@@ -29,18 +29,18 @@
 #include <curl/curl.h>
 #include "llist.h"
 
-#if defined(DEBUGBUILD) || defined(UNITTESTS)
+#ifdef DEBUGBUILD
 extern time_t deltatime;
 #endif
 
 struct stsentry {
-  struct Curl_llist_node node;
+  struct Curl_llist_element node;
   const char *host;
   bool includeSubDomains;
   curl_off_t expires; /* the timestamp of this entry's expiry */
 };
 
-/* The HSTS cache. Needs to be able to tailmatch hostnames. */
+/* The HSTS cache. Needs to be able to tailmatch host names. */
 struct hsts {
   struct Curl_llist list;
   char *filename;

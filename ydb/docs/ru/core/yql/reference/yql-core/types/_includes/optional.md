@@ -70,9 +70,15 @@ SELECT
 
 В YQL отсутствует неявное преобразование типов из `Optional<T>` в `T`, поэтому выполнимость `NOT NULL` ограничения на колонку таблицы обеспечивается на этапе компиляции запроса {{ ydb-short-name }}.
 
-Создать non-nullable колонку в таблице {{ ydb-short-name }} можно с помощью операции [CREATE TABLE](../../../reference/syntax/create_table/index.md), пользуясь ключевым словом `NOT NULL`.
+Создать non-nullable колонку в строковой или колоночной таблице {{ ydb-short-name }} можно с помощью операции [CREATE TABLE](../../../reference/syntax/create_table/index.md), пользуясь ключевым словом `NOT NULL`.
 
 ### Пример
+
+{% if backend_name == "YDB" and oss == true %}
+
+{% list tabs %}
+
+- Создание non-nullable колонки в строковой таблице
 
 ```yql
 CREATE TABLE t (
@@ -81,7 +87,46 @@ CREATE TABLE t (
     PRIMARY KEY (Key))
 ```
 
+- Создание non-nullable колонки в колоночной таблице
+
+```yql
+CREATE TABLE t (
+    Key Uint64 NOT NULL,
+    Value String NOT NULL,
+    PRIMARY KEY (Key)
+    )
+
+    WITH (
+        STORE = COLUMN
+    )
+```
+
+{% endlist %}
+
+{% else %}
+
+```yql
+CREATE TABLE t (
+    Key Uint64 NOT NULL,
+    Value String NOT NULL,
+    PRIMARY KEY (Key))
+```
+
+{% endif %}
+
 После этого операции записи в таблицу `t` будут выполняться, только если среди значений на вставку в колонки `key`, `value` будут отсутствовать значения NULL.
+
+{% if oss == true and backend_name == "YDB" %}
+
+{% note warning %}
+
+{% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
+
+{% include [ways_add_data_to_olap](../../../../_includes/ways_add_data_to_olap.md) %}
+
+{% endnote %}
+
+{% endif %}
 
 ### Пример взаимодействия NOT NULL ограничения с функциями YQL
 

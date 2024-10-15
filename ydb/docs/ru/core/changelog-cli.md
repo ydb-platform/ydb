@@ -15,8 +15,8 @@
 * Добавлена поддержка типов big datetime: `Date32`, `Datetime64`, `Timestamp64`, `Interval64`.
 * Переработана команда `ydb workload`:
 
-  * Добавлена опция `--clear` в подкоманде `init`, позволяющая удалить все существующие таблицы перед созданием новых.
-  * Добавлена команда `ydb workload * import` для заполнения таблиц начальным контентом перед началом нагрузки.
+  * Добавлена опция `--clear` в подкоманде `init`, позволяющая удалить все существующие колоночные и строчные таблицы перед созданием новых.
+  * Добавлена команда `ydb workload * import` для заполнения колоночных и строчных таблиц начальным контентом перед началом нагрузки.
 
 ### Изменения с потерей обратной совместимости
 
@@ -82,7 +82,7 @@
 * В командах [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb table query explain](reference/ydb-cli/commands/explain-plan.md), [ydb yql](reference/ydb-cli/yql.md) и [ydb scripting yql](reference/ydb-cli/scripting-yql.md) добавлена опция `--flame-graph`, задающая путь до файла, в котором необходимо сохранить визуализацию статистики выполнения запросов.
 * [Специальные команды](reference/ydb-cli/interactive-cli.md#spec-commands) интерактивного режима выполнения запросов теперь не чувствительны к регистру.
 * Добавлена валидация [специальных команд](reference/ydb-cli/interactive-cli.md#spec-commands) и их [параметров](reference/ydb-cli/interactive-cli.md#internal-vars).
-* Добавлено чтение из таблицы в сценарии с транзакциями в команде [ydb workload transfer topic-to-table run](reference/ydb-cli/workload-transfer.md#run).
+* Добавлено чтение из строковой таблицы в сценарии с транзакциями в команде [ydb workload transfer topic-to-table run](reference/ydb-cli/workload-transfer.md#run).
 * Добавлена опция `--commit-messages` в команде [ydb workload transfer topic-to-table run](reference/ydb-cli/workload-transfer.md#run), задающая число сообщений в одной транзакции.
 * Добавлены опции `--only-table-in-tx` и `--only-topic-in-tx` в команде [ydb workload transfer topic-to-table run](reference/ydb-cli/workload-transfer.md#run), задающие ограничения на виды запросов в одной транзакции.
 * Добавлены новые колонки `Select time` и `Upsert time` в таблице статистики в команде [ydb workload transfer topic-to-table run](reference/ydb-cli/workload-transfer.md#run).
@@ -130,7 +130,7 @@
 * Добавлена команда [ydb workload kv run read-rows](reference/ydb-cli/workload-kv.md#read-rows-kv), которая нагружает базу запросами на чтение строк, используя новый экспериментальный API вызов ReadRows (реализован только в ветке [main](https://github.com/ydb-platform/ydb)), выполняющий более быстрое чтение по ключу, чем [select](reference/ydb-cli/workload-kv.md#select-kv).
 * В [ydb workload topic](reference/ydb-cli/workload-topic.md) добавлены новые параметры `--warmup-time`, `--percentile`, `--topic`, задающие время прогрева теста, процентиль в выводе статистики и имя топика соответственно.
 * Добавлена команда [ydb workload tpch](reference/ydb-cli/workload-tpch.md) для запуска нагрузочного теста TPC-H.
-* Добавлен флаг `--ordered` в команде [ydb tools dump](reference/ydb-cli/export-import/tools-dump.md), сохраняющий порядок по первичному ключу в таблицах.
+* Добавлен флаг `--ordered` в команде [ydb tools dump](reference/ydb-cli/export-import/tools-dump.md), сохраняющий порядок по первичному ключу в строковых и колоночных таблицах.
 
 ### Производительность
 
@@ -225,7 +225,7 @@
 
 * Добавлен новый тип нагрузочного тестирования:
 
-  * `ydb workload kv init` — создание таблицы для тестирования kv нагрузки;
+  * `ydb workload kv init` — создание строковой таблицы для тестирования kv нагрузки;
   * `ydb workload kv run` — запуск одной из 3 видов нагрузки: запуск нескольких сессий вставки `UPSERT`, запуск нескольких сессий вставки `INSERT` или запуск нескольких сессий с GET-запросами по первичному ключу;
   * `ydb workload kv clean` — удаление тестовой таблицы.
 

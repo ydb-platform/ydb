@@ -286,6 +286,34 @@ class TestPqRowDispatcher(TestYdsBase):
         assert "Row dispatcher will use the predicate: WHERE (`time` > 101" in issues, "Incorrect Issues: " + issues
 
     @yq_v1
+    def test_filter_missing_fields(self, kikimr, client):
+        client.create_yds_connection(
+            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
+        )
+        self.init_topics("test_filter")
+
+        sql = Rf'''
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String, event String NOT NULL))
+                WHERE data = "";'''
+
+        query_id = start_yds_query(kikimr, client, sql)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+
+        data = [
+            '{"time": 101, "event": "event1"}',
+            '{"time": 102, "data": null, "event": "event2"}',
+        ]
+
+        self.write_stream(data)
+        expected = ['101', '102']
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+
+        wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
+        stop_yds_query(client, query_id)
+
+    @yq_v1
     def test_filter_use_unsupported_predicate(self, kikimr, client):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True

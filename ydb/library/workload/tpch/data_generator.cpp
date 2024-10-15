@@ -128,28 +128,28 @@ TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::TDataPortions TTpchWo
     if (tdefs[TableNum].child != NONE) {
         ctxs.emplace_back(*this, tdefs[TableNum].child, nullptr);
     }
-    with_lock(NumbersLock) {
-        if (!Generated) {
-            if (Owner.GetProcessCount() > 1) {
-                DSS_HUGE e;
-                set_state(TableNum, Owner.GetScale(), Owner.GetProcessCount(), Owner.GetProcessIndex() + 1, &e);
-            }
-            if (!!Owner.StateProcessor) {
-                if (const auto* state = MapFindPtr(Owner.StateProcessor->GetState(), GetName())) {
-                    Generated = state->Position;
-                    GenSeed(TableNum, Generated);
-                }
+
+    auto g = Guard(Lock);
+    if (!Generated) {
+        if (Owner.GetProcessCount() > 1) {
+            DSS_HUGE e;
+            set_state(TableNum, Owner.GetScale(), Owner.GetProcessCount(), Owner.GetProcessIndex() + 1, &e);
+        }
+        if (!!Owner.StateProcessor) {
+            if (const auto* state = MapFindPtr(Owner.StateProcessor->GetState(), GetName())) {
+                Generated = state->Position;
+                GenSeed(TableNum, Generated);
             }
         }
-        const auto count = TableSize > Generated ? std::min(ui64(TableSize - Generated), Owner.Params.BulkSize) : 0;
-        if (!count) {
-            return result;
-        }
-        ctxs.front().SetCount(count);
-        ctxs.front().SetStart((tdefs[TableNum].base * Owner.GetScale() / Owner.GetProcessCount()) * Owner.GetProcessIndex() + Generated + 1);
-        Generated += count;
     }
-    GenerateRows(ctxs);
+    const auto count = TableSize > Generated ? std::min(ui64(TableSize - Generated), Owner.Params.BulkSize) : 0;
+    if (!count) {
+        return result;
+    }
+    ctxs.front().SetCount(count);
+    ctxs.front().SetStart((tdefs[TableNum].base * Owner.GetScale() / Owner.GetProcessCount()) * Owner.GetProcessIndex() + Generated + 1);
+    Generated += count;
+    GenerateRows(ctxs, std::move(g));
     for(auto& ctx: ctxs) {
         ctx.AppendPortions(result);
     }
@@ -158,7 +158,7 @@ TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::TDataPortions TTpchWo
 
 #define CSV_WRITER_REGISTER_FIELD_DATE(writer, column_name, record_field) \
     writer.RegisterField(column_name, [](const decltype(writer)::TItem& item, IOutputStream& out) { \
-        out << TInstant::ParseIso8601(item.record_field).Days(); \
+        out << item.record_field; \
     });
 
 #define CSV_WRITER_REGISTER_FIELD_COMMENT(writer, prefix) \
@@ -185,13 +185,14 @@ public:
     {}
 
 protected:
-    virtual void GenerateRows(TContexts& ctxs) override {
+    virtual void GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) override {
         TVector<order_t> ordersList(ctxs.front().GetCount());
-        with_lock(DriverLock) {
-            for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
-                mk_order(ctxs.front().GetStart() + i, &ordersList[i], 0);
-            }
+        for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
+            row_start(TableNum);
+            mk_order(ctxs.front().GetStart() + i, &ordersList[i], 0);
+            row_stop(TableNum);
         }
+        g.Release();
 
         TCsvItemWriter<order_t> ordersWriter(ctxs[0].GetCsv().Out);
         CSV_WRITER_REGISTER_FIELD(ordersWriter, "o_orderkey", okey);
@@ -245,13 +246,15 @@ public:
     {}
 
 protected:
-    virtual void GenerateRows(TContexts& ctxs) override {
+    virtual void GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) override {
         TVector<part_t> partsList(ctxs.front().GetCount());
-        with_lock(DriverLock) {
-            for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
-                mk_part(ctxs.front().GetStart() + i, &partsList[i]);
-            }
+        for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
+            row_start(TableNum);
+            mk_part(ctxs.front().GetStart() + i, &partsList[i]);
+            row_stop(TableNum);
         }
+        g.Release();
+
         TCsvItemWriter<part_t> partsWriter(ctxs[0].GetCsv().Out);
         CSV_WRITER_REGISTER_FIELD(partsWriter, "p_partkey", partkey);
         CSV_WRITER_REGISTER_FIELD(partsWriter, "p_name", name);
@@ -286,13 +289,14 @@ public:
     {}
 
 protected:
-    virtual void GenerateRows(TContexts& ctxs) override {
+    virtual void GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) override {
         TVector<supplier_t> suppList(ctxs.front().GetCount());
-        with_lock(DriverLock) {
-            for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
-                mk_supp(ctxs.front().GetStart() + i, &suppList[i]);
-            }
+        for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
+            row_start(TableNum);
+            mk_supp(ctxs.front().GetStart() + i, &suppList[i]);
+            row_stop(TableNum);
         }
+        g.Release();
 
         TCsvItemWriter<supplier_t> writer(ctxs[0].GetCsv().Out);
         CSV_WRITER_REGISTER_FIELD(writer, "s_suppkey", suppkey);
@@ -316,13 +320,14 @@ public:
     {}
 
 protected:
-    virtual void GenerateRows(TContexts& ctxs) override {
+    virtual void GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) override {
         TVector<customer_t> custList(ctxs.front().GetCount());
-        with_lock(DriverLock) {
-            for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
-                mk_cust(ctxs.front().GetStart() + i, &custList[i]);
-            }
+        for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
+            row_start(TableNum);
+            mk_cust(ctxs.front().GetStart() + i, &custList[i]);
+            row_stop(TableNum);
         }
+        g.Release();
 
         TCsvItemWriter<customer_t> writer(ctxs[0].GetCsv().Out);
         CSV_WRITER_REGISTER_FIELD(writer, "c_custkey", custkey);
@@ -347,13 +352,15 @@ public:
     {}
 
 protected:
-    virtual void GenerateRows(TContexts& ctxs) override {
+    virtual void GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) override {
         TVector<code_t> nationList(ctxs.front().GetCount());
-        with_lock(DriverLock) {
-            for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
-                mk_nation(ctxs.front().GetStart() + i, &nationList[i]);
-            }
+        for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
+            row_start(TableNum);
+            mk_nation(ctxs.front().GetStart() + i, &nationList[i]);
+            row_stop(TableNum);
         }
+        g.Release();
+
         TCsvItemWriter<code_t> writer(ctxs[0].GetCsv().Out);
         CSV_WRITER_REGISTER_FIELD(writer, "n_nationkey", code);
         CSV_WRITER_REGISTER_FIELD(writer, "n_name", text);
@@ -373,13 +380,15 @@ public:
     {}
 
 protected:
-    virtual void GenerateRows(TContexts& ctxs) override {
+    virtual void GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) override {
         TVector<code_t> regionList(ctxs.front().GetCount());
-        with_lock(DriverLock) {
-            for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
-                mk_region(ctxs.front().GetStart() + i, &regionList[i]);
-            }
+        for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
+            row_start(TableNum);
+            mk_region(ctxs.front().GetStart() + i, &regionList[i]);
+            row_stop(TableNum);
         }
+        g.Release();
+
         TCsvItemWriter<code_t> writer(ctxs[0].GetCsv().Out);
         CSV_WRITER_REGISTER_FIELD(writer, "r_regionkey", code);
         CSV_WRITER_REGISTER_FIELD(writer, "r_name", text);

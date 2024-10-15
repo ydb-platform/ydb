@@ -5,6 +5,8 @@ items:
         href: infrastructure/network.md
       - name: Data center outages
         href: infrastructure/dc-outage.md
+      - name: Data center maintenance and drills
+        href: infrastructure/dc-drills.md
       - name: Hardware issues
         href: infrastructure/hardware.md
   - name: Reaching resource limits

@@ -8,4 +8,30 @@ Additionally, which components within the  {{ ydb-short-name }} process consume 
 
 ## Diagnostics
 
+1. Determine whether any {{ ydb-short-name }} nodes recently restarted for unknown reasons. Exclude cases of {{ ydb-short-name }} upgrades.
+
+    1. Open [Embedded UI](../../../../reference/embedded-ui/index.md).
+
+    1. On the **Nodes** tab, look for nodes that have low uptime.
+
+1. Determine whether memory usage reached 100%.
+
+    1. Open the **DB overview** dashboard in Grafana.
+
+    1. Analyze the charts in the **Memory** section.
+
+1. Determine whether the user load on {{ ydb-short-name }} has increased. Analyze the following charts on the **DB overview** dashboard in Grafana:
+
+    - **Requests** chart
+    - **Request size** chart
+    - **Response size** chart
+
+1. Determine whether new releases or data usage changes occurred in your applications.
+
 ## Recommendation
+
+Consider the following solutions to the problem of insufficient memory:
+
+- If the load on {{ ydb-short-name }} increased because of new usage patterns or higher volume of queries, try to optimize the application to reduce the load on {{ ydb-short-name }} or add more {{ ydb-short-name }} nodes.
+
+- If the load on {{ ydb-short-name }} has not changed, but {{ ydb-short-name }} nodes still restart, consider adding more {{ ydb-short-name }} nodes or raising the [hard memory limit](../../../../deploy/configuration/config.md#hard-memory-limit) available to {{ ydb-short-name }} nodes.

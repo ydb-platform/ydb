@@ -166,6 +166,7 @@ private:
     };
     
     TMap<ui64, SessionInfo> Sessions;
+    const THolderFactory& HolderFactory;
     const i64 BufferSize;
     i64 UsedSpace = 0;
 
@@ -243,7 +244,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         TCollectStatsLevel statsLevel,
         const TTxId& txId,
         ui64 taskId,
-        const THolderFactory& /*holderFactory*/,
+        const THolderFactory& holderFactory,
         NPq::NProto::TDqPqTopicSource&& sourceParams,
         NPq::NProto::TDqReadTaskParams&& readParams,
         const NActors::TActorId& computeActorId,
@@ -256,6 +257,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         , Token(token)
         , LocalRowDispatcherActorId(localRowDispatcherActorId)
         , Metrics(txId, taskId, counters)
+        , HolderFactory(holderFactory)
         , BufferSize(bufferSize)
 {
     MetadataFields.reserve(SourceParams.MetadataFieldsSize());
@@ -265,7 +267,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
     }
 
     IngressStats.Level = statsLevel;
-    SRC_LOG_D("Start read actor, local row dispatcher " << LocalRowDispatcherActorId.ToString());
+    SRC_LOG_D("Start read actor, local row dispatcher " << LocalRowDispatcherActorId.ToString() << ", metadatafields: " << JoinSeq(',', SourceParams.GetMetadataFields()));
 }
 
 void TDqPqRdReadActor::ProcessState() {
@@ -677,8 +679,21 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
 std::pair<NUdf::TUnboxedValuePod, i64> TDqPqRdReadActor::CreateItem(const TString& data) {
     i64 usedSpace = 0;
     NUdf::TUnboxedValuePod item;
-    item = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.data(), data.size()));
+    if (MetadataFields.empty()) {
+        item = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.data(), data.size()));
+        usedSpace += data.size();
+        return std::make_pair(item, usedSpace);
+    } 
+
+    NUdf::TUnboxedValue* itemPtr;
+    item = HolderFactory.CreateDirectArrayHolder(MetadataFields.size() + 1, itemPtr);
+    *(itemPtr++) = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.data(), data.size()));
     usedSpace += data.size();
+
+    for ([[maybe_unused]] const auto& [name, extractor] : MetadataFields) {
+        auto ub = NYql::NUdf::TUnboxedValuePod(0);  // TODO: use real values
+        *(itemPtr++) = std::move(ub);
+    }
     return std::make_pair(item, usedSpace);
 }
 

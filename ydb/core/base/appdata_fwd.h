@@ -64,6 +64,7 @@ namespace NKikimrConfig {
     class TGraphConfig;
     class TMetadataCacheConfig;
     class TMemoryControllerConfig;
+    class TFeatureFlags;
 }
 
 namespace NKikimrReplication {
@@ -271,6 +272,9 @@ struct TAppData {
             TProgramShouldContinue *kikimrShouldContinue);
 
     ~TAppData();
+
+    void InitFeatureFlags(const NKikimrConfig::TFeatureFlags& flags);
+    void UpdateRuntimeFlags(const NKikimrConfig::TFeatureFlags& flags);
 };
 
 inline TAppData* AppData(NActors::TActorSystem* actorSystem) {

@@ -86,15 +86,6 @@ TStringBuilder& TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TCon
     return Csv;
 }
 
-namespace {
-    const TString FormatString = [] () {
-        Ydb::Formats::CsvSettings settings;
-        settings.set_delimiter("|");
-        settings.set_header(true);
-        settings.mutable_quoting()->set_disabled(true);
-        return settings.SerializeAsString();
-    } ();
-}
 void TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TContext::AppendPortions(TDataPortions& result) {
     const auto name = getTdefsByNumber(TableNum)->name;
     const auto path = Owner.GetFullTableName(name);
@@ -113,7 +104,7 @@ void TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TContext::Appen
             Owner.Owner.StateProcessor.Get(),
             path,
             name,
-            TDataPortion::TCsv(std::move(Csv), FormatString),
+            TDataPortion::TCsv(std::move(Csv), TWorkloadGeneratorBase::PsvFormatString),
             Start - 1,
             Count
         ));

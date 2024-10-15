@@ -387,6 +387,10 @@ TProgram::TProgram(
                 cleaned.MutableYqlCore()->CopyFrom(GatewaysConfig_->GetYqlCore());
             }
 
+            if (GatewaysConfig_->HasSqlCore()) {
+                cleaned.MutableSqlCore()->CopyFrom(GatewaysConfig_->GetSqlCore());
+            }
+
             if (GatewaysConfig_->HasDq()) {
                 cleaned.MutableDq()->CopyFrom(GatewaysConfig_->GetDq());
             }
@@ -603,6 +607,30 @@ void TProgram::HandleSourceCode(TString& sourceCode) {
     }
 }
 
+namespace {
+
+THashSet<TString> ExtractSqlFlags(const NYT::TNode& dataNode) {
+    THashSet<TString> result;
+    for (const auto& f : dataNode["SqlFlags"].AsList()) {
+        result.insert(f.AsString());
+    }
+    return result;
+}
+
+} // namespace
+
+void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& flags) {
+    if (qContext.CanRead()) {
+        auto loaded = qContext.GetReader()->Get({FacadeComponent, TranslationLabel}).GetValueSync();
+        if (!loaded) {
+            return;
+        }
+
+        auto dataNode = NYT::NodeFromYsonString(loaded->Value);
+        flags = ExtractSqlFlags(dataNode);
+    }
+}
+
 void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
     const NSQLTranslation::TTranslationSettings*& currentSettings)
 {
@@ -639,11 +667,7 @@ void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& 
             loadedSettings.ClusterMapping[c.first] = c.second.AsString();
         }
 
-        loadedSettings.Flags.clear();
-        for (const auto& f : dataNode["SqlFlags"].AsList()) {
-            loadedSettings.Flags.insert(f.AsString());
-        }
-    
+        loadedSettings.Flags = ExtractSqlFlags(dataNode);
         loadedSettings.V0Behavior = (NSQLTranslation::EV0Behavior)dataNode["V0Behavior"].AsUint64();
         loadedSettings.V0WarnAsError = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["V0WarnAsError"].AsBool());
         loadedSettings.DqDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["DqDefaultAuto"].AsBool());

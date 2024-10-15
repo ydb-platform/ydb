@@ -110,17 +110,20 @@ public:
                    const TIndexBuildInfo::TLimits& limits,
                    const TActorId& responseActorId,
                    ui64 buildIndexId,
-                   TIndexBuildInfo::TSampleK::TRows&& init)
+                   TIndexBuildInfo::TSampleK::TRows init,
+                   ui32 child)
         : TargetTable(std::move(targetTable))
         , ResponseActorId(responseActorId)
         , BuildIndexId(buildIndexId)
         , Init(std::move(init))
+        , Child(child)
     {
         LogPrefix = TStringBuilder() 
             << "TUploadSampleK: BuildIndexId: " << BuildIndexId 
             << " ResponseActorId: " << ResponseActorId;
         Limits.MaxUploadRowsRetryCount = limits.MaxRetries;
         Y_ASSERT(!Init.empty());
+        Y_ASSERT(Child != 0);
     }
 
     static constexpr auto ActorActivityType() {
@@ -502,11 +505,13 @@ private:
         record.SetSnapshotStep(ui64(buildInfo.SnapshotStep));
 
         auto& shardStatus = buildInfo.Shards.at(shardIdx);
-        if (shardStatus.LastKeyAck) {
-            TSerializedTableRange range = TSerializedTableRange(shardStatus.LastKeyAck, "", false, false);
-            range.Serialize(*record.MutableKeyRange());
-        } else {
-            shardStatus.Range.Serialize(*record.MutableKeyRange());
+        if constexpr (requires { record.MutableKeyRange(); }) {
+            if (shardStatus.LastKeyAck) {
+                TSerializedTableRange range = TSerializedTableRange(shardStatus.LastKeyAck, "", false, false);
+                range.Serialize(*record.MutableKeyRange());
+            } else if (buildInfo.KMeans.Parent == 0) {
+                shardStatus.Range.Serialize(*record.MutableKeyRange());
+            }
         }
 
         record.SetSeqNoGeneration(Self->Generation());
@@ -523,6 +528,12 @@ private:
 
         ev->Record.SetK(buildInfo.KMeans.K);
         ev->Record.SetMaxProbability(buildInfo.Sample.MaxProbability);
+        if (buildInfo.KMeans.Parent != 0) {
+            auto from = TCell::Make(buildInfo.KMeans.Parent - 1);
+            auto to = TCell::Make(buildInfo.KMeans.Parent);
+            TSerializedTableRange range{{&from, 1}, false, {&to, 1}, true};
+            range.Serialize(*ev->Record.MutableKeyRange());
+        }
 
         ev->Record.AddColumns(buildInfo.IndexColumns[0]);
 
@@ -584,15 +595,165 @@ private:
         ToTabletSend.emplace_back(shardId, ui64(BuildId), std::move(ev));
     }
     
-    bool SendUploadSampleKRequest(TIndexBuildInfo& buildInfo) {
-        if (buildInfo.Sample.Rows.empty()) {
-            return false;
-        }
-
-        auto implLevelTable = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName).Dive(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
-        auto actor = new TUploadSampleK(implLevelTable.PathString(), buildInfo.Limits, Self->SelfId(), ui64(BuildId), std::move(buildInfo.Sample.Rows));
+    void SendUploadSampleKRequest(TIndexBuildInfo& buildInfo) {
+        auto path = TPath::Init(buildInfo.TablePathId, Self)
+                        .Dive(buildInfo.IndexName)
+                        .Dive(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
+        Y_ASSERT(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
+        auto actor = new TUploadSampleK(path.PathString(), buildInfo.Limits, Self->SelfId(), ui64(BuildId),
+                                        buildInfo.Sample.Rows, buildInfo.KMeans.ChildBegin);
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
+        buildInfo.Sample.Sent = true;
+    }
+
+    void ClearAfterFill(const TActorContext& ctx, TIndexBuildInfo& buildInfo) {
+        buildInfo.DoneShardsSize = 0;
+        buildInfo.InProgressShards = {};
+        buildInfo.ToUploadShards = {};
+
+        Self->IndexBuildPipes.CloseAll(BuildId, ctx);
+    }
+
+    bool FillTable(TIndexBuildInfo& buildInfo) {
+        if (buildInfo.ToUploadShards.empty() && buildInfo.DoneShardsSize == 0 && buildInfo.InProgressShards.empty()) {
+            for (const auto& [idx, status] : buildInfo.Shards) {
+                switch (status.Status) {
+                    case NKikimrIndexBuilder::EBuildStatus::INVALID:
+                    case NKikimrIndexBuilder::EBuildStatus::ACCEPTED:
+                    case NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS:
+                    case NKikimrIndexBuilder::EBuildStatus::ABORTED:
+                        buildInfo.ToUploadShards.emplace_back(idx);
+                        break;
+                    case NKikimrIndexBuilder::EBuildStatus::DONE:
+                        ++buildInfo.DoneShardsSize;
+                        break;
+                    case NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR:
+                    case NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST:
+                        Y_ABORT("Unreachable");
+                }
+            }
+        }
+
+        while (!buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.size() < buildInfo.Limits.MaxShards) {
+            auto shardIdx = buildInfo.ToUploadShards.front();
+            buildInfo.ToUploadShards.pop_front();
+            buildInfo.InProgressShards.emplace(shardIdx);
+
+            SendBuildIndexRequest(shardIdx, buildInfo);
+        }
+
+        return buildInfo.InProgressShards.empty() && buildInfo.ToUploadShards.empty() &&
+               buildInfo.DoneShardsSize == buildInfo.Shards.size();
+    }
+
+    void ComputeKMeansState(TIndexBuildInfo& buildInfo) {
+        if (!buildInfo.ToUploadShards.empty() || !buildInfo.InProgressShards.empty()) {
+            return;
+        }
+        std::array<NScheme::TTypeInfo, 1> typeInfos{NScheme::NTypeIds::Uint32};
+        auto range = ParentRange(buildInfo);
+        for (const auto& [idx, status] : buildInfo.Shards) {
+            switch (status.Status) {
+                case NKikimrIndexBuilder::EBuildStatus::INVALID:
+                    if (buildInfo.KMeans.Parent != 0) {
+                        if (!Intersect(typeInfos, range.ToTableRange(), status.Range.ToTableRange()).IsEmptyRange(typeInfos)) {
+                            buildInfo.ToUploadShards.emplace_back(idx);
+                        }
+                        break;
+                    }
+                    [[fallthrough]];
+                case NKikimrIndexBuilder::EBuildStatus::ACCEPTED:
+                case NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS:
+                case NKikimrIndexBuilder::EBuildStatus::ABORTED:
+                    buildInfo.ToUploadShards.emplace_back(idx);
+                    break;
+                case NKikimrIndexBuilder::EBuildStatus::DONE:
+                    ++buildInfo.DoneShardsSize;
+                    break;
+                case NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR:
+                case NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST:
+                    Y_ABORT("Unreachable");
+            }
+        }
+        // TODO(mbkkt) enable detection of Local case
+        // if (buildInfo.ToUploadShards.size() == 1 && buildInfo.DoneShardsSize == 0) {
+        //     buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Local;
+        // }
+    }
+
+    bool SendKMeansSample(TIndexBuildInfo& buildInfo) {
+        buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
+        if (buildInfo.Sample.MaxProbability == 0) {
+            buildInfo.ToUploadShards.clear();
+            buildInfo.InProgressShards.clear();
+            return true;
+        }
+        while (!buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.size() < buildInfo.Limits.MaxShards) {
+            auto shardIdx = buildInfo.ToUploadShards.front();
+            buildInfo.ToUploadShards.pop_front();
+            buildInfo.InProgressShards.emplace(shardIdx);
+            SendSampleKRequest(shardIdx, buildInfo);
+        }
+        return buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.empty();
+    }
+
+    bool FillVectorIndex(TIndexBuildInfo& buildInfo) {
+        ComputeKMeansState(buildInfo);
+        switch (buildInfo.KMeans.State) {
+            case TIndexBuildInfo::TKMeans::Sample:
+                return SendKMeansSample(buildInfo);
+            // TODO(mbkkt)
+            // case TIndexBuildInfo::TKMeans::Recompute:
+            //     return SendKMeansRecompute(buildInfo);
+            // TODO(mbkkt)
+            // case TIndexBuildInfo::TKMeans::Reshuffle:
+            //     return SendKMeansReshuffle(buildInfo);
+            // TODO(mbkkt)
+            // case TIndexBuildInfo::TKMeans::Local:
+            //     return SendKMeansLocal(buildInfo);
+        }
+        return true;
+    }
+
+    bool FillIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
+        if (!buildInfo.SnapshotTxId || !buildInfo.SnapshotStep) {
+            Y_ABORT_UNLESS(Self->TablesWithSnapshots.contains(buildInfo.TablePathId));
+            Y_ABORT_UNLESS(Self->TablesWithSnapshots.at(buildInfo.TablePathId) == buildInfo.InitiateTxId);
+
+            buildInfo.SnapshotTxId = buildInfo.InitiateTxId;
+            Y_ABORT_UNLESS(buildInfo.SnapshotTxId);
+            buildInfo.SnapshotStep = Self->SnapshotsStepIds.at(buildInfo.SnapshotTxId);
+            Y_ABORT_UNLESS(buildInfo.SnapshotStep);
+        }
+        if (buildInfo.Shards.empty()) {
+            NIceDb::TNiceDb db(txc.DB);
+            InitiateShards(db, buildInfo);
+        }
+        if (!buildInfo.IsBuildVectorIndex()) {
+            return FillTable(buildInfo);
+        } 
+        if (!FillVectorIndex(buildInfo)) {
+            return false;
+        }
+        if (!buildInfo.Sample.Sent && !buildInfo.Sample.Rows.empty()) {
+            SendUploadSampleKRequest(buildInfo);
+            return false;
+        }
+        if (buildInfo.KMeans.NextState()) {
+            Progress(BuildId);
+            return false;
+        }
+        buildInfo.Sample.Clear();
+        if (buildInfo.KMeans.NextParent()) {
+            Progress(BuildId);
+            return false;
+        }
+        if (buildInfo.KMeans.NextLevel()) {
+            ChangeState(BuildId, TIndexBuildInfo::EState::DropBuild);
+            Progress(BuildId);
+            return false;
+        }
         return true;
     }
 
@@ -665,102 +826,11 @@ public:
 
             break;
         case TIndexBuildInfo::EState::Filling: {
-            auto makeDone = [&] (size_t doneShards) {
-                buildInfo.DoneShardsSize = doneShards;
-                buildInfo.InProgressShards = {};
-                buildInfo.ToUploadShards = {};
-
-                Self->IndexBuildPipes.CloseAll(BuildId, ctx);
-            };
-            if (buildInfo.IsCancellationRequested()) {
-                makeDone(0);
-
-                ChangeState(BuildId, TIndexBuildInfo::EState::Cancellation_Applying);
-                Progress(BuildId);
-
-                // make final bill
-                Bill(buildInfo);
-
-                break;
-            }
-
-            if (buildInfo.Shards.empty()) {
-                NIceDb::TNiceDb db(txc.DB);
-                InitiateShards(db, buildInfo);
-            }
-
-            if (buildInfo.ToUploadShards.empty()
-                && buildInfo.DoneShardsSize == 0
-                && buildInfo.InProgressShards.empty())
-            {
-                for (const auto& item: buildInfo.Shards) {
-                    const TIndexBuildInfo::TShardStatus& shardStatus = item.second;
-                    switch (shardStatus.Status) {
-                    case NKikimrIndexBuilder::EBuildStatus::INVALID:
-                    case NKikimrIndexBuilder::EBuildStatus::ACCEPTED:
-                    case NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS:
-                    case NKikimrIndexBuilder::EBuildStatus::ABORTED:
-                        buildInfo.ToUploadShards.push_back(item.first);
-                        break;
-                    case NKikimrIndexBuilder::EBuildStatus::DONE:
-                        ++buildInfo.DoneShardsSize;
-                        break;
-                    case NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR:
-                    case NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST:
-                        Y_ABORT("Unreachable");
-                    }
-                }
-            }
-
-            if (!buildInfo.SnapshotTxId || !buildInfo.SnapshotStep) {
-                Y_ABORT_UNLESS(Self->TablesWithSnapshots.contains(buildInfo.TablePathId));
-                Y_ABORT_UNLESS(Self->TablesWithSnapshots.at(buildInfo.TablePathId) == buildInfo.InitiateTxId);
-
-                buildInfo.SnapshotTxId = buildInfo.InitiateTxId;
-                Y_ABORT_UNLESS(buildInfo.SnapshotTxId);
-                buildInfo.SnapshotStep = Self->SnapshotsStepIds.at(buildInfo.SnapshotTxId);
-                Y_ABORT_UNLESS(buildInfo.SnapshotStep);
-            }
-
-            if (buildInfo.IsBuildVectorIndex()) {
-                buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
-                if (buildInfo.Sample.MaxProbability == 0) {
-                    makeDone(buildInfo.Shards.size());
-                }
-            }
-
-            while (!buildInfo.ToUploadShards.empty()
-                   && buildInfo.InProgressShards.size() < buildInfo.Limits.MaxShards)
-            {
-                TShardIdx shardIdx = buildInfo.ToUploadShards.front();
-                buildInfo.ToUploadShards.pop_front();
-                buildInfo.InProgressShards.insert(shardIdx);
-
-                if (buildInfo.IsBuildVectorIndex()) {
-                    SendSampleKRequest(shardIdx, buildInfo);
-                } else {
-                    SendBuildIndexRequest(shardIdx, buildInfo);
-                }
-            }
-
-
-            if (buildInfo.InProgressShards.empty() && buildInfo.ToUploadShards.empty()
-                && buildInfo.DoneShardsSize == buildInfo.Shards.size()) {
-                // all done
-                Y_ABORT_UNLESS(0 == Self->IndexBuildPipes.CloseAll(BuildId, ctx));
-                if (buildInfo.IsBuildVectorIndex()) {
-                    if (SendUploadSampleKRequest(buildInfo)) {
-                        AskToScheduleBilling(buildInfo);
-                        break;
-                    }
-                    if (buildInfo.KMeans.NeedsAnotherLevel()) {
-                        AskToScheduleBilling(buildInfo);
-                        ChangeState(BuildId, TIndexBuildInfo::EState::DropBuild);
-                        Progress(BuildId);
-                        break;
-                    }
-                }
-                ChangeState(BuildId, TIndexBuildInfo::EState::Applying);
+            if (buildInfo.IsCancellationRequested() || FillIndex(txc, buildInfo)) {
+                ClearAfterFill(ctx, buildInfo);
+                ChangeState(BuildId, buildInfo.IsCancellationRequested()
+                                         ? TIndexBuildInfo::EState::Cancellation_Applying
+                                         : TIndexBuildInfo::EState::Applying);
                 Progress(BuildId);
 
                 // make final bill
@@ -768,7 +838,6 @@ public:
             } else {
                 AskToScheduleBilling(buildInfo);
             }
-
             break;
         }
         case TIndexBuildInfo::EState::DropBuild:
@@ -910,6 +979,15 @@ public:
         TVector<TCell> vec(columns, TCell());
         TArrayRef<TCell> cells(vec);
         return TSerializedTableRange(TSerializedCellVec::Serialize(cells), "", true, false);
+    }
+
+    static TSerializedTableRange ParentRange(const TIndexBuildInfo& buildInfo) {
+        if (buildInfo.KMeans.Parent == 0) {
+            return {};  // empty
+        }
+        auto from = TCell::Make(buildInfo.KMeans.Parent - 1);
+        auto to = TCell::Make(buildInfo.KMeans.Parent);
+        return TSerializedTableRange{{&from, 1}, false, {&to, 1}, true};
     }
 
     void InitiateShards(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) {

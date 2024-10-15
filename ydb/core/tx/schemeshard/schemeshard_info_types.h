@@ -2988,16 +2988,25 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     std::variant<std::monostate, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription> SpecializedIndexDescription;
 
     struct TKMeans {
-        // settings
-        ui32 K = 128;
+        // TODO(mbkkt) move to TVectorIndexKmeansTreeDescription
+        ui32 K = 4;
         ui32 Levels = 5;
-
-        // pools
-        ui32 Ids = 0;
         
         // progress
+        enum EState : ui32 {
+            Sample = 0,
+            // Recompute,
+            // Reshuffle,
+            // Local,
+        };
         ui32 Level = 0;
+
         ui32 Parent = 0;
+        ui32 ParentEnd = 0;  // included
+
+        EState State = Sample;
+
+        ui32 ChildBegin = 1;  // included
     
         static ui32 BinPow(ui32 k, ui32 l) {
             ui32 r = 1;
@@ -3013,6 +3022,58 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         bool NeedsAnotherLevel() const {
             return Level < Levels;
+        }
+        bool NeedsAnotherParent() const {
+            return Parent < ParentEnd;
+        }
+        bool NeedsAnotherState() const {
+            return false;
+        }
+
+        bool NextState() {
+            if (!NeedsAnotherState()) {
+                return false;
+            }
+            State = static_cast<EState>(static_cast<ui32>(State) + 1);
+            return true;
+        }
+
+        bool NextParent() {
+            if (!NeedsAnotherParent()) {
+                return false;
+            }
+            ChildBegin += K;
+            State = Sample;
+            ++Parent;
+            return true;
+        }
+
+        bool NextLevel() {
+            if (!NeedsAnotherLevel()) {
+                return false;
+            }
+            ChildBegin += K;
+            State = Sample;
+            ++Parent;
+            ParentEnd += BinPow(K, Level);
+            ++Level;
+            return true;
+        }
+
+        NKikimrTxDataShard::TEvLocalKMeansRequest::EState GetUpload() const {
+            if (Level == 0) {
+                if (NeedsAnotherLevel()) {
+                    return NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_BUILD;
+                } else {
+                    return NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_POSTING;
+                }
+            } else {
+                if (NeedsAnotherLevel()) {
+                    return NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_BUILD;
+                } else {
+                    return NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING;
+                }
+            }
         }
     };
     TKMeans KMeans;
@@ -3112,6 +3173,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         TRows Rows;
         ui64 MaxProbability = std::numeric_limits<ui64>::max();
+        bool Sent = false;
 
         void MakeWeakTop(ui64 k) {
             // 2 * k is needed to make it linear, 2 * N at all.
@@ -3137,6 +3199,12 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
                 return;
             }
             MakeTop(k);
+        }
+
+        void Clear() {
+            Rows.clear();
+            MaxProbability = std::numeric_limits<ui64>::max();
+            Sent = false;
         }
 
     private:

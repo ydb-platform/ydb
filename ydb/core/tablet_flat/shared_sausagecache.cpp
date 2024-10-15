@@ -269,7 +269,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         switch (Config->ReplacementPolicy) {
             case NKikimrSharedCache::S3FIFO:
-                return MakeHolder<TS3FIFOCache<TPage, TS3FIFOPageTraits>>(1);
+                // Note: ReplacementPolicyReinsertsLimit is a cold settings for now
+                return MakeHolder<TS3FIFOCache<TPage, TS3FIFOPageTraits>>(1, Config->ReplacementPolicyReinsertsLimit);
             case NKikimrSharedCache::ThreeLeveledLRU:
             default: {
                 TCacheCacheConfig cacheCacheConfig(1, Config->Counters->FreshBytes, Config->Counters->StagingBytes, Config->Counters->WarmBytes);

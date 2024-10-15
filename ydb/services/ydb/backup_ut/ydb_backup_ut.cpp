@@ -645,7 +645,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 break; // https://github.com/ydb-platform/ydb/issues/10444
             case EPathTypeColumnStore:
             case EPathTypeColumnTable:
-                break; // column stuff
+                break; // https://github.com/ydb-platform/ydb/issues/10459
             case EPathTypeBackupCollection:
             case EPathTypeBlobDepot:
                 break; // not applicable
@@ -926,7 +926,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                 break; // https://github.com/ydb-platform/ydb/issues/10444
             case EPathTypeColumnStore:
             case EPathTypeColumnTable:
-                break; // column stuff
+                break; // https://github.com/ydb-platform/ydb/issues/10459
             case EPathTypeBackupCollection:
             case EPathTypeBlobDepot:
                 break; // not applicable

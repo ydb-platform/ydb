@@ -113,7 +113,8 @@ struct Schema : NIceDb::Schema {
         InFlightSnapshots = 15,
         TxDependencies = 16,
         TxStates = 17,
-        TxEvents = 18
+        TxEvents = 18,
+        Subscribers = 19
     };
 
     // Tablet tables
@@ -287,6 +288,15 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<TxId, GenerationId, GenerationInternalId>;
         using TColumns = TableColumns<TxId, GenerationId, GenerationInternalId, Data>;
+    };
+
+    struct Subscribers : Table<(ui32)ECommonTables::Subscribers> {
+        struct SubscriberId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Type : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct Data : Column<3, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<SubscriberId>;
+        using TColumns = TableColumns<SubscriberId, Type, Data>;
     };
 
     // Index tables
@@ -589,7 +599,8 @@ struct Schema : NIceDb::Schema {
         InFlightSnapshots,
         TxDependencies,
         TxStates,
-        TxEvents
+        TxEvents,
+        Subscribers
         >;
 
     //
@@ -792,8 +803,8 @@ struct Schema : NIceDb::Schema {
         TString serialized;
         Y_ABORT_UNLESS(proto.SerializeToString(&serialized));
         db.Table<LongTxWrites>().Key((ui64)writeId).Update(
-            NIceDb::TUpdate<LongTxWrites::LongTxId>(serialized), 
-            NIceDb::TUpdate<LongTxWrites::WritePartId>(writePartId), 
+            NIceDb::TUpdate<LongTxWrites::LongTxId>(serialized),
+            NIceDb::TUpdate<LongTxWrites::WritePartId>(writePartId),
             NIceDb::TUpdate<LongTxWrites::GranuleShardingVersion>(granuleShardingVersion.value_or(0))
             );
     }

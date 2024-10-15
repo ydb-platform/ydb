@@ -1,0 +1,10 @@
+package NKikimrColumnShardSubscriberProto;
+
+message TAnalyzeSubscriber {
+}
+
+message TEvent {
+    oneof Implementation {
+        TAnalyzeSubscriber AnalyzeSubscriber = 21;
+    }
+}

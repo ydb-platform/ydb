@@ -164,6 +164,12 @@ public:
         RETURN_RESULT_UNLESS(NMetadataObject::IsApplyIfChecksPassed(Transaction, result, context));
         const bool exists = dstPath.IsResolved();
 
+        if (!IsEqualPaths(parentPath.PathString(), update->GetStorageDirectory())) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "Object must be placed in " + update->GetStorageDirectory() + ", got :" + parentPath.PathString());
+            return result;
+        }
+
         AddPathInSchemeShard(result, dstPath, owner);
         const TPathElement::TPtr object = CreatePathElement(dstPath, update->GetObjectPathType());
         NMetadataObject::CreateTransaction(OperationId, context, object->PathId, TTxState::TxCreateMetadataObject);

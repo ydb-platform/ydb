@@ -1,7 +1,6 @@
 #include "dq_pq_rd_read_actor.h"
 #include "probes.h"
 
-#include <csignal>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
@@ -151,8 +150,10 @@ private:
             const TTxId& txId,
             const NActors::TActorId selfId,
             TActorId rowDispatcherActorId,
+            ui64 partitionId,
             ui64 eventQueueId)
-            : RowDispatcherActorId(rowDispatcherActorId) {
+            : RowDispatcherActorId(rowDispatcherActorId)
+            , PartitionId(partitionId) {
             EventsQueue.Init(txId, selfId, selfId, eventQueueId, /* KeepAlive */ true);
             EventsQueue.OnNewRecipientId(rowDispatcherActorId);
         }
@@ -163,12 +164,13 @@ private:
         NYql::NDq::TRetryEventsQueue EventsQueue;
         bool HasPendingData = false;
         TActorId RowDispatcherActorId;
+        ui64 PartitionId;
     };
     
     TMap<ui64, SessionInfo> Sessions;
     const THolderFactory& HolderFactory;
-    const i64 BufferSize;
-    i64 UsedSpace = 0;
+    const i64 MaxBufferSize;
+    i64 ReadyBufferSizeBytes = 0;
 
 public:
     TDqPqRdReadActor(
@@ -237,6 +239,7 @@ public:
     void StopSessions();
     void ReInit(const TString& reason);
     void PrintInternalState();
+    void TrySendGetNextBatch(SessionInfo& sessionInfo);
 };
 
 TDqPqRdReadActor::TDqPqRdReadActor(
@@ -258,7 +261,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         , LocalRowDispatcherActorId(localRowDispatcherActorId)
         , Metrics(txId, taskId, counters)
         , HolderFactory(holderFactory)
-        , BufferSize(bufferSize)
+        , MaxBufferSize(bufferSize)
 {
     MetadataFields.reserve(SourceParams.MetadataFieldsSize());
     TPqMetaExtractor fieldsExtractor;
@@ -381,8 +384,6 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
     buffer.clear();
     do {
         auto& readyBatch = ReadyBuffer.front();
-        SRC_LOG_T("Return " << readyBatch.Data.size() << " items");
-        SRC_LOG_T("UsedSpace " << UsedSpace);
 
         for (const auto& message : readyBatch.Data) {
             auto [item, size] = CreateItem(message);
@@ -390,29 +391,21 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
         }
         usedSpace += readyBatch.UsedSpace;
         freeSpace -= readyBatch.UsedSpace;
-        UsedSpace -= readyBatch.UsedSpace;
-        SRC_LOG_T("UsedSpace2 " << UsedSpace);
-
         TPartitionKey partitionKey{TString{}, readyBatch.PartitionId};
         PartitionToOffset[partitionKey] = readyBatch.NextOffset;
         SRC_LOG_T("NextOffset " << readyBatch.NextOffset);
         ReadyBuffer.pop();
     } while (freeSpace > 0 && !ReadyBuffer.empty());
 
-    if (UsedSpace > BufferSize) {
-        Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
-    } else {
-        for (auto& [partitionId, sessionInfo] : Sessions) {
-            if (!sessionInfo.HasPendingData) {
-                continue;
-            }
-            auto event = std::make_unique<NFq::TEvRowDispatcher::TEvGetNextBatch>();
-            sessionInfo.HasPendingData = false;
-            event->Record.SetPartitionId(partitionId);
-            sessionInfo.EventsQueue.Send(event.release());
-        }
-    }
+    ReadyBufferSizeBytes -= usedSpace;
+    SRC_LOG_T("Return " << buffer.RowCount() << " rows, buffer size " << ReadyBufferSizeBytes << ", free space " << freeSpace << ", result size " << usedSpace);
 
+    if (ReadyBufferSizeBytes > MaxBufferSize) {
+        Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+    }
+    for (auto& [partitionId, sessionInfo] : Sessions) {
+        TrySendGetNextBatch(sessionInfo);
+    }
     ProcessState();
     return usedSpace;
 }
@@ -511,17 +504,8 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev
         SRC_LOG_W("Wrong seq num ignore message, seqNo " << meta.GetSeqNo());
         return;
     }
-    if (UsedSpace > BufferSize) {
-        sessionInfo.HasPendingData = true;
-        Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
-        return;
-    }
-    
-    Metrics.InFlyGetNextBatch->Inc();
-    auto event = std::make_unique<NFq::TEvRowDispatcher::TEvGetNextBatch>();
-    sessionInfo.HasPendingData = false;
-    event->Record.SetPartitionId(partitionId);
-    sessionInfo.EventsQueue.Send(event.release());
+    sessionInfo.HasPendingData = true;
+    TrySendGetNextBatch(sessionInfo);
 }
 
 void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {
@@ -605,7 +589,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr&
                 Sessions.emplace(
                     std::piecewise_construct,
                     std::forward_as_tuple(partitionId),
-                    std::forward_as_tuple(TxId, SelfId(), rowDispatcherActorId, partitionId));
+                    std::forward_as_tuple(TxId, SelfId(), rowDispatcherActorId, partitionId, partitionId));
             }
         }
     }
@@ -669,7 +653,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
         SRC_LOG_T("TEvMessageBatch NextOffset " << sessionInfo.NextOffset);
     }
     activeBatch.UsedSpace = bytes;
-    UsedSpace += bytes;
+    ReadyBufferSizeBytes += bytes;
     IngressStats.Bytes += bytes;
     IngressStats.Chunks++;
     activeBatch.NextOffset = ev->Get()->Record.GetNextMessageOffset();
@@ -723,6 +707,20 @@ void TDqPqRdReadActor::PrintInternalState() {
 void TDqPqRdReadActor::Handle(TEvPrivate::TEvProcessState::TPtr&) {
     Schedule(TDuration::Seconds(ProcessStatePeriodSec), new TEvPrivate::TEvProcessState());
     ProcessState();
+}
+
+void TDqPqRdReadActor::TrySendGetNextBatch(SessionInfo& sessionInfo) {
+    if (!sessionInfo.HasPendingData) {
+        return;
+    }
+    if (ReadyBufferSizeBytes > MaxBufferSize) {
+        return;
+    }
+    Metrics.InFlyGetNextBatch->Inc();
+    auto event = std::make_unique<NFq::TEvRowDispatcher::TEvGetNextBatch>();
+    sessionInfo.HasPendingData = false;
+    event->Record.SetPartitionId(sessionInfo.PartitionId);
+    sessionInfo.EventsQueue.Send(event.release());
 }
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(

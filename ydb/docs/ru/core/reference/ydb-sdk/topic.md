@@ -94,8 +94,7 @@
     }
     ```
 
-    В обоих примерах кода выше используется блок ([try-with-resources](https://docs.oracle.com/javase/tutorial/essential/exceptions/tryResourceClose.html)).
-    Это позволяет автоматически закрывать клиент и транспорт при выходе из этого блока, т.к. оба являются наследниками `AutoCloseable`.
+  В обоих примерах кода выше используется блок [try-with-resources](https://docs.oracle.com/javase/tutorial/essential/exceptions/tryResourceClose.html), что позволяет автоматически закрывать клиент и транспорт при выходе из этого блока, так как оба являются наследниками `AutoCloseable`.
 
 - Node.js
 

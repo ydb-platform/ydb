@@ -343,5 +343,70 @@ bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
     return false;
 }
 
+bool HasUncommittedChangesRead(const ui64 currentTx, const NKqpProto::TKqpPhyQuery& physicalQuery) {
+    auto getTable = [](const NKqpProto::TKqpPhyTableId& table) {
+        return NKikimr::TTableId(table.GetOwnerId(), table.GetTableId());
+    };
+
+    THashSet<NKikimr::TTableId> ModifiedTables;
+    for (size_t index = 0; index < physicalQuery.TransactionsSize(); ++index) {
+        const bool canBeUncommittedChangesRead = (index >= currentTx);
+        const auto &tx = physicalQuery.GetTransactions()[index];
+        for (const auto &stage : tx.GetStages()) {
+            for (const auto &tableOp : stage.GetTableOps()) {
+                switch (tableOp.GetTypeCase()) {
+                    case NKqpProto::TKqpPhyTableOperation::kReadRange:
+                    case NKqpProto::TKqpPhyTableOperation::kLookup:
+                    case NKqpProto::TKqpPhyTableOperation::kReadRanges: {
+                        if (canBeUncommittedChangesRead && ModifiedTables.contains(getTable(tableOp.GetTable()))) {
+                            return true;
+                        }
+                        break;
+                    }
+                    case NKqpProto::TKqpPhyTableOperation::kReadOlapRange:
+                    case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
+                    case NKqpProto::TKqpPhyTableOperation::kDeleteRows:
+                        ModifiedTables.insert(getTable(tableOp.GetTable()));
+                        break;
+                    default:
+                        YQL_ENSURE(false, "unexpected type");
+                }
+            }
+
+            for (const auto& input : stage.GetInputs()) {
+                if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup) {
+                    if (canBeUncommittedChangesRead && ModifiedTables.contains(getTable(input.GetStreamLookup().GetTable()))) {
+                        return true;
+                    }
+                } else {
+                    return true;
+                }
+            }
+
+            for (const auto& source : stage.GetSources()) {
+                if (source.GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
+                    if (canBeUncommittedChangesRead && ModifiedTables.contains(getTable(source.GetReadRangesSource().GetTable()))) {
+                        return true;
+                    }
+                } else {
+                    return true;
+                }
+            }
+
+            for (const auto& sink : stage.GetSinks()) {
+                if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink) {
+                    YQL_ENSURE(sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
+                    NKikimrKqp::TKqpTableSinkSettings settings;
+                    YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                    ModifiedTables.insert(getTable(settings.GetTable()));
+                } else {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 } // namespace NKqp
 } // namespace NKikimr

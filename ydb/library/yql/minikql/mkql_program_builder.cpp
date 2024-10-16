@@ -5735,6 +5735,7 @@ TRuntimeNode TProgramBuilder::BuildBlockCombineAll(const std::string_view& calla
     const auto inputType = input.GetStaticType();
     MKQL_ENSURE(inputType->IsStream() || inputType->IsFlow(), "Expected either stream or flow as input type");
     MKQL_ENSURE(returnType->IsStream() || returnType->IsFlow(), "Expected either stream or flow as return type");
+
     TCallableBuilder builder(Env, callableName, returnType);
     builder.Add(input);
 
@@ -5781,6 +5782,7 @@ TRuntimeNode TProgramBuilder::BuildBlockCombineHashed(const std::string_view& ca
     const auto inputType = input.GetStaticType();
     MKQL_ENSURE(inputType->IsStream() || inputType->IsFlow(), "Expected either stream or flow as input type");
     MKQL_ENSURE(returnType->IsStream() || returnType->IsFlow(), "Expected either stream or flow as return type");
+
     TCallableBuilder builder(Env, callableName, returnType);
     builder.Add(input);
 
@@ -5833,6 +5835,7 @@ TRuntimeNode TProgramBuilder::BuildBlockMergeFinalizeHashed(const std::string_vi
     const auto inputType = input.GetStaticType();
     MKQL_ENSURE(inputType->IsStream() || inputType->IsFlow(), "Expected either stream or flow as input type");
     MKQL_ENSURE(returnType->IsStream() || returnType->IsFlow(), "Expected either stream or flow as return type");
+
     TCallableBuilder builder(Env, callableName, returnType);
     builder.Add(input);
 

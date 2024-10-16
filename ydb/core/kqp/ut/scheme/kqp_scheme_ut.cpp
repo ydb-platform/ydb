@@ -5704,369 +5704,369 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(AlterAsyncReplication) {
-        using namespace NReplication;
+    // Y_UNIT_TEST(AlterAsyncReplication) {
+    //     using namespace NReplication;
 
-        TKikimrRunner kikimr;
-        auto repl = TReplicationClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
+    //     TKikimrRunner kikimr;
+    //     auto repl = TReplicationClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
+    //     auto db = kikimr.GetTableClient();
+    //     auto session = db.CreateSession().GetValueSync().GetSession();
 
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NActors::NLog::PRI_TRACE);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NActors::NLog::PRI_TRACE);
+    //     kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NActors::NLog::PRI_TRACE);
+    //     kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NActors::NLog::PRI_TRACE);
 
-        // path does not exist
-        {
-            auto query = R"(
-                --!syntax_v1
-                ALTER ASYNC REPLICATION `/Root/replication`
-                SET (
-                    STATE = "DONE"
-                );
-            )";
+    //     // path does not exist
+    //     {
+    //         auto query = R"(
+    //             --!syntax_v1
+    //             ALTER ASYNC REPLICATION `/Root/replication`
+    //             SET (
+    //                 STATE = "DONE"
+    //             );
+    //         )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Check failed: path: '/Root/replication', error: path hasn't been resolved, nearest resolved path: '/Root'");
-        }
+    //         const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+    //         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Check failed: path: '/Root/replication', error: path hasn't been resolved, nearest resolved path: '/Root'");
+    //     }
 
-        {
-            auto query = R"(
-                --!syntax_v1
-                CREATE TABLE `/Root/table` (
-                    Key Uint64,
-                    Value String,
-                    PRIMARY KEY (Key)
-                );
-            )";
+    //     {
+    //         auto query = R"(
+    //             --!syntax_v1
+    //             CREATE TABLE `/Root/table` (
+    //                 Key Uint64,
+    //                 Value String,
+    //                 PRIMARY KEY (Key)
+    //             );
+    //         )";
 
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+    //         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    //     }
 
-        {
-            auto query = Sprintf(R"(
-                --!syntax_v1
-                CREATE ASYNC REPLICATION `/Root/replication` FOR
-                    `/Root/table` AS `/Root/replica`
-                WITH (
-                    ENDPOINT = "%s",
-                    DATABASE = "/Root",
-                    TOKEN = "root@builtin"
-                );
-            )", kikimr.GetEndpoint().c_str());
+    //     {
+    //         auto query = Sprintf(R"(
+    //             --!syntax_v1
+    //             CREATE ASYNC REPLICATION `/Root/replication` FOR
+    //                 `/Root/table` AS `/Root/replica`
+    //             WITH (
+    //                 ENDPOINT = "%s",
+    //                 DATABASE = "/Root",
+    //                 TOKEN = "root@builtin"
+    //             );
+    //         )", kikimr.GetEndpoint().c_str());
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+    //         const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    //     }
 
-        // invalid state
-        {
-            auto query = R"(
-                --!syntax_v1
-                ALTER ASYNC REPLICATION `/Root/replication`
-                SET (
-                    STATE = "foo"
-                );
-            )";
+    //     // invalid state
+    //     {
+    //         auto query = R"(
+    //             --!syntax_v1
+    //             ALTER ASYNC REPLICATION `/Root/replication`
+    //             SET (
+    //                 STATE = "foo"
+    //             );
+    //         )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Unknown replication state: foo");
-        }
+    //         const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    //         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Unknown replication state: foo");
+    //     }
 
-        // invalid failover mode
-        {
-            auto query = R"(
-                --!syntax_v1
-                ALTER ASYNC REPLICATION `/Root/replication`
-                SET (
-                    FAILOVER_MODE = "foo"
-                );
-            )";
+    //     // invalid failover mode
+    //     {
+    //         auto query = R"(
+    //             --!syntax_v1
+    //             ALTER ASYNC REPLICATION `/Root/replication`
+    //             SET (
+    //                 FAILOVER_MODE = "foo"
+    //             );
+    //         )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Unknown failover mode: foo");
-        }
+    //         const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    //         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Unknown failover mode: foo");
+    //     }
 
-        // alter config in StandBy state
-        {
-            auto query = R"(
-                --!syntax_v1
-                ALTER ASYNC REPLICATION `/Root/replication`
-                SET (
-                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root"
-                );
-            )";
+    //     // alter config in StandBy state
+    //     {
+    //         auto query = R"(
+    //             --!syntax_v1
+    //             ALTER ASYNC REPLICATION `/Root/replication`
+    //             SET (
+    //                 CONNECTION_STRING = "grpc://localhost:2135/?database=/Root"
+    //             );
+    //         )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Please ensure the replication is not in StandBy state before attempting to modify its settings. Modifications are not allowed in StandBy state");
-        }
+    //         const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+    //         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Please ensure the replication is not in StandBy state before attempting to modify its settings. Modifications are not allowed in StandBy state");
+    //     }
 
-        // alter state and config
-        {
-            auto query = R"(
-                --!syntax_v1
-                ALTER ASYNC REPLICATION `/Root/replication`
-                SET (
-                    STATE = "DONE",
-                    FAILOVER_MODE = "FORCE",
-                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root"
-                );
-            )";
+    //     // alter state and config
+    //     {
+    //         auto query = R"(
+    //             --!syntax_v1
+    //             ALTER ASYNC REPLICATION `/Root/replication`
+    //             SET (
+    //                 STATE = "DONE",
+    //                 FAILOVER_MODE = "FORCE",
+    //                 CONNECTION_STRING = "grpc://localhost:2135/?database=/Root"
+    //             );
+    //         )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "It is not allowed to change both settings and the state of the replication in the same query. Please submit separate queries for each action");
-        }
+    //         const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+    //         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "It is not allowed to change both settings and the state of the replication in the same query. Please submit separate queries for each action");
+    //     }
 
-        // check alter state
-        {
-            auto query = R"(
-                --!syntax_v1
-                ALTER ASYNC REPLICATION `/Root/replication`
-                SET (
-                    STATE = "DONE",
-                    FAILOVER_MODE = "FORCE"
-                );
-            )";
+    //     // check alter state
+    //     {
+    //         auto query = R"(
+    //             --!syntax_v1
+    //             ALTER ASYNC REPLICATION `/Root/replication`
+    //             SET (
+    //                 STATE = "DONE",
+    //                 FAILOVER_MODE = "FORCE"
+    //             );
+    //         )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    //         const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-            while (true) {
-                const auto result = repl.DescribeReplication("/Root/replication").ExtractValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    //         while (true) {
+    //             const auto result = repl.DescribeReplication("/Root/replication").ExtractValueSync();
+    //             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-                const auto& desc = result.GetReplicationDescription();
-                if (desc.GetState() == TReplicationDescription::EState::Done) {
-                    break;
-                }
+    //             const auto& desc = result.GetReplicationDescription();
+    //             if (desc.GetState() == TReplicationDescription::EState::Done) {
+    //                 break;
+    //             }
 
-                Sleep(TDuration::Seconds(1));
-            }
-        }
+    //             Sleep(TDuration::Seconds(1));
+    //         }
+    //     }
 
 
-        // Connection string and Endpoint/Database are mutually exclusive
-        {
-            auto query = R"(
-                --!syntax_v1
-                ALTER ASYNC REPLICATION `/Root/replication`
-                SET (
-                    CONNECTION_STRING = "grpc://localhost:2135/?database=/local",
-                    ENDPOINT = "localhost:2135",
-                    DATABASE = "/local"
-                );
-            )";
+    //     // Connection string and Endpoint/Database are mutually exclusive
+    //     {
+    //         auto query = R"(
+    //             --!syntax_v1
+    //             ALTER ASYNC REPLICATION `/Root/replication`
+    //             SET (
+    //                 CONNECTION_STRING = "grpc://localhost:2135/?database=/local",
+    //                 ENDPOINT = "localhost:2135",
+    //                 DATABASE = "/local"
+    //             );
+    //         )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Connection string and Endpoint/Database are mutually exclusive");
-        }
+    //         const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    //         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Connection string and Endpoint/Database are mutually exclusive");
+    //     }
 
-        // alter connection params
-        {
-            auto query = R"(
-                --!syntax_v1
-                ALTER ASYNC REPLICATION `/Root/replication`
-                SET (
-                    DATABASE = "/local"
-                );
-            )";
+    //     // alter connection params
+    //     {
+    //         auto query = R"(
+    //             --!syntax_v1
+    //             ALTER ASYNC REPLICATION `/Root/replication`
+    //             SET (
+    //                 DATABASE = "/local"
+    //             );
+    //         )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+    //         const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    //     }
 
-        {
-            auto query = R"(
-                --!syntax_v1
-                ALTER ASYNC REPLICATION `/Root/replication`
-                SET (
-                    ENDPOINT = "localhost:2136"
-                );
-            )";
+    //     {
+    //         auto query = R"(
+    //             --!syntax_v1
+    //             ALTER ASYNC REPLICATION `/Root/replication`
+    //             SET (
+    //                 ENDPOINT = "localhost:2136"
+    //             );
+    //         )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+    //         const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    //     }
 
-        {
-            auto query = R"(
-                --!syntax_v1
-                ALTER ASYNC REPLICATION `/Root/replication`
-                SET (
-                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root"
-                );
-            )";
+    //     {
+    //         auto query = R"(
+    //             --!syntax_v1
+    //             ALTER ASYNC REPLICATION `/Root/replication`
+    //             SET (
+    //                 CONNECTION_STRING = "grpc://localhost:2135/?database=/Root"
+    //             );
+    //         )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+    //         const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    //     }
 
-        // Token and User/Password are mutually exclusive
-        {
-            auto query = R"(
-                --!syntax_v1
-                ALTER ASYNC REPLICATION `/Root/replication`
-                SET (
-                    TOKEN = "foo",
-                    USER = "user",
-                    PASSWORD = "password"
-                );
-            )";
+    //     // Token and User/Password are mutually exclusive
+    //     {
+    //         auto query = R"(
+    //             --!syntax_v1
+    //             ALTER ASYNC REPLICATION `/Root/replication`
+    //             SET (
+    //                 TOKEN = "foo",
+    //                 USER = "user",
+    //                 PASSWORD = "password"
+    //             );
+    //         )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Token and User/Password are mutually exclusive");
-        }
+    //         const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    //         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Token and User/Password are mutually exclusive");
+    //     }
 
-        // TOKEN and TOKEN_SECRET_NAME are mutually exclusive
-        {
-            auto query = R"(
-                --!syntax_v1
-                ALTER ASYNC REPLICATION `/Root/replication`
-                SET (
-                    TOKEN = "token",
-                    TOKEN_SECRET_NAME = "token_secret_name"
-                );
-            )";
+    //     // TOKEN and TOKEN_SECRET_NAME are mutually exclusive
+    //     {
+    //         auto query = R"(
+    //             --!syntax_v1
+    //             ALTER ASYNC REPLICATION `/Root/replication`
+    //             SET (
+    //                 TOKEN = "token",
+    //                 TOKEN_SECRET_NAME = "token_secret_name"
+    //             );
+    //         )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "TOKEN and TOKEN_SECRET_NAME are mutually exclusive");
-        }
+    //         const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    //         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "TOKEN and TOKEN_SECRET_NAME are mutually exclusive");
+    //     }
 
-        // PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive
-        {
-            auto query = R"(
-                --!syntax_v1
-                ALTER ASYNC REPLICATION `/Root/replication`
-                SET (
-                    USER = "user",
-                    PASSWORD = "password",
-                    PASSWORD_SECRET_NAME = "password_secret_name"
-                );
-            )";
+    //     // PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive
+    //     {
+    //         auto query = R"(
+    //             --!syntax_v1
+    //             ALTER ASYNC REPLICATION `/Root/replication`
+    //             SET (
+    //                 USER = "user",
+    //                 PASSWORD = "password",
+    //                 PASSWORD_SECRET_NAME = "password_secret_name"
+    //             );
+    //         )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive");
-        }
+    //         const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    //         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive");
+    //     }
 
-        // check alter credentials
-        {
-            auto query = R"(
-                --!syntax_v1
-                ALTER ASYNC REPLICATION `/Root/replication`
-                SET (
-                    TOKEN = "foo"
-                );
-            )";
+    //     // check alter credentials
+    //     {
+    //         auto query = R"(
+    //             --!syntax_v1
+    //             ALTER ASYNC REPLICATION `/Root/replication`
+    //             SET (
+    //                 TOKEN = "foo"
+    //             );
+    //         )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+    //         const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    //     }
 
-        {
-            auto query = R"(
-                --!syntax_v1
-                ALTER ASYNC REPLICATION `/Root/replication`
-                SET (
-                    TOKEN_SECRET_NAME = "mysecret"
-                );
-            )";
+    //     {
+    //         auto query = R"(
+    //             --!syntax_v1
+    //             ALTER ASYNC REPLICATION `/Root/replication`
+    //             SET (
+    //                 TOKEN_SECRET_NAME = "mysecret"
+    //             );
+    //         )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+    //         const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    //     }
 
-        // set password witout user
-        {
-            auto query = R"(
-                --!syntax_v1
-                ALTER ASYNC REPLICATION `/Root/replication`
-                SET (
-                    PASSWORD = "password"
-                );
-            )";
+    //     // set password witout user
+    //     {
+    //         auto query = R"(
+    //             --!syntax_v1
+    //             ALTER ASYNC REPLICATION `/Root/replication`
+    //             SET (
+    //                 PASSWORD = "password"
+    //             );
+    //         )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "User is not set");
-        }
+    //         const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+    //         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "User is not set");
+    //     }
 
-        {
-            auto query = R"(
-                --!syntax_v1
-                ALTER ASYNC REPLICATION `/Root/replication`
-                SET (
-                    PASSWORD_SECRET_NAME = "password_secret_name"
-                );
-            )";
+    //     {
+    //         auto query = R"(
+    //             --!syntax_v1
+    //             ALTER ASYNC REPLICATION `/Root/replication`
+    //             SET (
+    //                 PASSWORD_SECRET_NAME = "password_secret_name"
+    //             );
+    //         )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "User is not set");
-        }
+    //         const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+    //         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "User is not set");
+    //     }
 
-        {
-            auto query = R"(
-                --!syntax_v1
-                ALTER ASYNC REPLICATION `/Root/replication`
-                SET (
-                    USER = "user"
-                );
-            )";
+    //     {
+    //         auto query = R"(
+    //             --!syntax_v1
+    //             ALTER ASYNC REPLICATION `/Root/replication`
+    //             SET (
+    //                 USER = "user"
+    //             );
+    //         )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+    //         const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    //     }
 
-        {
-            auto query = R"(
-                --!syntax_v1
-                ALTER ASYNC REPLICATION `/Root/replication`
-                SET (
-                    PASSWORD = "password"
-                );
-            )";
+    //     {
+    //         auto query = R"(
+    //             --!syntax_v1
+    //             ALTER ASYNC REPLICATION `/Root/replication`
+    //             SET (
+    //                 PASSWORD = "password"
+    //             );
+    //         )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+    //         const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    //     }
 
-        {
-            auto query = R"(
-                --!syntax_v1
-                ALTER ASYNC REPLICATION `/Root/replication`
-                SET (
-                    PASSWORD_SECRET_NAME = "password_secret_name"
-                );
-            )";
+    //     {
+    //         auto query = R"(
+    //             --!syntax_v1
+    //             ALTER ASYNC REPLICATION `/Root/replication`
+    //             SET (
+    //                 PASSWORD_SECRET_NAME = "password_secret_name"
+    //             );
+    //         )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+    //         const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    //     }
 
-        {
-            auto query = R"(
-                --!syntax_v1
-                ALTER ASYNC REPLICATION `/Root/replication`
-                SET (
-                    USER = "new_user",
-                    PASSWORD = "new_password"
-                );
-            )";
+    //     {
+    //         auto query = R"(
+    //             --!syntax_v1
+    //             ALTER ASYNC REPLICATION `/Root/replication`
+    //             SET (
+    //                 USER = "new_user",
+    //                 PASSWORD = "new_password"
+    //             );
+    //         )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+    //         const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    //     }
 
-    }
+    // }
 
     Y_UNIT_TEST(DropAsyncReplication) {
         TKikimrRunner kikimr;

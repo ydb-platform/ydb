@@ -442,8 +442,7 @@ size_t GetBitmapPopCount(const std::shared_ptr<arrow::ArrayData>& arr) {
     return GetSparseBitmapPopCount(src, len);
 }
 
-// from what?
-TArrayRef<TType *const> GetWideComponentsFromType(TType* type) {
+TArrayRef<TType *const> GetWideComponents(TType* type) {
     if (type->IsFlow()) {
         const auto outputFlowType = AS_TYPE(TFlowType, type);
         return GetWideComponents(outputFlowType);
@@ -456,7 +455,7 @@ TArrayRef<TType *const> GetWideComponentsFromType(TType* type) {
 }
 
 size_t CalcMaxBlockLenForOutput(TType* out) {
-    const auto wideComponents = GetWideComponentsFromType(out);
+    const auto wideComponents = GetWideComponents(out);
     MKQL_ENSURE(wideComponents.size() > 0, "Expecting at least one output column");
 
     size_t maxBlockItemSize = 0;
@@ -2314,9 +2313,9 @@ IComputationNode* WrapBlockCombineAll(TCallable& callable, const TComputationNod
     const bool isStream = callable.GetInput(0).GetStaticType()->IsStream();
     MKQL_ENSURE(isStream == callable.GetType()->GetReturnType()->IsStream(), "input and output must be both either flow or stream");
 
-    const auto wideComponents = GetWideComponentsFromType(callable.GetInput(0).GetStaticType());
+    const auto wideComponents = GetWideComponents(callable.GetInput(0).GetStaticType());
     const auto tupleType = TTupleType::Create(wideComponents.size(), wideComponents.data(), ctx.Env);
-    const auto returnWideComponents = GetWideComponentsFromType(callable.GetType()->GetReturnType());
+    const auto returnWideComponents = GetWideComponents(callable.GetType()->GetReturnType());
 
     const auto wideFlowOrStream = LocateNode(ctx.NodeLocator, callable, 0);
 
@@ -2346,9 +2345,9 @@ IComputationNode* WrapBlockCombineHashed(TCallable& callable, const TComputation
     const bool isStream = callable.GetInput(0).GetStaticType()->IsStream();
     MKQL_ENSURE(isStream == callable.GetType()->GetReturnType()->IsStream(), "input and output must be both either flow or stream");
 
-    const auto wideComponents = GetWideComponentsFromType(callable.GetInput(0).GetStaticType());
+    const auto wideComponents = GetWideComponents(callable.GetInput(0).GetStaticType());
     const auto tupleType = TTupleType::Create(wideComponents.size(), wideComponents.data(), ctx.Env);
-    const auto returnWideComponents = GetWideComponentsFromType(callable.GetType()->GetReturnType());
+    const auto returnWideComponents = GetWideComponents(callable.GetType()->GetReturnType());
 
     const auto wideStreamOrFlow = LocateNode(ctx.NodeLocator, callable, 0);
 
@@ -2414,9 +2413,9 @@ IComputationNode* WrapBlockMergeFinalizeHashed(TCallable& callable, const TCompu
     const bool isStream = callable.GetInput(0).GetStaticType()->IsStream();
     MKQL_ENSURE(isStream == callable.GetType()->GetReturnType()->IsStream(), "input and output must be both either flow or stream");
 
-    const auto wideComponents = GetWideComponentsFromType(callable.GetInput(0).GetStaticType());
+    const auto wideComponents = GetWideComponents(callable.GetInput(0).GetStaticType());
     const auto tupleType = TTupleType::Create(wideComponents.size(), wideComponents.data(), ctx.Env);
-    const auto returnWideComponents = GetWideComponentsFromType(callable.GetType()->GetReturnType());
+    const auto returnWideComponents = GetWideComponents(callable.GetType()->GetReturnType());
 
     const auto wideStreamOrFlow = LocateNode(ctx.NodeLocator, callable, 0);
 
@@ -2460,9 +2459,9 @@ IComputationNode* WrapBlockMergeManyFinalizeHashed(TCallable& callable, const TC
     const bool isStream = callable.GetInput(0).GetStaticType()->IsStream();
     MKQL_ENSURE(isStream == callable.GetType()->GetReturnType()->IsStream(), "input and output must be both either flow or stream");
 
-    const auto wideComponents = GetWideComponentsFromType(callable.GetInput(0).GetStaticType());
+    const auto wideComponents = GetWideComponents(callable.GetInput(0).GetStaticType());
     const auto tupleType = TTupleType::Create(wideComponents.size(), wideComponents.data(), ctx.Env);
-    const auto returnWideComponents = GetWideComponentsFromType(callable.GetType()->GetReturnType());
+    const auto returnWideComponents = GetWideComponents(callable.GetType()->GetReturnType());
 
     const auto wideStreamOrFlow = LocateNode(ctx.NodeLocator, callable, 0);
 

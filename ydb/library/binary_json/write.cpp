@@ -548,10 +548,9 @@ void DomToJsonIndex(const NUdf::TUnboxedValue& value, TBinaryJsonCallbacks& call
     }
 }
 
-// unused, left for performance comparison
 template <typename TOnDemandValue>
     requires std::is_same_v<TOnDemandValue, simdjson::ondemand::value> || std::is_same_v<TOnDemandValue, simdjson::ondemand::document>
-[[maybe_unused]] [[nodiscard]] simdjson::error_code SimdJsonToJsonIndexImpl(TOnDemandValue& value, TBinaryJsonCallbacks& callbacks) {
+[[nodiscard]] simdjson::error_code SimdJsonToJsonIndex(TOnDemandValue& value, TBinaryJsonCallbacks& callbacks) {
 #define RETURN_IF_NOT_SUCCESS(error)              \
     if (Y_UNLIKELY(error != simdjson::SUCCESS)) { \
         return error;                             \
@@ -591,7 +590,10 @@ template <typename TOnDemandValue>
                     break;
                 }
                 case simdjson::fallback::number_type::big_integer:
-                    return simdjson::NUMBER_OUT_OF_RANGE;
+                    double v;
+                    RETURN_IF_NOT_SUCCESS(value.get(v));
+                    callbacks.OnDouble(v);
+                    break;
             }
             break;
         }
@@ -605,7 +607,7 @@ template <typename TOnDemandValue>
             RETURN_IF_NOT_SUCCESS(value.get(v));
             for (auto item : v) {
                 RETURN_IF_NOT_SUCCESS(item.error());
-                RETURN_IF_NOT_SUCCESS(SimdJsonToJsonIndexImpl(item.value_unsafe(), callbacks));
+                RETURN_IF_NOT_SUCCESS(SimdJsonToJsonIndex(item.value_unsafe(), callbacks));
             }
 
             callbacks.OnCloseArray();
@@ -622,7 +624,7 @@ template <typename TOnDemandValue>
                 const auto key = keyValue.unescaped_key();
                 RETURN_IF_NOT_SUCCESS(key.error());
                 callbacks.OnMapKey(key.value_unsafe());
-                RETURN_IF_NOT_SUCCESS(SimdJsonToJsonIndexImpl(keyValue.value(), callbacks));
+                RETURN_IF_NOT_SUCCESS(SimdJsonToJsonIndex(keyValue.value(), callbacks));
             }
 
             callbacks.OnCloseMap();
@@ -635,7 +637,8 @@ template <typename TOnDemandValue>
 #undef RETURN_IF_NOT_SUCCESS
 }
 
-[[nodiscard]] simdjson::error_code SimdJsonToJsonIndex(const simdjson::dom::element& value, TBinaryJsonCallbacks& callbacks) {
+// unused, left for performance comparison
+[[maybe_unused]] [[nodiscard]] simdjson::error_code SimdJsonToJsonIndexImpl(const simdjson::dom::element& value, TBinaryJsonCallbacks& callbacks) {
 #define RETURN_IF_NOT_SUCCESS(status)              \
     if (Y_UNLIKELY(status != simdjson::SUCCESS)) { \
         return status;                             \
@@ -681,7 +684,7 @@ template <typename TOnDemandValue>
             simdjson::dom::array v;
             RETURN_IF_NOT_SUCCESS(value.get(v));
             for (const auto& item : v) {
-                RETURN_IF_NOT_SUCCESS(SimdJsonToJsonIndex(item, callbacks));
+                RETURN_IF_NOT_SUCCESS(SimdJsonToJsonIndexImpl(item, callbacks));
             }
 
             callbacks.OnCloseArray();
@@ -694,7 +697,7 @@ template <typename TOnDemandValue>
             RETURN_IF_NOT_SUCCESS(value.get(v));
             for (const auto& item : v) {
                 callbacks.OnMapKey(item.key);
-                RETURN_IF_NOT_SUCCESS(SimdJsonToJsonIndex(item.value, callbacks));
+                RETURN_IF_NOT_SUCCESS(SimdJsonToJsonIndexImpl(item.value, callbacks));
             }
 
             callbacks.OnCloseMap();
@@ -706,28 +709,16 @@ template <typename TOnDemandValue>
 }
 }
 
-TMaybe<TBinaryJson> SerializeToBinaryJsonImplRapidjson(const TStringBuf json) {
-    TMemoryInput input(json.data(), json.size());
-    TBinaryJsonCallbacks callbacks(/* throwException */ false);
-    if (!ReadJson(&input, &callbacks)) {
-        return Nothing();
-    }
-    TBinaryJsonSerializer serializer(std::move(callbacks).GetResult());
-    return std::move(serializer).Serialize();
-}
-
 TMaybe<TBinaryJson> SerializeToBinaryJsonImpl(const TStringBuf json) {
-    thread_local simdjson::dom::parser parser;
-    auto doc = parser.parse(json);
+    thread_local simdjson::ondemand::parser parser;
+    const simdjson::padded_string paddedJson(json);
+    auto doc = parser.iterate(paddedJson);
     if (doc.error() != simdjson::SUCCESS) {
-        if (doc.error() == simdjson::BIGINT_ERROR) {
-            return SerializeToBinaryJsonImplRapidjson(json);
-        }
-        return Nothing();
+        return false;
     }
     TBinaryJsonCallbacks callbacks(/* throwException */ false);
-    if (SimdJsonToJsonIndex(doc.value(), callbacks) != simdjson::SUCCESS) {
-        return Nothing();
+    if (SimdJsonToJsonIndex(doc.value_unsafe(), callbacks) != simdjson::SUCCESS) {
+        return false;
     }
     TBinaryJsonSerializer serializer(std::move(callbacks).GetResult());
     return std::move(serializer).Serialize();

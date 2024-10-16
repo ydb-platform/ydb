@@ -850,7 +850,7 @@ void TNodeBroker::DbReleaseSlotIndex(const TNodeInfo &node,
     NIceDb::TNiceDb db(txc.DB);
     using T = Schema::Nodes;
     db.Table<T>().Key(node.NodeId)
-    .UpdateToNull<T::SlotIndex>();
+        .UpdateToNull<T::SlotIndex>();
 }
 
 void TNodeBroker::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,

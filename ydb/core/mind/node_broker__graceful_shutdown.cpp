@@ -1,9 +1,7 @@
 #include "node_broker_impl.h"
 #include "node_broker__scheme.h"
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/counters_node_broker.pb.h>
-
 namespace NKikimr::NNodeBroker {
 
 using namespace NKikimrNodeBroker;
@@ -37,9 +35,9 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
         auto &rec = Event->Get()->Record;
-        auto host = rec.GetHost();
+        auto &host = rec.GetHost();
         ui16 port = (ui16)rec.GetPort();
-        TString addr = rec.GetAddress();
+        auto &addr = rec.GetAddress();
 
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxGracefulShutdown Execute");
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,

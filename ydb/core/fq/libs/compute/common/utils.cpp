@@ -5,6 +5,7 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/yson/json2yson.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
@@ -1261,7 +1262,7 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(
     if (Issues) {
         auto* issue = pingTaskRequest.add_issues();
         issue->set_message("There are minor issues with query statistics processing. You can supply query ID and ask support for the information.");
-        issue->set_severity(2);
+        issue->set_severity(NYql::TSeverityIds::S_WARNING);
     }
 
     if (computeStatus) {

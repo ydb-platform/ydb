@@ -62,7 +62,7 @@ private:
             timer.Reset();
 
             patternToCompile.Entry->Pattern->Compile({}, nullptr);
-            patternCache->NotifyPatternCompiled(patternToCompile.SerializedProgram, patternToCompile.Entry);
+            patternCache->NotifyPatternCompiled(patternToCompile.SerializedProgram);
             patternToCompile.Entry = nullptr;
 
             Counters->CompiledComputationPatterns->Inc();

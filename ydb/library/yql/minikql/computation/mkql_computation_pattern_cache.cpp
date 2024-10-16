@@ -69,15 +69,20 @@ public:
         ClearIfNeeded();
     }
 
-    void NotifyPatternCompiled(const TString & serializedProgram, std::shared_ptr<TPatternCacheEntry>& entry) {
+    void NotifyPatternCompiled(const TString & serializedProgram) {
         auto it = SerializedProgramToPatternCacheHolder.find(serializedProgram);
         if (it == SerializedProgramToPatternCacheHolder.end()) {
             return;
         }
 
-        Y_ASSERT(entry->Pattern->IsCompiled());
+        const auto& entry = it->second.Entry;
 
-        Y_ASSERT(!it->second.LinkedInCompiledPatternLRUList());
+        Y_ENSURE(entry->Pattern->IsCompiled());
+
+        if (it->second.LinkedInCompiledPatternLRUList()) {
+            return;
+        }
+
         PromoteEntry(&it->second);
 
         ++CurrentCompiledPatternsSize;
@@ -290,9 +295,9 @@ void TComputationPatternLRUCache::EmplacePattern(const TString& serializedProgra
     }
 }
 
-void TComputationPatternLRUCache::NotifyPatternCompiled(const TString& serializedProgram, std::shared_ptr<TPatternCacheEntry> patternWithEnv) {
+void TComputationPatternLRUCache::NotifyPatternCompiled(const TString& serializedProgram) {
     std::lock_guard lock(Mutex);
-    Cache->NotifyPatternCompiled(serializedProgram, patternWithEnv);
+    Cache->NotifyPatternCompiled(serializedProgram);
 }
 
 size_t TComputationPatternLRUCache::GetSize() const {

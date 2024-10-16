@@ -307,8 +307,6 @@ private:
         }
     }
 
-public:
-    bool HasCycles = false;
 private:
     THashMap<TString, size_t> NodeIdByRelationName_;
 

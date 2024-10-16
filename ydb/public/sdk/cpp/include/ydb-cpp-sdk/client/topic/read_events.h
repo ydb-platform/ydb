@@ -200,6 +200,10 @@ struct TReadSessionEvent {
             return CompressedMessages;
         }
 
+        void SetReadInTransaction() {
+            ReadInTransaction = true;
+        }
+
         //! Commits all messages in batch.
         void Commit();
 
@@ -218,6 +222,7 @@ struct TReadSessionEvent {
         std::vector<TMessage> Messages;
         std::vector<TCompressedMessage> CompressedMessages;
         std::vector<std::pair<uint64_t, uint64_t>> OffsetRanges;
+        bool ReadInTransaction = false;
     };
 
     //! Acknowledgement for commit request.

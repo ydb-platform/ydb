@@ -248,6 +248,10 @@ TDataReceivedEvent::TDataReceivedEvent(std::vector<TMessage> messages, std::vect
 }
 
 void TDataReceivedEvent::Commit() {
+    if (ReadInTransaction) {
+        ythrow yexception() << "Offsets cannot be commited explicitly when reading in a transaction";
+    }
+
     for (auto [from, to] : OffsetRanges) {
         static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())->Commit(from, to);
     }

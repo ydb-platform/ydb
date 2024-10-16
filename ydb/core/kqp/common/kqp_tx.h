@@ -232,6 +232,10 @@ public:
         ParamsState = MakeIntrusive<TParamsState>();
         SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
         HasImmediateEffects = false;
+
+        HasOlapTable = false;
+        HasOltpTable = false;
+        HasTableWrite = false;
     }
 
     TKqpTransactionInfo GetInfo() const;
@@ -333,6 +337,7 @@ public:
     bool HasOlapTable = false;
     bool HasOltpTable = false;
     bool HasTableWrite = false;
+    bool HasUncommittedChangesRead = false;
 
     TShardIdToTableInfoPtr ShardIdToTableInfo = std::make_shared<TShardIdToTableInfo>();
 };
@@ -497,5 +502,7 @@ bool HasOlapTableWriteInStage(
 bool HasOlapTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
+
+bool HasUncommittedChangesRead(const ui64 currentTx, const NKqpProto::TKqpPhyQuery& physicalQuery);
 
 }  // namespace NKikimr::NKqp

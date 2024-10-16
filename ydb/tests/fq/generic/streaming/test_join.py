@@ -527,7 +527,10 @@ class TestJoinStreaming(TestYdsBase):
                     key_label="sensor",
                 )
                 for k in componentSensors:
-                    print(f'node[{node_index}].operation[{query_id}].component[{component}].{k} = {componentSensors[k]}', file=sys.stderr)
+                    print(
+                        f'node[{node_index}].operation[{query_id}].component[{component}].{k} = {componentSensors[k]}',
+                        file=sys.stderr,
+                    )
 
         fq_client.abort_query(query_id)
         fq_client.wait_query(query_id)

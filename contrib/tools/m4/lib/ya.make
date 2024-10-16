@@ -90,7 +90,6 @@ SRCS(
     localcharset.c
     lseek.c
     malloca.c
-    mbrtowc.c
     memchr2.c
     mkstemp-safer.c
     nl_langinfo.c
@@ -103,19 +102,16 @@ SRCS(
     progname.c
     quotearg.c
     raise.c
-    realloc.c
     regex.c
     rmdir.c
     secure_getenv.c
     sig-handler.c
     spawn-pipe.c
     stat.c
-    stpcpy.c
     stripslash.c
     tempname.c
     tmpdir.c
     unistd.c
-    unsetenv.c
     vasnprintf.c
     verror.c
     version-etc-fsf.c

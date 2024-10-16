@@ -252,6 +252,48 @@ struct TTableSettings {
     bool IsSet() const;
 };
 
+struct TKikimrPathId {
+    explicit TKikimrPathId(const std::pair<ui64, ui64>& raw)
+        : Raw(raw) {}
+
+    TKikimrPathId(ui64 ownerId, ui64 tableId)
+        : TKikimrPathId(std::make_pair(ownerId, tableId)) {}
+
+    TKikimrPathId(const NKikimrKqp::TKqpPathIdProto* message)
+        : TKikimrPathId(std::make_pair(message->GetOwnerId(), message->GetTableId())) {}
+
+    TKikimrPathId()
+        : TKikimrPathId(std::make_pair(0, 0)) {}
+
+    ui64 OwnerId() const { return Raw.first; }
+    ui64 TableId() const { return Raw.second; }
+
+    TString ToString() const {
+        return ::ToString(OwnerId()) + ':' + ::ToString(TableId());
+    }
+
+    bool operator==(const TKikimrPathId& x) const {
+        return Raw == x.Raw;
+    }
+
+    bool operator!=(const TKikimrPathId& x) const {
+        return !operator==(x);
+    }
+
+    ui64 Hash() const noexcept {
+        return THash<decltype(Raw)>()(Raw);
+    }
+
+    static TKikimrPathId Parse(const TStringBuf& str);
+
+    std::pair<ui64, ui64> Raw;
+
+    void ToMessage(NKikimrKqp::TKqpPathIdProto* message) const {
+        message->SetOwnerId(OwnerId());
+        message->SetTableId(TableId());
+    }
+};
+
 struct TKikimrColumnMetadata {
 
     TString Name;
@@ -263,14 +305,15 @@ struct TKikimrColumnMetadata {
     TVector<TString> Families;
     NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED;
     TString DefaultFromSequence;
+    TKikimrPathId DefaultFromSequencePathId; 
     Ydb::TypedValue DefaultFromLiteral;
     bool IsBuildInProgress = false;
 
     TKikimrColumnMetadata() = default;
 
     TKikimrColumnMetadata(const TString& name, ui32 id, const TString& type, bool notNull,
-        NKikimr::NScheme::TTypeInfo typeInfo = {}, const TString& typeMod = {}, const TString& defaultFromSequence = {},
-        NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED,
+        NKikimr::NScheme::TTypeInfo typeInfo = {}, const TString& typeMod = {}, const TString& defaultFromSequence = {}, 
+        const TKikimrPathId& defaultFromSequencePathId = {}, NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED,
         const Ydb::TypedValue& defaultFromLiteral = {}, bool isBuildInProgress = false)
         : Name(name)
         , Id(id)
@@ -280,6 +323,7 @@ struct TKikimrColumnMetadata {
         , TypeMod(typeMod)
         , DefaultKind(defaultKind)
         , DefaultFromSequence(defaultFromSequence)
+        , DefaultFromSequencePathId(defaultFromSequencePathId)
         , DefaultFromLiteral(defaultFromLiteral)
         , IsBuildInProgress(isBuildInProgress)
     {}
@@ -292,6 +336,7 @@ struct TKikimrColumnMetadata {
         , Families(message->GetFamily().begin(), message->GetFamily().end())
         , DefaultKind(message->GetDefaultKind())
         , DefaultFromSequence(message->GetDefaultFromSequence())
+        , DefaultFromSequencePathId(&message->GetDefaultFromSequencePathId())
         , DefaultFromLiteral(message->GetDefaultFromLiteral())
         , IsBuildInProgress(message->GetIsBuildInProgress())
     {
@@ -329,6 +374,7 @@ struct TKikimrColumnMetadata {
         auto columnType = NKikimr::NScheme::ProtoColumnTypeFromTypeInfoMod(TypeInfo, TypeMod);
         message->SetTypeId(columnType.TypeId);
         message->SetDefaultFromSequence(DefaultFromSequence);
+        DefaultFromSequencePathId.ToMessage(message->MutableDefaultFromSequencePathId());
         message->SetDefaultKind(DefaultKind);
         message->MutableDefaultFromLiteral()->CopyFrom(DefaultFromLiteral);
         message->SetIsBuildInProgress(IsBuildInProgress);
@@ -346,45 +392,6 @@ struct TKikimrColumnMetadata {
 
     void SetNotNull() {
         NotNull = true;
-    }
-};
-
-struct TKikimrPathId {
-    explicit TKikimrPathId(const std::pair<ui64, ui64>& raw)
-        : Raw(raw) {}
-
-    TKikimrPathId(ui64 ownerId, ui64 tableId)
-        : TKikimrPathId(std::make_pair(ownerId, tableId)) {}
-
-    TKikimrPathId(const NKikimrKqp::TKqpPathIdProto* message)
-        : TKikimrPathId(std::make_pair(message->GetOwnerId(), message->GetTableId())) {}
-
-    ui64 OwnerId() const { return Raw.first; }
-    ui64 TableId() const { return Raw.second; }
-
-    TString ToString() const {
-        return ::ToString(OwnerId()) + ':' + ::ToString(TableId());
-    }
-
-    bool operator==(const TKikimrPathId& x) const {
-        return Raw == x.Raw;
-    }
-
-    bool operator!=(const TKikimrPathId& x) const {
-        return !operator==(x);
-    }
-
-    ui64 Hash() const noexcept {
-        return THash<decltype(Raw)>()(Raw);
-    }
-
-    static TKikimrPathId Parse(const TStringBuf& str);
-
-    std::pair<ui64, ui64> Raw;
-
-    void ToMessage(NKikimrKqp::TKqpPathIdProto* message) const {
-        message->SetOwnerId(OwnerId());
-        message->SetTableId(TableId());
     }
 };
 

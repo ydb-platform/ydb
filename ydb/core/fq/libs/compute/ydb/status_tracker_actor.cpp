@@ -228,6 +228,7 @@ public:
         Fq::Private::PingTaskRequest pingTaskRequest = Builder.Build(QueryStats, Issues);
         if (Builder.Issues) {
             LOG_W(Builder.Issues.ToOneLineString());
+            GetStepCountersSubgroup()->GetCounter("StatIssues", true)->Inc();
         }
         ReportPublicCounters(Builder.PublicStat);
         Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest), 0, 1);

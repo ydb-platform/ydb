@@ -1,0 +1,311 @@
+====================BSL-1.0====================
+ * Distributed under the Boost Software License, Version 1.0.
+ * (See accompanying file LICENSE_1_0.txt or copy at
+ * http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0.
+//  See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0.
+//  See http://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+//  Use, modification and distribution are subject to the 
+//  Boost Software License, Version 1.0. (See accompanying file 
+//  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt).
+
+
+====================BSL-1.0====================
+//  Use, modification and distribution is subject to the Boost Software
+//  License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+//  
+//  See http://www.boost.org for updates, documentation, and revision history.
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0. 
+// (See accompanying file LICENSE_1_0.txt or copy at 
+// http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+Distributed under the Boost Software License,
+Version 1.0. (See accompanying file LICENSE_1_0.txt
+or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+/* Copyright 2017 Joaquin M Lopez Munoz.
+ * Distributed under the Boost Software License, Version 1.0.
+ * (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright 2002 Rani Sharoni (rani_sharoni@hotmail.com) and Robert Ramey
+//  Use, modification and distribution is subject to the Boost Software
+//  License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright 2009-2011 Frederic Bron, Robert Stewart, Steven Watanabe & Roman Perepelitsa.
+
+
+====================COPYRIGHT====================
+//  (C) Copyright 2009-2011 Frederic Bron.
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Daniel Frey and Robert Ramey 2009.
+//  (C) Copyright Balint Cserni 2017
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Dave Abrahams, Steve Cleary, Beman Dawes, 
+//      Howard Hinnant and John Maddock 2000, 2010. 
+//  (C) Copyright Mat Marcus, Jesse Jones and Adobe Systems Inc 2001
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Dave Abrahams, Steve Cleary, Beman Dawes, 
+//      Howard Hinnant and John Maddock 2000. 
+//  (C) Copyright Mat Marcus, Jesse Jones and Adobe Systems Inc 2001
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Dave Abrahams, Steve Cleary, Beman Dawes, 
+//  Aleksey Gurtovoy, Howard Hinnant & John Maddock 2000.  
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Dave Abrahams, Steve Cleary, Beman Dawes, Howard
+//  Hinnant & John Maddock 2000-2003.
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Dave Abrahams, Steve Cleary, Beman Dawes, Howard
+//  Hinnant & John Maddock 2000.
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright David Abrahams Steve Cleary, Beman Dawes, Howard
+//  Hinnant & John Maddock 2000-2002.  
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Ion Gaztanaga 2014.
+
+
+====================COPYRIGHT====================
+//  (C) Copyright John Maddock & Thorsten Ottosen 2005.
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright John Maddock 2000.
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright John Maddock 2005.  
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright John Maddock 2007. 
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright John Maddock 2010.  
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright John Maddock 2015. 
+//  Use, modification and distribution are subject to the 
+//  Boost Software License, Version 1.0. (See accompanying file 
+
+
+====================COPYRIGHT====================
+//  (C) Copyright John Maddock 2017.
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright John Maddock 2018. 
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright John Maddock and Steve Cleary 2000.
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Peter Dimov 2017. 
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Rani Sharoni 2003-2005.
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Rani Sharoni 2003.
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Runar Undheim, Robert Ramey & John Maddock 2008.
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Steve Cleary, Beman Dawes, Aleksey Gurtovoy, Howard Hinnant & John Maddock 2000.
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Steve Cleary, Beman Dawes, Howard Hinnant & John Maddock 2000-2005.
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Steve Cleary, Beman Dawes, Howard Hinnant & John Maddock 2000.
+//  (C) Copyright Eric Friedman 2002-2003.
+//  (C) Copyright Antony Polukhin 2013.
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  Copyright (c) 2014 Agustin Berge
+
+
+====================COPYRIGHT====================
+//  Copyright 2000 John Maddock (john@johnmaddock.co.uk)
+//  Copyright 2002 Aleksey Gurtovoy (agurtovoy@meta-comm.com)
+
+
+====================COPYRIGHT====================
+//  Copyright 2010 John Maddock
+
+
+====================COPYRIGHT====================
+//  Copyright 2010 Vicente J. Botet Escriba
+
+
+====================COPYRIGHT====================
+//  Copyright 2015 Peter Dimov
+
+
+====================COPYRIGHT====================
+//  Copyright 2017 Peter Dimov
+
+
+====================COPYRIGHT====================
+//  Copyright 2018 Peter Dimov
+
+
+====================COPYRIGHT====================
+//  Copyright 2023 Andrey Semashev
+
+
+====================COPYRIGHT====================
+// (C) Copyright Steve Cleary, Beman Dawes, Howard Hinnant & John Maddock 2000.
+//  Use, modification and distribution are subject to the Boost Software License,
+//  Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+// Copyright (c) 2002-2003
+// Eric Friedman, Itay Maman
+
+
+====================COPYRIGHT====================
+// Copyright 2000 John Maddock (john@johnmaddock.co.uk)
+// Copyright 2000 Jeremy Siek (jsiek@lsc.nd.edu)
+// Copyright 1999, 2000 Jaakko Jarvi (jaakko.jarvi@cs.utu.fi)
+
+
+====================COPYRIGHT====================
+// Copyright 2005 Alexander Nasonov.
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+// Copyright Aleksey Gurtovoy 2002-2004
+
+
+====================COPYRIGHT====================
+Copyright 2003 The Trustees of Indiana University
+
+
+====================COPYRIGHT====================
+Copyright 2017 Glen Joseph Fernandes
+(glenjofe@gmail.com)
+
+
+====================COPYRIGHT====================
+Copyright 2017-2018 Glen Joseph Fernandes
+(glenjofe@gmail.com)
+
+
+====================COPYRIGHT====================
+Copyright 2018 Glen Joseph Fernandes
+(glenjofe@gmail.com)
+
+
+====================COPYRIGHT====================
+Copyright 2019 Glen Joseph Fernandes
+(glenjofe@gmail.com)
+
+
+====================COPYRIGHT====================
+Copyright 2020 Glen Joseph Fernandes
+(glenjofe@gmail.com)

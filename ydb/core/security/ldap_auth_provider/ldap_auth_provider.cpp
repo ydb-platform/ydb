@@ -261,6 +261,11 @@ private:
             return {{TEvLdapAuthProvider::EStatus::UNAUTHORIZED,
                     {.Message = ERROR_MESSAGE, .Retryable = false}}};
         }
+        if (request.Password.Empty()) {
+            LDAP_LOG_D("LDAP login failed for user " << TString(dn) << ". Empty password");
+            NKikimrLdap::MemFree(dn);
+            return {{.Status = TEvLdapAuthProvider::EStatus::UNAUTHORIZED, .Error = {.Message = TString(ERROR_MESSAGE) + ". Empty password", .Retryable = false}}};
+        }
         TEvLdapAuthProvider::TError error;
         LDAP_LOG_D("bind: bindDn: " << dn);
         int result = NKikimrLdap::Bind(*request.Ld, dn, request.Password);

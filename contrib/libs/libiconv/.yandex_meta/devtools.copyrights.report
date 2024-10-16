@@ -1,0 +1,864 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 02da57a6f9f73ea56c34782db7b335ba
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999-2007 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        ksc5601.h [2:3]
+        rk1048.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0d831432c221c7e234669f09a8b8e3d1
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999-2002 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        armscii_8.h [2:3]
+        c99.h [2:3]
+        cns11643_15.h [2:3]
+        cns11643_3.h [2:3]
+        cns11643_4a.h [2:3]
+        cns11643_4b.h [2:3]
+        cns11643_5.h [2:3]
+        cns11643_6.h [2:3]
+        cns11643_7.h [2:3]
+        cp1131.h [2:3]
+        cp1161.h [2:3]
+        cp1162.h [2:3]
+        cp1163.h [2:3]
+        cp737.h [2:3]
+        cp853.h [2:3]
+        cp858.h [2:3]
+        cp860.h [2:3]
+        cp863.h [2:3]
+        euc_jisx0213.h [2:3]
+        java.h [2:3]
+        koi8_t.h [2:3]
+        riscos1.h [2:3]
+        shift_jisx0213.h [2:3]
+        sjis.h [2:3]
+        tds565.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0eb22f26f9c65b645ae608976a3f214b
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999-2003, 2005-2006, 2008 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        loop_unicode.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1334b5134c21533efdcafa6c68fb6e53
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999-2001, 2008 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        hz.h [2:3]
+        iso2022_cn.h [2:3]
+        iso2022_cnext.h [2:3]
+        iso2022_jp.h [2:3]
+        iso2022_jp1.h [2:3]
+        iso2022_jp2.h [2:3]
+        iso2022_kr.h [2:3]
+        ucs2.h [2:3]
+        ucs4.h [2:3]
+        utf16.h [2:3]
+        utf16be.h [2:3]
+        utf16le.h [2:3]
+        utf32.h [2:3]
+        utf7.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 13b21fb5a10356d06831e96842e54a70
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+        /* Copyright (C) 2001, 2008 Free Software Foundation, Inc.
+           This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        encodings_osf1.def [1:2]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 142b44f3cb13856dffbc91e633ca1b20
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999-2001, 2004 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cp1255.h [2:3]
+        cp1258.h [2:3]
+        utf8.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 168a3cb67628cbe820cd1997d8b1ec85
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999-2005 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        atarist.h [2:3]
+        cns11643_1.h [2:3]
+        cns11643_inv.h [2:3]
+        pt154.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1a83633e134925e1019bbe856260d74a
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999-2000 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gbkext1.h [2:3]
+        gbkext2.h [2:3]
+        ucs4be.h [2:3]
+        ucs4internal.h [2:3]
+        ucs4le.h [2:3]
+        ucs4swapped.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3c7fff93b2f0fb5be3900d0ca987ef60
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 2000-2003 Free Software Foundation, Inc.
+           This file is part of the GNU CHARSET Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        localcharset.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3e7d5d8a33b0197ff574a125d9870933
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 2003, 2005 Free Software Foundation, Inc.
+           Written by Bruno Haible <bruno@clisp.org>, 2003.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        relocatable.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6aa1a483f362199e95e6bbbb054985b2
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+        /* Copyright (C) 2002, 2005, 2008 Free Software Foundation, Inc.
+           This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        encodings_extra.def [1:2]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6aab62528582f8d670e789e0a47dd8f6
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999-2001, 2007 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        euc_kr.h [2:3]
+        johab.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6b60525665eac0f8ad77510efabc143c
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2001, 2005 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        dec_hanyu.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8411d827edec8ced764fc4899e7b18ce
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2000-2002, 2005-2006, 2008 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        loop_wchar.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 85a27cc5cfd62d9bda794a03271528a4
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999-2004, 2008 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        iso2022_jp3.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 85f01196787841ee930c7d9e9afe5891
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         Copyright (C) 1991 Free Software Foundation, Inc.
+         51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
+         Everyone is permitted to copy and distribute verbatim copies
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING.LIB [4:6]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8868ba65c09f9b91ca40cf24aefed9c6
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999-2001 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        ascii.h [2:3]
+        big5.h [2:3]
+        ces_big5.h [2:3]
+        cjk_variants.h [2:3]
+        cns11643.h [2:3]
+        cns11643_2.h [2:3]
+        cns11643_4.h [2:3]
+        cp1046.h [2:3]
+        cp1124.h [2:3]
+        cp1125.h [2:3]
+        cp1129.h [2:3]
+        cp1133.h [2:3]
+        cp1250.h [2:3]
+        cp1251.h [2:3]
+        cp1252.h [2:3]
+        cp1253.h [2:3]
+        cp1254.h [2:3]
+        cp1256.h [2:3]
+        cp1257.h [2:3]
+        cp437.h [2:3]
+        cp775.h [2:3]
+        cp850.h [2:3]
+        cp852.h [2:3]
+        cp855.h [2:3]
+        cp856.h [2:3]
+        cp857.h [2:3]
+        cp861.h [2:3]
+        cp862.h [2:3]
+        cp864.h [2:3]
+        cp865.h [2:3]
+        cp866.h [2:3]
+        cp869.h [2:3]
+        cp874.h [2:3]
+        cp922.h [2:3]
+        cp932ext.h [2:3]
+        cp936ext.h [2:3]
+        cp943.h [2:3]
+        cp950ext.h [2:3]
+        euc_cn.h [2:3]
+        euc_tw.h [2:3]
+        gb12345.h [2:3]
+        gb12345ext.h [2:3]
+        gb2312.h [2:3]
+        gbkext_inv.h [2:3]
+        georgian_academy.h [2:3]
+        georgian_ps.h [2:3]
+        hp_roman8.h [2:3]
+        iso646_cn.h [2:3]
+        iso646_jp.h [2:3]
+        iso8859_1.h [2:3]
+        iso8859_10.h [2:3]
+        iso8859_13.h [2:3]
+        iso8859_14.h [2:3]
+        iso8859_15.h [2:3]
+        iso8859_16.h [2:3]
+        iso8859_2.h [2:3]
+        iso8859_3.h [2:3]
+        iso8859_4.h [2:3]
+        iso8859_5.h [2:3]
+        iso8859_6.h [2:3]
+        iso8859_8.h [2:3]
+        iso8859_9.h [2:3]
+        isoir165ext.h [2:3]
+        jisx0201.h [2:3]
+        jisx0208.h [2:3]
+        jisx0212.h [2:3]
+        johab_hangul.h [2:3]
+        koi8_r.h [2:3]
+        koi8_ru.h [2:3]
+        koi8_u.h [2:3]
+        mac_arabic.h [2:3]
+        mac_centraleurope.h [2:3]
+        mac_croatian.h [2:3]
+        mac_cyrillic.h [2:3]
+        mac_greek.h [2:3]
+        mac_hebrew.h [2:3]
+        mac_iceland.h [2:3]
+        mac_roman.h [2:3]
+        mac_romania.h [2:3]
+        mac_thai.h [2:3]
+        mac_turkish.h [2:3]
+        mac_ukraine.h [2:3]
+        mulelao.h [2:3]
+        nextstep.h [2:3]
+        tis620.h [2:3]
+        ucs2be.h [2:3]
+        ucs2internal.h [2:3]
+        ucs2le.h [2:3]
+        ucs2swapped.h [2:3]
+        uhc_1.h [2:3]
+        uhc_2.h [2:3]
+        utf32be.h [2:3]
+        utf32le.h [2:3]
+        viscii.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8af24ee9db4c16696bf659aac0357140
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+        /* Copyright (C) 2000-2002, 2005-2006, 2008-2009 Free Software Foundation, Inc.
+           This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        genflags.c [1:2]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8d69a35bc6a66c900304c3dee6d5bddb
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999-2008 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        iconv.c [2:3]
+        iconv_open1.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8d856e6d646bd428a36215564c1fdb72
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+        /* Copyright (C) 2000-2001 Free Software Foundation, Inc.
+           This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        encodings_local.def [1:2]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 960a75d73914aa18148af565cb4f0d5b
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright (C) 2003-2006 Free Software Foundation, Inc.
+           Written by Bruno Haible <bruno@clisp.org>, 2003.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        relocatable.c [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 97aab0fe692382a2764308e958d35e1a
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999-2001, 2005 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        big5_2003.h [2:3]
+        ces_gbk.h [2:3]
+        cp950.h [2:3]
+        euc_jp.h [2:3]
+        gb18030.h [2:3]
+        gb18030ext.h [2:3]
+        gb18030uni.h [2:3]
+        isoir165.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL a91801e94a98611725307b288ccc64ae
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+        /* Copyright (C) 1999-2001, 2003, 2005, 2008 Free Software Foundation, Inc.
+           This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        genaliases.c [1:2]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL aa182fd43cc2dce97857298cd22ca034
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+        /* Copyright (C) 2001-2002 Free Software Foundation, Inc.
+           This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        encodings_dos.def [1:2]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL ad18c432c223391dfd54ce868d3279c8
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999-2004 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        iso8859_11.h [2:3]
+        iso8859_7.h [2:3]
+        jisx0213.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL b213214757106439b3b49d326072e996
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+        /* Copyright (C) 2000-2002, 2008 Free Software Foundation, Inc.
+           This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        encodings_aix.def [1:2]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL b363d40723bb47f69a4413d12070d3ed
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+        /* Copyright (C) 1999-2003, 2005, 2008 Free Software Foundation, Inc.
+           This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        genaliases2.c [1:2]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL ba3f18d0258c78520b1f7dcbc8c3f735
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+        /* Copyright (C) 2003 Free Software Foundation, Inc.
+           This file is part of the GNU CHARSET Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libcharset.h [1:2]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL bc6d57d8c690bf5cc75aa63d2315c1b4
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2001, 2004 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        vietcomb.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL bed102f65ef8c788322534daf484c2f6
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999-2002, 2006 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        big5hkscs1999.h [2:3]
+        big5hkscs2001.h [2:3]
+        big5hkscs2004.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL c0a580767e4df988cbeb3a33fe57d251
+BELONGS dynamic/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING.LIB [407:412]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL c2604b67d26076485c5f4bbbc698c8af
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999-2002, 2004-2009 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        converters.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL d2747bffa3e4b2274c394690125df598
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2005 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cp936.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL dc70d37b37d470f70db299629c00b073
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999-2001, 2005, 2007 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cp949.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL ddb3331d20d733f66d9ddbee52529031
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2000 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        loops.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL e20f438889b27750f01b0a277cd96dd3
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999-2001, 2005, 2008 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        gbk.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL e26aaa6f5af4338dc37d5fb8510f057c
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+        /* lib/config.h.  Generated from config.h.in by configure.  */
+        /* Copyright (C) 1999-2003, 2005, 2007 Free Software Foundation, Inc.
+           This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        config.h [1:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL e362b9e2f8906b50d3de4628a884af8d
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+        /* Copyright (C) 1999-2003, 2005-2006, 2008-2009 Free Software Foundation, Inc.
+           This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        iconv.h [1:2]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+SKIP     COPYRIGHT_SERVICE_LABEL e57dec028410cc0b788f43aacfba2799
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+        \# Copyright (C) 1999-2003 Free Software Foundation, Inc.
+        \# This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        translit.def [1:2]
+        translit.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL e9979d7b38f29a2d67c33115531c4caf
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999-2006 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        hkscs1999.h [2:3]
+        hkscs2001.h [2:3]
+        hkscs2004.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL f3ea308252acb2e49cf4f179abadcefc
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999-2002, 2005 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cp932.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL f4ed643fa84baebfc2439d86e5122585
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999-2003, 2008 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        aliases2.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL fa32a73da3fb06b6e414324523be8f9b
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+        /* Copyright (C) 1999-2009 Free Software Foundation, Inc.
+           This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        encodings.def [1:2]
+        iconv_open2.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL fa692f791401e3151b156f805c94d010
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 2001 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        dec_kanji.h [2:3]
+        flushwc.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL fdbb79c6eecf0810786d6d788211e0f3
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright (C) 1999-2002, 2004 Free Software Foundation, Inc.
+         * This file is part of the GNU LIBICONV Library.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tcvn.h [2:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make

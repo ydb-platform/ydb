@@ -62,6 +62,10 @@
     template<bool OPT1, bool OPT2>                                                                                 \
     void N(NUnitTest::TTestContext&)
 
+namespace NYdb::NTable {
+    struct TGlobalIndexSettings;
+}
+
 namespace NSchemeShardUT_Private {
     using namespace NKikimr;
 
@@ -290,6 +294,11 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropResourcePool);
     DROP_BY_PATH_ID_HELPERS(DropResourcePool);
 
+    // backup collection
+    GENERIC_HELPERS(CreateBackupCollection);
+    GENERIC_HELPERS(DropBackupCollection);
+    DROP_BY_PATH_ID_HELPERS(DropBackupCollection);
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS
@@ -361,6 +370,7 @@ namespace NSchemeShardUT_Private {
         NKikimrSchemeOp::EIndexType IndexType = NKikimrSchemeOp::EIndexTypeGlobal;
         TVector<TString> IndexColumns;
         TVector<TString> DataColumns;
+        TVector<NYdb::NTable::TGlobalIndexSettings> GlobalIndexSettings = {};
     };
 
     std::unique_ptr<TEvIndexBuilder::TEvCreateRequest> CreateBuildColumnRequest(ui64 id, const TString& dbName, const TString& src, const TString& columnName, const Ydb::TypedValue& literal);

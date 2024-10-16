@@ -575,7 +575,7 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
 
         auto& range = event->Record.GetCmdDeleteRange(index).GetRange();
         TString key = range.GetFrom();
-        UNIT_ASSERT(key.Size() > (1 + 10 + 1)); // type + partition + mark + consumer
+        UNIT_ASSERT(key.size() > (1 + 10 + 1)); // type + partition + mark + consumer
 
         if (deleteRange.Partition.Defined()) {
             auto partition = FromString<ui32>(key.substr(1, 10));

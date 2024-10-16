@@ -8,6 +8,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/cms/console/config_helpers.h>
 #include <ydb/core/protos/counters_node_broker.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -59,8 +60,6 @@ void TNodeBroker::OnActivateExecutor(const TActorContext &ctx)
     }
 
     const auto *appData = AppData(ctx);
-
-    Y_ABORT_UNLESS(appData->FeatureFlags.GetEnableNodeBrokerSingleDomainMode());
 
     MaxStaticId = Min(appData->DynamicNameserviceConfig->MaxStaticNodeId, TActorId::MaxNodeId);
     MinDynamicId = Max(MaxStaticId + 1, (ui64)Min(appData->DynamicNameserviceConfig->MinDynamicNodeId, TActorId::MaxNodeId));
@@ -466,7 +465,7 @@ void TNodeBroker::PrepareEpochCache()
         FillNodeInfo(entry.second, *info.AddExpiredNodes());
 
     Y_PROTOBUF_SUPPRESS_NODISCARD info.SerializeToString(&EpochCache);
-    TabletCounters->Simple()[COUNTER_EPOCH_SIZE_BYTES].Set(EpochCache.Size());
+    TabletCounters->Simple()[COUNTER_EPOCH_SIZE_BYTES].Set(EpochCache.size());
 
     EpochDeltasCache.clear();
     EpochDeltasVersions.clear();
@@ -486,7 +485,7 @@ void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
     Y_PROTOBUF_SUPPRESS_NODISCARD info.SerializeToString(&delta);
 
     EpochCache += delta;
-    TabletCounters->Simple()[COUNTER_EPOCH_SIZE_BYTES].Set(EpochCache.Size());
+    TabletCounters->Simple()[COUNTER_EPOCH_SIZE_BYTES].Set(EpochCache.size());
 
     if (!EpochDeltasVersions.empty() && EpochDeltasVersions.back() + 1 != Epoch.Version) {
         EpochDeltasCache.clear();

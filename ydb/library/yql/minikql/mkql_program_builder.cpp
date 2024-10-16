@@ -4450,17 +4450,23 @@ TRuntimeNode TProgramBuilder::ToBytes(TRuntimeNode data) {
     return UnaryDataFunction(data, __func__, TDataFunctionFlags::HasStringResult | TDataFunctionFlags::AllowOptionalArgs | TDataFunctionFlags::CommonOptionalResult);
 }
 
-TRuntimeNode TProgramBuilder::FromBytes(TRuntimeNode data, NUdf::TDataTypeId schemeType) {
+TRuntimeNode TProgramBuilder::FromBytes(TRuntimeNode data, TType* targetType) {
     auto type = data.GetStaticType();
     bool isOptional;
     auto dataType = UnpackOptionalData(type, isOptional);
     MKQL_ENSURE(dataType->GetSchemeType() == NUdf::TDataType<char*>::Id, "Expected String");
 
-    auto outDataType = NewDataType(schemeType);
-    auto resultType = NewOptionalType(outDataType);
+    auto resultType = NewOptionalType(targetType);
     TCallableBuilder callableBuilder(Env, __func__, resultType);
     callableBuilder.Add(data);
-    callableBuilder.Add(NewDataLiteral(static_cast<ui32>(schemeType)));
+    auto targetDataType = AS_TYPE(TDataType, targetType);
+    callableBuilder.Add(NewDataLiteral(static_cast<ui32>(targetDataType->GetSchemeType())));
+    if (targetDataType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id) {
+        const auto& params = static_cast<const TDataDecimalType*>(targetType)->GetParams();
+        callableBuilder.Add(NewDataLiteral(params.first));
+        callableBuilder.Add(NewDataLiteral(params.second));
+    }
+
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 

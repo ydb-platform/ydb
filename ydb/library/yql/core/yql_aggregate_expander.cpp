@@ -2532,9 +2532,20 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                 .Seal()
                 .Build();
 
+            auto name = TString(originalTrait->ChildPtr(0)->Content());
+            if (name.StartsWith("pg_")) {
+                auto func = name.substr(3);
+                TVector<ui32> argTypes;
+                bool needRetype = false;
+                auto status = ExtractPgTypesFromMultiLambda(originalTrait->ChildRef(2), argTypes, needRetype, Ctx);
+                YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
+                const NPg::TAggregateDesc& aggDesc = NPg::LookupAggregation(TString(func), argTypes);
+                name = "pg_" + aggDesc.Name + "#" + ToString(aggDesc.AggId);
+            }
+
             mergeTraits.push_back(Ctx.Builder(Node->Pos())
                 .Callable(many ? "AggApplyManyState" : "AggApplyState")
-                    .Add(0, originalTrait->ChildPtr(0))
+                    .Atom(0, name)
                     .Add(1, extractorTypeNode)
                     .Add(2, extractor)
                     .Add(3, originalExtractorTypeNode)

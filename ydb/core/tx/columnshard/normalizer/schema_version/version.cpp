@@ -23,11 +23,30 @@ private:
         }
     };
 
+    class TTableKey {
+    public:
+        ui64 PathId;
+        ui64 Step;
+        ui64 TxId;
+        ui64 Version;
+
+    public:
+        TTableKey(ui64 pathId, ui64 step, ui64 txId, ui64 version)
+            : PathId(pathId)
+            , Step(step)
+            , TxId(txId)
+            , Version(version)
+        {
+        }
+    };
+
     std::vector<TKey> VersionsToRemove;
+    std::vector<TTableKey> TableVersionsToRemove;
 
 public:
-    TNormalizerResult(std::vector<TKey>&& versions)
+    TNormalizerResult(std::vector<TKey>&& versions, std::vector<TTableKey>&& tableVersions)
         : VersionsToRemove(versions)
+        , TableVersionsToRemove(tableVersions)
     {
     }
 
@@ -35,7 +54,12 @@ public:
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
         for (auto& key: VersionsToRemove) {
+            LOG_S_DEBUG("Removing schema version in TSchemaVersionNormalizer " << key.Version);
             db.Table<Schema::SchemaPresetVersionInfo>().Key(key.Id, key.Step, key.TxId).Delete();
+        }
+        for (auto& key: TableVersionsToRemove) {
+            LOG_S_DEBUG("Removing table version in TSchemaVersionNormalizer " << key.Version << " pathId " << key.PathId);
+            db.Table<Schema::TableVersionInfo>().Key(key.PathId, key.Step, key.TxId).Delete();
         }
         return true;
     }
@@ -78,6 +102,7 @@ public:
         }
 
         std::vector<TKey> unusedSchemaIds;
+        std::vector<TTableKey> unusedTableSchemaIds;
         std::optional<ui64> maxVersion;
         std::vector<INormalizerChanges::TPtr> changes;
 
@@ -107,18 +132,57 @@ public:
             }
         }
 
-        std::vector<TKey> portion;
-        portion.reserve(10000);
-        for (const auto& id: unusedSchemaIds) {
-            if (!maxVersion.has_value() || (id.Version != *maxVersion)) {
-                portion.push_back(id);
-                if (portion.size() >= 10000) {
-                    changes.emplace_back(std::make_shared<TNormalizerResult>(std::move(portion)));
+        {
+            auto rowset = db.Table<Schema::TableVersionInfo>().Select();
+            if (!rowset.IsReady()) {
+                return std::nullopt;
+            }
+
+            while (!rowset.EndOfSet()) {
+                const ui64 pathId = rowset.GetValue<Schema::TableVersionInfo::PathId>();
+
+                NKikimrTxColumnShard::TTableVersionInfo versionInfo;
+                Y_ABORT_UNLESS(versionInfo.ParseFromString(rowset.GetValue<Schema::TableVersionInfo::InfoProto>()));
+                if (versionInfo.HasSchema()) {
+                    ui64 version = versionInfo.GetSchema().GetVersion();
+                    if (!usedSchemaVersions.contains(version)) {
+                        unusedTableSchemaIds.emplace_back(pathId, rowset.GetValue<Schema::TableVersionInfo::SinceStep>(), rowset.GetValue<Schema::TableVersionInfo::SinceTxId>(), version);
+                    }
+                }
+
+                if (!rowset.Next()) {
+                    return std::nullopt;
                 }
             }
         }
-        if (portion.size() > 0) {
-            changes.emplace_back(std::make_shared<TNormalizerResult>(std::move(portion)));
+
+        std::vector<TTableKey> tablePortion;
+        std::vector<TKey> portion;
+        tablePortion.reserve(10000);
+        portion.reserve(10000);
+        auto addPortion = [&]() {
+            if (portion.size() + tablePortion.size() >= 10000) {
+                changes.emplace_back(std::make_shared<TNormalizerResult>(std::move(portion), std::move(tablePortion)));
+                portion = std::vector<TKey>();
+                tablePortion = std::vector<TTableKey>();
+            }
+        };
+        for (const auto& id: unusedSchemaIds) {
+            if (!maxVersion.has_value() || (id.Version != *maxVersion)) {
+                portion.push_back(id);
+                addPortion();
+            }
+        }
+
+        for (const auto& id: unusedTableSchemaIds) {
+            if (!maxVersion.has_value() || (id.Version != *maxVersion)) {
+                tablePortion.push_back(id);
+                addPortion();
+            }
+        }
+
+        if (portion.size() + tablePortion.size() > 0) {
+            changes.emplace_back(std::make_shared<TNormalizerResult>(std::move(portion), std::move(tablePortion)));
         }
         return changes;
     }

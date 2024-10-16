@@ -1,0 +1,111 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0e38f662b528c9b976dd8c8d913034a2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/unordered_map.hpp [2:5]
+        include/boost/unordered_set.hpp [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 39ee4bcf7a682976231db184fa7886d3
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2008-2016 Daniel James.
+        // Distributed under the Boost Software License, Version 1.0. (See accompanying
+        // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/unordered/detail/fwd.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 65d8e0cce41880c02ab6a95962a28436
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/unordered/unordered_map.hpp [2:5]
+        include/boost/unordered/unordered_set.hpp [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ce97343ca1928bb25180cf14d4f5b41a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/unordered/detail/implementation.hpp [1:2]
+        include/boost/unordered/unordered_map.hpp [2:5]
+        include/boost/unordered/unordered_set.hpp [2:5]
+        include/boost/unordered_map.hpp [2:5]
+        include/boost/unordered_set.hpp [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d78b6dbfe1069ef1912985a3ebb3d094
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2003-2004 Jeremy B. Maitin-Shepard.
+        // Copyright (C) 2005-2016 Daniel James
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/unordered/detail/implementation.hpp [1:2]
+        include/boost/unordered/detail/map.hpp [2:4]
+        include/boost/unordered/detail/set.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ed6bcd8dbc21acf811b7047c38c1a3b9
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2008-2011 Daniel James.
+        // Distributed under the Boost Software License, Version 1.0. (See accompanying
+        // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/unordered/unordered_map_fwd.hpp [2:4]
+        include/boost/unordered/unordered_set_fwd.hpp [2:4]

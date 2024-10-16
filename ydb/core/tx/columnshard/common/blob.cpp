@@ -136,6 +136,11 @@ NKikimrColumnShardProto::TBlobRange TBlobRange::SerializeToProto() const {
     return result;
 }
 
+TString TBlobRange::GetData(const TString& blobData) const {
+    AFL_VERIFY(Offset + Size <= blobData.size())("offset", Offset)("size", Size)("blobDataSize", blobData.size());
+    return blobData.substr(Offset, Size);
+}
+
 NKikimr::TConclusionStatus TBlobRangeLink16::DeserializeFromProto(const NKikimrColumnShardProto::TBlobRangeLink16& proto) {
     BlobIdx = proto.GetBlobIdx();
     Offset = proto.GetOffset();

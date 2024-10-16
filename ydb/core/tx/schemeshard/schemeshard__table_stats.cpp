@@ -264,18 +264,19 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
                                                                subDomainInfo->EffectiveStoragePools(),
                                                                shardInfo->BindedChannels);
 
+    const auto pathElement = Self->PathsById[pathId];
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "TTxStoreTableStats.PersistSingleStats: main stats from"
                     << " datashardId(TabletID)=" << datashardId << " maps to shardIdx: " << shardIdx
-                    << ", pathId: " << pathId << ", pathId map=" << Self->PathsById[pathId]->Name
+                    << ", pathId: " << pathId << ", pathId map=" << pathElement->Name
                     << ", is column=" << isColumnTable << ", is olap=" << isOlapStore);
 
     const TPartitionStats newStats = PrepareStats(ctx, rec, channelsMapping);
 
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-               "Add stats from shard with datashardId(TabletID)=" << datashardId 
+               "Add stats from shard with datashardId(TabletID)=" << datashardId
                     << ", pathId " << pathId.LocalPathId
-                    << ": RowCount " << newStats.RowCount 
+                    << ": RowCount " << newStats.RowCount
                     << ", DataSize " << newStats.DataSize
                     << (newStats.HasBorrowedData ? ", with borrowed parts" : ""));
 
@@ -404,11 +405,14 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
     }
 
+    const TTableIndexInfo* index = Self->Indexes.Value(pathElement->ParentPathId, nullptr).Get();
     const TTableInfo* mainTableForIndex = Self->GetMainTableForIndex(pathId);
 
     const auto forceShardSplitSettings = Self->SplitSettings.GetForceShardSplitSettings();
     TVector<TShardIdx> shardsToMerge;
-    if (table->CheckCanMergePartitions(Self->SplitSettings, forceShardSplitSettings, shardIdx, shardsToMerge, mainTableForIndex)) {
+    if ((!index || index->State == NKikimrSchemeOp::EIndexStateReady)
+        && table->CheckCanMergePartitions(Self->SplitSettings, forceShardSplitSettings, shardIdx, shardsToMerge, mainTableForIndex)
+    ) {
         TTxId txId = Self->GetCachedTxId(ctx);
 
         if (!txId) {

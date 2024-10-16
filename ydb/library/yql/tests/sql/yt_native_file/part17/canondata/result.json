@@ -1297,9 +1297,9 @@
     ],
     "test.test[key_filter-lambda_with_null_filter--Debug]": [
         {
-            "checksum": "b44391799c11a1cab235b864bf833749",
-            "size": 4487,
-            "uri": "https://{canondata_backend}/1880306/2a33b9c798cdb676ceda243cdc609d2afef27554/resource.tar.gz#test.test_key_filter-lambda_with_null_filter--Debug_/opt.yql"
+            "checksum": "5c45aa482b25bb070a3a10e91ad88518",
+            "size": 4494,
+            "uri": "https://{canondata_backend}/1775319/f889872aabeacd6308c20e4de5a8e96864af3dd2/resource.tar.gz#test.test_key_filter-lambda_with_null_filter--Debug_/opt.yql"
         }
     ],
     "test.test[key_filter-lambda_with_null_filter--Plan]": [

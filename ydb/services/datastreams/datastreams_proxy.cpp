@@ -1330,7 +1330,7 @@ namespace NKikimr::NDataStreams::V1 {
             GetProtoRequest()->consumer_name(),
             appData->PQConfig
         );
-        if (!error.Empty()) {
+        if (!error.empty()) {
             return ReplyWithError(Ydb::StatusIds::NOT_FOUND, static_cast<size_t>(NYds::EErrorCodes::NOT_FOUND), error);
         }
     }

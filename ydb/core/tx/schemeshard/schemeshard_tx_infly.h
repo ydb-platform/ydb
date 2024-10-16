@@ -138,6 +138,9 @@ struct TTxState {
         item(TxDropResourcePool, 92) \
         item(TxAlterResourcePool, 93) \
         item(TxRestoreIncrementalBackupAtTable, 94) \
+        item(TxCreateBackupCollection, 95) \
+        item(TxDropBackupCollection, 96) \
+        item(TxAlterBackupCollection, 97) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -355,6 +358,7 @@ struct TTxState {
         case TxCopySequence:
         case TxCreateContinuousBackup:
         case TxCreateResourcePool:
+        case TxCreateBackupCollection:
             return true;
         case TxInitializeBuildIndex: //this is more like alter
         case TxCreateCdcStreamAtTable:
@@ -391,6 +395,7 @@ struct TTxState {
         case TxDropView:
         case TxDropContinuousBackup:
         case TxDropResourcePool:
+        case TxDropBackupCollection:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -425,6 +430,7 @@ struct TTxState {
         case TxAlterContinuousBackup:
         case TxAlterResourcePool:
         case TxRestoreIncrementalBackupAtTable:
+        case TxAlterBackupCollection:
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
@@ -461,6 +467,7 @@ struct TTxState {
         case TxDropView:
         case TxDropContinuousBackup:
         case TxDropResourcePool:
+        case TxDropBackupCollection:
             return true;
         case TxMkDir:
         case TxCreateTable:
@@ -498,6 +505,7 @@ struct TTxState {
         case TxCreateContinuousBackup:
         case TxCreateResourcePool:
         case TxRestoreIncrementalBackupAtTable:
+        case TxCreateBackupCollection:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -531,6 +539,7 @@ struct TTxState {
         case TxAlterView:
         case TxAlterContinuousBackup:
         case TxAlterResourcePool:
+        case TxAlterBackupCollection:
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
@@ -563,6 +572,7 @@ struct TTxState {
         case TxDropReplicationCascade:
         case TxDropBlobDepot:
         case TxDropContinuousBackup:
+        case TxDropBackupCollection:
             return true;
         case TxDropTableIndex:
         case TxRmDir:
@@ -606,6 +616,7 @@ struct TTxState {
         case TxCreateContinuousBackup:
         case TxCreateResourcePool:
         case TxRestoreIncrementalBackupAtTable:
+        case TxCreateBackupCollection:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -640,6 +651,7 @@ struct TTxState {
         case TxAlterView:
         case TxAlterContinuousBackup:
         case TxAlterResourcePool:
+        case TxAlterBackupCollection:
             return false;
         case TxInvalid:
         case TxAllocatePQ:
@@ -751,6 +763,9 @@ struct TTxState {
             case NKikimrSchemeOp::ESchemeOpAlterContinuousBackup: return TxInvalid;
             case NKikimrSchemeOp::ESchemeOpDropContinuousBackup: return TxInvalid;
             case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackup: return TxInvalid;
+            case NKikimrSchemeOp::ESchemeOpCreateBackupCollection: return TxCreateBackupCollection;
+            case NKikimrSchemeOp::ESchemeOpAlterBackupCollection: return TxAlterBackupCollection;
+            case NKikimrSchemeOp::ESchemeOpDropBackupCollection: return TxDropBackupCollection;
             default: return TxInvalid;
         }
     }

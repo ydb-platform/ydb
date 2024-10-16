@@ -12,12 +12,14 @@ TTpcDSGeneratorCustomerAddress::TTpcDSGeneratorCustomerAddress(const TTpcdsWorkl
     : TBulkDataGenerator(owner, CUSTOMER_ADDRESS)
 {}
 
-void TTpcDSGeneratorCustomerAddress::GenerateRows(TContexts& ctxs) {
+void TTpcDSGeneratorCustomerAddress::GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) {
     TVector<W_CUSTOMER_ADDRESS_TBL> customerAddressList(ctxs.front().GetCount());
     for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
         mk_w_customer_address(&customerAddressList[i], ctxs.front().GetStart() + i);
         tpcds_row_stop(TableNum);
     }
+    g.Release();
+
     TCsvItemWriter<W_CUSTOMER_ADDRESS_TBL> writer(ctxs.front().GetCsv().Out);
     CSV_WRITER_REGISTER_FIELD_KEY(writer, "ca_address_sk", ca_addr_sk);
     CSV_WRITER_REGISTER_FIELD_STRING(writer, "ca_address_id", ca_addr_id);

@@ -690,7 +690,7 @@ private:
     }
 
     void ComputeKMeansState(TIndexBuildInfo& buildInfo) {
-        if (!buildInfo.ToUploadShards.empty() || !buildInfo.InProgressShards.empty()) {
+        if (buildInfo.DoneShardsSize != 0 || !buildInfo.InProgressShards.empty() || !buildInfo.ToUploadShards.empty()) {
             return;
         }
         std::array<NScheme::TTypeInfo, 1> typeInfos{NScheme::NTypeIds::Uint32};
@@ -739,7 +739,6 @@ private:
     }
 
     bool SendVectorIndex(TIndexBuildInfo& buildInfo) {
-        ComputeKMeansState(buildInfo);
         switch (buildInfo.KMeans.State) {
             case TIndexBuildInfo::TKMeans::Sample:
                 return SendKMeansSample(buildInfo);
@@ -756,9 +755,12 @@ private:
     }
 
     bool FillVectorIndex(TIndexBuildInfo& buildInfo) {
+        ComputeKMeansState(buildInfo);
         if (!SendVectorIndex(buildInfo)) {
             return false;
         }
+        buildInfo.DoneShardsSize = 0;
+
         if (!buildInfo.Sample.Sent && !buildInfo.Sample.Rows.empty()) {
             SendUploadSampleKRequest(buildInfo);
             return false;
@@ -768,6 +770,7 @@ private:
             return false;
         }
         buildInfo.Sample.Clear();
+
         if (buildInfo.KMeans.NextParent()) {
             Progress(BuildId);
             return false;

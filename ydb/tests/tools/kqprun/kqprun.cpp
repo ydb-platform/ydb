@@ -296,7 +296,7 @@ protected:
                 TablesMapping[tableName] = filePath;
             });
 
-        options.AddLongOption('c', "app-config", "File with app config (TAppConfig for ydb tennant)")
+        options.AddLongOption('c', "app-config", "File with app config (TAppConfig for ydb tenant)")
             .RequiredArgument("file")
             .DefaultValue("./configuration/app_config.conf")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {

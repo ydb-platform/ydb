@@ -105,7 +105,8 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
         Sleep(TDuration::Seconds(1));
 
         auto settings = TDescribeTableSettings().WithTableStatistics(true);
-        auto describeResult = testHelper.GetSession().DescribeTable("/Root/TableStoreTest/ColumnTableTest", settings).GetValueSync();
+        auto describeResult =
+            testHelper.GetSession().DescribeTable("/Root/TableStoreTest/ColumnTableTest", settings).GetValueSync();
 
         UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
 

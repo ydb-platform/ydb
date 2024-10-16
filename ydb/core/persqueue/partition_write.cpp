@@ -1023,6 +1023,10 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
         return EProcessResult::Blocked;
     }
     WriteAffectedSourcesIds.insert(p.Msg.SourceId);
+    CurrentBatchBytes += p.Msg.Data.size();
+    if (p.Msg.AllowBatching && CurrentBatchBytes < Config.GetPartitionConfig().GetWriteBatching().GetMinBytes()) {
+        return EProcessResult::ContinueBatching;
+    }
     return EProcessResult::Continue;
 }
 
@@ -1735,6 +1739,7 @@ void TPartition::EndAppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, co
                 .External = false,
                 .IgnoreQuotaDeadline = true,
                 .HeartbeatVersion = std::nullopt,
+                .AllowBatching = false,
             }, std::nullopt};
 
             WriteInflightSize += heartbeat->Data.size();

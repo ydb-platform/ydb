@@ -529,6 +529,7 @@ private:
             HFuncTraced(TEvPQ::TEvGetWriteInfoError, Handle);
             HFuncTraced(TEvPQ::TEvDeletePartition, HandleOnInit);
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
+            IgnoreFunc(TEvPQ::TEvProceedTxAndUserActs);
         default:
             if (!Initializer.Handle(ev)) {
                 ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
@@ -592,6 +593,7 @@ private:
             HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
             HFuncTraced(TEvPQ::TEvProcessChangeOwnerRequests, Handle);
             HFuncTraced(TEvPQ::TEvDeletePartition, Handle);
+            SFunc(TEvPQ::TEvProceedTxAndUserActs, ProcessTxsAndUserActs);
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
@@ -603,6 +605,7 @@ private:
     enum class EProcessResult {
         Continue,
         ContinueDrop,
+        ContinueBatching,
         Break,
         NotReady,
         Blocked,
@@ -792,6 +795,8 @@ private:
     bool SendChangeConfigReply = true;
     TMessageQueue Responses;
     ui64 CurrentBatchSize = 0;
+    ui64 CurrentBatchBytes = 0;
+    THashMap<EProcessResult, ui32> CurrentBatchProcessResults;
 
     enum class ETxBatchingState{
         PreProcessing,

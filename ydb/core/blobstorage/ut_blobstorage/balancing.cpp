@@ -1,8 +1,8 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/util/random.h>
 
 #include <library/cpp/iterator/enumerate.h>
 
-#include <util/random/entropy.h>
 
 
 using TPartsLocations = TVector<TVector<ui8>>;
@@ -214,14 +214,6 @@ TLogoBlobID MakeLogoBlobId(ui32 step, ui32 dataSize) {
     return TLogoBlobID(1, 1, step, 0, dataSize, 0);
 }
 
-
-TString GenData(ui32 len) {
-    TString res = TString::Uninitialized(len);
-    EntropyPool().Read(res.Detach(), res.size());
-    return res;
-}
-
-
 struct TStopOneNodeTest {
     TTestEnv Env;
     TString data;
@@ -323,7 +315,7 @@ struct TRandomTest {
 
         for (ui32 step = 0; step < NumIters; ++step) {
             Cerr << "Step = " << step << Endl;
-            data.push_back(GenData(16 + random() % MaxBlobSize));
+            data.push_back(GenRandomBuffer(16 + random() % MaxBlobSize));
 
             if (Env.SendPut(step, data.back()) == NKikimrProto::OK) {
                 successfulSteps.push_back(step);

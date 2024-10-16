@@ -435,6 +435,11 @@ public:
         }
 
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
+
+        if (parentPathStr.StartsWith(JoinPath({parentPath.GetDomainPathString(), ".backups/collections"}))) {
+            schema.SetSystemColumnNamesAllowed(true);
+        }
+
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
             checks

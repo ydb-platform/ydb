@@ -615,8 +615,20 @@ private:
         Self->IndexBuildPipes.CloseAll(BuildId, ctx);
     }
 
+    template<typename Send>
+    bool SendToShards(TIndexBuildInfo& buildInfo, Send&& send) {
+        while (!buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.size() < buildInfo.Limits.MaxShards) {
+            auto shardIdx = buildInfo.ToUploadShards.front();
+            buildInfo.ToUploadShards.pop_front();
+            buildInfo.InProgressShards.emplace(shardIdx);
+            send(shardIdx);
+        }
+
+        return buildInfo.InProgressShards.empty() && buildInfo.ToUploadShards.empty();
+    }
+
     bool FillTable(TIndexBuildInfo& buildInfo) {
-        if (buildInfo.ToUploadShards.empty() && buildInfo.DoneShardsSize == 0 && buildInfo.InProgressShards.empty()) {
+        if (buildInfo.DoneShardsSize == 0 && buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.empty()) {
             for (const auto& [idx, status] : buildInfo.Shards) {
                 switch (status.Status) {
                     case NKikimrIndexBuilder::EBuildStatus::INVALID:
@@ -634,21 +646,12 @@ private:
                 }
             }
         }
-
-        while (!buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.size() < buildInfo.Limits.MaxShards) {
-            auto shardIdx = buildInfo.ToUploadShards.front();
-            buildInfo.ToUploadShards.pop_front();
-            buildInfo.InProgressShards.emplace(shardIdx);
-
-            SendBuildIndexRequest(shardIdx, buildInfo);
-        }
-
-        return buildInfo.InProgressShards.empty() && buildInfo.ToUploadShards.empty() &&
+        return SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendBuildIndexRequest(shardIdx, buildInfo); }) &&
                buildInfo.DoneShardsSize == buildInfo.Shards.size();
     }
 
     void ComputeKMeansState(TIndexBuildInfo& buildInfo) {
-        if (!buildInfo.ToUploadShards.empty() || !buildInfo.InProgressShards.empty()) {
+        if (buildInfo.DoneShardsSize != 0 || !buildInfo.InProgressShards.empty() || !buildInfo.ToUploadShards.empty()) {
             return;
         }
         std::array<NScheme::TTypeInfo, 1> typeInfos{NScheme::NTypeIds::Uint32};
@@ -689,17 +692,10 @@ private:
             buildInfo.InProgressShards.clear();
             return true;
         }
-        while (!buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.size() < buildInfo.Limits.MaxShards) {
-            auto shardIdx = buildInfo.ToUploadShards.front();
-            buildInfo.ToUploadShards.pop_front();
-            buildInfo.InProgressShards.emplace(shardIdx);
-            SendSampleKRequest(shardIdx, buildInfo);
-        }
-        return buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.empty();
+        return SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendSampleKRequest(shardIdx, buildInfo); });
     }
 
-    bool FillVectorIndex(TIndexBuildInfo& buildInfo) {
-        ComputeKMeansState(buildInfo);
+    bool SendVectorIndex(TIndexBuildInfo& buildInfo) {
         switch (buildInfo.KMeans.State) {
             case TIndexBuildInfo::TKMeans::Sample:
                 return SendKMeansSample(buildInfo);
@@ -712,6 +708,35 @@ private:
             // TODO(mbkkt)
             // case TIndexBuildInfo::TKMeans::Local:
             //     return SendKMeansLocal(buildInfo);
+        }
+        return true;
+    }
+
+    bool FillVectorIndex(TIndexBuildInfo& buildInfo) {
+        ComputeKMeansState(buildInfo);
+        if (!SendVectorIndex(buildInfo)) {
+            return false;
+        }
+        buildInfo.DoneShardsSize = 0;
+
+        if (!buildInfo.Sample.Sent && !buildInfo.Sample.Rows.empty()) {
+            SendUploadSampleKRequest(buildInfo);
+            return false;
+        }
+        if (buildInfo.KMeans.NextState()) {
+            Progress(BuildId);
+            return false;
+        }
+        buildInfo.Sample.Clear();
+
+        if (buildInfo.KMeans.NextParent()) {
+            Progress(BuildId);
+            return false;
+        }
+        if (buildInfo.KMeans.NextLevel()) {
+            ChangeState(BuildId, TIndexBuildInfo::EState::DropBuild);
+            Progress(BuildId);
+            return false;
         }
         return true;
     }
@@ -730,31 +755,12 @@ private:
             NIceDb::TNiceDb db(txc.DB);
             InitiateShards(db, buildInfo);
         }
-        if (!buildInfo.IsBuildVectorIndex()) {
+        if (buildInfo.IsBuildVectorIndex()) {
+            return FillVectorIndex(buildInfo);
+        } else {
+            Y_ASSERT(buildInfo.IsBuildSecondaryIndex() || buildInfo.IsBuildColumns());
             return FillTable(buildInfo);
-        } 
-        if (!FillVectorIndex(buildInfo)) {
-            return false;
         }
-        if (!buildInfo.Sample.Sent && !buildInfo.Sample.Rows.empty()) {
-            SendUploadSampleKRequest(buildInfo);
-            return false;
-        }
-        if (buildInfo.KMeans.NextState()) {
-            Progress(BuildId);
-            return false;
-        }
-        buildInfo.Sample.Clear();
-        if (buildInfo.KMeans.NextParent()) {
-            Progress(BuildId);
-            return false;
-        }
-        if (buildInfo.KMeans.NextLevel()) {
-            ChangeState(BuildId, TIndexBuildInfo::EState::DropBuild);
-            Progress(BuildId);
-            return false;
-        }
-        return true;
     }
 
 public:
@@ -1500,18 +1506,10 @@ public:
                 break;
 
             case  NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR:
-                buildInfo.Issue += TStringBuilder()
-                    << "One of the shards report BUILD_ERROR at Filling stage, process has to be canceled"
-                    << ", shardId: " << shardId
-                    << ", shardIdx: " << shardIdx;
-                Self->PersistBuildIndexIssue(db, buildInfo);
-                ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
-
-                Progress(buildId);
-                break;
             case  NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST:
                 buildInfo.Issue += TStringBuilder()
-                    << "One of the shards report BAD_REQUEST at Filling stage, process has to be canceled"
+                    << "One of the shards report " << shardStatus.Status
+                    << " at Filling stage, process has to be canceled"
                     << ", shardId: " << shardId
                     << ", shardIdx: " << shardIdx;
                 Self->PersistBuildIndexIssue(db, buildInfo);

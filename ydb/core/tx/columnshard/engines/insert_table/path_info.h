@@ -2,8 +2,8 @@
 #include "committed.h"
 #include "inserted.h"
 
-#include <ydb/core/tx/columnshard/counters/insert_table.h>
 #include <ydb/core/tx/columnshard/common/schema_versions.h>
+#include <ydb/core/tx/columnshard/counters/insert_table.h>
 
 #include <util/generic/noncopyable.h>
 #include <util/generic/set.h>
@@ -69,14 +69,14 @@ public:
 
     TPathInfoIndexPriority GetIndexationPriority() const;
 
-    bool EraseCommitted(const TCommittedData& data, TVersionCounters* versionCounters);
+    bool EraseCommitted(const TCommittedData& data, const std::shared_ptr<TVersionCounters>& versionCounters);
     bool HasCommitted(const TCommittedData& data);
 
     const TSet<TCommittedData>& GetCommitted() const {
         return Committed;
     }
 
-    bool AddCommitted(TCommittedData&& data, TVersionCounters* versionCounters, const bool load = false);
+    bool AddCommitted(TCommittedData&& data, const std::shared_ptr<TVersionCounters>& versionCounters, const bool load = false);
 
     bool IsOverloaded() const {
         return CommittedOverload || InsertedOverload;

@@ -2,10 +2,10 @@
 
 #include "column_engine.h"
 #include "defs.h"
-#include <ydb/core/tx/columnshard/common/scalars.h>
-#include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/columnshard_ttl.h>
+#include <ydb/core/tx/columnshard/common/limits.h>
+#include <ydb/core/tx/columnshard/common/scalars.h>
 #include <ydb/core/tx/columnshard/common/schema_versions.h>
 
 #include "changes/actualization/controller/controller.h"
@@ -14,6 +14,8 @@
 #include "storage/granule/storage.h"
 
 #include <ydb/core/tx/columnshard/columnshard_ttl.h>
+#include <ydb/core/tx/columnshard/counters/engine_logs.h>
+
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <ydb/core/tx/columnshard/counters/common_data.h>
@@ -88,9 +90,9 @@ public:
     };
 
     TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot,
-        const NKikimrSchemeOp::TColumnTableSchema& schema, std::shared_ptr<TVersionCounters>& versionCounters);
+        const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<TVersionCounters>& versionCounters);
     TColumnEngineForLogs(
-        ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema, std::shared_ptr<TVersionCounters>& versionCounters);
+        ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema, const std::shared_ptr<TVersionCounters>& versionCounters);
 
     virtual void OnTieringModified(
         const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) override;
@@ -195,7 +197,7 @@ public:
     }
     void UpsertPortion(const TPortionInfo& portionInfo, const TPortionInfo* exInfo = nullptr);
 
-    void RemoveSchemaVersion(ui64 version) override {
+    void RemoveSchemaVersion(const ui64 version) override {
         VersionedIndex.RemoveVersion(version);
     }
 

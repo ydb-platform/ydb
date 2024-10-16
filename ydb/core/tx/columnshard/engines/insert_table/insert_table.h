@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/counters/common_data.h>
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
 #include <ydb/core/tx/columnshard/common/schema_versions.h>
+#include <ydb/core/tx/columnshard/counters/insert_table.h>
 
 namespace NKikimr::NOlap {
 class TPKRangesFilter;
@@ -28,7 +29,7 @@ protected:
     bool RemoveBlobLinkOnComplete(const TUnifiedBlobId& blobId);
 
 public:
-    TInsertTableAccessor(std::shared_ptr<NOlap::TVersionCounters>& versionCounters)
+    TInsertTableAccessor(const std::shared_ptr<NOlap::TVersionCounters>& versionCounters)
         : VersionCounters(versionCounters)
         , Summary(VersionCounters)
     {
@@ -76,7 +77,7 @@ public:
             AddBlobLink(data.GetBlobRange().BlobId);
         }
         const ui64 pathId = data.GetPathId();
-        return Summary.GetPathInfoVerified(pathId).AddCommitted(std::move(data), &*VersionCounters, load);
+        return Summary.GetPathInfoVerified(pathId).AddCommitted(std::move(data), VersionCounters, load);
     }
     bool HasPathIdData(const ui64 pathId) const {
         return Summary.HasPathIdData(pathId);
@@ -104,7 +105,7 @@ private:
     TInsertWriteId LastWriteId = TInsertWriteId{ 0 };
 
 public:
-    TInsertTable(std::shared_ptr<NOlap::TVersionCounters>& versionCounters)
+    TInsertTable(const std::shared_ptr<NOlap::TVersionCounters>& versionCounters)
         : TInsertTableAccessor(versionCounters)
     {
     }

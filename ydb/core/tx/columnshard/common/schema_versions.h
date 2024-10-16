@@ -6,7 +6,6 @@ namespace NKikimr::NOlap {
 
 class TVersionCounters {
 public:
-
     class TSchemaKey {
     public:
         ui64 PlanStep;
@@ -16,7 +15,7 @@ public:
     public:
         TSchemaKey() = default;
 
-        TSchemaKey(ui32 id, ui64 planStep, ui64 txId)
+        TSchemaKey(const ui32 id, const ui64 planStep, const ui64 txId)
             : PlanStep(planStep)
             , TxId(txId)
             , Id(id)
@@ -36,7 +35,7 @@ public:
         return VersionToKey;
     }
 
-    void VersionAddRef(ui64 version, ui32 source = 0) {
+    void VersionAddRef(const ui64 version, const ui32 source = 0) {
         ui32& count = VersionCounters[version];
         if (count == 0) {
             VersionsToErase.erase(version);
@@ -46,7 +45,7 @@ public:
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "version_addref")("source", source)("version", version)("ref_count", count);
     }
 
-    ui32 VersionRemoveRef(ui64 version, ui32 source = 0) {
+    ui32 VersionRemoveRef(const ui64 version, const ui32 source = 0) {
         ui32& count = VersionCounters[version];
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "version_removref")("source", source)("version", version)("ref_count", count - 1);
         AFL_VERIFY(count > 0);
@@ -57,7 +56,7 @@ public:
         return count;
     }
 
-    bool HasUnusedSchemaVersionsExcept(ui64 lastVersion) const {
+    bool HasUnusedSchemaVersionsExcept(const ui64 lastVersion) const {
         return !VersionsToErase.empty() && ((VersionsToErase.size() > 1) || (*VersionsToErase.begin() != lastVersion));
     }
 
@@ -72,8 +71,9 @@ public:
         }
     }
 
-    void DeleteErasedVersion(ui64 version) {
-        VersionsToErase.erase(version);
+    void DeleteErasedVersion(const ui64 version) {
+        AFL_VERIFY(VersionCounters.find(version) == VersionCounters.end());
+        AFL_VERIFY(VersionsToErase.erase(version));
     }
 };
 

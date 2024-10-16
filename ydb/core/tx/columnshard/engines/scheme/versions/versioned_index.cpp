@@ -6,7 +6,7 @@
 
 namespace NKikimr::NOlap {
 
-void TVersionedIndex::RemoveVersion(ui64 version) {
+void TVersionedIndex::RemoveVersion(const ui64 version) {
     auto itVersion = SnapshotByVersion.find(version);
     AFL_VERIFY(itVersion != SnapshotByVersion.end());
     auto itSnap = Snapshots.find(itVersion->second->GetSnapshot());

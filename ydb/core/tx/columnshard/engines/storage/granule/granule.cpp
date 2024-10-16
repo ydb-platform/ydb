@@ -2,13 +2,11 @@
 #include "storage.h"
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/common/schema_versions.h>
 #include <ydb/core/tx/columnshard/engines/changes/actualization/construction/context.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 
 #include <ydb/library/actors/core/log.h>
-#include <ydb/core/tx/columnshard/columnshard_schema.h>
-#include <ydb/core/tx/columnshard/common/schema_versions.h>
-#include <ydb/core/tx/columnshard/engines/changes/actualization/construction/context.h>
 
 namespace NKikimr::NOlap {
 

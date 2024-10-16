@@ -12,6 +12,8 @@ namespace NKikimr::NBinaryJson {
  * @brief Translates textual JSON into BinaryJson
  */
 TMaybe<TBinaryJson> SerializeToBinaryJson(const TStringBuf json);
+TMaybe<TBinaryJson> SerializeToBinaryJsonOndemand(const TStringBuf json);
+TMaybe<TBinaryJson> SerializeToBinaryJsonRapidjson(const TStringBuf json);
 
 /**
  * @brief Translates DOM layout from `yql/library/dom` library into BinaryJson

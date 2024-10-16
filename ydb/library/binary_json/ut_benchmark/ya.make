@@ -18,6 +18,7 @@ SRCS(
 PEERDIR(
     library/cpp/testing/unittest
     ydb/library/binary_json
+    ydb/library/yql/public/udf/service/exception_policy
 )
 
 YQL_LAST_ABI_VERSION()

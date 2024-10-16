@@ -46,4 +46,4 @@ def connect_numpy():
              str(ex))
 
 
-connect_c_modules()
+# connect_c_modules()

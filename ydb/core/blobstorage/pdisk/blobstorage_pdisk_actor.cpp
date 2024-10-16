@@ -906,7 +906,6 @@ public:
     // All states
 
     void HandlePoison() {
-        PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TStopDevice>());
         PDisk.Reset();
         PassAway();
         P_LOG(PRI_NOTICE, BSP01, "HandlePoison, PDiskThread stopped");

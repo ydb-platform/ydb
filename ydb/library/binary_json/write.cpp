@@ -5,7 +5,6 @@
 #include <contrib/libs/simdjson/include/simdjson/dom/element-inl.h>
 #include <contrib/libs/simdjson/include/simdjson/dom/object-inl.h>
 #include <contrib/libs/simdjson/include/simdjson/dom/parser-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/ondemand.h>
 #include <library/cpp/json/json_reader.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/map.h>
@@ -609,92 +608,6 @@ void SimdJsonToJsonIndex(const simdjson::dom::element& value, TBinaryJsonCallbac
         }
     }
 }
-
-template <typename TOnDemandValue>
-    requires std::is_same_v<TOnDemandValue, simdjson::ondemand::value> || std::is_same_v<TOnDemandValue, simdjson::ondemand::document>
-simdjson::error_code SimdJsonToJsonIndex(TOnDemandValue& value, TBinaryJsonCallbacks& callbacks) {
-#define RETURN_IF_NOT_SUCCESS(error)              \
-    if (Y_UNLIKELY(error != simdjson::SUCCESS)) { \
-        return error;                             \
-    }
-
-    switch (value.type()) {
-        case simdjson::ondemand::json_type::string: {
-            std::string_view v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            callbacks.OnString(v);
-            break;
-        }
-        case simdjson::ondemand::json_type::boolean: {
-            bool v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            callbacks.OnBoolean(v);
-            break;
-        }
-        case simdjson::ondemand::json_type::number: {
-            switch (value.get_number_type()) {
-                case simdjson::fallback::number_type::floating_point_number: {
-                    double v;
-                    RETURN_IF_NOT_SUCCESS(value.get(v));
-                    callbacks.OnDouble(v);
-                    break;
-                }
-                case simdjson::fallback::number_type::signed_integer: {
-                    i64 v;
-                    RETURN_IF_NOT_SUCCESS(value.get(v));
-                    callbacks.OnInteger(v);
-                    break;
-                }
-                case simdjson::fallback::number_type::unsigned_integer: {
-                    ui64 v;
-                    RETURN_IF_NOT_SUCCESS(value.get(v));
-                    callbacks.OnUInteger(v);
-                    break;
-                }
-                case simdjson::fallback::number_type::big_integer:
-                    return simdjson::NUMBER_OUT_OF_RANGE;
-            }
-            break;
-        }
-        case simdjson::ondemand::json_type::null:
-            callbacks.OnNull();
-            break;
-        case simdjson::ondemand::json_type::array: {
-            callbacks.OnOpenArray();
-
-            simdjson::ondemand::array v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            for (auto item : v) {
-                RETURN_IF_NOT_SUCCESS(item.error());
-                RETURN_IF_NOT_SUCCESS(SimdJsonToJsonIndex(item.value_unsafe(), callbacks));
-            }
-
-            callbacks.OnCloseArray();
-            break;
-        }
-        case simdjson::ondemand::json_type::object: {
-            callbacks.OnOpenMap();
-
-            simdjson::ondemand::object v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            for (auto item : v) {
-                RETURN_IF_NOT_SUCCESS(item.error());
-                auto& keyValue = item.value_unsafe();
-                const auto key = keyValue.unescaped_key();
-                RETURN_IF_NOT_SUCCESS(key.error());
-                callbacks.OnMapKey(key.value_unsafe());
-                RETURN_IF_NOT_SUCCESS(SimdJsonToJsonIndex(keyValue.value(), callbacks));
-            }
-
-            callbacks.OnCloseMap();
-            break;
-        }
-    }
-
-    return simdjson::SUCCESS;
-
-#undef RETURN_IF_NOT_SUCCESS
-}
 }
 
 TMaybe<TBinaryJson> SerializeToBinaryJsonImpl(const TStringBuf json) {
@@ -711,31 +624,6 @@ TMaybe<TBinaryJson> SerializeToBinaryJsonImpl(const TStringBuf json) {
 
 TMaybe<TBinaryJson> SerializeToBinaryJson(const TStringBuf json) {
     return SerializeToBinaryJsonImpl(json);
-}
-
-TMaybe<TBinaryJson> SerializeToBinaryJsonOndemand(const TStringBuf json) {
-    const simdjson::padded_string paddedJson(json);
-    simdjson::ondemand::parser parser;
-    auto doc = parser.iterate(paddedJson);
-    if (doc.error() != simdjson::SUCCESS) {
-        return false;
-    }
-    TBinaryJsonCallbacks callbacks(/* throwException */ false);
-    if (SimdJsonToJsonIndex(doc.value_unsafe(), callbacks) != simdjson::SUCCESS) {
-        return false;
-    }
-    TBinaryJsonSerializer serializer(std::move(callbacks).GetResult());
-    return std::move(serializer).Serialize();
-}
-
-TMaybe<TBinaryJson> SerializeToBinaryJsonRapidjson(const TStringBuf json) {
-    TMemoryInput input(json.data(), json.size());
-    TBinaryJsonCallbacks callbacks(/* throwException */ false);
-    if (!ReadJson(&input, &callbacks)) {
-        return Nothing();
-    }
-    TBinaryJsonSerializer serializer(std::move(callbacks).GetResult());
-    return std::move(serializer).Serialize();
 }
 
 TBinaryJson SerializeToBinaryJson(const NUdf::TUnboxedValue& value) {

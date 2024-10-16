@@ -260,6 +260,7 @@ namespace Tests {
             FeatureFlags.SetEnableSeparationComputeActorsFromRead(true);
             FeatureFlags.SetEnableImmediateWritingOnBulkUpsert(true);
             FeatureFlags.SetEnableWritePortionsOnInsert(true);
+            FeatureFlags.SetEnableSparsedColumns(true);
         }
 
         TServerSettings(const TServerSettings& settings) = default;

@@ -110,13 +110,15 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         }
     }
 
+    // Issue: https://github.com/ydb-platform/ydb/issues/10483
     Y_UNIT_TEST(StatsSysViewEnumStringBytes) {
         ui64 rawBytesPK1;
         ui64 bytesPK1;
         {
             auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
             auto settings = TKikimrSettings()
-                .SetWithSampleTables(false);
+                .SetWithSampleTables(false)
+                .SetEnableSparsedColumns(false);
             TKikimrRunner kikimr(settings);
             Tests::NCommon::TLoggerInit(kikimr).Initialize();
             TTypedLocalHelper helper("", kikimr, "olapTable", "olapStore12");
@@ -135,7 +137,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         const ui32 groupsCount = 512;
         {
             auto settings = TKikimrSettings()
-                .SetWithSampleTables(false);
+                .SetWithSampleTables(false)
+                .SetEnableSparsedColumns(false);
             TKikimrRunner kikimr(settings);
             Tests::NCommon::TLoggerInit(kikimr).Initialize();
             TTypedLocalHelper helper("Utf8", kikimr);
@@ -253,12 +256,14 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         }
     }
 
+    // Issue: https://github.com/ydb-platform/ydb/issues/10481
     Y_UNIT_TEST(StatsSysViewBytesDictActualization) {
         ui64 rawBytes1;
         ui64 bytes1;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+            .SetWithSampleTables(false)
+            .SetEnableSparsedColumns(false);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTypedLocalHelper helper("Utf8", kikimr);

@@ -622,7 +622,7 @@ public:
         bool enableSparsed = AppData()->FeatureFlags.GetEnableSparsedColumns();
 
         if (!enableSparsed && HaveSparsedColumn(createDescription)) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Sparsed columns are disabled");
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "create table error: sparsed columns are disabled");
             return result;
         }
 

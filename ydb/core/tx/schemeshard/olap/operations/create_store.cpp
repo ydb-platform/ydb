@@ -1,14 +1,13 @@
-#include "checks.h"
-
-#include <ydb/core/base/subdomain.h>
-#include <ydb/core/mind/hive/hive.h>
-#include <ydb/core/scheme/scheme_types_proto.h>
-#include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
-#include <ydb/library/formats/arrow/accessor/common/const.h>
+#include <ydb/core/base/subdomain.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/mind/hive/hive.h>
+
+#include "checks.h"
 
 using namespace NKikimr;
 using namespace NKikimr::NSchemeShard;
@@ -310,36 +309,6 @@ class TCreateOlapStore: public TSubOperation {
         }
     }
 
-    void SetSparsedByDefaultForNonPKColumn(NKikimrSchemeOp::TColumnStoreDescription& createDescription) {
-        for (ui32 i = 0; i < createDescription.SchemaPresetsSize(); i++) {
-            auto mutableSchema = createDescription.MutableSchemaPresets(i)->MutableSchema();
-            TSet<TString> keyColumns;
-            for (const auto& name : mutableSchema->GetKeyColumnNames()) {
-                Y_VERIFY(keyColumns.insert(name).second);
-            }
-            for (ui32 i = 0; i < mutableSchema->ColumnsSize(); i++) {
-                auto mutableColumn = mutableSchema->MutableColumns(i);
-                if (!keyColumns.contains(mutableColumn->GetName()) && !mutableColumn->HasDataAccessorConstructor()) {
-                        mutableColumn->MutableDataAccessorConstructor()->SetClassName(
-                            NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName);
-                }
-            }
-        }
-    }
-
-    bool HaveSparsedColumn(const NKikimrSchemeOp::TColumnStoreDescription& createDescription) const {
-        for (const auto& schemaPreset : createDescription.GetSchemaPresets()) {
-            for (const auto& column : schemaPreset.GetSchema().GetColumns()) {
-                if ((column.HasDataAccessorConstructor() &&
-                        column.GetDataAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName) ||
-                    column.HasDefaultValue()) {
-                        return true;
-                }
-            }
-        }
-        return false;
-    }
-
 public:
     using TSubOperation::TSubOperation;
 
@@ -348,8 +317,7 @@ public:
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
         const TString& parentPathStr = Transaction.GetWorkingDir();
-        // Copy CreateColumnTable for changes. Set sparsed by default for non PK column (if EnableSparsedColumns = true)
-        auto createDescription = Transaction.GetCreateColumnStore();
+        const auto& createDescription = Transaction.GetCreateColumnStore();
         const TString& name = createDescription.GetName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -365,16 +333,6 @@ public:
             result->SetError(NKikimrScheme::StatusPreconditionFailed,
                 "OLAP schema operations are not supported");
             return result;
-        }
-
-        bool enableSparsed = AppData()->FeatureFlags.GetEnableSparsedColumns();
-        if (!enableSparsed && HaveSparsedColumn(createDescription)) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Sparsed columns are disabled");
-            return result;
-        }
-
-        if (enableSparsed) {
-            SetSparsedByDefaultForNonPKColumn(createDescription);
         }
 
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);

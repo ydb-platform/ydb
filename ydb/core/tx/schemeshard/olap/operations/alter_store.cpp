@@ -465,8 +465,7 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        // Copy AlterColumnStore for changes. Set sparsed by default for non PK column (if EnableSparsedColumns = true)
-        auto alter = Transaction.GetAlterColumnStore();
+        const auto& alter = Transaction.GetAlterColumnStore();
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = alter.GetName();
@@ -529,10 +528,6 @@ public:
         if (storeInfo->AlterData) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, "There's another Alter in flight");
             return result;
-        }
-
-        if (AppData()->FeatureFlags.GetEnableSparsedColumns()) {
-            SetSparsedByDefaultForNonPKColumn(alter);
         }
 
         TProposeErrorCollector errors(*result);

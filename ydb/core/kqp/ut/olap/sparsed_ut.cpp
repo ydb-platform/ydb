@@ -346,37 +346,19 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         }
     }
 
-    void SparsedByDefaultForNonPKColumn(bool isStandalone, bool enableSparsed) {
+    void SparsedByDefaultForNonPKColumn(bool enableSparsed) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetEnableSparsedColumns(enableSparsed);
         TKikimrRunner kikimr(settings);
 
         auto tableClient = kikimr.GetTableClient();
         auto session = tableClient.CreateSession().GetValueSync().GetSession();
         TString tableName = "StandaloneTable";
-        TString tableStoreName = "TableStore";
-        TString tablePath = TStringBuilder() << "/Root/" << (isStandalone ? "" : (tableStoreName + "/")) << tableName;
 
-        if (!isStandalone) {
-            auto createStore = R"(
-            CREATE TABLESTORE `/Root/TableStore` (
-                timestamp Timestamp NOT NULL,
-                resource_id Utf8,
-                uid Utf8 NOT NULL,
-                level Int32,
-                message Utf8,
-                PRIMARY KEY (timestamp, uid)
-            )
-            WITH (
-                STORE = COLUMN,
-                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
-            );)";
-            auto result = session.ExecuteSchemeQuery(createStore).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+        auto& server = kikimr.GetTestServer();
+        TActorId sender = server.GetRuntime()->AllocateEdgeActor();
 
         auto createTable = TStringBuilder() << R"(
-            CREATE TABLE `/Root/)" << (isStandalone ? "" : "TableStore/")
-                                            << R"(StandaloneTable` (
+            CREATE TABLE `)" << tableName << R"(` (
                 timestamp Timestamp NOT NULL,
                 resource_id Utf8,
                 uid Utf8 NOT NULL,
@@ -385,17 +367,13 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
                 PRIMARY KEY (timestamp, uid)
             )
             WITH (
-                STORE = COLUMN,
-                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+                STORE = COLUMN
             );)";
 
         auto result = session.ExecuteSchemeQuery(createTable).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-        auto& server = kikimr.GetTestServer();
-        TActorId sender = server.GetRuntime()->AllocateEdgeActor();
-
-        auto describeResult = DescribeTable(&server, sender, tablePath);
+        auto describeResult = DescribeTable(&server, sender, tableName);
         auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
         for (const auto& column : schema.GetColumns()) {
             auto name = column.GetName();
@@ -410,11 +388,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             }
         }
 
-        auto addNewColumnQuery = TStringBuilder() << "ALTER " << (isStandalone ? "TABLE" : "TABLESTORE") << "`/Root/"
-                                                  << (isStandalone ? tableName : tableStoreName) << "` ADD COLUMN newColumn Uint64;";
+        auto addNewColumnQuery = TStringBuilder() << "ALTER TABLE `" << tableName << "` ADD COLUMN newColumn Uint64;";
         result = session.ExecuteSchemeQuery(addNewColumnQuery).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        describeResult = DescribeTable(&server, sender, tablePath);
+        describeResult = DescribeTable(&server, sender, tableName);
         schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
         for (const auto& column : schema.GetColumns()) {
             if (column.GetName() == "newColumn") {
@@ -427,13 +404,11 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
     }
 
     Y_UNIT_TEST(DisabledDefaultSparsedForNotPKColumn) {
-        SparsedByDefaultForNonPKColumn(false, false);
-        SparsedByDefaultForNonPKColumn(true, false);
+        SparsedByDefaultForNonPKColumn(false);
     }
 
     Y_UNIT_TEST(EnabledDefaultSparsedForNotPKColumn) {
-        SparsedByDefaultForNonPKColumn(false, true);
-        SparsedByDefaultForNonPKColumn(true, true);
+        SparsedByDefaultForNonPKColumn(true);
     }
 }
 

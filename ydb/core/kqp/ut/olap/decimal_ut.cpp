@@ -24,10 +24,11 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
+    // Issue: https://github.com/ydb-platform/ydb/issues/10478
     class TDecimalTestCase {
     public:
         TDecimalTestCase(ui32 precision, ui32 scale)
-            : TestHelper(TKikimrSettings().SetWithSampleTables(false))
+            : TestHelper(TKikimrSettings().SetWithSampleTables(false).SetEnableSparsedColumns(false))
             , Precision(precision)
             , Scale(scale)
         {}

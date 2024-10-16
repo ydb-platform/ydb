@@ -387,9 +387,10 @@ namespace NYql::NDq {
             for (const auto& [k, _] : *Request) {
                 addClause(KeyType->GetMembersCount(), [&k=k](auto c) { return k.GetElement(c); });
             }
+            auto &k = Request->begin()->first;
             // Pad query with dummy clauses to improve caching
             for (ui32 nRequests = Request->size(); !IsPowerOf2(nRequests); ++nRequests) {
-                addClause(KeyType->GetMembersCount(), [](auto) { return NUdf::TUnboxedValue(); });
+                addClause(KeyType->GetMembersCount(), [&k=k](auto c) { return k.GetElement(c); });
             }
             *select.mutable_where()->mutable_filter_typed()->mutable_disjunction() = disjunction;
             return {};

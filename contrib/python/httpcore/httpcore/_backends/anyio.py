@@ -64,6 +64,7 @@ class AnyIOStream(AsyncNetworkStream):
             TimeoutError: ConnectTimeout,
             anyio.BrokenResourceError: ConnectError,
             anyio.EndOfStream: ConnectError,
+            ssl.SSLError: ConnectError,
         }
         with map_exceptions(exc_map):
             try:
@@ -103,9 +104,9 @@ class AnyIOBackend(AsyncNetworkBackend):
         timeout: typing.Optional[float] = None,
         local_address: typing.Optional[str] = None,
         socket_options: typing.Optional[typing.Iterable[SOCKET_OPTION]] = None,
-    ) -> AsyncNetworkStream:
+    ) -> AsyncNetworkStream:  # pragma: nocover
         if socket_options is None:
-            socket_options = []  # pragma: no cover
+            socket_options = []
         exc_map = {
             TimeoutError: ConnectTimeout,
             OSError: ConnectError,

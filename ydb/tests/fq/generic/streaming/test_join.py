@@ -131,6 +131,7 @@ TESTCASES = [
                 ('{"id":9,"user":3}', '{"id":9,"user_id":3,"lookup":"ydb30"}'),
                 ('{"id":2,"user":2}', '{"id":2,"user_id":2,"lookup":"ydb20"}'),
                 ('{"id":1,"user":1}', '{"id":1,"user_id":1,"lookup":"ydb10"}'),
+                ('{"id":10,"user":null}', '{"id":10,"user_id":null,"lookup":null}'),
                 ('{"id":4,"user":3}', '{"id":4,"user_id":3,"lookup":"ydb30"}'),
                 ('{"id":5,"user":3}', '{"id":5,"user_id":3,"lookup":"ydb30"}'),
                 ('{"id":6,"user":1}', '{"id":6,"user_id":1,"lookup":"ydb10"}'),
@@ -350,6 +351,10 @@ TESTCASES = [
                     '{"id":3,"za":2,"yb":"1","yc":114,"zd":115}',
                     '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":2,"yb":"1","yc":114,"zd":115}',
                 ),
+                (
+                    '{"id":3,"za":2,"yb":null,"yc":114,"zd":115}',
+                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":2,"yb":null,"yc":114,"zd":115}',
+                ),
             ]
         ),
     ),
@@ -390,6 +395,10 @@ TESTCASES = [
                 (
                     '{"id":3,"za":2,"yb":"1","yc":114,"zd":115}',
                     '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":2,"yb":"1","yc":114,"zd":115}',
+                ),
+                (
+                    '{"id":3,"za":null,"yb":"1","yc":114,"zd":115}',
+                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":null,"yb":"1","yc":114,"zd":115}',
                 ),
             ]
         ),

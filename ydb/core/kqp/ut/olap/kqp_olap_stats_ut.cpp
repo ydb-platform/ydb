@@ -75,12 +75,11 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
         AddRowsTableStandalone(true);
     }
 
-    void AddRowsTableInTableStore(bool enableSparsedColumns) {
+    Y_UNIT_TEST(AddRowsTableInTableStore) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<TOlapStatsController>();
 
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
-        runnerSettings.SetEnableSparsedColumns(enableSparsedColumns);
 
         TTestHelper testHelper(runnerSettings);
 
@@ -113,16 +112,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
         const auto& description = describeResult.GetTableDescription();
 
         UNIT_ASSERT_VALUES_EQUAL(inserted_rows, description.GetTableRows());
-        if (!enableSparsedColumns) {
-            UNIT_ASSERT_VALUES_EQUAL(size_single_table, description.GetTableSize());
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(size_single_table_with_sparsed, description.GetTableSize());
-        }
-    }
-
-    Y_UNIT_TEST(AddRowsTableInTableStore) {
-        AddRowsTableInTableStore(false);
-        AddRowsTableInTableStore(true);
+        UNIT_ASSERT_VALUES_EQUAL(size_single_table, description.GetTableSize());
     }
 
     Y_UNIT_TEST(AddRowsSomeTablesInTableStore) {

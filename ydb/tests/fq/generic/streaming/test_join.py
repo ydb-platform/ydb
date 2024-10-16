@@ -521,7 +521,7 @@ class TestJoinStreaming(TestYdsBase):
 
         for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
             sensors = kikimr.compute_plane.get_sensors(node_index, "dq_tasks")
-            for component in ("Lookup", "LookupSrc"):
+            for component in ["Lookup", "LookupSrc"]:
                 componentSensors = sensors.find_sensors(
                     labels={"operation": query_id, "component": component},
                     key_label="sensor",

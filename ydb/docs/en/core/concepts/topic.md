@@ -19,7 +19,7 @@ Messages may contain user-defined attributes in "key-value" format. They are ret
 
 ## Partitioning {#partitioning}
 
-To enable horizontal scaling, a topic is divided into `partitions` that are units of parallelism. Each partition has a limited bandwidth. The recommended write speed is 1 MBps.
+To enable horizontal scaling, a topic is divided into `partitions` that are units of parallelism. Each partition has a limited throughput. The recommended write speed is 1 MBps.
 
 {% note info %}
 
@@ -27,9 +27,53 @@ As for now, you can only reduce the number of partitions in a topic by deleting 
 
 {% endnote %}
 
+Partitions can be:
+ - **Active.** All partitions by default are active. You can both read from an active partition and write into an active partition.
+ - **Inactive.** You can only read from an inactive partition. Partition become inactive after splitting in case of [autopartitioning](#autopartitioning). Inactive partition is deleted automatically after deletion all messages from such partition due to retention period expired. 
+
 ### Offset {#offset}
 
 All messages within a partition have a unique sequence number called an `offset` An offset monotonically increases as new messages are written.
+
+## Autopartitioning {#autopartitioning}
+
+Total topic throughput is defined by count of partitions in this topic and throughput of each partition. Count of partitions and throughput of every partition are defined at the moment of the topic creation. If maximum required write speed to a topic is unknown when it is created, you can use autopartitioning to scale this topic automatically. If you switch on autopartitioning up on any topic then count of partitions in this topic will be increased automatically if write speed increases (see [Autopartitioning modes](#autopartitioning_modes)).
+
+### Guarantees {#autopartitioning_guarantee}
+
+1. SDK and server provide exactly-once guarantee of writing in case of partition split. It means that any message will be written once into the parent partition or into the one of the child partitions. Message can not be written into the parent partition and into the child partition at the same time. Moreover, a message can not be written into the one partition several times.
+2. SDK and server provide reading order. First, the data will be read from the parent partition, and after that the data will be read from the child partitions.
+3. So, exactly-once guarantee of writing and reading order guarantee continue to be fulfilled for the specific [(producer-id)](#producer-id).
+
+### Autopartitioning modes {#autopartitioning_modes}
+
+The following autopartition modes are possible for any topic.
+
+#### DISABLED
+
+Autopartitioning is disabled for this topic. In this case count of partitions is a constant, and there is no automatic scaling.
+
+Initial count of partitions is defined during topic creation. In this mode in case of manual change of partitions count new partitions are added. All previously existed partitions remain active as well as new partitions.
+
+#### UP
+
+Autopartitioning up is switched on on this topic. It means that in case of increasing of writing speed into the topic partitions count will be increased automatically. In case of decreasing of writing speed into the topic partitions count remaines unchanged. 
+
+Algorithm of partitions count increasing is following. If during defined period of time write speed into the some partitions increases defined threshold (in % of maximum write speed into the partition), this partition is splitted into the two child partitions. Original partition becomes inactive. Only reading is possible from such partition. When retention period expires, and all messages from this partition will be deleted, this partition also will be deleted. Two new child partitions become active, and reading and writing are both possible for these partitions.
+
+#### PAUSED
+
+Autopartitioning is paused for this topic. There is no automatic increasing of partitions count. If necessary, you can switch on autopartitioning up again for this topic.
+
+Examples of YQL-queries for switching between different modes of autopartitioning you can see [here](../yql/reference/syntax/alter-topic.md#autopartitioning).
+
+### Autopartitioning constraints {#autopartitioning_constraints}
+
+There are following constraints during using autopartitioning:
+
+1. If you switch on autopartitioning up on some topic, you can not stop autopartitioning, just pause it.
+2. If you switch on autopartitioning up on some topic, it's impossible to read and write into this topic through [Kafka API](../reference/kafka-api/index.md).
+3. Autopartitioning can be switched on only on topics with reserved capacity mode.
 
 ## Message sources and groups {#producer-id}
 

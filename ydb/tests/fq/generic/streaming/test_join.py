@@ -520,14 +520,14 @@ class TestJoinStreaming(TestYdsBase):
         assert read_data_ctr == messages_ctr
 
         for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
-            sensors = kikimr.compute_plane.get_sensors(node_index, "dq_tasks").find_sensors(
-                labels={"operation": query_id}, key_label="sensor"
-            )
-            for k in sensors:
-                for prefix in ("Lookup", "InputTransform"):
-                    if k.startswith(prefix):
-                        print(f'node[{node_index}].operation[{query_id}].{k} = {sensors[k]}', file=sys.stderr)
-                        break
+            sensors = kikimr.compute_plane.get_sensors(node_index, "dq_tasks")
+            for component in ("Lookup", "LookupSrc"):
+                componentSensors = sensors.find_sensors(
+                    labels={"operation": query_id, "component": component},
+                    key_label="sensor",
+                )
+                for k in componentSensors:
+                    print(f'node[{node_index}].operation[{query_id}].component[{component}].{k} = {componentSensors[k]}', file=sys.stderr)
 
         fq_client.abort_query(query_id)
         fq_client.wait_query(query_id)

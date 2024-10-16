@@ -103,13 +103,14 @@ namespace NYql::NDq {
             if (!taskCounters) {
                 return;
             }
-            Count = taskCounters->GetCounter("LookupSrcReqs");
-            Keys = taskCounters->GetCounter("LookupSrcKeys");
-            ResultChunks = taskCounters->GetCounter("LookupSrcChunks");
-            ResultRows = taskCounters->GetCounter("LookupSrcRows");
-            ResultBytes = taskCounters->GetCounter("LookupSrcBytes");
-            AnswerTime = taskCounters->GetCounter("LookupSrcAnswerMs");
-            CpuTime = taskCounters->GetCounter("LookupSrcCpuUs");
+            auto component = taskCounters->GetSubgroup("component", "LookupSrc");
+            Count = component->GetCounter("Reqs");
+            Keys = component->GetCounter("Keys");
+            ResultChunks = component->GetCounter("Chunks");
+            ResultRows = component->GetCounter("Rows");
+            ResultBytes = component->GetCounter("Bytes");
+            AnswerTime = component->GetCounter("AnswerMs");
+            CpuTime = component->GetCounter("CpuUs");
         }
     public:
 

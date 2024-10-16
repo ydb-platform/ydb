@@ -433,6 +433,8 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
 
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableTableDatetime64(enableDatetime64);
+        featureFlags.SetEnablePgSyntax(true);
+        featureFlags.SetEnableTablePgTypes(true);
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -631,7 +633,7 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
 key = 4, value = 22019
 key = 5, value = (empty maybe)
         )", true);
-    } 
+    }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnDatetime64) {
         ConditionalEraseShouldSuccess("Datetime64", TUnit::AUTO, R"(
@@ -645,7 +647,7 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
 key = 4, value = 1902441600
 key = 5, value = (empty maybe)
         )", true);
-    } 
+    }
     
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnTimestamp64) {
         ConditionalEraseShouldSuccess("Timestamp64", TUnit::AUTO, R"(
@@ -659,9 +661,87 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
 key = 4, value = 1902441600000000
 key = 5, value = (empty maybe)
         )", true);
-    }    
+    }
 
+    Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnPgInt4Seconds) {
+        ConditionalEraseShouldSuccess("pgint4", TUnit::SECONDS, R"(
+UPSERT INTO `/Root/table-1` (key, value) VALUES
+(1, 0p),
+(2, 636249600p),
+(3, 1902441600p),
+(4, NULL);
+        )", R"(
+key = 3, value = "1902441600"
+key = 4, value = (pg null)
+        )");
+    }
 
+    Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnPgInt8Seconds) {
+        ConditionalEraseShouldSuccess("pgint8", TUnit::SECONDS, R"(
+UPSERT INTO `/Root/table-1` (key, value) VALUES
+(1, 0pb),
+(2, 636249600pb),
+(3, 1902441600pb),
+(4, NULL);
+        )", R"(
+key = 3, value = "1902441600"
+key = 4, value = (pg null)
+        )");
+    }
+
+    Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnPgInt8Milliseconds) {
+        ConditionalEraseShouldSuccess("pgint8", TUnit::MILLISECONDS, R"(
+UPSERT INTO `/Root/table-1` (key, value) VALUES
+(1, 0pb),
+(2, 636249600000pb),
+(3, 1902441600000pb),
+(4, NULL);
+        )", R"(
+key = 3, value = "1902441600000"
+key = 4, value = (pg null)
+        )");
+    }
+
+    Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnPgInt8Microseconds) {
+        ConditionalEraseShouldSuccess("pgint8", TUnit::MICROSECONDS, R"(
+UPSERT INTO `/Root/table-1` (key, value) VALUES
+(1, 0pb),
+(2, 636249600000000pb),
+(3, 1902441600000000pb),
+(4, NULL);
+        )", R"(
+key = 3, value = "1902441600000000"
+key = 4, value = (pg null)
+        )");
+    }
+
+    Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnPgDate) {
+        ConditionalEraseShouldSuccess("pgdate", TUnit::AUTO, R"(
+UPSERT INTO `/Root/table-1` (key, value) VALUES
+(1, pgdate("1960-01-01")),
+(2, pgdate("1970-01-01")),
+(3, pgdate("1990-03-01")),
+(4, pgdate("2030-04-15")),
+(5, NULL);
+        )", R"(
+key = 4, value = "2030-04-15"
+key = 5, value = (pg null)
+        )");
+    }
+
+    Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnPgTimestamp) {
+        ConditionalEraseShouldSuccess("pgtimestamp", TUnit::AUTO, R"(
+UPSERT INTO `/Root/table-1` (key, value) VALUES
+(1, pgtimestamp("1960-01-01 00:00:00")),
+(2, pgtimestamp("1970-01-01 00:00:00")),
+(3, pgtimestamp("1990-03-01 00:00:00")),
+(4, pgtimestamp("2030-04-15 00:00:00")),
+(5, NULL);
+        )", R"(
+key = 4, value = "2030-04-15 00:00:00"
+key = 5, value = (pg null)
+        )");
+    }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldFailOnVariousErrors) {
         using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;

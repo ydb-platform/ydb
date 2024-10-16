@@ -1,0 +1,13 @@
+diff --git a/kmp_utility.cpp b/kmp_utility.cpp
+index 7e9f07c..9dd80f7 100644
+--- a/kmp_utility.cpp
++++ b/kmp_utility.cpp
+@@ -131,6 +131,8 @@ void __kmp_query_cpuid(kmp_cpuinfo_t *p) {
+   int cflush_size;
+ #endif
+ 
++  memset(&buf, 0, sizeof(buf));
++
+   p->initialized = 1;
+ 
+   p->flags.sse2 = 1; // Assume SSE2 by default.

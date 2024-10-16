@@ -10,7 +10,7 @@ std::shared_ptr<NKikimr::NOlap::TGranuleMeta> TGranulesStorage::GetGranuleForCom
     std::optional<NStorageOptimizer::TOptimizationPriority> priorityChecker;
     const TDuration actualizationLag = NYDBTest::TControllers::GetColumnShardController()->GetCompactionActualizationLag();
     for (auto&& i : Tables) {
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("path_id", i.first);
+//        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("path_id", i.first);
         i.second->ActualizeOptimizer(now, actualizationLag);
         auto gPriority = i.second->GetCompactionPriority();
         if (gPriority.IsZero() || (priorityChecker && gPriority < *priorityChecker)) {

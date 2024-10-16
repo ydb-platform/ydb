@@ -20,6 +20,7 @@ public:
     {
         SetSecurityToken(Request->Record.GetSecurityToken());
         SetRequireAdminAccess(true);
+        SetPeerName(msg.GetPeerName());
     }
 
     std::pair<ui64, TAutoPtr<IEventBase>> MakeReqPair(const TActorContext& ctx) {

@@ -3702,7 +3702,7 @@ private:
         if (node.Type() == TExprNode::EType::Atom || node.Type() == TExprNode::EType::Callable) {
             ui32 textLen = node.Content().size();
             SHA256_Update(&Sha, &textLen, sizeof(textLen));
-            SHA256_Update(&Sha, node.Content().Data(), textLen);
+            SHA256_Update(&Sha, node.Content().data(), textLen);
         }
 
         if (node.Type() == TExprNode::EType::Atom || node.Type() == TExprNode::EType::Argument || node.Type() == TExprNode::EType::World) {

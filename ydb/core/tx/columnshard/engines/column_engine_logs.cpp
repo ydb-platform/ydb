@@ -489,7 +489,6 @@ void TColumnEngineForLogs::UpsertPortion(const TPortionInfo& portionInfo, const 
 }
 
 bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool updateStats) {
-    Y_ABORT_UNLESS(!portionInfo.Empty());
     const ui64 portion = portionInfo.GetPortion();
     auto& spg = MutableGranuleVerified(portionInfo.GetPathId());
     auto p = spg.GetPortionOptional(portion);
@@ -506,19 +505,31 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
     }
 }
 
-std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot snapshot,
-    const TPKRangesFilter& pkRangesFilter) const {
+std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(
+    ui64 pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withUncommitted) const {
     auto out = std::make_shared<TSelectInfo>();
     auto spg = GranulesStorage->GetGranuleOptional(pathId);
     if (!spg) {
         return out;
     }
 
+    if (withUncommitted) {
+        for (const auto& [_, portionInfo] : spg->GetInsertedPortions()) {
+            AFL_VERIFY(portionInfo->HasInsertWriteId());
+            AFL_VERIFY(!portionInfo->HasCommitSnapshot());
+            const bool skipPortion = !pkRangesFilter.IsPortionInUsage(*portionInfo);
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", skipPortion ? "portion_skipped" : "portion_selected")("pathId", pathId)(
+                "portion", portionInfo->DebugString());
+            if (skipPortion) {
+                continue;
+            }
+            out->PortionsOrderedPK.emplace_back(portionInfo);
+        }
+    }
     for (const auto& [_, portionInfo] : spg->GetPortions()) {
-        if (!portionInfo->IsVisible(snapshot)) {
+        if (!portionInfo->IsVisible(snapshot, !withUncommitted)) {
             continue;
         }
-        Y_ABORT_UNLESS(portionInfo->Produced());
         const bool skipPortion = !pkRangesFilter.IsPortionInUsage(*portionInfo);
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", skipPortion ? "portion_skipped" : "portion_selected")("pathId", pathId)(
             "portion", portionInfo->DebugString());

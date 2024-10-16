@@ -5,7 +5,7 @@
 #include <ydb/core/blobstorage/crypto/crypto.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/event_filter.h>

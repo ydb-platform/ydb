@@ -1048,7 +1048,7 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
         case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt2: {
             // invoke_expr - cannot be a column, function name
             TSqlCallExpr call(Ctx, Mode);
-            if (isFirstElem && !name.Empty()) {
+            if (isFirstElem && !name.empty()) {
                 call.AllowDistinct();
                 call.InitName(name);
             } else {

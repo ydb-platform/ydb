@@ -214,7 +214,7 @@ void PGParse(const TString& input, IPGParseEvents& events) {
         auto cursorpos = parsetree_and_error.error->cursorpos;
         size_t codepoints = 0;
         if (cursorpos >= 0) {
-            for (size_t i = 0; i < input.Size(); ++i) {
+            for (size_t i = 0; i < input.size(); ++i) {
                 if (codepoints == cursorpos) {
                     break;
                 }

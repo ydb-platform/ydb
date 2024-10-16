@@ -524,7 +524,7 @@ Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const Ydb::Value& valu
             if (!dyNumber.Defined()) {
                 throw yexception() << "Invalid DyNumber value";
             }
-            res.SetBytes(dyNumber->Data(), dyNumber->Size());
+            res.SetBytes(dyNumber->data(), dyNumber->size());
             break;
         }
         case NUdf::TDataType<char*>::Id: {
@@ -1416,7 +1416,7 @@ void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeI
     case EPrimitiveType::Uuid: {
         ui64 hi;
         ui64 lo;
-        NUuid::UuidBytesToHalfs(cell.AsBuf().Data(), 16, hi, lo);
+        NUuid::UuidBytesToHalfs(cell.AsBuf().data(), 16, hi, lo);
         vb.Uuid(TUuidValue(lo, hi));
         break;
     }

@@ -1,0 +1,864 @@
+====================BSD-3-Clause====================
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that this notice is preserved.
+
+
+====================BSD-4-Clause-UC====================
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+
+
+====================BSD-4-Clause-UC====================
+ * See also: ftp://ftp.cs.berkeley.edu/pub/4bsd/README.Impt.License.Change
+
+
+====================Bsd-Original-Uc-1986====================
+ * Redistribution and use in source and binary forms are permitted
+ * provided that this notice is preserved and that due credit is given
+ * to the University of Michigan at Ann Arbor.  The name of the
+ * University may not be used to endorse or promote products derived
+ * from this software without specific prior written permission.  This
+ * software is provided ``as is'' without express or implied warranty.
+
+
+====================Bsd-Original-Uc-1986====================
+ * Redistribution and use in source and binary forms are permitted
+ * provided that this notice is preserved and that due credit is given
+ * to the University of Michigan at Ann Arbor. The name of the University
+ * may not be used to endorse or promote products derived from this
+ * software without specific prior written permission. This software
+ * is provided ``as is'' without express or implied warranty.
+
+
+====================Bsd-Original-Uc-1986====================
+Redistribution and use in source and binary forms are permitted
+provided that this notice is preserved and that due credit is given
+to the University of Michigan at Ann Arbor.  The name of the
+University may not be used to endorse or promote products derived
+from this software without specific prior written permission.  This
+software is provided ``as is'' without express or implied warranty.
+
+
+====================Bsd-Original-Uc-1986====================
+The names of the copyright holders may not be used to endorse or
+promote products derived from this software without their specific
+prior written permission.  This software is provided ``as is''
+without express or implied warranty.
+
+
+====================COPYRIGHT====================
+		(dst)->bv_val = memchr( (bv)->bv_val, (c), (bv)->bv_len ); \
+		(dst)->bv_len = (dst)->bv_val ? (bv)->bv_len - ((dst)->bv_val - (bv)->bv_val) : 0; \
+	} while (0)
+
+
+====================COPYRIGHT====================
+	((char *) memchr( (bv)->bv_val, (c), (bv)->bv_len ))
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1999, 2000 Novell, Inc. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2000 Novell, Inc. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Copyright 2006 Hans Leidekker
+ * All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Portions Copyright 1998 A. Hartgers.
+ * All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Portions Copyright 1999 Lars Uffmann.
+ * All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Portions Copyright 2007 Pierangelo Masarati.
+ * All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Portions Copyright 2008 Pierangelo Masarati.
+ * All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Portions Copyright 2018 Howard Chu.
+ * All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright 1999-2024 The OpenLDAP Foundation.
+ * Portions Copyright 1999-2003 Kurt D. Zeilenga.
+ * All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright 2001-2024 The OpenLDAP Foundation.
+ * All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright 2003-2024 The OpenLDAP Foundation.
+ * Portions Copyright 2003 IBM Corporation.
+ * All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright 2004-2024 The OpenLDAP Foundation.
+ * Portions Copyright 2004 Hewlett-Packard Company.
+ * Portions Copyright 2004 Howard Chu, Symas Corp.
+ * All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright 2005-2024 The OpenLDAP Foundation.
+ * Portions Copyright (c) 2005 by Howard Chu, Symas Corp.
+ * All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright 2005-2024 The OpenLDAP Foundation.
+ * Portions Copyright 2005-2006 SysNet s.n.c.
+ * All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright 2006-2024 The OpenLDAP Foundation.
+ * All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright 2008-2024 The OpenLDAP Foundation.
+ * All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright 2019-2024 The OpenLDAP Foundation.
+ * All rights reserved.
+
+
+====================COPYRIGHT====================
+# Copyright 1999 Computing Research Labs, New Mexico State University
+
+
+====================COPYRIGHT====================
+/*  Portions Copyright (c) 1995 Regents of the University of Michigan.
+ *  All rights reserved.
+
+
+====================COPYRIGHT====================
+/* Copyright (c) 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
+
+
+====================COPYRIGHT====================
+/* Copyright 1999, Juan C. Gomez, All rights reserved.
+
+
+====================COPYRIGHT====================
+/* Copyright 2001 Computing Research Labs, New Mexico State University
+
+
+====================COPYRIGHT====================
+/* Portions (C) Copyright PADL Software Pty Ltd. 1999
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted provided that this notice is preserved
+ * and that due credit is given to PADL Software Pty Ltd. This software
+ * is provided ``as is'' without express or implied warranty.  
+
+
+====================COPYRIGHT====================
+/* Portions Copyright (C) 1999, 2000 Novell, Inc. All Rights Reserved.
+
+
+====================COPYRIGHT====================
+/* Portions Copyright (c) 1990 Regents of the University of Michigan.
+ * All rights reserved.
+
+
+====================COPYRIGHT====================
+/* Portions Copyright (c) 1993 Regents of the University of Michigan.
+ * All rights reserved.
+
+
+====================COPYRIGHT====================
+/* Portions Copyright (c) 1994 Regents of the University of Michigan.
+ * All rights reserved.
+
+
+====================COPYRIGHT====================
+/* Portions Copyright (c) 1994 The Regents of the University of Michigan.
+ * All rights reserved.
+
+
+====================COPYRIGHT====================
+/* Portions Copyright (c) 1996 Regents of the University of Michigan.
+ * All rights reserved.
+
+
+====================COPYRIGHT====================
+Copyright 1998-2024 The OpenLDAP Foundation
+All rights reserved.
+
+
+====================COPYRIGHT====================
+Copyright 1999-2003 The OpenLDAP Foundation, Redwood City, California, USA.
+
+====================COPYRIGHT====================
+Copyright 1999-2024 The OpenLDAP Foundation, Redwood City, California, USA.
+
+====================COPYRIGHT====================
+Portions Copyright (c) 1992-1996 Regents of the University of Michigan.
+All rights reserved.
+
+
+====================COPYRIGHT====================
+Portions Copyright 1998-2013 Kurt D. Zeilenga.
+Portions Copyright 1998-2006 Net Boolean Incorporated.
+Portions Copyright 2001-2006 IBM Corporation.
+All rights reserved.
+
+
+====================COPYRIGHT====================
+Portions Copyright 1999-2008 Howard Y.H. Chu.
+Portions Copyright 1999-2008 Symas Corporation.
+Portions Copyright 1998-2003 Hallvard B. Furuseth.
+Portions Copyright 2007-2011 Gavin Henry.
+Portions Copyright 2007-2011 Suretec Systems Ltd.
+All rights reserved.
+
+
+====================Custom-openldap====================
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted provided that this notice is preserved
+
+
+====================Custom-openldap====================
+ * This software is not subject to any license of Silicon Graphics 
+ * Inc. or Purdue University.
+ *
+ * Redistribution and use in source and binary forms are permitted
+ * without restriction or fee of any kind as long as this notice
+ * is preserved.
+
+
+====================File: LICENSE====================
+The OpenLDAP Public License
+  Version 2.8, 17 August 2003
+
+Redistribution and use of this software and associated documentation
+("Software"), with or without modification, are permitted provided
+that the following conditions are met:
+
+1. Redistributions in source form must retain copyright statements
+   and notices,
+
+2. Redistributions in binary form must reproduce applicable copyright
+   statements and notices, this list of conditions, and the following
+   disclaimer in the documentation and/or other materials provided
+   with the distribution, and
+
+3. Redistributions must contain a verbatim copy of this document.
+
+The OpenLDAP Foundation may revise this license from time to time.
+Each revision is distinguished by a version number.  You may use
+this Software under terms of this license revision or under the
+terms of any subsequent revision of the license.
+
+THIS SOFTWARE IS PROVIDED BY THE OPENLDAP FOUNDATION AND ITS
+CONTRIBUTORS ``AS IS'' AND ANY EXPRESSED OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT
+SHALL THE OPENLDAP FOUNDATION, ITS CONTRIBUTORS, OR THE AUTHOR(S)
+OR OWNER(S) OF THE SOFTWARE BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+The names of the authors and copyright holders must not be used in
+advertising or otherwise to promote the sale, use or other dealing
+in this Software without specific, written prior permission.  Title
+to copyright in this Software shall at all times remain with copyright
+holders.
+
+OpenLDAP is a registered trademark of the OpenLDAP Foundation.
+
+Copyright 1999-2003 The OpenLDAP Foundation, Redwood City,
+California, USA.  All Rights Reserved.  Permission to copy and
+distribute verbatim copies of this document is granted.
+
+
+====================File: libraries/liblmdb/LICENSE====================
+The OpenLDAP Public License
+  Version 2.8, 17 August 2003
+
+Redistribution and use of this software and associated documentation
+("Software"), with or without modification, are permitted provided
+that the following conditions are met:
+
+1. Redistributions in source form must retain copyright statements
+   and notices,
+
+2. Redistributions in binary form must reproduce applicable copyright
+   statements and notices, this list of conditions, and the following
+   disclaimer in the documentation and/or other materials provided
+   with the distribution, and
+
+3. Redistributions must contain a verbatim copy of this document.
+
+The OpenLDAP Foundation may revise this license from time to time.
+Each revision is distinguished by a version number.  You may use
+this Software under terms of this license revision or under the
+terms of any subsequent revision of the license.
+
+THIS SOFTWARE IS PROVIDED BY THE OPENLDAP FOUNDATION AND ITS
+CONTRIBUTORS ``AS IS'' AND ANY EXPRESSED OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT
+SHALL THE OPENLDAP FOUNDATION, ITS CONTRIBUTORS, OR THE AUTHOR(S)
+OR OWNER(S) OF THE SOFTWARE BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+The names of the authors and copyright holders must not be used in
+advertising or otherwise to promote the sale, use or other dealing
+in this Software without specific, written prior permission.  Title
+to copyright in this Software shall at all times remain with copyright
+holders.
+
+OpenLDAP is a registered trademark of the OpenLDAP Foundation.
+
+Copyright 1999-2003 The OpenLDAP Foundation, Redwood City,
+California, USA.  All Rights Reserved.  Permission to copy and
+distribute verbatim copies of this document is granted.
+
+
+====================MIT====================
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE COMPUTING RESEARCH LAB OR NEW MEXICO STATE UNIVERSITY BE LIABLE FOR ANY
+ * CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT
+ * OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
+ * THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+====================MIT====================
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation
+# the rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+# THE COMPUTING RESEARCH LAB OR NEW MEXICO STATE UNIVERSITY BE LIABLE FOR ANY
+# CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT
+# OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
+# THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+====================OLDAP-2.8====================
+    This software is available under the OpenLDAP Public License,
+
+
+====================OLDAP-2.8====================
+ * 2.0.1 OF THE OPENLDAP PUBLIC LICENSE, A COPY OF WHICH IS AVAILABLE AT
+
+
+====================OLDAP-2.8====================
+ * 2.0.1 OF THE OPENLDAP PUBLIC LICENSE, A COPY OF WHICH IS AVAILABLE AT
+ * HTTP://WWW.OPENLDAP.ORG/LICENSE.HTML OR IN THE FILE "LICENSE" IN THE
+ * TOP-LEVEL DIRECTORY OF THE DISTRIBUTION. ANY USE OR EXPLOITATION OF THIS
+
+
+====================OLDAP-2.8====================
+ * Copyright 1998-2024 The OpenLDAP Foundation
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted only as authorized by the OpenLDAP
+ * Public License.
+ *
+ * A copy of this license is available in the file LICENSE in the
+ * top-level directory of the distribution or, alternatively, at
+ * <http://www.OpenLDAP.org/license.html>.
+
+
+====================OLDAP-2.8====================
+ * Copyright 1998-2024 The OpenLDAP Foundation.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted only as authorized by the OpenLDAP
+ * Public License.
+ *
+ * A copy of this license is available in file LICENSE in the
+ * top-level directory of the distribution or, alternatively, at
+ * <http://www.OpenLDAP.org/license.html>.
+
+
+====================OLDAP-2.8====================
+ * Copyright 1998-2024 The OpenLDAP Foundation.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted only as authorized by the OpenLDAP
+ * Public License.
+ *
+ * A copy of this license is available in the file LICENSE in the
+ * top-level directory of the distribution or, alternatively, at
+ * <http://www.OpenLDAP.org/license.html>.
+
+
+====================OLDAP-2.8====================
+ * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Copyright 2006 Hans Leidekker
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted only as authorized by the OpenLDAP
+ * Public License.
+ *
+ * A copy of this license is available in the file LICENSE in the
+ * top-level directory of the distribution or, alternatively, at
+ * <http://www.OpenLDAP.org/license.html>.
+
+
+====================OLDAP-2.8====================
+ * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Portions Copyright 1998 A. Hartgers.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted only as authorized by the OpenLDAP
+ * Public License.
+ *
+ * A copy of this license is available in the file LICENSE in the
+ * top-level directory of the distribution or, alternatively, at
+ * <http://www.OpenLDAP.org/license.html>.
+
+
+====================OLDAP-2.8====================
+ * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Portions Copyright 1999 Lars Uffmann.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted only as authorized by the OpenLDAP
+ * Public License.
+ *
+ * A copy of this license is available in the file LICENSE in the
+ * top-level directory of the distribution or, alternatively, at
+ * <http://www.OpenLDAP.org/license.html>.
+
+
+====================OLDAP-2.8====================
+ * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Portions Copyright 2007 Pierangelo Masarati.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted only as authorized by the OpenLDAP
+ * Public License.
+ *
+ * A copy of this license is available in the file LICENSE in the
+ * top-level directory of the distribution or, alternatively, at
+ * <http://www.OpenLDAP.org/license.html>.
+
+
+====================OLDAP-2.8====================
+ * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Portions Copyright 2008 Pierangelo Masarati.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted only as authorized by the OpenLDAP
+ * Public License.
+ *
+ * A copy of this license is available in the file LICENSE in the
+ * top-level directory of the distribution or, alternatively, at
+ * <http://www.OpenLDAP.org/license.html>.
+
+
+====================OLDAP-2.8====================
+ * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Portions Copyright 2018 Howard Chu.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted only as authorized by the OpenLDAP
+ * Public License.
+ *
+ * A copy of this license is available in the file LICENSE in the
+ * top-level directory of the distribution or, alternatively, at
+ * <http://www.OpenLDAP.org/license.html>.
+
+
+====================OLDAP-2.8====================
+ * Copyright 1999-2024 The OpenLDAP Foundation.
+ * Portions Copyright 1999-2003 Kurt D. Zeilenga.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted only as authorized by the OpenLDAP
+ * Public License.
+ *
+ * A copy of this license is available in the file LICENSE in the
+ * top-level directory of the distribution or, alternatively, at
+ * <http://www.OpenLDAP.org/license.html>.
+
+
+====================OLDAP-2.8====================
+ * Copyright 2001-2024 The OpenLDAP Foundation.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted only as authorized by the OpenLDAP
+ * Public License.
+ *
+ * A copy of this license is available in file LICENSE in the
+ * top-level directory of the distribution or, alternatively, at
+ * <http://www.OpenLDAP.org/license.html>.
+
+
+====================OLDAP-2.8====================
+ * Copyright 2003-2024 The OpenLDAP Foundation.
+ * Portions Copyright 2003 IBM Corporation.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted only as authorized by the OpenLDAP
+ * Public License.
+ *
+ * A copy of this license is available in file LICENSE in the
+ * top-level directory of the distribution or, alternatively, at
+ * <http://www.OpenLDAP.org/license.html>.
+
+
+====================OLDAP-2.8====================
+ * Copyright 2004-2024 The OpenLDAP Foundation.
+ * Portions Copyright 2004 Hewlett-Packard Company.
+ * Portions Copyright 2004 Howard Chu, Symas Corp.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted only as authorized by the OpenLDAP
+ * Public License.
+ *
+ * A copy of this license is available in the file LICENSE in the
+ * top-level directory of the distribution or, alternatively, at
+ * <http://www.OpenLDAP.org/license.html>.
+
+
+====================OLDAP-2.8====================
+ * Copyright 2005-2024 The OpenLDAP Foundation.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted only as authorized by the OpenLDAP
+ * Public License.
+ *
+ * A copy of this license is available in file LICENSE in the
+ * top-level directory of the distribution or, alternatively, at
+ * <http://www.OpenLDAP.org/license.html>.
+
+
+====================OLDAP-2.8====================
+ * Copyright 2005-2024 The OpenLDAP Foundation.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted only as authorized by the OpenLDAP
+ * Public License.
+ *
+ * A copy of this license is available in the file LICENSE in the
+ * top-level directory of the distribution or, alternatively, at
+ * <http://www.OpenLDAP.org/license.html>.
+
+
+====================OLDAP-2.8====================
+ * Copyright 2005-2024 The OpenLDAP Foundation.
+ * Portions Copyright (c) 2005 by Howard Chu, Symas Corp.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted only as authorized by the OpenLDAP
+ * Public License.
+ *
+ * A copy of this license is available in the file LICENSE in the
+ * top-level directory of the distribution or, alternatively, at
+ * <http://www.OpenLDAP.org/license.html>.
+
+
+====================OLDAP-2.8====================
+ * Copyright 2005-2024 The OpenLDAP Foundation.
+ * Portions Copyright 2005-2006 SysNet s.n.c.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted only as authorized by the OpenLDAP
+ * Public License.
+ *
+ * A copy of this license is available in the file LICENSE in the
+ * top-level directory of the distribution or, alternatively, at
+ * <http://www.OpenLDAP.org/license.html>.
+
+
+====================OLDAP-2.8====================
+ * Copyright 2006-2024 The OpenLDAP Foundation.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted only as authorized by the OpenLDAP
+ * Public License.
+ *
+ * A copy of this license is available in the file LICENSE in the
+ * top-level directory of the distribution or, alternatively, at
+ * <http://www.OpenLDAP.org/license.html>.
+
+
+====================OLDAP-2.8====================
+ * Copyright 2008-2024 The OpenLDAP Foundation.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted only as authorized by the OpenLDAP
+ * Public License.
+ *
+ * A copy of this license is available in the file LICENSE in the
+ * top-level directory of the distribution or, alternatively, at
+ * <http://www.OpenLDAP.org/license.html>.
+
+
+====================OLDAP-2.8====================
+ * Copyright 2019-2024 The OpenLDAP Foundation.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted only as authorized by the OpenLDAP
+ * Public License.
+ *
+ * A copy of this license is available in file LICENSE in the
+ * top-level directory of the distribution or, alternatively, at
+ * <http://www.OpenLDAP.org/license.html>.
+
+
+====================OLDAP-2.8====================
+ * Note: A verbatim copy of version 2.0.1 of the OpenLDAP Public License
+
+
+====================OLDAP-2.8====================
+ * OF THIS WORK OTHER THAN AS AUTHORIZED IN VERSION 2.0.1 OF THE OPENLDAP
+ * PUBLIC LICENSE, OR OTHER PRIOR WRITTEN CONSENT FROM NOVELL, COULD SUBJECT
+
+
+====================OLDAP-2.8====================
+ * TO VERSION 2.0.1 OF THE OPENLDAP PUBLIC LICENSE, A COPY OF WHICH IS
+
+
+====================OLDAP-2.8====================
+ * TO VERSION 2.0.1 OF THE OPENLDAP PUBLIC LICENSE, A COPY OF WHICH IS
+ * AVAILABLE AT HTTP://WWW.OPENLDAP.ORG/LICENSE.HTML OR IN THE FILE "LICENSE"
+ * IN THE TOP-LEVEL DIRECTORY OF THE DISTRIBUTION. ANY USE OR EXPLOITATION
+
+
+====================OLDAP-2.8====================
+ * WORK OTHER THAN AS AUTHORIZED IN VERSION 2.0.1 OF THE OPENLDAP PUBLIC
+ * LICENSE, OR OTHER PRIOR WRITTEN CONSENT FROM NOVELL, COULD SUBJECT THE
+
+
+====================OLDAP-2.8====================
+/* Note: A verbatim copy of version 2.0.1 of the OpenLDAP Public License
+
+
+====================OLDAP-2.8====================
+/* This work is part of OpenLDAP Software <http://www.openldap.org/>.
+
+
+====================OLDAP-2.8====================
+OpenLDAP is a registered trademark of the OpenLDAP Foundation.
+
+====================OLDAP-2.8====================
+Redistribution and use in source and binary forms, with or without
+modification, are permitted only as authorized by the OpenLDAP
+Public License.
+
+
+====================OLDAP-2.8====================
+Redistribution and use in source and binary forms, with or without
+modification, are permitted only as authorized by the OpenLDAP
+Public License.
+
+A copy of this license is available in the file LICENSE in the
+top-level directory of the distribution or, alternatively, at
+<http://www.OpenLDAP.org/license.html>.
+
+
+====================OLDAP-2.8====================
+Redistribution and use in source and binary forms, with or without
+modification, are permitted only as authorized by the OpenLDAP
+Public License.
+
+A copy of this license is available in the file LICENSE in the
+top-level directory of the distribution or, alternatively, at
+<http://www.OpenLDAP.org/license.html>.
+
+OpenLDAP is a registered trademark of the OpenLDAP Foundation.
+
+Individual files and/or contributed packages may be copyright by
+other parties and/or subject to additional restrictions.
+
+This work is derived from the University of Michigan LDAP v3.3
+distribution.  Information concerning this software is available
+at <http://www.umich.edu/~dirsvcs/ldap/ldap.html>.
+
+This work also contains materials derived from public sources.
+
+Additional information about OpenLDAP can be obtained at
+<http://www.openldap.org/>.
+
+
+====================OLDAP-2.8====================
+The OpenLDAP Public License
+  Version 2.8, 17 August 2003
+
+Redistribution and use of this software and associated documentation
+("Software"), with or without modification, are permitted provided
+that the following conditions are met:
+
+1. Redistributions in source form must retain copyright statements
+   and notices,
+
+2. Redistributions in binary form must reproduce applicable copyright
+   statements and notices, this list of conditions, and the following
+   disclaimer in the documentation and/or other materials provided
+   with the distribution, and
+
+3. Redistributions must contain a verbatim copy of this document.
+
+The OpenLDAP Foundation may revise this license from time to time.
+Each revision is distinguished by a version number.  You may use
+this Software under terms of this license revision or under the
+terms of any subsequent revision of the license.
+
+THIS SOFTWARE IS PROVIDED BY THE OPENLDAP FOUNDATION AND ITS
+CONTRIBUTORS ``AS IS'' AND ANY EXPRESSED OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT
+SHALL THE OPENLDAP FOUNDATION, ITS CONTRIBUTORS, OR THE AUTHOR(S)
+OR OWNER(S) OF THE SOFTWARE BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+The names of the authors and copyright holders must not be used in
+advertising or otherwise to promote the sale, use or other dealing
+in this Software without specific, written prior permission.  Title
+to copyright in this Software shall at all times remain with copyright
+holders.
+
+OpenLDAP is a registered trademark of the OpenLDAP Foundation.
+
+Copyright 1999-2003 The OpenLDAP Foundation, Redwood City,
+California, USA.  All Rights Reserved.  Permission to copy and
+distribute verbatim copies of this document is granted.
+
+====================OLDAP-2.8====================
+This work is part of OpenLDAP Software <http://www.openldap.org/>.
+
+
+====================Unicode-Mappings====================
+Disclaimer
+
+The Unicode Character Database is provided as is by Unicode, Inc.
+No claims are made as to fitness for any particular purpose. No
+warranties of any kind are expressed or implied. The recipient
+agrees to determine applicability of information provided. If this
+file has been purchased on magnetic or optical media from Unicode,
+Inc., the sole remedy for any claim will be exchange of defective
+media within 90 days of receipt.
+
+This disclaimer is applicable for all other data files accompanying
+the Unicode Character Database, some of which have been compiled
+by the Unicode Consortium, and some of which have been supplied by
+other sources.
+
+Limitations on Rights to Redistribute This Data
+
+Recipient is granted the right to make copies in any form for
+internal distribution and to freely use the information supplied
+in the creation of products supporting the Unicode (TM) Standard.
+The files in the Unicode Character Database can be redistributed
+to third parties or other organizations (whether for profit or not)
+as long as this notice and the disclaimer notice are retained.
+Information can be extracted from these files and used in documentation
+or programs, as long as there is an accompanying notice indicating
+the source.

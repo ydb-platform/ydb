@@ -69,7 +69,7 @@ void TestSerializationDeserializationPullParser(const TOriginal& original, EYson
     auto yson = ConvertToYsonString(original);
     if (ysonType != EYsonType::Node) {
         auto buf = yson.AsStringBuf();
-        yson = TYsonString(buf.SubString(1, buf.Size() - 2), ysonType);
+        yson = TYsonString(buf.SubString(1, buf.size() - 2), ysonType);
     }
     auto deserialized = PullParserConvert<TResult>(yson);
     EXPECT_EQ(original, deserialized);

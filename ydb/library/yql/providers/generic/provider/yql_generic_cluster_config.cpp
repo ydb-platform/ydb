@@ -266,7 +266,7 @@ namespace NYql {
             return false;
         }
 
-        return !iter->second.Empty();
+        return !iter->second.empty();
     }
 
     TGenericClusterConfig GenericClusterConfigFromProperties(const TString& clusterName, const THashMap<TString, TString>& properties) {

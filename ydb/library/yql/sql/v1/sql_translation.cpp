@@ -39,7 +39,7 @@ void VisitAllFields(const NProtoBuf::Message& msg, Callback& callback) {
 struct TTokenCollector {
     void operator()(const NProtoBuf::Message& message) {
         if (const auto* token = dynamic_cast<const NSQLv1Generated::TToken*>(&message)) {
-            if (!Tokens.Empty()) {
+            if (!Tokens.empty()) {
                 Tokens << ' ';
             }
             Tokens << token->GetValue();

@@ -47,7 +47,12 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->AddLongOption("s3-endpoint", "S3 endpoint to connect to")
         .Required().RequiredArgument("ENDPOINT").StoreResult(&AwsEndpoint);
 
-    config.Opts->AddLongOption("scheme", "S3 endpoint scheme")
+    auto colors = NColorizer::AutoColors(Cout);
+    config.Opts->AddLongOption("scheme", TStringBuilder()
+            << "S3 endpoint scheme - "
+            << colors.BoldColor() << "http" << colors.OldColor()
+            << " or "
+            << colors.BoldColor() << "https" << colors.OldColor())
         .RequiredArgument("SCHEME").StoreResult(&AwsScheme).DefaultValue(AwsScheme);
 
     config.Opts->AddLongOption("bucket", "S3 bucket")
@@ -92,7 +97,12 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->AddLongOption("retries", "Number of retries")
         .RequiredArgument("NUM").StoreResult(&NumberOfRetries).DefaultValue(NumberOfRetries);
 
-    config.Opts->AddLongOption("use-virtual-addressing", "S3 bucket virtual addressing")
+    config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder() 
+            << "Sets bucket URL style. Value "
+            << colors.BoldColor() << "true" << colors.OldColor()
+            << " means use Virtual-Hosted-Style URL, "
+            << colors.BoldColor() << "false" << colors.OldColor()
+            << " - Path-Style URL.")
         .RequiredArgument("BOOL").StoreResult<bool>(&UseVirtualAddressing).DefaultValue("true");
 
     config.Opts->AddLongOption("no-acl", "Prevent importing of ACL and owner")
@@ -163,7 +173,7 @@ int TCommandImportFromS3::Run(TConfig& config) {
                 token = listResult.NextToken;
                 for (TStringBuf key : listResult.Keys) {
                     if (key.ChopSuffix(NDump::SCHEME_FILE_NAME)) {
-                        TString destination = item.Destination + key.substr(item.Source.Size());
+                        TString destination = item.Destination + key.substr(item.Source.size());
                         settings.AppendItem({TString(key), std::move(destination)});
                     }
                 }

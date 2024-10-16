@@ -9,7 +9,7 @@ namespace {
 std::shared_ptr<FormatConfig> MakeCsvConfig(const THashMap<TString, TString>& params) {
     auto config = std::make_shared<CsvConfig>();
     if (auto delimiter = params.FindPtr("csvdelimiter"); delimiter) {
-        if (delimiter->Size() != 1) {
+        if (delimiter->size() != 1) {
             throw yexception() << "invalid parameter: csv_delimiter must be single character";
         }
         config->ParseOpts.delimiter = (*delimiter)[0];

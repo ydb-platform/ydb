@@ -30,8 +30,10 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 
         for (ui64 i = 0; i < 100; ++i) {
             WriteTestData(testHelper.GetKikimr(), "/Root/olapStore/olapTable", 0, i * 10000, 1000);
+            WriteTestData(testHelper.GetKikimr(), "/Root/olapStore/olapTable", 0, i * 10000, 1000);
         }
 
+        csController->WaitCompactions(TDuration::Seconds(5));
         csController->WaitActualization(TDuration::Seconds(5));
 
         ui64 columnRawBytes = 0;

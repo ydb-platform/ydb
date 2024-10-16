@@ -1,0 +1,10 @@
+--- contrib/restricted/aws/aws-c-io/include/aws/io/private/pki_utils.h	(index)
++++ contrib/restricted/aws/aws-c-io/include/aws/io/private/pki_utils.h	(working tree)
+@@ -10,6 +10,7 @@
+ /* It's ok to include external headers because this is a PRIVATE header file
+  * (it is usually a crime to include windows.h from header file) */
+ #    include <Windows.h>
++#    include <Wincrypt.h>
+ #endif /* _WIN32 */
+ 
+ #ifdef AWS_OS_APPLE

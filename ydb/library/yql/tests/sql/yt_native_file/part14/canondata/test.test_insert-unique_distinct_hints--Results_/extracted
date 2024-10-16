@@ -1,0 +1,12 @@
+<tmp_path>/program.sql:<main>: Warning: Post type annotation
+
+    <tmp_path>/program.sql:<main>:13:26: Warning: At function: Unordered
+    	INSERT INTO Output7 WITH TRUNCATE SELECT /*+ unique(subkey value) */ key, value FROM Input;
+	                         ^
+        <tmp_path>/program.sql:<main>:13:35: Warning: At function: AssumeUniqueHint
+        	INSERT INTO Output7 WITH TRUNCATE SELECT /*+ unique(subkey value) */ key, value FROM Input;
+	                                  ^
+            <tmp_path>/program.sql:<main>:13:35: Warning: Unique sql hint contains invalid column: 
+Unique((subkey,value)) is not applicable to List<Struct<'key':String,'value':String>>
+            	INSERT INTO Output7 WITH TRUNCATE SELECT /*+ unique(subkey value) */ key, value FROM Input;
+	                                  ^

@@ -1,0 +1,144 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Apache-2.0           2b42edef8fa55315f34f2370b4715ca9
+BELONGS ya.make
+FILE_INCLUDE NOTICE found in files: LICENSE at line 107, LICENSE at line 110, LICENSE at line 112, LICENSE at line 117, LICENSE at line 120, LICENSE at line 142
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE [2:202]
+
+KEEP     Apache-2.0           43f57e875cdc02e8385ff667f85d702e
+BELONGS ya.make
+    License text:
+        SPDX-License-Identifier: Apache-2.0.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        NOTICE [3:3]
+
+SKIP     LicenseRef-scancode-generic-cla 4c121fbba45df428a6eec824e562d4f8
+BELONGS ya.make
+    License text:
+        Contributor License Agreement (CLA)](
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 22.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [61:61]
+
+KEEP     Apache-2.0           6c901454b872854c0dea3ec06b67701a
+BELONGS ya.make
+    License text:
+        \## License
+        This library is licensed under the Apache 2.0 License. 
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [5:7]
+
+KEEP     Apache-2.0           d591512e466bb957030b8857f753349e
+BELONGS ya.make
+    License text:
+         * SPDX-License-Identifier: Apache-2.0.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        include/aws/mqtt/client.h [6:6]
+        include/aws/mqtt/exports.h [5:5]
+        include/aws/mqtt/mqtt.h [6:6]
+        include/aws/mqtt/private/client_impl.h [6:6]
+        include/aws/mqtt/private/fixed_header.h [6:6]
+        include/aws/mqtt/private/mqtt_client_test_helper.h [5:5]
+        include/aws/mqtt/private/packets.h [6:6]
+        include/aws/mqtt/private/shared_constants.h [3:3]
+        include/aws/mqtt/private/topic_tree.h [6:6]
+        include/aws/mqtt/private/v5/mqtt5_callbacks.h [3:3]
+        include/aws/mqtt/private/v5/mqtt5_client_impl.h [6:6]
+        include/aws/mqtt/private/v5/mqtt5_decoder.h [3:3]
+        include/aws/mqtt/private/v5/mqtt5_encoder.h [3:3]
+        include/aws/mqtt/private/v5/mqtt5_options_storage.h [6:6]
+        include/aws/mqtt/private/v5/mqtt5_topic_alias.h [3:3]
+        include/aws/mqtt/private/v5/mqtt5_utils.h [6:6]
+        include/aws/mqtt/private/v5/rate_limiters.h [3:3]
+        include/aws/mqtt/v5/mqtt5_client.h [6:6]
+        include/aws/mqtt/v5/mqtt5_listener.h [3:3]
+        include/aws/mqtt/v5/mqtt5_packet_storage.h [6:6]
+        include/aws/mqtt/v5/mqtt5_types.h [6:6]
+        source/client.c [3:3]
+        source/client_channel_handler.c [3:3]
+        source/fixed_header.c [3:3]
+        source/mqtt.c [3:3]
+        source/packets.c [3:3]
+        source/shared_constants.c [3:3]
+        source/topic_tree.c [3:3]
+        source/v5/mqtt5_callbacks.c [3:3]
+        source/v5/mqtt5_client.c [3:3]
+        source/v5/mqtt5_decoder.c [3:3]
+        source/v5/mqtt5_encoder.c [3:3]
+        source/v5/mqtt5_listener.c [3:3]
+        source/v5/mqtt5_options_storage.c [3:3]
+        source/v5/mqtt5_topic_alias.c [3:3]
+        source/v5/mqtt5_types.c [3:3]
+        source/v5/mqtt5_utils.c [3:3]
+        source/v5/rate_limiters.c [3:3]
+
+SKIP     LicenseRef-scancode-generic-cla ee24fdc60600747c7d12c32055b0011d
+BELONGS ya.make
+    License text:
+        Contributor_License_Agreement)
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 16.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [61:61]

@@ -73,6 +73,7 @@ namespace NYdb::NConsoleClient {
         ui32 MinActivePartitions_;
         TMaybe<ui32> MaxActivePartitions_;
         ui32 PartitionWriteSpeedKbps_;
+        TMaybe<ui32> PartitionsPerTablet_;
     };
 
     class TCommandTopicAlter: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs, public TCommandWithMeteringMode, public TCommandWithAutoPartitioning {

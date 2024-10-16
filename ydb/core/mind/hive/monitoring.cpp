@@ -246,7 +246,7 @@ public:
         if (WaitingOnly) {
             tabletIdIndex.reserve(Self->BootQueue.WaitQueue.size());
             for (const TBootQueue::TBootQueueRecord& rec : Self->BootQueue.WaitQueue) {
-                TTabletInfo* tablet = Self->FindTablet(rec.TabletId);
+                TTabletInfo* tablet = Self->FindTablet(rec.TabletId, rec.FollowerId);
                 if (tablet != nullptr) {
                     tabletIdIndex.push_back({tabletIndexFunction(*tablet), tablet});
                 }
@@ -4356,7 +4356,7 @@ bool THive::IsSafeOperation(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorConte
     TCgiParameters cgi(httpInfo->Cgi());
     TStringBuilder keyData;
     keyData << cgi.Get("tablet") << cgi.Get("owner") << cgi.Get("owner_idx");
-    if (keyData.Empty()) {
+    if (keyData.empty()) {
         ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"error\":\"tablet, owner or owner_idx parameters not set\"}"));
         return false;
     }

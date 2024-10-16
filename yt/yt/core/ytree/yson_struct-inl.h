@@ -403,6 +403,13 @@ void UpdateYsonStructField(TIntrusivePtr<TDst>& dst, const TIntrusivePtr<TSrc>& 
     }
 }
 
+template <CYsonStructDerived T, CYsonStructDerived U>
+    requires std::same_as<T, U>
+bool operator==(const T& lhs, const U& rhs)
+{
+    return static_cast<const TYsonStructBase&>(lhs).IsEqual(static_cast<const TYsonStructBase&>(rhs));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 #undef DECLARE_YSON_STRUCT

@@ -1,0 +1,8 @@
+--- a/include/jemalloc/jemalloc-linux.h	(index)
++++ b/include/jemalloc/jemalloc-linux.h	(working tree)
+@@ -40,1 +40,1 @@ extern "C" {
+-#define JEMALLOC_USE_CXX_THROW
++/* #undef JEMALLOC_USE_CXX_THROW */
+@@ -196,1 +196,1 @@ extern "C" {
+-#  define JEMALLOC_NOTHROW JEMALLOC_ATTR(nothrow)
++#  define JEMALLOC_NOTHROW

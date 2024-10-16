@@ -1,0 +1,29 @@
+requirements:
+  - contrib/restricted/libffi
+disable_includes:
+  - mbarrier.h
+exclude_from_macros:
+  - c/call_python.c
+  - c/cdlopen.c
+  - c/cffi1_module.c
+  - c/cglob.c
+  - c/commontypes.c
+  - c/ffi_obj.c
+  - c/lib_obj.c
+  - c/parse_c_type.c
+  - c/realize_c_type.c
+  - gen/*
+  - lsan.supp
+mark_as_resources:
+  - cffi/_cffi_errors.h
+  - cffi/_cffi_include.h
+  - cffi/_embedding.h
+  - cffi/parse_c_type.h
+exclude:
+  - c/libffi_*
+  - c/test_c.py
+copy:
+  - c/*
+keep:
+  - gen/*
+  - lsan.supp

@@ -135,7 +135,7 @@ public:
     }
 
     void UnregisterGroup(const bool isPriorityProcess, const ui64 externalGroupId) {
-        if (auto internalGroupId = GroupIds.GetInternalIdOptional(externalGroupId)) {
+        if (auto internalGroupId = GroupIds.ExtractInternalIdOptional(externalGroupId)) {
             AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "remove_group")("external_group_id", externalGroupId)(
                 "internal_group_id", internalGroupId);
             UnregisterGroupImpl(*internalGroupId);

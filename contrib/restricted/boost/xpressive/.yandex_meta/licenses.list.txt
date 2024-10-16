@@ -1,0 +1,66 @@
+====================BSL-1.0====================
+    Use, modification and distribution is subject to the Boost Software
+    License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Copyright 2008 Eric Niebler. Distributed under the Boost
+//  Software License, Version 1.0. (See accompanying file
+//  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Copyright 2009 Eric Niebler. Distributed under the Boost
+//  Software License, Version 1.0. (See accompanying file
+//  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0. (See
+//  accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0. (See accompany-
+// ing file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2001-2003 Joel de Guzman
+    Copyright (c) 2001-2003 Daniel Nuffer
+    http://spirit.sourceforge.net/
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2001-2003 Joel de Guzman
+    http://spirit.sourceforge.net/
+
+
+====================COPYRIGHT====================
+//  Copyright 2007 David Jenkins.
+//  Copyright 2007 Eric Niebler.
+
+
+====================COPYRIGHT====================
+//  Copyright 2008 Eric Niebler.
+//  Copyright 2008 David Jenkins.
+
+
+====================COPYRIGHT====================
+//  Copyright 2008 Eric Niebler. Distributed under the Boost
+//  Software License, Version 1.0. (See accompanying file
+//  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+//  Copyright 2009 Eric Niebler. Distributed under the Boost
+//  Software License, Version 1.0. (See accompanying file
+//  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// (c) Copyright Andreas Huber Doenni 2002-2005, Eric Niebler 2006
+// Distributed under the Boost Software License, Version 1.0. (See accompany-
+// ing file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)

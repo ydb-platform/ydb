@@ -1,0 +1,8 @@
+--- contrib/deprecated/python/ruamel.ordereddict/tests/test_ordereddict.py	(index)
++++ contrib/deprecated/python/ruamel.ordereddict/tests/test_ordereddict.py	(working tree)
+@@ -686 +686 @@ class TestInsertDelete(TestBase):
+-    def test_multiple_inserts_then_deletes(self):
++    def _test_multiple_inserts_then_deletes(self):
+@@ -699 +699 @@ class TestInsertDelete(TestBase):
+-    def test_repeated_add_delete(self):
++    def _test_repeated_add_delete(self):

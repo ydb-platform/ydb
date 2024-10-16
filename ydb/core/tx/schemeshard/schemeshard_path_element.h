@@ -136,6 +136,7 @@ public:
     bool IsView() const;
     bool IsTemporary() const;
     bool IsResourcePool() const;
+    bool IsBackupCollection() const;
     TVirtualTimestamp GetCreateTS() const;
     TVirtualTimestamp GetDropTS() const;
     void SetDropped(TStepId step, TTxId txId);

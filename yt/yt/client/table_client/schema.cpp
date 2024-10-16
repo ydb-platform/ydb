@@ -6,11 +6,7 @@
 #include "unversioned_row.h"
 #include "versioned_io_options.h"
 
-#include <optional>
-
 #include <yt/yt/client/tablet_client/public.h>
-
-#include <yt/yt/client/table_client/schema_serialization_helpers.h>
 
 #include <yt/yt/core/yson/public.h>
 #include <yt/yt/core/yson/pull_parser_deserialize.h>
@@ -24,6 +20,8 @@
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/wire_protocol.pb.h>
 
 #include <yt/yt_proto/yt/client/tablet_client/proto/lock_mask.pb.h>
+
+#include <optional>
 
 namespace NYT::NTableClient {
 

@@ -1,0 +1,17 @@
+commit b8e049facd44969b04f6348de63384686e4c924e
+author: shadchin
+date: 2022-03-24T17:42:39+03:00
+
+    Reduce ssl requirements
+
+--- contrib/tools/python3/Modules/_ssl.c	(7d5969ad8d55d9636131a4f1567d36a4b8afb5b7)
++++ contrib/tools/python3/Modules/_ssl.c	(b8e049facd44969b04f6348de63384686e4c924e)
+@@ -171,7 +171,7 @@ extern const SSL_METHOD *TLSv1_2_method(void);
+  * Based on Hynek's excellent blog post (update 2021-02-11)
+  * https://hynek.me/articles/hardening-your-web-servers-ssl-ciphers/
+  */
+-  #define PY_SSL_DEFAULT_CIPHER_STRING "@SECLEVEL=2:ECDH+AESGCM:ECDH+CHACHA20:ECDH+AES:DHE+AES:!aNULL:!eNULL:!aDSS:!SHA1:!AESCCM"
++  #define PY_SSL_DEFAULT_CIPHER_STRING "DEFAULT:ECDH+AESGCM:ECDH+CHACHA20:ECDH+AES:DHE+AES:!aNULL:!eNULL:!aDSS:!SHA1:!AESCCM"
+   #ifndef PY_SSL_MIN_PROTOCOL
+     #define PY_SSL_MIN_PROTOCOL TLS1_2_VERSION
+   #endif

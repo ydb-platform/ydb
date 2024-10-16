@@ -1030,6 +1030,7 @@ public:
                     for (const TString& word : filterWords) {
                         if (node->GetHostName().Contains(word) || ::ToString(node->GetNodeId()).Contains(word)) {
                             nodeView.push_back(node);
+                            break;
                         }
                     }
                 }

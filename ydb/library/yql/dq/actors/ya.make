@@ -14,6 +14,7 @@ PEERDIR(
 END()
 
 RECURSE(
+    common
     compute
     input_transforms
     spilling

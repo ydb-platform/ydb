@@ -1,0 +1,890 @@
+* Soon
+** gnulib
+Bruno notes:
+
+> I haven't looked deeply, but it strikes me that gnulib/lib/bitset/array.c
+> does not make use of the 'ffsl' function, nor or the 'integer_length_l'
+> function. Maybe because in Bison, all bitsets are so dense that it does
+> not give a performance advantage?
+
+** Cex
+*** Improve gnulib
+Don't do this (counterexample.c):
+
+// This is the fastest way to get the tail node from the gl_list API.
+gl_list_node_t
+list_get_end (gl_list_t list)
+{
+  gl_list_node_t sentinel = gl_list_add_last (list, NULL);
+  gl_list_node_t res = gl_list_previous_node (list, sentinel);
+  gl_list_remove_node (list, sentinel);
+  return res;
+}
+
+*** Ambiguous rewriting
+If the user is stupid enough to have equal rules, then the derivations are
+harder to read:
+
+    Reduce/reduce conflict on tokens $end, "+", "⊕":
+        2 exp: exp "+" exp .
+        3 exp: exp "+" exp .
+      Example                  exp "+" exp •
+      First derivation         exp ::=[ exp "+" exp • ]
+      Example                  exp "+" exp •
+      Second derivation        exp ::=[ exp "+" exp • ]
+
+Do we care about this?  In color, we use twice the same color here, but we
+could try to use the same color for the same rule.
+
+*** XML reports
+Show the counterexamples.  This is going to be really hard and/or painful.
+Unless we play it dumb (little structure).
+
+** Bistromathic
+- How about not evaluating incomplete lines when the text is not finished
+  (as shells do).
+
+** Questions
+*** Java
+- Should i18n be part of the Lexer?  Currently it's a static method of
+  Lexer.
+
+- is there a migration path that would allow to use TokenKinds in
+  yylex?
+
+- define the tokens as an enum too.
+
+- promote YYEOF rather than EOF.
+
+** YYerror
+https://git.savannah.gnu.org/gitweb/?p=gettext.git;a=blob;f=gettext-runtime/intl/plural.y;h=a712255af4f2f739c93336d4ff6556d932a426a5;hb=HEAD
+
+should be updated to not use YYERRCODE.  Returning an undef token is good
+enough.
+
+** Java
+*** calc.at
+Stop hard-coding "Calc".  Adjust local.at (look for FIXME).
+
+** A dev warning for b4_
+Maybe we should check for m4_ and b4_ leaking out of the m4 processing, as
+Autoconf does.  It would have caught over-quotation issues.
+
+** doc
+I feel it's ugly to use the GNU style to declare functions in the doc.  It
+generates tons of white space in the page, and may contribute to bad page
+breaks.
+
+** consistency
+token vs terminal.
+
+** api.token.raw
+The YYUNDEFTOK could be assigned a semantic value so that yyerror could be
+used to report invalid lexemes.
+
+** push parsers
+Consider deprecating impure push parsers.  They add a lot of complexity, for
+a bad feature.  On the other hand, that would make it much harder to sit
+push parsers on top of pull parser.  Which is currently not relevant, since
+push parsers are measurably slower.
+
+** %define parse.error formatted
+How about pushing Bistromathic's yyreport_syntax_error as another standard
+way to generate the error message, and leave to the user the task of
+providing the message formats?  Currently in bistro, it reads:
+
+    const char *
+    error_format_string (int argc)
+    {
+      switch (argc)
+        {
+        default: /* Avoid compiler warnings. */
+        case 0: return _("%@: syntax error");
+        case 1: return _("%@: syntax error: unexpected %u");
+          // TRANSLATORS: '%@' is a location in a file, '%u' is an
+          // "unexpected token", and '%0e', '%1e'... are expected tokens
+          // at this point.
+          //
+          // For instance on the expression "1 + * 2", you'd get
+          //
+          // 1.5: syntax error: expected - or ( or number or function or variable before *
+        case 2: return _("%@: syntax error: expected %0e before %u");
+        case 3: return _("%@: syntax error: expected %0e or %1e before %u");
+        case 4: return _("%@: syntax error: expected %0e or %1e or %2e before %u");
+        case 5: return _("%@: syntax error: expected %0e or %1e or %2e or %3e before %u");
+        case 6: return _("%@: syntax error: expected %0e or %1e or %2e or %3e or %4e before %u");
+        case 7: return _("%@: syntax error: expected %0e or %1e or %2e or %3e or %4e or %5e before %u");
+        case 8: return _("%@: syntax error: expected %0e or %1e or %2e or %3e or %4e or %5e or %6e before %u");
+        }
+    }
+
+The message would have to be generated in a string, and pushed to yyerror.
+Which will be a pain in the neck in yacc.c.
+
+If we want to do that, we should think very carefully about the syntax of
+the format string.
+
+** yyclearin does not invoke the lookahead token's %destructor
+https://lists.gnu.org/r/bug-bison/2018-02/msg00000.html
+Rici:
+
+> Modifying yyclearin so that it calls yydestruct seems like the simplest
+> solution to this issue, but it is conceivable that such a change would
+> break programs which already perform some kind of workaround in order to
+> destruct the lookahead symbol. So it might be necessary to use some kind of
+> compatibility %define, or to create a new replacement macro with a
+> different name such as yydiscardin.
+>
+> At a minimum, the fact that yyclearin does not invoke the %destructor
+> should be highlighted in the documentation, since it is not at all obvious.
+
+** Issues in i18n
+
+Les catégories d'avertissements incluent :
+  conflicts-sr      conflits S/R (activé par défaut)
+  conflicts-rr      conflits R/R (activé par défaut)
+  dangling-alias    l'alias chaîne n'est pas attaché à un symbole
+  deprecated        construction obsolète
+  empty-rule        règle vide sans %empty
+  midrule-values    valeurs de règle intermédiaire non définies ou inutilisées
+  precedence        priorité et associativité inutiles
+  yacc              incompatibilités avec POSIX Yacc
+  other             tous les autres avertissements (activé par défaut)
+  all               tous les avertissements sauf « dangling-alias » et « yacc »
+  no-CATEGORY       désactiver les avertissements dans CATEGORIE
+  none              désactiver tous les avertissements
+  error[=CATEGORY]  traiter les avertissements comme des erreurs
+
+Line -1 and -3 should mention CATEGORIE, not CATEGORY.
+
+* Bison 3.8
+** Rewrite glr.cc
+Get rid of scaffolding in glr.c.
+
+** Unit rules / Injection rules (Akim Demaille)
+Maybe we could expand unit rules (or "injections", see
+https://homepages.cwi.nl/~daybuild/daily-books/syntax/2-sdf/sdf.html), i.e.,
+transform
+
+        exp: arith | bool;
+        arith: exp '+' exp;
+        bool: exp '&' exp;
+
+into
+
+        exp: exp '+' exp | exp '&' exp;
+
+when there are no actions.  This can significantly speed up some grammars.
+I can't find the papers.  In particular the book 'LR parsing: Theory and
+Practice' is impossible to find, but according to 'Parsing Techniques: a
+Practical Guide', it includes information about this issue.  Does anybody
+have it?
+
+** clean up (Akim Demaille)
+Do not work on these items now, as I (Akim) have branches with a lot of
+changes in this area (hitting several files), and no desire to have to fix
+conflicts.  Addressing these items will happen after my branches have been
+merged.
+
+*** lalr.c
+Introduce a goto struct, and use it in place of from_state/to_state.
+Rename states1 as path, length as pathlen.
+Introduce inline functions for things such as nullable[*rp - ntokens]
+where we need to map from symbol number to nterm number.
+
+There are probably a significant part of the relations management that
+should be migrated on top of a bitsetv.
+
+*** closure
+It should probably take a "state*" instead of two arguments.
+
+*** traces
+The "automaton" and "set" categories are not so useful.  We should probably
+introduce lr(0) and lalr, just the way we have ielr categories.  The
+"closure" function is too verbose, it should probably have its own category.
+
+"set" can still be used for summarizing the important sets.  That would make
+tests easy to maintain.
+
+*** complain.*
+Rename these guys as "diagnostics.*" (or "diagnose.*"), since that's the
+name they have in GCC, clang, etc.  Likewise for the complain_* series of
+functions.
+
+*** ritem
+states/nstates, rules/nrules, ..., ritem/nritems
+Fix the latter.
+
+* D programming language
+There's a number of features that are missing, here sorted in _suggested_
+order of implementation.
+
+When copying code from other skeletons, keep the comments exactly as they
+are.  Keep the same variable names.  If you change the wording in one place,
+do it in the others too.  In other words: make sure to keep the
+maintenance *simple* by avoiding any gratuitous difference.
+
+** Rename the D example
+Move the current content of examples/d into examples/d/simple.
+
+** Create a second example
+Duplicate examples/d/simple into examples/d/calc.
+
+** Add location tracking to d/calc
+Look at the examples in the other languages to see how to do that.
+
+** yysymbol_name
+The SymbolKind is an enum.  For a given SymbolKind we want to get its string
+representation.  Currently it's a separate table in the parser that does
+that:
+
+  /* Symbol kinds.  */
+  public enum SymbolKind
+  {
+    S_YYEMPTY = -2,  /* No symbol.  */
+    S_YYEOF = 0,                   /* "end of file"  */
+    S_YYerror = 1,                 /* error  */
+    S_YYUNDEF = 2,                 /* "invalid token"  */
+    S_EQ = 3,                      /* "="  */
+    ...
+    S_input = 14,                  /* input  */
+    S_line = 15,                   /* line  */
+    S_exp = 16,                    /* exp  */
+  };
+
+  ...
+
+  /* YYTNAME[SYMBOL-NUM] -- String name of the symbol SYMBOL-NUM.
+     First, the terminals, then, starting at \a yyntokens_, nonterminals.  */
+  private static immutable string[] yytname_ =
+  [
+  "\"end of file\"", "error", "\"invalid token\"", "\"=\"", "\"+\"",
+  "\"-\"", "\"*\"", "\"/\"", "\"(\"", "\")\"", "\"end of line\"",
+  "\"number\"", "UNARY", "$accept", "input", "line", "exp", null
+  ];
+
+  ...
+
+So to get a symbol kind, one runs `yytname_[yykind]`.
+
+Is there a way to attach this conversion to string to SymbolKind?  In Java
+for instance, we have:
+
+  public enum SymbolKind
+  {
+    S_YYEOF(0),                    /* "end of file"  */
+    S_YYerror(1),                  /* error  */
+    S_YYUNDEF(2),                  /* "invalid token"  */
+    ...
+    S_input(16),                   /* input  */
+    S_line(17),                    /* line  */
+    S_exp(18);                     /* exp  */
+
+    private final int yycode_;
+
+    SymbolKind (int n) {
+      this.yycode_ = n;
+    }
+    ...
+    /* YYNAMES_[SYMBOL-NUM] -- String name of the symbol SYMBOL-NUM.
+       First, the terminals, then, starting at \a YYNTOKENS_, nonterminals.  */
+    private static final String[] yynames_ = yynames_init();
+    private static final String[] yynames_init()
+    {
+      return new String[]
+      {
+        i18n("end of file"), i18n("error"), i18n("invalid token"), "!", "+", "-", "*",
+        "/", "^", "(", ")", "=", i18n("end of line"), i18n("number"), "NEG",
+        "$accept", "input", "line", "exp", null
+      };
+    }
+
+    /* The user-facing name of this symbol.  */
+    public final String getName() {
+      return yynames_[yycode_];
+    }
+  };
+
+which allows to write more naturally `yykind.getName()` rather than
+`yytname_[yykind]`.  Is there something comparable in (idiomatic) D?
+
+** Change the return value of yylex
+Historically people were allowed to return any int from the scanner (which
+is convenient and allows `return '+'` from the scanner).  Akim tends to see
+this as an error, we should restrict the return values to TokenKind (not to
+be confused with SymbolKind).
+
+In the case of D, without the history, we have the choice to support or not
+`int`.  If we want to _keep_ `int`, is there a way, say via introspection,
+to support both signatures of yylex?  If we don't keep `int`, just move to
+TokenKind.
+
+** Documentation
+Write documentation about D support in doc/bison.texi.  Imitate the Java
+documentation.  You should be more succinct IMHO.
+
+** Complete Symbols
+The current interface from the scanner to the parser is somewhat clumsy: the
+token kind is returned by yylex, but the value and location are stored in
+the scanner.  This reflects the fact that the implementation of the parser
+uses three variables to deal with each parsed symbol: its kind, its value,
+its location.
+
+So today the scanner of examples/d/calc.d (no locations) looks like:
+
+    if (input.front.isNumber)
+      {
+        import std.conv : parse;
+        semanticVal_.ival = input.parse!int;
+        return TokenKind.NUM;
+      }
+
+and the generated parser:
+
+    /* Read a lookahead token.  */
+    if (yychar == TokenKind.YYEMPTY)
+    {
+      yychar = yylex ();
+      yylval = yylexer.semanticVal;
+    }
+
+The parser class should feature a `Symbol` type which binds together kind,
+value and location, and the scanner should be able to return an instance of
+that type.  Something like
+
+    if (input.front.isNumber)
+      {
+        import std.conv : parse;
+        return parser.Symbol (TokenKind.NUM, input.parse!int);
+      }
+
+** Token Constructors
+In the previous example it is possible to mix incorrectly kinds and values,
+and for instance:
+
+        return parser.Symbol (TokenKind.NUM, "Hello, World!\n");
+
+attaches a string value to NUM kind (wrong, of course).  When
+api.token.constructor is set, in C++, Bison generated "token constructors":
+parser.make_NUM. parser.make_PLUS, parser.make_STRING, etc.  The previous
+example becomes
+
+        return parser.make_NUM ("Hello, World!\n");
+
+which would easily be caught by the type checker.
+
+** Lookahead Correction
+Add support for LAC to the D skeleton.  It should not be too hard: look how
+this is done in lalr1.cc, and mock it.
+
+** Push Parser
+Add support for push parser.  Do not start a nice skeleton, just enhance the
+current one to support push parsers.  This is going to be a tougher nut to
+crack.
+
+First, you need to understand well how the push parser is expected to work.
+To this end:
+- read the doc
+- look at examples/c/pushcalc
+- create an example of a Java push parser.
+- have a look at the generated parser in Java, which has the advantage of
+  being already based on a parser object, instead of just a function.
+
+The C case is harder to read, but it may help too.  Keep in mind that
+because there's no object to maintain state, the C push parser uses some
+struct (yypstate) to preserve this state.  We don't need this in D, the
+parser object will suffice.
+
+I think working directly on the skeleton to add push-parser support is not
+the simplest path.  I suggest that you (1) transform a generated parser into
+a push parser by hand, and then (2) transform lalr1.d to generate such a
+parser.
+
+Use `git commit` frequently to make sure you keep track of your progress.
+
+*** (1.a) Prepare pull parser by hand
+Copy again one of the D examples into say examples/d/pushcalc.  Also
+check-in the generated parser to facilitate experimentation.
+
+- find local variables of yyparse should become members of the parser object
+  (so that we preserve state from one call to the next).
+
+- do it in your generated D parser.  We don't need an equivalent for
+  yypstate, because we already have it: that the parser object itself.
+
+- have your *pull*-parser (i.e., the good old yy::parser::parse()) work
+  properly this way.  Write and run tests.  That's one of the reasons I
+  suggest using examples/d/calc as a starting point: it already has tests,
+  you can/should add more.
+
+At this point you have a pull-parser which you prepared to turn into a
+push-parser.
+
+*** (1.b) Turn pull parser into push parser by hand
+
+- look again at how push parsers are implemented in Java/C to see what needs
+  to change in yyparse so that the control is inverted: parse() will
+  be *given* the tokens, instead of having to call yylex itself.  When I say
+  "look at C", I think your best option are (i) yacc.c (look for b4_push_if)
+  and (ii) examples/c/pushcalc.
+
+- rename parse() as push_parse(Symbol yyla) (or push_parse(TokenKind, Value,
+  Location)) that takes the symbol as argument.  That's the push parser we
+  are looking for.
+
+- define a new parse() function which has the same signature as the usual
+  pull-parser, that repeatedly calls the push_parse function.  Something
+  like this:
+
+int parse ()
+{
+ int status = 0;
+ do {
+  status = this->push_parse (yylex());
+ } while (status == YYPUSH_MORE);
+ return status;
+}
+
+- show me that parser, so that we can validate the approach.
+
+*** (2) Port that into the skeleton
+- once we agree on the API of the push parser, implement it into lalr1.d.
+  You will probaby need help on this regard, but imitation, again, should
+  help.
+
+- have example/d/pushcalc work properly and pass tests
+
+- add tests in the "real" test suite.  Do that in tests/calc.at.  I can
+  help.
+
+- document
+
+** GLR Parser
+This is very ambitious.  That's the final boss.  There are currently no
+"clean" implementation to get inspiration from.
+
+glr.c is very clean but:
+- is low-level C
+- is a different skeleton from yacc.c
+
+glr.cc is (currently) an ugly hack: a C++ shell around glr.c.  Valentin
+Tolmer is currently rewriting glr.cc to be clean C++, but he is not
+finished.  There will be a lot a common code between lalr1.cc and glr.cc, so
+eventually I would like them to be fused into a single skeleton, supporting
+both deterministic and generalized parsing.
+
+It would be great for D to also support this.
+
+The basic ideas of GLR are explained here:
+
+https://www.codeproject.com/Articles/5259825/GLR-Parsing-in-Csharp-How-to-Use-The-Most-Powerful
+
+* Better error messages
+The users are not provided with enough tools to forge their error messages.
+See for instance "Is there an option to change the message produced by
+YYERROR_VERBOSE?" by Simon Sobisch, on bison-help.
+
+See also
+https://www.cs.tufts.edu/~nr/cs257/archive/clinton-jefferey/lr-error-messages.pdf
+https://research.swtch.com/yyerror
+http://gallium.inria.fr/~fpottier/publis/fpottier-reachability-cc2016.pdf
+
+* Modernization
+Fix data/skeletons/yacc.c so that it defines YYPTRDIFF_T properly for modern
+and older C++ compilers.  Currently the code defaults to defining it to
+'long' for non-GCC compilers, but it should use the proper C++ magic to
+define it to the same type as the C ptrdiff_t type.
+
+* Completion
+Several features are not available in all the back-ends.
+
+- lac: D, Java (easy)
+- push parsers: glr.c, glr.cc, lalr1.cc (not very difficult)
+- token constructors: Java, C, D (a bit difficult)
+- glr: D, Java (super difficult)
+
+* Bugs
+** Autotest has quotation issues
+tests/input.at:1730:AT_SETUP([%define errors])
+
+->
+
+$ ./tests/testsuite -l | grep errors | sed q
+  38: input.at:1730      errors
+
+* Short term
+** Get rid of YYPRINT and b4_toknum
+Besides yytoknum is wrong when api.token.raw is defined.
+
+** Better design for diagnostics
+The current implementation of diagnostics is ad hoc, it grew organically.
+It works as a series of calls to several functions, with dependency of the
+latter calls on the former.  For instance:
+
+      complain (&sym->location,
+                sym->content->status == needed ? complaint : Wother,
+                _("symbol %s is used, but is not defined as a token"
+                  " and has no rules; did you mean %s?"),
+                quote_n (0, sym->tag),
+                quote_n (1, best->tag));
+      if (feature_flag & feature_caret)
+        location_caret_suggestion (sym->location, best->tag, stderr);
+
+We should rewrite this in a more FP way:
+
+1. build a rich structure that denotes the (complete) diagnostic.
+   "Complete" in the sense that it also contains the suggestions, the list
+   of possible matches, etc.
+
+2. send this to the pretty-printing routine.  The diagnostic structure
+   should be sufficient so that we can generate all the 'format' of
+   diagnostics, including the fixits.
+
+If properly done, this diagnostic module can be detached from Bison and be
+put in gnulib.  It could be used, for instance, for errors caught by
+xgettext.
+
+There's certainly already something alike in GCC.  At least that's the
+impression I get from reading the "-fdiagnostics-format=FORMAT" part of this
+page:
+
+https://gcc.gnu.org/onlinedocs/gcc/Diagnostic-Message-Formatting-Options.html
+
+** Graphviz display code thoughts
+The code for the --graph option is over two files: print_graph, and
+graphviz. This is because Bison used to also produce VCG graphs, but since
+this is no longer true, maybe we could consider these files for fusion.
+
+An other consideration worth noting is that print_graph.c (correct me if I
+am wrong) should contain generic functions, whereas graphviz.c and other
+potential files should contain just the specific code for that output
+format. It will probably prove difficult to tell if the implementation is
+actually generic whilst only having support for a single format, but it
+would be nice to keep stuff a bit tidier: right now, the construction of the
+bitset used to show reductions is in the graphviz-specific code, and on the
+opposite side we have some use of \l, which is graphviz-specific, in what
+should be generic code.
+
+Little effort seems to have been given to factoring these files and their
+print{,-xml} counterpart. We would very much like to re-use the pretty format
+of states from .output for the graphs, etc.
+
+Since graphviz dies on medium-to-big grammars, maybe consider an other tool?
+
+** push-parser
+Check it too when checking the different kinds of parsers.  And be
+sure to check that the initial-action is performed once per parsing.
+
+** m4 names
+b4_shared_declarations is no longer what it is.  Make it
+b4_parser_declaration for instance.
+
+** yychar in lalr1.cc
+There is a large difference bw maint and master on the handling of
+yychar (which was removed in lalr1.cc).  See what needs to be
+back-ported.
+
+
+    /* User semantic actions sometimes alter yychar, and that requires
+       that yytoken be updated with the new translation.  We take the
+       approach of translating immediately before every use of yytoken.
+       One alternative is translating here after every semantic action,
+       but that translation would be missed if the semantic action
+       invokes YYABORT, YYACCEPT, or YYERROR immediately after altering
+       yychar.  In the case of YYABORT or YYACCEPT, an incorrect
+       destructor might then be invoked immediately.  In the case of
+       YYERROR, subsequent parser actions might lead to an incorrect
+       destructor call or verbose syntax error message before the
+       lookahead is translated.  */
+
+    /* Make sure we have latest lookahead translation.  See comments at
+       user semantic actions for why this is necessary.  */
+    yytoken = yytranslate_ (yychar);
+
+
+** Get rid of fake #lines [Bison: ...]
+Possibly as simple as checking whether the column number is nonnegative.
+
+I have seen messages like the following from GCC.
+
+<built-in>:0: fatal error: opening dependency file .deps/libltdl/argz.Tpo: No such file or directory
+
+
+** Discuss about %printer/%destroy in the case of C++.
+It would be very nice to provide the symbol classes with an operator<<
+and a destructor.  Unfortunately the syntax we have chosen for
+%destroy and %printer make them hard to reuse.  For instance, the user
+is invited to write something like
+
+   %printer { debug_stream() << $$; } <my_type>;
+
+which is hard to reuse elsewhere since it wants to use
+"debug_stream()" to find the stream to use.  The same applies to
+%destroy: we told the user she could use the members of the Parser
+class in the printers/destructors, which is not good for an operator<<
+since it is no longer bound to a particular parser, it's just a
+(standalone symbol).
+
+* Various
+** Rewrite glr.cc in C++ (Valentin Tolmer)
+As a matter of fact, it would be very interesting to see how much we can
+share between lalr1.cc and glr.cc.  Most of the skeletons should be common.
+It would be a very nice source of inspiration for the other languages.
+
+Valentin Tolmer is working on this.
+
+** yychar == YYEMPTY
+The code in yyerrlab reads:
+
+      if (yychar <= YYEOF)
+        {
+          /* Return failure if at end of input.  */
+          if (yychar == YYEOF)
+            YYABORT;
+        }
+
+There are only two yychar that can be <= YYEOF: YYEMPTY and YYEOF.
+But I can't produce the situation where yychar is YYEMPTY here, is it
+really possible?  The test suite does not exercise this case.
+
+This shows that it would be interesting to manage to install skeleton
+coverage analysis to the test suite.
+
+* From lalr1.cc to yacc.c
+** Single stack
+Merging the three stacks in lalr1.cc simplified the code, prompted for
+other improvements and also made it faster (probably because memory
+management is performed once instead of three times).  I suggest that
+we do the same in yacc.c.
+
+(Some time later): it's also very nice to have three stacks: it's more dense
+as we don't lose bits to padding.  For instance the typical stack for states
+will use 8 bits, while it is likely to consume 32 bits in a struct.
+
+We need trustworthy benchmarks for Bison, for all our backends.  Akim has a
+few things scattered around; we need to put them in the repo, and make them
+more useful.
+
+* Report
+
+** Figures
+Some statistics about the grammar and the parser would be useful,
+especially when asking the user to send some information about the
+grammars she is working on.  We should probably also include some
+information about the variables (I'm not sure for instance we even
+specify what LR variant was used).
+
+** GLR
+How would Paul like to display the conflicted actions?  In particular,
+what when two reductions are possible on a given lookahead token, but one is
+part of $default.  Should we make the two reductions explicit, or just
+keep $default?  See the following point.
+
+** Disabled Reductions
+See 'tests/conflicts.at (Defaulted Conflicted Reduction)', and decide
+what we want to do.
+
+** Documentation
+Extend with error productions.  The hard part will probably be finding
+the right rule so that a single state does not exhibit too many yet
+undocumented ''features''.  Maybe an empty action ought to be
+presented too.  Shall we try to make a single grammar with all these
+features, or should we have several very small grammars?
+
+* Extensions
+** More languages?
+Well, only if there is really some demand for it.
+
+*** PHP
+https://github.com/scfc/bison-php/blob/master/data/lalr1.php
+
+*** Python
+https://lists.gnu.org/r/bison-patches/2013-09/msg00000.html and following
+
+** Multiple start symbols
+Would be very useful when parsing closely related languages.  The idea is to
+declare several start symbols, for instance
+
+    %start stmt expr
+    %%
+    stmt: ...
+    expr: ...
+
+and to generate parse(), parse_stmt() and parse_expr().  Technically, the
+above grammar would be transformed into
+
+   %start yy_start
+   %token YY_START_STMT YY_START_EXPR
+   %%
+   yy_start: YY_START_STMT stmt | YY_START_EXPR expr
+
+so that there are no new conflicts in the grammar (as would undoubtedly
+happen with yy_start: stmt | expr).  Then adjust the skeletons so that this
+initial token (YY_START_STMT, YY_START_EXPR) be shifted first in the
+corresponding parse function.
+
+** %include
+This is a popular demand.  We already made many changes in the parser that
+should make this reasonably easy to implement.
+
+Bruce Mardle <marblypup@yahoo.co.uk>
+https://lists.gnu.org/r/bison-patches/2015-09/msg00000.html
+
+However, there are many other things to do before having such a feature,
+because I don't want a % equivalent to #include (which we all learned to
+hate).  I want something that builds "modules" of grammars, and assembles
+them together, paying attention to keep separate bits separated, in pseudo
+name spaces.
+
+** Push parsers
+There is demand for push parsers in Java and C++.  And GLR I guess.
+
+** Generate code instead of tables
+This is certainly quite a lot of work.  See
+https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.50.4539.
+
+** $-1
+We should find a means to provide an access to values deep in the
+stack.  For instance, instead of
+
+        baz: qux { $$ = $<foo>-1 + $<bar>0 + $1; }
+
+we should be able to have:
+
+  foo($foo) bar($bar) baz($bar): qux($qux) { $baz = $foo + $bar + $qux; }
+
+Or something like this.
+
+** %if and the like
+It should be possible to have %if/%else/%endif.  The implementation is
+not clear: should it be lexical or syntactic.  Vadim Maslow thinks it
+must be in the scanner: we must not parse what is in a switched off
+part of %if.  Akim Demaille thinks it should be in the parser, so as
+to avoid falling into another CPP mistake.
+
+(Later): I'm sure there's actually good case for this.  People who need that
+feature can use m4/cpp on top of Bison.  I don't think it is worth the
+trouble in Bison itself.
+
+** XML Output
+There are couple of available extensions of Bison targeting some XML
+output.  Some day we should consider including them.  One issue is
+that they seem to be quite orthogonal to the parsing technique, and
+seem to depend mostly on the possibility to have some code triggered
+for each reduction.  As a matter of fact, such hooks could also be
+used to generate the yydebug traces.  Some generic scheme probably
+exists in there.
+
+XML output for GNU Bison and gcc
+   http://www.cs.may.ie/~jpower/Research/bisonXML/
+
+XML output for GNU Bison
+   http://yaxx.sourceforge.net/
+
+* Coding system independence
+Paul notes:
+
+        Currently Bison assumes 8-bit bytes (i.e. that UCHAR_MAX is
+        255).  It also assumes that the 8-bit character encoding is
+        the same for the invocation of 'bison' as it is for the
+        invocation of 'cc', but this is not necessarily true when
+        people run bison on an ASCII host and then use cc on an EBCDIC
+        host.  I don't think these topics are worth our time
+        addressing (unless we find a gung-ho volunteer for EBCDIC or
+        PDP-10 ports :-) but they should probably be documented
+        somewhere.
+
+        More importantly, Bison does not currently allow NUL bytes in
+        tokens, either via escapes (e.g., "x\0y") or via a NUL byte in
+        the source code.  This should get fixed.
+
+* Broken options?
+** %token-table
+** Skeleton strategy
+Must we keep %token-table?
+
+* Precedence
+
+** Partial order
+It is unfortunate that there is a total order for precedence.  It
+makes it impossible to have modular precedence information.  We should
+move to partial orders (sounds like series/parallel orders to me).
+
+This is a prerequisite for modules.
+
+* Pre and post actions.
+From: Florian Krohm <florian@edamail.fishkill.ibm.com>
+Subject: YYACT_EPILOGUE
+To: bug-bison@gnu.org
+X-Sent: 1 week, 4 days, 14 hours, 38 minutes, 11 seconds ago
+
+The other day I had the need for explicitly building the parse tree. I
+used %locations for that and defined YYLLOC_DEFAULT to call a function
+that returns the tree node for the production. Easy. But I also needed
+to assign the S-attribute to the tree node. That cannot be done in
+YYLLOC_DEFAULT, because it is invoked before the action is executed.
+The way I solved this was to define a macro YYACT_EPILOGUE that would
+be invoked after the action. For reasons of symmetry I also added
+YYACT_PROLOGUE. Although I had no use for that I can envision how it
+might come in handy for debugging purposes.
+All is needed is to add
+
+#if YYLSP_NEEDED
+    YYACT_EPILOGUE (yyval, (yyvsp - yylen), yylen, yyloc, (yylsp - yylen));
+#else
+    YYACT_EPILOGUE (yyval, (yyvsp - yylen), yylen);
+#endif
+
+at the proper place to bison.simple. Ditto for YYACT_PROLOGUE.
+
+I was wondering what you think about adding YYACT_PROLOGUE/EPILOGUE
+to bison. If you're interested, I'll work on a patch.
+
+* Better graphics
+Equip the parser with a means to create the (visual) parse tree.
+
+
+-----
+
+# LocalWords:  Cex gnulib gl Bistromathic TokenKinds yylex enum YYEOF EOF
+# LocalWords:  YYerror gettext af hb YYERRCODE undef calc FIXME dev yyerror
+# LocalWords:  Autoconf YYUNDEFTOK lexemes parsers Bistromathic's yyreport
+# LocalWords:  const argc yacc yyclearin lookahead destructor Rici incluent
+# LocalWords:  yydestruct yydiscardin catégories d'avertissements sr activé
+# LocalWords:  conflits défaut rr l'alias chaîne n'est attaché un symbole
+# LocalWords:  obsolète règle vide midrule valeurs de intermédiaire ou avec
+# LocalWords:  définies inutilisées priorité associativité inutiles POSIX
+# LocalWords:  incompatibilités tous les autres avertissements sauf dans rp
+# LocalWords:  désactiver CATEGORIE traiter comme des erreurs glr Akim bool
+# LocalWords:  Demaille arith lalr goto struct pathlen nullable ntokens lr
+# LocalWords:  nterm bitsetv ielr ritem nstates nrules nritems yysymbol EQ
+# LocalWords:  SymbolKind YYEMPTY YYUNDEF YYTNAME NUM yyntokens yytname sed
+# LocalWords:  nonterminals yykind yycode YYNAMES yynames init getName conv
+# LocalWords:  TokenKind semanticVal ival yychar yylval yylexer Tolmer hoc
+# LocalWords:  Sobisch YYPTRDIFF ptrdiff Autotest YYPRINT toknum yytoknum
+# LocalWords:  sym Wother stderr FP fixits xgettext fdiagnostics Graphviz
+# LocalWords:  graphviz VCG bitset xml bw maint yytoken YYABORT deps
+# LocalWords:  YYACCEPT yytranslate nonnegative destructors yyerrlab repo
+# LocalWords:  backends stmt expr yy Mardle baz qux Vadim Maslow CPP cpp
+# LocalWords:  yydebug gcc UCHAR EBCDIC gung PDP NUL Pre Florian Krohm utf
+# LocalWords:  YYACT YYLLOC YYLSP yyval yyvsp yylen yyloc yylsp endif
+# LocalWords:  ispell american
+
+Local Variables:
+mode: outline
+coding: utf-8
+fill-column: 76
+ispell-dictionary: "american"
+End:
+
+Copyright (C) 2001-2004, 2006, 2008-2015, 2018-2021 Free Software
+Foundation, Inc.
+
+This file is part of Bison, the GNU Compiler Compiler.
+
+Permission is granted to copy, distribute and/or modify this document
+under the terms of the GNU Free Documentation License, Version 1.3 or
+any later version published by the Free Software Foundation; with no
+Invariant Sections, with no Front-Cover Texts, and with no Back-Cover
+Texts.  A copy of the license is included in the "GNU Free
+Documentation License" file as part of this distribution.

@@ -1,0 +1,90 @@
+commit c6da6f130038532c120beefe89fcbab987434d66
+author: serjflint
+committer: shadchin
+date: 2023-12-29T07:22:46+03:00
+
+    fix msan
+
+--- contrib/tools/python3/Objects/capsule.c	(66e7c1ee23780a1434d1b4140c654a63ccd65503)
++++ contrib/tools/python3/Objects/capsule.c	(c6da6f130038532c120beefe89fcbab987434d66)
+@@ -197,6 +197,11 @@ PyCapsule_Import(const char *name, int no_block)
+     PyObject *object = NULL;
+     void *return_value = NULL;
+     char *trace;
++#if defined(__has_feature)
++#  if __has_feature(memory_sanitizer)
++    __msan_unpoison_string(name);
++#  endif
++#endif
+     size_t name_length = (strlen(name) + 1) * sizeof(char);
+     char *name_dup = (char *)PyMem_Malloc(name_length);
+ 
+--- contrib/tools/python3/Objects/typeobject.c	(66e7c1ee23780a1434d1b4140c654a63ccd65503)
++++ contrib/tools/python3/Objects/typeobject.c	(c6da6f130038532c120beefe89fcbab987434d66)
+@@ -4140,6 +4140,11 @@ _PyType_FromMetaclass_impl(
+                 tp_doc = NULL;
+             }
+             else {
++#if defined(__has_feature)
++#  if __has_feature(memory_sanitizer)
++                __msan_unpoison_string(slot->pfunc);
++#  endif
++#endif
+                 size_t len = strlen(slot->pfunc)+1;
+                 tp_doc = PyObject_Malloc(len);
+                 if (tp_doc == NULL) {
+@@ -4160,6 +4165,12 @@ _PyType_FromMetaclass_impl(
+         goto finally;
+     }
+ 
++
++#if defined(__has_feature)
++#  if __has_feature(memory_sanitizer)
++    __msan_unpoison_string(spec->name);
++#  endif
++#endif
+     const char *s = strrchr(spec->name, '.');
+     if (s == NULL) {
+         s = spec->name;
+--- contrib/tools/python3/Objects/unicodeobject.c	(66e7c1ee23780a1434d1b4140c654a63ccd65503)
++++ contrib/tools/python3/Objects/unicodeobject.c	(c6da6f130038532c120beefe89fcbab987434d66)
+@@ -2269,6 +2269,11 @@ PyUnicode_FromStringAndSize(const char *u, Py_ssize_t size)
+ PyObject *
+ PyUnicode_FromString(const char *u)
+ {
++#if defined(__has_feature)
++#  if __has_feature(memory_sanitizer)
++    __msan_unpoison_string(u);
++#  endif
++#endif
+     size_t size = strlen(u);
+     if (size > PY_SSIZE_T_MAX) {
+         PyErr_SetString(PyExc_OverflowError, "input too long");
+--- contrib/tools/python3/Parser/tokenizer.c        (index)
++++ contrib/tools/python3/Parser/tokenizer.c        (working tree)
+@@ -823,6 +823,11 @@ static char *
+ static char *translate_newlines(const char *s, int exec_input,
+                                 int preserve_crlf, struct tok_state *tok) {
+   int skip_next_lf = 0;
++#if defined(__has_feature)
++#  if __has_feature(memory_sanitizer)
++    __msan_unpoison_string(s);
++#  endif
++#endif
+   size_t needed_length = strlen(s) + 2, final_length;
+   char *buf, *current;
+   char c = '\0';
+--- contrib/tools/python3/Python/errors.c	(66e7c1ee23780a1434d1b4140c654a63ccd65503)
++++ contrib/tools/python3/Python/errors.c	(c6da6f130038532c120beefe89fcbab987434d66)
+@@ -1161,6 +1161,11 @@ PyErr_NewException(const char *name, PyObject *base, PyObject *dict)
+     PyObject *bases = NULL;
+     PyObject *result = NULL;
+ 
++#if defined(__has_feature)
++#  if __has_feature(memory_sanitizer)
++    __msan_unpoison_string(name);
++#  endif
++#endif
+     const char *dot = strrchr(name, '.');
+     if (dot == NULL) {
+         _PyErr_SetString(tstate, PyExc_SystemError,

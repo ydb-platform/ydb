@@ -1,0 +1,58 @@
+From 68dffeb3346282c7cf3b382040c5252ca7babac8 Mon Sep 17 00:00:00 2001
+From: Innokentii Mokin <innokentii@yandex-team.ru>
+Date: Thu, 13 Apr 2023 15:07:25 +0300
+Subject: [PATCH] add node style setter
+
+---
+ include/libfyaml.h | 14 ++++++++++++++
+ src/lib/fy-doc.c   | 12 ++++++++++++
+ 2 files changed, 26 insertions(+)
+
+diff --git a/include/libfyaml.h b/include/libfyaml.h
+index 16d8971..40e72f5 100644
+--- a/include/libfyaml.h
++++ b/include/libfyaml.h
+@@ -2784,6 +2784,20 @@ enum fy_node_style
+ fy_node_get_style(struct fy_node *fyn)
+ 	FY_EXPORT;
+ 
++/**
++ * fy_node_set_style() - Set the node style
++ *
++ * Set the node rendering style.
++ * If current node style is alias it won't be changed
++ * to save document structure
++ *
++ * @fyn: The node
++ * @style: The node style
++ */
++void
++fy_node_set_style(struct fy_node *fyn, enum fy_node_style style)
++       FY_EXPORT;
++
+ /**
+  * fy_node_is_scalar() - Check whether the node is a scalar
+  *
+diff --git a/src/lib/fy-doc.c b/src/lib/fy-doc.c
+index 7df5105..e7cd64a 100644
+--- a/src/lib/fy-doc.c
++++ b/src/lib/fy-doc.c
+@@ -3343,6 +3343,18 @@ enum fy_node_style fy_node_get_style(struct fy_node *fyn)
+ 	return fyn ? fyn->style : FYNS_PLAIN;
+ }
+ 
++void fy_node_set_style(struct fy_node *fyn, enum fy_node_style style)
++{
++	if (!fyn)
++		return;
++
++	/* ignore alias nodes to save document structure */
++	if (fyn->style == FYNS_ALIAS)
++		return;
++
++	fyn->style = style;
++}
++
+ bool fy_node_is_null(struct fy_node *fyn)
+ {
+ 	if (!fyn)

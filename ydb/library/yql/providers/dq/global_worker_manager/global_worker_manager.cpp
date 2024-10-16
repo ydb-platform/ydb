@@ -683,7 +683,7 @@ private:
 
     void UpdateLeaderInfo(THashMap<TString, NYT::TNode>& attributes) {
         LeaderHost = attributes.at(NCommonAttrs::HOSTNAME_ATTR).AsString();
-        LeaderPort = std::stoi(attributes.at(NCommonAttrs::GRPCPORT_ATTR).AsString().Data());
+        LeaderPort = std::stoi(attributes.at(NCommonAttrs::GRPCPORT_ATTR).AsString().data());
     }
 
     void Bootstrap(const TActorContext& ctx) {

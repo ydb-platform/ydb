@@ -1,0 +1,93 @@
+====================BSL-1.0====================
+## License
+
+Distributed under the
+[Boost Software License, Version 1.0](http://boost.org/LICENSE_1_0.txt).
+
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0.
+
+
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0.
+//  See http://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0.
+//  http://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+//  http://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+// http://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+// http://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Darin Adler 2000
+//  (C) Copyright Beman Dawes 2006, 2009, 2014
+//  (C) Copyright Peter Dimov 2019
+
+
+====================COPYRIGHT====================
+//  Copyright (C) 2012 David Stone
+//  Copyright Beman Dawes 2013
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 2010, 2011, 2014
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 2011
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 2015
+
+
+====================COPYRIGHT====================
+// Copyright 2019 Peter Dimov
+
+
+====================COPYRIGHT====================
+// Copyright 2019, 2020 Peter Dimov
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+// Copyright 2019, 2023 Peter Dimov
+// Distributed under the Boost Software License, Version 1.0.
+// http://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+// Copyright 2020 Peter Dimov
+
+
+====================COPYRIGHT====================
+// Copyright 2023 Peter Dimov
+// Distributed under the Boost Software License, Version 1.0.
+// http://www.boost.org/LICENSE_1_0.txt

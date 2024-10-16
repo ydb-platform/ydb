@@ -1,0 +1,11 @@
+--- contrib/python/aiohttp/aiohttp/_cparser.pxd	(index)
++++ contrib/python/aiohttp/aiohttp/_cparser.pxd	(working tree)
+@@ -10,7 +10,7 @@
+ )
+ 
+ 
+-cdef extern from "../vendor/llhttp/build/llhttp.h":
++cdef extern from "llhttp.h":
+ 
+     struct llhttp__internal_s:
+         int32_t _index

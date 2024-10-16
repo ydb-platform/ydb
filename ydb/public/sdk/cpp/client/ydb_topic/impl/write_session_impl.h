@@ -1,5 +1,7 @@
 #pragma once
 
+#include "transaction.h"
+
 #include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
@@ -313,7 +315,6 @@ private:
         ui64 AckCount = 0;
     };
 
-    using TTransactionId = std::pair<TString, TString>; // SessionId, TxId
     using TTransactionInfoPtr = std::shared_ptr<TTransactionInfo>;
 
     THandleResult OnErrorImpl(NYdb::TPlainStatus&& status); // true - should Start(), false - should Close(), empty - no action
@@ -423,8 +424,7 @@ private:
     void CancelTransactions();
     TTransactionInfoPtr GetOrCreateTxInfo(const TTransactionId& txId);
     void TrySignalAllAcksReceived(ui64 seqNo);
-
-    void OnTransactionCommit();
+    void DeleteTx(const TTransactionId& txId);
 
 private:
     TWriteSessionSettings Settings;

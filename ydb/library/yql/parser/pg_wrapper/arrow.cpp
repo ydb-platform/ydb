@@ -60,13 +60,14 @@ TExecs::TExecs()
 #undef RegisterExec
 }
 
-const NPg::TAggregateDesc& ResolveAggregation(const TString& name, NKikimr::NMiniKQL::TTupleType* tupleType, const std::vector<ui32>& argsColumns, NKikimr::NMiniKQL::TType* returnType) {
+const NPg::TAggregateDesc& ResolveAggregation(const TString& name, NKikimr::NMiniKQL::TTupleType* tupleType,
+    const std::vector<ui32>& argsColumns, NKikimr::NMiniKQL::TType* returnType, ui32 hint) {
     using namespace NKikimr::NMiniKQL;
     if (returnType) {
         MKQL_ENSURE(argsColumns.size() == 1, "Expected one column");
         TType* stateType = AS_TYPE(TBlockType, tupleType->GetElementType(argsColumns[0]))->GetItemType();
         TType* returnItemType = AS_TYPE(TBlockType, returnType)->GetItemType();
-        return NPg::LookupAggregation(name, AS_TYPE(TPgType, stateType)->GetTypeId(), AS_TYPE(TPgType, returnItemType)->GetTypeId());
+        return NPg::LookupAggregation(name + "#" + ToString(hint), AS_TYPE(TPgType, stateType)->GetTypeId(), AS_TYPE(TPgType, returnItemType)->GetTypeId());
     } else {
         TVector<ui32> argTypeIds;
         for (const auto col : argsColumns) {

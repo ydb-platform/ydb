@@ -1,0 +1,19 @@
+--- a/cpp/src/arrow/filesystem/api.h
++++ b/cpp/src/arrow/filesystem/api.h
+@@ -20,7 +20,6 @@
+ #include "arrow/util/config.h"  // IWYU pragma: export
+
+ #include "arrow/filesystem/filesystem.h"  // IWYU pragma: export
+-#error #include "arrow/filesystem/hdfs.h"        // IWYU pragma: export
+ #include "arrow/filesystem/localfs.h"     // IWYU pragma: export
+ #include "arrow/filesystem/mockfs.h"      // IWYU pragma: export
+ #ifdef ARROW_S3
+--- a/cpp/src/arrow/io/api.h
++++ b/cpp/src/arrow/io/api.h
+@@ -20,6 +20,5 @@
+ #include "arrow/io/buffered.h"
+ #include "arrow/io/compressed.h"
+ #include "arrow/io/file.h"
+-#error #include "arrow/io/hdfs.h"
+ #include "arrow/io/interfaces.h"
+ #include "arrow/io/memory.h"

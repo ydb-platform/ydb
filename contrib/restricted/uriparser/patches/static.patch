@@ -1,0 +1,5 @@
+--- a/include/uriparser/UriBase.h
++++ b/include/uriparser/UriBase.h
+@@ -100,1 +100,1 @@
+-# if defined(URI_STATIC_BUILD)
++# if 1 /* defined(URI_STATIC_BUILD) */

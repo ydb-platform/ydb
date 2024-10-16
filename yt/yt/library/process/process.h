@@ -73,6 +73,8 @@ protected:
     virtual void DoSpawn() = 0;
     const char* Capture(TStringBuf arg);
 
+    virtual void CleanUpParent() = 0;
+
 private:
     void SpawnChild();
     void ValidateSpawnResult();
@@ -128,6 +130,8 @@ private:
     void AsyncPeriodicTryWait();
 
     void ValidateSpawnResult();
+
+    void CleanUpParent() override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

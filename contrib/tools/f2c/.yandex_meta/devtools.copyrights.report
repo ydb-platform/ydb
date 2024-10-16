@@ -1,0 +1,357 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 116100c125f25f4161b23810ecddb496
+BELONGS ya.make
+    License text:
+        Copyright 1990, 1993-1996, 1999, 2001 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/data.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 11b523da43f02cdf1599c43ee4b85e7d
+BELONGS ya.make
+    License text:
+        Copyright 1990, 1991, 1994, 2000 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/mem.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 200e4eeb2dc6f2ac9834d8246accc823
+BELONGS ya.make
+    License text:
+        Copyright 1990 - 1996, 2000-2001 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/expr.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2e1cb296c75624a3a5743480efc975c7
+BELONGS ya.make
+    License text:
+        Copyright 1990, 1993, 1994, 2000 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/cds.c [2:2]
+        src/error.c [2:2]
+        src/xsum.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 383a229210d195cefa700c878f239400
+BELONGS ya.make
+    License text:
+        Copyright 1990, 1994, 2000 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/malloc.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3c99eff519a11f7e279e52f0cbb3789c
+BELONGS ya.make
+    License text:
+        Copyright 1990, 1994-6, 2000-2001 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/proc.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4b56873b0420745a3c8ac459d5c3e94d
+BELONGS ya.make
+    License text:
+        Copyright 1990, 1992-1995, 2000-2001 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/misc.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4c6541d440b994cf6b88c3d69c89fe75
+BELONGS ya.make
+    License text:
+        Copyright 1990, 1991, 1994 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/sysdep.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 53ae3202f940e17d0bd51872f24a9363
+BELONGS ya.make
+    License text:
+        Copyright 1990, 1993 by AT&T Bell Laboratories, Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/gram.head [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5e5caf4ff1a8ea2701abf1d6892236a1
+BELONGS ya.make
+    License text:
+        Copyright 1990-1996, 2000-2001 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/main.c [2:2]
+        src/output.c [2:2]
+        src/putpcc.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 683646c27e3f816ac063f34287ed2eeb
+BELONGS ya.make
+    License text:
+        Copyright 1990-1991, 1993-1994, 1996, 2000-2001 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/put.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 691f2b120f2555ad0a026aabb3ce04e3
+BELONGS ya.make
+    License text:
+        Copyright 1990 - 1996, 1999-2001 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/defs.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6eefa126cbfa42f77122464cb3d34cc5
+BELONGS ya.make
+    License text:
+        Copyright 1990, 2000 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/memset.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 73627f860bd317f557da28fa15082e55
+BELONGS ya.make
+    License text:
+        Copyright 1990-1, 1993-6, 1999-2001 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/formatdata.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7aa050d710139b3385801ff7dac885b9
+BELONGS ya.make
+    License text:
+        Copyright 1990 - 1994, 2000 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/sysdep.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7bc195df7bafba1df8aad983afbf5642
+BELONGS ya.make
+    License text:
+        Copyright 1990, 1992 - 1997, 1999, 2000 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lex.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7f21c476cdcc8d8dae7611fafb31f16f
+BELONGS ya.make
+    License text:
+        Copyright 1990, 1991, 1993, 1994, 1999-2001 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/p1output.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 90ce75334cefd20de4f69bdc2ecf029c
+BELONGS ya.make
+    License text:
+        Copyright 1990, 1992, 1994-6, 1998 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/intr.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 91854df3627222c05744c968504afffc
+BELONGS ya.make
+    License text:
+        Copyright 1990, 1993-6, 2000 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/equiv.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ae2f071351889ddf63495839097264bd
+BELONGS ya.make
+    License text:
+        Copyright 1990, 1994-5, 2001 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/parse_args.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c377fe9ade794c16bfce1d0ba571d5de
+BELONGS ya.make
+    License text:
+        Copyright 1990, 1993 - 1996, 2000 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/exec.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ce4cda6594b1ff77f0a7d288250a71cd
+BELONGS ya.make
+    License text:
+        Copyright 1990 - 1997 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/Notice [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d0478e0777410f30d3c2c92251df4eff
+BELONGS ya.make
+    License text:
+        Copyright 1990, 1992-1994, 2001 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/vax.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL df2a4081648641548d3d3a65376f0d3f
+BELONGS ya.make
+    License text:
+        Copyright 1990, 1992, 1993, 1994, 2000 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/pread.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e36525c387114e6bb41468e9c4896f55
+BELONGS ya.make
+    License text:
+        Copyright 1990, 1991, 1993, 1994, 1996, 2000 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/io.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e5ac11fab2001ad8cce2b7d0f92778f3
+BELONGS ya.make
+    License text:
+        Copyright 1990, 1992 - 1996, 2000 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/names.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e950c1e84d03b11bfca30cc9db571ba0
+BELONGS ya.make
+    License text:
+        Copyright 1990, 1991, 1993, 1994, 2000 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/niceprintf.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL efa316f2dbf6d070aa223b35a6f738a3
+BELONGS ya.make
+    License text:
+        Copyright 1990-1996, 1999-2001 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/format.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fb273e8500a5b7185595ffab689be7f0
+BELONGS ya.make
+    License text:
+        Copyright 1990, 1992-1996, 2000-2001 by AT&T, Lucent Technologies and Bellcore.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/init.c [2:2]

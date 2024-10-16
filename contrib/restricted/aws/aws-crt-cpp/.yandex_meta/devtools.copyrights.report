@@ -1,0 +1,161 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0b26996bfb42c528af128697232328ba
+BELONGS ya.make
+    License text:
+         * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/aws/crt/Allocator.h [3:3]
+        include/aws/crt/Api.h [3:3]
+        include/aws/crt/Config.h [3:3]
+        include/aws/crt/DateTime.h [3:3]
+        include/aws/crt/ImdsClient.h [3:3]
+        include/aws/crt/JsonObject.h [3:3]
+        include/aws/crt/Optional.h [3:3]
+        include/aws/crt/RefCounted.h [3:3]
+        include/aws/crt/StlAllocator.h [3:3]
+        include/aws/crt/StringUtils.h [3:3]
+        include/aws/crt/StringView.h [3:3]
+        include/aws/crt/Types.h [3:3]
+        include/aws/crt/UUID.h [3:3]
+        include/aws/crt/auth/Credentials.h [3:3]
+        include/aws/crt/auth/Signing.h [3:3]
+        include/aws/crt/auth/Sigv4Signing.h [3:3]
+        include/aws/crt/crypto/HMAC.h [3:3]
+        include/aws/crt/crypto/Hash.h [3:3]
+        include/aws/crt/endpoints/RuleEngine.h [3:3]
+        include/aws/crt/http/HttpConnection.h [3:3]
+        include/aws/crt/http/HttpConnectionManager.h [3:3]
+        include/aws/crt/http/HttpProxyStrategy.h [3:3]
+        include/aws/crt/http/HttpRequestResponse.h [3:3]
+        include/aws/crt/io/Bootstrap.h [3:3]
+        include/aws/crt/io/ChannelHandler.h [3:3]
+        include/aws/crt/io/EventLoopGroup.h [3:3]
+        include/aws/crt/io/HostResolver.h [3:3]
+        include/aws/crt/io/Pkcs11.h [3:3]
+        include/aws/crt/io/SocketOptions.h [3:3]
+        include/aws/crt/io/Stream.h [3:3]
+        include/aws/crt/io/TlsOptions.h [3:3]
+        include/aws/crt/io/Uri.h [3:3]
+        include/aws/crt/mqtt/Mqtt5Client.h [3:3]
+        include/aws/crt/mqtt/Mqtt5Packets.h [3:3]
+        include/aws/crt/mqtt/Mqtt5Types.h [3:3]
+        include/aws/crt/mqtt/MqttClient.h [3:3]
+        include/aws/iot/Mqtt5Client.h [3:3]
+        include/aws/iot/MqttClient.h [3:3]
+        include/aws/iot/MqttCommon.h [3:3]
+        source/Allocator.cpp [2:2]
+        source/Api.cpp [2:2]
+        source/DateTime.cpp [2:2]
+        source/ImdsClient.cpp [2:2]
+        source/JsonObject.cpp [2:2]
+        source/StringUtils.cpp [2:2]
+        source/Types.cpp [2:2]
+        source/UUID.cpp [2:2]
+        source/auth/Credentials.cpp [2:2]
+        source/auth/Sigv4Signing.cpp [2:2]
+        source/crypto/HMAC.cpp [2:2]
+        source/crypto/Hash.cpp [2:2]
+        source/endpoints/RuleEngine.cpp [2:2]
+        source/http/HttpConnection.cpp [2:2]
+        source/http/HttpConnectionManager.cpp [2:2]
+        source/http/HttpProxyStrategy.cpp [2:2]
+        source/http/HttpRequestResponse.cpp [2:2]
+        source/io/Bootstrap.cpp [2:2]
+        source/io/ChannelHandler.cpp [2:2]
+        source/io/EventLoopGroup.cpp [2:2]
+        source/io/HostResolver.cpp [2:2]
+        source/io/Pkcs11.cpp [2:2]
+        source/io/SocketOptions.cpp [2:2]
+        source/io/Stream.cpp [2:2]
+        source/io/TlsOptions.cpp [2:2]
+        source/io/Uri.cpp [2:2]
+        source/iot/Mqtt5Client.cpp [2:2]
+        source/iot/MqttClient.cpp [2:2]
+        source/iot/MqttCommon.cpp [2:2]
+        source/mqtt/Mqtt5Client.cpp [2:2]
+        source/mqtt/Mqtt5Packets.cpp [2:2]
+        source/mqtt/MqttClient.cpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b31e8701a4bbdd2815b5622e4729c99e
+BELONGS ya.make
+    License text:
+         *Copyright 2010-2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/aws/crt/Exports.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b4214fdd3b33dc734c2a39eeb8734c7d
+BELONGS ya.make
+    License text:
+         * Copyright 2010-2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/aws/crt/external/cJSON.h [30:30]
+        source/external/cJSON.cpp [30:30]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bdcf211d81a69c0f282fb7543c1a24a7
+BELONGS ya.make
+    License text:
+          Copyright (c) 2009-2017 Dave Gamble and cJSON contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/aws/crt/external/cJSON.h [2:2]
+        source/external/cJSON.cpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fb2d0a655f9cc4d8930ae34bcc510fbe
+BELONGS ya.make
+    License text:
+        Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE [2:2]

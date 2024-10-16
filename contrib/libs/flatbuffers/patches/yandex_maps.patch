@@ -1,0 +1,50 @@
+commit f7ef3a38113d34baa5cea2f8ba448c41283db8b4
+author: trivias
+date: 2019-11-12T16:23:02+03:00
+revision: 5908421
+
+    Port mapsmobi iterator flatc extension to Arcadia flatc
+    
+    Расширение flatc, которое генерит заголовок, позволяющий читать flatbuffer произвольным классом с интерфейсом аналогичным void*.
+    Ревью в mapsmobi:
+    https://maps.crucible.yandex-team.ru/cru/CRMCORE-12050
+    
+    REVIEW: 1001396
+
+--- a/include/flatbuffers/idl.h
++++ b/include/flatbuffers/idl.h
+@@ -581,6 +581,7 @@ struct IDLOptions {
+     kRust = 1 << 14,
+     kKotlin = 1 << 15,
+     kSwift = 1 << 16,
++    kCppYandexMapsIter = 1 << 19,
+     kNim = 1 << 17,
+     kProto = 1 << 18,
+   };
+@@ -1071,2 +1072,11 @@ extern std::string GenerateFBS(const Parser &parser,
++// Generate a C++ header for reading with templated file iterator from
++// the definitions in the Parser object.
++// See idl_gen_cpp_yandex_maps_iter.cpp.
++extern std::string GenerateCPPYandexMapsIter(const Parser &parser,
++                               const std::string &include_guard_ident);
++extern bool GenerateCPPYandexMapsIter(const Parser &parser,
++                        const std::string &path,
++                        const std::string &file_name);
++
+ // Generate GRPC Cpp interfaces.
+ // See idl_gen_grpc.cpp.
+--- a/src/flatc_main.cpp
++++ b/src/flatc_main.cpp
+@@ -166,1 +166,6 @@ int main(int argc, const char *argv[]) {
+      flatbuffers::NewSwiftCodeGenerator());
++
++  flatc.RegisterCodeGenerator(
++      flatbuffers::FlatCOption{ "", "yandex-maps-iter", "",
++                                "Generate C++ template headers for tables/structs" },
++      flatbuffers::NewCppYandexMapsIterCodeGenerator());
+--- a/src/flatc_main.cpp
++++ b/src/flatc_main.cpp
+@@ -27,2 +27,3 @@
+ #include "idl_gen_cpp.h"
++ #include "idl_gen_cpp_yandex_maps_iter.h"
+ #include "idl_gen_csharp.h"

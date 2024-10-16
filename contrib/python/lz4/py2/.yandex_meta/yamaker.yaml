@@ -1,0 +1,4 @@
+requirements:
+  - contrib/libs/lz4
+  - future
+  - py3c

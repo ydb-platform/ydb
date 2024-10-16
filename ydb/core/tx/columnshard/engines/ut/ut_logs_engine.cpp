@@ -157,7 +157,7 @@ public:
         auto& columns = Indices[0].Columns;
         for (auto& [pathId, portions] : columns) {
             for (auto& [portionId, portionLocal] : portions) {
-                auto copy = portionLocal;
+                auto copy = NOlap::TPortionInfoConstructor::TTestCopier::Copy(portionLocal);
                 copy.MutableRecords().clear();
                 for (const auto& rec : portionLocal.GetRecords()) {
                     auto itContextLoader = LoadContexts[copy.GetAddress()].find(rec.GetAddress());
@@ -278,7 +278,7 @@ TString MakeTestBlob(i64 start = 0, i64 end = 100, ui32 step = 1) {
 void AddIdsToBlobs(std::vector<TWritePortionInfoWithBlobsResult>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs, ui32& step) {
     for (auto& portion : portions) {
         THashMap<TUnifiedBlobId, TString> blobsData;
-        for (auto& b : portion.GetBlobs()) {
+        for (auto& b : portion.MutableBlobs()) {
             const auto blobId = MakeUnifiedBlobId(++step, b.GetSize());
             b.RegisterBlobId(portion, blobId);
             blobsData.emplace(blobId, b.GetResultBlob());
@@ -481,21 +481,21 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         { // select from snap before insert
             ui64 planStep = 1;
             ui64 txId = 0;
-            auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false));
+            auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 0);
         }
 
         { // select from snap between insert (greater txId)
             ui64 planStep = 1;
             ui64 txId = 2;
-            auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false));
+            auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 0);
         }
 
         { // select from snap after insert (greater planStep)
             ui64 planStep = 2;
             ui64 txId = 1;
-            auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false));
+            auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK[0]->NumChunks(), columnIds.size() + TIndexInfo::GetSnapshotColumnIdsSet().size() - 1);
         }
@@ -503,7 +503,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         { // select another pathId
             ui64 planStep = 2;
             ui64 txId = 1;
-            auto selectInfo = engine.Select(paths[1], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false));
+            auto selectInfo = engine.Select(paths[1], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 0);
         }
     }
@@ -576,7 +576,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         { // full scan
             ui64 txId = 1;
-            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false));
+            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 20);
         }
 
@@ -590,7 +590,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             }
             NOlap::TPKRangesFilter pkFilter(false);
             Y_ABORT_UNLESS(pkFilter.Add(gt10k, nullptr, indexInfo.GetReplaceKey()));
-            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), pkFilter);
+            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), pkFilter, false);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 10);
         }
 
@@ -602,7 +602,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             }
             NOlap::TPKRangesFilter pkFilter(false);
             Y_ABORT_UNLESS(pkFilter.Add(nullptr, lt10k, indexInfo.GetReplaceKey()));
-            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), pkFilter);
+            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), pkFilter, false);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 9);
         }
     }
@@ -758,7 +758,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
             { // full scan
                 ui64 txId = 1;
-                auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false));
+                auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
                 UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 20);
             }
 
@@ -767,7 +767,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
             { // full scan
                 ui64 txId = 1;
-                auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false));
+                auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
                 UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 20);
             }
 
@@ -783,7 +783,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
             { // full scan
                 ui64 txId = 1;
-                auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false));
+                auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
                 UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 10);
             }
         }
@@ -798,7 +798,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
             { // full scan
                 ui64 txId = 1;
-                auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false));
+                auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
                 UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 10);
             }
         }

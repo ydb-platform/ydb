@@ -119,7 +119,7 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
         to->GetIndexInfo().AppendIndex(entityChunksNew, i.first, storages, secondaryData).Validate();
     }
 
-    const NSplitter::TEntityGroups groups = to->GetIndexInfo().GetEntityGroupsByStorageId(targetTier, *storages);
+    const NSplitter::TEntityGroups groups = source.PortionInfo.GetEntityGroupsByStorageId(targetTier, *storages, to->GetIndexInfo());
     auto schemaTo = std::make_shared<TDefaultSchemaDetails>(to, std::make_shared<NArrow::NSplitter::TSerializationStats>());
     TGeneralSerializedSlice slice(secondaryData.GetExternalData(), schemaTo, counters);
 

@@ -1,0 +1,291 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+# CONTRIBUTING.md describes contributing rules for patch upstreaming; it does not contain any legal information
+IGNORE_FILES CONTRIBUTING.md
+
+KEEP     Apache-2.0           2b42edef8fa55315f34f2370b4715ca9
+BELONGS ya.make
+FILE_INCLUDE NOTICE found in files: LICENSE at line 107, LICENSE at line 110, LICENSE at line 112, LICENSE at line 117, LICENSE at line 120, LICENSE at line 142
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE [2:202]
+
+KEEP     Public-Domain        4f1fe8159202f044650a04f00bc590ca
+BELONGS ya.make
+    License text:
+        if SELF_TEST is defined.  You can use this free for any purpose.  It's in
+        the public domain.  It has no warranty.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain-disclaimer
+        Score           : 94.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain-disclaimer.LICENSE
+    Files with this license:
+        include/aws/common/private/lookup3.inl [24:25]
+
+KEEP     Public-Domain        5b7627115f23e7c5f0d8e352a16d9353
+BELONGS ya.make
+    License text:
+         * The following public domain code has been modified as follows:
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        include/aws/common/private/lookup3.inl [9:9]
+
+KEEP     MIT                  5debb370f50e1dfd24ff5144233a2ef6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        include/aws/common/external/cJSON.h [4:20]
+        source/external/cJSON.c [4:20]
+
+KEEP     Apache-2.0           6c901454b872854c0dea3ec06b67701a
+BELONGS ya.make
+    License text:
+        \## License
+        This library is licensed under the Apache 2.0 License.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [8:10]
+
+KEEP     Public-Domain        6f73b312395754a90fe2614a46eb72b4
+BELONGS ya.make
+    License text:
+        lookup3.c, by Bob Jenkins, May 2006, Public Domain.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        include/aws/common/private/lookup3.inl [19:19]
+
+KEEP     Apache-2.0           7b04071babb9b8532292659e4abba7e3
+BELONGS ya.make
+    License text:
+        * Every source and header file must have a copyright header (The standard AWS one for apache 2).
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [206:206]
+
+KEEP     Apache-2.0           d3a6c1cb5b7a1e53a61f819a19149ee8
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        source/arch/arm/asm/cpuid.c [4:13]
+
+KEEP     Apache-2.0           d591512e466bb957030b8857f753349e
+BELONGS ya.make
+    License text:
+         * SPDX-License-Identifier: Apache-2.0.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        generated/include/aws/common/config.h [6:6]
+        include/aws/common/allocator.h [5:5]
+        include/aws/common/array_list.h [6:6]
+        include/aws/common/array_list.inl [6:6]
+        include/aws/common/assert.h [6:6]
+        include/aws/common/atomics.h [8:8]
+        include/aws/common/atomics.inl [6:6]
+        include/aws/common/atomics_fallback.inl [6:6]
+        include/aws/common/atomics_gnu.inl [6:6]
+        include/aws/common/atomics_gnu_old.inl [5:5]
+        include/aws/common/atomics_msvc.inl [6:6]
+        include/aws/common/byte_buf.h [5:5]
+        include/aws/common/byte_order.h [6:6]
+        include/aws/common/byte_order.inl [6:6]
+        include/aws/common/cache.h [5:5]
+        include/aws/common/clock.h [6:6]
+        include/aws/common/clock.inl [6:6]
+        include/aws/common/command_line_parser.h [5:5]
+        include/aws/common/common.h [6:6]
+        include/aws/common/condition_variable.h [6:6]
+        include/aws/common/cpuid.h [5:5]
+        include/aws/common/date_time.h [5:5]
+        include/aws/common/device_random.h [5:5]
+        include/aws/common/encoding.h [6:6]
+        include/aws/common/encoding.inl [6:6]
+        include/aws/common/environment.h [6:6]
+        include/aws/common/error.h [6:6]
+        include/aws/common/error.inl [6:6]
+        include/aws/common/exports.h [5:5]
+        include/aws/common/fifo_cache.h [5:5]
+        include/aws/common/file.h [5:5]
+        include/aws/common/hash_table.h [6:6]
+        include/aws/common/json.h [6:6]
+        include/aws/common/lifo_cache.h [5:5]
+        include/aws/common/linked_hash_table.h [5:5]
+        include/aws/common/linked_list.h [6:6]
+        include/aws/common/linked_list.inl [6:6]
+        include/aws/common/log_channel.h [7:7]
+        include/aws/common/log_formatter.h [7:7]
+        include/aws/common/log_writer.h [7:7]
+        include/aws/common/logging.h [6:6]
+        include/aws/common/lru_cache.h [5:5]
+        include/aws/common/macros.h [5:5]
+        include/aws/common/math.cbmc.inl [6:6]
+        include/aws/common/math.fallback.inl [6:6]
+        include/aws/common/math.gcc_arm64_asm.inl [6:6]
+        include/aws/common/math.gcc_builtin.inl [6:6]
+        include/aws/common/math.gcc_overflow.inl [6:6]
+        include/aws/common/math.gcc_x64_asm.inl [6:6]
+        include/aws/common/math.h [6:6]
+        include/aws/common/math.inl [6:6]
+        include/aws/common/math.msvc.inl [6:6]
+        include/aws/common/mutex.h [6:6]
+        include/aws/common/package.h [6:6]
+        include/aws/common/platform.h [6:6]
+        include/aws/common/posix/common.inl [3:3]
+        include/aws/common/predicates.h [5:5]
+        include/aws/common/priority_queue.h [5:5]
+        include/aws/common/private/array_list.h [6:6]
+        include/aws/common/private/byte_buf.h [5:5]
+        include/aws/common/private/dlloads.h [5:5]
+        include/aws/common/private/hash_table_impl.h [6:6]
+        include/aws/common/private/json_impl.h [6:6]
+        include/aws/common/private/thread_shared.h [5:5]
+        include/aws/common/private/xml_parser_impl.h [6:6]
+        include/aws/common/process.h [5:5]
+        include/aws/common/promise.h [3:3]
+        include/aws/common/ref_count.h [6:6]
+        include/aws/common/ring_buffer.h [5:5]
+        include/aws/common/ring_buffer.inl [5:5]
+        include/aws/common/rw_lock.h [6:6]
+        include/aws/common/statistics.h [6:6]
+        include/aws/common/stdbool.h [8:8]
+        include/aws/common/stdint.h [5:5]
+        include/aws/common/string.h [5:5]
+        include/aws/common/string.inl [5:5]
+        include/aws/common/system_info.h [6:6]
+        include/aws/common/task_scheduler.h [6:6]
+        include/aws/common/thread.h [6:6]
+        include/aws/common/thread_scheduler.h [5:5]
+        include/aws/common/time.h [5:5]
+        include/aws/common/uri.h [5:5]
+        include/aws/common/uuid.h [6:6]
+        include/aws/common/xml_parser.h [6:6]
+        include/aws/common/zero.h [6:6]
+        include/aws/common/zero.inl [6:6]
+        source/allocator.c [3:3]
+        source/allocator_sba.c [3:3]
+        source/arch/intel/asm/cpuid.c [3:3]
+        source/arch/intel/cpuid.c [3:3]
+        source/arch/intel/encoding_avx2.c [3:3]
+        source/array_list.c [3:3]
+        source/assert.c [3:3]
+        source/byte_buf.c [3:3]
+        source/cache.c [3:3]
+        source/codegen.c [3:3]
+        source/command_line_parser.c [3:3]
+        source/common.c [3:3]
+        source/condition_variable.c [3:3]
+        source/date_time.c [3:3]
+        source/device_random.c [3:3]
+        source/encoding.c [3:3]
+        source/error.c [3:3]
+        source/fifo_cache.c [3:3]
+        source/file.c [3:3]
+        source/hash_table.c [3:3]
+        source/json.c [3:3]
+        source/lifo_cache.c [3:3]
+        source/linked_hash_table.c [3:3]
+        source/log_channel.c [3:3]
+        source/log_formatter.c [3:3]
+        source/log_writer.c [3:3]
+        source/logging.c [3:3]
+        source/lru_cache.c [3:3]
+        source/math.c [3:3]
+        source/memtrace.c [3:3]
+        source/posix/clock.c [3:3]
+        source/posix/condition_variable.c [3:3]
+        source/posix/device_random.c [3:3]
+        source/posix/environment.c [3:3]
+        source/posix/file.c [3:3]
+        source/posix/mutex.c [3:3]
+        source/posix/process.c [3:3]
+        source/posix/rw_lock.c [3:3]
+        source/posix/system_info.c [3:3]
+        source/posix/thread.c [3:3]
+        source/posix/time.c [3:3]
+        source/priority_queue.c [3:3]
+        source/process_common.c [3:3]
+        source/promise.c [3:3]
+        source/ref_count.c [3:3]
+        source/ring_buffer.c [3:3]
+        source/statistics.c [3:3]
+        source/string.c [3:3]
+        source/task_scheduler.c [3:3]
+        source/thread_scheduler.c [3:3]
+        source/thread_shared.c [3:3]
+        source/uri.c [3:3]
+        source/uuid.c [3:3]
+        source/xml_parser.c [3:3]
+
+KEEP     BSD-3-Clause         dd558a10c2d5fddeacafae69996ee4f5
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        source/posix/time.c [17:41]

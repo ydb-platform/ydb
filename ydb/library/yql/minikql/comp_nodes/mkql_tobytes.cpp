@@ -2,6 +2,7 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/utils/swap_bytes.h>
 
 namespace NKikimr {
@@ -36,6 +37,30 @@ public:
         return result;
     }
 #endif
+};
+
+template<bool IsOptional>
+class TToBytesDecimalWrapper : public TMutableComputationNode<TToBytesDecimalWrapper<IsOptional>> {
+using TBaseComputation = TMutableComputationNode<TToBytesDecimalWrapper<IsOptional>>;
+public:
+    TToBytesDecimalWrapper(TComputationMutables& mutables, IComputationNode* data)
+        : TBaseComputation(mutables, EValueRepresentation::String)
+        , Data(data)
+    {}
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        const auto& value = this->Data->GetValue(ctx);
+        if (IsOptional && !value)
+            return NUdf::TUnboxedValuePod();
+
+        return MakeString(NUdf::TStringRef(reinterpret_cast<const char*>(&value), 15));
+    }
+
+    void RegisterDependencies() const final {
+        this->DependsOn(Data);
+    }
+
+    IComputationNode* const Data;
 };
 
 template<bool IsOptional, typename Type>
@@ -100,7 +125,16 @@ IComputationNode* WrapToBytes(TCallable& callable, const TComputationNodeFactory
         MAKE_TZ_TYPE_BYTES(NUdf::TTzDate, ui16);
         MAKE_TZ_TYPE_BYTES(NUdf::TTzDatetime, ui32);
         MAKE_TZ_TYPE_BYTES(NUdf::TTzTimestamp, ui64);
+        MAKE_TZ_TYPE_BYTES(NUdf::TTzDate32, i32);
+        MAKE_TZ_TYPE_BYTES(NUdf::TTzDatetime64, i64);
+        MAKE_TZ_TYPE_BYTES(NUdf::TTzTimestamp64, i64);
 #undef MAKE_TZ_TYPE_BYTES
+        case NUdf::TDataType<NUdf::TDecimal>::Id: {
+            if (isOptional) \
+                return new TToBytesDecimalWrapper<true>(ctx.Mutables, data);
+            else
+                return new TToBytesDecimalWrapper<false>(ctx.Mutables, data);
+        }
         default:
             break;
     }

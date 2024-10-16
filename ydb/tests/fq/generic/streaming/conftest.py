@@ -10,10 +10,14 @@ from ydb.tests.tools.fq_runner.kikimr_utils import start_kikimr
 
 from ydb.tests.fq.generic.utils.settings import Settings
 
+from typing import Final
+
+docker_compose_file_path: Final = "ydb/tests/fq/generic/streaming/docker-compose.yml"
+
 
 @pytest.fixture
 def settings() -> Settings:
-    return Settings.from_env(docker_compose_file_path='ydb/tests/fq/generic/streaming/docker-compose.yml')
+    return Settings.from_env(docker_compose_file_path=docker_compose_file_path)
 
 
 @pytest.fixture

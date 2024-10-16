@@ -46,14 +46,14 @@ void TProgressBar::Render()
     outputEnd += ToString(Capacity);
     outputEnd += "]";
 
-    if (barLen > output.Size() - 1) {
-        barLen -= output.Size() - 1;
+    if (barLen > output.size() - 1) {
+        barLen -= output.size() - 1;
     } else {
         barLen = 1;
     }
 
-    if (barLen > outputEnd.Size()) {
-        barLen -= outputEnd.Size();
+    if (barLen > outputEnd.size()) {
+        barLen -= outputEnd.size();
     } else {
         barLen = 1;
     }

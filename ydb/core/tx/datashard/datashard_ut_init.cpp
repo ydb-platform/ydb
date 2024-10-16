@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
                 if (rec.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
                     TString body = rec.GetTxBody();
                     NKikimrTxDataShard::TFlatSchemeTransaction tx;
-                    Y_PROTOBUF_SUPPRESS_NODISCARD tx.ParseFromArray(body.Data(), body.Size());
+                    Y_PROTOBUF_SUPPRESS_NODISCARD tx.ParseFromArray(body.data(), body.size());
                     if (tx.HasCreateTable()) {
                         tableId = tx.GetCreateTable().GetId_Deprecated();
                         if (tx.GetCreateTable().HasPathId()) {

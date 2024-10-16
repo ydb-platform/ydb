@@ -1,0 +1,69 @@
+diff --git a/include/__tuple/sfinae_helpers.h b/include/__tuple/sfinae_helpers.h
+index 2fffac9..ee55576 100644
+--- a/include/__tuple/sfinae_helpers.h
++++ b/include/__tuple/sfinae_helpers.h
+@@ -49,22 +49,24 @@ struct __tuple_sfinae_base {
+   static auto __do_test(...) -> false_type;
+ 
+   template <class _FromArgs, class _ToArgs>
+-  using __constructible = decltype(__do_test<is_constructible>(_ToArgs{}, _FromArgs{}));
++  using __constructible = decltype(__do_test<is_constructible>(declval<_ToArgs>(), declval<_FromArgs>()));
+   template <class _FromArgs, class _ToArgs>
+-  using __convertible = decltype(__do_test<is_convertible>(_FromArgs{}, _ToArgs{}));
++  using __convertible = decltype(__do_test<is_convertible>(declval<_FromArgs>(), declval<_ToArgs>()));
+   template <class _FromArgs, class _ToArgs>
+-  using __assignable = decltype(__do_test<is_assignable>(_ToArgs{}, _FromArgs{}));
++  using __assignable = decltype(__do_test<is_assignable>(declval<_ToArgs>(), declval<_FromArgs>()));
+ };
+ 
+ // __tuple_convertible
+ 
+ template <class _Tp, class _Up, bool = __tuple_like_ext<__libcpp_remove_reference_t<_Tp> >::value,
+-                                bool = __tuple_like_ext<_Up>::value>
++                                bool = __tuple_like_ext<_Up>::value,
++                class = void>
+ struct __tuple_convertible
+     : public false_type {};
+ 
+ template <class _Tp, class _Up>
+-struct __tuple_convertible<_Tp, _Up, true, true>
++struct __tuple_convertible<_Tp, _Up, true, true,
++                           typename enable_if<(tuple_size<typename remove_reference<_Tp>::type>::value == tuple_size<_Up>::value)>::type>
+     : public __tuple_sfinae_base::__convertible<
+       typename __make_tuple_types<_Tp>::type
+     , typename __make_tuple_types<_Up>::type
+diff --git a/include/__tuple/tuple_element.h b/include/__tuple/tuple_element.h
+index 478dd08..5d2c38f 100644
+--- a/include/__tuple/tuple_element.h
++++ b/include/__tuple/tuple_element.h
+@@ -64,6 +64,7 @@ __indexed<_Idx, _Tp> __at_index(__indexed<_Idx, _Tp> const&);
+ 
+ } // namespace __indexer_detail
+ 
++#if !defined(__CUDACC__) || !defined(_MSC_VER)
+ template <size_t _Idx, class ..._Types>
+ using __type_pack_element _LIBCPP_NODEBUG = typename decltype(
+     __indexer_detail::__at_index<_Idx>(
+@@ -72,7 +73,21 @@ using __type_pack_element _LIBCPP_NODEBUG = typename decltype(
+             typename __make_tuple_indices<sizeof...(_Types)>::type
+         >{})
+   )::type;
+-#endif
++#else // !defined(__CUDACC__) || !defined(_MSC_VER)
++template <size_t _Idx, class ..._Types>
++struct __y_type_pack_element {
++    using __t1 = typename __make_tuple_indices<sizeof...(_Types)>::type;
++    using __t2 = __indexer_detail::__indexer<__tuple_types<_Types...>, __t1>;
++    using __t3 = decltype(__indexer_detail::__at_index<_Idx>(__t2{}));
++    using __t4 = typename __t3::type;
++};
++
++template <size_t _Idx, class ..._Types>
++using __type_pack_element = typename __y_type_pack_element<_Idx, _Types...>::__t4;
++
++#endif // !defined(__CUDACC__) || !defined(_MSC_VER)
++
++#endif // __has_builtin(__type_pack_element)
+ 
+ template <size_t _Ip, class ..._Types>
+ struct _LIBCPP_TEMPLATE_VIS tuple_element<_Ip, __tuple_types<_Types...> >

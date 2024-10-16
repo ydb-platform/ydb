@@ -1,0 +1,145 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSL-1.0              2cc71fe4bd12718a9884bf7ff37269f3
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt or copy at
+        // http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/bimap.hpp [5:7]
+        include/boost/bimap/bimap.hpp [5:7]
+        include/boost/bimap/container_adaptor/associative_container_adaptor.hpp [5:7]
+        include/boost/bimap/container_adaptor/container_adaptor.hpp [5:7]
+        include/boost/bimap/container_adaptor/detail/comparison_adaptor.hpp [5:7]
+        include/boost/bimap/container_adaptor/detail/functor_bag.hpp [5:7]
+        include/boost/bimap/container_adaptor/detail/identity_converters.hpp [6:8]
+        include/boost/bimap/container_adaptor/detail/key_extractor.hpp [5:7]
+        include/boost/bimap/container_adaptor/detail/non_unique_container_helper.hpp [5:7]
+        include/boost/bimap/container_adaptor/list_adaptor.hpp [5:7]
+        include/boost/bimap/container_adaptor/list_map_adaptor.hpp [5:7]
+        include/boost/bimap/container_adaptor/map_adaptor.hpp [5:7]
+        include/boost/bimap/container_adaptor/multimap_adaptor.hpp [5:7]
+        include/boost/bimap/container_adaptor/multiset_adaptor.hpp [5:7]
+        include/boost/bimap/container_adaptor/ordered_associative_container_adaptor.hpp [5:7]
+        include/boost/bimap/container_adaptor/sequence_container_adaptor.hpp [5:7]
+        include/boost/bimap/container_adaptor/set_adaptor.hpp [5:7]
+        include/boost/bimap/container_adaptor/support/iterator_facade_converters.hpp [5:7]
+        include/boost/bimap/container_adaptor/unordered_associative_container_adaptor.hpp [5:7]
+        include/boost/bimap/container_adaptor/unordered_map_adaptor.hpp [5:7]
+        include/boost/bimap/container_adaptor/unordered_multimap_adaptor.hpp [5:7]
+        include/boost/bimap/container_adaptor/unordered_multiset_adaptor.hpp [5:7]
+        include/boost/bimap/container_adaptor/unordered_set_adaptor.hpp [5:7]
+        include/boost/bimap/container_adaptor/vector_adaptor.hpp [5:7]
+        include/boost/bimap/container_adaptor/vector_map_adaptor.hpp [5:7]
+        include/boost/bimap/detail/bimap_core.hpp [5:7]
+        include/boost/bimap/detail/concept_tags.hpp [5:7]
+        include/boost/bimap/detail/debug/static_error.hpp [5:7]
+        include/boost/bimap/detail/generate_index_binder.hpp [5:7]
+        include/boost/bimap/detail/generate_relation_binder.hpp [5:7]
+        include/boost/bimap/detail/generate_view_binder.hpp [5:7]
+        include/boost/bimap/detail/is_set_type_of.hpp [5:7]
+        include/boost/bimap/detail/manage_additional_parameters.hpp [5:7]
+        include/boost/bimap/detail/manage_bimap_key.hpp [5:7]
+        include/boost/bimap/detail/map_view_base.hpp [5:7]
+        include/boost/bimap/detail/map_view_iterator.hpp [5:7]
+        include/boost/bimap/detail/modifier_adaptor.hpp [5:7]
+        include/boost/bimap/detail/non_unique_views_helper.hpp [5:7]
+        include/boost/bimap/detail/set_view_base.hpp [5:7]
+        include/boost/bimap/detail/set_view_iterator.hpp [5:7]
+        include/boost/bimap/detail/test/check_metadata.hpp [5:7]
+        include/boost/bimap/detail/user_interface_config.hpp [5:7]
+        include/boost/bimap/list_of.hpp [5:7]
+        include/boost/bimap/multiset_of.hpp [5:7]
+        include/boost/bimap/property_map/set_support.hpp [5:7]
+        include/boost/bimap/property_map/unordered_set_support.hpp [5:7]
+        include/boost/bimap/relation/detail/access_builder.hpp [5:7]
+        include/boost/bimap/relation/detail/metadata_access_builder.hpp [5:7]
+        include/boost/bimap/relation/detail/mutant.hpp [5:7]
+        include/boost/bimap/relation/detail/static_access_builder.hpp [5:7]
+        include/boost/bimap/relation/detail/to_mutable_relation_functor.hpp [5:7]
+        include/boost/bimap/relation/member_at.hpp [5:7]
+        include/boost/bimap/relation/mutant_relation.hpp [5:7]
+        include/boost/bimap/relation/pair_layout.hpp [5:7]
+        include/boost/bimap/relation/structured_pair.hpp [5:7]
+        include/boost/bimap/relation/support/data_extractor.hpp [5:7]
+        include/boost/bimap/relation/support/get.hpp [5:7]
+        include/boost/bimap/relation/support/get_pair_functor.hpp [5:7]
+        include/boost/bimap/relation/support/is_tag_of_member_at.hpp [5:7]
+        include/boost/bimap/relation/support/member_with_tag.hpp [5:7]
+        include/boost/bimap/relation/support/opposite_tag.hpp [5:7]
+        include/boost/bimap/relation/support/pair_by.hpp [5:7]
+        include/boost/bimap/relation/support/pair_type_by.hpp [5:7]
+        include/boost/bimap/relation/support/value_type_of.hpp [5:7]
+        include/boost/bimap/relation/symmetrical_base.hpp [5:7]
+        include/boost/bimap/set_of.hpp [5:7]
+        include/boost/bimap/support/data_type_by.hpp [5:7]
+        include/boost/bimap/support/iterator_type_by.hpp [5:7]
+        include/boost/bimap/support/key_type_by.hpp [5:7]
+        include/boost/bimap/support/lambda.hpp [5:7]
+        include/boost/bimap/support/map_by.hpp [5:7]
+        include/boost/bimap/support/map_type_by.hpp [5:7]
+        include/boost/bimap/support/value_type_by.hpp [5:7]
+        include/boost/bimap/tags/support/apply_to_value_type.hpp [5:7]
+        include/boost/bimap/tags/support/default_tagged.hpp [5:7]
+        include/boost/bimap/tags/support/is_tagged.hpp [5:7]
+        include/boost/bimap/tags/support/overwrite_tagged.hpp [5:7]
+        include/boost/bimap/tags/support/tag_of.hpp [5:7]
+        include/boost/bimap/tags/support/value_type_of.hpp [5:7]
+        include/boost/bimap/tags/tagged.hpp [5:7]
+        include/boost/bimap/unconstrained_set_of.hpp [5:7]
+        include/boost/bimap/unordered_multiset_of.hpp [5:7]
+        include/boost/bimap/unordered_set_of.hpp [5:7]
+        include/boost/bimap/vector_of.hpp [5:7]
+        include/boost/bimap/views/list_map_view.hpp [5:7]
+        include/boost/bimap/views/list_set_view.hpp [5:7]
+        include/boost/bimap/views/map_view.hpp [5:7]
+        include/boost/bimap/views/multimap_view.hpp [5:7]
+        include/boost/bimap/views/multiset_view.hpp [5:7]
+        include/boost/bimap/views/set_view.hpp [5:7]
+        include/boost/bimap/views/unconstrained_map_view.hpp [5:7]
+        include/boost/bimap/views/unconstrained_set_view.hpp [5:7]
+        include/boost/bimap/views/unordered_map_view.hpp [5:7]
+        include/boost/bimap/views/unordered_multimap_view.hpp [5:7]
+        include/boost/bimap/views/unordered_multiset_view.hpp [5:7]
+        include/boost/bimap/views/unordered_set_view.hpp [5:7]
+        include/boost/bimap/views/vector_map_view.hpp [5:7]
+        include/boost/bimap/views/vector_set_view.hpp [5:7]

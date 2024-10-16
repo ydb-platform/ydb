@@ -48,6 +48,20 @@ SELECT * FROM mysql_datasource.<table_name>
 1. {% include [!](_includes/datetime_limits.md) %}
 1. {% include [!](_includes/predicate_pushdown.md) %}
 
+    |Тип данных {{ ydb-short-name }}|
+    |----|
+    |`Bool`|
+    |`Int8`|
+    |`Uint8`|
+    |`Int16`|
+    |`Uint16`|
+    |`Int32`|
+    |`Uint32`|
+    |`Int64`|
+    |`Uint64`|
+    |`Float`|
+    |`Double`|
+
 ## Поддерживаемые типы данных
 
 В базе данных MySQL признак опциональности значений колонки (разрешено или запрещено колонке содержать значения `NULL`) не является частью системы типов данных. Ограничение (constraint) `NOT NULL` для любой колонки любой таблицы хранится в виде значения столбца `IS_NULLABLE` системной таблицы [INFORMATION_SCHEMA.COLUMNS](https://dev.mysql.com/doc/refman/8.4/en/information-schema-columns-table.html), то есть на уровне метаданных таблицы. Следовательно, все базовые типы MySQL по умолчанию могут содержать значения `NULL`, и в системе типов {{ ydb-full-name }} они должны отображаться в [опциональные](../../yql/reference/types/optional.md) типы.

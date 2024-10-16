@@ -14,7 +14,7 @@ public:
         : Context(context)
         , CorrelationId(correlationId)
         , Message(message)
-        , WithProxy(context->Config.HasProxy() && !context->Config.GetProxy().GetHostname().Empty())
+        , WithProxy(context->Config.HasProxy() && !context->Config.GetProxy().GetHostname().empty())
         , Response(new TMetadataResponseData())
     {}
 

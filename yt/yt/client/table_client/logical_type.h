@@ -2,7 +2,7 @@
 
 #include "public.h"
 
-#include <yt/yt/client/table_client/row_base.h>
+#include "row_base.h"
 
 #include <yt/yt/core/yson/public.h>
 #include <yt/yt/core/ytree/public.h>

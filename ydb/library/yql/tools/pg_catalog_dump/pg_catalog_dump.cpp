@@ -102,7 +102,7 @@ int Main(int argc, const char *argv[])
         json.WriteKey("ret_type_fixed").WriteBool(retDesc.PassByValue &&
             retDesc.TypeLen > 0 && retDesc.TypeLen <= 8);
 
-        json.WriteKey("has_init_value").WriteBool(!desc.InitValue.Empty());
+        json.WriteKey("has_init_value").WriteBool(!desc.InitValue.empty());
         json.EndObject();
     });
 

@@ -62,6 +62,18 @@ protected:
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapColumn::TSerializer& proto) const override;
 
 public:
+    static std::shared_ptr<ISerializer> GetUncompressed() {
+        static std::shared_ptr<ISerializer> result =
+            std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::UNCOMPRESSED);
+        return result;
+    }
+
+    static std::shared_ptr<ISerializer> GetFast() {
+        static std::shared_ptr<ISerializer> result =
+            std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::LZ4_FRAME);
+        return result;
+    }
+
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
     }

@@ -9,12 +9,12 @@ TDataStorageAccessor::TDataStorageAccessor(const std::unique_ptr<TInsertTable>& 
     , Index(index) {
 }
 
-std::shared_ptr<TSelectInfo> TDataStorageAccessor::Select(const TReadDescription& readDescription) const {
+std::shared_ptr<TSelectInfo> TDataStorageAccessor::Select(const TReadDescription& readDescription, const bool withUncommitted) const {
     if (readDescription.ReadNothing) {
         return std::make_shared<TSelectInfo>();
     }
     AFL_VERIFY(readDescription.PKRangesFilter);
-    return Index->Select(readDescription.PathId, readDescription.GetSnapshot(), *readDescription.PKRangesFilter);
+    return Index->Select(readDescription.PathId, readDescription.GetSnapshot(), *readDescription.PKRangesFilter, withUncommitted);
 }
 
 ISnapshotSchema::TPtr TReadMetadataBase::GetLoadSchemaVerified(const TPortionInfo& portion) const {

@@ -37,7 +37,7 @@ namespace {
             }
         }
         
-        if (!operation.CreatedBy().Empty()) {
+        if (!operation.CreatedBy().empty()) {
             freeText << "Created by: " << operation.CreatedBy() << Endl;
         }
 
@@ -126,7 +126,7 @@ namespace {
 
         freeText << "TypeV3: " << (settings.UseTypeV3_ ? "true" : "false") << Endl;
 
-        if (!operation.CreatedBy().Empty()) {
+        if (!operation.CreatedBy().empty()) {
             freeText << "Created by: " << operation.CreatedBy() << Endl;
         }
 
@@ -192,7 +192,7 @@ namespace {
             freeText << "Number of retries: " << settings.NumberOfRetries_.GetRef() << Endl;
         }
 
-        if (!operation.CreatedBy().Empty()) {
+        if (!operation.CreatedBy().empty()) {
             freeText << "Created by: " << operation.CreatedBy() << Endl;
         }
 

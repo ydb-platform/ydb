@@ -88,6 +88,8 @@ struct IYsonStructParameter
     virtual IMapNodePtr GetRecursiveUnrecognized(const TYsonStructBase* self) const = 0;
 
     virtual void WriteSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const = 0;
+
+    virtual bool CompareParameter(const TYsonStructBase* lhsSelf, const TYsonStructBase* rhsSelf) const = 0;
 };
 
 DECLARE_REFCOUNTED_STRUCT(IYsonStructParameter)
@@ -127,6 +129,10 @@ struct IYsonStructMeta
     virtual void SetUnrecognizedStrategy(EUnrecognizedStrategy strategy) = 0;
 
     virtual void WriteSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer) const = 0;
+
+    virtual bool CompareStructs(
+        const TYsonStructBase* lhs,
+        const TYsonStructBase* rhs) const = 0;
 
     virtual ~IYsonStructMeta() = default;
 };
@@ -172,6 +178,10 @@ public:
     void WriteSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer) const override;
 
     void FinishInitialization(const std::type_info& structType);
+
+    bool CompareStructs(
+        const TYsonStructBase* lhs,
+        const TYsonStructBase* rhs) const override;
 
 private:
     friend class TYsonStructRegistry;
@@ -270,6 +280,8 @@ public:
     IMapNodePtr GetRecursiveUnrecognized(const TYsonStructBase* self) const override;
 
     void WriteSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const override;
+
+    bool CompareParameter(const TYsonStructBase* lhsSelf, const TYsonStructBase* rhsSelf) const override;
 
     // Mark as optional. Field will be default-initialized if `init` is true, initialization is skipped otherwise.
     TYsonStructParameter& Optional(bool init = true);

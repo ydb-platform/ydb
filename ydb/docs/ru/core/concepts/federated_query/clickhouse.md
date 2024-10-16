@@ -49,6 +49,20 @@ SELECT * FROM clickhouse_datasource.<table_name>
 1. {% include [!](_includes/datetime_limits.md) %}
 1. {% include [!](_includes/predicate_pushdown.md) %}
 
+    |Тип данных {{ ydb-short-name }}|
+    |----|
+    |`Bool`|
+    |`Int8`|
+    |`Uint8`|
+    |`Int16`|
+    |`Uint16`|
+    |`Int32`|
+    |`Uint32`|
+    |`Int64`|
+    |`Uint64`|
+    |`Float`|
+    |`Double`|
+
 ## Поддерживаемые типы данных
 
 По умолчанию в ClickHouse колонки физически не могут содержать значение `NULL`, однако пользователь имеет возможность создать таблицу с колонками опциональных, или [nullable](https://clickhouse.com/docs/ru/sql-reference/data-types/nullable) типов. Типы колонок, отображаемые {{ ydb-short-name }} при извлечении данных из внешней базы данных ClickHouse, будут зависеть от того, используются ли в таблице ClickHouse примитивные или опциональные типы. При этом в связи с рассмотренными выше ограничениями типов {{ ydb-short-name }}, использующихся для хранения дат и времени, все аналогичные типы ClickHouse отображаются в {{ ydb-short-name }} как [опциональные](../../yql/reference/types/optional.md).

@@ -1,0 +1,328 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Apache-2.0           353b7f53c15a69ee750c01ae193782e1
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        thrift/transport/TPipe.cpp [2:17]
+        thrift/windows/OverlappedSubmissionThread.cpp [2:17]
+
+KEEP     Apache-2.0           8583e8a40394a933bc5fbe9a68f522d9
+BELONGS compiler/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        compiler/thrift/common.cc [2:17]
+        compiler/thrift/common.h [2:17]
+        compiler/thrift/generate/t_as3_generator.cc [2:17]
+        compiler/thrift/generate/t_c_glib_generator.cc [2:17]
+        compiler/thrift/generate/t_cl_generator.cc [5:20]
+        compiler/thrift/generate/t_cocoa_generator.cc [2:17]
+        compiler/thrift/generate/t_cpp_generator.cc [2:17]
+        compiler/thrift/generate/t_csharp_generator.cc [2:17]
+        compiler/thrift/generate/t_d_generator.cc [2:17]
+        compiler/thrift/generate/t_dart_generator.cc [2:17]
+        compiler/thrift/generate/t_delphi_generator.cc [2:17]
+        compiler/thrift/generate/t_erl_generator.cc [2:17]
+        compiler/thrift/generate/t_generator.cc [2:17]
+        compiler/thrift/generate/t_generator.h [2:17]
+        compiler/thrift/generate/t_generator_registry.h [2:17]
+        compiler/thrift/generate/t_go_generator.cc [2:17]
+        compiler/thrift/generate/t_gv_generator.cc [2:17]
+        compiler/thrift/generate/t_haxe_generator.cc [2:17]
+        compiler/thrift/generate/t_hs_generator.cc [2:17]
+        compiler/thrift/generate/t_html_generator.cc [2:17]
+        compiler/thrift/generate/t_java_generator.cc [2:17]
+        compiler/thrift/generate/t_javame_generator.cc [2:17]
+        compiler/thrift/generate/t_js_generator.cc [2:17]
+        compiler/thrift/generate/t_json_generator.cc [2:17]
+        compiler/thrift/generate/t_lua_generator.cc [2:17]
+        compiler/thrift/generate/t_netcore_generator.cc [2:17]
+        compiler/thrift/generate/t_ocaml_generator.cc [2:17]
+        compiler/thrift/generate/t_oop_generator.h [2:17]
+        compiler/thrift/generate/t_perl_generator.cc [2:17]
+        compiler/thrift/generate/t_php_generator.cc [2:17]
+        compiler/thrift/generate/t_py_generator.cc [2:17]
+        compiler/thrift/generate/t_rb_generator.cc [2:17]
+        compiler/thrift/generate/t_rs_generator.cc [2:17]
+        compiler/thrift/generate/t_st_generator.cc [2:17]
+        compiler/thrift/generate/t_swift_generator.cc [2:17]
+        compiler/thrift/generate/t_xml_generator.cc [2:17]
+        compiler/thrift/generate/t_xsd_generator.cc [2:17]
+        compiler/thrift/globals.h [2:17]
+        compiler/thrift/logging.cc [2:17]
+        compiler/thrift/logging.h [2:17]
+        compiler/thrift/main.cc [2:17]
+        compiler/thrift/main.h [2:17]
+        compiler/thrift/parse/parse.cc [2:17]
+        compiler/thrift/parse/t_base_type.h [2:17]
+        compiler/thrift/parse/t_const.h [2:17]
+        compiler/thrift/parse/t_const_value.h [2:17]
+        compiler/thrift/parse/t_container.h [2:17]
+        compiler/thrift/parse/t_doc.h [2:17]
+        compiler/thrift/parse/t_enum.h [2:17]
+        compiler/thrift/parse/t_enum_value.h [2:17]
+        compiler/thrift/parse/t_field.h [2:17]
+        compiler/thrift/parse/t_function.h [2:17]
+        compiler/thrift/parse/t_list.h [2:17]
+        compiler/thrift/parse/t_map.h [2:17]
+        compiler/thrift/parse/t_program.h [2:17]
+        compiler/thrift/parse/t_scope.h [2:17]
+        compiler/thrift/parse/t_service.h [2:17]
+        compiler/thrift/parse/t_set.h [2:17]
+        compiler/thrift/parse/t_struct.h [2:17]
+        compiler/thrift/parse/t_type.h [2:17]
+        compiler/thrift/parse/t_typedef.cc [2:17]
+        compiler/thrift/parse/t_typedef.h [2:17]
+        compiler/thrift/platform.h [2:17]
+        compiler/thrift/plugin/plugin.cc [2:17]
+        compiler/thrift/plugin/plugin.h [2:17]
+        compiler/thrift/plugin/plugin.thrift [2:17]
+        compiler/thrift/plugin/plugin_output.cc [2:17]
+        compiler/thrift/plugin/plugin_output.h [2:17]
+        compiler/thrift/plugin/type_util.h [2:17]
+        compiler/thrift/thriftl.cc [1105:1120]
+        compiler/thrift/thriftl.ll [2:17]
+        compiler/thrift/thrifty.cc [68:83]
+        compiler/thrift/thrifty.yy [6:21]
+        compiler/thrift/version.h [2:17]
+        compiler/thrift/version.h.in [2:17]
+        compiler/thrift/windows/config.h [2:17]
+        thrift/TApplicationException.cpp [2:17]
+        thrift/TApplicationException.h [2:17]
+        thrift/TBase.h [2:17]
+        thrift/TDispatchProcessor.h [2:17]
+        thrift/TLogging.h [2:17]
+        thrift/TOutput.cpp [2:17]
+        thrift/TOutput.h [2:17]
+        thrift/TProcessor.h [2:17]
+        thrift/TToString.h [2:17]
+        thrift/Thrift.h [2:17]
+        thrift/VirtualProfiling.cpp [2:17]
+        thrift/async/TAsyncBufferProcessor.h [2:17]
+        thrift/async/TAsyncChannel.cpp [2:17]
+        thrift/async/TAsyncChannel.h [2:17]
+        thrift/async/TAsyncDispatchProcessor.h [2:17]
+        thrift/async/TAsyncProcessor.h [2:17]
+        thrift/async/TAsyncProtocolProcessor.cpp [2:17]
+        thrift/async/TAsyncProtocolProcessor.h [2:17]
+        thrift/async/TConcurrentClientSyncInfo.cpp [2:17]
+        thrift/async/TConcurrentClientSyncInfo.h [2:17]
+        thrift/async/TEvhttpClientChannel.cpp [2:17]
+        thrift/async/TEvhttpClientChannel.h [2:17]
+        thrift/async/TEvhttpServer.cpp [2:17]
+        thrift/async/TEvhttpServer.h [2:17]
+        thrift/concurrency/Exception.h [2:17]
+        thrift/concurrency/FunctionRunner.h [2:17]
+        thrift/concurrency/Monitor.h [2:17]
+        thrift/concurrency/Mutex.h [2:17]
+        thrift/concurrency/PlatformThreadFactory.h [2:17]
+        thrift/concurrency/StdMonitor.cpp [2:17]
+        thrift/concurrency/StdMutex.cpp [2:17]
+        thrift/concurrency/StdThreadFactory.cpp [2:17]
+        thrift/concurrency/StdThreadFactory.h [2:17]
+        thrift/concurrency/Thread.h [2:17]
+        thrift/concurrency/ThreadManager.cpp [2:17]
+        thrift/concurrency/ThreadManager.h [2:17]
+        thrift/concurrency/TimerManager.cpp [2:17]
+        thrift/concurrency/TimerManager.h [2:17]
+        thrift/concurrency/Util.cpp [2:17]
+        thrift/concurrency/Util.h [2:17]
+        thrift/processor/PeekProcessor.cpp [2:17]
+        thrift/processor/PeekProcessor.h [2:17]
+        thrift/processor/StatsProcessor.h [2:17]
+        thrift/processor/TMultiplexedProcessor.h [2:17]
+        thrift/protocol/TBase64Utils.cpp [2:17]
+        thrift/protocol/TBase64Utils.h [2:17]
+        thrift/protocol/TBinaryProtocol.h [2:17]
+        thrift/protocol/TBinaryProtocol.tcc [2:17]
+        thrift/protocol/TCompactProtocol.h [2:17]
+        thrift/protocol/TCompactProtocol.tcc [2:17]
+        thrift/protocol/TDebugProtocol.cpp [2:17]
+        thrift/protocol/TDebugProtocol.h [2:17]
+        thrift/protocol/THeaderProtocol.cpp [2:17]
+        thrift/protocol/THeaderProtocol.h [2:17]
+        thrift/protocol/TJSONProtocol.cpp [2:17]
+        thrift/protocol/TJSONProtocol.h [2:17]
+        thrift/protocol/TMultiplexedProtocol.cpp [2:17]
+        thrift/protocol/TMultiplexedProtocol.h [2:17]
+        thrift/protocol/TProtocol.cpp [2:17]
+        thrift/protocol/TProtocol.h [2:17]
+        thrift/protocol/TProtocolDecorator.h [2:17]
+        thrift/protocol/TProtocolException.h [2:17]
+        thrift/protocol/TProtocolTap.h [2:17]
+        thrift/protocol/TProtocolTypes.h [2:17]
+        thrift/protocol/TVirtualProtocol.h [2:17]
+        thrift/qt/TQIODeviceTransport.cpp [2:17]
+        thrift/qt/TQIODeviceTransport.h [2:17]
+        thrift/qt/TQTcpServer.cpp [2:17]
+        thrift/qt/TQTcpServer.h [2:17]
+        thrift/server/TConnectedClient.cpp [2:17]
+        thrift/server/TConnectedClient.h [2:17]
+        thrift/server/TNonblockingServer.cpp [2:17]
+        thrift/server/TNonblockingServer.h [2:17]
+        thrift/server/TServer.cpp [2:17]
+        thrift/server/TServer.h [2:17]
+        thrift/server/TServerFramework.cpp [2:17]
+        thrift/server/TServerFramework.h [2:17]
+        thrift/server/TSimpleServer.cpp [2:17]
+        thrift/server/TSimpleServer.h [2:17]
+        thrift/server/TThreadPoolServer.cpp [2:17]
+        thrift/server/TThreadPoolServer.h [2:17]
+        thrift/server/TThreadedServer.cpp [2:17]
+        thrift/server/TThreadedServer.h [2:17]
+        thrift/stdcxx.h [2:17]
+        thrift/thrift-config.h [2:17]
+        thrift/transport/PlatformSocket.h [2:17]
+        thrift/transport/TBufferTransports.cpp [2:17]
+        thrift/transport/TBufferTransports.h [2:17]
+        thrift/transport/TFDTransport.cpp [2:17]
+        thrift/transport/TFDTransport.h [2:17]
+        thrift/transport/TFileTransport.cpp [2:17]
+        thrift/transport/TFileTransport.h [2:17]
+        thrift/transport/THeaderTransport.cpp [2:17]
+        thrift/transport/THeaderTransport.h [2:17]
+        thrift/transport/THttpClient.cpp [2:17]
+        thrift/transport/THttpClient.h [2:17]
+        thrift/transport/THttpServer.cpp [2:17]
+        thrift/transport/THttpServer.h [2:17]
+        thrift/transport/THttpTransport.cpp [2:17]
+        thrift/transport/THttpTransport.h [2:17]
+        thrift/transport/TNonblockingSSLServerSocket.cpp [2:17]
+        thrift/transport/TNonblockingSSLServerSocket.h [2:17]
+        thrift/transport/TNonblockingServerSocket.cpp [2:17]
+        thrift/transport/TNonblockingServerSocket.h [2:17]
+        thrift/transport/TNonblockingServerTransport.h [2:17]
+        thrift/transport/TPipe.h [2:17]
+        thrift/transport/TPipeServer.cpp [2:17]
+        thrift/transport/TPipeServer.h [2:17]
+        thrift/transport/TSSLServerSocket.cpp [2:17]
+        thrift/transport/TSSLServerSocket.h [2:17]
+        thrift/transport/TSSLSocket.cpp [2:17]
+        thrift/transport/TSSLSocket.h [2:17]
+        thrift/transport/TServerSocket.cpp [2:17]
+        thrift/transport/TServerSocket.h [2:17]
+        thrift/transport/TServerTransport.h [2:17]
+        thrift/transport/TShortReadTransport.h [2:17]
+        thrift/transport/TSimpleFileTransport.cpp [2:17]
+        thrift/transport/TSimpleFileTransport.h [2:17]
+        thrift/transport/TSocket.cpp [2:17]
+        thrift/transport/TSocket.h [2:17]
+        thrift/transport/TSocketPool.cpp [2:17]
+        thrift/transport/TSocketPool.h [2:17]
+        thrift/transport/TTransport.h [2:17]
+        thrift/transport/TTransportException.cpp [2:17]
+        thrift/transport/TTransportException.h [2:17]
+        thrift/transport/TTransportUtils.cpp [2:17]
+        thrift/transport/TTransportUtils.h [2:17]
+        thrift/transport/TVirtualTransport.h [2:17]
+        thrift/transport/TZlibTransport.cpp [2:17]
+        thrift/transport/TZlibTransport.h [2:17]
+        thrift/windows/GetTimeOfDay.cpp [2:17]
+        thrift/windows/GetTimeOfDay.h [2:17]
+        thrift/windows/Operators.h [2:17]
+        thrift/windows/OverlappedSubmissionThread.h [2:17]
+        thrift/windows/SocketPair.cpp [12:27]
+        thrift/windows/SocketPair.h [2:17]
+        thrift/windows/Sync.h [2:17]
+        thrift/windows/TWinsockSingleton.cpp [2:17]
+        thrift/windows/TWinsockSingleton.h [2:17]
+        thrift/windows/WinFcntl.cpp [2:17]
+        thrift/windows/WinFcntl.h [2:17]
+        thrift/windows/config.h [2:17]
+
+KEEP     Apache-2.0           9020eb91c0b53327fba333a3d00407b7
+BELONGS compiler/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        compiler/thrift/plugin/Makefile.am [2:17]
+
+KEEP     Apache-2.0           9dbe1b4d928b8e28ca55048c70d8bad2
+BELONGS compiler/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        compiler/thrift/generate/t_html_generator.h [6:7]
+
+KEEP     GPL-3.0-or-later WITH Bison-exception-2.2 a1a13d070d6688e9c508f055e129a5bc
+BELONGS compiler/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 92.02
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        compiler/thrift/thrifty.hh [1:31]
+    Scancode info:
+        Original SPDX id: Bison-exception-2.2
+        Score           : 92.02
+        Match type      : NOTICE
+        Links           : https://spdx.org/licenses/Bison-exception-2.2
+    Files with this license:
+        compiler/thrift/thrifty.hh [1:31]
+
+KEEP     GPL-3.0-or-later WITH Bison-exception-2.2 d514084a37be4aa60dda15660d0fb31e
+BELONGS compiler/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 92.02
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        compiler/thrift/thrifty.cc [1:31]
+    Scancode info:
+        Original SPDX id: Bison-exception-2.2
+        Score           : 92.02
+        Match type      : NOTICE
+        Links           : https://spdx.org/licenses/Bison-exception-2.2
+    Files with this license:
+        compiler/thrift/thrifty.cc [1:31]

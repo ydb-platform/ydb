@@ -68,8 +68,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("max", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("max", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2050: return MakePgAgg_max_2050().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     case 2115: return MakePgAgg_max_2115().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
@@ -167,8 +168,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("min", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("min", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2051: return MakePgAgg_min_2051().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     case 2131: return MakePgAgg_min_2131().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
@@ -236,8 +238,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("avg", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("avg", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2100: return MakePgAgg_avg_2100().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     case 2101: return MakePgAgg_avg_2101().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
@@ -292,8 +295,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("sum", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("sum", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2107: return MakePgAgg_sum_2107().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     case 2108: return MakePgAgg_sum_2108().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
@@ -337,8 +341,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("count", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("count", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2147: return MakePgAgg_count_2147().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     case 2803: return MakePgAgg_count_2803().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
@@ -384,8 +389,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("variance", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("variance", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2148: return MakePgAgg_variance_2148().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     case 2149: return MakePgAgg_variance_2149().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
@@ -435,8 +441,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("stddev", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("stddev", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2154: return MakePgAgg_stddev_2154().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     case 2155: return MakePgAgg_stddev_2155().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
@@ -482,8 +489,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("bit_and", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("bit_and", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2236: return MakePgAgg_bit_and_2236().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     case 2238: return MakePgAgg_bit_and_2238().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
@@ -527,8 +535,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("bit_or", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("bit_or", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2237: return MakePgAgg_bit_or_2237().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     case 2239: return MakePgAgg_bit_or_2239().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
@@ -568,8 +577,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("array_agg", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("array_agg", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2335: return MakePgAgg_array_agg_2335().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     case 4053: return MakePgAgg_array_agg_4053().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
@@ -605,8 +615,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("bool_and", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("bool_and", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2517: return MakePgAgg_bool_and_2517().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     default: throw yexception() << "Unsupported agg id: " << aggDesc.AggId;
@@ -641,8 +652,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("bool_or", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("bool_or", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2518: return MakePgAgg_bool_or_2518().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     default: throw yexception() << "Unsupported agg id: " << aggDesc.AggId;
@@ -677,8 +689,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("every", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("every", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2519: return MakePgAgg_every_2519().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     default: throw yexception() << "Unsupported agg id: " << aggDesc.AggId;
@@ -723,8 +736,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("var_samp", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("var_samp", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2641: return MakePgAgg_var_samp_2641().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     case 2642: return MakePgAgg_var_samp_2642().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
@@ -774,8 +788,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("stddev_samp", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("stddev_samp", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2712: return MakePgAgg_stddev_samp_2712().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     case 2713: return MakePgAgg_stddev_samp_2713().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
@@ -825,8 +840,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("var_pop", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("var_pop", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2718: return MakePgAgg_var_pop_2718().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     case 2719: return MakePgAgg_var_pop_2719().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
@@ -876,8 +892,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("stddev_pop", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("stddev_pop", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2724: return MakePgAgg_stddev_pop_2724().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     case 2725: return MakePgAgg_stddev_pop_2725().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
@@ -917,8 +934,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("regr_count", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("regr_count", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2818: return MakePgAgg_regr_count_2818().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     default: throw yexception() << "Unsupported agg id: " << aggDesc.AggId;
@@ -953,8 +971,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("regr_sxx", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("regr_sxx", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2819: return MakePgAgg_regr_sxx_2819().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     default: throw yexception() << "Unsupported agg id: " << aggDesc.AggId;
@@ -989,8 +1008,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("regr_syy", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("regr_syy", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2820: return MakePgAgg_regr_syy_2820().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     default: throw yexception() << "Unsupported agg id: " << aggDesc.AggId;
@@ -1025,8 +1045,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("regr_sxy", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("regr_sxy", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2821: return MakePgAgg_regr_sxy_2821().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     default: throw yexception() << "Unsupported agg id: " << aggDesc.AggId;
@@ -1061,8 +1082,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("regr_avgx", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("regr_avgx", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2822: return MakePgAgg_regr_avgx_2822().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     default: throw yexception() << "Unsupported agg id: " << aggDesc.AggId;
@@ -1097,8 +1119,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("regr_avgy", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("regr_avgy", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2823: return MakePgAgg_regr_avgy_2823().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     default: throw yexception() << "Unsupported agg id: " << aggDesc.AggId;
@@ -1133,8 +1156,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("regr_r2", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("regr_r2", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2824: return MakePgAgg_regr_r2_2824().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     default: throw yexception() << "Unsupported agg id: " << aggDesc.AggId;
@@ -1169,8 +1193,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("regr_slope", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("regr_slope", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2825: return MakePgAgg_regr_slope_2825().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     default: throw yexception() << "Unsupported agg id: " << aggDesc.AggId;
@@ -1205,8 +1230,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("regr_intercept", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("regr_intercept", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2826: return MakePgAgg_regr_intercept_2826().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     default: throw yexception() << "Unsupported agg id: " << aggDesc.AggId;
@@ -1241,8 +1267,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("covar_pop", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("covar_pop", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2827: return MakePgAgg_covar_pop_2827().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     default: throw yexception() << "Unsupported agg id: " << aggDesc.AggId;
@@ -1277,8 +1304,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("covar_samp", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("covar_samp", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2828: return MakePgAgg_covar_samp_2828().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     default: throw yexception() << "Unsupported agg id: " << aggDesc.AggId;
@@ -1313,8 +1341,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("corr", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("corr", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 2829: return MakePgAgg_corr_2829().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     default: throw yexception() << "Unsupported agg id: " << aggDesc.AggId;
@@ -1351,8 +1380,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("string_agg", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("string_agg", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 3538: return MakePgAgg_string_agg_3538().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     case 3545: return MakePgAgg_string_agg_3545().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
@@ -1390,8 +1420,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("range_intersect_agg", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("range_intersect_agg", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 4389: return MakePgAgg_range_intersect_agg_4389().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     case 4450: return MakePgAgg_range_intersect_agg_4450().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
@@ -1433,8 +1464,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("bit_xor", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("bit_xor", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 6164: return MakePgAgg_bit_xor_6164().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     case 6165: return MakePgAgg_bit_xor_6165().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
@@ -1472,8 +1504,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     TTupleType* tupleType,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) const final {
-    const auto& aggDesc = ResolveAggregation("any_value", tupleType, argsColumns, returnType);
+    TType* returnType,
+    ui32 hint) const final {
+    const auto& aggDesc = ResolveAggregation("any_value", tupleType, argsColumns, returnType, hint);
     switch (aggDesc.AggId) {
     case 6291: return MakePgAgg_any_value_6291().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     default: throw yexception() << "Unsupported agg id: " << aggDesc.AggId;

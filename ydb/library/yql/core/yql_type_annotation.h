@@ -293,7 +293,7 @@ inline TString SerializeBinary(const T& value) {
 
 template <typename T>
 inline T DeserializeBinary(const TString& value) {
-    return *(const T*)value.Data();
+    return *(const T*)value.data();
 }
 
 template <typename T>

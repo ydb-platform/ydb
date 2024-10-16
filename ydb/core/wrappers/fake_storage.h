@@ -5,12 +5,8 @@
 #include "abstract.h"
 
 #include <ydb/core/base/events.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-
+#include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
-
-#include <util/string/builder.h>
-#include <util/string/printf.h>
 
 namespace NKikimr::NWrappers::NExternalStorage {
 class TFakeBucketStorage {

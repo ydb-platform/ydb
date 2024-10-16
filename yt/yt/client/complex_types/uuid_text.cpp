@@ -45,7 +45,7 @@ void TextYqlUuidToBytes(TStringBuf uuid, char* ptr)
         }
     };
 
-    const char* input = uuid.Data();
+    const char* input = uuid.data();
     for (int i = 3; i >= 0; --i) {
         *ptr++ = parseByte(input + 2 * i);
     }
@@ -115,7 +115,7 @@ TGuid GuidFromBytes(TStringBuf bytes)
     // https://a.yandex-team.ru/arc/trunk/arcadia/yt/yt/client/formats/skiff_yson_converter-inl.h?rev=r8579019#L124
 
     CheckUuidSize(bytes);
-    const char* ptr = bytes.Data();
+    const char* ptr = bytes.data();
     auto low = InetToHost(ReadUnaligned<ui64>(ptr + sizeof(ui64)));
     auto high = InetToHost(ReadUnaligned<ui64>(ptr));
 

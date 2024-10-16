@@ -166,20 +166,24 @@ public:
         , GhostQueue(limit)
     {}
 
-    TPage* EvictNext() override {
+    TIntrusiveList<TPage> EvictNext() override {
         if (SmallQueue.Queue.Empty() && MainQueue.Queue.Empty()) {
-            return nullptr;
+            return {};
         }
 
         // TODO: account passive pages inside the cache
         TLimit savedLimit = std::exchange(Limit, TLimit(SmallQueue.Size + MainQueue.Size - 1));
 
-        TPage* evictedPage = EvictOneIfFull();
-        Y_DEBUG_ABORT_UNLESS(evictedPage);
+        TIntrusiveList<TPage> evictedList;
+        if (TPage* evictedPage = EvictOneIfFull()) {
+            evictedList.PushBack(evictedPage);
+        } else {
+            Y_DEBUG_ABORT("Unexpected empty eviction");
+        }
         
         Limit = savedLimit;
 
-        return evictedPage;
+        return evictedList;
     }
 
     TIntrusiveList<TPage> Touch(TPage* page) override {

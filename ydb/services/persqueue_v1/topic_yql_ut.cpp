@@ -35,7 +35,8 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
             CREATE TOPIC `/Root/PQ/rt3.dc1--legacy--topic1` (
                 CONSUMER c1
             ) WITH (min_active_partitions = 2,
-                    partition_count_limit = 5
+                    partition_count_limit = 5,
+                    auto_partitioning_strategy = 'scale_up'
             );
         )__";
 

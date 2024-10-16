@@ -1,12 +1,10 @@
 #include "blob_reader.h"
 
+#include "comparator.h"
 #include "name_table.h"
 #include "schema.h"
-
-#include <yt/yt/client/table_client/comparator.h>
-#include <yt/yt/client/table_client/row_batch.h>
-#include <yt/yt/client/table_client/unversioned_reader.h>
-#include <yt/yt/client/table_client/unversioned_row.h>
+#include "row_batch.h"
+#include "unversioned_row.h"
 
 #include <yt/yt/core/concurrency/async_stream.h>
 

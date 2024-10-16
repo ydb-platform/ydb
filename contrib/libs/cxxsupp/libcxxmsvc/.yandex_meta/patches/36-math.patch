@@ -1,0 +1,32 @@
+diff --git a/include/math.h b/include/math.h
+index 62fcc62..a409b61 100644
+--- a/include/math.h
++++ b/include/math.h
+@@ -1658,10 +1658,10 @@ rint(_A1 __lcpp_x) _NOEXCEPT
+ 
+ inline _LIBCPP_INLINE_VISIBILITY float       round(float __lcpp_x) _NOEXCEPT
+ {
+-#if __has_builtin(__builtin_round)
+-    return __builtin_round(__lcpp_x);
++#if __has_builtin(__builtin_roundf)
++    return __builtin_roundf(__lcpp_x);
+ #else
+-    return ::round(__lcpp_x);
++    return ::roundf(__lcpp_x);
+ #endif
+ }
+ inline _LIBCPP_INLINE_VISIBILITY long double round(long double __lcpp_x) _NOEXCEPT
+@@ -1719,10 +1719,10 @@ tgamma(_A1 __lcpp_x) _NOEXCEPT {return ::tgamma((double)__lcpp_x);}
+ 
+ inline _LIBCPP_INLINE_VISIBILITY float       trunc(float __lcpp_x) _NOEXCEPT
+ {
+-#if __has_builtin(__builtin_trunc)
+-    return __builtin_trunc(__lcpp_x);
++#if __has_builtin(__builtin_truncf)
++    return __builtin_truncf(__lcpp_x);
+ #else
+-    return ::trunc(__lcpp_x);
++    return ::truncf(__lcpp_x);
+ #endif
+ }
+ inline _LIBCPP_INLINE_VISIBILITY long double trunc(long double __lcpp_x) _NOEXCEPT

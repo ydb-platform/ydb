@@ -332,6 +332,11 @@ namespace {
             else if (option.IsAtom("join_algo")) {
                 //do nothing
             }
+            else if (option.IsAtom("compact")) {
+                if (!EnsureTupleSize(*child, 1, ctx)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
             else {
                 ctx.AddError(TIssue(ctx.GetPosition(option.Pos()), TStringBuilder() <<
                     "Unknown option name: " << option.Content()));
@@ -774,6 +779,8 @@ IGraphTransformer::TStatus ValidateEquiJoinOptions(TPositionHandle positionHandl
             // do nothing
         } else if (optionName == "join_algo") {
             // do nothing
+        } else if (optionName == "compact") {
+            options.Compact = true;
         } else {
             ctx.AddError(TIssue(position, TStringBuilder() <<
                 "Unknown option name: " << optionName));
@@ -1345,8 +1352,12 @@ TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings) {
 
     result.ForceSortedMerge = HasSetting(linkSettings, "forceSortedMerge");
     
-    if(HasSetting(linkSettings, "forceStreamLookup")) {
+    if (HasSetting(linkSettings, "forceStreamLookup")) {
         result.JoinAlgo = EJoinAlgoType::StreamLookupJoin;
+    }
+
+    if (HasSetting(linkSettings, "compact")) {
+        result.Compact = true;
     }
 
     return result;
@@ -1380,6 +1391,10 @@ TExprNode::TPtr BuildEquiJoinLinkSettings(const TEquiJoinLinkSettings& linkSetti
 
     if (linkSettings.RightHints) {
         settings.push_back(builder("right"));
+    }
+
+    if (linkSettings.Compact) {
+        settings.push_back(ctx.NewList(linkSettings.Pos, { ctx.NewAtom(linkSettings.Pos, "compact", TNodeFlags::Default) }));
     }
 
     return ctx.NewList(linkSettings.Pos, std::move(settings));

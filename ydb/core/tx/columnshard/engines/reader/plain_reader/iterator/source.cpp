@@ -66,8 +66,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
         for (auto&& c : columnChunks) {
             AFL_VERIFY(!itFinished);
             if (!itFilter.IsBatchForSkip(c->GetMeta().GetNumRows())) {
-                auto reading =
-                    blobsAction.GetReading(Schema->GetIndexInfo().GetColumnStorageId(c->GetColumnId(), Portion->GetMeta().GetTierName()));
+                auto reading = blobsAction.GetReading(Portion->GetColumnStorageId(c->GetColumnId(), Schema->GetIndexInfo()));
                 reading->SetIsBackgroundProcess(false);
                 reading->AddRange(Portion->RestoreBlobRange(c->BlobRange));
                 ++fetchedChunks;
@@ -124,7 +123,7 @@ bool TPortionDataSource::DoStartFetchingIndexes(
             }
             indexIds.emplace(i.GetIndexId());
             if (auto bRange = i.GetBlobRangeOptional()) {
-                auto readAction = action.GetReading(Schema->GetIndexInfo().GetIndexStorageId(i.GetIndexId()));
+                auto readAction = action.GetReading(Portion->GetIndexStorageId(i.GetIndexId(), Schema->GetIndexInfo()));
                 readAction->SetIsBackgroundProcess(false);
                 readAction->AddRange(Portion->RestoreBlobRange(*bRange));
             }
@@ -189,8 +188,20 @@ void TPortionDataSource::DoApplyIndex(const NIndexes::TIndexCheckerContainer& in
 
 void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) {
     auto blobSchema = GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*Portion);
-    MutableStageData().AddBatch(Portion->PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs())
-                                    .AssembleToGeneralContainer(SequentialEntityIds));
+
+    std::optional<TSnapshot> ss;
+    if (Portion->HasInsertWriteId()) {
+        if (Portion->HasCommitSnapshot()) {
+            ss = Portion->GetCommitSnapshotVerified();
+        } else if (GetContext()->GetReadMetadata()->IsMyUncommitted(Portion->GetInsertWriteIdVerified())) {
+            ss = GetContext()->GetReadMetadata()->GetRequestSnapshot();
+        }
+    }
+
+    auto batch = Portion->PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), ss)
+                     .AssembleToGeneralContainer(SequentialEntityIds);
+
+    MutableStageData().AddBatch(batch);
 }
 
 bool TCommittedDataSource::DoStartFetchingColumns(

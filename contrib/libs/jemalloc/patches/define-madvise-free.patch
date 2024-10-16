@@ -1,0 +1,5 @@
+--- a/include/jemalloc/internal/jemalloc_internal_defs-linux.h	(index)
++++ b/include/jemalloc/internal/jemalloc_internal_defs-linux.h	(working tree)
+@@ -289,1 +289,1 @@
+-/* #undef JEMALLOC_DEFINE_MADVISE_FREE */
++#define JEMALLOC_DEFINE_MADVISE_FREE

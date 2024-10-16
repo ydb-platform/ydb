@@ -16,6 +16,7 @@
 
 #include <ydb/core/util/pb.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -919,6 +920,11 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropResourcePool, NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropResourcePool, NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool)
 
+    // backup collection
+    GENERIC_HELPERS(CreateBackupCollection, NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection, &NKikimrSchemeOp::TModifyScheme::MutableCreateBackupCollection)
+    GENERIC_HELPERS(DropBackupCollection, NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection, &NKikimrSchemeOp::TModifyScheme::MutableDropBackupCollection)
+    DROP_BY_PATH_ID_HELPERS(DropBackupCollection, NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection)
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS
@@ -1679,12 +1685,18 @@ namespace NSchemeShardUT_Private {
         *index.mutable_data_columns() = {cfg.DataColumns.begin(), cfg.DataColumns.end()};
 
         switch (cfg.IndexType) {
-        case NKikimrSchemeOp::EIndexTypeGlobal:
-            *index.mutable_global_index() = Ydb::Table::GlobalIndex();
-            break;
-        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
-            *index.mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
-            break;
+        case NKikimrSchemeOp::EIndexTypeGlobal: {
+            auto& settings = *index.mutable_global_index()->mutable_settings();
+            if (cfg.GlobalIndexSettings) {
+                cfg.GlobalIndexSettings[0].SerializeTo(settings);
+            }
+        } break;
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync: {
+            auto& settings = *index.mutable_global_async_index()->mutable_settings();
+            if (cfg.GlobalIndexSettings) {
+                cfg.GlobalIndexSettings[0].SerializeTo(settings);
+            }
+        } break;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
             auto& settings = *index.mutable_global_vector_kmeans_tree_index();
             settings = Ydb::Table::GlobalVectorKMeansTreeIndex();
@@ -2011,7 +2023,7 @@ namespace NSchemeShardUT_Private {
                 Runtime.SendToPipe(shardData.ShardId, sender, proposal);
                 TAutoPtr<IEventHandle> handle;
                 auto event = Runtime.GrabEdgeEventIf<TEvDataShard::TEvProposeTransactionResult>(handle,
-                                                                                                [=](const TEvDataShard::TEvProposeTransactionResult& event) {
+                                                                                                [this, shardData](const TEvDataShard::TEvProposeTransactionResult& event) {
                     return event.GetTxId() == TxId && event.GetOrigin() == shardData.ShardId;
                 });
                 activeZone = true;

@@ -1954,6 +1954,7 @@ roaring64_bitmap_t *roaring64_bitmap_portable_deserialize_safe(
 
     roaring64_bitmap_t *r = roaring64_bitmap_create();
     // Iterate through buckets ordered by increasing keys.
+    int64_t previous_high32 = -1;
     for (uint64_t bucket = 0; bucket < buckets; ++bucket) {
         // Read as uint32 the most significant 32 bits of the bucket.
         uint32_t high32;
@@ -1964,6 +1965,12 @@ roaring64_bitmap_t *roaring64_bitmap_portable_deserialize_safe(
         memcpy(&high32, buf, sizeof(high32));
         buf += sizeof(high32);
         read_bytes += sizeof(high32);
+        // High 32 bits must be strictly increasing.
+        if (high32 <= previous_high32) {
+            roaring64_bitmap_free(r);
+            return NULL;
+        }
+        previous_high32 = high32;
 
         // Read the 32-bit Roaring bitmaps representing the least significant
         // bits of a set of elements.
@@ -1982,6 +1989,24 @@ roaring64_bitmap_t *roaring64_bitmap_portable_deserialize_safe(
         }
         buf += bitmap32_size;
         read_bytes += bitmap32_size;
+
+        // While we don't attempt to validate much, we must ensure that there
+        // is no duplication in the high 48 bits - inserting into the ART
+        // assumes (or UB) no duplicate keys. The top 32 bits must be unique
+        // because we check for strict increasing values of  high32, but we
+        // must also ensure the top 16 bits within each 32-bit bitmap are also
+        // at least unique (we ensure they're strictly increasing as well,
+        // which they must be for a _valid_ bitmap, since it's cheaper to check)
+        int32_t last_bitmap_key = -1;
+        for (int i = 0; i < bitmap32->high_low_container.size; i++) {
+            uint16_t key = bitmap32->high_low_container.keys[i];
+            if (key <= last_bitmap_key) {
+                roaring_bitmap_free(bitmap32);
+                roaring64_bitmap_free(r);
+                return NULL;
+            }
+            last_bitmap_key = key;
+        }
 
         // Insert all containers of the 32-bit bitmap into the 64-bit bitmap.
         move_from_roaring32_offset(r, bitmap32, high32);

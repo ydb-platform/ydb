@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/interface/yql_dq_task_preprocessor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
@@ -17,6 +18,7 @@ TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctio
     bool withSpilling,
     NDq::IDqAsyncIoFactory::TPtr = nullptr, int threads = 16,
     IMetricsRegistryPtr metricsRegistry = {},
-    const std::function<NActors::IActor*(void)>& metricsPusherFactory = {});
+    const std::function<NActors::IActor*(void)>& metricsPusherFactory = {},
+    TVector<std::pair<NActors::TActorId, NActors::TActorSetupCmd>>&& additionalLocalServices = {});
 
 } // namespace NYql

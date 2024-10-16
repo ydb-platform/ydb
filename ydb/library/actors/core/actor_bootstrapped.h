@@ -1,6 +1,5 @@
 #pragma once
 
-#include "actorsystem.h"
 #include "actor.h"
 #include "events.h"
 #include <util/generic/noncopyable.h>

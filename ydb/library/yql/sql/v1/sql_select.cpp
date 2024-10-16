@@ -34,8 +34,11 @@ bool CollectJoinLinkSettings(TPosition pos, TJoinLinkSettings& linkSettings, TCo
             newStrategy = TJoinLinkSettings::EStrategy::ForceMap;
         } else if (canonizedName == "grace") {
             newStrategy = TJoinLinkSettings::EStrategy::ForceGrace;
+        } else if (canonizedName == "compact") {
+            linkSettings.Compact = true;
+            continue;
         } else {
-            ctx.Warning(hint.Pos, TIssuesIds::YQL_UNUSED_HINT) << "Unsupported join strategy: " << hint.Name;
+            ctx.Warning(hint.Pos, TIssuesIds::YQL_UNUSED_HINT) << "Unsupported join hint: " << hint.Name;
         }
 
         if (TJoinLinkSettings::EStrategy::Default == linkSettings.Strategy) {

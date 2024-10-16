@@ -24,11 +24,11 @@ std::shared_ptr<IBaseOptimizerNode> CreateChain(size_t size, TString onAttribute
         auto ei = std::make_shared<TRelOptimizerNode>(eiStr, std::make_shared<TOptimizerStatistics>());
         ei->Stats->Labels = std::make_shared<TVector<TString>>(TVector<TString>{eiStr});
 
-        std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>> joinConditions;
-        joinConditions.insert({TJoinColumn(eiPrevStr, onAttribute), TJoinColumn(eiStr, onAttribute)});
+        TVector<NDq::TJoinColumn> leftKeys = {TJoinColumn(eiPrevStr, onAttribute)};
+        TVector<NDq::TJoinColumn> rightKeys = {TJoinColumn(eiStr, onAttribute)};
 
         root = std::make_shared<TJoinOptimizerNode>(
-            root, ei, joinConditions, EJoinKind::InnerJoin, EJoinAlgoType::Undefined, false, false
+            root, ei, leftKeys, rightKeys, EJoinKind::InnerJoin, EJoinAlgoType::Undefined, false, false
         );
     }
 
@@ -105,23 +105,26 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
         auto lhs = CreateChain(3, "228", "a");
         auto rhs = CreateChain(2, "1337", "b");
 
-        std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>> joinConditions;
-        joinConditions.insert({TJoinColumn("a3", "1337"), TJoinColumn("b1", "1337")});
+        TVector<NDq::TJoinColumn> leftKeys = {TJoinColumn("a3", "1337")};
+        TVector<NDq::TJoinColumn> rightKeys = {TJoinColumn("b1", "1337")};
 
         // a1 --228-- a2 --228-- a3 --1337-- b1 --1337-- b2
         auto root = std::make_shared<TJoinOptimizerNode>(
-            lhs, rhs, joinConditions, EJoinKind::InnerJoin, EJoinAlgoType::Undefined, false, false
+            lhs, rhs, leftKeys, rightKeys, EJoinKind::InnerJoin, EJoinAlgoType::Undefined, false, false
         );
 
-        joinConditions.clear();
+        leftKeys.clear();
+        rightKeys.clear();
 
-        joinConditions.insert({TJoinColumn("c2", "123"), TJoinColumn("b2", "123")});
+        leftKeys.push_back(TJoinColumn("c2", "123"));
+        rightKeys.push_back(TJoinColumn("b2", "123"));
+
         rhs = CreateChain(2, "228", "c");
 
         // a1 --228-- a2 --228-- a3 --1337-- b1 --1337-- b2 --123-- c1 --228-- c2 
         // ^ we don't want to have transitive closure between c and a
         root = std::make_shared<TJoinOptimizerNode>(
-            root, rhs, joinConditions, EJoinKind::InnerJoin, EJoinAlgoType::Undefined, false, false
+            root, rhs, leftKeys, rightKeys, EJoinKind::InnerJoin, EJoinAlgoType::Undefined, false, false
         );
 
         auto graph = MakeJoinHypergraph<TNodeSet>(root);
@@ -184,7 +187,8 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
             TJoinOptimizerNode(
                 GetJoinArg(lhsArg),
                 GetJoinArg(rhsArg),
-                {{TJoinColumn(lhsCond.c_str(), col), TJoinColumn(rhsCond.c_str(), col)}},
+                {TJoinColumn(lhsCond.c_str(), col)}, 
+                {TJoinColumn(rhsCond.c_str(), col)},
                 EJoinKind::InnerJoin,
                 EJoinAlgoType::Undefined,
                 false,

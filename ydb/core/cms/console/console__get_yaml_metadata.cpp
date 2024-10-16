@@ -1,6 +1,7 @@
 #include "console_configs_manager.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/library/yaml_config/yaml_config.h>
 
 namespace NKikimr::NConsole {
 

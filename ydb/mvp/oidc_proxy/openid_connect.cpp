@@ -140,7 +140,7 @@ TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, con
             requestedAddressContext = jsonRequestedAddressContext->GetStringRobust();
             requestedAddressContext = Base64Decode(requestedAddressContext);
         }
-        if (requestedAddressContext.Empty()) {
+        if (requestedAddressContext.empty()) {
             return TRestoreOidcContextResult({.IsSuccess = false,
                                          .IsErrorRetryable = false,
                                          .ErrorMessage = errorMessage << "Struct with state is empty"});
@@ -150,7 +150,7 @@ TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, con
             expectedDigest = jsonDigest->GetStringRobust();
             expectedDigest = Base64Decode(expectedDigest);
         }
-        if (expectedDigest.Empty()) {
+        if (expectedDigest.empty()) {
             return TRestoreOidcContextResult({.IsSuccess = false,
                                             .IsErrorRetryable = false,
                                             .ErrorMessage = errorMessage << "Expected digest is empty"});
@@ -192,7 +192,7 @@ TCheckStateResult CheckState(const TString& state, const TString& key) {
             stateContainer = jsonStateContainer->GetStringRobust();
             stateContainer = Base64Decode(stateContainer);
         }
-        if (stateContainer.Empty()) {
+        if (stateContainer.empty()) {
             return TCheckStateResult(false, errorMessage << "Container with state is empty");
         }
         const NJson::TJsonValue* jsonDigest = nullptr;
@@ -200,7 +200,7 @@ TCheckStateResult CheckState(const TString& state, const TString& key) {
             expectedDigest = jsonDigest->GetStringRobust();
             expectedDigest = Base64Decode(expectedDigest);
         }
-        if (expectedDigest.Empty()) {
+        if (expectedDigest.empty()) {
             return TCheckStateResult(false, errorMessage << "Expected digest is empty");
         }
     }

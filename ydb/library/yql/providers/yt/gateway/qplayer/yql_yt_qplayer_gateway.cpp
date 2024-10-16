@@ -25,11 +25,12 @@ const TString YtGateway_GetFolder = "YtGateway_GetFolder";
 const TString YtGateway_GetFolders = "YtGateway_GetFolders";
 const TString YtGateway_ResolveLinks = "YtGateway_ResolveLinks";
 const TString YtGateway_PathStat = "YtGateway_PathStat";
+const TString YtGateway_PathStatMissing = "YtGateway_PathStatMissing";
 
 TString MakeHash(const TString& str) {
     SHA256_CTX sha;
     SHA256_Init(&sha);
-    SHA256_Update(&sha, str.Data(), str.Size());
+    SHA256_Update(&sha, str.data(), str.size());
     unsigned char hash[SHA256_DIGEST_LENGTH];
     SHA256_Final(hash, &sha);
     return TString((const char*)hash, sizeof(hash));
@@ -777,6 +778,7 @@ public:
                     throw yexception() << "Missing replay data";
                 }
 
+                PathStatKeys_.emplace(key);
                 auto valueNode = NYT::NodeFromYsonString(TStringBuf(item->Value));
                 DeserializePathStat(valueNode, res, index);
             }
@@ -813,6 +815,21 @@ public:
 
             for (ui32 index = 0; index < options.Paths().size(); ++index) {
                 const auto& key = MakePathStatKey(options.Cluster(), options.Extended(), options.Paths()[index]);
+                bool allow = false;
+                if (PathStatKeys_.contains(key)) {
+                    allow = true;
+                } else {
+                    auto missingItem = QContext_.GetReader()->Get({YtGateway_PathStatMissing, key}).GetValueSync();
+                    if (!missingItem) {
+                        allow = true;
+                        PathStatKeys_.emplace(key);
+                    }
+                }
+
+                if (!allow) {
+                    return res;
+                }
+
                 auto item = QContext_.GetReader()->Get({YtGateway_PathStat, key}).GetValueSync();
                 if (!item) {
                     return res;
@@ -826,7 +843,28 @@ public:
             return res;
         }
 
-        return Inner_->TryPathStat(std::move(options));
+        auto optionsDup = options;
+        auto res = Inner_->TryPathStat(std::move(options));
+        if (!QContext_.CanWrite()) {
+            return res;
+        }
+
+        if (!res.Success()) {
+            for (ui32 index = 0; index < optionsDup.Paths().size(); ++index) {
+                const auto& key = MakePathStatKey(optionsDup.Cluster(), optionsDup.Extended(), optionsDup.Paths()[index]);
+                QContext_.GetWriter()->Put({YtGateway_PathStatMissing, key}, "1").GetValueSync();
+            }
+
+            return res;
+        }
+
+        for (ui32 index = 0; index < optionsDup.Paths().size(); ++index) {
+            const auto& key = MakePathStatKey(optionsDup.Cluster(), optionsDup.Extended(), optionsDup.Paths()[index]);
+            auto value = SerializePathStat(res, index);
+            QContext_.GetWriter()->Put({YtGateway_PathStat, key}, value).GetValueSync();
+        }
+
+        return res;
     }
 
     bool TryParseYtUrl(const TString& url, TString* cluster, TString* path) const final {
@@ -882,6 +920,7 @@ private:
     const TQContext QContext_;
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
     const TFileStoragePtr FileStorage_;
+    THashSet<TString> PathStatKeys_;
 };
 
 }

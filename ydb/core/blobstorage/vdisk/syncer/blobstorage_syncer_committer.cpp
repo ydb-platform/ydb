@@ -1,6 +1,7 @@
 #include "blobstorage_syncer_committer.h"
 #include "blobstorage_syncer_data.h"
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
 namespace NKikimr {
 

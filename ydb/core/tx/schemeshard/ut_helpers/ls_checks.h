@@ -96,6 +96,7 @@ namespace NLs {
     void IsExternalDataSource(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsView(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsResourcePool(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsBackupCollection(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns, bool strictCount = false);
     TCheckFunc CheckColumnType(const ui64 columnIndex, const TString& columnTypename);
     void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult& record);

@@ -1,0 +1,717 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+IGNORE_FILES ChangeLog-1998 ChangeLog-2012 NEWS
+
+KEEP     GPL-3.0-only         116f62dff244753eb5a6e4f48e6a7e7b
+BELONGS ya.make
+    License text:
+        \# Under Section 7 of GPL version 3, you are granted additional
+    Scancode info:
+        Original SPDX id: GPL-3.0-only
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, http://www.gnu.org/licenses/gpl-3.0.html, https://spdx.org/licenses/GPL-3.0-only
+    Files with this license:
+        data/m4sugar/foreach.m4 [20:20]
+        data/m4sugar/m4sugar.m4 [19:19]
+
+KEEP     GPL-3.0-or-later     1693b04c7e65f9c96100278355221b12
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/allocator.h [5:16]
+        lib/areadlink.c [6:17]
+        lib/areadlink.h [6:17]
+        lib/argmatch.c [6:17]
+        lib/argmatch.h [6:17]
+        lib/assure.h [5:16]
+        lib/basename-lgpl.c [6:17]
+        lib/basename.c [6:17]
+        lib/binary-io.c [4:15]
+        lib/binary-io.h [4:15]
+        lib/bitrotate.h [4:15]
+        lib/careadlinkat.c [6:17]
+        lib/careadlinkat.h [5:16]
+        lib/close-stream.c [5:16]
+        lib/close.c [4:15]
+        lib/closeout.c [6:17]
+        lib/closeout.h [6:17]
+        lib/concat-filename.h [4:15]
+        lib/diffseq.h [6:17]
+        lib/dirname-lgpl.c [6:17]
+        lib/dirname.c [6:17]
+        lib/dup-safer-flag.c [6:17]
+        lib/dup-safer.c [5:16]
+        lib/dup2.c [5:16]
+        lib/error.c [5:16]
+        lib/error.h [6:17]
+        lib/exitfail.c [5:16]
+        lib/exitfail.h [5:16]
+        lib/fatal-signal.c [5:16]
+        lib/fatal-signal.h [5:16]
+        lib/fcntl.c [5:16]
+        lib/fd-safer-flag.c [6:17]
+        lib/fd-safer.c [5:16]
+        lib/filename.h [4:15]
+        lib/fopen-safer.c [5:16]
+        lib/fpending.c [5:16]
+        lib/fpucw.h [5:16]
+        lib/fseterr.c [4:15]
+        lib/fseterr.h [4:15]
+        lib/fstrcmp.c [5:16]
+        lib/getdtablesize.c [5:16]
+        lib/gethrxtime.c [5:16]
+        lib/gethrxtime.h [5:16]
+        lib/getprogname.c [4:15]
+        lib/getprogname.h [4:15]
+        lib/gl_anyhash1.h [5:16]
+        lib/gl_anyhash2.h [5:16]
+        lib/gl_anyhash_primes.h [5:16]
+        lib/gl_anylinked_list1.h [5:16]
+        lib/gl_anylinked_list2.h [5:16]
+        lib/gl_anyrbtree_list1.h [5:16]
+        lib/gl_anyrbtree_list2.h [5:16]
+        lib/gl_anytree_list1.h [5:16]
+        lib/gl_anytree_list2.h [5:16]
+        lib/gl_anytree_oset.h [5:16]
+        lib/gl_anytreehash_list1.h [5:16]
+        lib/gl_anytreehash_list2.h [5:16]
+        lib/gl_array_list.c [5:16]
+        lib/gl_array_list.h [5:16]
+        lib/gl_linked_list.c [5:16]
+        lib/gl_linked_list.h [5:16]
+        lib/gl_list.h [5:16]
+        lib/gl_oset.h [5:16]
+        lib/gl_rbtree_ordered.h [5:16]
+        lib/gl_rbtree_oset.c [5:16]
+        lib/gl_rbtree_oset.h [5:16]
+        lib/gl_rbtreehash_list.c [5:16]
+        lib/gl_rbtreehash_list.h [5:16]
+        lib/gl_xlist.h [5:16]
+        lib/glthread/tls.c [4:15]
+        lib/glthread/tls.h [4:15]
+        lib/hard-locale.c [6:17]
+        lib/hard-locale.h [5:16]
+        lib/hash.c [7:18]
+        lib/hash.h [6:17]
+        lib/isnand-nolibm.h [4:15]
+        lib/isnanf-nolibm.h [4:15]
+        lib/isnanl-nolibm.h [4:15]
+        lib/mbchar.c [3:14]
+        lib/mbchar.h [4:15]
+        lib/mbfile.h [4:15]
+        lib/mbrtowc.c [5:16]
+        lib/mbswidth.c [4:15]
+        lib/mbswidth.h [4:15]
+        lib/open.c [4:15]
+        lib/pipe-safer.c [4:15]
+        lib/pipe2-safer.c [4:15]
+        lib/printf-frexp.c [4:15]
+        lib/printf-frexp.h [4:15]
+        lib/printf-frexpl.c [4:15]
+        lib/printf-frexpl.h [4:15]
+        lib/progname.c [5:16]
+        lib/progname.h [5:16]
+        lib/quote.h [5:16]
+        lib/quotearg.c [5:16]
+        lib/quotearg.h [6:17]
+        lib/raise.c [5:16]
+        lib/readline.c [5:16]
+        lib/readline.h [5:16]
+        lib/relocatable.h [5:16]
+        lib/setlocale_null.c [4:15]
+        lib/setlocale_null.h [4:15]
+        lib/sig-handler.h [5:16]
+        lib/sigaction.c [5:16]
+        lib/sigprocmask.c [5:16]
+        lib/spawn-pipe.c [5:16]
+        lib/spawn-pipe.h [5:16]
+        lib/stdio-impl.h [4:15]
+        lib/stdio-safer.h [5:16]
+        lib/stripslash.c [6:17]
+        lib/textstyle.h [5:16]
+        lib/thread-optim.h [5:16]
+        lib/timespec.h [6:17]
+        lib/unicodeio.c [5:16]
+        lib/unicodeio.h [5:16]
+        lib/unistd-safer.h [5:16]
+        lib/unlocked-io.h [5:16]
+        lib/verify.h [5:16]
+        lib/w32spawn.h [5:16]
+        lib/wait-process.c [5:16]
+        lib/wait-process.h [5:16]
+        lib/wcwidth.c [4:15]
+        lib/windows-tls.c [4:15]
+        lib/windows-tls.h [4:15]
+        lib/xalloc-die.c [6:17]
+        lib/xalloc-oversized.h [5:16]
+        lib/xalloc.h [5:16]
+        lib/xhash.c [5:16]
+        lib/xmalloc.c [5:16]
+        lib/xmemdup0.c [5:16]
+        lib/xmemdup0.h [5:16]
+        lib/xreadlink.c [5:16]
+        lib/xreadlink.h [6:17]
+        lib/xstrndup.c [5:16]
+        lib/xstrndup.h [5:16]
+        lib/xtime.h [5:16]
+
+SKIP     LicenseRef-scancode-free-unknown 1fa0410782b5fff901b0496a79bcba9e
+BELONGS ya.make
+	# Not a license, but a string constant
+    License text:
+        This is free software; see the source for copying conditions.  There is NO\n\
+        warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-free-unknown
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
+    Files with this license:
+        src/getargs.c [491:492]
+
+KEEP     GPL-3.0-or-later     34ac60d6fc707a523402ec9c55db0e6a
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/cloexec.c [5:16]
+        lib/cloexec.h [5:16]
+        lib/fpending.h [6:17]
+
+KEEP     GPL-3.0-or-later     41f71d8e26ad222bc00931cb69091447
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/c-ctype.h [10:21]
+
+KEEP     GPL-3.0-or-later     4c1501e84b9200d3a65db7c65c2a40eb
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/platform/win64/alloca.h [7:19]
+
+KEEP     GPL-3.0-or-later AND Bison-exception-2.2 5201a3020c09685265f8be7aea86fa12
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 91.60
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        src/parse-gram.h [1:32]
+    Scancode info:
+        Original SPDX id: Bison-exception-2.2
+        Score           : 91.60
+        Match type      : NOTICE
+        Links           : https://spdx.org/licenses/Bison-exception-2.2
+    Files with this license:
+        src/parse-gram.h [1:32]
+
+KEEP     GPL-3.0-or-later     5c38482eda235f97188a3f621539f5ce
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        data/skeletons/bison.m4 [8:19]
+        data/skeletons/c++-skel.m4 [8:19]
+        data/skeletons/c++.m4 [7:18]
+        data/skeletons/c-like.m4 [7:18]
+        data/skeletons/c-skel.m4 [8:19]
+        data/skeletons/c.m4 [8:19]
+        data/skeletons/glr.cc [5:16]
+        data/skeletons/lalr1.cc [5:16]
+        data/skeletons/location.cc [5:16]
+        data/skeletons/stack.hh [5:16]
+        data/skeletons/variant.hh [5:16]
+        data/skeletons/yacc.c [10:21]
+
+KEEP     GPL-3.0-or-later     659dd41b50d94dd686004e4d8e78c706
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/platform/win64/sys/stat.h [5:16]
+        lib/platform/win64/sys/wait.h [5:16]
+        lib/platform/win64/unistd.h [5:16]
+
+KEEP     GPL-3.0-or-later     6d1b4b2950ffef52cfd2e22aaa33b61d
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/fstrcmp.h [7:18]
+
+SKIP     CC-BY-4.0            6f0a22e0f788bdc3871e153db7999560
+BELONGS ya.make
+    License text:
+        ]b4_token_ctor_if([], [b4_public_types_define([cc])])[
+          // by_state.
+    Scancode info:
+        Original SPDX id: CC-BY-4.0
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://creativecommons.org/licenses/by/4.0/, http://creativecommons.org/licenses/by/4.0/legalcode, https://spdx.org/licenses/CC-BY-4.0
+    Files with this license:
+        data/skeletons/lalr1.cc [636:638]
+
+KEEP     GPL-3.0-or-later     7c229c32d3d54dacee032f7da11d3dc5
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/platform/win64/fcntl.h [6:17]
+        lib/platform/win64/getopt.h [7:18]
+        lib/platform/win64/sched.h [5:16]
+        lib/platform/win64/signal.h [6:17]
+        lib/platform/win64/spawn.h [6:17]
+
+KEEP     GPL-3.0-or-later     8252ddbe8adb7de26aba1085088f4a8a
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/getopt.c [6:18]
+        lib/getopt1.c [6:18]
+        lib/getopt_int.h [6:18]
+        lib/obstack.c [5:17]
+        lib/obstack.h [5:17]
+        lib/strverscmp.c [6:18]
+
+KEEP     GPL-3.0-or-later     89f1eb0b11fd0ec6004428d56314d07d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        data/skeletons/bison.m4 [66:77]
+
+KEEP     GPL-3.0-or-later     8e0fa9bb12e3eaf6041fdd9b8c3e5894
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/basename-lgpl.h [6:17]
+        lib/dirname.h [6:17]
+
+KEEP     GPL-3.0-or-later     92745a1c00b93ebec7f37cd22772fc08
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/bitset.c [7:18]
+        lib/bitset.h [7:18]
+        lib/bitset/array.c [8:19]
+        lib/bitset/array.h [8:19]
+        lib/bitset/base.h [8:19]
+        lib/bitset/list.c [8:19]
+        lib/bitset/list.h [8:19]
+        lib/bitset/stats.c [7:18]
+        lib/bitset/stats.h [7:18]
+        lib/bitset/table.c [7:18]
+        lib/bitset/table.h [8:19]
+        lib/bitset/vector.c [7:18]
+        lib/bitset/vector.h [8:19]
+        lib/bitsetv.c [6:17]
+        lib/bitsetv.h [8:19]
+        lib/get-errno.c [6:17]
+        lib/get-errno.h [6:17]
+        lib/timevar.c [8:19]
+        lib/timevar.def [11:22]
+        lib/timevar.h [8:19]
+        src/AnnotationList.c [7:18]
+        src/AnnotationList.h [7:18]
+        src/InadequacyList.c [7:18]
+        src/InadequacyList.h [7:18]
+        src/Sbitset.c [7:18]
+        src/Sbitset.h [7:18]
+        src/assoc.c [8:19]
+        src/assoc.h [8:19]
+        src/closure.c [8:19]
+        src/closure.h [8:19]
+        src/complain.c [6:17]
+        src/complain.h [6:17]
+        src/conflicts.c [8:19]
+        src/conflicts.h [8:19]
+        src/counterexample.c [7:18]
+        src/counterexample.h [7:18]
+        src/derivation.c [7:18]
+        src/derivation.h [7:18]
+        src/derives.c [8:19]
+        src/derives.h [8:19]
+        src/files.c [8:19]
+        src/files.h [8:19]
+        src/fixits.c [7:18]
+        src/fixits.h [5:16]
+        src/flex-scanner.h [8:19]
+        src/getargs.c [8:19]
+        src/getargs.h [8:19]
+        src/glyphs.c [7:18]
+        src/glyphs.h [7:18]
+        src/gram.c [8:19]
+        src/gram.h [8:19]
+        src/graphviz.c [8:19]
+        src/graphviz.h [8:19]
+        src/ielr.c [7:18]
+        src/ielr.h [7:18]
+        src/lalr.c [8:19]
+        src/lalr.h [8:19]
+        src/location.c [8:19]
+        src/location.h [8:19]
+        src/lr0.c [8:19]
+        src/lr0.h [8:19]
+        src/lssi.c [7:18]
+        src/lssi.h [7:18]
+        src/main.c [8:19]
+        src/muscle-tab.c [7:18]
+        src/muscle-tab.h [8:19]
+        src/named-ref.c [7:18]
+        src/named-ref.h [7:18]
+        src/nullable.c [8:19]
+        src/nullable.h [8:19]
+        src/output.c [8:19]
+        src/output.h [8:19]
+        src/parse-gram.y [7:18]
+        src/parse-simulation.c [7:18]
+        src/parse-simulation.h [7:18]
+        src/print-graph.c [8:19]
+        src/print-graph.h [8:19]
+        src/print-xml.c [8:19]
+        src/print-xml.h [8:19]
+        src/print.c [8:19]
+        src/print.h [8:19]
+        src/reader.c [8:19]
+        src/reader.h [8:19]
+        src/reduce.c [8:19]
+        src/reduce.h [8:19]
+        src/relation.c [8:19]
+        src/relation.h [8:19]
+        src/scan-code.c [859:870]
+        src/scan-code.h [8:19]
+        src/scan-code.l [7:18]
+        src/scan-gram.c [1329:1340]
+        src/scan-gram.h [8:19]
+        src/scan-gram.l [7:18]
+        src/scan-skel.c [843:854]
+        src/scan-skel.h [8:19]
+        src/scan-skel.l [7:18]
+        src/state-item.c [7:18]
+        src/state-item.h [7:18]
+        src/state.c [8:19]
+        src/state.h [8:19]
+        src/strversion.c [7:18]
+        src/strversion.h [7:18]
+        src/symlist.c [8:19]
+        src/symlist.h [8:19]
+        src/symtab.c [8:19]
+        src/symtab.h [8:19]
+        src/system.h [6:17]
+        src/tables.c [8:19]
+        src/tables.h [8:19]
+        src/uniqstr.c [8:19]
+        src/uniqstr.h [8:19]
+    Belongs difference:
+        - ya.make
+
+KEEP     GPL-3.0-or-later AND Bison-exception-2.2 98a438404263de4951835fafc159dce1
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 91.60
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        src/parse-gram.c [1:32]
+    Scancode info:
+        Original SPDX id: Bison-exception-2.2
+        Score           : 91.60
+        Match type      : NOTICE
+        Links           : https://spdx.org/licenses/Bison-exception-2.2
+    Files with this license:
+        src/parse-gram.c [1:32]
+
+KEEP     GPL-3.0-only         a705c9099b04501ac6e8db37ebbdcba2
+BELONGS ya.make
+    License text:
+        \# this program; see the files COPYINGv3 and COPYING.EXCEPTION
+    Scancode info:
+        Original SPDX id: GPL-3.0-only
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, http://www.gnu.org/licenses/gpl-3.0.html, https://spdx.org/licenses/GPL-3.0-only
+    Files with this license:
+        data/m4sugar/foreach.m4 [26:26]
+        data/m4sugar/m4sugar.m4 [25:25]
+
+KEEP     GPL-3.0-or-later     ab2b1cb2dbcba44bf0fe07d706549fea
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 92.45
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        data/m4sugar/foreach.m4 [9:27]
+        data/m4sugar/m4sugar.m4 [8:26]
+
+KEEP     GPL-3.0-or-later     b04637d10702e3bcde5f8e16add8f1c4
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/intprops.h [5:16]
+
+SKIP     GFDL-1.3-or-later    b97704fec037076859631eabdf1e717e
+BELONGS ya.make
+    # This license applies to README itself, not to the code
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GFDL-1.3-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/fdl-1.3.txt, https://spdx.org/licenses/GFDL-1.3-or-later
+    Files with this license:
+        README [128:133]
+        TODO [885:890]
+
+KEEP     GPL-3.0-or-later AND Bison-exception-2.2 ba3ab315213d55477554596046cda697
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 55.61
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        data/skeletons/bison.m4 [73:90]
+    Scancode info:
+        Original SPDX id: Bison-exception-2.2
+        Score           : 55.61
+        Match type      : NOTICE
+        Links           : https://spdx.org/licenses/Bison-exception-2.2
+    Files with this license:
+        data/skeletons/bison.m4 [73:90]
+
+KEEP     GPL-3.0-or-later     bd60f320d5b489e4bdc30910553ad718
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/arg-nonnull.h [4:15]
+        lib/attribute.h [5:16]
+        lib/c-strcaseeq.h [4:15]
+        lib/fd-hook.c [5:16]
+        lib/fd-hook.h [4:15]
+        lib/streq.h [4:15]
+        lib/unistr.h [5:16]
+        lib/unistr/u8-mbtoucr.c [5:16]
+        lib/unistr/u8-uctomb-aux.c [5:16]
+        lib/unistr/u8-uctomb.c [5:16]
+        lib/unitypes.h [5:16]
+        lib/uniwidth.h [6:17]
+        lib/uniwidth/cjk.h [5:16]
+        lib/uniwidth/width.c [5:16]
+        lib/unused-parameter.h [4:15]
+
+KEEP     GPL-3.0-or-later     c202ae9af7826822a1048ac0a9dfcba0
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/c-strcase.h [5:16]
+        lib/c-strcasecmp.c [4:15]
+        lib/c-strncasecmp.c [4:15]
+        lib/float+.h [5:16]
+        lib/glthread/lock.c [4:15]
+        lib/glthread/lock.h [4:15]
+        lib/glthread/threadlib.c [4:15]
+        lib/minmax.h [5:16]
+        lib/waitpid.c [4:15]
+        lib/windows-initguard.h [4:15]
+        lib/windows-mutex.c [4:15]
+        lib/windows-mutex.h [4:15]
+        lib/windows-once.c [4:15]
+        lib/windows-once.h [4:15]
+        lib/windows-recmutex.c [4:15]
+        lib/windows-recmutex.h [4:15]
+        lib/windows-rwlock.c [4:15]
+        lib/windows-rwlock.h [4:15]
+        lib/xsize.h [5:16]
+
+KEEP     GPL-3.0-or-later     c3d8c615523b05d13b1f620348206d18
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/asnprintf.c [4:15]
+        lib/asprintf.c [5:16]
+        lib/gettext.h [5:16]
+        lib/localcharset.c [5:16]
+        lib/localcharset.h [5:16]
+        lib/msvc-inval.c [4:15]
+        lib/msvc-inval.h [4:15]
+        lib/msvc-nothrow.c [5:16]
+        lib/msvc-nothrow.h [5:16]
+        lib/obstack_printf.c [4:15]
+        lib/pipe2.c [4:15]
+        lib/printf-args.c [5:16]
+        lib/printf-args.h [5:16]
+        lib/printf-parse.c [4:15]
+        lib/printf-parse.h [5:16]
+        lib/vasnprintf.c [4:15]
+        lib/vasnprintf.h [4:15]
+        lib/vasprintf.c [4:15]
+
+KEEP     GPL-3.0-or-later     d5368cd6d940985f1e76b2a961c01a6d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        AUTHORS [31:42]
+        PACKAGING [44:55]
+        README-alpha [20:31]
+        THANKS [244:255]
+        data/README.md [200:211]
+
+KEEP     GPL-3.0-only         e49f4652534af377a713df3d9dec60cb
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, http://www.gnu.org/licenses/gpl-3.0.html, https://spdx.org/licenses/GPL-3.0-only
+    Files with this license:
+        COPYING [1:674]
+
+KEEP     GPL-3.0-or-later     ee2d2b11782a1857afc805a236047d8e
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 97.06
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/concat-filename.c [4:15]
+        lib/path-join.c [4:15]
+        lib/path-join.h [4:15]
+        lib/stpcpy.c [8:19]
+        lib/stpncpy.c [7:18]
+        lib/xconcat-filename.c [4:15]
+
+KEEP     GPL-3.0-or-later     f73f32c84d631734a3b7f80d7b50ab8c
+BELONGS lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        lib/strndup.c [6:17]

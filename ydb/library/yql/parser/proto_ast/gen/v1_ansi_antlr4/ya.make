@@ -15,16 +15,17 @@ SET(PROTOBUF_SUFFIX_PATH .pb.main.h)
 
 SET(LEXER_PARSER_NAMESPACE NALPAnsiAntlr4)
 
-SET(GRAMMAR_STRING_CORE_SINGLE "\"~([']) | (QUOTE_SINGLE QUOTE_SINGLE)\"")
-SET(GRAMMAR_STRING_CORE_DOUBLE "\"~([#DOUBLE_QUOTE#]) | (QUOTE_DOUBLE QUOTE_DOUBLE)\"")
-SET(GRAMMAR_MULTILINE_COMMENT_CORE       "\"MULTILINE_COMMENT | .\"")
-
 CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/v4/tool/templates/codegen/Cpp/Cpp.stg.in ${antlr_templates}/Cpp/Cpp.stg)
 CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/v4/tool/templates/codegen/Cpp/Files.stg.in ${antlr_templates}/Cpp/Files.stg)
 
 IF(EXPORT_CMAKE)
     MANUAL_GENERATION(${sql_grammar})
 ELSE()
+    # For exporting CMake this vars fill in epilogue.cmake
+    SET(GRAMMAR_STRING_CORE_SINGLE "\"~([']) | (QUOTE_SINGLE QUOTE_SINGLE)\"")
+    SET(GRAMMAR_STRING_CORE_DOUBLE "\"~([#DOUBLE_QUOTE#]) | (QUOTE_DOUBLE QUOTE_DOUBLE)\"")
+    SET(GRAMMAR_MULTILINE_COMMENT_CORE "\"MULTILINE_COMMENT | .\"")
+
     CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/sql/v1/SQLv1Antlr4.g.in ${sql_grammar})
 ENDIF()
 

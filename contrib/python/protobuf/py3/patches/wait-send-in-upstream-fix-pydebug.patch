@@ -1,0 +1,66 @@
+diff --git a/python/google/protobuf/pyext/descriptor.cc b/python/google/protobuf/pyext/descriptor.cc
+index de9a248..8efe348 100644
+--- a/python/google/protobuf/pyext/descriptor.cc
++++ b/python/google/protobuf/pyext/descriptor.cc
+@@ -443,6 +443,9 @@ PyObject* NewInternedDescriptor(PyTypeObject* type,
+ 
+ static void Dealloc(PyObject* pself) {
+   PyBaseDescriptor* self = reinterpret_cast<PyBaseDescriptor*>(pself);
++  if (PyObject_GC_IsTracked(pself)) {
++    PyObject_GC_UnTrack(pself);
++  }
+   // Remove from interned dictionary
+   interned_descriptors->erase(self->descriptor);
+   Py_CLEAR(self->pool);
+diff --git a/python/google/protobuf/pyext/descriptor_pool.cc b/python/google/protobuf/pyext/descriptor_pool.cc
+index 0dd57b2..bfbbe4a 100644
+--- a/python/google/protobuf/pyext/descriptor_pool.cc
++++ b/python/google/protobuf/pyext/descriptor_pool.cc
+@@ -212,6 +212,9 @@ static PyObject* New(PyTypeObject* type,
+ 
+ static void Dealloc(PyObject* pself) {
+   PyDescriptorPool* self = reinterpret_cast<PyDescriptorPool*>(pself);
++  if (PyObject_GC_IsTracked(pself)) {
++    PyObject_GC_UnTrack(pself);
++  }
+   descriptor_pool_map->erase(self->pool);
+   Py_CLEAR(self->py_message_factory);
+   for (std::unordered_map<const void*, PyObject*>::iterator it =
+diff --git a/python/google/protobuf/pyext/map_container.cc b/python/google/protobuf/pyext/map_container.cc
+index 2d75c09..fe48b21 100644
+--- a/python/google/protobuf/pyext/map_container.cc
++++ b/python/google/protobuf/pyext/map_container.cc
+@@ -515,6 +515,9 @@ PyObject* MapReflectionFriend::ScalarMapToStr(PyObject* _self) {
+ 
+ static void ScalarMapDealloc(PyObject* _self) {
+   MapContainer* self = GetMap(_self);
++  if (PyObject_GC_IsTracked(_self)) {
++    PyObject_GC_UnTrack(_self);
++  }
+   self->RemoveFromParentCache();
+   PyTypeObject *type = Py_TYPE(_self);
+   type->tp_free(_self);
+@@ -728,6 +731,9 @@ PyObject* MessageMapGet(PyObject* self, PyObject* args, PyObject* kwargs) {
+ 
+ static void MessageMapDealloc(PyObject* _self) {
+   MessageMapContainer* self = GetMessageMap(_self);
++  if (PyObject_GC_IsTracked(_self)) {
++    PyObject_GC_UnTrack(_self);
++  }
+   self->RemoveFromParentCache();
+   Py_DECREF(self->message_class);
+   PyTypeObject *type = Py_TYPE(_self);
+diff --git a/python/google/protobuf/pyext/message_factory.cc b/python/google/protobuf/pyext/message_factory.cc
+index 27aa5e4..060cc76 100644
+--- a/python/google/protobuf/pyext/message_factory.cc
++++ b/python/google/protobuf/pyext/message_factory.cc
+@@ -104,6 +104,9 @@ PyObject* New(PyTypeObject* type, PyObject* args, PyObject* kwargs) {
+ static void Dealloc(PyObject* pself) {
+   PyMessageFactory* self = reinterpret_cast<PyMessageFactory*>(pself);
+ 
++  if (PyObject_GC_IsTracked(pself)) {
++    PyObject_GC_UnTrack(pself);
++  }
+   typedef PyMessageFactory::ClassesByMessageMap::iterator iterator;
+   for (iterator it = self->classes_by_descriptor->begin();
+        it != self->classes_by_descriptor->end(); ++it) {

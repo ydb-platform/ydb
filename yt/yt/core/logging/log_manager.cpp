@@ -859,7 +859,7 @@ private:
         CompressionThreadPool_->Configure(Config_->CompressionThreadCount);
 
         if (RequestSuppressionEnabled_) {
-            SuppressedRequestIdSet_.SetTTl((Config_->RequestSuppressionTimeout + DequeuePeriod) * 2);
+            SuppressedRequestIdSet_.SetTtl((Config_->RequestSuppressionTimeout + DequeuePeriod) * 2);
         } else {
             SuppressedRequestIdSet_.Clear();
             SuppressedRequestIdQueue_.DequeueAll();

@@ -8,7 +8,6 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_vdisk_guids.h>
 
-#include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
 #include <ydb/core/base/blobstorage.h>
 

@@ -6,6 +6,7 @@
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/mvp/core/core_ydb.h>
 #include "context.h"
 
 
@@ -60,6 +61,7 @@ std::unique_ptr<NYdbGrpc::TServiceConnection<TSessionService>> CreateGRpcService
     config.Locator = host;
     config.EnableSsl = (scheme == "grpcs");
     static NYdbGrpc::TGRpcClientLow client;
+    SetGrpcKeepAlive(config);
     return client.CreateGRpcServiceConnection<TSessionService>(config);
 }
 

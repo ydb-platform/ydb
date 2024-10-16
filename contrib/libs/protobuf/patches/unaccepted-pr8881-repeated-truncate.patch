@@ -1,0 +1,29 @@
+--- a/src/google/protobuf/repeated_ptr_field.h	(index)
++++ b/src/google/protobuf/repeated_ptr_field.h	(working tree)
+@@ -335,6 +335,15 @@ class PROTOBUF_EXPORT RepeatedPtrFieldBase {
+ 
+   void Reserve(int new_size);  // implemented in the cc file
+ 
++  template<typename TypeHandler>
++  void Truncate(int new_size) {
++    GOOGLE_DCHECK_LE(new_size, current_size_);
++    for (int i = new_size; i < current_size_; i++) {
++      TypeHandler::Clear(cast<TypeHandler>(rep_->elements[i]));
++    }
++    current_size_ = new_size;
++  }
++
+   template <typename TypeHandler>
+   static inline typename TypeHandler::Type* copy(
+       typename TypeHandler::Type* value) {
+@@ -907,6 +916,10 @@ class RepeatedPtrField : private internal::RepeatedPtrFieldBase {
+   // array is grown, it will always be at least doubled in size.
+   void Reserve(int new_size);
+ 
++  void Truncate(int new_size) {
++    return RepeatedPtrFieldBase::Truncate<TypeHandler>(new_size);
++  }
++
+   int Capacity() const;
+ 
+   // Gets the underlying array.  This pointer is possibly invalidated by

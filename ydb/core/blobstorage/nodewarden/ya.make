@@ -1,7 +1,6 @@
 LIBRARY()
 
 SRCS(
-    defs.h
     group_stat_aggregator.cpp
     group_stat_aggregator.h
     distconf.cpp

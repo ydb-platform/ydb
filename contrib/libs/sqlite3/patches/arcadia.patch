@@ -1,0 +1,13 @@
+--- a/sqlite3.c
++++ b/sqlite3.c
+@@ -19969,1 +19969,1 @@
+-SQLITE_PRIVATE int sqlite3PendingByte = 0x40000000;
++int sqlite3PendingByte = 0x40000000;
+@@ -25482,6 +25486,7 @@
+ ** is used regardless of the run-time threadsafety setting.
+ */
+ #ifdef SQLITE_MUTEX_NOOP
++#error Are you sure you want this?
+ SQLITE_PRIVATE sqlite3_mutex_methods const *sqlite3DefaultMutex(void){
+   return sqlite3NoopMutex();
+ }

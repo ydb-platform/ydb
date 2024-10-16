@@ -18,6 +18,7 @@
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/shared_cache.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 
 #include "single_thread_ic_mock.h"
 
@@ -230,7 +231,7 @@ public:
 
         appData->DomainsInfo = AppDataInfo.DomainsInfo;
         appData->MonotonicTimeProvider = AppDataInfo.MonotonicTimeProvider;
-        appData->FeatureFlags = AppDataInfo.FeatureFlags;
+        appData->InitFeatureFlags(AppDataInfo.FeatureFlags);
 
         appData->HiveConfig.SetWarmUpBootWaitingPeriod(10);
         appData->HiveConfig.SetMaxNodeUsageToKick(100);

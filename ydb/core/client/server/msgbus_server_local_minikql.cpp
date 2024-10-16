@@ -17,6 +17,7 @@ public:
     {
         SetSecurityToken(static_cast<TBusTabletLocalMKQL*>(msg.GetMessage())->Record.GetSecurityToken());
         SetRequireAdminAccess(true);
+        SetPeerName(msg.GetPeerName());
     }
 
     void Handle(TEvTablet::TEvLocalMKQLResponse::TPtr &ev, const TActorContext &ctx) {

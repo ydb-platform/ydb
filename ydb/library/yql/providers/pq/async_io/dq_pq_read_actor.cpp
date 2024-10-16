@@ -541,13 +541,13 @@ private:
             i64 usedSpace = 0;
             NUdf::TUnboxedValuePod item;
             if (Self.MetadataFields.empty()) {
-                item = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.Data(), data.Size()));
-                usedSpace += data.Size();
+                item = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.data(), data.size()));
+                usedSpace += data.size();
             } else {
                 NUdf::TUnboxedValue* itemPtr;
                 item = Self.HolderFactory.CreateDirectArrayHolder(Self.MetadataFields.size() + 1, itemPtr);
-                *(itemPtr++) = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.Data(), data.Size()));
-                usedSpace += data.Size();
+                *(itemPtr++) = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.data(), data.size()));
+                usedSpace += data.size();
 
                 for (const auto& [name, extractor] : Self.MetadataFields) {
                     auto [ub, size] = extractor(message);

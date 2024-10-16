@@ -517,7 +517,7 @@ class YqTenant(BaseTenant):
 
         fq_config['row_dispatcher'] = {
             'enabled': True,
-            'timeout_before_start_session_sec': 2,
+            'timeout_before_start_session_sec': 5,
             'send_status_period_sec': 2,
             'max_session_used_memory': 1000000,
             'without_consumer': True}

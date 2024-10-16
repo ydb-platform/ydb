@@ -1,0 +1,98 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 006976ef6a7e45903db1f49fcdfcfe89
+BELONGS ya.make
+    License text:
+        // Copyright David Abrahams 2009. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying
+        // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/concept/detail/backward_compatibility.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0b275d928a7071063ea8fa601680fadd
+BELONGS ya.make
+    License text:
+        // (C) Copyright Jeremy Siek 2000.
+        // Copyright 2002 The Trustees of Indiana University.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/concept_check.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6b6f79fc5e7fa6cea0ca8005d59ea5f4
+BELONGS ya.make
+    License text:
+        // Copyright David Abrahams 2006. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying
+        // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/concept/assert.hpp [1:3]
+        include/boost/concept/detail/borland.hpp [1:3]
+        include/boost/concept/detail/concept_def.hpp [1:3]
+        include/boost/concept/detail/concept_undef.hpp [1:3]
+        include/boost/concept/detail/general.hpp [1:3]
+        include/boost/concept/detail/has_constraints.hpp [1:3]
+        include/boost/concept/detail/msvc.hpp [1:3]
+        include/boost/concept/requires.hpp [1:3]
+        include/boost/concept/usage.hpp [1:3]
+        include/boost/concept_check/borland.hpp [1:3]
+        include/boost/concept_check/general.hpp [1:3]
+        include/boost/concept_check/has_constraints.hpp [1:3]
+        include/boost/concept_check/msvc.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c9d0d72a3dcde4707176a755657f4634
+BELONGS ya.make
+    License text:
+        // (C) Copyright Jeremy Siek 2000.
+        // Distributed under the Boost Software License, Version 1.0. (See
+        // accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/concept_archetype.hpp [2:4]
+        include/boost/concept_check.hpp [2:3]

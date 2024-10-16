@@ -6,15 +6,16 @@ SET(sql_grammar ${antlr_output}/SQLv1.g)
 
 SET(ANTLR_PACKAGE_NAME NSQLv1Generated)
 
-SET(GRAMMAR_STRING_CORE_SINGLE "\"~(QUOTE_SINGLE | BACKSLASH) | (BACKSLASH .)\"")
-SET(GRAMMAR_STRING_CORE_DOUBLE "\"~(QUOTE_DOUBLE | BACKSLASH) | (BACKSLASH .)\"")
-SET(GRAMMAR_MULTILINE_COMMENT_CORE       "\".\"")
-
 CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in ${antlr_templates}/protobuf/protobuf.stg)
 
 IF(EXPORT_CMAKE)
     MANUAL_GENERATION(${sql_grammar})
 ELSE()
+    # For exporting CMake this vars fill in epilogue.cmake
+    SET(GRAMMAR_STRING_CORE_SINGLE "\"~(QUOTE_SINGLE | BACKSLASH) | (BACKSLASH .)\"")
+    SET(GRAMMAR_STRING_CORE_DOUBLE "\"~(QUOTE_DOUBLE | BACKSLASH) | (BACKSLASH .)\"")
+    SET(GRAMMAR_MULTILINE_COMMENT_CORE "\".\"")
+
     CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/sql/v1/SQLv1.g.in ${sql_grammar})
 ENDIF()
 
@@ -30,27 +31,29 @@ RUN_ANTLR(
 
 IF (USE_VANILLA_PROTOC)
     SET(PROTOC_PATH contrib/tools/protoc_std)
+    PEERDIR(contrib/libs/protobuf_std)
 ELSE()
     SET(PROTOC_PATH contrib/tools/protoc/bin)
+    PEERDIR(contrib/libs/protobuf)
 ENDIF()
 
 
 RUN_PROGRAM(
-    $PROTOC_PATH -I=$CURDIR -I=$ARCADIA_ROOT -I=$ARCADIA_BUILD_ROOT -I=$ARCADIA_ROOT/contrib/libs/protobuf/src
-    --cpp_out=$ARCADIA_BUILD_ROOT --cpp_styleguide_out=$ARCADIA_BUILD_ROOT
+    $PROTOC_PATH -I=${CURDIR} -I=${ARCADIA_ROOT} -I=${ARCADIA_BUILD_ROOT} -I=${ARCADIA_ROOT}/contrib/libs/protobuf/src
+    --cpp_out=${ARCADIA_BUILD_ROOT} --cpp_styleguide_out=${ARCADIA_BUILD_ROOT}
     --plugin=protoc-gen-cpp_styleguide=contrib/tools/protoc/plugins/cpp_styleguide
     SQLv1Parser.proto
     IN SQLv1Parser.proto
     TOOL contrib/tools/protoc/plugins/cpp_styleguide
     OUT_NOAUTO SQLv1Parser.pb.h SQLv1Parser.pb.cc
-    CWD $ARCADIA_BUILD_ROOT
+    CWD ${antlr_output}
 )
 
 RUN_PYTHON3(
     ${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/gen/multiproto.py SQLv1Parser
     IN SQLv1Parser.pb.h
     IN SQLv1Parser.pb.cc
-    OUT_NOAUTO 
+    OUT_NOAUTO
     SQLv1Parser.pb.code0.cc
     SQLv1Parser.pb.code1.cc
     SQLv1Parser.pb.code2.cc
@@ -64,10 +67,8 @@ RUN_PYTHON3(
     SQLv1Parser.pb.data.cc
     SQLv1Parser.pb.classes.h
     SQLv1Parser.pb.main.h
-    CWD $ARCADIA_BUILD_ROOT/ydb/library/yql/parser/proto_ast/gen/v1_proto_split
+    CWD ${antlr_output}
 )
-
-PEERDIR(contrib/libs/protobuf)
 
 SRCS(
     SQLv1Parser.pb.code0.cc

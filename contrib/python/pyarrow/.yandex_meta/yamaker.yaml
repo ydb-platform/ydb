@@ -1,0 +1,18 @@
+requirements:
+  - contrib/libs/apache/arrow/cpp/src/arrow/python
+exclude:
+  - pyarrow/tensorflow/plasma_op.cc
+  - pyarrow/cuda.py
+  - pyarrow/dataset.py
+  - pyarrow/flight.py
+  - pyarrow/hdfs.py
+  - pyarrow/gandiva.pyx
+  - pyarrow/plasma.py
+  - pyarrow/_cuda.pyx
+  - pyarrow/_dataset.pyx
+  - pyarrow/_flight.pyx
+  - pyarrow/_hdfs.pyx
+  - pyarrow/_hdfsio.pyx
+  - pyarrow/_plasma.pyx
+  - pyarrow/_s3fs.pyx
+  - pyarrow/cffi.py

@@ -174,7 +174,7 @@ public:
     [[nodiscard]] bool Add(const std::shared_ptr<TTierInfo>& tier) {
         AFL_VERIFY(tier);
         if (!TTLColumnName) {
-            if (tier->GetEvictColumnName().Empty()) {
+            if (tier->GetEvictColumnName().empty()) {
                 AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "empty_evict_column_name");
                 return false;
             }

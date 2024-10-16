@@ -121,7 +121,7 @@ public:
             .Done();
 
         auto format = topicKeyParser.GetFormat();
-        if (format.Empty()) {
+        if (format.empty()) {
             format = "raw";
         }
 

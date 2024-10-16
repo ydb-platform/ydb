@@ -1,6 +1,7 @@
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_requestimpl.h"
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
+#include <ydb/core/base/feature_flags.h>
 
 namespace NKikimr {
 

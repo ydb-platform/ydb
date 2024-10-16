@@ -99,7 +99,7 @@ Y_UNIT_TEST_TWIN(AnalyzeTable, ColumnStore) {
     
     auto countMin = ExtractCountMin(runtime, pathId, 2);
     TString value = "Hello,world!";
-    auto stat = countMin->Probe(value.Data(), value.Size());
+    auto stat = countMin->Probe(value.data(), value.size());
     UNIT_ASSERT_C(stat >= 1500, ToString(stat));
 }
 

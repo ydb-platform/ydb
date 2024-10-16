@@ -1,19 +1,20 @@
 from __future__ import annotations
 
 import sys
-import threading
 from collections.abc import Awaitable, Callable, Generator
-from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
-from contextlib import AbstractContextManager, contextmanager
+from concurrent.futures import Future
+from contextlib import (
+    AbstractAsyncContextManager,
+    AbstractContextManager,
+    contextmanager,
+)
 from dataclasses import dataclass, field
 from inspect import isawaitable
+from threading import Lock, Thread, get_ident
 from types import TracebackType
 from typing import (
     Any,
-    AsyncContextManager,
-    ContextManager,
     Generic,
-    Iterable,
     TypeVar,
     cast,
     overload,
@@ -88,7 +89,9 @@ class _BlockingAsyncContextManager(Generic[T_co], AbstractContextManager):
         type[BaseException] | None, BaseException | None, TracebackType | None
     ] = (None, None, None)
 
-    def __init__(self, async_cm: AsyncContextManager[T_co], portal: BlockingPortal):
+    def __init__(
+        self, async_cm: AbstractAsyncContextManager[T_co], portal: BlockingPortal
+    ):
         self._async_cm = async_cm
         self._portal = portal
 
@@ -146,7 +149,7 @@ class BlockingPortal:
         return get_async_backend().create_blocking_portal()
 
     def __init__(self) -> None:
-        self._event_loop_thread_id: int | None = threading.get_ident()
+        self._event_loop_thread_id: int | None = get_ident()
         self._stop_event = Event()
         self._task_group = create_task_group()
         self._cancelled_exc_class = get_cancelled_exc_class()
@@ -167,7 +170,7 @@ class BlockingPortal:
     def _check_running(self) -> None:
         if self._event_loop_thread_id is None:
             raise RuntimeError("This portal is not running")
-        if self._event_loop_thread_id == threading.get_ident():
+        if self._event_loop_thread_id == get_ident():
             raise RuntimeError(
                 "This method cannot be called from the event loop thread"
             )
@@ -202,7 +205,7 @@ class BlockingPortal:
         def callback(f: Future[T_Retval]) -> None:
             if f.cancelled() and self._event_loop_thread_id not in (
                 None,
-                threading.get_ident(),
+                get_ident(),
             ):
                 self.call(scope.cancel)
 
@@ -375,8 +378,8 @@ class BlockingPortal:
         return f, task_status_future.result()
 
     def wrap_async_context_manager(
-        self, cm: AsyncContextManager[T_co]
-    ) -> ContextManager[T_co]:
+        self, cm: AbstractAsyncContextManager[T_co]
+    ) -> AbstractContextManager[T_co]:
         """
         Wrap an async context manager as a synchronous context manager via this portal.
 
@@ -411,7 +414,7 @@ class BlockingPortalProvider:
 
     backend: str = "asyncio"
     backend_options: dict[str, Any] | None = None
-    _lock: threading.Lock = field(init=False, default_factory=threading.Lock)
+    _lock: Lock = field(init=False, default_factory=Lock)
     _leases: int = field(init=False, default=0)
     _portal: BlockingPortal = field(init=False)
     _portal_cm: AbstractContextManager[BlockingPortal] | None = field(
@@ -469,43 +472,37 @@ def start_blocking_portal(
 
     async def run_portal() -> None:
         async with BlockingPortal() as portal_:
-            if future.set_running_or_notify_cancel():
-                future.set_result(portal_)
-                await portal_.sleep_until_stopped()
+            future.set_result(portal_)
+            await portal_.sleep_until_stopped()
+
+    def run_blocking_portal() -> None:
+        if future.set_running_or_notify_cancel():
+            try:
+                _eventloop.run(
+                    run_portal, backend=backend, backend_options=backend_options
+                )
+            except BaseException as exc:
+                if not future.done():
+                    future.set_exception(exc)
 
     future: Future[BlockingPortal] = Future()
-    with ThreadPoolExecutor(1) as executor:
-        run_future = executor.submit(
-            _eventloop.run,  # type: ignore[arg-type]
-            run_portal,
-            backend=backend,
-            backend_options=backend_options,
-        )
+    thread = Thread(target=run_blocking_portal, daemon=True)
+    thread.start()
+    try:
+        cancel_remaining_tasks = False
+        portal = future.result()
         try:
-            wait(
-                cast(Iterable[Future], [run_future, future]),
-                return_when=FIRST_COMPLETED,
-            )
+            yield portal
         except BaseException:
-            future.cancel()
-            run_future.cancel()
+            cancel_remaining_tasks = True
             raise
-
-        if future.done():
-            portal = future.result()
-            cancel_remaining_tasks = False
+        finally:
             try:
-                yield portal
-            except BaseException:
-                cancel_remaining_tasks = True
-                raise
-            finally:
-                try:
-                    portal.call(portal.stop, cancel_remaining_tasks)
-                except RuntimeError:
-                    pass
-
-        run_future.result()
+                portal.call(portal.stop, cancel_remaining_tasks)
+            except RuntimeError:
+                pass
+    finally:
+        thread.join()
 
 
 def check_cancelled() -> None:

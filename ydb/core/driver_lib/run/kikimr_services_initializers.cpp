@@ -13,6 +13,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/event_filter.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/feature_flags_service.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/pool_stats_collector.h>
@@ -37,6 +38,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/configs_cache.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/feature_flags_configurator.h>
 #include <ydb/core/cms/console/immediate_controls_configurator.h>
 #include <ydb/core/cms/console/jaeger_tracing_configurator.h>
 #include <ydb/core/cms/console/log_settings_configurator.h>
@@ -1692,6 +1694,9 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
             stringsFromProto(desc->AddressesV6, config.GetPublicAddressesV6());
 
             desc->ServedServices.insert(desc->ServedServices.end(), config.GetServices().begin(), config.GetServices().end());
+            if (config.HasEndpointId()) {
+                desc->EndpointId = config.GetEndpointId();
+            }
             endpoints.push_back(std::move(desc));
         }
 
@@ -1706,6 +1711,9 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
             desc->TargetNameOverride = config.GetPublicTargetNameOverride();
 
             desc->ServedServices.insert(desc->ServedServices.end(), config.GetServices().begin(), config.GetServices().end());
+            if (config.HasEndpointId()) {
+                desc->EndpointId = config.GetEndpointId();
+            }
             endpoints.push_back(std::move(desc));
         }
 
@@ -1721,6 +1729,9 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
                 stringsFromProto(desc->AddressesV6, sx.GetPublicAddressesV6());
 
                 desc->ServedServices.insert(desc->ServedServices.end(), sx.GetServices().begin(), sx.GetServices().end());
+                if (sx.HasEndpointId()) {
+                    desc->EndpointId = sx.GetEndpointId();
+                }
                 endpoints.push_back(std::move(desc));
             }
 
@@ -1735,6 +1746,9 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
                 desc->TargetNameOverride = sx.GetPublicTargetNameOverride();
 
                 desc->ServedServices.insert(desc->ServedServices.end(), sx.GetServices().begin(), sx.GetServices().end());
+                if (sx.HasEndpointId()) {
+                    desc->EndpointId = sx.GetEndpointId();
+                }
                 endpoints.push_back(std::move(desc));
             }
         }
@@ -2468,6 +2482,10 @@ void TConfigsDispatcherInitializer::InitializeServices(NActors::TActorSystemSetu
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
             NConsole::MakeConfigsDispatcherID(NodeId),
             TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
+
+    setup->LocalServices.emplace_back(
+        MakeFeatureFlagsServiceID(),
+        TActorSetupCmd(NConsole::CreateFeatureFlagsConfigurator(), TMailboxType::HTSwap, appData->UserPoolId));
 }
 
 TConfigsCacheInitializer::TConfigsCacheInitializer(const TKikimrRunConfig& runConfig)

@@ -715,7 +715,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
                 const auto query = Sprintf("\
                     INSERT INTO test (key, val)\n\
                     VALUES (Uuid(\"%s\"), %u);\n\
-                ", uuid.Data(), val++);
+                ", uuid.data(), val++);
                 auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             }
@@ -746,7 +746,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
             for (const auto& uuid : testUuids) {
                 const auto query = Sprintf("\
                     SELECT (val) FROM test WHERE key=CAST(\"%s\" as uuid);\n\
-                ", uuid.Data());
+                ", uuid.data());
                 auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
@@ -863,7 +863,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
                 const auto query = Sprintf("\
                     INSERT INTO test (key, val)\n\
                     VALUES (Uuid(\"%s\"), %u);\n\
-                ", uuid.Data(), val++);
+                ", uuid.data(), val++);
                 auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             }
@@ -871,7 +871,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         {
             int val = 0;
             for (const auto& uuid : testUuids) {
-                const auto query = Sprintf("SELECT * FROM test WHERE key=Uuid(\"%s\");", uuid.Data());
+                const auto query = Sprintf("SELECT * FROM test WHERE key=Uuid(\"%s\");", uuid.data());
                 auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 

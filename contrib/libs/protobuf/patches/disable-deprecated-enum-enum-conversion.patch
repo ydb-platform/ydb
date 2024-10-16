@@ -1,0 +1,17 @@
+commit af38e0d9473a2b9fcf94ea1dfc7b68818a3e657d
+author: nechda
+date: 2024-08-08T14:03:30+03:00
+
+    [PROTOBUF] Dont emit erro deprecated-enum-enum-conversion
+
+--- contrib/libs/protobuf/src/google/protobuf/port_def.inc	(7f7b074042eca175373d29cc3fb0f81287851b42)
++++ contrib/libs/protobuf/src/google/protobuf/port_def.inc	(af38e0d9473a2b9fcf94ea1dfc7b68818a3e657d)
+@@ -975,7 +975,7 @@ static_assert(PROTOBUF_CPLUSPLUS_MIN(201402L), "Protobuf only supports C++14 and
+ #pragma clang diagnostic ignored "-Wshorten-64-to-32"
+ // Turn on -Wdeprecated-enum-enum-conversion. This deprecation comes in C++20
+ // via http://wg21.link/p1120r0.
+-#pragma clang diagnostic error "-Wdeprecated-enum-enum-conversion"
++// #pragma clang diagnostic error "-Wdeprecated-enum-enum-conversion"
+ // This error has been generally flaky, but we need to disable it specifically
+ // to fix https://github.com/protocolbuffers/protobuf/issues/12313
+ #pragma clang diagnostic ignored "-Wunused-parameter"

@@ -164,7 +164,7 @@ public:
         Y_ABORT_UNLESS(Request.HasPartitionRequest() && Request.GetPartitionRequest().HasCmdRead());
         Y_ABORT_UNLESS(Request.GetPartitionRequest().GetCmdRead().GetPartNo() == 0); //partial request are not allowed, otherwise remove ReadProxy
         Y_ABORT_UNLESS(!Response->Record.HasPartitionResponse());
-        if (!directReadKey.SessionId.Empty()) {
+        if (!directReadKey.SessionId.empty()) {
             DirectReadKey.ReadId = Request.GetPartitionRequest().GetCmdRead().GetDirectReadId();
         }
     }
@@ -2319,9 +2319,9 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
                 << "Too big heartbeat message, must be at most " << mSize << ", but got " << cmd.GetHeartbeat().GetData().size());
             return;
         } else {
-            ui32 totalSize = cmd.GetData().Size();
+            ui32 totalSize = cmd.GetData().size();
             if (cmd.HasHeartbeat()) {
-                totalSize = cmd.GetHeartbeat().GetData().Size();
+                totalSize = cmd.GetHeartbeat().GetData().size();
             }
             if (cmd.HasTotalSize()) {
                 totalSize = cmd.GetTotalSize();
@@ -2508,7 +2508,7 @@ bool ValidateDirectReadRequestBase(
         TStringBuilder& error, TDirectReadKey& key
 ) {
     key = TDirectReadKey{cmd.GetSessionKey().GetSessionId(), cmd.GetSessionKey().GetPartitionSessionId(), cmd.GetDirectReadId()};
-    if (key.SessionId.Empty()) {
+    if (key.SessionId.empty()) {
         error << "no session id in publish read request: ";
         return false;
     } else if (key.PartitionSessionId == 0) {
@@ -2594,7 +2594,7 @@ void TPersQueue::DestroySession(TPipeInfo& pipeInfo) {
     LOG_DEBUG_S(
             ctx, NKikimrServices::PERSQUEUE, "PQ: Destroy direct read session " << pipeInfo.SessionId
     );
-    if (pipeInfo.SessionId.Empty())
+    if (pipeInfo.SessionId.empty())
         return;
     ActorContext().Send(
             MakePQDReadCacheServiceActorId(),
@@ -3050,7 +3050,7 @@ void TPersQueue::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TA
                     it->second.Owner, it->first
             ));
         }
-        if (!it->second.SessionId.Empty()) {
+        if (!it->second.SessionId.empty()) {
             DestroySession(it->second);
         }
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " server disconnected, pipe "

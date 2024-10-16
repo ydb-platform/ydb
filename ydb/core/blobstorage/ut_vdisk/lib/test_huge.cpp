@@ -8,6 +8,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_recoverylogwriter.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_lsnmngr.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
 using namespace NKikimr;
 using namespace NKikimr::NHuge;

@@ -46,10 +46,10 @@ TString MakeCreateExternalDataTableQuery(const FederatedQuery::BindingContent& c
     auto withOptions = std::unordered_map<TString, TString>{};
     withOptions.insert({"DATA_SOURCE", TStringBuilder{} << '"' << connectionName << '"'});
     withOptions.insert({"LOCATION", EncloseAndEscapeString(subset.path_pattern(), '"')});
-    if (!subset.format().Empty()) {
+    if (!subset.format().empty()) {
         withOptions.insert({"FORMAT", EncloseAndEscapeString(subset.format(), '"')});
     }
-    if (!subset.compression().Empty()) {
+    if (!subset.compression().empty()) {
         withOptions.insert(
             {"COMPRESSION", EncloseAndEscapeString(subset.compression(), '"')});
     }

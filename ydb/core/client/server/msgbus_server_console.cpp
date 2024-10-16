@@ -44,6 +44,7 @@ public:
             TBase::SetRequireAdminAccess(true);
         }
 
+        TBase::SetPeerName(msg.GetPeerName());
     }
 
     void Bootstrap(const TActorContext &ctx)

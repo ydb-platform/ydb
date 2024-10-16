@@ -127,7 +127,7 @@ void TUuidWriter::operator()(TStringBuf value, NSkiff::TCheckedInDebugSkiffWrite
             ExpectedSize,
             value.size());
     }
-    const ui64* array = reinterpret_cast<const ui64*>(value.Data());
+    const ui64* array = reinterpret_cast<const ui64*>(value.data());
     writer->WriteUint128(NSkiff::TUint128{InetToHost(array[1]), InetToHost(array[0])});
 }
 

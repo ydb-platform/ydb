@@ -9,6 +9,7 @@
 #include <ydb/core/mind/tenant_pool.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/yaml_config/yaml_config.h>
 #include <util/system/hostname.h>
 #include <util/generic/ptr.h>
 

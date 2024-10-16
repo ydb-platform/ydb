@@ -1,0 +1,7 @@
+--- a/config-linux.h	(index)
++++ b/config-linux.h	(working tree)
+@@ -1074,4 +1074,0 @@
+-/* Define to the equivalent of the C99 'restrict' keyword, or to
+-   nothing if this is not supported.  Do not define if restrict is
+-   supported only directly.  */
+-#define restrict __restrict__

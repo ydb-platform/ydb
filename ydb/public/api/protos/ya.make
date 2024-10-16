@@ -18,6 +18,7 @@ SRCS(
     draft/ydb_object_storage.proto
     draft/ydb_replication.proto
     draft/ydb_tablet.proto
+    draft/ydb_view.proto
     draft/ymq.proto
     draft/field_transformation.proto
     ydb_federation_discovery.proto

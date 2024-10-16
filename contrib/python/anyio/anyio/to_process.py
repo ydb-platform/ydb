@@ -223,7 +223,7 @@ def process_worker() -> None:
                 main_module_path: str | None
                 sys.path, main_module_path = args
                 del sys.modules["__main__"]
-                if main_module_path:
+                if main_module_path and os.path.isfile(main_module_path):
                     # Load the parent's main module but as __mp_main__ instead of
                     # __main__ (like multiprocessing does) to avoid infinite recursion
                     try:
@@ -234,7 +234,6 @@ def process_worker() -> None:
                             sys.modules["__main__"] = main
                     except BaseException as exc:
                         exception = exc
-
         try:
             if exception is not None:
                 status = b"EXCEPTION"

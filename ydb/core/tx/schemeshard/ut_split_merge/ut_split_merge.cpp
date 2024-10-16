@@ -1,4 +1,5 @@
 #include <ydb/core/tablet_flat/util_fmt_cell.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 
@@ -275,6 +276,69 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+111));
         // test requires more txids than cached at start
+    }
+
+    Y_UNIT_TEST(MergeIndexTableShards) {
+        TTestBasicRuntime runtime;
+
+        TTestEnvOptions opts;
+        opts.EnableBackgroundCompaction(false);
+        TTestEnv env(runtime, opts);
+
+        ui64 txId = 100;
+
+        TBlockEvents<TEvDataShard::TEvPeriodicTableStats> statsBlocker(runtime);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+                TableDescription {
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint64" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                }
+                IndexDescription {
+                    Name: "ByValue"
+                    KeyColumnNames: ["value"]
+                    IndexImplTableDescriptions {
+                        SplitBoundary { KeyPrefix { Tuple { Optional { Text: "A" } } } }
+                        SplitBoundary { KeyPrefix { Tuple { Optional { Text: "B" } } } }
+                        SplitBoundary { KeyPrefix { Tuple { Optional { Text: "C" } } } }
+                    }
+                }
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/ByValue/indexImplTable", true),
+            { NLs::PartitionCount(4) }
+        );
+
+        statsBlocker.Stop().Unblock();
+
+        TVector<ui64> indexShards;
+        auto shardCollector = [&indexShards](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
+            const auto& partitions = record.GetPathDescription().GetTablePartitions();
+            indexShards.clear();
+            indexShards.reserve(partitions.size());
+            for (const auto& partition : partitions) {
+                indexShards.emplace_back(partition.GetDatashardId());
+            }
+        };
+
+        // wait until all index impl table shards are merged into one
+        while (true) {
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/ByValue/indexImplTable", true), {
+                shardCollector
+            });
+            if (indexShards.size() > 1) {
+                // If a merge happens, old shards are deleted and replaced with a new one.
+                // That is why we need to wait for * all * the shards to be deleted.
+                env.TestWaitTabletDeletion(runtime, indexShards);
+            } else {
+                break;
+            }
+        }
     }
 
     Y_UNIT_TEST(AutoMergeInOne) {

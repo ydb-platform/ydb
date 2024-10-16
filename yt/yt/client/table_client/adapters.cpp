@@ -1,11 +1,10 @@
 #include "adapters.h"
-#include "private.h"
 
+#include "private.h"
+#include "schema.h"
 #include "row_batch.h"
 
 #include <yt/yt/client/api/table_writer.h>
-
-#include <yt/yt/client/table_client/schema.h>
 
 #include <yt/yt/core/concurrency/scheduler.h>
 #include <yt/yt/core/concurrency/throughput_throttler.h>

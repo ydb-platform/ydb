@@ -1,0 +1,15 @@
+From 929d4ee707b1e023d3858b7eaa359d457e878f1f Mon Sep 17 00:00:00 2001
+From: Антон Самохвалов <pg@yandex-team.ru>
+Date: Thu, 14 Jan 2016 14:15:59 +0000
+Subject: [PATCH] shut up ubsan
+
+git-svn-id: svn+ssh://arcadia.yandex.ru/arc/trunk/arcadia/contrib/libs/zlib@2026327 41d65440-b5be-11dd-afe3-b2e846d9b4f8
+--- a/deflate.c
++++ b/deflate.c
+@@ -52,2 +52,3 @@
+ #include "deflate.h"
++#include <util/system/compiler.h>
+ 
+@@ -1148,1 +1148,2 @@ local void lm_init (s)
++Y_NO_SANITIZE("undefined")
+ local uInt longest_match(deflate_state *s, IPos cur_match) {

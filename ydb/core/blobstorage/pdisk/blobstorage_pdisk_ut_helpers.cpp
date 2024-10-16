@@ -35,7 +35,7 @@ TString StatusToString(const NKikimrProto::EReplyStatus status) {
 }
 
 TString MakeDatabasePath(const char *dir) {
-    TString databaseDirectory = Sprintf("%s/yard", dir);
+    TString databaseDirectory = Sprintf("%s/pdisk", dir);
     return databaseDirectory;
 }
 
@@ -44,8 +44,21 @@ TString MakePDiskPath(const char *dir) {
     if (IsRealBlockDevice) {
         return RealBlockDevicePath;
     } else {
-        return databaseDirectory + "/pdisk.dat";
+        return databaseDirectory + "/data.bin";
     }
+}
+
+TString CreateFile(const char *baseDir, ui32 dataSize) {
+    TString databaseDirectory = MakeDatabasePath(baseDir);
+    MakeDirIfNotExist(databaseDirectory.c_str());
+    TString path = MakePDiskPath(baseDir);
+    {
+        TFile file(path.c_str(), OpenAlways | RdWr | Seq | Direct);
+        file.Resize(dataSize);
+        file.Close();
+    }
+    UNIT_ASSERT_EQUAL_C(NFs::Exists(path), true, "File " << path << " does not exist.");
+    return path;
 }
 
 void FormatPDiskForTest(TString path, ui64 guid, ui32& chunkSize, ui64 diskSize, bool isErasureEncodeUserLog,

@@ -334,8 +334,9 @@ def main():
                 "    TTupleType* tupleType,\n" \
                 "    const std::vector<ui32>& argsColumns,\n" \
                 "    const TTypeEnvironment& env,\n" \
-                "    TType* returnType) const final {\n" \
-                "    const auto& aggDesc = ResolveAggregation(\"NAME\", tupleType, argsColumns, returnType);\n"
+                "    TType* returnType,\n" \
+                "    ui32 hint) const final {\n" \
+                "    const auto& aggDesc = ResolveAggregation(\"NAME\", tupleType, argsColumns, returnType, hint);\n"
                 "    switch (aggDesc.AggId) {\n" +
                 "".join(["    case " + str(agg_id) + ": return MakePgAgg_NAME_" + str(agg_id) + "().PrepareFinalizeKeys(argsColumns.front(), aggDesc);\n" for agg_id in agg_names[name]]) +
                 "    default: throw yexception() << \"Unsupported agg id: \" << aggDesc.AggId;\n" \

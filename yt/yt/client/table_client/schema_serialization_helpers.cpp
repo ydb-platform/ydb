@@ -1,9 +1,8 @@
+#include "schema_serialization_helpers.h"
 
 #include "comparator.h"
 
 #include <yt/yt/core/ytree/fluent.h>
-
-#include <yt/yt/client/table_client/schema_serialization_helpers.h>
 
 namespace NYT::NTableClient {
 

@@ -54,6 +54,8 @@ public:
         return GRPC_COMPRESS_LEVEL_NONE;
     }
 
+    TString GetEndpointId() const override { return {}; }
+
     google::protobuf::Arena* GetArena() override {
         return &Arena_;
     }

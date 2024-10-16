@@ -18,7 +18,7 @@ TPyObjectPtr PyRepr(TStringBuf asciiStr, bool intern) {
 
     Py_ssize_t size = static_cast<Py_ssize_t>(asciiStr.size());
 #if PY_MAJOR_VERSION >= 3
-    TPyObjectPtr pyStr = PyUnicode_FromStringAndSize(asciiStr.Data(), size);
+    TPyObjectPtr pyStr = PyUnicode_FromStringAndSize(asciiStr.data(), size);
 #else
     TPyObjectPtr pyStr = PyString_FromStringAndSize(asciiStr.data(), size);
 #endif

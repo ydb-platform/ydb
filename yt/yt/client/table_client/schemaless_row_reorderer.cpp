@@ -1,7 +1,7 @@
 #include "schemaless_row_reorderer.h"
 
-#include <yt/yt/client/table_client/name_table.h>
-#include <yt/yt/client/table_client/row_buffer.h>
+#include "name_table.h"
+#include "row_buffer.h"
 
 namespace NYT::NTableClient {
 

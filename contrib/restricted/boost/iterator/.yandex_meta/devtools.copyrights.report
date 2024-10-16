@@ -1,0 +1,370 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 096d8c5df1c32b2f75ba4a9a2e402de2
+BELONGS ya.make
+    License text:
+        // Copyright David Abrahams and Thomas Becker 2000-2006.
+        // Copyright Kohei Takahashi 2012-2014.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/iterator/zip_iterator.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0a88dd37543f88fab003f41788b3cf9b
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Dave Abrahams and Daniel Walker 1999-2003.
+        //  Copyright (c) Andrey Semashev 2017
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/next_prior.hpp [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1aaf18d7a866b2a0f3d63bce77bf1c79
+BELONGS ya.make
+    License text:
+        // Copyright David Abrahams and Jeremy Siek 2003.
+        // Distributed under the Boost Software License, Version 1.0. (See
+        // accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/pending/iterator_tests.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1daddaec4a141024c460f121eb640798
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/iterator/detail/config_def.hpp [1:5]
+        include/boost/iterator/detail/enable_if.hpp [1:5]
+        include/boost/iterator/filter_iterator.hpp [1:5]
+        include/boost/iterator/indirect_iterator.hpp [1:5]
+        include/boost/iterator/interoperable.hpp [1:5]
+        include/boost/iterator/iterator_adaptor.hpp [1:5]
+        include/boost/iterator/iterator_facade.hpp [1:5]
+        include/boost/iterator/reverse_iterator.hpp [1:5]
+        include/boost/iterator/transform_iterator.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 275d0865f693a03adf83bd0f3ac07c33
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/iterator/detail/config_def.hpp [1:5]
+        include/boost/iterator/detail/enable_if.hpp [1:5]
+        include/boost/iterator/filter_iterator.hpp [1:5]
+        include/boost/iterator/indirect_iterator.hpp [1:5]
+        include/boost/iterator/interoperable.hpp [1:5]
+        include/boost/iterator/iterator_adaptor.hpp [1:5]
+        include/boost/iterator/iterator_archetypes.hpp [1:3]
+        include/boost/iterator/iterator_categories.hpp [1:3]
+        include/boost/iterator/iterator_concepts.hpp [1:3]
+        include/boost/iterator/iterator_facade.hpp [1:5]
+        include/boost/iterator/reverse_iterator.hpp [1:5]
+        include/boost/iterator/transform_iterator.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 31944823e2ff50fe3a2c1ee16b2ac06e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/iterator/permutation_iterator.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3244b00e8ab273a03f19b20a64c26a96
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2023 Andrey Semashev
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/iterator/is_iterator.hpp [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3480f6f1e992412638387963c9a8bfe5
+BELONGS ya.make
+    License text:
+        // Copyright David Abrahams and Thomas Becker 2000-2006.
+        // Copyright Kohei Takahashi 2012-2014.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/iterator/zip_iterator.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3ab6090aa97ef6371f6b59c9148c4ea1
+BELONGS ya.make
+    License text:
+        // Copyright (c) David Abrahams 2001.
+        // Copyright (c) Jeremy Siek 2001-2003.
+        // Copyright (c) Thomas Witt 2002.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/iterator/new_iterator_tests.hpp [5:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3eeb9233d0c8faa3468506996fae389d
+BELONGS ya.make
+    License text:
+        // (C) Copyright Jens Maurer 2001.
+        // Distributed under the Boost Software License, Version 1.0. (See
+        // accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/generator_iterator.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 466b8cae4ed2e64dacdfdd01d7b4a0b4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/iterator/detail/config_def.hpp [1:5]
+        include/boost/iterator/detail/config_undef.hpp [1:3]
+        include/boost/iterator/detail/enable_if.hpp [1:5]
+        include/boost/iterator/filter_iterator.hpp [1:5]
+        include/boost/iterator/indirect_iterator.hpp [1:5]
+        include/boost/iterator/interoperable.hpp [1:5]
+        include/boost/iterator/iterator_adaptor.hpp [1:5]
+        include/boost/iterator/iterator_facade.hpp [1:5]
+        include/boost/iterator/reverse_iterator.hpp [1:5]
+        include/boost/iterator/transform_iterator.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 483fdf5158d0f8518198f5ac2c492f5f
+BELONGS ya.make
+    License text:
+        // (C) Copyright Jeremy Siek 2001.
+        // Distributed under the Boost Software License, Version 1.0. (See
+        // accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/iterator/function_output_iterator.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4aa8761b7714a5e9baf4ca567e1fc644
+BELONGS ya.make
+    License text:
+        // (C) Copyright Andrey Semashev 2017.
+        // Distributed under the Boost Software License, Version 1.0. (See
+        // accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/function_output_iterator.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 553dd745e86757a08cb75a0e5c758ba8
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/iterator/function_input_iterator.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5c8ac41153fe8e9daf8181b70c9bcb2b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/iterator/permutation_iterator.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6587dc636363fab50bd61228a566457c
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Dave Abrahams and Daniel Walker 1999-2003.
+        //  Copyright (c) Andrey Semashev 2017
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/next_prior.hpp [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6d352fb30bdf4f6229e55027126be38e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/iterator/permutation_iterator.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 70a94800ba84db85ec3ff20c6d23755e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/indirect_reference.hpp [5:7]
+        include/boost/iterator_adaptors.hpp [1:3]
+        include/boost/pointee.hpp [5:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7154f956948b41d87bf8a2b73a07d675
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Jeremy Siek 1999.
+        //  Distributed under the Boost Software License, Version 1.0. (See
+        //  accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/pending/detail/int_iterator.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7b333747aa8572c825a7efd493a9a9f8
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2017 Michel Morin.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/iterator/advance.hpp [1:1]
+        include/boost/iterator/distance.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8f8a6ade4e24b15fc1746528d7ea1943
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/shared_container_iterator.hpp [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b115999a21015dd266d010727a799415
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/iterator/function_input_iterator.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c30de2713f6adb4cc18cd66c69ba60b2
+BELONGS ya.make
+    License text:
+        // Copyright (c) David Abrahams 2001.
+        // Copyright (c) Jeremy Siek 2001-2003.
+        // Copyright (c) Thomas Witt 2002.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/iterator/new_iterator_tests.hpp [5:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL da74bde384bb9591220ea65cbfd6ed00
+BELONGS ya.make
+    License text:
+        // Copyright (c) David Abrahams 2001.
+        // Copyright (c) Jeremy Siek 2001-2003.
+        // Copyright (c) Thomas Witt 2002.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/iterator/new_iterator_tests.hpp [5:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f737ed06addb0e3798f6d97ca33809b1
+BELONGS ya.make
+    License text:
+        // Copyright David Abrahams 2003.
+        // Distributed under the Boost Software License, Version 1.0. (See
+        // accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/iterator/counting_iterator.hpp [1:3]
+        include/boost/iterator/detail/any_conversion_eater.hpp [1:3]
+        include/boost/iterator/detail/facade_iterator_category.hpp [1:3]
+        include/boost/iterator/detail/minimum_category.hpp [1:3]
+        include/boost/iterator/is_lvalue_iterator.hpp [1:3]
+        include/boost/iterator/is_readable_iterator.hpp [1:3]
+        include/boost/iterator/iterator_traits.hpp [1:3]
+        include/boost/iterator/minimum_category.hpp [1:3]
+        include/boost/pending/iterator_adaptors.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f94cb856c9e5e6fd69d03e77e07fdd8a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/iterator/function_input_iterator.hpp [1:5]

@@ -1,0 +1,95 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1473392d783508900e70b0d067afdf4b
+BELONGS ya.make
+    License text:
+        // Copyright 2016 Ismael Jimenez Martinez. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/complexity.cc [1:1]
+        src/complexity.h [1:1]
+        src/statistics.cc [1:1]
+        src/statistics.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1fefd9dea40e1e3b9c89f84fe802b250
+BELONGS ya.make
+    License text:
+        // Copyright 2017 Roman Lebedev. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/statistics.cc [2:2]
+        src/statistics.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 904be6eceb61d466f53f25892be2624f
+BELONGS ya.make
+    License text:
+        // Copyright 2021 Google Inc. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/perf_counters.cc [1:1]
+        src/perf_counters.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f4d2490c76552286e9c484abd3bea2b4
+BELONGS ya.make
+    License text:
+        // Copyright 2015 Google Inc. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/benchmark/benchmark.h [1:1]
+        src/benchmark.cc [1:1]
+        src/benchmark_name.cc [1:1]
+        src/benchmark_register.cc [1:1]
+        src/benchmark_runner.cc [1:1]
+        src/benchmark_runner.h [1:1]
+        src/colorprint.cc [1:1]
+        src/commandlineflags.cc [1:1]
+        src/console_reporter.cc [1:1]
+        src/counter.cc [1:1]
+        src/counter.h [1:1]
+        src/csv_reporter.cc [1:1]
+        src/json_reporter.cc [1:1]
+        src/re.h [1:1]
+        src/reporter.cc [1:1]
+        src/sysinfo.cc [1:1]
+        src/timers.cc [1:1]

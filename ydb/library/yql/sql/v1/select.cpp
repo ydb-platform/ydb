@@ -1760,7 +1760,7 @@ public:
 
     TNodePtr BuildSort(TContext& ctx, const TString& label) override {
         Y_UNUSED(ctx);
-        if (OrderBy.empty()) {
+        if (OrderBy.empty() || DisableSort_) {
             return nullptr;
         }
 
@@ -1846,7 +1846,7 @@ public:
             if (!maybeExist.Defined()) {
                 return maybeExist;
             }
-            if (!aggregated && column.GetColumnName() && IsMissingInProjection(ctx, column)) {
+            if (!DisableSort_ && !aggregated && column.GetColumnName() && IsMissingInProjection(ctx, column)) {
                 ExtraSortColumns[FullColumnName(column)] = &column;
             }
             return maybeExist;
@@ -2964,6 +2964,7 @@ public:
         }
 
         if (IgnoreSort()) {
+            Source->DisableSort();
             ctx.Warning(Source->GetPos(), TIssuesIds::YQL_ORDER_BY_WITHOUT_LIMIT_IN_SUBQUERY) << "ORDER BY without LIMIT in subquery will be ignored";
         }
 

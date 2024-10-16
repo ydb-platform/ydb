@@ -306,6 +306,11 @@ namespace {
             .Optional()
             .StoreResult(&MaxActivePartitions_);
         AddAutoPartitioning(config, false);
+
+        config.Opts->AddLongOption("partitions-per-tablet", "Partitions per PQ tablet")
+            .Optional()
+            .Hidden()
+            .StoreResult(&PartitionsPerTablet_);
     }
 
     void TCommandTopicCreate::Parse(TConfig& config) {
@@ -347,6 +352,10 @@ namespace {
 
         settings.RetentionPeriod(TDuration::Hours(RetentionPeriodHours_));
         settings.RetentionStorageMb(RetentionStorageMb_);
+
+        if (PartitionsPerTablet_.Defined()) {
+            settings.AddAttribute("_partitions_per_tablet", ToString(*PartitionsPerTablet_));
+        }
 
         auto status = topicClient.CreateTopic(TopicName, settings).GetValueSync();
         ThrowOnError(status);

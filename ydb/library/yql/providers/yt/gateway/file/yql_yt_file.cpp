@@ -455,8 +455,8 @@ public:
             TSession* session = GetSession(options);
 
             TSet<TString> uniqueTables;
-            const auto fullPrefix = options.Prefix().Empty() ? TString() : (options.Prefix() + '/');
-            const auto fullSuffix = options.Suffix().Empty() ? TString() : ('/' + options.Suffix());
+            const auto fullPrefix = options.Prefix().empty() ? TString() : (options.Prefix() + '/');
+            const auto fullSuffix = options.Suffix().empty() ? TString() : ('/' + options.Suffix());
             for (const auto& [tableName, _] : Services_->GetTablesMapping()) {
                 TVector<TString> parts;
                 Split(tableName, ".", parts);
@@ -541,7 +541,7 @@ public:
         auto pos = options.Pos();
         try {
             TSet<TString> uniqueTables;
-            const auto fullPrefix = options.Prefix().Empty() ? "" : (options.Prefix() + '/');
+            const auto fullPrefix = options.Prefix().empty() ? "" : (options.Prefix() + '/');
             for (const auto& [tableName, _] : Services_->GetTablesMapping()) {
                 TVector<TString> parts;
                 Split(tableName, ".", parts);

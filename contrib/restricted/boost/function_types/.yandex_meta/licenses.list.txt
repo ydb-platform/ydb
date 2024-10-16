@@ -1,0 +1,16 @@
+====================BSL-1.0====================
+// Use modification and distribution are subject to the boost Software License,
+// Version 1.0. (See http://www.boost.org/LICENSE_1_0.txt).
+
+
+====================BSL-1.0====================
+// Version 1.0. (See http://www.boost.org/LICENSE_1_0.txt).
+
+
+====================BSL-1.0 AND BSL-1.0====================
+// Use modification and distribution are subject to the boost Software License,
+// Version 1.0. (See http://www.boost.org/LICENSE_1_0.txt).
+
+
+====================COPYRIGHT====================
+// (C) Copyright Tobias Schwinger

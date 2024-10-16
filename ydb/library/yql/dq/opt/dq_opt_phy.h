@@ -31,6 +31,12 @@ NNodes::TExprBase DqPushSkipNullMembersToStage(NNodes::TExprBase node, TExprCont
 NNodes::TExprBase DqPushExtractMembersToStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
 
+NNodes::TExprBase DqPushAssumeDistinctToStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
+
+NNodes::TExprBase DqPushAssumeUniqueToStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
+
 NNodes::TExprBase DqPushOrderedLMapToStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
 

@@ -1,0 +1,13 @@
+diff --git a/src/assert.cpp b/src/assert.cpp
+index 40c51f8..21a3863 100644
+--- a/src/assert.cpp
++++ b/src/assert.cpp
+@@ -28,7 +28,7 @@ _LIBCPP_NORETURN void __libcpp_abort_debug_function(__libcpp_debug_info const& i
+     std::abort();
+ }
+ 
+-constinit __libcpp_debug_function_type __libcpp_debug_function = __libcpp_abort_debug_function;
++_LIBCPP_CONSTINIT __libcpp_debug_function_type __libcpp_debug_function = __libcpp_abort_debug_function;
+ 
+ bool __libcpp_set_debug_function(__libcpp_debug_function_type __func) {
+   __libcpp_debug_function = __func;

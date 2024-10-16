@@ -1576,8 +1576,8 @@ NUdf::TUnboxedValuePod ParseTzDate(NUdf::TStringRef str) {
     ui32 year, month, day;
     ui32 pos = 0;
     bool beforeChrist = false;
-    if (pos < buf.Size()) {
-        char c = buf.Data()[pos];
+    if (pos < buf.size()) {
+        char c = buf.data()[pos];
         if (c == '-') {
             beforeChrist = true;
             ++pos;
@@ -1843,8 +1843,8 @@ NUdf::TUnboxedValuePod ParseTzDatetime(NUdf::TStringRef str) {
     ui32 year, month, day;
     ui32 pos = 0;
     bool beforeChrist = false;
-    if (pos < buf.Size()) {
-        char c = buf.Data()[pos];
+    if (pos < buf.size()) {
+        char c = buf.data()[pos];
         if (c == '-') {
             beforeChrist = true;
             ++pos;
@@ -2116,8 +2116,8 @@ NUdf::TUnboxedValuePod ParseTzTimestamp(NUdf::TStringRef str) {
     ui32 year, month, day;
     ui32 pos = 0;
     bool beforeChrist = false;
-    if (pos < buf.Size()) {
-        char c = buf.Data()[pos];
+    if (pos < buf.size()) {
+        char c = buf.data()[pos];
         if (c == '-') {
             beforeChrist = true;
             ++pos;

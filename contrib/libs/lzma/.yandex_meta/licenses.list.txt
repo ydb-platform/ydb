@@ -1,0 +1,154 @@
+====================0BSD====================
+        0BSD for newer releases was made in Febrary 2024 because
+
+
+====================0BSD====================
+        and ChangeLog) are under 0BSD unless stated otherwise in
+
+
+====================0BSD====================
+        are under 0BSD; they aren't based on the man pages of GNU gzip.
+
+
+====================0BSD====================
+        domain and 0BSD. The main difference likely is that one
+
+
+====================0BSD====================
+        shouldn't claim that 0BSD-licensed code is in the public
+
+
+====================0BSD====================
+        the BSD Zero Clause License (0BSD).
+
+
+====================0BSD====================
+        under 0BSD except that, on systems that don't have a usable
+
+
+====================0BSD====================
+      - COPYING.0BSD: BSD Zero Clause License
+
+
+====================0BSD====================
+      - liblzma is under the BSD Zero Clause License (0BSD).
+
+
+====================0BSD====================
+    COPYING.0BSD          BSD Zero Clause License
+
+
+====================0BSD====================
+/* SPDX-License-Identifier: 0BSD */
+
+
+====================0BSD====================
+// SPDX-License-Identifier: 0BSD
+
+
+====================0BSD====================
+Permission to use, copy, modify, and/or distribute this
+software for any purpose with or without fee is hereby granted.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
+WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL
+THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR
+CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT,
+NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+====================0BSD AND Public-Domain====================
+        an extremely permissive license. Neither 0BSD nor public domain
+
+
+====================BSD-2-Clause====================
+        for example, BSD 2-Clause "Simplified" License which does have
+
+
+====================BSD-3-Clause AND 0BSD====================
+ * liblzma is distributed under the BSD Zero Clause License (0BSD).
+
+
+====================COPYRIGHT====================
+        Copyright (C) The XZ Utils authors and contributors
+
+
+====================COPYRIGHT====================
+ Copyright (C) 1989, 1991 Free Software Foundation, Inc.,
+ 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ Everyone is permitted to copy and distribute verbatim copies
+
+
+====================COPYRIGHT====================
+ Copyright (C) 1991, 1999 Free Software Foundation, Inc.
+ 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ Everyone is permitted to copy and distribute verbatim copies
+
+
+====================COPYRIGHT====================
+ Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
+ Everyone is permitted to copy and distribute verbatim copies
+ of this license document, but changing it is not allowed.
+
+
+====================COPYRIGHT====================
+programs whose distribution conditions are different, write to the author
+to ask for permission.  For software which is copyrighted by the Free
+Software Foundation, write to the Free Software Foundation; we sometimes
+make exceptions for this.  Our decision will be guided by the two goals
+of preserving the free status of all derivatives of our free software and
+of promoting the sharing and reuse of software generally.
+
+
+====================File: COPYING.0BSD====================
+Permission to use, copy, modify, and/or distribute this
+software for any purpose with or without fee is hereby granted.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
+WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL
+THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR
+CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT,
+NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+
+====================Public-Domain====================
+        There is very little *practical* difference between public
+        domain and 0BSD. The main difference likely is that one
+
+
+====================Public-Domain====================
+        lzma-file-format.xt are in the public domain but may
+
+
+====================Public-Domain====================
+        public domain has (real or perceived) legal ambiguities in
+
+
+====================Public-Domain====================
+        shouldn't claim that 0BSD-licensed code is in the public
+        domain; 0BSD-licensed code is copyrighted but available under
+
+
+====================Public-Domain====================
+        significant amount of code put into the public domain and
+
+
+====================Public-Domain====================
+        some old translations are in the public domain.
+
+
+====================Public-Domain====================
+        that obviously remains so. The switch from public domain to
+
+
+====================Public-Domain====================
+//  The C code is based on the public domain SHA-256 code found from
+
+
+====================Public-Domain====================
+/// and the public domain code from https://github.com/rawrunprotected/crc

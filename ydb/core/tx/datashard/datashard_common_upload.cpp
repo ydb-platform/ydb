@@ -189,7 +189,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             if (valueCells.GetCells()[vi].Size() > NLimits::MaxWriteValueSize) {
                 SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT,
                          Sprintf("Row cell size of %" PRISZT " bytes is larger than the allowed threshold %" PRIu64,
-                                 valueCells.GetBuffer().Size(), NLimits::MaxWriteValueSize));
+                                 valueCells.GetBuffer().size(), NLimits::MaxWriteValueSize));
                 return true;
             }
 

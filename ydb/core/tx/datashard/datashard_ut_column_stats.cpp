@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(StatisticsScan) {
             auto& stat = column.GetStatistics(0);
             UNIT_ASSERT(stat.GetType() == 2);
 
-            auto* data = stat.GetData().Data();
+            auto* data = stat.GetData().data();
             auto* sketch = reinterpret_cast<const TCountMinSketch*>(data);
 
             for (ui32 j = 0; j <= 10; ++j) {

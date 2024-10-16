@@ -629,6 +629,20 @@
             "uri": "https://{canondata_backend}/1809005/2a59475dc877549ac4197a291aacd77d92f24ab4/resource.tar.gz#test.test_bigdate-table_arithmetic_narrow-default.txt-Plan_/plan.txt"
         }
     ],
+    "test.test[bigdate-tz_bytes-default.txt-Debug]": [
+        {
+            "checksum": "b04dcd471fce83310ed2047481dae3cd",
+            "size": 1095,
+            "uri": "https://{canondata_backend}/1900335/a93c9a2bd84a19d5ed7b813ddf3960f383b3d67c/resource.tar.gz#test.test_bigdate-tz_bytes-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[bigdate-tz_bytes-default.txt-Plan]": [
+        {
+            "checksum": "01775e7c945a56ebf0edc2d478f4f68d",
+            "size": 2567,
+            "uri": "https://{canondata_backend}/1900335/a93c9a2bd84a19d5ed7b813ddf3960f383b3d67c/resource.tar.gz#test.test_bigdate-tz_bytes-default.txt-Plan_/plan.txt"
+        }
+    ],
     "test.test[binding-bind_cast-default.txt-Debug]": [
         {
             "checksum": "ed9a0b04f26402a726f8d5e3db8aaaf6",
@@ -1131,6 +1145,20 @@
             "checksum": "76867bbaec3a2896a4edb68ad22a5b35",
             "size": 19115,
             "uri": "https://{canondata_backend}/1809005/2a59475dc877549ac4197a291aacd77d92f24ab4/resource.tar.gz#test.test_insert-multiappend_sorted-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[insert-unique_distinct_hints--Debug]": [
+        {
+            "checksum": "e322bcb334453884bab222e1a5a4b87e",
+            "size": 6903,
+            "uri": "https://{canondata_backend}/1936842/ef250a2d1fa4278f450bd1ca39ae94b0e4ccec23/resource.tar.gz#test.test_insert-unique_distinct_hints--Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[insert-unique_distinct_hints--Plan]": [
+        {
+            "checksum": "fa4bddefca5e392ced9c542f5bfb4b24",
+            "size": 21877,
+            "uri": "https://{canondata_backend}/1936842/ef250a2d1fa4278f450bd1ca39ae94b0e4ccec23/resource.tar.gz#test.test_insert-unique_distinct_hints--Plan_/plan.txt"
         }
     ],
     "test.test[insert_monotonic-to_empty--Debug]": [

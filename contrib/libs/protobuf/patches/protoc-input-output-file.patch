@@ -1,0 +1,124 @@
+--- a/src/google/protobuf/compiler/command_line_interface.cc
++++ b/src/google/protobuf/compiler/command_line_interface.cc
+@@ -1579,6 +1579,13 @@ CommandLineInterface::ParseArgumentStatus CommandLineInterface::ParseArguments(
+               << std::endl;
+     return PARSE_ARGUMENT_FAIL;
+   }
++  if (mode_ != MODE_DECODE && mode_ != MODE_ENCODE &&
++      (!encode_decode_input_.empty() || !encode_decode_output_.empty())) {
++    std::cerr << "--encode-decode-input and --encode-decode-output are used "
++              << "only together with --encode or --decode modes."
++              << std::endl;
++    return PARSE_ARGUMENT_FAIL;
++  }
+   if (!dependency_out_name_.empty() && input_files_.size() > 1) {
+     std::cerr
+         << "Can only process one input file when using --dependency_out=FILE."
+@@ -1889,6 +1896,35 @@ CommandLineInterface::InterpretArgument(const TProtoStringType& name,
+ 
+     codec_type_ = value;
+ 
++  } else if (name == "--encode-decode-input") {
++    if (!encode_decode_input_.empty()) {
++      std::cerr << name << " may only be passed once." << std::endl;
++      return PARSE_ARGUMENT_FAIL;
++    }
++    if (value.empty()) {
++      std::cerr << name << " requires a non-empty value." << std::endl;
++      return PARSE_ARGUMENT_FAIL;
++    }
++    if (access(value.c_str(), F_OK) < 0) {
++      std::cerr << value << ": encode/decode input file does not exist."
++                << std::endl;
++      return PARSE_ARGUMENT_FAIL;
++    }
++
++    encode_decode_input_ = value;
++
++  } else if (name == "--encode-decode-output") {
++    if (!encode_decode_output_.empty()) {
++      std::cerr << name << " may only be passed once." << std::endl;
++      return PARSE_ARGUMENT_FAIL;
++    }
++    if (value.empty()) {
++      std::cerr << name << " requires a non-empty value." << std::endl;
++      return PARSE_ARGUMENT_FAIL;
++    }
++
++    encode_decode_output_ = value;
++
+   } else if (name == "--deterministic_output") {
+     deterministic_output_ = true;
+ 
+@@ -2035,6 +2071,10 @@ Parse PROTO_FILES and generate output based on the options given:
+                               pairs in text format to standard output.  No
+                               PROTO_FILES should be given when using this
+                               flag.
++  --encode-decode-input=FILE  Read text/binary message from FILE instead of
++                              reading it from standard input.
++  --encode-decode-output=FILE Write text/binary message to FILE instead of
++                              writing it to standard output.
+   --descriptor_set_in=FILES   Specifies a delimited list of FILES
+                               each containing a FileDescriptorSet (a
+                               protocol buffer defined in descriptor.proto).
+@@ -2352,16 +2392,40 @@ bool CommandLineInterface::EncodeOrDecode(const DescriptorPool* pool) {
+   DynamicMessageFactory dynamic_factory(pool);
+   std::unique_ptr<Message> message(dynamic_factory.GetPrototype(type)->New());
+ 
++  int in_fd = STDIN_FILENO;
++  if (!encode_decode_input_.empty()) {
++    do {
++      in_fd = open(encode_decode_input_.c_str(), O_RDONLY | O_BINARY);
++    } while (in_fd < 0 && errno == EINTR);
++    if (in_fd < 0) {
++      int error = errno;
++      std::cerr << encode_decode_input_ << ": " << strerror(error) << std::endl;
++      return false;
++    }
++  }
++
++  int out_fd = STDOUT_FILENO;
++  if (!encode_decode_output_.empty()) {
++    do {
++      out_fd = open(encode_decode_output_.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0666);
++    } while (out_fd < 0 && errno == EINTR);
++    if (out_fd < 0) {
++      int error = errno;
++      std::cerr << encode_decode_output_ << ": " << strerror(error) << std::endl;;
++      return false;
++    }
++  }
++
+   if (mode_ == MODE_ENCODE) {
+-    SetFdToTextMode(STDIN_FILENO);
+-    SetFdToBinaryMode(STDOUT_FILENO);
++    SetFdToTextMode(in_fd);
++    SetFdToBinaryMode(out_fd);
+   } else {
+-    SetFdToBinaryMode(STDIN_FILENO);
+-    SetFdToTextMode(STDOUT_FILENO);
++    SetFdToBinaryMode(in_fd);
++    SetFdToTextMode(out_fd);
+   }
+ 
+-  io::FileInputStream in(STDIN_FILENO);
+-  io::FileOutputStream out(STDOUT_FILENO);
++  io::FileInputStream in(in_fd);
++  io::FileOutputStream out(out_fd);
+ 
+   if (mode_ == MODE_ENCODE) {
+     // Input is text.
+--- a/src/google/protobuf/compiler/command_line_interface.h
++++ b/src/google/protobuf/compiler/command_line_interface.h
+@@ -383,6 +383,11 @@ class PROTOC_EXPORT CommandLineInterface {
+ 
+   Mode mode_ = MODE_COMPILE;
+ 
++  // For encode end decode modes only: read from input and write to output
++  // instead of stdin and stdout.
++  TProtoStringType encode_decode_input_;
++  TProtoStringType encode_decode_output_;
++
+   enum PrintMode {
+     PRINT_NONE,         // Not in MODE_PRINT
+     PRINT_FREE_FIELDS,  // --print_free_fields

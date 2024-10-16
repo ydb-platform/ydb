@@ -1,0 +1,10 @@
+--- contrib/libs/protobuf/src/google/protobuf/port_def.inc      (af38e0d9473a2b9fcf94ea1dfc7b68818a3e657d)
++++ contrib/libs/protobuf/src/google/protobuf/port_def.inc      (61c97633ad4150fc3855f71a23e0b8d90f4c4f42)
+@@ -997,6 +997,7 @@
+ // This error has been generally flaky, but we need to disable it specifically
+ // to fix https://github.com/protocolbuffers/protobuf/issues/12313
+ #pragma clang diagnostic ignored "-Wunused-parameter"
++#pragma clang diagnostic ignored "-Wswitch-enum"
+ #endif
+ #ifdef __GNUC__
+ #pragma GCC diagnostic push

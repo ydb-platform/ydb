@@ -19,7 +19,6 @@ void TTTLColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     auto& engine = self.MutableIndexAs<TColumnEngineForLogs>();
     auto& index = engine.GetVersionedIndex();
     for (const auto& p : PortionsToEvict) {
-        Y_ABORT_UNLESS(!p.GetPortionInfo().Empty());
         p.GetPortionInfo().FillBlobRangesByStorage(blobRanges, index);
     }
     for (auto&& i : blobRanges) {

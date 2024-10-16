@@ -116,7 +116,8 @@ public:
        TTupleType* tupleType,
        const std::vector<ui32>& argsColumns,
        const TTypeEnvironment& env,
-       TType* returnType) const = 0;
+       TType* returnType,
+       ui32 hint) const = 0;
 };
 
 const IBlockAggregatorFactory& GetBlockAggregatorFactory(TStringBuf name);

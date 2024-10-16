@@ -188,7 +188,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         keys.EndList();
         auto selectResult = db.ReadRows("/Root/WrongTable", keys.Build()).GetValueSync();
         UNIT_ASSERT_C(!selectResult.IsSuccess(), selectResult.GetIssues().ToString());
-        UNIT_ASSERT_C(selectResult.GetIssues().ToString().Size(), "Expect non-empty issue in case of error");
+        UNIT_ASSERT_C(selectResult.GetIssues().ToString().size(), "Expect non-empty issue in case of error");
         UNIT_ASSERT_EQUAL(selectResult.GetStatus(), EStatus::SCHEME_ERROR);
         auto res = FormatResultSetYson(selectResult.GetResultSet());
         CompareYson("[]", res);
@@ -305,7 +305,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
 
         auto selectResult = db.ReadRows("/Root/TestTable", keys.Build()).GetValueSync();
         UNIT_ASSERT_C(!selectResult.IsSuccess(), selectResult.GetIssues().ToString());
-        UNIT_ASSERT_C(selectResult.GetIssues().ToString().Size(), "Expect non-empty issues in case of error");
+        UNIT_ASSERT_C(selectResult.GetIssues().ToString().size(), "Expect non-empty issues in case of error");
     }
 
     Y_UNIT_TEST(ReadRows_SpecificReturnValue) {

@@ -75,7 +75,7 @@ void ExecutePgInsert(
         --!syntax_pg\n\
         INSERT INTO %s (key, value) VALUES (\n\
             '%s'::%s, '%s'::%s\n\
-        )", tableName.Data(), keyIn.Data(), keyType.Data(), spec.TextIn(i).Data(), valType.Data());
+        )", tableName.data(), keyIn.data(), keyType.data(), spec.TextIn(i).data(), valType.data());
         Cerr << req << Endl;
         auto result = session.ExecuteDataQuery(req, TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -100,16 +100,16 @@ void ExecutePgArrayInsert(
         auto keyEntry = Sprintf("'%u'::int2", i);
         auto valueEntry = Sprintf(
             "ARRAY ['%s'::%s, '%s'::%s]",
-            spec.TextIn(i).Data(),
-            valType.Data(),
-            spec.TextIn(i).Data(),
-            valType.Data()
+            spec.TextIn(i).data(),
+            valType.data(),
+            spec.TextIn(i).data(),
+            valType.data()
         );
         TString req = Sprintf("\
         --!syntax_pg\n\
         INSERT INTO %s (key, value) VALUES (\n\
             %s, %s\n\
-        );", tableName.Data(), keyEntry.Data(), valueEntry.Data());
+        );", tableName.data(), keyEntry.data(), valueEntry.data());
         Cerr << req << Endl;
         auto result = session.ExecuteDataQuery(req, TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -135,7 +135,7 @@ bool ExecutePgInsertForCoercion(
     --!syntax_pg\n\
     INSERT INTO %s (key, value) VALUES (\n\
         '0'::int2, '%s'::%s\n\
-    )", tableName.Data(), spec.TextIn().Data(), valType.Data());
+    )", tableName.data(), spec.TextIn().data(), valType.data());
     Cerr << req << Endl;
 
     auto result = session.ExecuteDataQuery(req, TTxControl::BeginTx().CommitTx()).GetValueSync();
@@ -1129,7 +1129,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
     Y_UNIT_TEST(ReadPgArray) {
         NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         auto binaryStr = NPg::PgNativeBinaryFromNativeText("{1,1}", INT2ARRAYOID).Str;
-        Y_ENSURE(binaryStr.Size() == 32);
+        Y_ENSURE(binaryStr.size() == 32);
         auto value = NYql::NCommon::PgValueFromNativeBinary(binaryStr, INT2ARRAYOID);
     }
 
@@ -1354,7 +1354,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 %s,\n\
                 %s,\n\
                 PRIMARY KEY (key)\n\
-            );", tableName.Data(), keyEntry.Data(), valueEntry.Data());
+            );", tableName.data(), keyEntry.data(), valueEntry.data());
             Cerr << req << Endl;
             auto result = session.ExecuteSchemeQuery(req).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -1416,7 +1416,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             CREATE TABLE %s (\n\
                 %s PRIMARY KEY,\n\
                 %s\n\
-            );", tableName.Data(), keyEntry.Data(), valueEntry.Data());
+            );", tableName.data(), keyEntry.data(), valueEntry.data());
             Cerr << req << Endl;
             auto result = session.ExecuteSchemeQuery(req).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -3371,7 +3371,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 session = db.CreateSession().GetValueSync().GetSession();
                 TString req = Sprintf("\
                     --!syntax_pg\n\
-                    DELETE FROM %s WHERE key = '%s'::%s", tableName.Data(), keyIn.Data(), keyType.Data());
+                    DELETE FROM %s WHERE key = '%s'::%s", tableName.data(), keyIn.data(), keyType.data());
                 Cerr << req << Endl;
                 auto result = session.ExecuteDataQuery(req, TTxControl::BeginTx().CommitTx()).GetValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());

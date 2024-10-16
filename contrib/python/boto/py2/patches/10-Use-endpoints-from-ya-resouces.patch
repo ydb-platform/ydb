@@ -1,0 +1,24 @@
+--- contrib/python/boto/py2/boto/regioninfo.py	(index)
++++ contrib/python/boto/py2/boto/regioninfo.py	(working tree)
+@@ -115,14 +115,19 @@ def load_regions():
+     return endpoints
+ 
+ 
++def _load_resource_endpoints():
++    import pkgutil
++    return json.loads(pkgutil.get_data('boto', 'endpoints.json'))
++
++
+ def _load_builtin_endpoints(_cache=_endpoints_cache):
+     """Loads the builtin endpoints in the legacy format."""
+     # If there's a cached response, return it
+     if _cache:
+         return _cache
+ 
+-    # Load the endpoints file
+-    endpoints = _load_json_file(boto.ENDPOINTS_PATH)
++    # Load the endpoints from resouces
++    endpoints = _load_resource_endpoints()
+ 
+     # Build the endpoints into the legacy format
+     resolver = BotoEndpointResolver(endpoints)

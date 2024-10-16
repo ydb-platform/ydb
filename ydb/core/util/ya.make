@@ -44,6 +44,7 @@ SRCS(
     simple_cache.h
     single_thread_ic_mock.cpp
     single_thread_ic_mock.h
+    source_location.cpp
     stlog.cpp
     stlog.h
     testactorsys.cpp

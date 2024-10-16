@@ -16,31 +16,31 @@ namespace NKikimr {
         Y_UNIT_TEST(Basic) {
             TPDiskErrorState state;
             UNIT_ASSERT(state.GetState() == TPDiskErrorState::Good);
-            UNIT_ASSERT(state.GetErrorReason().Empty());
+            UNIT_ASSERT(state.GetErrorReason().empty());
 
             state.Set(NKikimrProto::CORRUPTED, 0, "");
             UNIT_ASSERT(state.GetState() == TPDiskErrorState::NoWrites);
-            UNIT_ASSERT(state.GetErrorReason().Empty());
+            UNIT_ASSERT(state.GetErrorReason().empty());
         }
 
         Y_UNIT_TEST(Basic2) {
             TPDiskErrorState state;
             UNIT_ASSERT(state.GetState() == TPDiskErrorState::Good);
-            UNIT_ASSERT(state.GetErrorReason().Empty());
+            UNIT_ASSERT(state.GetErrorReason().empty());
 
             state.Set(NKikimrProto::OUT_OF_SPACE, NKikimrBlobStorage::StatusNotEnoughDiskSpaceForOperation, "");
             UNIT_ASSERT(state.GetState() == TPDiskErrorState::WriteOnlyLog);
-            UNIT_ASSERT(state.GetErrorReason().Empty());
+            UNIT_ASSERT(state.GetErrorReason().empty());
 
             state.Set(NKikimrProto::CORRUPTED, 0, "");
             UNIT_ASSERT(state.GetState() == TPDiskErrorState::NoWrites);
-            UNIT_ASSERT(state.GetErrorReason().Empty());
+            UNIT_ASSERT(state.GetErrorReason().empty());
         }
 
         Y_UNIT_TEST(BasicErrorReason) {
             TPDiskErrorState state;
             UNIT_ASSERT(state.GetState() == TPDiskErrorState::Good);
-            UNIT_ASSERT(state.GetErrorReason().Empty());
+            UNIT_ASSERT(state.GetErrorReason().empty());
 
             state.Set(NKikimrProto::OUT_OF_SPACE, NKikimrBlobStorage::StatusNotEnoughDiskSpaceForOperation, "Foo");
             UNIT_ASSERT(state.GetState() == TPDiskErrorState::WriteOnlyLog);

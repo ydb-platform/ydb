@@ -76,9 +76,9 @@ namespace {
         static const TString end = "_idx";
         static const TString delimiter = "_";
 
-        size_t sz = end.Size();
+        size_t sz = end.size();
         for (const auto& n: key)
-            sz += n.Value().Size() + delimiter.Size();
+            sz += n.Value().size() + delimiter.size();
 
         TString name(Reserve(sz));
         for (const auto& n: key) {
@@ -967,7 +967,9 @@ bool FillUsedFilesImpl(
             auto key = TUserDataKey::Udf(alias);
             if (const auto block = types.UserDataStorage->FindUserDataBlock(key)) {
                 files[key] = *block;
-                YQL_ENSURE(block->FrozenFile);
+                if (!types.QContext.CanRead()) {
+                    YQL_ENSURE(block->FrozenFile);
+                }
             } else {
                 // Check alias clash with user files
                 if (files.contains(TUserDataStorage::ComposeUserDataKey(alias))) {
@@ -977,7 +979,10 @@ bool FillUsedFilesImpl(
 
                 if (!alias.StartsWith(NKikimr::NMiniKQL::StaticModulePrefix) && !files.contains(key)) {
                     // CreateFakeFileLink calculates md5 for file, let's do it once
-                    sysBlock.FrozenFile = CreateFakeFileLink(sysBlock.Data, pathWithMd5->Md5);
+                    if (!types.QContext.CanRead()) {
+                        sysBlock.FrozenFile = CreateFakeFileLink(sysBlock.Data, pathWithMd5->Md5);
+                    }
+
                     files[key] = sysBlock;
                     types.UserDataStorage->AddUserDataBlock(key, sysBlock);
                 }
@@ -1194,8 +1199,11 @@ bool FreezeUsedFilesSync(const TExprNode& node, TUserDataTable& files, const TTy
         return false;
     }
 
-    auto future = FreezeUserDataTableIfNeeded(types.UserDataStorage, files, urlDownloadFilter);
-    files = future.GetValueSync()();
+    if (!types.QContext.CanRead()) {
+        auto future = FreezeUserDataTableIfNeeded(types.UserDataStorage, files, urlDownloadFilter);
+        files = future.GetValueSync()();
+    }
+
     return true;
 }
 
@@ -1767,7 +1775,7 @@ bool RenamePgSelectColumns(
     if (selectorColumnOrder->Size() > insertColumnOrder.Size()) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << Sprintf(
             "%s have %zu columns, INSERT INTO expects: %zu",
-            optionName.Data(),
+            optionName.data(),
             selectorColumnOrder->Size(),
             insertColumnOrder.Size()
         )));

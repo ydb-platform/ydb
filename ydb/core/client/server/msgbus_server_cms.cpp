@@ -31,6 +31,7 @@ public:
         , Request(request)
     {
         TBase::SetSecurityToken(request.GetSecurityToken());
+        TBase::SetPeerName(msg.GetPeerName());
     }
 
     void Bootstrap(const TActorContext &ctx)

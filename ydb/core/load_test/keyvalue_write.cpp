@@ -79,7 +79,7 @@ public:
             write->SetStorageChannel(
                     IsInline ?  NKikimrClient::TKeyValueRequest::INLINE : NKikimrClient::TKeyValueRequest::MAIN);
             write->SetPriority(NKikimrClient::TKeyValueRequest::REALTIME);
-            BytesInFlight += DataBuffer.Size();
+            BytesInFlight += DataBuffer.size();
             ++ItemsInFlight;
             ++OperationIdx;
         }

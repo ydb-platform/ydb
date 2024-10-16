@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
             auto httpResponse = runtime.GrabEdgeEventRethrow<NActors::NMon::TEvRemoteHttpInfoRes>(sender);
             TString body = httpResponse->Get()->Html;
             Cerr << body << Endl;
-            UNIT_ASSERT(body.Size() > 500);
+            UNIT_ASSERT(body.size() > 500);
             UNIT_ASSERT(body.Contains("ForceTraversals: 1"));
         }
 

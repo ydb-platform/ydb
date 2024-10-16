@@ -75,11 +75,11 @@ void TCommandSql::Parse(TConfig& config) {
         throw TMisuseException() << "Both mutually exclusive options \"Explain mode\" (\"--explain\") "
             << "and \"Explain-analyze mode\" (\"--explain-analyze\") were provided.";
     }
-    if (ExplainAnalyzeMode && !CollectStatsMode.Empty()) {
+    if (ExplainAnalyzeMode && !CollectStatsMode.empty()) {
         throw TMisuseException() << "Statistics collection mode option \"--stats\" has no effect in explain-analyze mode. "
             "Relevant for execution mode only.";
     }
-    if (ExplainMode && !CollectStatsMode.Empty()) {
+    if (ExplainMode && !CollectStatsMode.empty()) {
         throw TMisuseException() << "Statistics collection mode option \"--stats\" has no effect in explain mode"
             "Relevant for execution mode only.";
     }
@@ -98,7 +98,7 @@ void TCommandSql::Parse(TConfig& config) {
             Query = ReadFromFile(QueryFile, "query");
         }
     }
-    if (Query.Empty()) {
+    if (Query.empty()) {
         Cerr << "Neither text of script (\"--script\", \"-s\") "
             << "nor path to file with script text (\"--file\", \"-f\") were provided." << Endl;
         config.PrintHelpAndExit();

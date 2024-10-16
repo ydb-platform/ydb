@@ -601,7 +601,16 @@ void TViewerPipeClient::InitConfig(const TCgiParameters& params) {
     }
     Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
     JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
-    JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), true);
+    JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
+    if (FromStringWithDefault<bool>(params.Get("enums"), true)) {
+        Proto2JsonConfig.EnumMode = TProto2JsonConfig::EnumValueMode::EnumName;
+    }
+    if (!FromStringWithDefault<bool>(params.Get("ui64"), false)) {
+        Proto2JsonConfig.StringifyNumbers = TProto2JsonConfig::EStringifyNumbersMode::StringifyInt64Always;
+    }
+    Proto2JsonConfig.MapAsObject = true;
+    Proto2JsonConfig.ConvertAny = true;
+    Proto2JsonConfig.WriteNanAsString = true;
     Timeout = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("timeout"), Timeout.MilliSeconds()));
 }
 
@@ -661,7 +670,7 @@ TString TViewerPipeClient::GetHTTPOKJSON(const NJson::TJsonValue& response, TIns
 
 TString TViewerPipeClient::GetHTTPOKJSON(const google::protobuf::Message& response, TInstant lastModified) {
     TStringStream json;
-    TProtoToJson::ProtoToJson(json, response, JsonSettings);
+    NProtobufJson::Proto2Json(response, json, Proto2JsonConfig);
     return GetHTTPOKJSON(json.Str(), lastModified);
 }
 

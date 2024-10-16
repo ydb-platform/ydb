@@ -144,7 +144,7 @@ inline EKafkaErrors ConvertErrorCode(Ydb::PersQueue::ErrorCode::ErrorCode code) 
 }
 
 inline TString NormalizePath(const TString& database, const TString& topic) {
-    if (topic.Size() > database.Size() && topic.at(database.Size()) == '/' && topic.StartsWith(database)) {
+    if (topic.size() > database.size() && topic.at(database.size()) == '/' && topic.StartsWith(database)) {
         return topic;
     }
     return NKikimr::CanonizePath(database + "/" + topic);
@@ -152,7 +152,7 @@ inline TString NormalizePath(const TString& database, const TString& topic) {
 
 inline TString GetTopicNameWithoutDb(const TString& database, TString topic) {
     auto topicWithDb = NormalizePath(database, topic);
-    topic = topicWithDb.substr(database.Size()+1);
+    topic = topicWithDb.substr(database.size()+1);
     return topic;
 }
 

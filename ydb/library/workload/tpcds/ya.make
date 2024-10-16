@@ -49,16 +49,16 @@ RESOURCE(
     ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q7.sql tpcds/yql/q7.sql
     ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q8.sql tpcds/yql/q8.sql
     ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q9.sql tpcds/yql/q9.sql
-    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q20.sql tpcds/yql/q10.sql
-    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q21.sql tpcds/yql/q11.sql
-    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q22.sql tpcds/yql/q12.sql
-    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q23.sql tpcds/yql/q13.sql
-    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q24.sql tpcds/yql/q14.sql
-    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q25.sql tpcds/yql/q15.sql
-    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q26.sql tpcds/yql/q16.sql
-    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q27.sql tpcds/yql/q17.sql
-    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q28.sql tpcds/yql/q18.sql
-    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q29.sql tpcds/yql/q19.sql
+    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q10.sql tpcds/yql/q10.sql
+    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q11.sql tpcds/yql/q11.sql
+    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q12.sql tpcds/yql/q12.sql
+    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q13.sql tpcds/yql/q13.sql
+    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q14.sql tpcds/yql/q14.sql
+    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q15.sql tpcds/yql/q15.sql
+    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q16.sql tpcds/yql/q16.sql
+    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q17.sql tpcds/yql/q17.sql
+    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q18.sql tpcds/yql/q18.sql
+    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q19.sql tpcds/yql/q19.sql
     ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q20.sql tpcds/yql/q20.sql
     ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q21.sql tpcds/yql/q21.sql
     ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q22.sql tpcds/yql/q22.sql

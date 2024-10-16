@@ -2,7 +2,7 @@
 
 #include "defs.h"
 #include "vdisk_histogram_latency.h"
-#include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/blobstorage_base.pb.h>
 
 namespace NKikimr {
     namespace NVDiskMon {

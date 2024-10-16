@@ -24,10 +24,6 @@ IF (OS_WINDOWS)
     ADDINCL(
         GLOBAL contrib/tools/m4/lib/platform/win64
     )
-ELSE()
-    ADDINCL(
-        GLOBAL contrib/tools/m4/lib/platform/posix
-    )
 ENDIF()
 
 IF (OS_DARWIN)
@@ -55,7 +51,6 @@ SRCS(
     c-stack.c
     c-strcasecmp.c
     c-strncasecmp.c
-    calloc.c
     clean-temp.c
     cloexec.c
     close-stream.c
@@ -80,15 +75,11 @@ SRCS(
     fflush.c
     filenamecat-lgpl.c
     filenamecat.c
-    float.c
     fopen-safer.c
     fpurge.c
     freading.c
     fstat.c
-    get-errno.c
     getdtablesize.c
-    getopt.c
-    getopt1.c
     gl_avltree_oset.c
     gl_linkedhash_list.c
     gl_list.c
@@ -97,16 +88,12 @@ SRCS(
     gl_xoset.c
     hash.c
     isnand.c
-    isnanf.c
     isnanl.c
-    itold.c
+    isnanf.c
     localcharset.c
     lseek.c
-    lstat.c
-    malloc.c
     malloca.c
     mbrtowc.c
-    mbswidth.c
     memchr2.c
     mkstemp-safer.c
     nl_langinfo.c
@@ -119,21 +106,14 @@ SRCS(
     progname.c
     quotearg.c
     raise.c
-    rawmemchr.c
-    readlink.c
     realloc.c
     regex.c
-    rename.c
     rmdir.c
     secure_getenv.c
     sig-handler.c
-    signbitd.c
-    signbitf.c
-    signbitl.c
     spawn-pipe.c
     stat.c
     stpcpy.c
-    strdup.c
     stripslash.c
     tempname.c
     tmpdir.c
@@ -147,10 +127,8 @@ SRCS(
     wctype-h.c
     xalloc-die.c
     xasprintf.c
-    xconcat-filename.c
     xmalloc.c
     xmalloca.c
-    xmemdup0.c
     xprintf.c
     xsize.c
     xstrndup.c
@@ -160,8 +138,6 @@ SRCS(
 IF (NOT MUSL)
     SRCS(
         freadahead.c
-        fseterr.c
-        #        fseek.c
     )
 ENDIF()
 
@@ -171,24 +147,14 @@ IF (NOT OS_LINUX)
     )
 ENDIF()
 
-IF (NOT OS_WINDOWS)
-    SRCS(
-        stdio-write.c
-    )
-ENDIF()
-
 IF (OS_WINDOWS)
     SRCS(
-        frexp.c
-        wcrtomb.c
-        perror.c
-        mkstemp.c
         vasprintf.c
         strsignal.c
         mkdtemp.c
         fseeko.c
-        fopen.c
-        ftello.c
+        getopt.c
+        getopt1.c
         gettimeofday.c
         localeconv.c
         msvc-inval.c
@@ -196,20 +162,7 @@ IF (OS_WINDOWS)
         open.c
         sigaction.c
         sigprocmask.c
-        snprintf.c
-        spawn_faction_addclose.c
-        spawn_faction_adddup2.c
-        spawn_faction_addopen.c
-        spawn_faction_destroy.c
-        spawn_faction_init.c
-        spawnattr_destroy.c
-        spawnattr_init.c
-        spawnattr_setflags.c
-        spawnattr_setsigmask.c
-        spawni.c
-        spawnp.c
         waitpid.c
-        wcwidth.c
         uniwidth/width.c
     )
 ENDIF()

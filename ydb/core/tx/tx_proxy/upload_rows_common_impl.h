@@ -772,7 +772,7 @@ private:
                 // (re)calculate RuCost for batch variant if it's bigger then RuCost calculated in ExtractRows()
                 Y_ABORT_UNLESS(Batch && Batch->num_rows() >= 0);
                 ui32 numRows = Batch->num_rows();
-                ui64 bytesSize = Max<ui64>(NArrow::GetBatchDataSize(Batch), GetSourceData().Size());
+                ui64 bytesSize = Max<ui64>(NArrow::GetBatchDataSize(Batch), GetSourceData().size());
                 float batchRuCost = TUpsertCost::CostToRu(TUpsertCost::BatchCost(bytesSize, numRows));
                 if (batchRuCost > RuCost) {
                     RuCost = batchRuCost;

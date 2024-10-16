@@ -1,6 +1,7 @@
 #pragma once
 #include "json_pipe_req.h"
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <library/cpp/protobuf/json/json2proto.h>
 
 namespace NKikimr::NViewer {
 

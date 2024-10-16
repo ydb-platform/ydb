@@ -1,0 +1,23 @@
+diff --git a/include/__utility/integer_sequence.h b/include/__utility/integer_sequence.h
+index 6c56e74..a74b1a0 100644
+--- a/include/__utility/integer_sequence.h
++++ b/include/__utility/integer_sequence.h
+@@ -43,8 +43,17 @@ using __make_integer_sequence _LIBCPP_NODEBUG = __make_integer_seq<integer_seque
+ 
+ #else
+ 
++template <class _Tp, class _T> struct __integer_sequence_convert {
++    using type = integer_sequence<_Tp>;
++};
++
++template<class _Tp, class _Tp2, _Tp... _Values>
++struct __integer_sequence_convert<_Tp, __integer_sequence<_Tp2, _Values...>> {
++    using type = integer_sequence<_Tp, _Values...>;
++};
++
+ template<typename _Tp, _Tp _Np> using __make_integer_sequence_unchecked _LIBCPP_NODEBUG =
+-  typename __detail::__make<_Np>::type::template __convert<integer_sequence, _Tp>;
++  typename __integer_sequence_convert<_Tp, typename __detail::__make<_Np>::type>::type;
+ 
+ template <class _Tp, _Tp _Ep>
+ struct __make_integer_sequence_checked

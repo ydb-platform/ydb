@@ -7,7 +7,7 @@ import ydb
 import json
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from abc import abstractmethod, ABC
-from typing import Set, List, Dict, Any, Callable
+from typing import Set, List, Dict, Any, Callable, Optional
 from time import sleep
 
 
@@ -223,7 +223,7 @@ class ScenarioTestHelper:
 
             pass
 
-    def __init__(self, context: TestContext) -> None:
+    def __init__(self, context: Optional[TestContext]) -> None:
         """Constructor.
 
         Args:
@@ -256,7 +256,7 @@ class ScenarioTestHelper:
 
     @staticmethod
     def _run_with_expected_status(
-        operation: callable,
+        operation: Callable,
         expected_status: ydb.StatusCode | Set[ydb.StatusCode],
         retriable_status: ydb.StatusCode | Set[ydb.StatusCode] = {},
         n_retries=0,

@@ -1,0 +1,150 @@
+diff --git a/include/optional b/include/optional
+index b20081d..fd17b08 100644
+--- a/include/optional
++++ b/include/optional
+@@ -236,7 +236,7 @@ struct __optional_destruct_base<_Tp, false>
+     bool __engaged_;
+ 
+     _LIBCPP_INLINE_VISIBILITY
+-    _LIBCPP_CONSTEXPR_AFTER_CXX17 ~__optional_destruct_base()
++    /* _LIBCPP_CONSTEXPR_AFTER_CXX17 */ ~__optional_destruct_base()
+     {
+         if (__engaged_)
+             __val_.~value_type();
+@@ -647,16 +647,14 @@ private:
+     // LWG2756: conditionally explicit conversion from _Up
+     struct _CheckOptionalArgsConstructor {
+       template <class _Up>
+-      static constexpr bool __enable_implicit() {
+-          return is_constructible_v<_Tp, _Up&&> &&
+-                 is_convertible_v<_Up&&, _Tp>;
+-      }
++      static constexpr bool __enable_implicit =
++          is_constructible_v<_Tp, _Up&&> &&
++          is_convertible_v<_Up&&, _Tp>;
+ 
+       template <class _Up>
+-      static constexpr bool __enable_explicit() {
+-          return is_constructible_v<_Tp, _Up&&> &&
+-                 !is_convertible_v<_Up&&, _Tp>;
+-      }
++      static constexpr bool __enable_explicit =
++          is_constructible_v<_Tp, _Up&&> &&
++          !is_convertible_v<_Up&&, _Tp>;
+     };
+     template <class _Up>
+     using _CheckOptionalArgsCtor = _If<
+@@ -686,22 +684,19 @@ private:
+           is_assignable<_Tp&, _Opt const&&>
+       >;
+       template <class _Up, class _QUp = _QualUp>
+-      static constexpr bool __enable_implicit() {
+-          return is_convertible<_QUp, _Tp>::value &&
+-              !__check_constructible_from_opt<_Up>::value;
+-      }
++      static constexpr bool __enable_implicit =
++          is_convertible<_QUp, _Tp>::value &&
++          !__check_constructible_from_opt<_Up>::value;
++
+       template <class _Up, class _QUp = _QualUp>
+-      static constexpr bool __enable_explicit() {
+-          return !is_convertible<_QUp, _Tp>::value &&
+-              !__check_constructible_from_opt<_Up>::value;
+-      }
++      static constexpr bool __enable_explicit =
++          !is_convertible<_QUp, _Tp>::value &&
++          !__check_constructible_from_opt<_Up>::value;
++
+       template <class _Up, class _QUp = _QualUp>
+-      static constexpr bool __enable_assign() {
+-          // Construction and assignability of _QUp to _Tp has already been
+-          // checked.
+-          return !__check_constructible_from_opt<_Up>::value &&
+-              !__check_assignable_from_opt<_Up>::value;
+-      }
++      static constexpr bool __enable_assign =
++          !__check_constructible_from_opt<_Up>::value &&
++          !__check_assignable_from_opt<_Up>::value;
+     };
+ 
+     template <class _Up, class _QualUp>
+@@ -734,7 +729,7 @@ public:
+     template <class _InPlaceT, class... _Args, class = enable_if_t<
+           _And<
+               _IsSame<_InPlaceT, in_place_t>,
+-              is_constructible<value_type, _Args...>
++            is_constructible<value_type, _Args...>
+             >::value
+         >
+     >
+@@ -750,14 +745,14 @@ public:
+         : __base(in_place, __il, _VSTD::forward<_Args>(__args)...) {}
+ 
+     template <class _Up = value_type, enable_if_t<
+-        _CheckOptionalArgsCtor<_Up>::template __enable_implicit<_Up>()
++        _CheckOptionalArgsCtor<_Up>::template __enable_implicit<_Up>
+     , int> = 0>
+     _LIBCPP_INLINE_VISIBILITY
+     constexpr optional(_Up&& __v)
+         : __base(in_place, _VSTD::forward<_Up>(__v)) {}
+ 
+     template <class _Up, enable_if_t<
+-        _CheckOptionalArgsCtor<_Up>::template __enable_explicit<_Up>()
++        _CheckOptionalArgsCtor<_Up>::template __enable_explicit<_Up>
+     , int> = 0>
+     _LIBCPP_INLINE_VISIBILITY
+     constexpr explicit optional(_Up&& __v)
+@@ -765,7 +760,7 @@ public:
+ 
+     // LWG2756: conditionally explicit conversion from const optional<_Up>&
+     template <class _Up, enable_if_t<
+-        _CheckOptionalLikeCtor<_Up, _Up const&>::template __enable_implicit<_Up>()
++        _CheckOptionalLikeCtor<_Up, _Up const&>::template __enable_implicit<_Up>
+     , int> = 0>
+     _LIBCPP_INLINE_VISIBILITY
+     _LIBCPP_CONSTEXPR_AFTER_CXX17 optional(const optional<_Up>& __v)
+@@ -773,7 +768,7 @@ public:
+         this->__construct_from(__v);
+     }
+     template <class _Up, enable_if_t<
+-        _CheckOptionalLikeCtor<_Up, _Up const&>::template __enable_explicit<_Up>()
++        _CheckOptionalLikeCtor<_Up, _Up const&>::template __enable_explicit<_Up>
+     , int> = 0>
+     _LIBCPP_INLINE_VISIBILITY
+     _LIBCPP_CONSTEXPR_AFTER_CXX17 explicit optional(const optional<_Up>& __v)
+@@ -783,7 +778,7 @@ public:
+ 
+     // LWG2756: conditionally explicit conversion from optional<_Up>&&
+     template <class _Up, enable_if_t<
+-        _CheckOptionalLikeCtor<_Up, _Up &&>::template __enable_implicit<_Up>()
++        _CheckOptionalLikeCtor<_Up, _Up &&>::template __enable_implicit<_Up>
+     , int> = 0>
+     _LIBCPP_INLINE_VISIBILITY
+     _LIBCPP_CONSTEXPR_AFTER_CXX17 optional(optional<_Up>&& __v)
+@@ -791,7 +786,7 @@ public:
+         this->__construct_from(_VSTD::move(__v));
+     }
+     template <class _Up, enable_if_t<
+-        _CheckOptionalLikeCtor<_Up, _Up &&>::template __enable_explicit<_Up>()
++        _CheckOptionalLikeCtor<_Up, _Up &&>::template __enable_explicit<_Up>
+     , int> = 0>
+     _LIBCPP_INLINE_VISIBILITY
+     _LIBCPP_CONSTEXPR_AFTER_CXX17 explicit optional(optional<_Up>&& __v)
+@@ -843,7 +838,7 @@ public:
+ 
+     // LWG2756
+     template <class _Up, enable_if_t<
+-        _CheckOptionalLikeAssign<_Up, _Up const&>::template __enable_assign<_Up>()
++        _CheckOptionalLikeAssign<_Up, _Up const&>::template __enable_assign<_Up>
+     , int> = 0>
+     _LIBCPP_INLINE_VISIBILITY
+     _LIBCPP_CONSTEXPR_AFTER_CXX17 optional&
+@@ -855,7 +850,7 @@ public:
+ 
+     // LWG2756
+     template <class _Up, enable_if_t<
+-        _CheckOptionalLikeCtor<_Up, _Up &&>::template __enable_assign<_Up>()
++        _CheckOptionalLikeCtor<_Up, _Up &&>::template __enable_assign<_Up>
+     , int> = 0>
+     _LIBCPP_INLINE_VISIBILITY
+     _LIBCPP_CONSTEXPR_AFTER_CXX17 optional&

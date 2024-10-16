@@ -53,6 +53,8 @@ SRCS(
     console__update_tenant_state.cpp
     console__update_tenant_pool_config.cpp
     defs.h
+    feature_flags_configurator.cpp
+    feature_flags_configurator.h
     grpc_library_helper.cpp
     http.cpp
     http.h

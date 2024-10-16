@@ -52,7 +52,9 @@ NThreading::TFuture<TResponse> InjectSessionStatusInterception(
         // Exclude CLIENT_RESOURCE_EXHAUSTED from transport errors which can cause to session disconnect
         // since we have guarantee this request wasn't been started to execute.
 
-        if (status.IsTransportError() && status.GetStatus() != EStatus::CLIENT_RESOURCE_EXHAUSTED) {
+        if (status.IsTransportError()
+            && status.GetStatus() != EStatus::CLIENT_RESOURCE_EXHAUSTED && status.GetStatus() != EStatus::CLIENT_OUT_OF_RANGE)
+        {
             impl->MarkBroken();
         } else if (status.GetStatus() == EStatus::SESSION_BUSY) {
             impl->MarkBroken();
@@ -71,6 +73,7 @@ NThreading::TFuture<TResponse> InjectSessionStatusInterception(
                 impl->ScheduleTimeToTouch(RandomizeThreshold(timeout), impl->GetState() == TKqpSessionCommon::EState::S_ACTIVE);
             }
         }
+
         if (cb) {
             cb(value, *impl);
         }

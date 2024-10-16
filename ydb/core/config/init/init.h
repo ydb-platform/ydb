@@ -2,10 +2,9 @@
 
 #include <ydb/core/driver_lib/run/service_mask.h>
 #include <ydb/core/base/event_filter.h>
-#include <ydb/core/config/init/source_location.h>
+#include <ydb/core/util/source_location.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/interconnect.h>
-#include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 #include <library/cpp/getopt/small/last_getopt_opts.h>
 
@@ -30,7 +29,7 @@ struct TConfigItemInfo {
     };
 
     struct TUpdate {
-        const char* File;
+        TString File;
         ui32 Line;
         EUpdateKind Kind;
     };
@@ -77,10 +76,10 @@ class IConfigUpdateTracer {
 public:
     virtual ~IConfigUpdateTracer() {}
     void AddUpdate(ui32 kind, TConfigItemInfo::EUpdateKind update, const NCompat::TSourceLocation location = NCompat::TSourceLocation::current()) {
-        return this->Add(kind, TConfigItemInfo::TUpdate{location.file_name(), location.line(), update});
+        return this->Add(kind, TConfigItemInfo::TUpdate{NUtil::TrimSourceFileName(location.file_name()), location.line(), update});
     }
     void AddUpdate(ui32 kind, TConfigItemInfo::EUpdateKind update, TCallContext ctx) {
-        return this->Add(kind, TConfigItemInfo::TUpdate{ctx.File, ctx.Line, update});
+        return this->Add(kind, TConfigItemInfo::TUpdate{NUtil::TrimSourceFileName(ctx.File), ctx.Line, update});
     }
     virtual void Add(ui32 kind, TConfigItemInfo::TUpdate update) = 0;
     virtual THashMap<ui32, TConfigItemInfo> Dump() const = 0;

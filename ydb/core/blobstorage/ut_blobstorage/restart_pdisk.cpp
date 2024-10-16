@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(BSCRestartPDisk) {
         ui32 targetPDiskId = 0;
 
         for (auto& [k, v] : env.PDiskMockStates) {
-            if (v.Get()->GetStateErrorReason().Empty()) {
+            if (v.Get()->GetStateErrorReason().empty()) {
                 targetNodeId = k.first;
                 targetPDiskId = k.second;
             }

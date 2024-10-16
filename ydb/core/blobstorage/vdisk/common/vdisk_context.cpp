@@ -1,5 +1,7 @@
 #include "vdisk_context.h"
 
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
+
 namespace NKikimr {
 
     static TLogger ActorSystemLogger(TActorSystem *as) {
@@ -80,6 +82,17 @@ namespace NKikimr {
             str << " Message# '" << message << "'";
         }
         return str.Str();
+    }
+
+    bool TVDiskContext::CheckPDiskResponseReadable(const TActorContext &actorSystemOrCtx, const NPDisk::TEvChunkReadResult &ev, const TString &message) {
+        if (!ev.Data.IsReadable()) {
+            LOG_ERROR(actorSystemOrCtx, NKikimrServices::BS_VDISK_OTHER,
+                    VDISKP(VDiskLogPrefix,
+                        "CheckPDiskResponseReadable: not readable chunk from PDisk: %s",
+                        FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data()));
+            return false;
+        }
+        return true;
     }
 
 } // NKikimr

@@ -1,32 +1,30 @@
 #pragma once
 
-#include <functional>
-
-#include <util/generic/string.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/include/read_events.h>
 
 namespace NFq {
 
 class TJsonParser {
 public:
-    using TCallback = std::function<void(ui64, TList<TString>&&)>;
-    
-public:
-    TJsonParser(
-        const TVector<TString>& columns,
-        const TVector<TString>& types,
-        TCallback callback);
+    TJsonParser(const TVector<TString>& columns, const TVector<TString>& types, ui64 batchSize, TDuration batchCreationTimeout);
     ~TJsonParser();
-    void Push(ui64 offset, const TString& value);
-    TString GetSql();
+
+    bool IsReady() const;
+    TInstant GetCreationDeadline() const;
+    size_t GetNumberValues() const;
+    const TVector<ui64>& GetOffsets() const;
+
+    void AddMessages(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
+    const TVector<TVector<std::string_view>>& Parse();
+
+    TString GetDescription() const;
+    TString GetDebugString(const TVector<TVector<std::string_view>>& parsedValues) const;
 
 private:
     class TImpl;
     const std::unique_ptr<TImpl> Impl;
 };
 
-std::unique_ptr<TJsonParser> NewJsonParser(
-    const TVector<TString>& columns,
-    const TVector<TString>& types,
-    TJsonParser::TCallback callback);
+std::unique_ptr<TJsonParser> NewJsonParser(const TVector<TString>& columns, const TVector<TString>& types, ui64 batchSize, TDuration batchCreationTimeout);
 
 } // namespace NFq

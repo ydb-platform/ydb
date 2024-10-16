@@ -4,6 +4,8 @@
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
+#include <ydb/public/lib/deprecated/kicli/kicli.h>
+
 #include <util/digest/city.h>
 #include <util/digest/murmur.h>
 #include <util/generic/yexception.h>

@@ -365,7 +365,7 @@ private:
                 NodeBatches.emplace(nodeId, batch);
                 ++WhiteboardStateRequestsInFlight;
             }
-            if (batch.HasStaticNodes && TabletViewerResponse.count(nodeId) == 0) {
+            if (Tablets && batch.HasStaticNodes && TabletViewerResponse.count(nodeId) == 0) {
                 auto viewerRequest = std::make_unique<TEvViewer::TEvViewerRequest>();
                 InitTabletWhiteboardRequest(viewerRequest->Record.MutableTabletRequest());
                 viewerRequest->Record.SetTimeout(Timeout / 2);
@@ -392,7 +392,7 @@ private:
                     SystemStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, request));
                     ++WhiteboardStateRequestsInFlight;
                 }
-                if (node->Static) {
+                if (Tablets && node->Static) {
                     if (TabletStateResponse.count(nodeId) == 0) {
                         auto request = std::make_unique<TEvWhiteboard::TEvTabletStateRequest>();
                         TabletStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, request.release()));

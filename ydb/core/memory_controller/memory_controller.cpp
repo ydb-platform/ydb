@@ -2,6 +2,7 @@
 #include "memory_controller_config.h"
 #include "memtable_collection.h"
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/localdb.h>
 #include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>

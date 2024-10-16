@@ -72,6 +72,34 @@ class TestCredentials(object):
         assert credentials.rapt_token == self.RAPT_TOKEN
         assert credentials.refresh_handler is None
 
+    def test_get_cred_info(self):
+        credentials = self.make_credentials()
+        credentials._account = "fake-account"
+        assert not credentials.get_cred_info()
+
+        credentials._cred_file_path = "/path/to/file"
+        assert credentials.get_cred_info() == {
+            "credential_source": "/path/to/file",
+            "credential_type": "user credentials",
+            "principal": "fake-account",
+        }
+
+    def test_get_cred_info_no_account(self):
+        credentials = self.make_credentials()
+        assert not credentials.get_cred_info()
+
+        credentials._cred_file_path = "/path/to/file"
+        assert credentials.get_cred_info() == {
+            "credential_source": "/path/to/file",
+            "credential_type": "user credentials",
+        }
+
+    def test__make_copy_get_cred_info(self):
+        credentials = self.make_credentials()
+        credentials._cred_file_path = "/path/to/file"
+        cred_copy = credentials._make_copy()
+        assert cred_copy._cred_file_path == "/path/to/file"
+
     def test_token_usage_metrics(self):
         credentials = self.make_credentials()
         credentials.token = "token"

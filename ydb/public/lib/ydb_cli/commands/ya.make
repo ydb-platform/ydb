@@ -65,6 +65,11 @@ PEERDIR(
 
 END()
 
-RECURSE_FOR_TESTS(
-    topic_workload/ut
+RECURSE(
+    command_base
+    interactive
+    sdk_core_access
+    topic_workload
+    transfer_workload
+    ydb_discovery
 )

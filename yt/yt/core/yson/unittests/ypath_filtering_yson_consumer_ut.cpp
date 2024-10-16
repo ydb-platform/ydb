@@ -299,6 +299,20 @@ TEST_F(TYPathFilteringConsumerTest, ForcedNested)
     ASSERT_EQ(FlushOutput(), R"({"data"={"forced_key"=#;};})");
 }
 
+TEST_F(TYPathFilteringConsumerTest, ForcedNestedMultiple)
+{
+    auto consumer = CreateYPathFilteringConsumer(
+        GetConsumer(),
+        /*paths*/ {"/data/forced_key1", "/data/forced_key2"},
+        EYPathFilteringMode::WhitelistWithForcedEntities);
+
+    NYTree::BuildYsonFluently(consumer.get())
+        .BeginMap()
+        .EndMap();
+
+    ASSERT_EQ(FlushOutput(), R"({"data"={"forced_key1"=#;"forced_key2"=#;};})");
+}
+
 TEST_F(TYPathFilteringConsumerTest, ForcedWhitelistMixedNested)
 {
     auto consumer = CreateYPathFilteringConsumer(

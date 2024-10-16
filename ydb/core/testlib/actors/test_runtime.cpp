@@ -7,6 +7,7 @@
 #include <ydb/core/mon/sync_http_mon.h>
 #include <ydb/core/mon/async_http_mon.h>
 #include <ydb/core/mon_alloc/profiler.h>
+#include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/tablet/tablet_impl.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
@@ -19,6 +20,7 @@
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/stream.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 
 /**** ACHTUNG: Do not make here any new dependecies on kikimr ****/
 
@@ -154,7 +156,7 @@ namespace NActors {
             nodeAppData->PQConfig = app0->PQConfig;
             nodeAppData->NetClassifierConfig.CopyFrom(app0->NetClassifierConfig);
             nodeAppData->EnableKqpSpilling = app0->EnableKqpSpilling;
-            nodeAppData->FeatureFlags = app0->FeatureFlags;
+            nodeAppData->InitFeatureFlags(app0->FeatureFlags);
             nodeAppData->CompactionConfig = app0->CompactionConfig;
             nodeAppData->HiveConfig.SetWarmUpBootWaitingPeriod(10);
             nodeAppData->HiveConfig.SetMaxNodeUsageToKick(100);

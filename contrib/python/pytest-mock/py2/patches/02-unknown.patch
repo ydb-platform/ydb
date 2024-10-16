@@ -1,0 +1,19 @@
+--- contrib/python/pytest-mock/py2/pytest_mock/plugin.py	(index)
++++ contrib/python/pytest-mock/py2/pytest_mock/plugin.py	(working tree)
+@@ -5,6 +5,7 @@ import inspect
+ import sys
+ 
+ import pytest
++import six
+ 
+ from ._version import version
+ 
+@@ -172,7 +173,7 @@ class MockFixture(object):
+             if info.code_context is None:
+                 # no source code available (#169)
+                 return
+-            code_context = " ".join(info.code_context).strip()
++            code_context = " ".join(six.ensure_text(x) for x in info.code_context).strip()
+ 
+             if code_context.startswith("with mocker."):
+                 raise ValueError(

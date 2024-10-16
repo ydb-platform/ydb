@@ -626,7 +626,7 @@ static std::optional<TDriveData> GetNvmeDriveData(int fd, TStringStream *outDeta
 
 static std::optional<TDriveData> GetSysfsDriveData(const TString &path, TStringStream *outDetails) {
     char realPath[PATH_MAX];
-    char *res = realpath(path.Data(), realPath);
+    char *res = realpath(path.data(), realPath);
     if (res == NULL) {
         if (errno == ENOENT) {
             ythrow TFileError() << "no such file# " << path;

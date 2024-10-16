@@ -4,13 +4,13 @@ items:
 - { name: FROM,              href: from.md                                                 }
 - { name: FROM AS_TABLE,     href: from_as_table.md                                        }
 - { name: FROM SELECT,       href: from_select.md                                          }
-- { name: FOLDER,            href: folder.md,                when: feature_map_reduce      }
-- { name: WalkFolders,       href: walk_folders.md,          when: feature_map_reduce      }
+- { name: FOLDER,            href: folder.md,                when: yt                      }
+- { name: WalkFolders,       href: walk_folders.md,          when: yt                      }
 - { name: DISTINCT,          href: distinct.md                                             }
 - { name: UNIQUE DISTINCT,   href: unique_distinct_hints.md                                }
 - { name: UNION,             href: union.md                                                }
 - { name: CONCAT,            href: concat.md,                when: feature_bulk_tables     }
-- { name: VIEW,              href: view.md,                  when: feature_map_reduce      }
+- { name: VIEW,              href: view.md,                  when: feature_mapreduce       }
 - { name: VIEW INDEX,        href: secondary_index.md,       when: feature_secondary_index }
 - { name: WITH,              href: with.md                                                 }
 - { name: WITHOUT,           href: without.md                                              }

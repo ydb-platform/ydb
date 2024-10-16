@@ -532,6 +532,10 @@ public:
         Gateway->SetToken(cluster, token);
     }
 
+    void SetClientAddress(const TString& clientAddress) override {
+        Gateway->SetClientAddress(clientAddress);
+    }
+
     bool GetDatabaseForLoginOperation(TString& database) {
         return NSchemeHelpers::SetDatabaseForLoginOperation(database, GetDomainLoginOnly(), GetDomainName(), GetDatabase());
     }

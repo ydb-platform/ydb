@@ -1,0 +1,261 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Python-2.0           084da548815188967cad816891b84e50
+BELONGS ya.make
+    License text:
+        \# limitations under the License.
+        """gRPC's Python API."""
+    Scancode info:
+        Original SPDX id: Python-2.0
+        Score           : 66.67
+        Match type      : TAG
+        Links           : http://docs.python.org/license.html, http://spdx.org/licenses/Python-2.0, https://spdx.org/licenses/Python-2.0
+    Files with this license:
+        grpc/__init__.py [13:14]
+
+KEEP     MPL-2.0              280da0ae8b63b2e861e6766d710e9baf
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: LICENSE at line 600
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MPL-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://mpl.mozilla.org/2012/01/03/announcing-mpl-2-0/, http://www.mozilla.com/MPL/2.0/, https://spdx.org/licenses/MPL-2.0
+    Files with this license:
+        LICENSE [238:610]
+
+KEEP     Apache-2.0           2b42edef8fa55315f34f2370b4715ca9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE [2:202]
+
+KEEP     Python-2.0           5749a3f68d211a0dbd91f414c9769695
+BELONGS ya.make
+    License text:
+        \# limitations under the License.
+        """gRPC's Python gEvent APIs."""
+    Scancode info:
+        Original SPDX id: Python-2.0
+        Score           : 66.67
+        Match type      : TAG
+        Links           : http://docs.python.org/license.html, http://spdx.org/licenses/Python-2.0, https://spdx.org/licenses/Python-2.0
+    Files with this license:
+        grpc/experimental/gevent.py [13:14]
+
+KEEP     Apache-2.0           86e8237b9a37a6951edea992afba41f3
+BELONGS ya.make
+    License text:
+        Classifier: License :: OSI Approved :: Apache Software License
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 95.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        .dist-info/METADATA [20:20]
+
+KEEP     Apache-2.0           920b2f581700b4aa528093ed0d2f5a5b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        _parallel_compile_patch.py [3:13]
+        _spawn_patch.py [3:13]
+        commands.py [3:13]
+        grpc/__init__.py [3:13]
+        grpc/_auth.py [3:13]
+        grpc/_channel.py [3:13]
+        grpc/_common.py [3:13]
+        grpc/_compression.py [3:13]
+        grpc/_cython/__init__.py [3:13]
+        grpc/_cython/_cygrpc/__init__.py [3:13]
+        grpc/_cython/_cygrpc/_hooks.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/_hooks.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/aio/call.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/aio/call.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/aio/callback_common.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/aio/callback_common.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/aio/channel.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/aio/channel.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/aio/common.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/aio/completion_queue.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/aio/completion_queue.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/aio/grpc_aio.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/aio/grpc_aio.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/aio/rpc_status.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/aio/rpc_status.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/aio/server.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/aio/server.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/arguments.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/arguments.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/call.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/call.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/channel.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/channel.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/channelz.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/completion_queue.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/completion_queue.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/credentials.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/credentials.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/csds.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/event.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/event.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/fork_posix.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/fork_posix.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/fork_windows.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/grpc.pxi [3:13]
+        grpc/_cython/_cygrpc/grpc_gevent.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/grpc_gevent.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/grpc_string.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/metadata.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/metadata.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/operation.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/operation.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/propagation_bits.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/propagation_bits.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/records.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/records.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/security.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/security.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/server.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/server.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/tag.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/tag.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/thread.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/time.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/time.pyx.pxi [3:13]
+        grpc/_cython/_cygrpc/vtable.pxd.pxi [3:13]
+        grpc/_cython/_cygrpc/vtable.pyx.pxi [3:13]
+        grpc/_cython/cygrpc.pxd [3:13]
+        grpc/_cython/cygrpc.pyx [3:13]
+        grpc/_interceptor.py [3:13]
+        grpc/_plugin_wrapping.py [3:13]
+        grpc/_runtime_protos.py [3:13]
+        grpc/_server.py [3:13]
+        grpc/_simple_stubs.py [3:13]
+        grpc/_typing.py [3:13]
+        grpc/_utilities.py [3:13]
+        grpc/aio/__init__.py [3:13]
+        grpc/aio/_base_call.py [3:13]
+        grpc/aio/_base_channel.py [3:13]
+        grpc/aio/_base_server.py [3:13]
+        grpc/aio/_call.py [3:13]
+        grpc/aio/_channel.py [3:13]
+        grpc/aio/_interceptor.py [3:13]
+        grpc/aio/_metadata.py [3:13]
+        grpc/aio/_server.py [3:13]
+        grpc/aio/_typing.py [3:13]
+        grpc/aio/_utils.py [3:13]
+        grpc/beta/__init__.py [3:13]
+        grpc/beta/_client_adaptations.py [3:13]
+        grpc/beta/_metadata.py [3:13]
+        grpc/beta/_server_adaptations.py [3:13]
+        grpc/beta/implementations.py [3:13]
+        grpc/beta/interfaces.py [3:13]
+        grpc/beta/utilities.py [3:13]
+        grpc/experimental/__init__.py [3:13]
+        grpc/experimental/aio/__init__.py [3:13]
+        grpc/experimental/gevent.py [3:13]
+        grpc/experimental/session_cache.py [3:13]
+        grpc/framework/__init__.py [3:13]
+        grpc/framework/common/__init__.py [3:13]
+        grpc/framework/common/cardinality.py [3:13]
+        grpc/framework/common/style.py [3:13]
+        grpc/framework/foundation/__init__.py [3:13]
+        grpc/framework/foundation/abandonment.py [3:13]
+        grpc/framework/foundation/callable_util.py [3:13]
+        grpc/framework/foundation/future.py [3:13]
+        grpc/framework/foundation/logging_pool.py [3:13]
+        grpc/framework/foundation/stream.py [3:13]
+        grpc/framework/foundation/stream_util.py [3:13]
+        grpc/framework/interfaces/__init__.py [3:13]
+        grpc/framework/interfaces/base/__init__.py [3:13]
+        grpc/framework/interfaces/base/base.py [3:13]
+        grpc/framework/interfaces/base/utilities.py [3:13]
+        grpc/framework/interfaces/face/__init__.py [3:13]
+        grpc/framework/interfaces/face/face.py [3:13]
+        grpc/framework/interfaces/face/utilities.py [3:13]
+        grpc_core_dependencies.py [3:13]
+        grpc_version.py [3:13]
+        support.py [3:13]
+
+KEEP     BSD-3-Clause         bf460a928b270e23d6623d4db9286950
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [210:234]
+
+KEEP     Apache-2.0           df9d777d047486b6b2cc4bd489b7e975
+BELONGS ya.make
+    License text:
+        License: Apache License 2.0
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        .dist-info/METADATA [8:8]
+
+KEEP     BSD-3-Clause         efdacd288befe1a76f28537587b3936a
+BELONGS ya.make
+    License text:
+           limitations under the License.
+        -----------------------------------------------------------
+        BSD 3-Clause License
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [202:206]

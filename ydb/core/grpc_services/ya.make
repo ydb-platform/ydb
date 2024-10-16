@@ -75,6 +75,7 @@ SRCS(
     rpc_stream_execute_yql_script.cpp
     rpc_whoami.cpp
     rpc_object_storage.cpp
+    rpc_view.cpp
     table_settings.cpp
 
     rpc_common/rpc_common_kqp_session.cpp

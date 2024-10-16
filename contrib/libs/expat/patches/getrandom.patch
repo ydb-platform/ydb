@@ -1,0 +1,12 @@
+--- a/expat_config.h
++++ b/expat_config.h
+@@ -25,3 +25,3 @@
+ /* Define to 1 if you have the `getrandom' function. */
+-#define HAVE_GETRANDOM 1
++/* #undef HAVE_GETRANDOM */
+ 
+@@ -52,3 +52,3 @@
+ /* Define to 1 if you have `syscall' and `SYS_getrandom'. */
+-#define HAVE_SYSCALL_GETRANDOM 1
++/* #undef HAVE_SYSCALL_GETRANDOM */
+ 

@@ -20,20 +20,21 @@ RUN_ANTLR(
 
 IF (USE_VANILLA_PROTOC)
     SET(PROTOC_PATH contrib/tools/protoc_std)
+    PEERDIR(contrib/libs/protobuf_std)
 ELSE()
     SET(PROTOC_PATH contrib/tools/protoc/bin)
+    PEERDIR(contrib/libs/protobuf)
 ENDIF()
 
-
 RUN_PROGRAM(
-    $PROTOC_PATH -I=$CURDIR -I=$ARCADIA_ROOT -I=$ARCADIA_BUILD_ROOT -I=$ARCADIA_ROOT/contrib/libs/protobuf/src
-    --cpp_out=$ARCADIA_BUILD_ROOT --cpp_styleguide_out=$ARCADIA_BUILD_ROOT
+    $PROTOC_PATH -I=${CURDIR} -I=${ARCADIA_ROOT} -I=${ARCADIA_BUILD_ROOT} -I=${ARCADIA_ROOT}/contrib/libs/protobuf/src
+    --cpp_out=${ARCADIA_BUILD_ROOT} --cpp_styleguide_out=${ARCADIA_BUILD_ROOT}
     --plugin=protoc-gen-cpp_styleguide=contrib/tools/protoc/plugins/cpp_styleguide
     SQLParser.proto
     IN SQLParser.proto
     TOOL contrib/tools/protoc/plugins/cpp_styleguide
     OUT_NOAUTO SQLParser.pb.h SQLParser.pb.cc
-    CWD $ARCADIA_BUILD_ROOT
+    CWD ${antlr_output}
 )
 
 RUN_PYTHON3(
@@ -54,10 +55,8 @@ RUN_PYTHON3(
     SQLParser.pb.data.cc
     SQLParser.pb.classes.h
     SQLParser.pb.main.h
-    CWD $ARCADIA_BUILD_ROOT/ydb/library/yql/parser/proto_ast/gen/v0_proto_split
+    CWD ${antlr_output}
 )
-
-PEERDIR(contrib/libs/protobuf)
 
 SRCS(
     SQLParser.pb.code0.cc

@@ -1,0 +1,20 @@
+--- contrib/libs/protobuf/src/google/protobuf/descriptor.h	(d41e0f52b204831b82c746275d9339deba1980b3)
++++ contrib/libs/protobuf/src/google/protobuf/descriptor.h	(224e5c6eb476648794a67b47aa67ced218b4043c)
+@@ -1952,7 +1952,6 @@ class PROTOBUF_EXPORT DescriptorPool {
+       PROTOBUF_IGNORE_DEPRECATION_STOP
+     }
+ 
+-   private:
+     // These should never be called directly, but if a legacy class overrides
+     // them they'll get routed to by the Record* methods.
+     DUMMY_DEPRECATED("Use RecordError")
+--- contrib/libs/protobuf/src/google/protobuf/io/tokenizer.h	(d41e0f52b204831b82c746275d9339deba1980b3)
++++ contrib/libs/protobuf/src/google/protobuf/io/tokenizer.h	(224e5c6eb476648794a67b47aa67ced218b4043c)
+@@ -96,7 +96,6 @@ class PROTOBUF_EXPORT ErrorCollector {
+     PROTOBUF_IGNORE_DEPRECATION_STOP
+   }
+ 
+- private:
+   // These should never be called directly, but if a legacy class overrides
+   // them they'll get routed to by the Record* methods.
+   DUMMY_DEPRECATED("Use RecordError")

@@ -16,6 +16,9 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 
 class TAlterPQ: public TSubOperation {
+    // Make sure we make decisions using a consistent runtime value
+    const bool EnableTopicSplitMerge = AppData()->FeatureFlags.GetEnableTopicSplitMerge();
+
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
@@ -59,7 +62,7 @@ public:
             const NKikimrSchemeOp::TPersQueueGroupDescription& alter,
             TString& errStr)
     {
-        bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge()
+        bool splitMergeEnabled = EnableTopicSplitMerge
             && NPQ::SplitMergeEnabled(*tabletConfig)
             && (!alter.HasPQTabletConfig() || !alter.GetPQTabletConfig().HasPartitionStrategy() || NPQ::SplitMergeEnabled(alter.GetPQTabletConfig()));
 
@@ -579,7 +582,7 @@ public:
 
         alterData->ActivePartitionCount = topic->ActivePartitionCount;
 
-        bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge()
+        bool splitMergeEnabled = EnableTopicSplitMerge
                 && NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
                 && NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
 

@@ -150,7 +150,7 @@ template <typename T>
 static T DecimalBinaryToIntegerUnchecked(TStringBuf binaryValue)
 {
     T result;
-    memcpy(&result, binaryValue.Data(), sizeof(result));
+    memcpy(&result, binaryValue.data(), sizeof(result));
     result = DecimalInetToHost(result);
 
     constexpr auto one = DecimalIntegerToUnsigned(T{1});
@@ -177,15 +177,15 @@ static void CheckDecimalValueSize(TStringBuf value, int precision, int scale)
             "Decimal<%v,%v> binary value representation has invalid length: actual %v, expected %v",
             precision,
             scale,
-            value.Size(),
+            value.size(),
             expectedSize);
     }
 }
 
 static Y_FORCE_INLINE TStringBuf PlaceOnBuffer(TStringBuf value, char* buffer)
 {
-    memcpy(buffer, value.Data(), value.Size());
-    return TStringBuf(buffer, value.Size());
+    memcpy(buffer, value.data(), value.size());
+    return TStringBuf(buffer, value.size());
 }
 
 // TODO(ermolovd): make it FASTER (check NYT::WriteDecIntToBufferBackwards)
@@ -367,7 +367,7 @@ TStringBuf TDecimal::BinaryToText(TStringBuf binaryDecimal, int precision, int s
     ValidatePrecisionAndScale(precision, scale);
 
     YT_VERIFY(bufferSize >= MaxTextSize);
-    switch (binaryDecimal.Size()) {
+    switch (binaryDecimal.size()) {
         case 4:
             return DecimalBinaryToTextUncheckedImpl<i32>(binaryDecimal, scale, buffer);
         case 8:
@@ -471,7 +471,7 @@ static void ValidateDecimalBinaryValueImpl(TStringBuf binaryDecimal, int precisi
 void TDecimal::ValidateBinaryValue(TStringBuf binaryDecimal, int precision, int scale)
 {
     CheckDecimalValueSize(binaryDecimal, precision, scale);
-    switch (binaryDecimal.Size()) {
+    switch (binaryDecimal.size()) {
         case 4:
             return ValidateDecimalBinaryValueImpl<i32>(binaryDecimal, precision, scale);
         case 8:
@@ -564,19 +564,19 @@ Y_FORCE_INLINE void CheckBufferLength(int precision, size_t bufferLength)
 
 i32 TDecimal::ParseBinary32(int precision, TStringBuf buffer)
 {
-    CheckBufferLength<i32>(precision, buffer.Size());
+    CheckBufferLength<i32>(precision, buffer.size());
     return DecimalBinaryToIntegerUnchecked<i32>(buffer);
 }
 
 i64 TDecimal::ParseBinary64(int precision, TStringBuf buffer)
 {
-    CheckBufferLength<i64>(precision, buffer.Size());
+    CheckBufferLength<i64>(precision, buffer.size());
     return DecimalBinaryToIntegerUnchecked<i64>(buffer);
 }
 
 TDecimal::TValue128 TDecimal::ParseBinary128(int precision, TStringBuf buffer)
 {
-    CheckBufferLength<i128>(precision, buffer.Size());
+    CheckBufferLength<i128>(precision, buffer.size());
     auto result = DecimalBinaryToIntegerUnchecked<i128>(buffer);
     return {GetLow(result), static_cast<i64>(GetHigh(result))};
 }

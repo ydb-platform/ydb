@@ -4,6 +4,8 @@
 #include "rpc_scheme_base.h"
 #include "rpc_common/rpc_common.h"
 
+#include <ydb/public/api/protos/ydb_coordination.pb.h>
+
 namespace NKikimr {
 namespace NGRpcService {
 

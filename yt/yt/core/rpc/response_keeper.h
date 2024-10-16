@@ -106,6 +106,12 @@ DEFINE_REFCOUNTED_TYPE(IResponseKeeper)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool ValidateHeaderAndParseRememberOption(const TSharedRefArray& responseMessage);
+
+void ValidateRetry(TMutationId mutationId, bool isRetry);
+
+////////////////////////////////////////////////////////////////////////////////
+
 IResponseKeeperPtr CreateResponseKeeper(
     TResponseKeeperConfigPtr config,
     IInvokerPtr invoker,

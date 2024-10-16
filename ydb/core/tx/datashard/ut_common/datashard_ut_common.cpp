@@ -2492,6 +2492,10 @@ namespace {
                 PrintPrimitive(out, parser);
                 break;
 
+            case NYdb::TTypeParser::ETypeKind::Pg:
+                PrintPg(out, parser);
+                break;
+
             default:
                 Y_ABORT("Unhandled");
             }
@@ -2520,6 +2524,15 @@ namespace {
             }
 
             #undef PRINT_PRIMITIVE
+        }
+
+        static void PrintPg(TStringBuilder& out, const NYdb::TValueParser& parser) {
+            auto pg = parser.GetPg();
+            if (pg.IsNull()) {
+                out << "(pg null)";
+            } else {
+                out << pg.Content_.Quote();
+            }
         }
 
     private:

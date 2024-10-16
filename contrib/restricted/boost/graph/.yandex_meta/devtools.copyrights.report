@@ -1,0 +1,1144 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 00d8c23eb547d50de392cb17b51e426e
+BELONGS ya.make
+    License text:
+        // Copyright 2002 Indiana University.
+        // Authors: Andrew Lumsdaine, Lie-Quan Lee, Jeremy G. Siek
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/adjacency_iterator.hpp [2:3]
+        include/boost/graph/create_condensation_graph.hpp [2:3]
+        include/boost/graph/dag_shortest_paths.hpp [2:3]
+        include/boost/graph/detail/incremental_components.hpp [2:4]
+        include/boost/graph/detail/list_base.hpp [2:3]
+        include/boost/graph/exception.hpp [2:3]
+        include/boost/graph/graph_archetypes.hpp [2:3]
+        include/boost/graph/graph_selectors.hpp [2:3]
+        include/boost/graph/iteration_macros_undef.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 01ee5bf19060374ef2efda82af9fc108
+BELONGS ya.make
+    License text:
+        // Copyright Michael Drexl 2005, 2006.
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/r_c_shortest_paths.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0248c07689d63f8e0b5cff0f09a2737a
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2012 Flavio De Lorenzi (fdlorenzi@gmail.com)
+        // Copyright (C) 2013 Jakob Lykke Andersen, University of Southern Denmark
+        // (jlandersen@imada.sdu.dk)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/vf2_sub_graph_iso.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 09990d303a67b1a0c87b3ccf09c2097c
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2006  Tiago de Paula Peixoto <tiago@forked.de>
+        // Copyright (C) 2004,2009  The Trustees of Indiana University.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/graphml.cpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0a1ddf2f633492698f29966f2ba00d47
+BELONGS ya.make
+    License text:
+        // Copyright 1997, 1998, 1999, 2000 University of Notre Dame.
+        // Copyright (C) Vladimir Prus 2003
+        // Authors: Andrew Lumsdaine, Lie-Quan Lee, Jeremy G. Siek
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/random.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0b29116922cfef70c51094e6d835a79b
+BELONGS ya.make
+    License text:
+        // (C) Copyright Francois Faure, iMAGIS-GRAVIR / UJF, 2001.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/property_iter_range.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1503802c606bb498fc119fbf3329ccce
+BELONGS ya.make
+    License text:
+        // Copyright (c) Jeremy Siek 2001
+        // Copyright (c) Douglas Gregor 2004
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/biconnected_components.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1638af8b9d8a13b7d2e95217a0492d14
+BELONGS ya.make
+    License text:
+        // (C) Copyright Andrew Sutton 2007
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/geodesic_distance.hpp [1:1]
+        include/boost/graph/property_maps/null_property_map.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1a243be6fc839e64391e9bd0d3aea29a
+BELONGS ya.make
+    License text:
+        // (c) Copyright Juergen Hunold 2008
+        // Use, modification and distribution is subject to the Boost Software
+        // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/edmunds_karp_max_flow.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1b49b31378926fed6bad2e9e34790202
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/pending/container_traits.hpp [1:5]
+        include/boost/pending/detail/disjoint_sets.hpp [1:3]
+        include/boost/pending/detail/property.hpp [1:3]
+        include/boost/pending/fibonacci_heap.hpp [1:3]
+        include/boost/pending/property.hpp [1:3]
+        include/boost/pending/queue.hpp [1:3]
+        include/boost/pending/stringtok.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1bf87741a9385d7452ade49e1b079010
+BELONGS ya.make
+    License text:
+        // Copyright 1997, 1998, 1999, 2000 University of Notre Dame.
+        // Copyright 2010 Thomas Claveirole
+        // Authors: Andrew Lumsdaine, Lie-Quan Lee, Jeremy G. Siek, Thomas Claveirole
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/adjacency_list.hpp [2:4]
+        include/boost/graph/bellman_ford_shortest_paths.hpp [3:4]
+        include/boost/graph/breadth_first_search.hpp [3:4]
+        include/boost/graph/cuthill_mckee_ordering.hpp [2:5]
+        include/boost/graph/depth_first_search.hpp [2:4]
+        include/boost/graph/detail/adj_list_edge_iterator.hpp [3:4]
+        include/boost/graph/detail/adjacency_list.hpp [3:5]
+        include/boost/graph/detail/array_binary_tree.hpp [3:4]
+        include/boost/graph/detail/connected_components.hpp [2:3]
+        include/boost/graph/detail/edge.hpp [3:4]
+        include/boost/graph/detail/incidence_iterator.hpp [3:4]
+        include/boost/graph/detail/self_avoiding_walk.hpp [2:3]
+        include/boost/graph/detail/sparse_ordering.hpp [2:5]
+        include/boost/graph/dijkstra_shortest_paths.hpp [2:3]
+        include/boost/graph/dijkstra_shortest_paths_no_color_map.hpp [2:4]
+        include/boost/graph/edge_list.hpp [2:3]
+        include/boost/graph/filtered_graph.hpp [2:3]
+        include/boost/graph/graph_as_tree.hpp [3:4]
+        include/boost/graph/graph_concepts.hpp [3:4]
+        include/boost/graph/graph_traits.hpp [2:3]
+        include/boost/graph/graph_utility.hpp [3:4]
+        include/boost/graph/johnson_all_pairs_shortest.hpp [2:3]
+        include/boost/graph/king_ordering.hpp [2:5]
+        include/boost/graph/kruskal_min_spanning_tree.hpp [3:4]
+        include/boost/graph/leda_graph.hpp [2:6]
+        include/boost/graph/matrix_as_graph.hpp [3:4]
+        include/boost/graph/named_function_params.hpp [2:3]
+        include/boost/graph/neighbor_bfs.hpp [3:4]
+        include/boost/graph/prim_minimum_spanning_tree.hpp [2:3]
+        include/boost/graph/properties.hpp [2:3]
+        include/boost/graph/random.hpp [2:4]
+        include/boost/graph/read_dimacs.hpp [2:3]
+        include/boost/graph/relax.hpp [2:3]
+        include/boost/graph/sequential_vertex_coloring.hpp [2:4]
+        include/boost/graph/smallest_last_ordering.hpp [2:3]
+        include/boost/graph/strong_components.hpp [3:4]
+        include/boost/graph/topological_sort.hpp [3:4]
+        include/boost/graph/transpose_graph.hpp [3:4]
+        include/boost/graph/undirected_dfs.hpp [3:4]
+        include/boost/graph/vector_as_graph.hpp [2:5]
+        include/boost/graph/visitors.hpp [2:3]
+        include/boost/pending/bucket_sorter.hpp [3:4]
+        include/boost/pending/disjoint_sets.hpp [3:4]
+        include/boost/pending/indirect_cmp.hpp [3:4]
+        include/boost/pending/is_heap.hpp [3:4]
+        include/boost/pending/mutable_heap.hpp [3:4]
+        include/boost/pending/mutable_queue.hpp [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1e6c23354a6747a6c3eef56fb2537b44
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2006, Stephan Diederich
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/boykov_kolmogorov_max_flow.hpp [1:1]
+        include/boost/graph/write_dimacs.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 22403f1361a990fb6fd5cc8b876e046d
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2004 Kristopher Beevers
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/astar_search.hpp [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 22b8921218f5846e7fc7d4a2ac8c34c0
+BELONGS ya.make
+    License text:
+        // Copyright 2004-2006 The Trustees of Indiana University.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/plod_generator.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 26ec38d4689211b14e2c5b53e9a78f76
+BELONGS ya.make
+    License text:
+        // Copyright 2009 The Trustees of Indiana University.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/detail/histogram_sort.hpp [1:1]
+        include/boost/graph/topology.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 29b0154b5b9497e05eafdea58aee1ec9
+BELONGS ya.make
+    License text:
+        // Copyright 2000 University of Notre Dame.
+        // Authors: Jeremy G. Siek, Andrew Lumsdaine, Lie-Quan Lee
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/edge_connectivity.hpp [2:3]
+        include/boost/graph/edmonds_karp_max_flow.hpp [2:3]
+        include/boost/graph/push_relabel_max_flow.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2e933bb084c95d7e3472974501e28c75
+BELONGS ya.make
+    License text:
+        // Copyright (c) Jeremy Siek 2001, Marc Wintermantel 2002
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/bandwidth.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 351746b3263b8ecde03d30e68809a8c2
+BELONGS ya.make
+    License text:
+        // Copyright 2005 Trustees of Indiana University
+        // Authors: Andrew Lumsdaine, Douglas Gregor
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/simple_point.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 35f3967788124fb1166bf637d6cd211a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/transitive_closure.hpp [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 368bc0676fed97d8e20cb5e9e1a4530f
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2009 Andrew Sutton
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/detail/labeled_graph_traits.hpp [1:1]
+        include/boost/graph/graph_mutability_traits.hpp [1:1]
+        include/boost/graph/labeled_graph.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3761f0e38b5da4769378918141293e40
+BELONGS ya.make
+    License text:
+        // Copyright 2002 Rensselaer Polytechnic Institute
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/floyd_warshall_shortest.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3e8210b2d067c6fa6eca9745ccdb03df
+BELONGS ya.make
+    License text:
+        // Copyright 2008
+        // Author: Matyas W Egyhazy
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/metric_tsp_approx.hpp [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 471d4b0a42c396158389600e3135b118
+BELONGS ya.make
+    License text:
+        // Copyright 2001 University of Notre Dame.
+        // Copyright 2003 Jeremy Siek
+        // Authors: Lie-Quan Lee, Jeremy Siek, and Douglas Gregor
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/dll_import_export.hpp [2:4]
+        include/boost/graph/graphviz.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 483fdf5158d0f8518198f5ac2c492f5f
+BELONGS ya.make
+    License text:
+        // (C) Copyright Jeremy Siek 2001.
+        // Distributed under the Boost Software License, Version 1.0. (See accompany-
+        // ing file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/detail/algorithm.hpp [1:3]
+        include/boost/graph/detail/permutation.hpp [1:3]
+        include/boost/graph/detail/set_adaptor.hpp [1:3]
+        include/boost/graph/detail/shadow_iterator.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4a4c85d50d7786e732eb8f9d7ce88a13
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2007 Andrew Sutton
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/detail/geodesic.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4c7e1f597f1997587410c32f9a6d6fdb
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2005 Aaron Windsor
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/max_cardinality_matching.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4cf14bcc6afe3ad08dfd547e89ac0920
+BELONGS ya.make
+    License text:
+        // Copyright 2010 The Trustees of Indiana University.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/loop_erased_random_walk.hpp [1:1]
+        include/boost/graph/random_spanning_tree.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4d26b7ae91cf6f8491cee13434ff5797
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1996
+         * Silicon Graphics Computer Systems, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/detail/algorithm.hpp [19:20]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 572b131daaeb41ada07b46e9bcc351e8
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2005-2010 The Trustees of Indiana University.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/one_bit_color_map.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 586afb33401cfbc0d9c28c9f0b024801
+BELONGS ya.make
+    License text:
+        // Copyright 2005 Jeremy G. Siek
+        // Authors: Jeremy G. Siek
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/adj_list_serialize.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5bb192a3ec0466664f95da7b439ee5e7
+BELONGS ya.make
+    License text:
+        // Copyright 2012 Fernando Vilas
+        //           2010 Daniel Trebbien
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/maximum_adjacency_search.hpp [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 670e9fea8b553fd6cefa4f9a295c8a0a
+BELONGS ya.make
+    License text:
+        // Copyright 2012 The Trustees of Indiana University.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/detail/is_distributed_selector.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 686307e753ad6e1d636dbc622eedb324
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2006  Tiago de Paula Peixoto <tiago@forked.de>
+        // Copyright (C) 2004  The Trustees of Indiana University.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/graphml.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 69913f770ab644c0c626ffe368b41c06
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Jeremiah Willcock 2004
+        //  Distributed under the Boost Software License, Version 1.0. (See
+        //  accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/pending/fenced_priority_queue.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6b1ab40ae46ff90ccb7c47e8c55973bc
+BELONGS ya.make
+    License text:
+        //            Copyright Daniel Trebbien 2010.
+        // Distributed under the Boost Software License, Version 1.0.
+        //   (See accompanying file LICENSE_1_0.txt or the copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/buffer_concepts.hpp [1:3]
+        include/boost/graph/stoer_wagner_min_cut.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6faaf754e301184e7a07944b24799553
+BELONGS ya.make
+    License text:
+        // Copyright 2004 The Trustees of Indiana University.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/bc_clustering.hpp [1:1]
+        include/boost/graph/betweenness_centrality.hpp [1:1]
+        include/boost/graph/circle_layout.hpp [1:1]
+        include/boost/graph/gursoy_atun_layout.hpp [1:1]
+        include/boost/graph/kamada_kawai_spring_layout.hpp [1:1]
+        include/boost/graph/leda_graph.hpp [2:6]
+        include/boost/graph/overloading.hpp [1:1]
+        include/boost/graph/random_layout.hpp [1:1]
+        include/boost/graph/sequential_vertex_coloring.hpp [2:4]
+        include/boost/graph/small_world_generator.hpp [1:1]
+        include/boost/graph/vertex_and_edge_range.hpp [1:1]
+        include/boost/pending/relaxed_heap.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7154f956948b41d87bf8a2b73a07d675
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Jeremy Siek 1999.
+        // Distributed under the Boost Software License, Version 1.0. (See
+        // accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/tree_traits.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 740b8b21c73d73ca167354e62df16207
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2010 Matthias Walter (xammy@xammy.homelinux.net)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/bipartite.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 779f3f74aa28c6ec9cbf99f210980137
+BELONGS ya.make
+    License text:
+        // Copyright 2007 Stanford University
+        // Authors: David Gleich
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/core_numbers.hpp [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7da1e963669f385bf3784df6bc8f2553
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2005-2006 The Trustees of Indiana University.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/two_bit_color_map.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 807dea3c55c068fbbaf4810187c7c84b
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2007-2009 Andrew Sutton
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/bron_kerbosch_all_cliques.hpp [1:1]
+        include/boost/graph/closeness_centrality.hpp [1:1]
+        include/boost/graph/clustering_coefficient.hpp [1:1]
+        include/boost/graph/degree_centrality.hpp [1:1]
+        include/boost/graph/detail/index.hpp [1:1]
+        include/boost/graph/directed_graph.hpp [1:1]
+        include/boost/graph/eccentricity.hpp [1:1]
+        include/boost/graph/exterior_property.hpp [1:1]
+        include/boost/graph/numeric_values.hpp [1:1]
+        include/boost/graph/property_maps/constant_property_map.hpp [1:1]
+        include/boost/graph/property_maps/container_property_map.hpp [1:1]
+        include/boost/graph/property_maps/matrix_property_map.hpp [1:1]
+        include/boost/graph/tiernan_all_cycles.hpp [1:1]
+        include/boost/graph/undirected_graph.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 89b41c99892d77117372460a7f90d72f
+BELONGS ya.make
+    License text:
+        // Copyright 2004-5 The Trustees of Indiana University.
+        // Copyright 2002 Brad King and Douglas Gregor
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/page_rank.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8aaadc898368c37b5d90c024f9104351
+BELONGS ya.make
+    License text:
+        //          Copyright (C) 2012, Michele Caini.
+        // Distributed under the Boost Software License, Version 1.0.
+        //    (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/two_graphs_common_spanning_trees.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9207c14a0f73cfde357a50e86305b641
+BELONGS ya.make
+    License text:
+        // Copyright 2004-9 Trustees of Indiana University
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/detail/read_graphviz_new.hpp [1:1]
+        include/boost/graph/detail/read_graphviz_spirit.hpp [1:1]
+        src/read_graphviz_new.cpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 96b2ef2696a6c6919d3372f54d0dcce4
+BELONGS ya.make
+    License text:
+        // Copyright 1997, 1998, 1999, 2000 University of Notre Dame.
+        // Copyright 2009 Trustees of Indiana University.
+        // Authors: Andrew Lumsdaine, Lie-Quan Lee, Jeremy G. Siek, Michael Hansen
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/detail/d_ary_heap.hpp [3:4]
+        include/boost/graph/detail/incremental_components.hpp [2:4]
+        include/boost/graph/dijkstra_shortest_paths_no_color_map.hpp [2:4]
+        include/boost/graph/grid_graph.hpp [2:3]
+        include/boost/graph/incremental_components.hpp [3:5]
+        include/boost/graph/lookup_edge.hpp [2:3]
+        include/boost/graph/mcgregor_common_subgraphs.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 98be8460f5eeedee67d327e5aa099ae2
+BELONGS ya.make
+    License text:
+        // Copyright 2004-5 The Trustees of Indiana University.
+        // Copyright 2002 Brad King and Douglas Gregor
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/page_rank.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9cf9d5ea6d40a88eeda2127bd41fc81a
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2012 Flavio De Lorenzi (fdlorenzi@gmail.com)
+        // Copyright (C) 2013 Jakob Lykke Andersen, University of Southern Denmark
+        // (jlandersen@imada.sdu.dk)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/vf2_sub_graph_iso.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9d08918c66a0d366cbbae02999f8438d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/transitive_closure.hpp [1:4]
+        include/boost/graph/vector_as_graph.hpp [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a717e4b7c213ca28bbeaec4750bb98ec
+BELONGS ya.make
+    License text:
+        // Copyright 2004, 2005 The Trustees of Indiana University.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/erdos_renyi_generator.hpp [1:1]
+        include/boost/graph/fruchterman_reingold.hpp [1:1]
+        include/boost/graph/mesh_graph_generator.hpp [1:1]
+        include/boost/graph/point_traits.hpp [1:1]
+        include/boost/graph/rmat_graph_generator.hpp [1:1]
+        include/boost/graph/ssca_graph_generator.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a7831931571cb11df5942e281a68009f
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1994
+         * Hewlett-Packard Company
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/detail/algorithm.hpp [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a9d5074bdc20d985f64135ae02f955a0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/pending/container_traits.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ab71254ad02f316b826c74cda23fc7de
+BELONGS ya.make
+    License text:
+        // Copyright 2001 Universite Joseph Fourier, Grenoble.
+        // Author: Francois Faure
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/adjacency_list_io.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ac019423baf07909ddd9038922e85359
+BELONGS ya.make
+    License text:
+        // Copyright 2005 The Trustees of Indiana University.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/detail/indexed_properties.hpp [1:1]
+        include/boost/graph/dimacs.hpp [1:1]
+        include/boost/graph/graph_stats.hpp [1:1]
+        include/boost/graph/metis.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b1820d2cd3cc81402964cf6c2c64f349
+BELONGS ya.make
+    License text:
+        // Copyright 1997, 1998, 1999, 2000 University of Notre Dame.
+        // Copyright 2010 Thomas Claveirole
+        // Authors: Andrew Lumsdaine, Lie-Quan Lee, Jeremy G. Siek, Thomas Claveirole
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/adjacency_list.hpp [2:4]
+        include/boost/graph/detail/adjacency_list.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b608aafcf17c3fbc3a9abfa54ff163ce
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2007 Douglas Gregor
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/named_graph.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ba5506df7530081f1cb89a1a0c3dde35
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/vector_as_graph.hpp [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL baf28d14712b3b53f3b722d4d80fdb6c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/pending/container_traits.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bd84a09c4319b7c30ed8c9bc63531fff
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2018 Yi Ji
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/maximum_weighted_matching.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bda792b52a7a784797c1280c82f443a0
+BELONGS ya.make
+    License text:
+        //  (C) Copyright David Abrahams 2000.
+        // Distributed under the Boost Software License, Version 1.0. (See
+        // accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/reverse_graph.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c02bfefa74f87417f2dbc10a0395ffac
+BELONGS ya.make
+    License text:
+        // Copyright 2018 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/detail/empty_header.hpp [4:4]
+        include/boost/graph/detail/mpi_include.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c3a440d06912f47e5190235167d26eea
+BELONGS ya.make
+    License text:
+        // Copyright 2001 University of Notre Dame.
+        // Copyright 2006 Trustees of Indiana University
+        // Authors: Jeremy G. Siek and Douglas Gregor <dgregor@cs.indiana.edu>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/adjacency_matrix.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c43f1a8f551d96ac636a4afde37c7277
+BELONGS ya.make
+    License text:
+        // (C) Copyright 2009 Eric Bose-Wolf
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/transitive_reduction.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c44aa21684966e124d964b7f61ceb274
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2006 The Trustees of Indiana University.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/st_connected.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c6f32cbdc60da329c029d3eceb822cb5
+BELONGS ya.make
+    License text:
+        // Copyright 2001 Indiana University
+        // Author: Jeremy G. Siek
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/iteration_macros.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c8b2225195e675e39283e940da8d4aca
+BELONGS ya.make
+    License text:
+        // Copyright 2013 Maciej Piechotka
+        // Authors: Maciej Piechotka
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/edge_coloring.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c91df6862997c9f36164f1308b236bf7
+BELONGS ya.make
+    License text:
+        // Copyright 2007 Aaron Windsor
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/boyer_myrvold_planar_test.hpp [2:2]
+        include/boost/graph/is_kuratowski_subgraph.hpp [2:2]
+        include/boost/graph/is_straight_line_drawing.hpp [2:2]
+        include/boost/graph/make_biconnected_planar.hpp [2:2]
+        include/boost/graph/make_connected.hpp [2:2]
+        include/boost/graph/make_maximal_planar.hpp [2:2]
+        include/boost/graph/planar_detail/add_edge_visitors.hpp [2:2]
+        include/boost/graph/planar_detail/bucket_sort.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cc20f3be80fcae2741d451fd54843c93
+BELONGS ya.make
+    License text:
+        // Copyright 2001 University of Notre Dame.
+        // Copyright 2006 Trustees of Indiana University
+        // Authors: Jeremy G. Siek and Douglas Gregor <dgregor@cs.indiana.edu>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/adjacency_matrix.hpp [2:4]
+        include/boost/graph/dll_import_export.hpp [2:4]
+        include/boost/graph/graphviz.hpp [2:4]
+        include/boost/graph/subgraph.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cde0b758663026af6e7dea405ee6bf38
+BELONGS ya.make
+    License text:
+        // Copyright Louis Dionne 2013
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/hawick_circuits.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d08ee88acc4c1b352aea89d4523daace
+BELONGS ya.make
+    License text:
+        // Copyright 2009, Andrew Sutton
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/graph_concepts.hpp [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d52e2e3deec2da9a498dcf40b8dc3655
+BELONGS ya.make
+    License text:
+        // Copyright 2002 Marc Wintermantel (wintermantel@even-ag.ch)
+        // ETH Zurich, Center of Structure Technologies
+        // (https://web.archive.org/web/20050307090307/http://www.structures.ethz.ch/)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/profile.hpp [3:5]
+        include/boost/graph/sloan_ordering.hpp [3:5]
+        include/boost/graph/wavefront.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d91946878c8cc10edec238acbae07c4c
+BELONGS ya.make
+    License text:
+        // Copyright 2005-2009 The Trustees of Indiana University.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/compressed_sparse_row_graph.hpp [1:1]
+        include/boost/graph/detail/compressed_sparse_row_struct.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d9d3f9179a9781a228af49eebba2dba2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/leda_graph.hpp [2:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e52d2d00c0bddf195fcd2e865710a087
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2001 Jeremy Siek, Douglas Gregor, Brian Osman
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/isomorphism.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e660351224f73455ec6e8b19ff54015b
+BELONGS ya.make
+    License text:
+        // Copyright 2013 University of Warsaw.
+        // Authors: Piotr Wygocki
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/cycle_canceling.hpp [2:3]
+        include/boost/graph/detail/augment.hpp [2:3]
+        include/boost/graph/find_flow_cost.hpp [2:3]
+        include/boost/graph/successive_shortest_path_nonnegative_weights.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e948c32bb4fec5a27e9bbe3a45398269
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Jeremy Siek 2006
+        //  Distributed under the Boost Software License, Version 1.0. (See
+        //  accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/pending/property_serialize.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e9c139c5d04d10ee2bf656ff900cbbaf
+BELONGS ya.make
+    License text:
+        // Copyright (c) Aaron Windsor 2007
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/chrobak_payne_drawing.hpp [2:2]
+        include/boost/graph/planar_canonical_ordering.hpp [2:2]
+        include/boost/graph/planar_detail/boyer_myrvold_impl.hpp [2:2]
+        include/boost/graph/planar_detail/face_handles.hpp [2:2]
+        include/boost/graph/planar_detail/face_iterators.hpp [2:2]
+        include/boost/graph/planar_face_traversal.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL edd357e5bb31d28a8d2f7af650d68345
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2006-2009 Dmitry Bufistov and Andrey Parfenov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/howard_cycle_ratio.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f135edc02c00b6582ebdd933caabbc00
+BELONGS ya.make
+    License text:
+        // Copyright 1997, 1998, 1999, 2000 University of Notre Dame.
+        // Copyright 2003 Bruce Barr
+        // Authors: Andrew Lumsdaine, Lie-Quan Lee, Jeremy G. Siek
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/depth_first_search.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f1f8468601bd581bae0bf23eba4b070b
+BELONGS ya.make
+    License text:
+        // Copyright (c) Jeremy Siek 2001
+        // Copyright (c) Douglas Gregor 2004
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/biconnected_components.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f2afe39f6ff7491f267ce9bc28a07daa
+BELONGS ya.make
+    License text:
+        // Copyright 1997-2001 University of Notre Dame.
+        // Authors: Andrew Lumsdaine, Lie-Quan Lee, Jeremy G. Siek
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/connected_components.hpp [3:4]
+        include/boost/graph/copy.hpp [3:4]
+        include/boost/graph/incremental_components.hpp [3:5]
+        include/boost/graph/minimum_degree_ordering.hpp [3:4]
+        include/boost/graph/stanford_graph.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fd6578dd286e9257f73d8cc59e377eb7
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2005-2009 Jongsoo Park <jongsoo.park -at- gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/dominator_tree.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fda42ec6f8d7fcf06eb7924a33f02d3c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/cuthill_mckee_ordering.hpp [2:5]
+        include/boost/graph/detail/sparse_ordering.hpp [2:5]
+        include/boost/graph/king_ordering.hpp [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ff121923a9c0b6799597434faafbacb1
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2006  Tiago de Paula Peixoto <tiago@forked.de>
+        // Copyright (C) 2004  The Trustees of Indiana University.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/graphml.hpp [1:2]
+        src/graphml.cpp [1:2]

@@ -32,8 +32,8 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     }();
 
     TVector<YQLHighlight::Color> ColorsFromPattern(const TStringBuf& symbols) {
-        TVector<YQLHighlight::Color> result(symbols.Size());
-        for (std::size_t i = 0; i < symbols.Size(); ++i) {
+        TVector<YQLHighlight::Color> result(symbols.size());
+        for (std::size_t i = 0; i < symbols.size(); ++i) {
             result[i] = colors.at(symbols[i]);
         }
         return result;
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
 
     TVector<YQLHighlight::Color> Apply(YQLHighlight& highlight,
                                        const TStringBuf& query) {
-        TVector<YQLHighlight::Color> colors(query.Size(),
+        TVector<YQLHighlight::Color> colors(query.size(),
                                             YQLHighlight::Color::DEFAULT);
         highlight.Apply(query, colors);
         return colors;
@@ -172,13 +172,13 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
             "kkkk qqqqqqqqqqqqqqqqqqqqqqqq kkkk vvvvo";
 
         YQLHighlight highlight(Coloring);
-        for (std::size_t size = 0; size <= query.Size(); ++size) {
+        for (std::size_t size = 0; size <= query.size(); ++size) {
             const TStringBuf prefix(query, 0, size);
 
             auto colors = Apply(highlight, prefix);
             Y_DO_NOT_OPTIMIZE_AWAY(colors);
 
-            if (size == query.Size() || IsSpace(pattern[size])) {
+            if (size == query.size() || IsSpace(pattern[size])) {
                 const TStringBuf pattern_prefix(pattern, 0, size);
                 Check(highlight, prefix, pattern_prefix);
             }

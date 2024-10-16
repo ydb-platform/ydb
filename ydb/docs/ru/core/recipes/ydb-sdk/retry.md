@@ -62,6 +62,7 @@
                   return err
               }
               fmt.Println(whoAmI)
+              return nil
           },
           retry.WithIdempotent(true),
       )

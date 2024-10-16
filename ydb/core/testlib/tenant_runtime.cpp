@@ -4,6 +4,8 @@
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/base/feature_flags_service.h>
+#include <ydb/core/cms/console/feature_flags_configurator.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/mind/labels_maintainer.h>
 #include <ydb/core/mind/tenant_pool.h>
@@ -1045,6 +1047,11 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
                 ));
             EnableScheduleForActor(aid, true);
             RegisterService(MakeConfigsDispatcherID(GetNodeId(0)), aid, 0);
+            if (Config.RegisterFeatureFlagsConfigurator) {
+                RegisterService(
+                    MakeFeatureFlagsServiceID(),
+                    Register(CreateFeatureFlagsConfigurator()));
+            }
         }
 
         Register(NKikimr::CreateLabelsMaintainer(Extension.GetMonitoringConfig()),

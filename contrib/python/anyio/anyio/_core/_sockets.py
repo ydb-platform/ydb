@@ -680,19 +680,26 @@ async def setup_unix_local_socket(
     :param socktype: socket.SOCK_STREAM or socket.SOCK_DGRAM
 
     """
-    path_str: str | bytes | None
+    path_str: str | None
     if path is not None:
-        path_str = os.fspath(path)
+        path_str = os.fsdecode(path)
 
-        # Copied from pathlib...
-        try:
-            stat_result = os.stat(path)
-        except OSError as e:
-            if e.errno not in (errno.ENOENT, errno.ENOTDIR, errno.EBADF, errno.ELOOP):
-                raise
-        else:
-            if stat.S_ISSOCK(stat_result.st_mode):
-                os.unlink(path)
+        # Linux abstract namespace sockets aren't backed by a concrete file so skip stat call
+        if not path_str.startswith("\0"):
+            # Copied from pathlib...
+            try:
+                stat_result = os.stat(path)
+            except OSError as e:
+                if e.errno not in (
+                    errno.ENOENT,
+                    errno.ENOTDIR,
+                    errno.EBADF,
+                    errno.ELOOP,
+                ):
+                    raise
+            else:
+                if stat.S_ISSOCK(stat_result.st_mode):
+                    os.unlink(path)
     else:
         path_str = None
 

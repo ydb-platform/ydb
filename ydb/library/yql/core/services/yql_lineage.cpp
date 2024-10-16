@@ -793,7 +793,7 @@ private:
                 continue;
             }
 
-            if (setting->Child(2)->Content().Empty()) {
+            if (setting->Child(2)->Content().empty()) {
                 continue;
             }
 

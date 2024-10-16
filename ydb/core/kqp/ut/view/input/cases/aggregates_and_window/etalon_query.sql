@@ -43,4 +43,4 @@ FROM (
     JOIN `/Root/series`
         AS series
     USING (series_id)
-);
+) ORDER BY series;

@@ -244,6 +244,9 @@ class TMediatorTimecastProxy : public TActor<TMediatorTimecastProxy> {
             bucket.PendingUpdate.PopFront();
         }
 
+        // Note: when EnableGranularTimecast changes at runtime we will gracefully
+        // handle it when (re)connecting to a bucket. However, changes to the
+        // feature flag have no effect as long as bucket is connected.
         if (!AppData(ctx)->FeatureFlags.GetEnableGranularTimecast()) {
             bucket.SubscriptionId = Max<ui64>();
             return;

@@ -1,0 +1,40 @@
+--- contrib/libs/c-ares/src/lib/ares_library_init.c	(index)
++++ contrib/libs/c-ares/src/lib/ares_library_init.c	(working tree)
+@@ -51,1 +54,1 @@ void *(*ares_malloc)(size_t size) = default_malloc;
+-int ares_library_init(int flags)
++int ares_library_init_unsafe(int flags)
+@@ -82,1 +93,1 @@ int ares_library_init_mem(int flags,
+-void ares_library_cleanup(void)
++void ares_library_cleanup_unsafe(void)
+@@ -110,1 +115,1 @@ void ares_library_cleanup(void)
+-int ares_library_initialized(void)
++int ares_library_initialized_unsafe(void)
+@@ -140,3 +140,28 @@ int ares_library_initialized(void)
+ #endif
+   return ARES_SUCCESS;
+ }
++#include "atomic.h"
++static atomic_t     ares_init_lock;
++int ares_library_init(int flags)
++{
++  acquire_lock(&ares_init_lock);
++  int res = ares_library_init_unsafe(flags);
++  release_lock(&ares_init_lock);
++  return res;
++}
++
++void ares_library_cleanup(void)
++{
++  acquire_lock(&ares_init_lock);
++  ares_library_cleanup_unsafe();
++  release_lock(&ares_init_lock);
++}
++
++
++int ares_library_initialized(void)
++{
++  acquire_lock(&ares_init_lock);
++  int res = ares_library_initialized_unsafe();
++  release_lock(&ares_init_lock);
++  return res;
++}

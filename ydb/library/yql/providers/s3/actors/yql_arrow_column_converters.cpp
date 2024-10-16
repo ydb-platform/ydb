@@ -208,7 +208,7 @@ std::shared_ptr<arrow::Array> ArrowTypeAsYqlString(const std::shared_ptr<arrow::
 
         const ui64 v = baseValue * multiplier;
         TString result = format ? TInstant::FromValue(v).FormatGmTime(format.c_str()) : TInstant::FromValue(v).ToString();
-        builder.Add(NUdf::TBlockItem(NUdf::TStringRef(result.c_str(), result.Size())));
+        builder.Add(NUdf::TBlockItem(NUdf::TStringRef(result.c_str(), result.size())));
     }
     return builder.Build(true).make_array();
 }

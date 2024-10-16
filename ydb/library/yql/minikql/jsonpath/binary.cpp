@@ -563,7 +563,7 @@ void TJsonPathBuilder::WriteFinishPosition() {
 
 void TJsonPathBuilder::WriteString(TStringBuf value) {
     WriteUint(value.size());
-    Result->Append(value.Data(), value.size());
+    Result->Append(value.data(), value.size());
 }
 
 void TJsonPathBuilder::RewriteUintSequence(const TVector<TUint>& sequence, TUint offset) {

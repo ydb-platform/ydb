@@ -32,6 +32,9 @@ namespace NYql::NDq {
  *
  * This class is templated by std::bitset with the largest number of joins we can process
  * or std::bitset<64>, which has a more efficient implementation of enumerating subsets of set.
+ * 
+ * Also, it has a bool ProcessCycles template parameter, which makes algorithm consider all edges
+ * between csg-cmp. It makes dphyp slower, but without it we can miss a condition in case of cycles
  */
 template <typename TNodeSet>
 class TDPHypSolver {
@@ -58,7 +61,7 @@ private:
 
     void EnumerateCmpRec(const TNodeSet& s1, const TNodeSet& s2, const TNodeSet& x);
 
-    void EmitCsgCmp(const TNodeSet& s1, const TNodeSet& s2, const typename TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge);
+    void EmitCsgCmp(const TNodeSet& s1, const TNodeSet& s2, const typename TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge, const typename TJoinHypergraph<TNodeSet>::TEdge* reversedCsgCmpEdge);
 
 private:
     // Create an exclusion set that contains all the nodes of the graph that are smaller or equal to
@@ -325,7 +328,7 @@ template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsg(const TNodeSet
             s2[i] = 1;
 
             if (auto* edge = Graph_.FindEdgeBetween(s1, s2)) {
-                EmitCsgCmp(s1, s2, edge);
+                EmitCsgCmp(s1, s2, edge, &Graph_.GetEdge(edge->ReversedEdgeId));
             }
 
             EnumerateCmpRec(s1, s2, x | MakeB(neighs, GetLowestSetBit(s2)));
@@ -354,7 +357,7 @@ template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EnumerateCmpRec(const 
 
         if (DpTable_.contains(s2 | next)) {
             if (auto* edge = Graph_.FindEdgeBetween(s1, s2 | next)) {
-                EmitCsgCmp(s1, s2 | next, edge);
+                EmitCsgCmp(s1, s2 | next, edge, &Graph_.GetEdge(edge->ReversedEdgeId));
             }
         }
 
@@ -461,19 +464,23 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
 /* 
  * Emit a single CSG + CMP pair
  */
-template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeSet& s1, const TNodeSet& s2, const typename TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge) {
+template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(
+    const TNodeSet& s1, 
+    const TNodeSet& s2, 
+    const typename TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge,
+    const typename TJoinHypergraph<TNodeSet>::TEdge* reversedCsgCmpEdge
+) {
     // Here we actually build the join and choose and compare the
     // new plan to what's in the dpTable, if it there
 
     Y_ENSURE(DpTable_.contains(s1), "DP Table does not contain S1");
     Y_ENSURE(DpTable_.contains(s2), "DP Table does not conaint S2");
 
-    const auto* reversedEdge = &Graph_.GetEdge(csgCmpEdge->ReversedEdgeId);
     auto leftNodes = DpTable_[s1];
     auto rightNodes = DpTable_[s2];
     
     if (csgCmpEdge->IsReversed) {
-        std::swap(csgCmpEdge, reversedEdge);
+        std::swap(csgCmpEdge, reversedCsgCmpEdge);
         std::swap(leftNodes, rightNodes);
     }
 
@@ -503,7 +510,7 @@ template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeS
     #ifndef NDEBUG
         auto pair = std::make_pair(s1, s2);
         Y_ENSURE (!CheckTable_.contains(pair), "Check table already contains pair S1|S2");
-        CheckTable_[ std::pair<TNodeSet,TNodeSet>(s1, s2) ] = true;
+        CheckTable_[pair] = true;
     #endif
 }
 

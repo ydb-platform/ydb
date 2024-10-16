@@ -21,6 +21,7 @@
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/base.pb.h>
+#include <ydb/core/util/random.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/schlab/mon/mon.h>
 
@@ -30,7 +31,6 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/generic/algorithm.h>
-#include <util/random/entropy.h>
 #include <util/string/split.h>
 #include <util/system/sanitizers.h>
 
@@ -382,9 +382,9 @@ public:
                         NPDisk::TKey chunkKey;
                         NPDisk::TKey logKey;
                         NPDisk::TKey sysLogKey;
-                        EntropyPool().Read(&chunkKey, sizeof(NKikimr::NPDisk::TKey));
-                        EntropyPool().Read(&logKey, sizeof(NKikimr::NPDisk::TKey));
-                        EntropyPool().Read(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
+                        SafeEntropyPoolRead(&chunkKey, sizeof(NKikimr::NPDisk::TKey));
+                        SafeEntropyPoolRead(&logKey, sizeof(NKikimr::NPDisk::TKey));
+                        SafeEntropyPoolRead(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
                         TPDiskConfig *cfg = actor->Cfg.Get();
 
                         try {

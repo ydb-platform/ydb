@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/core/blobstorage/pdisk/mock/pdisk_mock.h>
+#include <ydb/core/util/random.h>
+
 #include "blobstorage_pdisk_ut.h"
 #include "blobstorage_pdisk_ut_defs.h"
 #include "blobstorage_pdisk_data.h"
@@ -42,7 +44,7 @@ public:
     TSettings Settings;
 
     TIntrusivePtr<TPDiskConfig> DefaultPDiskConfig(bool isBad) {
-        EntropyPool().Read(&TestCtx.PDiskGuid, sizeof(TestCtx.PDiskGuid));
+        SafeEntropyPoolRead(&TestCtx.PDiskGuid, sizeof(TestCtx.PDiskGuid));
         ui64 formatGuid = TestCtx.PDiskGuid + static_cast<ui64>(isBad);
         if (Settings.DiskSize) {
             FormatPDiskForTest(TestCtx.Path, formatGuid, Settings.ChunkSize, Settings.DiskSize, false, TestCtx.SectorMap, Settings.SmallDisk);

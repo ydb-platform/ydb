@@ -142,7 +142,7 @@ ALTER TOPIC `my_topic` RESET (
 
 {% endif %}
 
-### Включение и приостановка автопартиционирования {#autopartitioning}
+### Change autopartitioning modes for the topic {#autopartitioning}
 
 Next command set [autopartitioning](../../../../concepts/topic#autopartitioning) into the mode UP:
 

@@ -9,4 +9,4 @@
 5. DDL operations are not supported. Use the [{{ ydb-short-name }} SDK](../ydb-sdk/index.md) or [{{ ydb-short-name }} CLI](../ydb-cli/index.md) to perform them.
 6. Data schema validation not supported.
 7. Kafka Connect is only supported in standalone mode.
-8. If autopartitioning switched on on some topic you can not read from this topic by Kafka API or write into this topic by Kafka API.
+8. If autopartitioning is switched on on some topic you can not read from this topic by Kafka API or write into this topic by Kafka API.

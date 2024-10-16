@@ -389,7 +389,7 @@ namespace NYql::NDq {
             }
             auto &k = Request->begin()->first;
             // Pad query with dummy clauses to improve caching
-            for (ui32 nRequests = Request->size(); !IsPowerOf2(nRequests); ++nRequests) {
+            for (ui32 nRequests = Request->size(); !IsPowerOf2(nRequests) && nRequests < MaxKeysInRequest; ++nRequests) {
                 addClause(KeyType->GetMembersCount(), [&k=k](auto c) { return k.GetElement(c); });
             }
             *select.mutable_where()->mutable_filter_typed()->mutable_disjunction() = disjunction;

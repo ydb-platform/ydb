@@ -236,6 +236,7 @@ public:
         HasOlapTable = false;
         HasOltpTable = false;
         HasTableWrite = false;
+        HasUncommittedChangesRead = false;
     }
 
     TKqpTransactionInfo GetInfo() const;

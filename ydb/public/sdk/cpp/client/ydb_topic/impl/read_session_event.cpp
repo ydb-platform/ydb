@@ -249,7 +249,7 @@ TDataReceivedEvent::TDataReceivedEvent(TVector<TMessage> messages, TVector<TComp
 
 void TDataReceivedEvent::Commit() {
     if (ReadInTransaction) {
-        ythrow yexception() << "Offsets cannot be promoted when reading in a transaction";
+        ythrow yexception() << "Offsets cannot be commited explicitly when reading in a transaction";
     }
 
     for (auto [from, to] : OffsetRanges) {

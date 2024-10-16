@@ -3881,7 +3881,7 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
     if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
         auto subDomainId = ResolvePathIdForDomain(pathId);
         auto subDomainInfo = ResolveDomainInfo(pathId);
-        subDomainInfo->AggrDiskSpaceUsage(this, TPartitionStats(), ctx, tableInfo->GetStats().Aggregated);
+        subDomainInfo->AggrDiskSpaceUsage(this, TPartitionStats(), tableInfo->GetStats().Aggregated);
         if (subDomainInfo->CheckDiskSpaceQuotas(this)) {
             PersistSubDomainState(db, subDomainId, *subDomainInfo);
             // Publish is done in a separate transaction, so we may call this directly

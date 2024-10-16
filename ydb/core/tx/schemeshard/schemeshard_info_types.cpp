@@ -215,12 +215,10 @@ void TSubDomainInfo::CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskS
     }
 }
 
-void TSubDomainInfo::AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartitionStats& newAggr, const TActorContext& ctx, const TPartitionStats& oldAggr) {
-    auto oldUsage = DiskSpaceUsage.Tables;
+void TSubDomainInfo::AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartitionStats& newAggr, const TPartitionStats& oldAggr) {
     DiskSpaceUsage.Tables.DataSize += (newAggr.DataSize - oldAggr.DataSize);
     counters->ChangeDiskSpaceTablesDataBytes(newAggr.DataSize - oldAggr.DataSize);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "AggrDiskSpace: old data size " << oldUsage.DataSize << " old index size " << oldUsage.IndexSize << " newAggr data size " << newAggr.DataSize << " oldAggr data size " << oldAggr.DataSize << " new data size " << DiskSpaceUsage.Tables.DataSize << " new index size " << DiskSpaceUsage.Tables.IndexSize << " old total size " << DiskSpaceUsage.Tables.TotalSize);
     DiskSpaceUsage.Tables.IndexSize += (newAggr.IndexSize - oldAggr.IndexSize);
     counters->ChangeDiskSpaceTablesIndexBytes(newAggr.IndexSize - oldAggr.IndexSize);
 

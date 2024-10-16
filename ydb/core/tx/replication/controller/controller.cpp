@@ -1,5 +1,6 @@
 #include "controller.h"
 #include "controller_impl.h"
+#include "target_util.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/discovery/discovery.h>
@@ -490,23 +491,7 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
             return;
         }
         for (auto partitionId: record.GetChildPartitionsIds()) {
-            auto ev = MakeHolder<TEvService::TEvRunWorker>();
-            auto& record = ev->Record;
-
-            auto& worker = *record.MutableWorker();
-            worker.SetReplicationId(replication->GetId());
-            worker.SetTargetId(id.TargetId());
-            worker.SetWorkerId(partitionId);
-
-            auto& readerSettings = *record.MutableCommand()->MutableRemoteTopicReader();
-            readerSettings.MutableConnectionParams()->CopyFrom(replication->GetConfig().GetSrcConnectionParams());
-            readerSettings.SetTopicPath(target->GetSrcPath());
-            readerSettings.SetTopicPartitionId(partitionId);
-            readerSettings.SetConsumerName(ReplicationConsumerName);
-
-            auto& writerSettings = *record.MutableCommand()->MutableLocalTableWriter();
-            PathIdFromPathId(target->GetDstPathId(), writerSettings.MutablePathId());
-
+            auto ev = MakeTEvRunWorker(replication, *target, partitionId);
             Send(SelfId(), std::move(ev));
         }
     }

@@ -678,7 +678,7 @@ bool IsReplicationSupportTopicAutopartitioning(const NKikimrSchemeOp::TCreateCdc
             }
 
             auto map = result.GetMap();
-            return map["support_topic_autopartitioning"].GetBoolean();
+            return map["supports_topic_autopartitioning"].GetBoolean();
         }
     }
 

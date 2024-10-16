@@ -171,7 +171,7 @@ public:
         , Changefeed(MakeChangefeed(streamName, streamRetentionPeriod, NJson::TJsonMap{
             {"path", dstPath},
             {"id", ToString(rid)},
-            {"support_topic_autopartitioning", AppData()->FeatureFlags.GetEnableTopicAutopartitioningForReplication()},
+            {"supports_topic_autopartitioning", AppData()->FeatureFlags.GetEnableTopicAutopartitioningForReplication()},
         }))
         , LogPrefix("StreamCreator", ReplicationId, TargetId)
     {

@@ -1,3 +1,4 @@
+#include <library/cpp/resource/resource.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/mersenne.h>
 #include "shared_cache_clock_pro.h"
@@ -123,7 +124,7 @@ Y_UNIT_TEST_SUITE(TClockProCache) {
 
         TPage page5{5, 1};
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page5), TVector<ui32>{2});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{1 C 1r 2b}, {2 T 3b}, Cold>{3 C 1r 4b}, {4 C 0r 1b}, {5 C 0r 1b}; ColdTarget: 10");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{3 C 1r 4b}, {4 C 0r 1b}, {1 C 1r 2b}, Cold>{5 C 0r 1b}; ColdTarget: 7");
     }
 
     Y_UNIT_TEST(Lifecycle) {
@@ -145,20 +146,17 @@ Y_UNIT_TEST_SUITE(TClockProCache) {
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{1 C 0r 1b}, Cold>{2 C 1r 2b}, {3 C 0r 3b}, {4 C 0r 4b}; ColdTarget: 10");
 
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page5), (TVector<ui32>{3, 4}));
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{3 T 3b}, {4 T 4b}, Cold>{5 C 0r 5b}, {1 C 0r 1b}, {2 C 0r 2b}; ColdTarget: 10");
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page5), (TVector<ui32>{3}));
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{1 C 0r 1b}, {2 C 0r 2b}, Cold>{4 C 0r 4b}, {5 C 0r 5b}; ColdTarget: 7");
 
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), (TVector<ui32>{5}));
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{5 T 5b}, Cold>{1 C 0r 1b}, {3 H 0r 3b}, {2 C 0r 2b}; ColdTarget: 6");
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), (TVector<ui32>{4}));
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{1 C 0r 1b}, {2 C 0r 2b}, {4 T 4b}, Cold>{5 C 0r 5b}, {3 C 0r 3b}; ColdTarget: 7");
 
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{5 T 5b}, Cold>{1 C 0r 1b}, {3 H 1r 3b}, {2 C 0r 2b}; ColdTarget: 6");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{1 C 0r 1b}, {2 C 0r 2b}, {4 T 4b}, Cold>{5 C 0r 5b}, {3 C 1r 3b}; ColdTarget: 7");
 
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{5 T 5b}, Cold>{1 C 0r 1b}, {3 H 1r 3b}, {2 C 0r 2b}, {4 C 0r 4b}; ColdTarget: 6");
-
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page5), (TVector<ui32>{1, 2, 4}));
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{4 T 4b}, Cold>{3 C 0r 3b}, {5 C 0r 5b}; ColdTarget: 7");
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), TVector<ui32>{5});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{3 C 1r 3b}, {1 C 0r 1b}, {2 C 0r 2b}, Cold>{4 H 0r 4b}; ColdTarget: 5");
     }
 
     Y_UNIT_TEST(EvictNext) {
@@ -175,28 +173,27 @@ Y_UNIT_TEST_SUITE(TClockProCache) {
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{1 C 0r 1b}, Cold>{2 C 0r 2b}, {3 C 0r 3b}, {4 C 0r 4b}; ColdTarget: 10");
-
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{1 C 0r 1b}, Cold>{2 C 1r 2b}, {3 C 0r 3b}, {4 C 0r 4b}; ColdTarget: 10");
-
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page5), (TVector<ui32>{3, 4}));
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{3 T 3b}, {4 T 4b}, Cold>{5 C 0r 5b}, {1 C 0r 1b}, {2 C 0r 2b}; ColdTarget: 10");
-
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), (TVector<ui32>{5}));
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{5 T 5b}, Cold>{1 C 0r 1b}, {3 H 0r 3b}, {2 C 0r 2b}; ColdTarget: 6");
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page5), (TVector<ui32>{3}));
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), (TVector<ui32>{4}));
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), TVector<ui32>{5});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{3 C 1r 3b}, {1 C 0r 1b}, {2 C 0r 2b}, Cold>{4 H 0r 4b}; ColdTarget: 5");
 
         UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{1});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>{2 C 0r 2b}, Test>{1 T 1b}, Cold>{3 H 0r 3b}; ColdTarget: 6");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{1 T 1b}, Cold>{2 C 0r 2b}, {4 H 0r 4b}, {3 C 0r 3b}; ColdTarget: 5");
 
         UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{2});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{2 T 2b}, Cold>{3 C 0r 3b}; ColdTarget: 6");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{2 T 2b}, Cold>{4 H 0r 4b}, {3 C 0r 3b}; ColdTarget: 5");
 
         UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{3});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "ColdTarget: 6");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Test>{3 T 3b}, Cold>{4 C 0r 4b}; ColdTarget: 5");
+
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{4});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Cold>Test>{4 T 4b}; ColdTarget: 5");
 
         UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{});
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "ColdTarget: 6");
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Cold>Test>{4 T 4b}; ColdTarget: 5");
     }
 
     Y_UNIT_TEST(UpdateLimit) {
@@ -218,8 +215,8 @@ Y_UNIT_TEST_SUITE(TClockProCache) {
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>{1 C 0r 1b}, Test>{4 T 4b}, Cold>{5 C 0r 1b}; ColdTarget: 0");
 
         cache.UpdateLimit(0);
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), (TVector<ui32>{5, 1, 2}));
-        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "ColdTarget: 0");
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), (TVector<ui32>{5, 1}));
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Hot>Cold>Test>{2 C 0r 2b}; ColdTarget: 0");
     }
 
     Y_UNIT_TEST(Erase) {
@@ -275,6 +272,39 @@ Y_UNIT_TEST_SUITE(TClockProCache) {
         }
 
         Cerr << 1.0 * hits / (hits + misses) << Endl;
+    }
+
+    Y_UNIT_TEST(Canon) {
+        TClockProCache<TPage, TPageTraits> cache(200);
+        const auto raw = NResource::Find("clock-pro.txt");
+
+        TMap<ui32, THolder<TPage>> pages;
+        TStringInput input(raw);
+        TString line;
+        ui32 lineId = 1;
+        while (input.ReadLine(line)) {
+            // Cerr << "#" << lineId << " " << line << Endl;
+
+            TString token0, token1;
+            Split(line, ' ', token0, token1);
+            
+            ui32 pageId = std::stoul(token0);
+            if (!pages.contains(pageId)) {
+                pages.emplace(pageId, MakeHolder<TPage>(pageId, 1));
+            }
+
+            TPage* page = pages[pageId].Get();
+            bool gotHit = TPageTraits::GetLocation(page) != EClockProPageLocation::None;
+            bool expectHit = token1 == "h";
+
+            UNIT_ASSERT_VALUES_EQUAL_C(gotHit, expectHit, TStringBuilder() << "Difference on line #" << lineId << " " << line);
+
+            cache.Touch(page);
+
+            // Cerr << cache.Dump() << Endl;
+
+            lineId++;
+        }
     }
 }
 

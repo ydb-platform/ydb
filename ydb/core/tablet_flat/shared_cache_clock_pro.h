@@ -68,7 +68,7 @@ public:
             return {};
         }
 
-        ui64 savedLimit = std::exchange(Limit, SizeHot + SizeCold - 1);
+        ui64 savedLimit = std::exchange(Limit, SizeHot + SizeCold);
         ui64 savedColdTarget = std::exchange(ColdTarget, Min(ColdTarget, Limit));
 
         TIntrusiveList<TPage> evictedList = EvictWhileFull();
@@ -88,7 +88,7 @@ public:
             // transforms a 'Cold non-resident' ('Test') page to a 'Hot' page:
             TPageEntry* entry = AsEntry(it);
             Y_ABORT_UNLESS(!entry->Page);
-            return Fill(entry, page);
+            return Fill(it, entry, page);
         } else {
             // adds a 'Cold resident' page
             return Add(page);
@@ -187,6 +187,8 @@ private:
     TIntrusiveList<TPage> Add(TPage* page) {
         Y_DEBUG_ABORT_UNLESS(TPageTraits::GetLocation(page) == EClockProPageLocation::None);
 
+        auto result = EvictWhileFull();
+
         auto inserted = Entries.emplace(TPageTraits::GetKey(page), page, TPageTraits::GetSize(page));
         Y_ABORT_UNLESS(inserted.second);
         TPageEntry* entry = AsEntry(inserted.first);
@@ -196,35 +198,38 @@ private:
         TPageTraits::SetLocation(entry->Page, EClockProPageLocation::Cold);
         SizeCold += entry->Size;
 
-        return EvictWhileFull();
+        return result;
     }
 
-    TIntrusiveList<TPage> Fill(TPageEntry* entry, TPage* page) {
+    TIntrusiveList<TPage> Fill(THashSet<TPageEntry, TPageKeyHash, TPageKeyEqual>::iterator entryIt, TPageEntry* entry, TPage* page) {
         Y_DEBUG_ABORT_UNLESS(!entry->Page);
         Y_DEBUG_ABORT_UNLESS(TPageTraits::GetLocation(page) == EClockProPageLocation::None);
         Y_ABORT_UNLESS(!TPageTraits::GetReferenced(page));
         Y_ABORT_UNLESS(TPageTraits::GetSize(page) == entry->Size);
 
-        Y_ABORT_UNLESS(SizeTest >= entry->Size);
-        SizeTest -= entry->Size;
-
-        UnlinkEntry(entry);
-
-        entry->Page = page;
-        TPageTraits::SetLocation(page, EClockProPageLocation::Hot);
-        SizeHot += entry->Size;
-        
-        LinkEntry(entry);
+        EraseEntry(entry);
+        Entries.erase(entryIt);
 
         ColdTarget = Min(ColdTarget + entry->Size, Limit);
 
-        return EvictWhileFull();
+        auto result = EvictWhileFull();
+
+        auto inserted = Entries.emplace(TPageTraits::GetKey(page), page, TPageTraits::GetSize(page));
+        Y_ABORT_UNLESS(inserted.second);
+        entry = AsEntry(inserted.first);
+
+        LinkEntry(entry);
+
+        TPageTraits::SetLocation(page, EClockProPageLocation::Hot);
+        SizeHot += entry->Size;
+
+        return result;
     }
 
     TIntrusiveList<TPage> EvictWhileFull() {
         TIntrusiveList<TPage> evictedList;
         
-        while (SizeHot + SizeCold > Limit) {
+        while (SizeHot + SizeCold >= Max(ui64(1), Limit)) {
             RunHandCold(evictedList);
         }
 
@@ -263,7 +268,7 @@ private:
 
         Advance(HandCold);
 
-        while (SizeHot > Limit - ColdTarget) {
+        while (SizeHot >= Limit - ColdTarget && HandHot) {
             RunHandHot(evictedList);
         }
     }
@@ -299,7 +304,7 @@ private:
     void RunHandTest(TIntrusiveList<TPage>& evictedList) {
         Y_ABORT_UNLESS(HandTest);
 
-        if (HandTest == HandCold) {
+        if (SizeCold > 0 && HandTest == HandCold) {
             RunHandCold(evictedList);
             if (!HandTest) {
                 return;

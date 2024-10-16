@@ -695,7 +695,7 @@ private:
         return SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendSampleKRequest(shardIdx, buildInfo); });
     }
 
-    bool FillVectorIndex(TIndexBuildInfo& buildInfo) {
+    bool SendVectorIndex(TIndexBuildInfo& buildInfo) {
         ComputeKMeansState(buildInfo);
         switch (buildInfo.KMeans.State) {
             case TIndexBuildInfo::TKMeans::Sample:
@@ -713,24 +713,8 @@ private:
         return true;
     }
 
-    bool FillIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
-        if (!buildInfo.SnapshotTxId || !buildInfo.SnapshotStep) {
-            Y_ABORT_UNLESS(Self->TablesWithSnapshots.contains(buildInfo.TablePathId));
-            Y_ABORT_UNLESS(Self->TablesWithSnapshots.at(buildInfo.TablePathId) == buildInfo.InitiateTxId);
-
-            buildInfo.SnapshotTxId = buildInfo.InitiateTxId;
-            Y_ABORT_UNLESS(buildInfo.SnapshotTxId);
-            buildInfo.SnapshotStep = Self->SnapshotsStepIds.at(buildInfo.SnapshotTxId);
-            Y_ABORT_UNLESS(buildInfo.SnapshotStep);
-        }
-        if (buildInfo.Shards.empty()) {
-            NIceDb::TNiceDb db(txc.DB);
-            InitiateShards(db, buildInfo);
-        }
-        if (!buildInfo.IsBuildVectorIndex()) {
-            return FillTable(buildInfo);
-        } 
-        if (!FillVectorIndex(buildInfo)) {
+    bool FillVectorIndex(TIndexBuildInfo& buildInfo) {
+        if (!SendVectorIndex(buildInfo)) {
             return false;
         }
         if (!buildInfo.Sample.Sent && !buildInfo.Sample.Rows.empty()) {
@@ -752,6 +736,28 @@ private:
             return false;
         }
         return true;
+    }
+
+    bool FillIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
+        if (!buildInfo.SnapshotTxId || !buildInfo.SnapshotStep) {
+            Y_ABORT_UNLESS(Self->TablesWithSnapshots.contains(buildInfo.TablePathId));
+            Y_ABORT_UNLESS(Self->TablesWithSnapshots.at(buildInfo.TablePathId) == buildInfo.InitiateTxId);
+
+            buildInfo.SnapshotTxId = buildInfo.InitiateTxId;
+            Y_ABORT_UNLESS(buildInfo.SnapshotTxId);
+            buildInfo.SnapshotStep = Self->SnapshotsStepIds.at(buildInfo.SnapshotTxId);
+            Y_ABORT_UNLESS(buildInfo.SnapshotStep);
+        }
+        if (buildInfo.Shards.empty()) {
+            NIceDb::TNiceDb db(txc.DB);
+            InitiateShards(db, buildInfo);
+        }
+        if (buildInfo.IsBuildVectorIndex()) {
+            return FillVectorIndex(buildInfo);
+        } else {
+            Y_ASSERT(buildInfo.IsBuildSecondaryIndex() || buildInfo.IsBuildColumns());
+            return FillTable(buildInfo);
+        }
     }
 
 public:

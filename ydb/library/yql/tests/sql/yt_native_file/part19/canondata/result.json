@@ -584,9 +584,9 @@
     ],
     "test.test[blocks-combine_hashed_max--Peephole]": [
         {
-            "checksum": "072de32f237c0a659fcb217825d6fe8d",
-            "size": 3482,
-            "uri": "https://{canondata_backend}/1942173/d7b51a8943054cfea98b1e42450768694da5000b/resource.tar.gz#test.test_blocks-combine_hashed_max--Peephole_/opt.yql"
+            "checksum": "1c4cc1601f1f61b764e391b851324999",
+            "size": 3530,
+            "uri": "https://{canondata_backend}/1946324/820e3db848dce72eac40665b9ca64552c869136b/resource.tar.gz#test.test_blocks-combine_hashed_max--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_hashed_max--Plan]": [
@@ -612,9 +612,9 @@
     ],
     "test.test[blocks-combine_hashed_sum_many_keys--Peephole]": [
         {
-            "checksum": "dce58d7114cdf691cd277a82b722aaef",
-            "size": 11971,
-            "uri": "https://{canondata_backend}/1775319/049530c2ab88f8664aade59a42710a0f0aec002c/resource.tar.gz#test.test_blocks-combine_hashed_sum_many_keys--Peephole_/opt.yql"
+            "checksum": "616ca4f49125448895b333f0c77aa4bb",
+            "size": 12071,
+            "uri": "https://{canondata_backend}/1946324/820e3db848dce72eac40665b9ca64552c869136b/resource.tar.gz#test.test_blocks-combine_hashed_sum_many_keys--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_hashed_sum_many_keys--Plan]": [
@@ -640,9 +640,9 @@
     ],
     "test.test[blocks-distinct_mixed_keys--Peephole]": [
         {
-            "checksum": "16b9a0bc731ecbefb8d4274854782711",
-            "size": 7436,
-            "uri": "https://{canondata_backend}/1775319/049530c2ab88f8664aade59a42710a0f0aec002c/resource.tar.gz#test.test_blocks-distinct_mixed_keys--Peephole_/opt.yql"
+            "checksum": "76517f43bab95ee0125ec1b4ccf3a55b",
+            "size": 7664,
+            "uri": "https://{canondata_backend}/1937001/e715663cfc04c70f73b3049843d47c204d5f6c08/resource.tar.gz#test.test_blocks-distinct_mixed_keys--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-distinct_mixed_keys--Plan]": [

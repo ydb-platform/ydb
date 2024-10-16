@@ -301,6 +301,7 @@ protected:
     ITransaction* CreateRequestTabletOwners(TEvHive::TEvRequestTabletOwners::TPtr event);
     ITransaction* CreateUpdateTabletsObject(TEvHive::TEvUpdateTabletsObject::TPtr event);
     ITransaction* CreateUpdateDomain(TSubDomainKey subdomainKey, TEvHive::TEvUpdateDomain::TPtr event = {});
+    ITransaction* CreateDeleteNode(TNodeId nodeId);
 
 public:
     TDomainsView DomainsView;

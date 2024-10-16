@@ -1046,6 +1046,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     }
     req->set_range_expansion_limit(options.RangeExpansionLimit);
     req->set_max_subqueries(options.MaxSubqueries);
+    req->set_min_row_count_per_subquery(options.MinRowCountPerSubquery);
     req->set_allow_full_scan(options.AllowFullScan);
     req->set_allow_join_without_index(options.AllowJoinWithoutIndex);
 

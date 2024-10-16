@@ -472,7 +472,6 @@ void InitFq(const NFq::NConfig::TConfig& fqConfig, IPqGateway::TPtr pqGateway, T
 
         auto rowDispatcher = NFq::NewRowDispatcherService(
             fqConfig.GetRowDispatcher(),
-            fqConfig.GetRowDispatcher(),
             NKikimr::CreateYdbCredentialsProviderFactory,
             yqSharedResources,
             credentialsFactory,

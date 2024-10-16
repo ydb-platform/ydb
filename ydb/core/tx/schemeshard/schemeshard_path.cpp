@@ -1549,6 +1549,8 @@ bool TPath::IsCommonSensePath() const {
         bool ok = (*item)->IsDirectory() || (*item)->IsDomainRoot();
         // Temporarily olap stores are treated like directories
         ok = ok || (*item)->IsOlapStore();
+        // Temporarily backup collections are treated like directories
+        ok = ok || (*item)->IsBackupCollection();
         if (!ok) {
             return false;
         }

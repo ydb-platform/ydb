@@ -959,6 +959,14 @@ protected:
         return str.Str();
     }
 
+    bool GetFailWritesStatus() override {
+        return IoContext->GetFailWritesStatus();
+    }
+
+    void SetFailWrites(bool fail) override {
+        IoContext->SetFailWrites(fail);
+    }
+
     void IncrementMonInFlight(IAsyncIoOperation::EType type, ui32 size) {
         switch (type) {
             case IAsyncIoOperation::EType::PWrite:

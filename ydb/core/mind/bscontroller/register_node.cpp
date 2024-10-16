@@ -434,7 +434,7 @@ void TBlobStorageController::ReadVSlot(const TVSlotInfo& vslot, TEvBlobStorage::
         vDisk->SetEntityStatus(NKikimrBlobStorage::DESTROY);
     } else if (vslot.Mood == TMood::Wipe) {
         vDisk->SetDoWipe(true);
-    } else if (vslot.Mood == TMood::ReadOnly) {
+    } else if (TMood::IsReadOnly(vslot.Mood)) {
         vDisk->SetReadOnly(true);
     }
 
@@ -450,7 +450,7 @@ void TBlobStorageController::ReadVSlot(const TVSlotInfo& vslot, TEvBlobStorage::
 
         SerializeDonors(vDisk, vslot, *group, vslotFinder);
     } else {
-        Y_ABORT_UNLESS(vslot.Mood != TMood::Donor);
+        Y_ABORT_UNLESS(!TMood::IsDonor(vslot.Mood));
     }
 }
 

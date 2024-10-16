@@ -238,7 +238,7 @@ public:
 };
 
 void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseConfig *config,
-        ui32 pdisks, ui32 vdiskPerPdisk = 4, const TNodeTenantsMap &tenants = {}, bool useMirror3dcErasure = false)
+        ui32 pdisks, ui32 vdiskPerPdisk = 4, const TNodeTenantsMap &tenants = {}, bool useMirror3dcErasure = false, bool createDynamicGroups = false)
 {
     ui32 numNodes = runtime.GetNodeCount();
     ui32 numNodeGroups = pdisks * vdiskPerPdisk;
@@ -255,7 +255,20 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
         numGroups = numNodes * numNodeGroups;
 
     auto now = runtime.GetTimeProvider()->Now();
-    for (ui32 groupId = 0; groupId < numGroups; ++groupId) {
+
+    std::map<ui32, ui32> groupIdxToGroupId;
+
+    for (ui32 i = 0; i < numGroups; ++i) {
+        ui32 groupId;
+
+        if (createDynamicGroups) {
+            groupId = ((i % pdisks) == 0) ? i : (i | (1 << 31));
+        } else {
+            groupId = i;
+        }
+
+        groupIdxToGroupId[i] = groupId;
+
         auto &group = *config->AddGroup();
         group.SetGroupId(groupId);
         group.SetGroupGeneration(1);
@@ -316,7 +329,11 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
 
             for (ui8 vdiskIndex = 0; vdiskIndex < vdiskPerPdisk; ++vdiskIndex) {
                 ui32 vdiskId = pdiskIndex * vdiskPerPdisk + vdiskIndex;
-                ui32 groupId = groupShift + vdiskId;
+                ui32 groupIdx = groupShift + vdiskId;
+
+                UNIT_ASSERT(groupIdxToGroupId.count(groupIdx));
+                ui32 groupId = groupIdxToGroupId[groupIdx];
+
                 ui32 failRealm = 0;
                 if (useMirror3dcErasure)
                     failRealm = (nodeIndex % 9) / 3;
@@ -341,7 +358,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
                 vdiskConfig.SetFailRealmIdx(failRealm);
                 vdiskConfig.SetFailDomainIdx(nodeIndex % 8);
 
-                config->MutableGroup(groupId)->AddVSlotId()
+                config->MutableGroup(groupIdx)->AddVSlotId()
                     ->CopyFrom(vdiskConfig.GetVSlotId());
             }
         }
@@ -561,7 +578,7 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
 
     TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
     TFakeNodeWhiteboardService::Info.clear();
-    GenerateExtendedInfo(*this, config, options.VDisks, 4, options.Tenants, options.UseMirror3dcErasure);
+    GenerateExtendedInfo(*this, config, options.VDisks, 4, options.Tenants, options.UseMirror3dcErasure, options.EnableDynamicGroups);
 
     SetObserverFunc([](TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigRequest
@@ -1220,7 +1237,7 @@ void TCmsTestEnv::EnableNoisyBSCPipe() {
 void TCmsTestEnv::RegenerateBSConfig(NKikimrBlobStorage::TBaseConfig *config, const TTestEnvOpts &opts) {
     TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
     config->Clear();
-    GenerateExtendedInfo(*this, config, opts.VDisks, 4, opts.Tenants, opts.UseMirror3dcErasure);
+    GenerateExtendedInfo(*this, config, opts.VDisks, 4, opts.Tenants, opts.UseMirror3dcErasure, opts.EnableDynamicGroups);
 }
 
 } // namespace NCmsTest

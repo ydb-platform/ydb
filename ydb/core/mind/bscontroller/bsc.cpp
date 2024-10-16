@@ -48,7 +48,7 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
     Y_ABORT_UNLESS(inserted);
 
     if (!IsBeingDeleted()) {
-        if (Mood != TMood::Donor) {
+        if (!TMood::IsDonor(Mood)) {
             Y_ABORT_UNLESS(group);
             Group = group;
             group->AddVSlot(this);
@@ -339,22 +339,22 @@ void TBlobStorageController::ValidateInternalState() {
         Y_ABORT_UNLESS(it != vslot->PDisk->VSlotsOnPDisk.end());
         Y_ABORT_UNLESS(it->second == vslot.Get());
         const TGroupInfo *group = FindGroup(vslot->GroupId);
-        if (!vslot->IsBeingDeleted() && vslot->Mood != TMood::Donor) {
+        if (!vslot->IsBeingDeleted() && !TMood::IsDonor(vslot->Mood)) {
             Y_ABORT_UNLESS(group);
             Y_ABORT_UNLESS(vslot->Group == group);
         } else {
             Y_ABORT_UNLESS(!vslot->Group);
         }
-        if (vslot->Mood == TMood::Donor) {
+        if (TMood::IsDonor(vslot->Mood)) {
             const TVSlotInfo *acceptor = FindAcceptor(*vslot);
             Y_ABORT_UNLESS(!acceptor->IsBeingDeleted());
-            Y_ABORT_UNLESS(acceptor->Mood != TMood::Donor);
+            Y_ABORT_UNLESS(!TMood::IsDonor(acceptor->Mood));
             Y_ABORT_UNLESS(acceptor->Donors.contains(vslotId));
         }
         for (const TVSlotId& donorVSlotId : vslot->Donors) {
             const TVSlotInfo *donor = FindVSlot(donorVSlotId);
             Y_ABORT_UNLESS(donor);
-            Y_ABORT_UNLESS(donor->Mood == TMood::Donor);
+            Y_ABORT_UNLESS(TMood::IsDonor(donor->Mood));
             Y_ABORT_UNLESS(donor->GroupId == vslot->GroupId);
             Y_ABORT_UNLESS(donor->GroupGeneration < vslot->GroupGeneration);
             Y_ABORT_UNLESS(donor->GetShortVDiskId() == vslot->GetShortVDiskId());

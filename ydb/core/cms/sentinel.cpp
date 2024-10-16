@@ -217,6 +217,7 @@ bool TPDiskStatus::IsNewStatusGood() const {
         case EPDiskStatus::FAULTY:
         case EPDiskStatus::BROKEN:
         case EPDiskStatus::TO_BE_REMOVED:
+        case EPDiskStatus::READONLY_FAULTY:
         case EPDiskStatus::EDriveStatus_INT_MIN_SENTINEL_DO_NOT_USE_:
         case EPDiskStatus::EDriveStatus_INT_MAX_SENTINEL_DO_NOT_USE_:
             return false;
@@ -957,12 +958,16 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             if (it->second.HasFaultyMarker() && Config.EvictVDisksStatus.Defined()) {
                 info.SetForcedStatus(*Config.EvictVDisksStatus);
             } else {
-                info.ResetForcedStatus();
+                if (info.Markers.contains(NKikimrCms::MARKER_DISK_READONLY_FAULTY)) {
+                    info.SetForcedStatus(EPDiskStatus::READONLY_FAULTY);
+                } else {
+                    info.ResetForcedStatus();
+                }
             }
 
             all.AddPDisk(id);
             if (info.IsChanged()) {
-                if (info.IsNewStatusGood() || info.HasForcedStatus()) {
+                if (info.IsNewStatusGood() || info.HasForcedStatus() || info.Markers.contains(NKikimrCms::MARKER_DISK_READONLY_FAULTY)) {
                     alwaysAllowed.insert(id);
                 } else {
                     changed.AddPDisk(id);
@@ -1053,7 +1058,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         NTabletPipe::SendData(SelfId(), CmsState->BSControllerPipe, request.Release(), ++SentinelState->ChangeRequestId);
     }
 
-    void Handle(TEvSentinel::TEvUpdateHostMarkers::TPtr& ev) {
+    void Handle(TEvSentinel::TEvUpdateMarkers::TPtr& ev) {
         for (auto& [nodeId, markers] : ev->Get()->HostMarkers) {
             auto it = SentinelState->Nodes.find(nodeId);
             if (it == SentinelState->Nodes.end()) {
@@ -1062,6 +1067,16 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             }
 
             it->second.Markers = std::move(markers);
+        }
+
+        for (auto& [pdiksId, markers] : ev->Get()->PDiskMarkers) {
+            auto it = SentinelState->PDisks.find(pdiksId);
+            if (it == SentinelState->PDisks.end()) {
+                // markers will be updated upon next ConfigUpdate iteration
+                continue;
+            }
+
+            it->second->Markers = std::move(markers);
         }
     }
 
@@ -1298,7 +1313,7 @@ public:
             sFunc(TEvSentinel::TEvConfigUpdated, OnConfigUpdated);
             sFunc(TEvSentinel::TEvUpdateState, UpdateState);
             sFunc(TEvSentinel::TEvStateUpdated, OnStateUpdated);
-            hFunc(TEvSentinel::TEvUpdateHostMarkers, Handle);
+            hFunc(TEvSentinel::TEvUpdateMarkers, Handle);
             sFunc(TEvSentinel::TEvBSCPipeDisconnected, OnPipeDisconnected);
 
             hFunc(TEvCms::TEvGetSentinelStateRequest, Handle);

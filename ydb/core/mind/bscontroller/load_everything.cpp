@@ -395,7 +395,7 @@ public:
 
         // tie donors and acceptors
         for (const auto& [vslotId, vslot] : Self->VSlots) {
-            if (vslot->Mood == TMood::Donor) {
+            if (TMood::IsDonor(vslot->Mood)) {
                 const TVSlotInfo *acceptor = Self->FindAcceptor(*vslot);
                 const_cast<TVSlotInfo&>(*acceptor).Donors.insert(vslotId);
             }

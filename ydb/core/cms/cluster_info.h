@@ -1044,7 +1044,8 @@ inline bool ActionRequiresHost(NKikimrCms::TAction::EType type) {
     return type != NKikimrCms::TAction::ADD_HOST
         && type != NKikimrCms::TAction::ADD_DEVICES
         && type != NKikimrCms::TAction::REPLACE_DEVICES
-        && type != NKikimrCms::TAction::REMOVE_DEVICES;
+        && type != NKikimrCms::TAction::REMOVE_DEVICES
+        && type != NKikimrCms::TAction::DECOMISSION_DISK;
 }
 
 inline bool ActionRequiresHost(const NKikimrCms::TAction &action) {

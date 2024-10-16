@@ -73,6 +73,8 @@ public:
                             break;
                         case TMood::Donor:
                             break;
+                        case TMood::ReadOnlyDonor:
+                            break;
                     }
                     break;
             }

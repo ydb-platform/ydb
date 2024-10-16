@@ -140,6 +140,42 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
                 str << "</button>";
             }
         }
+        TAG(TH4) {str << "Inject write failures"; }
+        DIV() {
+            str << R"___(
+                <script>
+                    function sendFailWrites() {
+                        $.ajax({
+                            url: "",
+                            data: "failWrites=",
+                            method: "POST",
+                            success: reloadPage
+                        });
+                    }
+
+                    function sendNormalWrites() {
+                        $.ajax({
+                            url: "",
+                            data: "normalWrites=",
+                            method: "POST",
+                            success: reloadPage
+                        });
+                    }
+                </script>
+            )___";
+            str << "<button onclick='sendFailWrites()' name='failWrites' class='btn btn-default' ";
+            str << "style='background:Tomato; margin:5px' ";
+            str << ">";
+            str << "Fail writes";
+            str << "</button>";
+            str << "<button onclick='sendNormalWrites()' name='normalWrites' class='btn btn-default' ";
+            str << "style='background:LightGray; margin:5px' ";
+            str << ">";
+            str << "Normal writes";
+            str << "</button>";
+            str << "<br>";
+            str << "Status: " << (BlockDevice->GetFailWritesStatus() ? "Fail mode" : "Normal mode");
+        }
         if (Cfg->SectorMap) {
             TAG(TH4) {str << "SectorMap"; }
             PRE() {str << Cfg->SectorMap->ToString();}

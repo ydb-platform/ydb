@@ -130,6 +130,8 @@ public:
     virtual int GetLastErrno() = 0;
     virtual TString GetPDiskInfo() = 0;
     virtual TFileHandle *GetFileHandle() = 0;
+    virtual void SetFailWrites(bool fail) = 0;
+    virtual bool GetFailWritesStatus() = 0;
     virtual void OnAsyncIoOperationCompletion(IAsyncIoOperation *op) = 0;
 };
 

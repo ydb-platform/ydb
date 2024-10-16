@@ -1337,7 +1337,8 @@ private:
 
             Visit(event,
                 [&] (const TConfigEvent& event) {
-                    return UpdateConfig(event);
+                    UpdateConfig(event);
+                    config = Config_.Acquire();
                 },
                 [&] (const TLogEvent& event) {
                     if (requestSuppressionEnabled && event.RequestId && SuppressedRequestIdSet_.Contains(event.RequestId)) {

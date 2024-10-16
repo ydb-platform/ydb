@@ -768,14 +768,14 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 TabletId,
                 TxRejectedByOutOfStorage,
                 TxRejectedByOverload,
+                FollowerId,
                 UpdateTime
             FROM `/Root/.sys/partition_stats`;
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         auto ysonString = NKqp::StreamResultToYson(it);
-
-        TYsonFieldChecker check(ysonString, 23);
+        TYsonFieldChecker check(ysonString, 24);
 
         check.Uint64GreaterOrEquals(nowUs); // AccessTime
         check.DoubleGreaterOrEquals(0.0); // CPUCores
@@ -799,6 +799,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Uint64Greater(0u); // TabletId
         check.Uint64(0u); // TxRejectedByOutOfStorage
         check.Uint64(0u); // TxRejectedByOverload
+        check.Uint64(0u); // FollowerId
         check.Uint64GreaterOrEquals(nowUs); // UpdateTime
     }
 
@@ -1389,7 +1390,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             const auto& columns = table.GetTableColumns();
             const auto& keyColumns = table.GetPrimaryKeyColumns();
 
-            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 26);
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 27);
             UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
             UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
 

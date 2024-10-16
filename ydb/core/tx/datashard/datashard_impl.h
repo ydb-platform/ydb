@@ -1577,7 +1577,8 @@ public:
     }
 
     ui32 Generation() const { return Executor()->Generation(); }
-    bool IsFollower() const { return Executor()->GetStats().IsFollower; }
+    ui32 FollowerId() const { return Executor()->GetStats().FollowerId; }
+    bool IsFollower() const { return FollowerId() != 0; }
     bool SyncSchemeOnFollower(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx,
                            NKikimrTxDataShard::TError::EKind & status, TString& errMessage);
 
@@ -3176,12 +3177,15 @@ protected:
             HFuncTraced(TEvDataShard::TEvProposeTransaction, HandleAsFollower);
             HFuncTraced(TEvPrivate::TEvDelayedProposeTransaction, Handle);
             HFuncTraced(TEvDataShard::TEvReadColumnsRequest, Handle);
+            HFuncTraced(TEvTabletPipe::TEvClientConnected, Handle);
+            HFuncTraced(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFuncTraced(TEvTabletPipe::TEvServerConnected, Handle);
             HFuncTraced(TEvTabletPipe::TEvServerDisconnected, Handle);
             HFuncTraced(TEvDataShard::TEvRead, Handle);
             HFuncTraced(TEvDataShard::TEvReadContinue, Handle);
             HFuncTraced(TEvDataShard::TEvReadAck, Handle);
             HFuncTraced(TEvDataShard::TEvReadCancel, Handle);
+            HFuncTraced(TEvPrivate::TEvPeriodicWakeup, DoPeriodicTasks);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWorkAsFollower unhandled event type: " << ev->GetTypeRewrite()
@@ -3235,7 +3239,7 @@ protected:
             const TUserTable &ti = *t.second;
 
             // Don't report stats until they are build for the first time
-            if (!ti.Stats.StatsUpdateTime) {
+            if (!ti.Stats.StatsUpdateTime && !IsFollower()) {
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "SendPeriodicTableStats at datashard " << TabletID()
                             << ", for tableId " << tableId << ", but no stats yet"
                 );
@@ -3243,41 +3247,63 @@ protected:
             }
 
             if (!DbStatsReportPipe) {
+                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "SendPeriodicTableStats register new pipe at datashard " << TabletID()
+                    << " FollowerId " << FollowerId() << ", TableInfos size = " << TableInfos.size());
+
                 NTabletPipe::TClientConfig clientConfig;
                 DbStatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
             }
 
             THolder<TEvDataShard::TEvPeriodicTableStats> ev(new TEvDataShard::TEvPeriodicTableStats(TabletID(), PathOwnerId, tableId));
+            ev->Record.SetFollowerId(FollowerId());
             ev->Record.SetShardState(State);
             ev->Record.SetGeneration(Executor()->Generation());
             ev->Record.SetRound(StatsReportRound++);
-            ev->Record.MutableTableStats()->SetRowCount(ti.Stats.DataStats.RowCount + ti.Stats.MemRowCount);
 
-            ev->Record.MutableTableStats()->SetDataSize(ti.Stats.DataStats.DataSize.Size + ti.Stats.MemDataSize);
-            ev->Record.MutableTableStats()->SetIndexSize(ti.Stats.DataStats.IndexSize.Size);
-            ev->Record.MutableTableStats()->SetByKeyFilterSize(ti.Stats.DataStats.ByKeyFilterSize);
-            ev->Record.MutableTableStats()->SetInMemSize(ti.Stats.MemDataSize);
+            if (!IsFollower()) {
+                ev->Record.MutableTableStats()->SetRowCount(ti.Stats.DataStats.RowCount + ti.Stats.MemRowCount);
 
-            TMap<ui8, std::tuple<ui64, ui64>> channels; // Channel -> (DataSize, IndexSize)
-            for (size_t channel = 0; channel < ti.Stats.DataStats.DataSize.ByChannel.size(); channel++) {
-                if (ti.Stats.DataStats.DataSize.ByChannel[channel]) {
-                    std::get<0>(channels[channel]) = ti.Stats.DataStats.DataSize.ByChannel[channel];
+                ev->Record.MutableTableStats()->SetDataSize(ti.Stats.DataStats.DataSize.Size + ti.Stats.MemDataSize);
+                ev->Record.MutableTableStats()->SetIndexSize(ti.Stats.DataStats.IndexSize.Size);
+                ev->Record.MutableTableStats()->SetByKeyFilterSize(ti.Stats.DataStats.ByKeyFilterSize);
+                ev->Record.MutableTableStats()->SetInMemSize(ti.Stats.MemDataSize);
+
+                TMap<ui8, std::tuple<ui64, ui64>> channels; // Channel -> (DataSize, IndexSize)
+                for (size_t channel = 0; channel < ti.Stats.DataStats.DataSize.ByChannel.size(); channel++) {
+                    if (ti.Stats.DataStats.DataSize.ByChannel[channel]) {
+                        std::get<0>(channels[channel]) = ti.Stats.DataStats.DataSize.ByChannel[channel];
+                    }
                 }
-            }
-            for (size_t channel = 0; channel < ti.Stats.DataStats.IndexSize.ByChannel.size(); channel++) {
-                if (ti.Stats.DataStats.IndexSize.ByChannel[channel]) {
-                    std::get<1>(channels[channel]) = ti.Stats.DataStats.IndexSize.ByChannel[channel];
+                for (size_t channel = 0; channel < ti.Stats.DataStats.IndexSize.ByChannel.size(); channel++) {
+                    if (ti.Stats.DataStats.IndexSize.ByChannel[channel]) {
+                        std::get<1>(channels[channel]) = ti.Stats.DataStats.IndexSize.ByChannel[channel];
+                    }
                 }
-            }
-            for (auto p : channels) {
-                auto item = ev->Record.MutableTableStats()->AddChannels();
-                item->SetChannel(p.first);
-                item->SetDataSize(std::get<0>(p.second));
-                item->SetIndexSize(std::get<1>(p.second));
-            }
+                for (auto p : channels) {
+                    auto item = ev->Record.MutableTableStats()->AddChannels();
+                    item->SetChannel(p.first);
+                    item->SetDataSize(std::get<0>(p.second));
+                    item->SetIndexSize(std::get<1>(p.second));
+                }
 
-            ev->Record.MutableTableStats()->SetLastAccessTime(ti.Stats.AccessTime.MilliSeconds());
-            ev->Record.MutableTableStats()->SetLastUpdateTime(ti.Stats.UpdateTime.MilliSeconds());
+                ev->Record.MutableTableStats()->SetLastAccessTime(ti.Stats.AccessTime.MilliSeconds());
+                ev->Record.MutableTableStats()->SetLastUpdateTime(ti.Stats.UpdateTime.MilliSeconds());
+
+                ev->Record.MutableTableStats()->SetPartCount(ti.Stats.PartCount);
+                ev->Record.MutableTableStats()->SetSearchHeight(ti.Stats.SearchHeight);
+                ev->Record.MutableTableStats()->SetLastFullCompactionTs(ti.Stats.LastFullCompaction.Seconds());
+                ev->Record.MutableTableStats()->SetHasLoanedParts(Executor()->HasLoanedParts());
+
+                if (!ti.Stats.PartOwners.contains(TabletID())) {
+                    ev->Record.AddUserTablePartOwners(TabletID());
+                }
+                for (const auto& pi : ti.Stats.PartOwners) {
+                    ev->Record.AddUserTablePartOwners(pi);
+                }
+                for (const auto& pi : SysTablesPartOwners) {
+                    ev->Record.AddSysTablesPartOwners(pi);
+                }                
+            }
 
             ev->Record.MutableTableStats()->SetImmediateTxCompleted(TabletCounters->Cumulative()[COUNTER_PREPARE_IMMEDIATE].Get() + TabletCounters->Cumulative()[COUNTER_WRITE_IMMEDIATE].Get());
             ev->Record.MutableTableStats()->SetPlannedTxCompleted(TabletCounters->Cumulative()[COUNTER_PLANNED_TX_COMPLETE].Get());
@@ -3304,27 +3330,13 @@ protected:
                 resourceMetrics->Fill(*ev->Record.MutableTabletMetrics());
             }
 
-            ev->Record.MutableTableStats()->SetPartCount(ti.Stats.PartCount);
-            ev->Record.MutableTableStats()->SetSearchHeight(ti.Stats.SearchHeight);
-            ev->Record.MutableTableStats()->SetLastFullCompactionTs(ti.Stats.LastFullCompaction.Seconds());
-            ev->Record.MutableTableStats()->SetHasLoanedParts(Executor()->HasLoanedParts());
-
-            if (!ti.Stats.PartOwners.contains(TabletID())) {
-                ev->Record.AddUserTablePartOwners(TabletID());
-            }
-            for (const auto& pi : ti.Stats.PartOwners) {
-                ev->Record.AddUserTablePartOwners(pi);
-            }
-            for (const auto& pi : SysTablesPartOwners) {
-                ev->Record.AddSysTablesPartOwners(pi);
-            }
-
             ev->Record.SetNodeId(ctx.ExecutorThread.ActorSystem->NodeId);
             ev->Record.SetStartTime(StartTime().MilliSeconds());
 
             if (DstSplitDescription)
                 ev->Record.SetIsDstSplit(true);
 
+            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TEvPeriodicTableStats from datashard " << TabletID() << ", FollowerId " << FollowerId() << ", tableId " << tableId);
             NTabletPipe::SendData(ctx, DbStatsReportPipe, ev.Release());
         }
 

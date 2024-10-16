@@ -1,7 +1,8 @@
 import os
-import typing
 from enum import auto, StrEnum
+from typing import Any, Literal, TYPE_CHECKING
 
+# noinspection PyUnresolvedReferences
 import ymake
 
 import _dart_fields as df
@@ -15,29 +16,34 @@ from _common import (
 from _dart_fields import create_dart_record
 
 
+if TYPE_CHECKING:
+    from lib.nots.erm_json_lite import ErmJsonLite
+    from lib.nots.package_manager import PackageManagerType, BasePackageManager
+    from lib.nots.semver import Version
+    from lib.nots.typescript import TsConfig
+
 # 1 is 60 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
 # 0.5 is 120 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
 # 0.2 is 300 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
 ESLINT_FILE_PROCESSING_TIME_DEFAULT = 0.2  # seconds per file
 
-COLOR_CODES = {
-    "red": "31",
-    "green": "32",
-    "yellow": "33",
-    "cyan": "36",
-    "reset": "49",
-}
-
 REQUIRED_MISSING = "~~required~~"
 
 
-class ConsoleColors(dict):
-    def __init__(self, color_codes):
-        for k, v in color_codes.items():
-            self.__dict__[k] = f"\033[0;{v}m"
+class COLORS:
+    """
+    See https://en.m.wikipedia.org/wiki/ANSI_escape_code#Colors for details
+    """
 
+    @staticmethod
+    def _wrap_color(color_code: int) -> str:
+        return f"\033[0;{color_code}m"
 
-COLORS = ConsoleColors(COLOR_CODES)
+    red = _wrap_color(31)
+    green = _wrap_color(32)
+    yellow = _wrap_color(33)
+    cyan = _wrap_color(36)
+    reset = _wrap_color(49)
 
 
 class TsTestType(StrEnum):
@@ -48,6 +54,100 @@ class TsTestType(StrEnum):
     PLAYWRIGHT_LARGE = auto()
     TSC_TYPECHECK = auto()
     TS_STYLELINT = auto()
+
+
+class UnitType:
+    MessageType = Literal["INFO", "WARN", "ERROR"]
+    PluginArgs = str | list[str] | tuple[str]
+
+    def message(self, args: list[MessageType | str]) -> None:
+        """
+        Print message to the log
+        """
+
+    def get(self, var_name: str) -> str | None:
+        """
+        Get variable value
+        """
+
+    def set(self, args: PluginArgs) -> None:
+        """
+        Set variable value
+        """
+
+    def enabled(self, var_name: str) -> None:
+        """
+        Set variable value to "yes"
+        """
+
+    def disabled(self, var_name: str) -> None:
+        """
+        Set variable value to "no"
+        """
+
+    def set_property(self, args: PluginArgs) -> None:
+        """
+        TODO (set vs set_property?)
+        """
+
+    def resolve(self, path: str) -> str:
+        """
+        Resolve path TODO?
+        """
+
+    def resolve_arc_path(self, path: str) -> str:
+        """
+        Resolve path TODO?
+        """
+
+    def path(self) -> str:
+        """
+        Get the project path
+        """
+
+    def ondepends(self, deps: PluginArgs) -> None:
+        """
+        Run DEPENDS(...)
+        """
+
+    def onpeerdir(self, args: str | list[str]) -> None:
+        """
+        Run PEERDIR(...)
+        """
+
+
+class NotsUnitType(UnitType):
+    def on_peerdir_ts_resource(self, *resources: str):
+        """
+        Ensure dependency installed on the project
+
+        Also check its version (is it supported by erm)
+        """
+
+    def on_do_ts_yndexing(self) -> None:
+        """
+        Turn on code navigation indexing
+        """
+
+    def on_from_npm(self, args: UnitType.PluginArgs) -> None:
+        """
+        TODO remove after removing on_from_pnpm_lockfiles
+        """
+
+    def on_setup_install_node_modules_recipe(self) -> None:
+        """
+        Setup test recipe to install node_modules before running tests
+        """
+
+    def on_setup_extract_node_modules_recipe(self, args: UnitType.PluginArgs) -> None:
+        """
+        Setup test recipe to extract workspace-node_modules.tar before running tests
+        """
+
+    def on_setup_extract_output_tars_recipe(self, args: UnitType.PluginArgs) -> None:
+        """
+        Setup test recipe to extract peer's output before running tests
+        """
 
 
 TS_TEST_FIELDS_BASE = (
@@ -128,18 +228,17 @@ TS_TEST_SPECIFIC_FIELDS = {
 
 
 class PluginLogger(object):
-    def __init__(self):
-        self.unit = None
-        self.prefix = ""
+    unit: UnitType = None
+    prefix = ""
 
-    def reset(self, unit, prefix=""):
+    def reset(self, unit: NotsUnitType | None, prefix=""):
         self.unit = unit
         self.prefix = prefix
 
     def get_state(self):
-        return (self.unit, self.prefix)
+        return self.unit, self.prefix
 
-    def _stringify_messages(self, messages):
+    def _stringify_messages(self, messages: tuple[Any, ...]):
         parts = []
         for m in messages:
             if m is None:
@@ -150,19 +249,19 @@ class PluginLogger(object):
         # cyan color (code 36) for messages
         return f"{COLORS.green}{self.prefix}{COLORS.reset}\n{COLORS.cyan}{" ".join(parts)}{COLORS.reset}"
 
-    def info(self, *messages):
+    def info(self, *messages: Any) -> None:
         if self.unit:
             self.unit.message(["INFO", self._stringify_messages(messages)])
 
-    def warn(self, *messages):
+    def warn(self, *messages: Any) -> None:
         if self.unit:
             self.unit.message(["WARN", self._stringify_messages(messages)])
 
-    def error(self, *messages):
+    def error(self, *messages: Any) -> None:
         if self.unit:
             self.unit.message(["ERROR", self._stringify_messages(messages)])
 
-    def print_vars(self, *variables):
+    def print_vars(self, *variables: str):
         if self.unit:
             values = ["{}={}".format(v, self.unit.get(v)) for v in variables]
             self.info("\n".join(values))
@@ -172,6 +271,12 @@ logger = PluginLogger()
 
 
 def _with_report_configure_error(fn):
+    """
+    Handle exceptions, report them as ymake configure error
+
+    Also wraps plugin function like `on<macro_name>` to register `unit` in the PluginLogger
+    """
+
     def _wrapper(*args, **kwargs):
         last_state = logger.get_state()
         unit = args[0]
@@ -190,9 +295,7 @@ def _with_report_configure_error(fn):
     return _wrapper
 
 
-def _build_directives(name, flags, paths):
-    # type: (str, list[str]|tuple[str], list[str]) -> str
-
+def _build_directives(name: str, flags: list[str] | tuple[str], paths: list[str]) -> str:
     parts = [p for p in [name] + (flags or []) if p]
     parts_str = ";".join(parts)
     expressions = ['${{{parts}:"{path}"}}'.format(parts=parts_str, path=path) for path in paths]
@@ -200,15 +303,14 @@ def _build_directives(name, flags, paths):
     return " ".join(expressions)
 
 
-def _build_cmd_input_paths(paths, hide=False, disable_include_processor=False):
-    # type: (list[str]|tuple[str], bool, bool) -> str
+def _build_cmd_input_paths(paths: list[str] | tuple[str], hide=False, disable_include_processor=False):
     hide_part = "hide" if hide else ""
     disable_ip_part = "context=TEXT" if disable_include_processor else ""
 
     return _build_directives("input", [hide_part, disable_ip_part], paths)
 
 
-def _create_erm_json(unit):
+def _create_erm_json(unit: NotsUnitType):
     from lib.nots.erm_json_lite import ErmJsonLite
 
     erm_packages_path = unit.get("ERM_PACKAGES_PATH")
@@ -217,20 +319,20 @@ def _create_erm_json(unit):
     return ErmJsonLite.load(path)
 
 
-def _get_pm_type(unit) -> typing.Literal["pnpm", "npm"]:
-    resolved = unit.get("PM_TYPE")
+def _get_pm_type(unit: NotsUnitType) -> 'PackageManagerType':
+    resolved: PackageManagerType | None = unit.get("PM_TYPE")
     if not resolved:
         raise Exception("PM_TYPE is not set yet. Macro _SET_PACKAGE_MANAGER() should be called before.")
 
     return resolved
 
 
-def _get_source_path(unit):
+def _get_source_path(unit: NotsUnitType) -> str:
     sources_path = unit.get("TS_TEST_FOR_DIR") if unit.get("TS_TEST_FOR") else unit.path()
     return sources_path
 
 
-def _create_pm(unit):
+def _create_pm(unit: NotsUnitType) -> 'BasePackageManager':
     from lib.nots.package_manager import get_package_manager_type
 
     sources_path = _get_source_path(unit)
@@ -251,7 +353,7 @@ def _create_pm(unit):
 
 
 @_with_report_configure_error
-def on_set_package_manager(unit):
+def on_set_package_manager(unit: NotsUnitType) -> None:
     pm_type = "pnpm"  # projects without any lockfile are processed by pnpm
 
     source_path = _get_source_path(unit)
@@ -279,8 +381,9 @@ def on_set_package_manager(unit):
 
 
 @_with_report_configure_error
-def on_set_append_with_directive(unit, var_name, dir, *values):
-    wrapped = ['${{{dir}:"{v}"}}'.format(dir=dir, v=v) for v in values]
+def on_set_append_with_directive(unit: NotsUnitType, var_name: str, directive: str, *values: str) -> None:
+    wrapped = [f'${{{directive}:"{v}"}}' for v in values]
+
     __set_append(unit, var_name, " ".join(wrapped))
 
 
@@ -309,7 +412,7 @@ def on_from_npm_lockfiles(unit, *args):
         pass
 
 
-def _check_nodejs_version(unit, major):
+def _check_nodejs_version(unit: NotsUnitType, major: int) -> None:
     if major < 14:
         raise Exception(
             "Node.js {} is unsupported. Update Node.js please. See https://nda.ya.ru/t/joB9Mivm6h4znu".format(major)
@@ -325,7 +428,7 @@ def _check_nodejs_version(unit, major):
 
 
 @_with_report_configure_error
-def on_peerdir_ts_resource(unit, *resources):
+def on_peerdir_ts_resource(unit: NotsUnitType, *resources: str) -> None:
     from lib.nots.package_manager import BasePackageManager
 
     pj = BasePackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)))
@@ -364,8 +467,7 @@ def on_peerdir_ts_resource(unit, *resources):
 
 
 @_with_report_configure_error
-def on_ts_configure(unit):
-    # type: (Unit) -> None
+def on_ts_configure(unit: NotsUnitType) -> None:
     from lib.nots.package_manager.base import PackageJson
     from lib.nots.package_manager.base.utils import build_pj_path
     from lib.nots.typescript import TsConfig
@@ -423,8 +525,8 @@ def on_ts_configure(unit):
 
 
 @_with_report_configure_error
-def on_setup_build_env(unit):  # type: (Unit) -> None
-    build_env_var = unit.get("TS_BUILD_ENV")  # type: str
+def on_setup_build_env(unit: NotsUnitType) -> None:
+    build_env_var = unit.get("TS_BUILD_ENV")
     if not build_env_var:
         return
 
@@ -441,8 +543,7 @@ def on_setup_build_env(unit):  # type: (Unit) -> None
     unit.set(["NOTS_TOOL_BUILD_ENV", " ".join(options)])
 
 
-def __set_append(unit, var_name, value):
-    # type: (Unit, str, str|list[str]|tuple[str]) -> None
+def __set_append(unit: NotsUnitType, var_name: str, value: UnitType.PluginArgs) -> None:
     """
     SET_APPEND() python naive implementation - append value/values to the list of values
     """
@@ -453,9 +554,7 @@ def __set_append(unit, var_name, value):
     unit.set([var_name, new_value])
 
 
-def __strip_prefix(prefix, line):
-    # type: (str, str) -> str
-
+def __strip_prefix(prefix: str, line: str) -> str:
     if line.startswith(prefix):
         prefix_len = len(prefix)
         return line[prefix_len:]
@@ -463,7 +562,7 @@ def __strip_prefix(prefix, line):
     return line
 
 
-def _filter_inputs_by_rules_from_tsconfig(unit, tsconfig):
+def _filter_inputs_by_rules_from_tsconfig(unit: NotsUnitType, tsconfig: 'TsConfig') -> None:
     """
     Reduce file list from the TS_GLOB_FILES variable following tsconfig.json rules
     """
@@ -476,14 +575,11 @@ def _filter_inputs_by_rules_from_tsconfig(unit, tsconfig):
     __set_append(unit, "TS_INPUT_FILES", [os.path.join(target_path, f) for f in filtered_files])
 
 
-def _is_tests_enabled(unit):
-    if unit.get("TIDY") == "yes":
-        return False
-
-    return True
+def _is_tests_enabled(unit: NotsUnitType) -> bool:
+    return unit.get("TIDY") != "yes"
 
 
-def _setup_eslint(unit):
+def _setup_eslint(unit: NotsUnitType) -> None:
     if not _is_tests_enabled(unit):
         return
 
@@ -532,7 +628,7 @@ def _setup_eslint(unit):
 
 
 @_with_report_configure_error
-def _setup_tsc_typecheck(unit):
+def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
     if not _is_tests_enabled(unit):
         return
 
@@ -594,7 +690,7 @@ def _setup_tsc_typecheck(unit):
 
 
 @_with_report_configure_error
-def _setup_stylelint(unit):
+def _setup_stylelint(unit: NotsUnitType) -> None:
     if not _is_tests_enabled(unit):
         return
 
@@ -640,7 +736,7 @@ def _setup_stylelint(unit):
     unit.set(["TEST_RECIPES_VALUE", recipes_value])
 
 
-def _resolve_module_files(unit, mod_dir, file_paths):
+def _resolve_module_files(unit: NotsUnitType, mod_dir: str, file_paths: list[str]) -> list[str]:
     mod_dir_with_sep_len = len(mod_dir) + 1
     resolved_files = []
 
@@ -653,9 +749,9 @@ def _resolve_module_files(unit, mod_dir, file_paths):
     return resolved_files
 
 
-def _set_resource_vars(unit, erm_json, tool, version, nodejs_major=None):
-    # type: (any, ErmJsonLite, Version, str|None, int|None) -> None
-
+def _set_resource_vars(
+    unit: NotsUnitType, erm_json: 'ErmJsonLite', tool: str, version: 'Version', nodejs_major: int = None
+) -> None:
     resource_name = erm_json.canonize_name(tool).upper()
 
     # example: NODEJS_12_18_4 | HERMIONE_7_0_4_NODEJS_18
@@ -671,8 +767,9 @@ def _set_resource_vars(unit, erm_json, tool, version, nodejs_major=None):
     unit.set(["{}-ROOT-VAR-NAME".format(resource_name), yamake_resource_var])
 
 
-def _select_matching_version(erm_json, resource_name, range_str, dep_is_required=False):
-    # type: (ErmJsonLite, str, str, bool) -> Version
+def _select_matching_version(
+    erm_json: 'ErmJsonLite', resource_name: str, range_str: str, dep_is_required=False
+) -> 'Version':
     if dep_is_required and range_str is None:
         raise Exception(
             "Please install the '{tool}' package to the project. Run the command:\n"
@@ -702,7 +799,7 @@ def _select_matching_version(erm_json, resource_name, range_str, dep_is_required
 
 
 @_with_report_configure_error
-def on_prepare_deps_configure(unit):
+def on_prepare_deps_configure(unit: NotsUnitType) -> None:
     contrib_path = unit.get("NPM_CONTRIBS_PATH")
     if contrib_path == '-':
         unit.on_prepare_deps_configure_no_contrib()
@@ -724,7 +821,7 @@ def on_prepare_deps_configure(unit):
 
 
 @_with_report_configure_error
-def on_prepare_deps_configure_no_contrib(unit):
+def on_prepare_deps_configure_no_contrib(unit: NotsUnitType) -> None:
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
     has_deps = pj.has_dependencies()
@@ -743,7 +840,7 @@ def on_prepare_deps_configure_no_contrib(unit):
 
 
 @_with_report_configure_error
-def on_node_modules_configure(unit):
+def on_node_modules_configure(unit: NotsUnitType) -> None:
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
 
@@ -800,7 +897,9 @@ def on_node_modules_configure(unit):
 
 
 @_with_report_configure_error
-def on_ts_test_for_configure(unit, test_runner, default_config, node_modules_filename):
+def on_ts_test_for_configure(
+    unit: NotsUnitType, test_runner: TsTestType, default_config: str, node_modules_filename: str
+) -> None:
     if not _is_tests_enabled(unit):
         return
 
@@ -857,8 +956,9 @@ def on_ts_test_for_configure(unit, test_runner, default_config, node_modules_fil
         unit.set_property(["DART_DATA", data])
 
 
+# noinspection PyUnusedLocal
 @_with_report_configure_error
-def on_validate_ts_test_for_args(unit, for_mod, root):
+def on_validate_ts_test_for_args(unit: NotsUnitType, for_mod: str, root: str) -> None:
     # FBP-1085
     is_arc_root = root == "${ARCADIA_ROOT}"
     is_rel_for_mod = for_mod.startswith(".")
@@ -871,14 +971,14 @@ def on_validate_ts_test_for_args(unit, for_mod, root):
 
 
 @_with_report_configure_error
-def on_set_ts_test_for_vars(unit, for_mod):
+def on_set_ts_test_for_vars(unit: NotsUnitType, for_mod: str) -> None:
     unit.set(["TS_TEST_FOR", "yes"])
     unit.set(["TS_TEST_FOR_DIR", unit.resolve_arc_path(for_mod)])
     unit.set(["TS_TEST_FOR_PATH", rootrel_arc_src(for_mod, unit)])
 
 
 @_with_report_configure_error
-def on_ts_files(unit, *files):
+def on_ts_files(unit: NotsUnitType, *files: str) -> None:
     new_cmds = ['$COPY_CMD ${{input;context=TEXT:"{0}"}} ${{output;noauto:"{0}"}}'.format(f) for f in files]
     all_cmds = unit.get("_TS_FILES_COPY_CMD")
     if all_cmds:
@@ -887,7 +987,7 @@ def on_ts_files(unit, *files):
 
 
 @_with_report_configure_error
-def on_ts_large_files(unit, destination: str, *files: list[str]):
+def on_ts_large_files(unit: NotsUnitType, destination: str, *files: list[str]) -> None:
     if destination == REQUIRED_MISSING:
         ymake.report_configure_error(
             "Macro TS_LARGE_FILES() requires to use DESTINATION parameter.\n"
@@ -901,7 +1001,7 @@ def on_ts_large_files(unit, destination: str, *files: list[str]):
         return
 
     # TODO: FBP-1795
-    # ${BINDIR} prefix for input is important to resove to result of LARGE_FILES and not to SOURCEDIR
+    # ${BINDIR} prefix for input is important to resolve to result of LARGE_FILES and not to SOURCEDIR
     new_cmds = [
         '$COPY_CMD ${{input;context=TEXT:"${{BINDIR}}/{0}"}} ${{output;noauto:"{1}/{0}"}}'.format(f, destination)
         for f in files
@@ -913,7 +1013,7 @@ def on_ts_large_files(unit, destination: str, *files: list[str]):
 
 
 @_with_report_configure_error
-def on_ts_package_check_files(unit):
+def on_ts_package_check_files(unit: NotsUnitType) -> None:
     ts_files = unit.get("_TS_FILES_COPY_CMD")
     if ts_files == "":
         ymake.report_configure_error(
@@ -925,7 +1025,7 @@ def on_ts_package_check_files(unit):
 
 
 @_with_report_configure_error
-def on_depends_on_mod(unit):
+def on_depends_on_mod(unit: NotsUnitType) -> None:
     if unit.get("_TS_TEST_DEPENDS_ON_BUILD"):
         for_mod_path = unit.get("TS_TEST_FOR_PATH")
         unit.ondepends([for_mod_path])

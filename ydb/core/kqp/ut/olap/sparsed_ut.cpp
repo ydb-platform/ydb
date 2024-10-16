@@ -1,14 +1,17 @@
-#include "helpers/local.h"
-#include "helpers/writer.h"
-#include "helpers/typed_local.h"
-#include "helpers/query_executor.h"
 #include "helpers/get_value.h"
+#include "helpers/local.h"
+#include "helpers/query_executor.h"
+#include "helpers/typed_local.h"
+#include "helpers/writer.h"
+
+#include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/tx/columnshard/blobs_action/common/const.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/wrappers/fake_storage.h>
+
+#include <ydb/library/formats/arrow/protos/accessor.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
-#include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/wrappers/fake_storage.h>
-#include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 
 namespace NKikimr::NKqp {
 
@@ -343,6 +346,70 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         }
     }
 
+    void SparsedByDefaultForNonPKColumn(bool enableSparsed) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetEnableSparsedColumns(enableSparsed);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        TString tableName = "StandaloneTable";
+
+        auto& server = kikimr.GetTestServer();
+        TActorId sender = server.GetRuntime()->AllocateEdgeActor();
+
+        auto createTable = TStringBuilder() << R"(
+            CREATE TABLE `)" << tableName << R"(` (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                level Int32,
+                message Utf8,
+                PRIMARY KEY (timestamp, uid)
+            )
+            WITH (
+                STORE = COLUMN
+            );)";
+
+        auto result = session.ExecuteSchemeQuery(createTable).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto describeResult = DescribeTable(&server, sender, tableName);
+        auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+        for (const auto& column : schema.GetColumns()) {
+            auto name = column.GetName();
+            // PK columns
+            if (name == "timestamp" || name == "uid") {
+                UNIT_ASSERT(!column.HasDataAccessorConstructor());
+            } else {
+                UNIT_ASSERT(column.HasDataAccessorConstructor() == enableSparsed);
+                if (column.HasDataAccessorConstructor()) {
+                    UNIT_ASSERT_EQUAL(column.GetDataAccessorConstructor().GetClassName(), "SPARSED");
+                }
+            }
+        }
+
+        auto addNewColumnQuery = TStringBuilder() << "ALTER TABLE `" << tableName << "` ADD COLUMN newColumn Uint64;";
+        result = session.ExecuteSchemeQuery(addNewColumnQuery).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        describeResult = DescribeTable(&server, sender, tableName);
+        schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+        for (const auto& column : schema.GetColumns()) {
+            if (column.GetName() == "newColumn") {
+                UNIT_ASSERT(column.HasDataAccessorConstructor() == enableSparsed);
+                if (column.HasDataAccessorConstructor()) {
+                    UNIT_ASSERT_EQUAL(column.GetDataAccessorConstructor().GetClassName(), "SPARSED");
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(DisabledDefaultSparsedForNotPKColumn) {
+        SparsedByDefaultForNonPKColumn(false);
+    }
+
+    Y_UNIT_TEST(EnabledDefaultSparsedForNotPKColumn) {
+        SparsedByDefaultForNonPKColumn(true);
+    }
 }
 
 } // namespace

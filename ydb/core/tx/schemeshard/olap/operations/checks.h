@@ -15,5 +15,3 @@ namespace NKikimr::NSchemeShard::NOlap {
         return true;
     }
 }
-
-

@@ -37,6 +37,14 @@ namespace NKikimr::NSchemeShard {
             }
             DictionaryEncoding = *settings;
         }
+        if (columnSchema.HasDataAccessorConstructor()) {
+            NArrow::NAccessor::TConstructorContainer counstructor;
+            if (!counstructor.DeserializeFromProto(columnSchema.GetDataAccessorConstructor())) {
+                errors.AddError("Cannot parse counstructor info");
+                return false;
+            }
+            AccessorConstructor = counstructor;
+        }
 
         if (columnSchema.HasTypeId()) {
             errors.AddError(TStringBuilder() << "Cannot set TypeId for column '" << Name << ", use Type");

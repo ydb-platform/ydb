@@ -13,6 +13,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
     constexpr size_t inserted_rows = 1000;
     constexpr size_t tables_in_store = 1000;
     constexpr size_t size_single_table = 12688;
+    constexpr size_t size_single_table_with_sparsed = 16672;
 
     const TVector<TTestHelper::TColumnSchema> schema = {
         TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
@@ -29,11 +30,12 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
         }
     };
 
-    Y_UNIT_TEST(AddRowsTableStandalone) {
+    void AddRowsTableStandalone(bool enableSparsedColumns) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<TOlapStatsController>();
 
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
+        runnerSettings.SetEnableSparsedColumns(enableSparsedColumns);
 
         TTestHelper testHelper(runnerSettings);
 
@@ -61,7 +63,16 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
         const auto& description = describeResult.GetTableDescription();
 
         UNIT_ASSERT_VALUES_EQUAL(inserted_rows, description.GetTableRows());
-        UNIT_ASSERT_VALUES_EQUAL(size_single_table, description.GetTableSize());
+        if (!enableSparsedColumns) {
+            UNIT_ASSERT_VALUES_EQUAL(size_single_table, description.GetTableSize());
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(size_single_table_with_sparsed, description.GetTableSize());
+        }
+    }
+
+    Y_UNIT_TEST(AddRowsTableStandalone) {
+        AddRowsTableStandalone(false);
+        AddRowsTableStandalone(true);
     }
 
     Y_UNIT_TEST(AddRowsTableInTableStore) {

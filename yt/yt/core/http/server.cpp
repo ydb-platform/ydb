@@ -225,8 +225,9 @@ private:
                 SetRequestId(response, request->GetRequestId());
 
                 if (MemoryUsageTracker_ && MemoryUsageTracker_->IsExceeded()) {
+                    // We use Unavailable code here, as it is already retryable in all clients.
                     THROW_ERROR_EXCEPTION(
-                        EStatusCode::TooManyRequests,
+                        NRpc::EErrorCode::Unavailable,
                         "Request is dropped due to high memory pressure")
                         << TErrorAttribute("total_memory_limit", MemoryUsageTracker_->GetLimit())
                         << TErrorAttribute("memory_usage", MemoryUsageTracker_->GetUsed());

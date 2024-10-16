@@ -174,6 +174,52 @@ void TGetJobStderrCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TGetJobTraceCommand::Register(TRegistrar registrar)
+{
+    registrar.ParameterWithUniversalAccessor<std::optional<TJobId>>(
+        "job_id",
+        [] (TThis* command) -> auto& {return command->Options.JobId; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TJobTraceId>>(
+        "trace_id",
+        [] (TThis* command) -> auto& {return command->Options.TraceId; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "from_event_index",
+        [] (TThis* command) -> auto& {return command->Options.FromEventIndex; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "to_event_index",
+        [] (TThis* command) -> auto& {return command->Options.ToEventIndex; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "from_time",
+        [] (TThis* command) -> auto& {return command->Options.FromTime; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "to_time",
+        [] (TThis* command) -> auto& {return command->Options.ToTime; })
+        .Optional(/*init*/ false);
+}
+
+void TGetJobTraceCommand::DoExecute(ICommandContextPtr context)
+{
+    auto result = WaitFor(context->GetClient()->GetJobTrace(OperationIdOrAlias, Options))
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(BuildYsonStringFluently()
+        .DoListFor(result, [&] (TFluentList fluent, const TJobTraceEvent& traceEvent) {
+            Serialize(traceEvent, fluent.GetConsumer());
+        }));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TGetJobFailContextCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("job_id", &TThis::JobId);

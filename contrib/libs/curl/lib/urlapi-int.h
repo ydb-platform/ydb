@@ -28,11 +28,12 @@
 size_t Curl_is_absolute_url(const char *url, char *buf, size_t buflen,
                             bool guess_scheme);
 
-CURLUcode Curl_url_set_authority(CURLU *u, const char *authority);
+CURLUcode Curl_url_set_authority(CURLU *u, const char *authority,
+                                 unsigned int flags);
 
-#ifdef UNITTESTS
-UNITTEST CURLUcode Curl_parse_port(struct Curl_URL *u, struct dynbuf *host,
-                                   bool has_scheme);
+#ifdef DEBUGBUILD
+CURLUcode Curl_parse_port(struct Curl_URL *u, struct dynbuf *host,
+                          bool has_scheme);
 #endif
 
 #endif /* HEADER_CURL_URLAPI_INT_H */

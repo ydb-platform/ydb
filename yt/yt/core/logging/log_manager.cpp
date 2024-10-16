@@ -348,26 +348,52 @@ public:
         RegisterWriterFactory(TString(TStderrLogWriterConfig::WriterType), GetStderrLogWriterFactory());
     }
 
+    bool IsInitialized() const
+    {
+        return InitializationFinished_.Test();
+    }
+
     void Initialize()
     {
-        std::call_once(Initialized_, [&] {
-            // NB: Cannot place this logic inside ctor since it may boot up Compression threads unexpected
-            // and these will try to access TLogManager instance causing a deadlock.
-            try {
-                if (auto config = TLogManagerConfig::TryCreateFromEnv()) {
-                    DoUpdateConfig(config, /*fromEnv*/ true);
-                }
-            } catch (const std::exception& ex) {
-                fprintf(stderr, "Error configuring logging from environment variables\n%s\n",
-                    ex.what());
-            }
+        [[likely]] if (InitializationFinished_.Test()) {
+            // Don't bother doing syscalls on a hot path.
+            return;
+        }
 
-            if (!IsConfiguredFromEnv()) {
-                DoUpdateConfig(TLogManagerConfig::CreateDefault(), /*fromEnv*/ false);
+        // Sync is done via event so there is no need for stronger memory orders.
+        // Case of recursive call is alright, because there sync is done via sequenced-before ordering.
+        [[likely]] if (InitializationStarted_.exchange(true, std::memory_order::relaxed)) {
+            NThreading::TThreadId initializerThreadId = NThreading::InvalidThreadId;
+            while (initializerThreadId == NThreading::InvalidThreadId) {
+                initializerThreadId = InitializerThreadId_.load(std::memory_order::relaxed);
             }
+            if (GetCurrentThreadId() == initializerThreadId) {
+                // Recursive call -- bail out.
+                return;
+            }
+            // Another thread -- now wait for real.
+            InitializationFinished_.Wait();
+            return;
+        }
+        InitializerThreadId_.store(GetCurrentThreadId(), std::memory_order::relaxed);
 
-            SystemCategory_ = GetCategory(SystemLoggingCategoryName);
-        });
+        // NB: Cannot place this logic inside ctor since it may boot up Compression threads unexpected
+        // and these will try to access TLogManager instance causing a deadlock.
+        try {
+            if (auto config = TLogManagerConfig::TryCreateFromEnv()) {
+                DoUpdateConfig(config, /*fromEnv*/ true);
+            }
+        } catch (const std::exception& ex) {
+            fprintf(stderr, "Error configuring logging from environment variables\n%s\n",
+                ex.what());
+        }
+
+        if (!IsConfiguredFromEnv()) {
+            DoUpdateConfig(TLogManagerConfig::CreateDefault(), /*fromEnv*/ false);
+        }
+
+        SystemCategory_ = GetCategory(SystemLoggingCategoryName);
+        InitializationFinished_.NotifyAll();
     }
 
     void Configure(INodePtr node)
@@ -1347,7 +1373,10 @@ private:
     std::atomic<ui64> HighBacklogWatermark_ = Max<ui64>();
     std::atomic<ui64> LowBacklogWatermark_ = Max<ui64>();
 
-    std::once_flag Initialized_;
+    std::atomic<bool> InitializationStarted_ = false;
+    std::atomic<NThreading::TThreadId> InitializerThreadId_ = NThreading::InvalidThreadId;
+    NThreading::TEvent InitializationFinished_;
+
     std::once_flag Started_;
     std::atomic<bool> Suspended_ = false;
     std::atomic<bool> ScheduledOutOfBand_ = false;
@@ -1431,103 +1460,153 @@ TLogManager::~TLogManager() = default;
 TLogManager* TLogManager::Get()
 {
     auto* logManager = LeakySingleton<TLogManager>();
-    logManager->Initialize();
+    logManager->Impl_->Initialize();
     return logManager;
 }
 
 void TLogManager::Configure(TLogManagerConfigPtr config, bool sync)
 {
+    [[unlikely]] if (!Impl_->IsInitialized()) {
+        return;
+    }
     Impl_->Configure(std::move(config), /*fromEnv*/ false, sync);
 }
 
 void TLogManager::ConfigureFromEnv()
 {
+    [[unlikely]] if (!Impl_->IsInitialized()) {
+        return;
+    }
     Impl_->ConfigureFromEnv();
 }
 
 bool TLogManager::IsConfiguredFromEnv()
 {
+    [[unlikely]] if (!Impl_->IsInitialized()) {
+        return false;
+    }
     return Impl_->IsConfiguredFromEnv();
 }
 
 void TLogManager::Shutdown()
 {
+    [[unlikely]] if (!Impl_->IsInitialized()) {
+        return;
+    }
     Impl_->Shutdown();
 }
 
 int TLogManager::GetVersion() const
 {
+    [[unlikely]] if (!Impl_->IsInitialized()) {
+        return 0;
+    }
     return Impl_->GetVersion();
 }
 
 bool TLogManager::GetAbortOnAlert() const
 {
+    [[unlikely]] if (!Impl_->IsInitialized()) {
+        return false;
+    }
     return Impl_->GetAbortOnAlert();
 }
 
 const TLoggingCategory* TLogManager::GetCategory(TStringBuf categoryName)
 {
+    [[unlikely]] if (!Impl_->IsInitialized()) {
+        return nullptr;
+    }
     return Impl_->GetCategory(categoryName);
 }
 
 void TLogManager::UpdateCategory(TLoggingCategory* category)
 {
+    [[unlikely]] if (!Impl_->IsInitialized()) {
+        return;
+    }
     Impl_->UpdateCategory(category);
 }
 
 void TLogManager::UpdateAnchor(TLoggingAnchor* anchor)
 {
+    [[unlikely]] if (!Impl_->IsInitialized()) {
+        return;
+    }
     Impl_->UpdateAnchor(anchor);
 }
 
 void TLogManager::RegisterStaticAnchor(TLoggingAnchor* anchor, ::TSourceLocation sourceLocation, TStringBuf anchorMessage)
 {
+    [[unlikely]] if (!Impl_->IsInitialized()) {
+        return;
+    }
     Impl_->RegisterStaticAnchor(anchor, sourceLocation, anchorMessage);
 }
 
 TLoggingAnchor* TLogManager::RegisterDynamicAnchor(TString anchorMessage)
 {
+    [[unlikely]] if (!Impl_->IsInitialized()) {
+        return nullptr;
+    }
     return Impl_->RegisterDynamicAnchor(std::move(anchorMessage));
 }
 
 void TLogManager::RegisterWriterFactory(const TString& typeName, const ILogWriterFactoryPtr& factory)
 {
+    [[unlikely]] if (!Impl_->IsInitialized()) {
+        return;
+    }
     Impl_->RegisterWriterFactory(typeName, factory);
 }
 
 void TLogManager::UnregisterWriterFactory(const TString& typeName)
 {
+    [[unlikely]] if (!Impl_->IsInitialized()) {
+        return;
+    }
     Impl_->UnregisterWriterFactory(typeName);
 }
 
 void TLogManager::Enqueue(TLogEvent&& event)
 {
+    [[unlikely]] if (!Impl_->IsInitialized()) {
+        Cerr << NYT::Format("Trying to log event during logger initialization -- skipping") << Endl;
+        return;
+    }
     Impl_->Enqueue(std::move(event));
 }
 
 void TLogManager::Reopen()
 {
+    [[unlikely]] if (!Impl_->IsInitialized()) {
+        return;
+    }
     Impl_->Reopen();
 }
 
 void TLogManager::EnableReopenOnSighup()
 {
+    [[unlikely]] if (!Impl_->IsInitialized()) {
+        return;
+    }
     Impl_->EnableReopenOnSighup();
 }
 
 void TLogManager::SuppressRequest(TRequestId requestId)
 {
+    [[unlikely]] if (!Impl_->IsInitialized()) {
+        return;
+    }
     Impl_->SuppressRequest(requestId);
 }
 
 void TLogManager::Synchronize(TInstant deadline)
 {
+    [[unlikely]] if (!Impl_->IsInitialized()) {
+        return;
+    }
     Impl_->Synchronize(deadline);
-}
-
-void TLogManager::Initialize()
-{
-    Impl_->Initialize();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

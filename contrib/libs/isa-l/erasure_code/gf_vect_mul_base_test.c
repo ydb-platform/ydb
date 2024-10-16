@@ -63,7 +63,10 @@ int main(int argc, char *argv[])
 	for (i = 0; i < TEST_SIZE; i++)
 		buff1[i] = rand();
 
-	gf_vect_mul_base(TEST_SIZE, gf_const_tbl, buff1, buff2);
+	if (gf_vect_mul_base(TEST_SIZE, gf_const_tbl, buff1, buff2) != 0) {
+		printf("fail fill with rand data\n");
+		return 1;
+	}
 
 	for (i = 0; i < TEST_SIZE; i++)
 		if (gf_mul_erasure(a, buff1[i]) != buff2[i]) {
@@ -72,8 +75,10 @@ int main(int argc, char *argv[])
 			return 1;
 		}
 
-	gf_vect_mul_base(TEST_SIZE, gf_const_tbl, buff1, buff3);
-
+	if (gf_vect_mul_base(TEST_SIZE, gf_const_tbl, buff1, buff3) != 0) {
+		printf("fail fill with rand data for buff1\n");
+		return -1;
+	}
 	// Check reference function
 	for (i = 0; i < TEST_SIZE; i++)
 		if (buff2[i] != buff3[i]) {
@@ -89,7 +94,10 @@ int main(int argc, char *argv[])
 	printf("Random tests ");
 	for (a = 0; a != 255; a++) {
 		gf_vect_mul_init(a, gf_const_tbl);
-		gf_vect_mul_base(TEST_SIZE, gf_const_tbl, buff1, buff2);
+		if (gf_vect_mul_base(TEST_SIZE, gf_const_tbl, buff1, buff2) != 0) {
+			printf("fail random tests\n");
+			return 1;
+		}
 
 		for (i = 0; i < TEST_SIZE; i++)
 			if (gf_mul_erasure(a, buff1[i]) != buff2[i]) {
@@ -97,7 +105,9 @@ int main(int argc, char *argv[])
 				       i, a, buff1[i], buff2[i], gf_mul_erasure(2, buff1[i]));
 				return 1;
 			}
+#ifdef TEST_VERBOSE
 		putchar('.');
+#endif
 	}
 
 	// Run tests at end of buffer for Electric Fence
@@ -110,7 +120,11 @@ int main(int argc, char *argv[])
 		efence_buff1 = buff1 + size;
 		efence_buff2 = buff2 + size;
 
-		gf_vect_mul_base(TEST_SIZE - size, gf_const_tbl, efence_buff1, efence_buff2);
+		if (gf_vect_mul_base
+		    (TEST_SIZE - size, gf_const_tbl, efence_buff1, efence_buff2) != 0) {
+			printf("fail tests at end of buffer\n");
+			return -1;
+		}
 
 		for (i = 0; i < TEST_SIZE - size; i++)
 			if (gf_mul_erasure(a, efence_buff1[i]) != efence_buff2[i]) {
@@ -121,7 +135,9 @@ int main(int argc, char *argv[])
 				return 1;
 			}
 
+#ifdef TEST_VERBOSE
 		putchar('.');
+#endif
 	}
 
 	printf(" done: Pass\n");

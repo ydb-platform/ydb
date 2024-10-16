@@ -105,17 +105,6 @@ BELONGS bin/ya.make ya.make
     Belongs difference:
         + bin/ya.make
 
-KEEP     COPYRIGHT_SERVICE_LABEL 29aec767c30e97ea136c9d10e5b07b99
-BELONGS ya.make
-    License text:
-         * Copyright (C) Jan Venekamp, <jan@venekamp.net>
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        lib/vtls/cipher_suite.c [8:8]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 38cad413a2ebb8a3334028596a877e60
 BELONGS ya.make
     License text:
@@ -130,18 +119,6 @@ BELONGS ya.make
         lib/vtls/schannel.c [8:10]
         lib/vtls/schannel.h [10:11]
         lib/vtls/schannel_verify.c [8:10]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 4197a3d01f0ba1b0db6df039d59067a7
-BELONGS ya.make
-    License text:
-         * Copyright (C) Evgeny Grin (Karlson2k), <k2k@narod.ru>.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        lib/curl_sha512_256.c [8:8]
-        lib/curl_sha512_256.h [10:10]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 45323df52808e24e39741bd52fa522fb
 BELONGS ya.make
@@ -197,14 +174,25 @@ BELONGS ya.make
     License text:
          * Copyright (C) Jacob Hoffman-Andrews,
          * <github@hoffman-andrews.com>
-         * Copyright (C) kpcyrd, <kpcyrd@archlinux.org>
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/vtls/rustls.c [8:10]
+        lib/vtls/rustls.c [8:9]
         lib/vtls/rustls.h [8:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6acfa3297df1dc97d507e572a0645cd9
+BELONGS ya.make
+    License text:
+        Copyright (c) 1996 - 2023, Daniel Stenberg, <daniel@haxx.se>, and many
+        contributors, see the THANKS file.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [3:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 84500f86b97af8062c8463ad37fdf711
 BELONGS bin/ya.make ya.make
@@ -232,30 +220,17 @@ BELONGS ya.make
         lib/smb.c [8:9]
         lib/smb.h [10:11]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 95a6917b277d6cc5ac045c9c8bbca830
-BELONGS ya.make
-    License text:
-        Copyright (c) 1996 - 2024, Daniel Stenberg, <daniel@haxx.se>, and many
-        contributors, see the THANKS file.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        COPYING [3:4]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 998d598c0b2c4665183fefe5ae17d48c
 BELONGS ya.make
     License text:
-         * Copyright (c) 1995, 1996, 1997, 1998, 1999 Kungliga Tekniska Högskolan
-         * (Royal Institute of Technology, Stockholm, Sweden).
-         * Copyright (C) Daniel Stenberg
-         * All rights reserved.
+         * Copyright (C) Daniel Stenberg, <daniel.se>, et al.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        lib/easygetopt.c [8:8]
+        lib/easyoptions.c [8:8]
         lib/krb5.c [3:6]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 9c50cbe37ab155bc81052d66295612bf
@@ -278,7 +253,6 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        CHANGES.md [2:2]
         include/README.md [2:2]
         include/curl/curl.h [10:10]
         include/curl/curlver.h [10:10]
@@ -352,6 +326,8 @@ BELONGS ya.make
         lib/curl_multibyte.h [10:10]
         lib/curl_ntlm_core.c [8:8]
         lib/curl_ntlm_core.h [10:10]
+        lib/curl_ntlm_wb.c [8:8]
+        lib/curl_ntlm_wb.h [10:10]
         lib/curl_path.c [8:8]
         lib/curl_printf.h [10:10]
         lib/curl_range.c [8:8]
@@ -369,11 +345,8 @@ BELONGS ya.make
         lib/curl_trc.c [8:8]
         lib/curl_trc.h [10:10]
         lib/curlx.h [10:10]
-        lib/cw-out.c [8:8]
-        lib/cw-out.h [10:10]
         lib/dict.c [8:8]
         lib/dict.h [10:10]
-        lib/dllmain.c [8:8]
         lib/doh.c [8:8]
         lib/doh.h [10:10]
         lib/dynbuf.c [8:8]
@@ -382,9 +355,7 @@ BELONGS ya.make
         lib/dynhds.h [10:10]
         lib/easy.c [8:8]
         lib/easy_lock.h [10:10]
-        lib/easygetopt.c [8:8]
         lib/easyif.h [10:10]
-        lib/easyoptions.c [8:8]
         lib/easyoptions.h [10:10]
         lib/escape.c [8:8]
         lib/escape.h [10:10]
@@ -482,8 +453,6 @@ BELONGS ya.make
         lib/rand.h [10:10]
         lib/rename.c [8:8]
         lib/rename.h [10:10]
-        lib/request.c [8:8]
-        lib/request.h [10:10]
         lib/rtsp.c [8:8]
         lib/rtsp.h [10:10]
         lib/select.c [8:8]
@@ -556,11 +525,8 @@ BELONGS ya.make
         lib/vquic/curl_msh3.h [10:10]
         lib/vquic/curl_ngtcp2.c [8:8]
         lib/vquic/curl_ngtcp2.h [10:10]
-        lib/vquic/curl_osslq.c [8:8]
-        lib/vquic/curl_osslq.h [10:10]
         lib/vquic/curl_quiche.c [8:8]
         lib/vquic/curl_quiche.h [10:10]
-        lib/vquic/vquic-tls.c [8:8]
         lib/vquic/vquic.c [8:8]
         lib/vquic/vquic.h [10:10]
         lib/vquic/vquic_int.h [10:10]
@@ -589,14 +555,13 @@ BELONGS ya.make
         lib/vtls/wolfssl.c [8:8]
         lib/vtls/wolfssl.h [10:10]
         lib/vtls/x509asn1.c [8:8]
+        lib/vtls/x509asn1.h [11:11]
         lib/warnless.c [8:8]
         lib/warnless.h [10:10]
         lib/ws.c [8:8]
         lib/ws.h [10:10]
         src/slist_wc.c [8:8]
         src/slist_wc.h [10:10]
-        src/terminal.c [8:8]
-        src/terminal.h [10:10]
         src/tool_binmode.c [8:8]
         src/tool_binmode.h [10:10]
         src/tool_bname.c [8:8]
@@ -611,8 +576,6 @@ BELONGS ya.make
         src/tool_cb_rea.h [10:10]
         src/tool_cb_see.c [8:8]
         src/tool_cb_see.h [10:10]
-        src/tool_cb_soc.c [8:8]
-        src/tool_cb_soc.h [10:10]
         src/tool_cb_wrt.c [8:8]
         src/tool_cb_wrt.h [10:10]
         src/tool_cfgable.c [8:8]
@@ -742,7 +705,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/urlapi.c [138:138]
+        lib/urlapi.c [132:132]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f38404a02e69976b94505df0c691bed0
 BELONGS bin/ya.make ya.make
@@ -752,7 +715,7 @@ BELONGS bin/ya.make ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/md4.c [235:240]
+        lib/md4.c [232:237]
         lib/md5.c [257:262]
     Belongs difference:
         + bin/ya.make

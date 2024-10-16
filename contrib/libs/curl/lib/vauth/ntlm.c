@@ -44,7 +44,6 @@
 #include "warnless.h"
 #include "rand.h"
 #include "vtls/vtls.h"
-#include "strdup.h"
 
 #define BUILDING_CURL_NTLM_MSGS_C
 #include "vauth/vauth.h"
@@ -58,6 +57,10 @@
 
 /* "NTLMSSP" signature is always in ASCII regardless of the platform */
 #define NTLMSSP_SIGNATURE "\x4e\x54\x4c\x4d\x53\x53\x50"
+
+/* The fixed host name we provide, in order to not leak our real local host
+   name. Copy the name used by Firefox. */
+#define NTLM_HOSTNAME "WORKSTATION"
 
 #if DEBUG_ME
 # define DEBUG_OUT(x) x
@@ -181,10 +184,11 @@ static CURLcode ntlm_decode_type2_target(struct Curl_easy *data,
       }
 
       free(ntlm->target_info); /* replace any previous data */
-      ntlm->target_info = Curl_memdup(&type2[target_info_offset],
-                                      target_info_len);
+      ntlm->target_info = malloc(target_info_len);
       if(!ntlm->target_info)
         return CURLE_OUT_OF_MEMORY;
+
+      memcpy(ntlm->target_info, &type2[target_info_offset], target_info_len);
     }
   }
 
@@ -321,10 +325,10 @@ static void unicodecpy(unsigned char *dest, const char *src, size_t length)
  * Parameters:
  *
  * data    [in]     - The session handle.
- * userp   [in]     - The username in the format User or Domain\User.
+ * userp   [in]     - The user name in the format User or Domain\User.
  * passwdp [in]     - The user's password.
  * service [in]     - The service type such as http, smtp, pop or imap.
- * host    [in]     - The hostname.
+ * host    [in]     - The host name.
  * ntlm    [in/out] - The NTLM data struct being used and modified.
  * out     [out]    - The result storage.
  *
@@ -380,9 +384,9 @@ CURLcode Curl_auth_create_ntlm_type1_message(struct Curl_easy *data,
                     "%c%c"       /* 2 zeroes */
                     "%c%c"       /* host length */
                     "%c%c"       /* host allocated space */
-                    "%c%c"       /* hostname offset */
+                    "%c%c"       /* host name offset */
                     "%c%c"       /* 2 zeroes */
-                    "%s"         /* hostname */
+                    "%s"         /* host name */
                     "%s",        /* domain string */
                     0,           /* trailing zero */
                     0, 0, 0,     /* part of type-1 long */
@@ -444,7 +448,7 @@ CURLcode Curl_auth_create_ntlm_type1_message(struct Curl_easy *data,
  * Parameters:
  *
  * data    [in]     - The session handle.
- * userp   [in]     - The username in the format User or Domain\User.
+ * userp   [in]     - The user name in the format User or Domain\User.
  * passwdp [in]     - The user's password.
  * ntlm    [in/out] - The NTLM data struct being used and modified.
  * out     [out]    - The result storage.
@@ -466,7 +470,7 @@ CURLcode Curl_auth_create_ntlm_type3_message(struct Curl_easy *data,
            12    LM/LMv2 Response       security buffer
            20    NTLM/NTLMv2 Response   security buffer
            28    Target Name            security buffer
-           36    username              security buffer
+           36    User Name              security buffer
            44    Workstation Name       security buffer
           (52)   Session Key            security buffer (*)
           (60)   Flags                  long (*)
@@ -478,17 +482,15 @@ CURLcode Curl_auth_create_ntlm_type3_message(struct Curl_easy *data,
   CURLcode result = CURLE_OK;
   size_t size;
   unsigned char ntlmbuf[NTLM_BUFSIZE];
-  unsigned int lmrespoff;
+  int lmrespoff;
   unsigned char lmresp[24]; /* fixed-size */
-  unsigned int ntrespoff;
+  int ntrespoff;
   unsigned int ntresplen = 24;
   unsigned char ntresp[24]; /* fixed-size */
   unsigned char *ptr_ntresp = &ntresp[0];
   unsigned char *ntlmv2resp = NULL;
   bool unicode = (ntlm->flags & NTLMFLAG_NEGOTIATE_UNICODE) ? TRUE : FALSE;
-  /* The fixed hostname we provide, in order to not leak our real local host
-     name. Copy the name used by Firefox. */
-  static const char host[] = "WORKSTATION";
+  char host[HOSTNAME_MAX + 1] = "";
   const char *user;
   const char *domain = "";
   size_t hostoff = 0;
@@ -513,7 +515,21 @@ CURLcode Curl_auth_create_ntlm_type3_message(struct Curl_easy *data,
     user = userp;
 
   userlen = strlen(user);
-  hostlen = sizeof(host) - 1;
+
+#ifndef NTLM_HOSTNAME
+  /* Get the machine's un-qualified host name as NTLM doesn't like the fully
+     qualified domain name */
+  if(Curl_gethostname(host, sizeof(host))) {
+    infof(data, "gethostname() failed, continuing without");
+    hostlen = 0;
+  }
+  else {
+    hostlen = strlen(host);
+  }
+#else
+  (void)msnprintf(host, sizeof(host), "%s", NTLM_HOSTNAME);
+  hostlen = sizeof(NTLM_HOSTNAME)-1;
+#endif
 
   if(ntlm->flags & NTLMFLAG_NEGOTIATE_NTLM2_KEY) {
     unsigned char ntbuffer[0x18];
@@ -569,7 +585,7 @@ CURLcode Curl_auth_create_ntlm_type3_message(struct Curl_easy *data,
       return result;
 
     Curl_ntlm_core_lm_resp(lmbuffer, &ntlm->nonce[0], lmresp);
-    ntlm->flags &= ~(unsigned int)NTLMFLAG_NEGOTIATE_NTLM2_KEY;
+    ntlm->flags &= ~NTLMFLAG_NEGOTIATE_NTLM2_KEY;
 
     /* A safer but less compatible alternative is:
      *   Curl_ntlm_core_lm_resp(ntbuffer, &ntlm->nonce[0], lmresp);
@@ -706,7 +722,7 @@ CURLcode Curl_auth_create_ntlm_type3_message(struct Curl_easy *data,
   /* Make sure that the domain, user and host strings fit in the
      buffer before we copy them there. */
   if(size + userlen + domlen + hostlen >= NTLM_BUFSIZE) {
-    failf(data, "user + domain + hostname too big");
+    failf(data, "user + domain + host name too big");
     return CURLE_OUT_OF_MEMORY;
   }
 

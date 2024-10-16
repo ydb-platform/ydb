@@ -111,7 +111,9 @@ int inv_test(u8 * in, u8 * inv, u8 * sav, int n)
 		print_matrix(in, n);
 		return -1;
 	}
+#ifdef TEST_VERBOSE
 	putchar('.');
+#endif
 
 	return 0;
 }
@@ -119,7 +121,8 @@ int inv_test(u8 * in, u8 * inv, u8 * sav, int n)
 int main(int argc, char *argv[])
 {
 	int i, k, t;
-	u8 *test_mat, *save_mat, *invr_mat;
+	u8 *test_mat = NULL, *save_mat = NULL, *invr_mat = NULL;
+	int ret = -1;
 
 	u8 test1[] = { 1, 1, 6,
 		1, 1, 1,
@@ -149,25 +152,25 @@ int main(int argc, char *argv[])
 	invr_mat = malloc(KMAX * KMAX);
 
 	if (NULL == test_mat || NULL == save_mat || NULL == invr_mat)
-		return -1;
+		goto exit;
 
 	// Test with lots of leading 1's
 	k = 3;
 	memcpy(test_mat, test1, k * k);
 	if (inv_test(test_mat, invr_mat, save_mat, k))
-		return -1;
+		goto exit;
 
 	// Test with leading zeros
 	k = 3;
 	memcpy(test_mat, test2, k * k);
 	if (inv_test(test_mat, invr_mat, save_mat, k))
-		return -1;
+		goto exit;
 
 	// Test 3
 	k = 3;
 	memcpy(test_mat, test3, k * k);
 	if (inv_test(test_mat, invr_mat, save_mat, k))
-		return -1;
+		goto exit;
 
 	// Test 4 - try a singular matrix
 	k = 4;
@@ -175,7 +178,7 @@ int main(int argc, char *argv[])
 	if (!gf_invert_matrix(test_mat, invr_mat, k)) {
 		printf("Fail: didn't catch singular matrix\n");
 		print_matrix(test4, 4);
-		return -1;
+		goto exit;
 	}
 	// Do random test of size KMAX
 	k = KMAX;
@@ -185,7 +188,7 @@ int main(int argc, char *argv[])
 
 	if (gf_invert_matrix(test_mat, invr_mat, k)) {
 		printf("rand picked a singular matrix, try again\n");
-		return -1;
+		goto exit;
 	}
 
 	matrix_mult(invr_mat, save_mat, test_mat, k);
@@ -195,7 +198,7 @@ int main(int argc, char *argv[])
 		print_matrix(save_mat, k);
 		print_matrix(invr_mat, k);
 		print_matrix(test_mat, k);
-		return -1;
+		goto exit;
 	}
 	// Do Randoms.  Random size and coefficients
 	for (t = 0; t < RANDOMS; t++) {
@@ -214,12 +217,22 @@ int main(int argc, char *argv[])
 			print_matrix(save_mat, k);
 			print_matrix(invr_mat, k);
 			print_matrix(test_mat, k);
-			return -1;
+			goto exit;
 		}
+#ifdef TEST_VERBOSE
 		if (0 == (t % 8))
 			putchar('.');
+#endif
 	}
 
 	printf(" Pass\n");
-	return 0;
+
+	ret = 0;
+
+      exit:
+	free(test_mat);
+	free(save_mat);
+	free(invr_mat);
+
+	return ret;
 }

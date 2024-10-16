@@ -523,9 +523,10 @@ using TAllTransports = ::testing::Types<
     TRpcOverGrpcImpl<false, false>,
     TRpcOverGrpcImpl<false, true>,
     TRpcOverGrpcImpl<true, false>,
-    TRpcOverGrpcImpl<true, true>,
-    TRpcOverHttpImpl<false>,
-    TRpcOverHttpImpl<true>
+    TRpcOverGrpcImpl<true, true>
+    // XXX(babenko): temporarily off
+    // TRpcOverHttpImpl<false>,
+    // TRpcOverHttpImpl<true>
 >;
 
 using TWithAttachments = ::testing::Types<

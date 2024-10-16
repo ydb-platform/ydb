@@ -938,7 +938,7 @@ TFuture<void> TTransaction::FinishDistributedWriteSession(
     ValidateActive();
     return Client_->FinishDistributedWriteSession(
         std::move(session),
-        PatchTransactionId(options));
+        options);
 }
 
 TFuture<void> TTransaction::DoAbort(

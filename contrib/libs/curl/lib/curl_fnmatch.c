@@ -80,7 +80,7 @@ static int parsekeyword(unsigned char **pattern, unsigned char *charset)
   unsigned char *p = *pattern;
   bool found = FALSE;
   for(i = 0; !found; i++) {
-    char c = (char)*p++;
+    char c = *p++;
     if(i >= KEYLEN)
       return SETCHARSET_FAIL;
     switch(state) {

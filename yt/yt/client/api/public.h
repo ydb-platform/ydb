@@ -188,7 +188,8 @@ DECLARE_REFCOUNTED_STRUCT(TBackupManifest)
 DECLARE_REFCOUNTED_STRUCT(TListOperationsAccessFilter)
 
 DECLARE_REFCOUNTED_CLASS(TDistributedWriteSession)
-DECLARE_REFCOUNTED_CLASS(TDistributedWriteCookie)
+DECLARE_REFCOUNTED_CLASS(TFragmentWriteCookie)
+struct IDistributedTableClientBase;
 
 DECLARE_REFCOUNTED_STRUCT(TShuffleHandle)
 

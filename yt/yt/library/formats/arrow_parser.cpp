@@ -163,28 +163,17 @@ public:
         return ParseNull();
     }
 
-    // Decimal types. For now, YT natively supports only Decimal128 with scale up to 35.
-    // Thus, we represent short enough decimals as native YT decimals, and wider decimals as
-    // their decimal string representation; but the latter is subject to change whenever we
-    // get the native support for Decimal128 with scale up to 38 or Decimal256 with scale up to 76.
     arrow::Status Visit(const arrow::Decimal128Type& type) override
     {
-        constexpr int MaximumYTDecimalPrecision = 35;
-        if (type.precision() <= MaximumYTDecimalPrecision) {
-            return ParseStringLikeArray<arrow::Decimal128Array>([&] (const TStringBuf& value, i64 columnId) {
-                return MakeDecimalBinaryValue(value, columnId, type.precision());
-            });
-        } else {
-            return ParseStringLikeArray<arrow::Decimal128Array>([&] (const TStringBuf& value, i64 columnId) {
-                return MakeDecimalTextValue<arrow::Decimal128>(value, columnId, type.scale());
-            });
-        }
+        return ParseStringLikeArray<arrow::Decimal128Array>([&] (const TStringBuf& value, i64 columnId) {
+            return MakeDecimalBinaryValue<TDecimal::TValue128>(value, columnId, type.precision());
+        });
     }
 
     arrow::Status Visit(const arrow::Decimal256Type& type) override
     {
         return ParseStringLikeArray<arrow::Decimal256Array>([&] (const TStringBuf& value, i64 columnId) {
-            return MakeDecimalTextValue<arrow::Decimal256>(value, columnId, type.scale());
+            return MakeDecimalBinaryValue<TDecimal::TValue256>(value, columnId, type.precision());
         });
     }
 
@@ -294,32 +283,30 @@ private:
         return arrow::Status::OK();
     }
 
+    template <class TUnderlyingValueType>
     TUnversionedValue MakeDecimalBinaryValue(const TStringBuf& value, i64 columnId, int precision)
     {
-        // NB: arrow wire representation of Decimal128 is little-endian and (obviously) 128 bit,
+        // NB: Arrow wire representation of Decimal128 is little-endian and (obviously) 128 bit,
         // while YT in-memory representation of Decimal is big-endian, variadic-length of either 32 bit, 64 bit or 128 bit,
         // and MSB-flipped to ensure lexical sorting order.
-        TDecimal::TValue128 value128;
-        YT_VERIFY(value.size() == sizeof(value128));
-        std::memcpy(&value128, value.data(), value.size());
+        // Representation of Decimal256 is similar, but only 256 bits.
+        TUnderlyingValueType decimalValue;
+        YT_VERIFY(value.size() == sizeof(decimalValue));
+        std::memcpy(&decimalValue, value.data(), value.size());
 
-        const auto maxByteCount = sizeof(value128);
+        const auto maxByteCount = sizeof(decimalValue);
         char* buffer = BufferForStringLikeValues_->Preallocate(maxByteCount);
-        auto decimalBinary = TDecimal::WriteBinaryVariadic(precision, value128, buffer, maxByteCount);
+        TStringBuf decimalBinary;
+        if constexpr (std::is_same_v<TUnderlyingValueType, TDecimal::TValue128>) {
+            decimalBinary = TDecimal::WriteBinary128Variadic(precision, decimalValue, buffer, maxByteCount);
+        } else if constexpr (std::is_same_v<TUnderlyingValueType, TDecimal::TValue256>) {
+            decimalBinary = TDecimal::WriteBinary256(precision, decimalValue, buffer, maxByteCount);
+        } else {
+            static_assert(std::is_same_v<TUnderlyingValueType, TDecimal::TValue256>, "Unexpected decimal type");
+        }
         BufferForStringLikeValues_->Advance(decimalBinary.size());
 
         return MakeUnversionedStringValue(decimalBinary, columnId);
-    }
-
-    template <class TArrowDecimalType>
-    TUnversionedValue MakeDecimalTextValue(const TStringBuf& value, i64 columnId, int scale)
-    {
-        TArrowDecimalType decimal(reinterpret_cast<const uint8_t*>(value.data()));
-        auto string = decimal.ToString(scale);
-        char* buffer = BufferForStringLikeValues_->Preallocate(string.size());
-        std::memcpy(buffer, string.data(), string.size());
-        BufferForStringLikeValues_->Advance(string.size());
-        return MakeUnversionedStringValue(TStringBuf(buffer, string.size()), columnId);
     }
 };
 

@@ -76,6 +76,15 @@ IF (OS_LINUX)
     )
 ENDIF()
 
+IF (ARCH_AARCH64)
+    PEERDIR(
+        contrib/libs/llvm16/lib/Target/AArch64
+        contrib/libs/llvm16/lib/Target/AArch64/AsmParser
+        contrib/libs/llvm16/lib/Target/AArch64/MCTargetDesc
+        contrib/libs/llvm16/lib/Target/AArch64/TargetInfo
+    )
+ENDIF()
+
 ADDINCL(
     contrib/libs/llvm16/tools/lli
 )

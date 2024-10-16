@@ -30,7 +30,7 @@
 
 struct fileinfo {
   struct curl_fileinfo info;
-  struct Curl_llist_node list;
+  struct Curl_llist_element list;
   struct dynbuf buf;
 };
 

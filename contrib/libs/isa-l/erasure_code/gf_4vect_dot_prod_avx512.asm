@@ -44,8 +44,6 @@
  %define arg5  r9
 
  %define tmp   r11
- %define tmp.w r11d
- %define tmp.b r11b
  %define tmp2  r10
  %define tmp3  r13		; must be saved and restored
  %define tmp4  r12		; must be saved and restored
@@ -54,19 +52,22 @@
  %define return rax
  %define PS     8
  %define LOG_PS 3
+ %define stack_size  4*8
 
- %define func(x) x:
+ %define func(x) x: endbranch
  %macro FUNC_SAVE 0
-	push	r12
-	push	r13
-	push	r14
-	push	r15
+	sub	rsp, stack_size
+	mov	[rsp + 0*8], r12
+	mov	[rsp + 1*8], r13
+	mov	[rsp + 2*8], r14
+	mov	[rsp + 3*8], r15
  %endmacro
  %macro FUNC_RESTORE 0
-	pop	r15
-	pop	r14
-	pop	r13
-	pop	r12
+	mov	r12,  [rsp + 0*8]
+	mov	r13,  [rsp + 1*8]
+	mov	r14,  [rsp + 2*8]
+	mov	r15,  [rsp + 3*8]
+	add	rsp, stack_size
  %endmacro
 %endif
 
@@ -79,8 +80,6 @@
  %define arg4   r12 		; must be saved, loaded and restored
  %define arg5   r15 		; must be saved and restored
  %define tmp    r11
- %define tmp.w  r11d
- %define tmp.b  r11b
  %define tmp2   r10
  %define tmp3   r13		; must be saved and restored
  %define tmp4   r14		; must be saved and restored
@@ -156,8 +155,8 @@
 %else
 ;;; Use Non-temporal load/stor
  %ifdef NO_NT_LDST
-  %define XLDR vmovdqa
-  %define XSTR vmovdqa
+  %define XLDR vmovdqa64
+  %define XSTR vmovdqa64
  %else
   %define XLDR vmovntdqa
   %define XSTR vmovntdq
@@ -191,13 +190,8 @@ default rel
 section .text
 
 align 16
-global gf_4vect_dot_prod_avx512:ISAL_SYM_TYPE_FUNCTION
+global gf_4vect_dot_prod_avx512, function
 func(gf_4vect_dot_prod_avx512)
-%ifidn __OUTPUT_FORMAT__, macho64
-global _gf_4vect_dot_prod_avx512:ISAL_SYM_TYPE_FUNCTION
-func(_gf_4vect_dot_prod_avx512)
-%endif
-
 	FUNC_SAVE
 	sub	len, 64
 	jl	.return_fail

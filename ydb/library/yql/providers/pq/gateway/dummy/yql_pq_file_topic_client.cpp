@@ -217,7 +217,7 @@ private:
     ui64 SeqNo_ = 0;
 };
 
-class TFileTopicWriteSession : public NYdb::NTopic::IWriteSession {
+class TFileTopicWriteSession : public NYdb::NTopic::IWriteSession, private  NYdb::NTopic::TContinuationTokenIssuer {
 public:
     TFileTopicWriteSession(TFile file): 
         File_(std::move(file)), FileWriter_([this] () {
@@ -225,6 +225,7 @@ public:
         }), Counters_()
     {
         Pool_.Start(1);
+        EventsQ_.Push(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
     }
 
     NThreading::TFuture<void> WaitEvent() {
@@ -448,7 +449,6 @@ std::shared_ptr<NYdb::NTopic::ISimpleBlockingWriteSession> TFileTopicClient::Cre
 
 std::shared_ptr<NYdb::NTopic::IWriteSession> TFileTopicClient::CreateWriteSession(const NYdb::NTopic::TWriteSessionSettings& settings) {
     TString topicPath = settings.Path_;
-
     auto topicsIt = Topics_.find(make_pair("pq", topicPath));
     Y_ENSURE(topicsIt != Topics_.end());
     auto filePath = topicsIt->second.FilePath;

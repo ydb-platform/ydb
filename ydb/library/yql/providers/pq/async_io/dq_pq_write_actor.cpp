@@ -152,7 +152,6 @@ public:
         , Callbacks(callbacks)
         , LogPrefix(TStringBuilder() << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", TaskId: " << taskId << ", PQ sink. ")
         , FreeSpace(freeSpace)
-        , TopicClient(Driver, GetTopicClientSettings())
         , PqGateway(pqGateway)
     { 
         EgressStats.Level = statsLevel;
@@ -302,6 +301,13 @@ private:
                 : NYdb::NTopic::ECodec::GZIP);
     }
 
+    ITopicClient& GetTopicClient() {
+        if (!TopicClient) {
+            TopicClient = PqGateway->GetTopicClient(Driver, GetTopicClientSettings());
+        }
+        return *TopicClient;
+    }
+
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() {
         return NYdb::NTopic::TTopicClientSettings()
             .Database(SinkParams.GetDatabase())
@@ -316,7 +322,7 @@ private:
 
     void CreateSessionIfNotExists() {
         if (!WriteSession) {
-            WriteSession = TopicClient.CreateWriteSession(GetWriteSessionSettings());
+            WriteSession = GetTopicClient().CreateWriteSession(GetWriteSessionSettings());
             SubscribeOnNextEvent();
         }
     }
@@ -473,7 +479,7 @@ private:
     i64 FreeSpace = 0;
     bool Finished = false;
 
-    NYdb::NTopic::TTopicClient TopicClient;
+    ITopicClient::TPtr TopicClient;
     std::shared_ptr<NYdb::NTopic::IWriteSession> WriteSession;
     TString SourceId;
     ui64 NextSeqNo = 1;

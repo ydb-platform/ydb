@@ -3430,8 +3430,16 @@ const TAggregateDesc& LookupAggregation(const TString& name, const TVector<ui32>
 }
 
 const TAggregateDesc& LookupAggregation(const TString& name, ui32 stateType, ui32 resultType) {
+    TStringBuf realName = name;
+    TMaybe<ui32> aggId;
+    TStringBuf left, right;
+    if (realName.TrySplit('#', left, right)) {
+        aggId = FromString<ui32>(right);
+        realName = left;
+    }
+
     const auto& catalog = TCatalog::Instance();
-    auto aggIdPtr = catalog.State->AggregationsByName.FindPtr(to_lower(name));
+    auto aggIdPtr = catalog.State->AggregationsByName.FindPtr(to_lower(TString(realName)));
     if (!aggIdPtr) {
         throw yexception() << "No such aggregate: " << name;
     }
@@ -3439,6 +3447,10 @@ const TAggregateDesc& LookupAggregation(const TString& name, ui32 stateType, ui3
     for (const auto& id : *aggIdPtr) {
         const auto& d = catalog.State->Aggregations.FindPtr(id);
         Y_ENSURE(d);
+        if (aggId && d->AggId != *aggId) {
+            continue;
+        }
+
         if (!ValidateAggregateArgs(*d, stateType, resultType)) {
             continue;
         }

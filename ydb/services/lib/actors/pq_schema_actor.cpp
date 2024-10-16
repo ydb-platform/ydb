@@ -7,6 +7,8 @@
 
 #include <ydb/public/lib/jwt/jwt.h>
 
+#include <ydb/public/api/protos/ydb_topic.pb.h>
+
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 
 #include <util/string/vector.h>

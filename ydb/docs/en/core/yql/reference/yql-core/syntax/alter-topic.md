@@ -141,3 +141,31 @@ ALTER TOPIC `my_topic` RESET (
 * `supported_codecs`: List of [codecs](../../../../concepts/topic#message-codec) supported by the topic. Value type: `String`.
 
 {% endif %}
+
+### Включение и приостановка автопартиционирования {#autopartitioning}
+
+Next command set [autopartitioning](../../../../concepts/topic#autopartitioning) into the mode UP:
+
+```yql
+ALTER TOPIC `my_topic` SET (
+    min_active_partitions = 1,
+    max_active_partitions = 5,
+    auto_partitioning_strategy = 'scale_up'
+);
+```
+
+Next command set [autopartitioning](../../../../concepts/topic#autopartitioning) into the mode PAUSED:
+
+```yql
+ALTER TOPIC `my_topic` SET (
+    auto_partitioning_strategy = 'paused'
+);
+```
+
+Next command set [autopartitioning](../../../../concepts/topic#autopartitioning) into the mode UP from mode PAUSED:
+
+```yql
+ALTER TOPIC `my_topic` SET (
+    auto_partitioning_strategy = 'scale_up'
+);
+```

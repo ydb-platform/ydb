@@ -1,4 +1,5 @@
 #include "ydb_proxy.h"
+#include "partition_end_watcher.h"
 
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
@@ -181,56 +182,6 @@ private:
     THashSet<TRequestPtr, TRequestPtrHash> Requests;
 
 }; // TBaseProxyActor
-
-class TPartitionEndWatcher {
-    void MaybeSendPartitionEnd(const TActorId& client) {
-        if (!EndPartitionSessionEvent || CommittedOffset != PendingCommittedOffset) {
-            return;
-        }
-
-        auto* x = std::get_if<TReadSessionEvent::TEndPartitionSessionEvent>(&*EndPartitionSessionEvent);
-        x->Confirm();
-        ActorOps->Send(client, new TEvYdbProxy::TEvTopicEndPartition(*x));
-    }
-
-public:
-    explicit TPartitionEndWatcher(IActorOps* actorOps)
-        : ActorOps(actorOps)
-    {
-    }
-
-    void SetEvent(TReadSessionEvent::TEvent&& event, const TActorId& client) {
-        EndPartitionSessionEvent = std::move(event);
-        MaybeSendPartitionEnd(client);
-    }
-
-    void UpdatePendingCommittedOffset(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
-        if (auto count = event.GetMessagesCount()) {
-            if (event.HasCompressedMessages()) {
-                PendingCommittedOffset = event.GetCompressedMessages()[count - 1].GetOffset();
-            } else {
-                PendingCommittedOffset = event.GetMessages()[count - 1].GetOffset();
-            }
-        }
-    }
-
-    void SetCommittedOffset(ui64 offset, const TActorId& client) {
-        CommittedOffset = offset;
-        MaybeSendPartitionEnd(client);
-    }
-
-    void Clear() {
-        PendingCommittedOffset = 0;
-        CommittedOffset = 0;
-        EndPartitionSessionEvent.Clear();
-    }
-
-private:
-    IActorOps* const ActorOps;
-    ui64 PendingCommittedOffset = 0;
-    ui64 CommittedOffset = 0;
-    TMaybe<TReadSessionEvent::TEvent> EndPartitionSessionEvent;
-}; // TPartitionEndWatcher
 
 class TTopicReader: public TBaseProxyActor<TTopicReader> {
     void Handle(TEvYdbProxy::TEvReadTopicRequest::TPtr& ev) {

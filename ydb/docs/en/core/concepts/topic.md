@@ -29,7 +29,7 @@ As for now, you can only reduce the number of partitions in a topic by deleting 
 
 Partitions can be:
  - **Active.** All partitions by default are active. You can both read from an active partition and write into an active partition.
- - **Inactive.** You can only read from an inactive partition. Partition become inactive after splitting in case of [autopartitioning](#autopartitioning). Inactive partition is deleted automatically after deletion all messages from such partition due to retention period expired. 
+ - **Inactive.** You can only read from an inactive partition. Partition become inactive after splitting in case of [autopartitioning](#autopartitioning). Inactive partition is deleted automatically after deletion all messages from such partition due to retention period expired.
 
 ### Offset {#offset}
 
@@ -57,7 +57,7 @@ Initial count of partitions is defined during topic creation. In this mode in ca
 
 #### UP
 
-Autopartitioning up is switched on on this topic. It means that in case of increasing of writing speed into the topic partitions count will be increased automatically. In case of decreasing of writing speed into the topic partitions count remaines unchanged. 
+Autopartitioning up is switched on on this topic. It means that in case of increasing of writing speed into the topic partitions count will be increased automatically. In case of decreasing of writing speed into the topic partitions count remaines unchanged.
 
 Algorithm of partitions count increasing is following. If during defined period of time write speed into the some partitions increases defined threshold (in % of maximum write speed into the partition), this partition is splitted into the two child partitions. Original partition becomes inactive. Only reading is possible from such partition. When retention period expires, and all messages from this partition will be deleted, this partition also will be deleted. Two new child partitions become active, and reading and writing are both possible for these partitions.
 

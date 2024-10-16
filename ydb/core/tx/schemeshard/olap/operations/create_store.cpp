@@ -317,7 +317,7 @@ public:
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
         const TString& parentPathStr = Transaction.GetWorkingDir();
-        const auto& createDescription = Transaction.GetCreateColumnStore();
+        auto& createDescription = Transaction.GetCreateColumnStore();
         const TString& name = createDescription.GetName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

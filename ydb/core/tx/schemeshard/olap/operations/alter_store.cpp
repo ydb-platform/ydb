@@ -449,16 +449,6 @@ class TAlterOlapStore: public TSubOperation {
         return false;
     }
 
-    void SetSparsedByDefaultForNonPKColumn(NKikimrSchemeOp::TAlterColumnStore& alterDescription) {
-        for (ui32 i = 0; i < alterDescription.AlterSchemaPresetsSize(); i++) {
-            auto mutableAlterSchema = alterDescription.MutableAlterSchemaPresets(i)->MutableAlterSchema();
-            for (ui32 i = 0; i < mutableAlterSchema->AddColumnsSize(); i++) {
-                auto mutableColumn = mutableAlterSchema->MutableAddColumns(i);
-                mutableColumn->MutableDataAccessorConstructor()->SetClassName(NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName);
-            }
-        }
-    }
-
 public:
     using TSubOperation::TSubOperation;
 

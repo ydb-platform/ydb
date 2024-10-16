@@ -42,7 +42,7 @@ public:
         const NMiniKQL::TStructType* lookupPayloadType,
         const NMiniKQL::TMultiType* outputRowType,
         TOutputRowColumnOrder&& outputRowColumnOrder,
-        size_t maxDelay,
+        size_t maxDelayedRows,
         size_t cacheLimit,
         std::chrono::seconds cacheTtl
     )
@@ -64,7 +64,7 @@ public:
         , OutputRowColumnOrder(std::move(outputRowColumnOrder))
         , InputFlowFetchStatus(NUdf::EFetchStatus::Yield)
         , LruCache(std::make_unique<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl>(cacheLimit, lookupKeyType))
-        , MaxDelay(maxDelay)
+        , MaxDelayedRows(maxDelayedRows)
         , CacheTtl(cacheTtl)
         , ReadyQueue(OutputRowType)
     {
@@ -230,8 +230,8 @@ private: //IDqComputeActorAsyncInput
                     AddReadyQueue(key, other, &*lookupPayload);
                 } else {
                     if (AwaitingQueue.empty()) {
-                        // look ahead at most MaxDelay rows after first missing
-                        rowLimit = row + MaxDelay;
+                        // look ahead at most MaxDelayedRows after first missing
+                        rowLimit = row + MaxDelayedRows;
                     }
                     AwaitingQueue.emplace_back(key, std::move(other));
                     KeysForLookup->emplace(std::move(key), NUdf::TUnboxedValue{});
@@ -294,7 +294,7 @@ protected:
 
     NUdf::EFetchStatus InputFlowFetchStatus;
     std::unique_ptr<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl> LruCache;
-    size_t MaxDelay;
+    size_t MaxDelayedRows;
     std::chrono::seconds CacheTtl;
     using TInputKeyOtherPair = std::pair<NUdf::TUnboxedValue, NUdf::TUnboxedValue>;
     using TAwaitingQueue = std::deque<TInputKeyOtherPair, NKikimr::NMiniKQL::TMKQLAllocator<TInputKeyOtherPair>>; //input row split in two parts: key columns and other columns
@@ -557,7 +557,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             lookupPayloadType,
             outputRowType,
             std::move(outputColumnsOrder),
-            settings.GetMaxDelay(),
+            settings.GetMaxDelayedRows(),
             settings.GetCacheLimit(),
             std::chrono::seconds(settings.GetCacheTtlSeconds())
         ) :
@@ -577,7 +577,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             lookupPayloadType,
             outputRowType,
             std::move(outputColumnsOrder),
-            settings.GetMaxDelay(),
+            settings.GetMaxDelayedRows(),
             settings.GetCacheLimit(),
             std::chrono::seconds(settings.GetCacheTtlSeconds())
         );

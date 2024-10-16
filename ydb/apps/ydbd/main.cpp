@@ -7,8 +7,10 @@
 #include <ydb/library/pdisk_io/aio.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
 
+void foo();
 
 int main(int argc, char **argv) {
+    foo();
     SetupTerminateHandler();
 
     auto factories = std::make_shared<NKikimr::TModuleFactories>();

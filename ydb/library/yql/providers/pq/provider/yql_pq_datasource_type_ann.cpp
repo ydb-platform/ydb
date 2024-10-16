@@ -132,7 +132,7 @@ public:
     }
 
     TStatus HandleDqTopicSource(TExprBase input, TExprContext& ctx) {
-        if (!EnsureArgsCount(input.Ref(), 6, ctx)) {
+        if (!EnsureArgsCount(input.Ref(), 5, ctx)) {
             return TStatus::Error;
         }
 

@@ -1,6 +1,7 @@
 #include "ut_helpers.h"
 
 #include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 
 #include <ydb/core/testlib/basics/appdata.h>
 
@@ -71,6 +72,14 @@ void TPqIoTestFixture::InitSource(
         const THashMap<TString, TString> secureParams;
         const THashMap<TString, TString> taskParams { {"pq", serializedParams} };
 
+        TPqGatewayServices pqServices(
+            Driver,
+            nullptr,
+            nullptr,
+            std::make_shared<TPqGatewayConfig>(),
+            nullptr
+        );
+
         auto [dqSource, dqSourceAsActor] = CreateDqPqReadActor(
             std::move(settings),
             0,
@@ -84,6 +93,7 @@ void TPqIoTestFixture::InitSource(
             actor.SelfId(),
             actor.GetHolderFactory(),
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
+            CreatePqNativeGateway(std::move(pqServices)),
             freeSpace);
 
         actor.InitAsyncInput(dqSource, dqSourceAsActor);
@@ -234,6 +244,12 @@ void AddReadRule(NYdb::TDriver& driver, const TString& streamName) {
 
 std::vector<TString> UVParser(const NUdf::TUnboxedValue& item) {
     return { TString(item.AsStringRef()) };
+}
+
+std::vector<TString> UVParserWithMetadatafields(const NUdf::TUnboxedValue& item) {
+    const auto& cell = item.GetElement(0);
+    TString str(cell.AsStringRef());
+    return {str};
 }
 
 void TPqIoTestFixture::AsyncOutputWrite(std::vector<TString> data, TMaybe<NDqProto::TCheckpoint> checkpoint) {

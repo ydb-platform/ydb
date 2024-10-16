@@ -7,9 +7,9 @@
 #include <contrib/libs/simdjson/include/simdjson/dom/parser-inl.h>
 #include <library/cpp/json/json_reader.h>
 
-#include <util/generic/set.h>
-#include <util/generic/stack.h>
 #include <util/generic/vector.h>
+#include <util/generic/stack.h>
+#include <util/generic/set.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/map.h>
 

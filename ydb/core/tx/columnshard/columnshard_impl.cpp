@@ -13,10 +13,10 @@
 
 #include "blobs_reader/actor.h"
 #include "blobs_action/storages_manager/manager.h"
+#include "blobs_action/transaction/tx_clean_versions.h"
 #include "blobs_action/transaction/tx_remove_blobs.h"
 #include "blobs_action/transaction/tx_gc_insert_table.h"
 #include "blobs_action/transaction/tx_gc_indexed.h"
-#include "blobs_action/transaction/tx_clean_versions.h"
 #include "bg_tasks/events/events.h"
 
 #include "data_sharing/destination/session/destination.h"

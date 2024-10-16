@@ -45,7 +45,7 @@ TInsertionSummary::TCounters TInsertTable::Commit(
             auto committed = data->Commit(planStep, txId);
             dbTable.Commit(committed);
 
-            pathInfo->AddCommitted(std::move(committed), &*VersionCounters);
+            pathInfo->AddCommitted(std::move(committed), VersionCounters);
         } else {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "abort_insertion")("path_id", data->GetPathId())(
                 "blob_range", data->GetBlobRange().ToString());
@@ -68,7 +68,7 @@ TInsertionSummary::TCounters TInsertTable::CommitEphemeral(IDbWrapper& dbTable, 
     auto& pathInfo = Summary.GetPathInfoVerified(pathId);
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "commit_insertion")("path_id", pathId)("blob_range", data.GetBlobRange().ToString());
     dbTable.Commit(data);
-    pathInfo.AddCommitted(std::move(data), &*VersionCounters);
+    pathInfo.AddCommitted(std::move(data), VersionCounters);
 
     return counters;
 }

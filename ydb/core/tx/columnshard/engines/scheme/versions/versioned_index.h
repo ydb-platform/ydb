@@ -112,7 +112,7 @@ public:
 
     bool LoadShardingInfo(IDbWrapper& db);
 
-    void RemoveVersion(ui64 version);
+    void RemoveVersion(const ui64 version);
 
     ui64 GetLastSchemaVersion() const {
         return LastSchemaVersion;

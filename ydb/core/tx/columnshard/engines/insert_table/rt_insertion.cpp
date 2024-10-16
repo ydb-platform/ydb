@@ -72,7 +72,7 @@ bool TInsertionSummary::IsOverloaded(const ui64 pathId) const {
     }
 }
 
-void TInsertionSummary::OnNewInserted(TPathInfo& pathInfo, const ui64 dataSize, ui64 version, const bool load) noexcept {
+void TInsertionSummary::OnNewInserted(TPathInfo& pathInfo, const ui64 dataSize, const ui64 version, const bool load) noexcept {
     Counters.Inserted.Add(dataSize, load);
     pathInfo.AddInsertedSize(dataSize, TCompactionLimits::OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID);
     ++StatsPrepared.Rows;
@@ -81,7 +81,7 @@ void TInsertionSummary::OnNewInserted(TPathInfo& pathInfo, const ui64 dataSize, 
     VersionCounters->VersionAddRef(version, 1);
 }
 
-void TInsertionSummary::OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize, ui64 version) noexcept {
+void TInsertionSummary::OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize, const ui64 version) noexcept {
     Counters.Inserted.Erase(dataSize);
     pathInfo.AddInsertedSize(-1 * (i64)dataSize, TCompactionLimits::OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID);
     Y_ABORT_UNLESS(--StatsPrepared.Rows >= 0);
@@ -95,7 +95,7 @@ THashSet<TInsertWriteId> TInsertionSummary::GetExpiredInsertions(const TInstant 
     return Inserted.GetExpired(timeBorder, limit);
 }
 
-void TInsertionSummary::OnEraseAborted(ui64 version) {
+void TInsertionSummary::OnEraseAborted(ui64 const version) {
     VersionCounters->VersionRemoveRef(version, 1);
 }
 
@@ -125,7 +125,7 @@ bool TInsertionSummary::EraseCommitted(const TCommittedData& data) {
         return false;
     }
 
-    if (!pathInfo->EraseCommitted(data, &*VersionCounters)) {
+    if (!pathInfo->EraseCommitted(data, VersionCounters)) {
         Counters.Committed.SkipErase(data.BlobSize());
         return false;
     } else {
@@ -141,7 +141,7 @@ bool TInsertionSummary::HasCommitted(const TCommittedData& data) {
     return pathInfo->HasCommitted(data);
 }
 
-void TInsertionSummary::OnNewAborted(ui64 version) {
+void TInsertionSummary::OnNewAborted(const ui64 version) {
     VersionCounters->VersionAddRef(version, 1);
 }
 

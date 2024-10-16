@@ -28,6 +28,7 @@ As for now, you can only reduce the number of partitions in a topic by deleting 
 {% endnote %}
 
 Partitions can be:
+
  - **Active.** All partitions by default are active. You can both read from an active partition and write into an active partition.
  - **Inactive.** You can only read from an inactive partition. Partition become inactive after splitting in case of [autopartitioning](#autopartitioning). Inactive partition is deleted automatically after deletion all messages from such partition due to retention period expired.
 

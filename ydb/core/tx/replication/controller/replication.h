@@ -141,6 +141,7 @@ private:
     class TImpl;
     std::shared_ptr<TImpl> Impl;
     std::optional<TDropOp> DropOp;
+
 }; // TReplication
 
 }

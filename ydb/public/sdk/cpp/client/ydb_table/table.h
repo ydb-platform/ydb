@@ -357,7 +357,6 @@ public:
     TChangefeedDescription& SetAttributes(THashMap<TString, TString>&& attrs);
     // Value that will be emitted in the `awsRegion` field of the record in DynamoDBStreamsJson format
     TChangefeedDescription& WithAwsRegion(const TString& value);
-    TChangefeedDescription& WithTopicAutopartitioning();
 
     const TString& GetName() const;
     EChangefeedMode GetMode() const;
@@ -369,7 +368,6 @@ public:
     const THashMap<TString, TString>& GetAttributes() const;
     const TString& GetAwsRegion() const;
     const std::optional<TInitialScanProgress>& GetInitialScanProgress() const;
-    bool GetTopicAutopartitioning() const;
 
     void SerializeTo(Ydb::Table::Changefeed& proto) const;
     TString ToString() const;
@@ -394,7 +392,6 @@ private:
     THashMap<TString, TString> Attributes_;
     TString AwsRegion_;
     std::optional<TInitialScanProgress> InitialScanProgress_;
-    bool TopicAutopartitioning_ = false;
 };
 
 bool operator==(const TChangefeedDescription& lhs, const TChangefeedDescription& rhs);

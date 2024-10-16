@@ -10,8 +10,6 @@ namespace NKikimr::NReplication {
 
 namespace NController {
 
-extern const TString ReplicationConsumerName;
-
 TController::TController(const TActorId& tablet, TTabletStorageInfo* info)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)

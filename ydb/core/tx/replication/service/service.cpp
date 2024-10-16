@@ -111,7 +111,7 @@ public:
         ops->Send(ActorId, ev.Release());
     }
 
-    void SendWorkerDataEnd(IActorOps* ops, const TWorkerId& id, ui64 partitionId, const TVector<ui64>& adjacentPartitionsIds, const TVector<ui64>& childPartitionsIds) {
+    void SendWorkerDataEnd(IActorOps* ops, const TWorkerId& id, ui64 partitionId, const TVector<ui64>&& adjacentPartitionsIds, const TVector<ui64>&& childPartitionsIds) {
         auto ev = MakeHolder<TEvService::TEvWorkerDataEnd>();
         auto& record = ev->Record;
 
@@ -372,7 +372,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
         LOG_I("Worker has ended"
             << ": worker# " << ev->Sender);
-        session->SendWorkerDataEnd(this, session->GetWorkerId(ev->Sender), ev->Get()->PartitionId, ev->Get()->AdjacentPartitionsIds, ev->Get()->ChildPartitionsIds);
+        session->SendWorkerDataEnd(this, session->GetWorkerId(ev->Sender), ev->Get()->PartitionId, std::move(ev->Get()->AdjacentPartitionsIds), std::move(ev->Get()->ChildPartitionsIds));
     }
 
     void Handle(TEvWorker::TEvGone::TPtr& ev) {

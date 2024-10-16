@@ -615,8 +615,20 @@ private:
         Self->IndexBuildPipes.CloseAll(BuildId, ctx);
     }
 
+    template<typename Send>
+    bool SendToShards(TIndexBuildInfo& buildInfo, Send&& send) {
+        while (!buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.size() < buildInfo.Limits.MaxShards) {
+            auto shardIdx = buildInfo.ToUploadShards.front();
+            buildInfo.ToUploadShards.pop_front();
+            buildInfo.InProgressShards.emplace(shardIdx);
+            send(shardIdx);
+        }
+
+        return buildInfo.InProgressShards.empty() && buildInfo.ToUploadShards.empty();
+    }
+
     bool FillTable(TIndexBuildInfo& buildInfo) {
-        if (buildInfo.ToUploadShards.empty() && buildInfo.DoneShardsSize == 0 && buildInfo.InProgressShards.empty()) {
+        if (buildInfo.DoneShardsSize == 0 && buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.empty()) {
             for (const auto& [idx, status] : buildInfo.Shards) {
                 switch (status.Status) {
                     case NKikimrIndexBuilder::EBuildStatus::INVALID:
@@ -634,16 +646,7 @@ private:
                 }
             }
         }
-
-        while (!buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.size() < buildInfo.Limits.MaxShards) {
-            auto shardIdx = buildInfo.ToUploadShards.front();
-            buildInfo.ToUploadShards.pop_front();
-            buildInfo.InProgressShards.emplace(shardIdx);
-
-            SendBuildIndexRequest(shardIdx, buildInfo);
-        }
-
-        return buildInfo.InProgressShards.empty() && buildInfo.ToUploadShards.empty() &&
+        return SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendBuildIndexRequest(shardIdx, buildInfo); }) &&
                buildInfo.DoneShardsSize == buildInfo.Shards.size();
     }
 
@@ -689,13 +692,7 @@ private:
             buildInfo.InProgressShards.clear();
             return true;
         }
-        while (!buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.size() < buildInfo.Limits.MaxShards) {
-            auto shardIdx = buildInfo.ToUploadShards.front();
-            buildInfo.ToUploadShards.pop_front();
-            buildInfo.InProgressShards.emplace(shardIdx);
-            SendSampleKRequest(shardIdx, buildInfo);
-        }
-        return buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.empty();
+        return SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendSampleKRequest(shardIdx, buildInfo); });
     }
 
     bool FillVectorIndex(TIndexBuildInfo& buildInfo) {

@@ -90,6 +90,11 @@ TNodePtr BuildViewSelect(
     }
     issues.Clear();
 
+    // Holds (among other things) subquery references.
+    // These references need to be passed to the parent context
+    // to be able to compile view queries with subqueries.
+    context.PushCurrentBlocks(&parentContext.GetCurrentBlocks());
+
     context.Settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
 
     TSqlSelect selectTranslator(context, context.Settings.Mode);

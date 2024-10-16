@@ -25,7 +25,6 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         return TChangefeedDescription(name, EChangefeedMode::Updates, EChangefeedFormat::Json)
             .WithRetentionPeriod(retentionPeriod)
             .WithInitialScan()
-            //.WithTopicAutopartitioning()
             .AddAttribute("__async_replication", NJson::WriteJson(attrs, false));
     }
 
@@ -172,6 +171,7 @@ public:
         , Changefeed(MakeChangefeed(streamName, streamRetentionPeriod, NJson::TJsonMap{
             {"path", dstPath},
             {"id", ToString(rid)},
+            {"support_topic_autopartitioning", AppData()->FeatureFlags.GetEnableTopicAutopartitioningForReplication()},
         }))
         , LogPrefix("StreamCreator", ReplicationId, TargetId)
     {

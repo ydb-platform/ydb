@@ -64,9 +64,9 @@ TEngineLogsCounters::TEngineLogsCounters()
 
     GranuleOptimizerLocked = TBase::GetDeriviative("Optimizer/Granules/Locked");
 
-    PortionsLoadingTimeCounter = TBase::GetDeriviative("Startup/PortionsLoadingTime");
-    ColumnsLoadingTimeCounter  = TBase::GetDeriviative("Startup/ColumnsLoadingTime");
-    IndexesLoadingTimeCounter = TBase::GetDeriviative("Startup/IndexesLoadingTime");
+    PortionsLoadingTimeCounter = TBase::GetValue("Startup/PortionsLoadingTime");
+    ColumnsLoadingTimeCounter  = TBase::GetValue("Startup/ColumnsLoadingTime");
+    IndexesLoadingTimeCounter = TBase::GetValue("Startup/IndexesLoadingTime");
     LoadPortionsFailCounter = TBase::GetDeriviative("Startup/LoadPortionFailCount");
     LoadColumnsFailCounter = TBase::GetDeriviative("Startup/LoadColumnFailCount");
     LoadIndexFailCounter = TBase::GetDeriviative("Startup/LoadIndexFailCount");

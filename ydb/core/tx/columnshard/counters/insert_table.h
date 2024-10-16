@@ -79,7 +79,7 @@ public:
     TInsertTableLoadCounters()
         : TBase("InsertTableLoad")
     {
-        InsertTableLoadingTimeCounter = TBase::GetDeriviative("Startup/InsertTableLoadingTime");;
+        InsertTableLoadingTimeCounter = TBase::GetValue("Startup/InsertTableLoadingTime");;
         InsertTableLoadingFailCounter = TBase::GetDeriviative("Startup/InsertTableLoadFails");;
     }
 

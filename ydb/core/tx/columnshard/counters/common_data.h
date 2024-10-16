@@ -71,10 +71,10 @@ public:
     TLoadTimeSignals()
         : TBase("Startup")
     {
-        TablesLoadingTimeCounter = TBase::GetDeriviative("Startup/TablesLoadingTime");;
-        SchemaPresetLoadingTimeCounter = TBase::GetDeriviative("Startup/SchemaPresetLoadingTime");;
-        TableVersionsLoadingTimeCounter = TBase::GetDeriviative("Startup/TableVersionsLoadingTime");;
-        SchemaPresetVersionsLoadingTimeCounter = TBase::GetDeriviative("Startup/SchemaPreseVersionstLoadingTime");;
+        TablesLoadingTimeCounter = TBase::GetValue("Startup/TablesLoadingTime");;
+        SchemaPresetLoadingTimeCounter = TBase::GetValue("Startup/SchemaPresetLoadingTime");;
+        TableVersionsLoadingTimeCounter = TBase::GetValue("Startup/TableVersionsLoadingTime");;
+        SchemaPresetVersionsLoadingTimeCounter = TBase::GetValue("Startup/SchemaPreseVersionstLoadingTime");;
 
         TablesLoadingFailCounter = TBase::GetDeriviative("Startup/TablesLoadingFailCount");;
         SchemaPresetLoadingFailCounter = TBase::GetDeriviative("Startup/SchemaPresetLoadingFailCount");;

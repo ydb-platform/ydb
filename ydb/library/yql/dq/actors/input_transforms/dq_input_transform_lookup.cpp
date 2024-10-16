@@ -214,13 +214,17 @@ private: //IDqComputeActorAsyncInput
                 NUdf::TUnboxedValue key = HolderFactory.CreateDirectArrayHolder(LookupInputIndexes.size(), keyItems);
                 NUdf::TUnboxedValue* otherItems;
                 NUdf::TUnboxedValue other = HolderFactory.CreateDirectArrayHolder(OtherInputIndexes.size(), otherItems);
+                bool nullsInKey = false;
                 for (size_t i = 0; i != LookupInputIndexes.size(); ++i) {
                     keyItems[i] = inputRowItems[LookupInputIndexes[i]];
+                    nullsInKey |= !keyItems[i];
                 }
                 for (size_t i = 0; i != OtherInputIndexes.size(); ++i) {
                     otherItems[i] = inputRowItems[OtherInputIndexes[i]];
                 }
-                if (auto lookupPayload = LruCache->Get(key, now)) {
+                if (nullsInKey) {
+                    AddReadyQueue(key, other, nullptr);
+                } else if (auto lookupPayload = LruCache->Get(key, now)) {
                     AddReadyQueue(key, other, &*lookupPayload);
                 } else {
                     AwaitingQueue.emplace_back(key, std::move(other));

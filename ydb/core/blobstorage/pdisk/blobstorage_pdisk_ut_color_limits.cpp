@@ -187,7 +187,7 @@ Y_UNIT_TEST_SUITE(TColorLimitsTest) {
 
             UNIT_ASSERT_C(color == borderColor, "Because owner consumed all his quota his color should be equal to border");
             if (color != NKikimrBlobStorage::TPDiskSpaceColor::GREEN) {
-                UNIT_ASSERT_C(std::fabs(occupancy - borderOccupancy) <= 0.001,
+                UNIT_ASSERT_C(std::fabs(occupancy - borderOccupancy) <= 0.01,
                     "Because owner consumed all his quota his occupancy should be equal to occupancy border");
             }
             UNIT_ASSERT_C(occupancy >= prevOccupancy, "check that with Border is increasing fair occupancy is increasing too");

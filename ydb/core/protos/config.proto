@@ -1193,6 +1193,17 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 134217728,
             DefaultValue: 0 }];
+
+        optional uint64 CdcInitialScanReadAheadLo = 19 [(ControlOptions) = {
+            Description: "Override for CDC initial scan readahead (low watermark)",
+            MinValue: 0,
+            MaxValue: 67108864,
+            DefaultValue: 0 }];
+        optional uint64 CdcInitialScanReadAheadHi = 20 [(ControlOptions) = {
+            Description: "Override for CDC initial scan readahead (high watermark)",
+            MinValue: 0,
+            MaxValue: 134217728,
+            DefaultValue: 0 }];
     }
 
     message TTxLimitControls {
@@ -1657,7 +1668,7 @@ message TSchemeShardConfig {
     repeated TInFlightCounterConfig InFlightCounterConfig = 4;
 
     // number of shards per table
-    optional uint32 MaxCdcInitialScanShardsInFlight = 5 [default = 10];
+    optional uint32 MaxCdcInitialScanShardsInFlight = 5 [default = 32];
 }
 
 message TCompactionConfig {

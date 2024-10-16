@@ -271,6 +271,9 @@ struct TTxState {
     TStepId MinStep = InvalidStepId;
     TStepId PlanStep = InvalidStepId;
 
+    // TxCopy: Stores path for cdc stream to create in case of ContinuousBackup; uses ExtraData through proto
+    TPathId CdcPathId = InvalidPathId;
+
     // persist - TxShards:
     TVector<TShardOperation> Shards; // shards + operations on them
     bool NeedUpdateObject = false;

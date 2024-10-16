@@ -202,6 +202,7 @@ SRCS(
     schemeshard_build_index__list.cpp
     schemeshard_build_index__progress.cpp
     schemeshard_build_index_tx_base.cpp
+    schemeshard_cdc_stream_common.cpp
     schemeshard_cdc_stream_scan.cpp
     schemeshard_domain_links.cpp
     schemeshard_domain_links.h

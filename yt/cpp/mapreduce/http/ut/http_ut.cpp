@@ -15,7 +15,7 @@ using namespace NYT;
 void WriteDataFrame(TStringBuf string, IOutputStream* stream)
 {
     stream->Write("\x01");
-    ui32 size = string.Size();
+    ui32 size = string.size();
     auto littleEndianSize = HostToLittle(size);
     stream->Write(&littleEndianSize, sizeof(littleEndianSize));
     stream->Write(string);

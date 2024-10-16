@@ -1,14 +1,11 @@
 #include "wire_protocol.h"
 
 #include "private.h"
+#include "row_batch.h"
+#include "row_buffer.h"
+#include "unversioned_row.h"
 
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/chunk_meta.pb.h>
-#include <yt/yt/client/table_client/row_buffer.h>
-#include <yt/yt/client/table_client/schema.h>
-#include <yt/yt/client/table_client/unversioned_reader.h>
-#include <yt/yt/client/table_client/unversioned_writer.h>
-#include <yt/yt/client/table_client/unversioned_row.h>
-#include <yt/yt/client/table_client/row_batch.h>
 
 #include <yt/yt/core/actions/future.h>
 

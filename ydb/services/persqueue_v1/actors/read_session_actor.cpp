@@ -1739,6 +1739,7 @@ i64 TFormedReadResponse<TServerMessage>::ApplyResponse(TServerMessage&& resp) {
     return ByteSize - prev;
 }
 
+
 template <typename TServerMessage>
 i64 TFormedReadResponse<TServerMessage>::ApplyDirectReadResponse(TEvPQProxy::TEvDirectReadResponse::TPtr& ev) {
 
@@ -1754,7 +1755,6 @@ i64 TFormedReadResponse<TServerMessage>::ApplyDirectReadResponse(TEvPQProxy::TEv
     ByteSize = DirectReadByteSize;
     return diff;
 }
-
 
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadResponse::TPtr& ev, const TActorContext& ctx) {
@@ -1913,9 +1913,9 @@ ui64 TReadSessionActor<UseMigrationProtocol>::PrepareResponse(typename TFormedRe
     formedResponse->ByteSizeBeforeFiltering = formedResponse->Response.ByteSize();
 
     if constexpr (UseMigrationProtocol) {
-        formedResponse->HasMessages = RemoveEmptyMessages(*formedResponse->Response.mutable_data_batch());
+        formedResponse->HasMessages = HasMessages(formedResponse->Response.data_batch());
     } else {
-        formedResponse->HasMessages = RemoveEmptyMessages(*formedResponse->Response.mutable_read_response());
+        formedResponse->HasMessages = HasMessages(formedResponse->Response.read_response());
     }
 
     return formedResponse->HasMessages ? formedResponse->Response.ByteSize() : 0;

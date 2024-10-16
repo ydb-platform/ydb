@@ -595,7 +595,7 @@ int TClientCommandRootCommon::Run(TConfig& config) {
     }
 
     TString prompt;
-    if (!ProfileName.Empty()) {
+    if (!ProfileName.empty()) {
         prompt = ProfileName + "> ";
     } else {
         prompt = "ydb> ";

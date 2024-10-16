@@ -691,7 +691,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
 
         TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0, settings).ExtractValueSync();
         UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
-        UNIT_ASSERT(results.GetNextFetchToken().Empty());
+        UNIT_ASSERT(results.GetNextFetchToken().empty());
 
         TResultSetParser resultSet(results.ExtractResultSet());
         UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), NUMBER_OF_ROWS);

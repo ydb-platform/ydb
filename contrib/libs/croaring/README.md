@@ -410,10 +410,17 @@ int main() {
     // we can write a bitmap to a pointer and recover it later
     uint32_t expectedsize = roaring_bitmap_portable_size_in_bytes(r1);
     char *serializedbytes = malloc(expectedsize);
+    // When serializing data to a file, we recommend that you also use
+    // checksums so that, at deserialization, you can be confident
+    // that you are recovering the correct data.
     roaring_bitmap_portable_serialize(r1, serializedbytes);
     // Note: it is expected that the input follows the specification
     // https://github.com/RoaringBitmap/RoaringFormatSpec
     // otherwise the result may be unusable.
+    // The 'roaring_bitmap_portable_deserialize_safe' function will not read
+    // beyond expectedsize bytes.
+    // We recommend you further use checksums to make sure that the input is from
+    // serialized data.
     roaring_bitmap_t *t = roaring_bitmap_portable_deserialize_safe(serializedbytes, expectedsize);
     if(t == NULL) { return EXIT_FAILURE; }
     const char *reason = NULL;
@@ -428,7 +435,11 @@ int main() {
         roaring_bitmap_portable_deserialize_size(serializedbytes, expectedsize);
     assert(sizeofbitmap ==
            expectedsize);  // sizeofbitmap would be zero if no bitmap were found
-    // we can also read the bitmap "safely" by specifying a byte size limit:
+    // We can also read the bitmap "safely" by specifying a byte size limit.
+    // The 'roaring_bitmap_portable_deserialize_safe' function will not read
+    // beyond expectedsize bytes.
+    // We recommend you further use checksums to make sure that the input is from
+    // serialized data.
     t = roaring_bitmap_portable_deserialize_safe(serializedbytes, expectedsize);
     if(t == NULL) {
         printf("Problem during deserialization.\n");
@@ -500,6 +511,8 @@ We also support efficient 64-bit compressed bitmaps in C:
   roaring64_bitmap_free(r2);
 ```
 
+The API is similar to the conventional 32-bit bitmaps. Please see
+the header file `roaring64.h` (compare with `roaring.h`).
 
 # Conventional bitsets (C)
 

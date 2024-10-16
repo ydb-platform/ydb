@@ -138,7 +138,7 @@ void THttpRequest::Handle(TEvStatistics::TEvLoadStatisticsQueryResponse::TPtr& e
         return;
     }
 
-    auto countMinSketch = std::unique_ptr<TCountMinSketch>(TCountMinSketch::FromString(msg->Data->Data(), msg->Data->Size()));
+    auto countMinSketch = std::unique_ptr<TCountMinSketch>(TCountMinSketch::FromString(msg->Data->data(), msg->Data->size()));
     const auto probe = countMinSketch->Probe(cell.Data(), cell.Size());
     HttpReply(Params[EParamType::PATH] + "[" + Params[EParamType::COLUMN_NAME] + "]=" + std::to_string(probe));
 }

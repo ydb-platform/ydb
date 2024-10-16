@@ -8,10 +8,11 @@
 
 namespace NKikimr::NSchemeShard {
 
-TPath::TChecker::TChecker(const TPath& path)
+TPath::TChecker::TChecker(const TPath& path, const NCompat::TSourceLocation location)
     : Path(path)
     , Failed(false)
     , Status(EStatus::StatusSuccess)
+    , Location(location)
 {
 }
 
@@ -32,7 +33,14 @@ const TPath::TChecker& TPath::TChecker::Fail(EStatus status, const TString& erro
     Status = status;
     Error = TStringBuilder() << "Check failed"
         << ": path: '" << Path.PathString() << "'"
-        << ", error: " << error;
+        << ", error: " << error
+    // this line included only in debug error
+    // because we do not want to forward information
+    // about our sources to db user
+#ifndef NDEBUG
+        << ", source_location: " << NUtil::TrimSourceFileName(Location.file_name()) << ":" << Location.line()
+#endif
+        ;
 
     return *this;
 }
@@ -888,6 +896,19 @@ const TPath::TChecker& TPath::TChecker::IsResourcePool(EStatus status) const {
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::IsBackupCollection(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsBackupCollection()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a backup collection"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
 const TPath::TChecker& TPath::TChecker::PathShardsLimit(ui64 delta, EStatus status) const {
     if (Failed) {
         return *this;
@@ -1102,8 +1123,8 @@ TPath::TPath(TVector<TPathElement::TPtr>&& elements, TSchemeShard* ss)
     Y_ABORT_UNLESS(IsResolved());
 }
 
-TPath::TChecker TPath::Check() const {
-    return TChecker(*this);
+TPath::TChecker TPath::Check(const NCompat::TSourceLocation location) const {
+    return TChecker(*this, location);
 }
 
 bool TPath::IsEmpty() const {

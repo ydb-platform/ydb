@@ -205,6 +205,7 @@ private:
         auto request = MakeHolder<TConsoleRequest>();
         request->Record.MutableRequest()->CopyFrom(*this->GetProtoRequest());
         request->Record.SetUserToken(this->Request_->GetSerializedToken());
+        request->Record.SetPeerName(this->Request_->GetPeerName());
         NTabletPipe::SendData(IActor::SelfId(), ConsolePipe, request.Release());
     }
 };

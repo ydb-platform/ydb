@@ -30,7 +30,7 @@ TString RelPathFromAbsolute(TString db, TString path) {
     }
 
     db.push_back('/');
-    path = path.erase(0, Min(path.Size(), db.Size()));
+    path = path.erase(0, Min(path.size(), db.size()));
     return path ? path : "/";
 }
 
@@ -64,7 +64,7 @@ TMap<TStringBuf, ui64> SizeSuffix {
 }
 
 ui64 SizeFromString(TStringBuf s) {
-    size_t pos = s.Size();
+    size_t pos = s.size();
     while (pos > 0 && !isdigit(s[pos - 1])) {
         --pos;
     }

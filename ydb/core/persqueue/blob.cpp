@@ -144,7 +144,7 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
         keySize = ReadUnaligned<ui8>(data);
         data += sizeof(ui8);
         explicitHashKey = TString(data, keySize);
-        data += explicitHashKey.Size();
+        data += explicitHashKey.size();
     }
 
     TInstant writeTimestamp;

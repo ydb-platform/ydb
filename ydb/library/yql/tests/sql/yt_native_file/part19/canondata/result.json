@@ -1747,6 +1747,27 @@
             "uri": "https://{canondata_backend}/1942100/33d51fa00fd086c78b2c0087e9e9f2249eef2d76/resource.tar.gz#test.test_order_by-order_by_dot_column-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[order_by-order_by_missing_project_column_ignored--Debug]": [
+        {
+            "checksum": "71d6905dd2e8fc6e3b80190e45d4f056",
+            "size": 636,
+            "uri": "https://{canondata_backend}/1881367/6f52d48e883a42b65664e9e69900a025414071f8/resource.tar.gz#test.test_order_by-order_by_missing_project_column_ignored--Debug_/opt.yql"
+        }
+    ],
+    "test.test[order_by-order_by_missing_project_column_ignored--Plan]": [
+        {
+            "checksum": "55515ae638f317612d048052be489bfd",
+            "size": 1740,
+            "uri": "https://{canondata_backend}/1881367/6f52d48e883a42b65664e9e69900a025414071f8/resource.tar.gz#test.test_order_by-order_by_missing_project_column_ignored--Plan_/plan.txt"
+        }
+    ],
+    "test.test[order_by-order_by_missing_project_column_ignored--Results]": [
+        {
+            "checksum": "34aa47c9e627357ce32cc88b1e8814eb",
+            "size": 2756,
+            "uri": "https://{canondata_backend}/1881367/6f52d48e883a42b65664e9e69900a025414071f8/resource.tar.gz#test.test_order_by-order_by_missing_project_column_ignored--Results_/results.txt"
+        }
+    ],
     "test.test[order_by-order_by_tablepath_column--Debug]": [
         {
             "checksum": "57839c0ee7f085e35c24a04cff8de49e",
@@ -2924,9 +2945,9 @@
     ],
     "test.test[window-full/session--Debug]": [
         {
-            "checksum": "a7f5b924c596e4861cfff98981b5f071",
-            "size": 11042,
-            "uri": "https://{canondata_backend}/1937027/16b7289b1b8f5fdff728155d836fa2b238949b2d/resource.tar.gz#test.test_window-full_session--Debug_/opt.yql"
+            "checksum": "fd79f82807ae5a2b2ac7181f3da01c58",
+            "size": 11314,
+            "uri": "https://{canondata_backend}/1942173/f70acaf8d9dbbd62a5305d5424f4de9ac3080ddc/resource.tar.gz#test.test_window-full_session--Debug_/opt.yql"
         }
     ],
     "test.test[window-full/session--Plan]": [

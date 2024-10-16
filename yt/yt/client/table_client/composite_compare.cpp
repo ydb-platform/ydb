@@ -310,7 +310,7 @@ TFingerprint CompositeFarmHash(TYsonStringBuf value)
             break;
         case EYsonItemType::StringValue: {
             auto string = item.UncheckedAsString();
-            result = FarmFingerprint(FarmFingerprint(string.Data(), string.size()));
+            result = FarmFingerprint(FarmFingerprint(string.data(), string.size()));
             break;
         }
         case EYsonItemType::EndOfStream:
@@ -351,7 +351,7 @@ TFingerprint CompositeFarmHash(TYsonStringBuf value)
                 continue;
             case EYsonItemType::StringValue: {
                 auto string = item.UncheckedAsString();
-                result = FarmFingerprint(result, FarmFingerprint(string.Data(), string.size()));
+                result = FarmFingerprint(result, FarmFingerprint(string.data(), string.size()));
                 continue;
             }
             case EYsonItemType::EndOfStream:

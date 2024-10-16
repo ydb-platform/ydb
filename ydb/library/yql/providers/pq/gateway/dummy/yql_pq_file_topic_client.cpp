@@ -84,7 +84,7 @@ private:
 
 class TFileTopicReadSession : public NYdb::NTopic::IReadSession {
 
-constexpr static auto FILE_POLL_PERIOD = TDuration::MilliSeconds(100);    
+constexpr static auto FILE_POLL_PERIOD = TDuration::MilliSeconds(5);    
 
 public:
     TFileTopicReadSession(TFile file, NYdb::NTopic::TPartitionSession::TPtr session, const TString& producerId = ""): 
@@ -187,10 +187,14 @@ private:
             TString rawMsg;
             TVector<TMessage> msgs;
             size_t size = 0;
+            ui64 maxBatchRowSize = 100;
 
             while (size_t read = fi.ReadLine(rawMsg)) {
                 msgs.emplace_back(MakeNextMessage(rawMsg));
                 MsgOffset_++;
+                if (!maxBatchRowSize--) {
+                    break;
+                }
                 size += rawMsg.size();
             }
             if (!msgs.empty()) {

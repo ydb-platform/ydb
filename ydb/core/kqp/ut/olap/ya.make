@@ -13,6 +13,7 @@ ELSE()
 ENDIF()
 
 SRCS(
+    delete_ut.cpp
     kqp_olap_stats_ut.cpp
     GLOBAL kqp_olap_ut.cpp
     sys_view_ut.cpp
@@ -32,6 +33,7 @@ SRCS(
 PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
+    ydb/library/yql/sql/pg_dummy
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/tx/columnshard/test_helper
     ydb/core/tx/columnshard

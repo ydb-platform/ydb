@@ -13,6 +13,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/fmt
+    contrib/libs/simdjson
     ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/config/protos
     ydb/core/fq/libs/control_plane_storage
@@ -25,7 +26,7 @@ PEERDIR(
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/proto
     ydb/library/yql/providers/pq/provider
-    ydb/library/yql/public/purecalc/common
+    ydb/core/fq/libs/row_dispatcher/purecalc_no_pg_wrapper
     ydb/public/sdk/cpp/client/ydb_scheme
     ydb/public/sdk/cpp/client/ydb_table
 )
@@ -39,4 +40,3 @@ IF(NOT EXPORT_CMAKE)
         ut
     )
 ENDIF()
-

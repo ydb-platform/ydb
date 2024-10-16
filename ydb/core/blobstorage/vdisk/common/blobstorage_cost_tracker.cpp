@@ -1,4 +1,5 @@
 #include "blobstorage_cost_tracker.h"
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
 namespace NKikimr {
 
@@ -66,6 +67,19 @@ TBsCostTracker::TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::E
     default:
         CostModel = std::make_unique<TBsCostModelErasureNone>(diskType);
         break;
+    }
+}
+
+
+ui64 TBsCostModelBase::GetCost(const NPDisk::TEvChunkRead& ev) const {
+    return ReadCost(ev.Size);
+}
+
+ui64 TBsCostModelBase::GetCost(const NPDisk::TEvChunkWrite& ev) const {
+    if (ev.PriorityClass == NPriPut::Log) {
+        return WriteCost(ev.PartsPtr->ByteSize());
+    } else {
+        return HugeWriteCost(ev.PartsPtr->ByteSize());
     }
 }
 

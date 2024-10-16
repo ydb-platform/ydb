@@ -358,7 +358,7 @@ protected:
             return packer.Unpack(std::move(packedValue), HolderFactory);
         } else {
             if (expectedLength) {
-                UNIT_ASSERT_VALUES_EQUAL_C(packedValue.Size(), *expectedLength, additionalMsg);
+                UNIT_ASSERT_VALUES_EQUAL_C(packedValue.size(), *expectedLength, additionalMsg);
             }
             ValidateEmbeddedLength(packedValue, additionalMsg);
             return packer.Unpack(packedValue, HolderFactory);

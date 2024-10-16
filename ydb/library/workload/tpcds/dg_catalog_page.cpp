@@ -13,13 +13,15 @@ TTpcDSGeneratorCatalogPage::TTpcDSGeneratorCatalogPage(const TTpcdsWorkloadDataI
     : TBulkDataGenerator(owner, CATALOG_PAGE)
 {}
 
-void TTpcDSGeneratorCatalogPage::GenerateRows(TContexts& ctxs) {
+void TTpcDSGeneratorCatalogPage::GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) {
     TVector<CATALOG_PAGE_TBL> catalogPageList(ctxs.front().GetCount());
     for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
         mk_w_catalog_page(NULL, ctxs.front().GetStart() + i);
         catalogPageList[i] = g_w_catalog_page;
         tpcds_row_stop(TableNum);
     }
+    g.Release();
+
     TCsvItemWriter<CATALOG_PAGE_TBL> writer(ctxs.front().GetCsv().Out);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writer, cp_catalog_page_sk);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, cp_catalog_page_id);

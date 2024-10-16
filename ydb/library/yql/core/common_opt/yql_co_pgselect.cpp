@@ -4049,17 +4049,17 @@ TExprNode::TPtr ExpandPgLike(const TExprNode::TPtr& node, TExprContext& ctx, TOp
             TStringBuf arg;
             if (!hasUnderscore && countOfPercents == 1 && str.StartsWith('%')) {
                 op = "EndsWith";
-                arg = str.SubString(1, str.Size() - 1);
+                arg = str.SubString(1, str.size() - 1);
             }
 
             if (!hasUnderscore && countOfPercents == 1 && str.EndsWith('%')) {
                 op = "StartsWith";
-                arg = str.SubString(0, str.Size() - 1);
+                arg = str.SubString(0, str.size() - 1);
             }
 
             if (!hasUnderscore && countOfPercents == 2 && str.StartsWith('%') && str.EndsWith('%')) {
                 op = "StringContains";
-                arg = str.SubString(1, str.Size() - 2);
+                arg = str.SubString(1, str.size() - 2);
             }
 
             if (!op.empty()) {

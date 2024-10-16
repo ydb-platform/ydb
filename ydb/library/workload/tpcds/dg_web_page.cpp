@@ -12,12 +12,14 @@ TTpcDSGeneratorWebPage::TTpcDSGeneratorWebPage(const TTpcdsWorkloadDataInitializ
     : TBulkDataGenerator(owner, WEB_PAGE)
 {}
 
-void TTpcDSGeneratorWebPage::GenerateRows(TContexts& ctxs) {
+void TTpcDSGeneratorWebPage::GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) {
     TVector<W_WEB_PAGE_TBL> webPageList(ctxs.front().GetCount());
     for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
         mk_w_web_page(&webPageList[i], ctxs.front().GetStart() + i);
         tpcds_row_stop(TableNum);
     }
+    g.Release();
+
     TCsvItemWriter<W_WEB_PAGE_TBL> writer(ctxs.front().GetCsv().Out);
     CSV_WRITER_REGISTER_FIELD_KEY(writer, "wp_web_page_sk", wp_page_sk);
     CSV_WRITER_REGISTER_FIELD_STRING(writer, "wp_web_page_id", wp_page_id);

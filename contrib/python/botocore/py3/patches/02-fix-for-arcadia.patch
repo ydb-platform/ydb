@@ -1,0 +1,203 @@
+--- contrib/python/botocore/py3/botocore/data/endpoints.json	(index)
++++ contrib/python/botocore/py3/botocore/data/endpoints.json	(working tree)
+@@ -21165,6 +21165,46 @@
+     "regionRegex" : "^eu\\-isoe\\-\\w+\\-\\d+$",
+     "regions" : { },
+     "services" : { }
++  }, {
++    "defaults" : {
++      "hostname" : "{service}.{region}.{dnsSuffix}",
++      "protocols" : [ "https" ],
++      "signatureVersions" : [ "v4" ]
++    },
++    "dnsSuffix" : "yandex.net",
++    "partition" : "yandex",
++    "partitionName" : "Yandex",
++    "regions" : {
++      "yandex" : {
++        "description" : "Yandex"
++      }
++    },
++    "services" : {
++      "s3" : {
++        "defaults" : {
++          "protocols" : [ "http", "https" ],
++          "signatureVersions" : [ "s3", "s3v4" ]
++        },
++        "endpoints" : {
++          "yandex" : {
++            "hostname" : "s3.mds.yandex.net"
++          },
++          "yandex-test" : {
++            "hostname" : "s3.mdst.yandex.net"
++          }
++        }
++      },
++      "sqs" : {
++        "defaults" : {
++          "protocols" : [ "http" ]
++        },
++        "endpoints" : {
++          "yandex" : {
++            "hostname": "sqs.yandex.net:8771"
++          }
++        }
++      }
++    }
+   } ],
+   "version" : 3
+ }
+\ No newline at end of file
+--- contrib/python/botocore/py3/botocore/__init__.py	(index)
++++ contrib/python/botocore/py3/botocore/__init__.py	(working tree)
+@@ -64,1 +64,1 @@ _xform_cache = {
+-BOTOCORE_ROOT = os.path.dirname(os.path.abspath(__file__))
++BOTOCORE_ROOT = os.path.dirname(__file__)
+--- contrib/python/botocore/py3/botocore/configprovider.py	(index)
++++ contrib/python/botocore/py3/botocore/configprovider.py	(working tree)
+@@ -52,1 +52,1 @@ logger = logging.getLogger(__name__)
+-    'region': ('region', 'AWS_DEFAULT_REGION', None, None),
++    'region': ('region', 'AWS_DEFAULT_REGION', 'yandex', None),
+--- contrib/python/botocore/py3/botocore/loaders.py	(index)
++++ contrib/python/botocore/py3/botocore/loaders.py	(working tree)
+@@ -101,14 +101,17 @@ information that doesn't quite fit in the original models, but is still needed
+ for the sdk. For instance, additional operation parameters might be added here
+ which don't represent the actual service api.
+ """
++import collections
+ import logging
+ import os
+ 
+ from botocore import BOTOCORE_ROOT
+-from botocore.compat import HAS_GZIP, OrderedDict, json
++from botocore.compat import HAS_GZIP, OrderedDict, json, six
+ from botocore.exceptions import DataNotFoundError, UnknownServiceError
+ from botocore.utils import deep_merge
+ 
++from library.python import resource
++
+ _JSON_OPEN_METHODS = {
+     '.json': open,
+ }
+@@ -197,6 +200,67 @@ class JSONFileLoader(object):
+         return None
+ 
+ 
++# SQS-119
++class HybridJsonLoader(JSONFileLoader):
++
++    type_data_cache = collections.defaultdict(lambda: collections.defaultdict(set))
++
++    arcadia_resources_path = (
++        'contrib/python/awscli/awscli/data/',
++        'contrib/python/boto3/py3/boto3/data/',
++        'contrib/python/botocore/py3/botocore/data/',
++    )
++
++    @classmethod
++    def collect_service_data(cls):
++        if cls.type_data_cache:
++            return
++
++        for res in resource.resfs_files():
++            res = six.ensure_str(res)
++            if res.startswith(cls.arcadia_resources_path):
++                splitted_path = res.split('/data/')[1].split('/')
++                if len(splitted_path) >= 3:
++                    service_name, version, type_name = splitted_path[:3]
++                    type_name = type_name.replace('.json.gz', '').replace('.json', '')
++                    cls.type_data_cache[type_name][service_name].add(version)
++
++    @classmethod
++    def read_from_resources(cls, file_path):
++        for ext in _JSON_OPEN_METHODS:
++            for prefix in cls.arcadia_resources_path:
++                path = f'{prefix}{file_path}{ext}'
++                data = resource.resfs_read(path)
++                if data:
++                    return path, ext, data
++        return
++
++    def exists(self, file_path):
++        if self.read_from_resources(file_path):
++            return True
++        return super(HybridJsonLoader, self).exists(file_path)
++
++    def _load_resource(self, full_path, ext, data):
++        # By default the file will be opened with locale encoding on Python 3.
++        # We specify "utf8" here to ensure the correct behavior.
++        if ext == ".json":
++            payload = data.decode('utf-8')
++        elif ext == ".json.gz":
++            import io
++            with gzip_open(io.BytesIO(data)) as fp:
++                payload = fp.read().decode('utf-8')
++        else:
++            raise ValueError(f"Unknown extension {ext}")
++
++        logger.debug("Loading JSON file: %s", full_path)
++        return json.loads(payload, object_pairs_hook=OrderedDict)
++
++    def load_file(self, file_path):
++        if load_args := self.read_from_resources(file_path):
++            return self._load_resource(*load_args)
++        return super(HybridJsonLoader, self).load_file(file_path)
++
++
+ def create_loader(search_path_string=None):
+     """Create a Loader class.
+ 
+@@ -231,7 +279,7 @@ class Loader(object):
+ 
+     """
+
+-    FILE_LOADER_CLASS = JSONFileLoader
++    FILE_LOADER_CLASS = HybridJsonLoader
+     # The included models in botocore/data/ that we ship with botocore.
+     BUILTIN_DATA_PATH = os.path.join(BOTOCORE_ROOT, 'data')
+     # For convenience we automatically add ~/.aws/models to the data path.
+@@ -316,6 +364,11 @@ class Loader(object):
+                     if self.file_loader.exists(full_load_path):
+                         services.add(service_name)
+                         break
++
++        # SQS-119
++        HybridJsonLoader.collect_service_data()
++        services = services.union(HybridJsonLoader.type_data_cache[type_name].keys())
++
+         return sorted(services)
+ 
+     @instance_cache
+@@ -367,6 +420,11 @@ class Loader(object):
+                 # to the type_name passed in.
+                 if self.file_loader.exists(full_path):
+                     known_api_versions.add(dirname)
++
++        # SQS-119
++        HybridJsonLoader.collect_service_data()
++        known_api_versions = known_api_versions.union(HybridJsonLoader.type_data_cache[type_name][service_name])
++
+         if not known_api_versions:
+             raise DataNotFoundError(data_path=service_name)
+         return sorted(known_api_versions)
+@@ -449,6 +507,11 @@ class Loader(object):
+             if found is not None:
+                 return found, possible_path
+ 
++        # SQS-119
++        found_by_arcadia_loader = self.file_loader.load_file(name)
++        if found_by_arcadia_loader is not None:
++            return found_by_arcadia_loader, None
++
+         # We didn't find anything that matched on any path.
+         raise DataNotFoundError(data_path=name)
+ 
+@@ -499,6 +562,8 @@ class Loader:
+ 
+         :return: Whether the given path is within the package's data directory.
+         """
++        if path is None:
++            return True
+         path = os.path.expanduser(os.path.expandvars(path))
+         return path.startswith(self.BUILTIN_DATA_PATH)
+ 

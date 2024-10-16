@@ -4414,9 +4414,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
 
         TVector<TRuntimeNode> tupleItems;
         const auto data1 = pb.NewDataLiteral<NUdf::EDataSlot::String>(TString("\xEA\x00\x00\x00", 4));
-        tupleItems.push_back(pb.FromBytes(data1, NUdf::TDataType<ui32>::Id));
+        tupleItems.push_back(pb.FromBytes(data1, pb.NewDataType(NUdf::TDataType<ui32>::Id)));
         const auto data2 = pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<const char*>::Id);
-        tupleItems.push_back(pb.FromBytes(data2, NUdf::TDataType<ui32>::Id));
+        tupleItems.push_back(pb.FromBytes(data2, pb.NewDataType(NUdf::TDataType<ui32>::Id)));
         const auto pgmReturn = pb.NewTuple(tupleItems);
 
         const auto graph = setup.BuildGraph(pgmReturn);

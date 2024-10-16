@@ -142,7 +142,7 @@ std::shared_ptr<TOptimizerStatistics> NYql::OverrideStatistics(const NYql::TOpti
                 TString countMinRaw{};
                 Base64StrictDecode(countMinBase64, countMinRaw);
                 
-                cStat.CountMinSketch.reset(NKikimr::TCountMinSketch::FromString(countMinRaw.Data(), countMinRaw.Size()));
+                cStat.CountMinSketch.reset(NKikimr::TCountMinSketch::FromString(countMinRaw.data(), countMinRaw.size()));
             }
 
             res->ColumnStatistics->Data[columnName] = cStat;

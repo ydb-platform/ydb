@@ -32,6 +32,8 @@
 #include <util/system/condvar.h>
 #include <util/system/mutex.h>
 
+#include <queue>
+
 namespace NKikimr {
 namespace NPDisk {
 
@@ -45,11 +47,13 @@ class TCompletionEventSender;
 
 class TPDisk : public IPDisk {
 public:
-    ui32 PDiskId;
-    TActorId PDiskActor;
+    std::shared_ptr<TPDiskCtx> PCtx;
+    // ui32 PDiskId; // deprecated, moved to PCtx
+    // TActorId PDiskActor; // deprecated, moved to PCtx
+    // TActorSystem *ActorSystem; // deprecated, moved to PCtx
 
     // Monitoring
-    TPDiskMon Mon;
+    TPDiskMon Mon; // deprecated, will be moved to PCtx
 
 
     // Static state
@@ -71,9 +75,9 @@ public:
     TAtomic InputQueueCost = 0;
 
     TVector<TRequestBase*> JointLogReads;
-    TVector<TIntrusivePtr<TRequestBase>> JointChunkReads;
-    TVector<TRequestBase*> JointChunkWrites;
-    TVector<TLogWrite*> JointLogWrites;
+    std::queue<TIntrusivePtr<TRequestBase>> JointChunkReads;
+    std::queue<TRequestBase*> JointChunkWrites;
+    std::queue<TLogWrite*> JointLogWrites;
     TVector<TLogWrite*> JointCommits;
     TVector<TChunkTrim*> JointChunkTrims;
     TVector<std::unique_ptr<TChunkForget>> JointChunkForgets;
@@ -99,6 +103,9 @@ public:
     TControlWrapper ForsetiMaxLogBatchNs;
     TControlWrapper ForsetiOpPieceSizeSsd;
     TControlWrapper ForsetiOpPieceSizeRot;
+    TControlWrapper UseNoopSchedulerSSD;
+    TControlWrapper UseNoopSchedulerHDD;
+    bool UseNoopSchedulerCached = false;
 
     // SectorMap Controls
     TControlWrapper SectorMapFirstSectorReadRate;
@@ -118,7 +125,6 @@ public:
     TNonceSet ForceLogNonceDiff;
 
     // Static state
-    TActorSystem *ActorSystem;
     alignas(16) TDiskFormat Format;
     ui64 ExpectedDiskGuid;
     TPDiskCategory PDiskCategory;
@@ -167,7 +173,7 @@ public:
 
     // Initialization data
     ui64 InitialSysLogWritePosition = 0;
-    EInitPhase InitPhase = EInitPhase::Uninitialized;
+    std::atomic<EInitPhase> InitPhase = EInitPhase::Uninitialized;
     TBuffer *InitialTailBuffer = nullptr;
     TLogPosition InitialLogPosition{0, 0};
     volatile ui64 InitialPreviousNonce = 0;
@@ -197,9 +203,11 @@ public:
     // Debug
     std::function<TString()> DebugInfoGenerator;
 
+    NLWTrace::TOrbit UpdateCycleOrbit;
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Initialization
-    TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
+    TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
     TString DynamicStateToString(bool isMultiline);
     TCheckDiskFormatResult ReadChunk0Format(ui8* formatSectors, const TMainKey& mainKey); // Called by actor
     bool IsFormatMagicValid(ui8 *magicData, ui32 magicDataSize); // Called by actor
@@ -288,8 +296,7 @@ public:
     void SendChunkReadError(const TIntrusivePtr<TChunkRead>& read, TStringStream& errorReason,
             NKikimrProto::EReplyStatus status);
     EChunkReadPieceResult ChunkReadPiece(TIntrusivePtr<TChunkRead> &read, ui64 pieceCurrentSector, ui64 pieceSizeLimit,
-            ui64 *reallyReadBytes, NWilson::TTraceId traceId, NLWTrace::TOrbit&& orbit);
-    void SplitChunkJobSize(ui32 totalSize, ui32 *outSmallJobSize, ui32 *outLargeJObSize, ui32 *outSmallJobCount);
+            NWilson::TTraceId traceId, NLWTrace::TOrbit&& orbit);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk locking
     TVector<TChunkIdx> LockChunksForOwner(TOwner owner, const ui32 count, TString &errorReason);
@@ -342,7 +349,8 @@ public:
     void KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEventSender *completionAction);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Update process
-    void ProcessLogWriteQueueAndCommits();
+    void ProcessLogWriteQueue();
+    void ProcessLogWriteBatch(TVector<TLogWrite*> logWrites, TVector<TLogWrite*> commits);
     void ProcessChunkForgetQueue();
     void ProcessChunkWriteQueue();
     void ProcessChunkReadQueue();
@@ -362,7 +370,7 @@ public:
 
     // Schedules EvReadLogResult event for the system log
     void ResetInit();
-    bool Initialize(TActorSystem *actorSystem, const TActorId &pDiskActorId); // Called by actor
+    bool Initialize(); // Called by actor
     void InitiateReadSysLog(const TActorId &pDiskActor); // Called by actor
     void ProcessReadLogResult(const TEvReadLogResult &evReadLogResult, const TActorId &pDiskActor);
 
@@ -372,12 +380,13 @@ public:
     bool PreprocessRequestImpl(T *req); // const;
     NKikimrProto::EReplyStatus CheckOwnerAndRound(TRequestBase* req, TStringStream& err);
     bool PreprocessRequest(TRequestBase *request);
-    void PushRequestToForseti(TRequestBase *request);
-    void AddJobToForseti(NSchLab::TCbs *cbs, TRequestBase *request, NSchLab::EJobKind jobKind);
+    void PushRequestToScheduler(TRequestBase *request);
+    void AddJobToScheduler(TRequestBase *request, NSchLab::EJobKind jobKind);
     void RouteRequest(TRequestBase *request);
     void ProcessPausedQueue();
     void ProcessPendingActivities();
     void EnqueueAll();
+    void GetJobsFromForsetti();
     void Update() override;
     void Wakeup() override;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -399,4 +408,3 @@ bool ParseSectorOffset(const TDiskFormat& format, TActorSystem *actorSystem, ui3
 
 } // NPDisk
 } // NKikimr
-

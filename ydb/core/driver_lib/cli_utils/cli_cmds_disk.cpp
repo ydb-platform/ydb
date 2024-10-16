@@ -1,5 +1,5 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
-#include <util/random/entropy.h>
+#include <ydb/core/util/random.h>
 #include "cli.h"
 #include "cli_cmds.h"
 
@@ -164,9 +164,9 @@ public:
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
         Path = config.ParseResult->GetFreeArgs()[0];
-        EntropyPool().Read(&ChunkKey, sizeof(NKikimr::NPDisk::TKey));
-        EntropyPool().Read(&LogKey, sizeof(NKikimr::NPDisk::TKey));
-        EntropyPool().Read(&SysLogKey, sizeof(NKikimr::NPDisk::TKey));
+        SafeEntropyPoolRead(&ChunkKey, sizeof(NKikimr::NPDisk::TKey));
+        SafeEntropyPoolRead(&LogKey, sizeof(NKikimr::NPDisk::TKey));
+        SafeEntropyPoolRead(&SysLogKey, sizeof(NKikimr::NPDisk::TKey));
         bool hasMainOption = config.ParseResult->FindLongOptParseResult("main-key");
         bool hasMasterOption = config.ParseResult->FindLongOptParseResult("master-key");
         bool hasKOption = config.ParseResult->FindCharOptParseResult('k');

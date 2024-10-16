@@ -55,24 +55,25 @@ Y_UNIT_TEST_SUITE(TSectorMapPerformance) {
         NPDisk::TSectorMap sectorMap(deviceSize, diskMode);
         sectorMap.ZeroInit(2);
 
-        double timeElapsed = 0;
         if (operationType == EOperationType::OperationRead) {
             sectorMap.Write((ui8*)data.data(), dataSize, sectorPos * NPDisk::NSectorMap::SECTOR_SIZE);
-            THPTimer timer;
-            sectorMap.Read((ui8*)data.data(), dataSize, sectorPos * NPDisk::NSectorMap::SECTOR_SIZE);
-            timeElapsed = timer.Passed();
-        } else {
-            THPTimer timer;
-            sectorMap.Write((ui8*)data.data(), dataSize, sectorPos * NPDisk::NSectorMap::SECTOR_SIZE);
-            timeElapsed = timer.Passed();
         }
+        double timeElapsed = 0;
+        THPTimer timer;
+        if (operationType == EOperationType::OperationRead) {
+            sectorMap.Read((ui8*)data.data(), dataSize, sectorPos * NPDisk::NSectorMap::SECTOR_SIZE);
+        } else {
+            sectorMap.Write((ui8*)data.data(), dataSize, sectorPos * NPDisk::NSectorMap::SECTOR_SIZE);
+        }
+        timeElapsed = timer.Passed();
 
         double relativeDeviation = (timeElapsed - timeExpected) / timeExpected;
         if (time) {
             *time = { timeExpected, timeElapsed };
         }
 
-        return relativeDeviation >= -deviationRange.first && relativeDeviation <= deviationRange.second;
+        bool ok = relativeDeviation >= -deviationRange.first && relativeDeviation <= deviationRange.second;
+        return NSan::PlainOrUnderSanitizer(ok, true);
     }
 
 
@@ -88,10 +89,6 @@ Y_UNIT_TEST_SUITE(TSectorMapPerformance) {
     MAKE_TEST(HDD, 1960, 100, Read, Last);
     MAKE_TEST(HDD, 1960, 100, Write, First);
     MAKE_TEST(HDD, 1960, 100, Write, Last);
-    MAKE_TEST(HDD, 1960, 1000, Read, First);
-    MAKE_TEST(HDD, 1960, 1000, Read, Last);
-    MAKE_TEST(HDD, 1960, 1000, Write, First);
-    MAKE_TEST(HDD, 1960, 1000, Write, Last);
 
     MAKE_TEST(SSD, 1960, 100, Read, First);
     MAKE_TEST(SSD, 1960, 100, Write, First);

@@ -831,8 +831,8 @@ private:
         return TStatus::Ok;
     }
 
-Ydb::Table::VectorIndexSettings SerializeVectorIndexSettingsToProto(const TCoNameValueTupleList& indexSettings) {
-    Ydb::Table::VectorIndexSettings proto;
+Ydb::Table::KMeansTreeSettings SerializeVectorIndexSettingsToProto(const TCoNameValueTupleList& indexSettings) {
+    Ydb::Table::KMeansTreeSettings proto;
 
     for (const auto& indexSetting : indexSettings) {
         const auto& name = indexSetting.Name().Value();
@@ -850,8 +850,8 @@ Ydb::Table::VectorIndexSettings SerializeVectorIndexSettingsToProto(const TCoNam
             YQL_ENSURE(false, "Wrong index setting name: " << name);
     }
 
-    YQL_ENSURE(proto.metric_case() != Ydb::Table::VectorIndexSettings::METRIC_NOT_SET, "Missed index setting distance or similarity");
-    YQL_ENSURE(proto.vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED, "Missed index setting vector_type");
+    YQL_ENSURE(proto.metric_case() != Ydb::Table::KMeansTreeSettings::METRIC_NOT_SET, "Missed index setting distance or similarity");
+    YQL_ENSURE(proto.vector_type() != Ydb::Table::KMeansTreeSettings::VECTOR_TYPE_UNSPECIFIED, "Missed index setting vector_type");
     YQL_ENSURE(proto.vector_dimension(), "Missed index setting vector_dimension");
 
     return proto;

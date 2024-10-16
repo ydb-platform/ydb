@@ -25,7 +25,7 @@ class ChangefeedDescription;
 class DescribeTableResult;
 class ExplicitPartitions;
 class GlobalIndexSettings;
-class VectorIndexSettings;
+class KMeansTreeSettings;
 class PartitioningSettings;
 class DateTypeColumnModeSettings;
 class TtlSettings;
@@ -237,7 +237,7 @@ public:
     template <typename TProto>
     static TVectorIndexSettings FromProto(const TProto& proto);
 
-    void SerializeTo(Ydb::Table::VectorIndexSettings& settings) const;
+    void SerializeTo(Ydb::Table::KMeansTreeSettings& settings) const;
 
     void Out(IOutputStream &o) const;
 };

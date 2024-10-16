@@ -2402,11 +2402,11 @@ template <typename TProto>
 TVectorIndexSettings TVectorIndexSettings::FromProto(const TProto& proto) {
     auto convertDistance = [] (auto distance) -> auto {
         switch (distance) {
-        case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
+        case Ydb::Table::KMeansTreeSettings::DISTANCE_COSINE:
             return EDistance::Cosine;
-        case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
+        case Ydb::Table::KMeansTreeSettings::DISTANCE_MANHATTAN:
             return EDistance::Manhattan;
-        case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
+        case Ydb::Table::KMeansTreeSettings::DISTANCE_EUCLIDEAN:
             return EDistance::Euclidean;
         default:
             return EDistance::Unknown;
@@ -2415,9 +2415,9 @@ TVectorIndexSettings TVectorIndexSettings::FromProto(const TProto& proto) {
 
     auto convertSimilarity = [] (auto similarity) -> auto {
         switch (similarity) {
-        case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
+        case Ydb::Table::KMeansTreeSettings::SIMILARITY_COSINE:
             return ESimilarity::Cosine;
-        case Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT:
+        case Ydb::Table::KMeansTreeSettings::SIMILARITY_INNER_PRODUCT:
             return ESimilarity::InnerProduct;
         default:
             return ESimilarity::Unknown;
@@ -2426,13 +2426,13 @@ TVectorIndexSettings TVectorIndexSettings::FromProto(const TProto& proto) {
 
     auto convertVectorType = [] (auto vectorType) -> auto {
         switch (vectorType) {
-        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
+        case Ydb::Table::KMeansTreeSettings::VECTOR_TYPE_FLOAT:
             return EVectorType::Float;
-        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
+        case Ydb::Table::KMeansTreeSettings::VECTOR_TYPE_UINT8:
             return EVectorType::Uint8;
-        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
+        case Ydb::Table::KMeansTreeSettings::VECTOR_TYPE_INT8:
             return EVectorType::Int8;
-        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT:
+        case Ydb::Table::KMeansTreeSettings::VECTOR_TYPE_BIT:
             return EVectorType::Bit;
         default:
             return EVectorType::Unknown;
@@ -2458,43 +2458,43 @@ TVectorIndexSettings TVectorIndexSettings::FromProto(const TProto& proto) {
     };
 }
 
-void TVectorIndexSettings::SerializeTo(Ydb::Table::VectorIndexSettings& settings) const {
+void TVectorIndexSettings::SerializeTo(Ydb::Table::KMeansTreeSettings& settings) const {
     auto convertDistance = [] (auto distance) -> auto {
         switch (distance) {
         case EDistance::Cosine:
-            return Ydb::Table::VectorIndexSettings::DISTANCE_COSINE;
+            return Ydb::Table::KMeansTreeSettings::DISTANCE_COSINE;
         case EDistance::Manhattan:
-            return Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN;
+            return Ydb::Table::KMeansTreeSettings::DISTANCE_MANHATTAN;
         case EDistance::Euclidean:
-            return Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
+            return Ydb::Table::KMeansTreeSettings::DISTANCE_EUCLIDEAN;
         case EDistance::Unknown:
-            return Ydb::Table::VectorIndexSettings::DISTANCE_UNSPECIFIED;
+            return Ydb::Table::KMeansTreeSettings::DISTANCE_UNSPECIFIED;
         }
     };
 
     auto convertSimilarity = [] (auto similarity) -> auto {
         switch (similarity) {
         case ESimilarity::Cosine:
-            return Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE;
+            return Ydb::Table::KMeansTreeSettings::SIMILARITY_COSINE;
         case ESimilarity::InnerProduct:
-            return Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT;
+            return Ydb::Table::KMeansTreeSettings::SIMILARITY_INNER_PRODUCT;
         case ESimilarity::Unknown:
-            return Ydb::Table::VectorIndexSettings::SIMILARITY_UNSPECIFIED;
+            return Ydb::Table::KMeansTreeSettings::SIMILARITY_UNSPECIFIED;
         }
     };
 
     auto convertVectorType = [] (auto vectorType) -> auto {
         switch (vectorType) {
         case EVectorType::Float:
-            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
+            return Ydb::Table::KMeansTreeSettings::VECTOR_TYPE_FLOAT;
         case EVectorType::Uint8:
-            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
+            return Ydb::Table::KMeansTreeSettings::VECTOR_TYPE_UINT8;
         case EVectorType::Int8:
-            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8;
+            return Ydb::Table::KMeansTreeSettings::VECTOR_TYPE_INT8;
         case EVectorType::Bit:
-            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT;
+            return Ydb::Table::KMeansTreeSettings::VECTOR_TYPE_BIT;
         case EVectorType::Unknown:
-            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED;
+            return Ydb::Table::KMeansTreeSettings::VECTOR_TYPE_UNSPECIFIED;
         }
     };
 

@@ -32,16 +32,16 @@ Y_DECLARE_OUT_SPEC(, Ydb::Import::ImportProgress::Progress, stream, value) {
     stream << Ydb::Import::ImportProgress_Progress_Name(value);
 }
 
-Y_DECLARE_OUT_SPEC(, Ydb::Table::VectorIndexSettings::Distance, stream, value) {
-    stream << Ydb::Table::VectorIndexSettings::Distance_Name(value);
+Y_DECLARE_OUT_SPEC(, Ydb::Table::KMeansTreeSettings::Distance, stream, value) {
+    stream << Ydb::Table::KMeansTreeSettings::Distance_Name(value);
 }
 
-Y_DECLARE_OUT_SPEC(, Ydb::Table::VectorIndexSettings::Similarity, stream, value) {
-    stream << Ydb::Table::VectorIndexSettings::Similarity_Name(value);
+Y_DECLARE_OUT_SPEC(, Ydb::Table::KMeansTreeSettings::Similarity, stream, value) {
+    stream << Ydb::Table::KMeansTreeSettings::Similarity_Name(value);
 }
 
-Y_DECLARE_OUT_SPEC(, Ydb::Table::VectorIndexSettings::VectorType, stream, value) {
-    stream << Ydb::Table::VectorIndexSettings::VectorType_Name(value);
+Y_DECLARE_OUT_SPEC(, Ydb::Table::KMeansTreeSettings::VectorType, stream, value) {
+    stream << Ydb::Table::KMeansTreeSettings::VectorType_Name(value);
 }
 
 Y_DECLARE_OUT_SPEC(, Ydb::Table::IndexBuildState_State, stream, value) {

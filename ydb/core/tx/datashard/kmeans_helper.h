@@ -219,13 +219,13 @@ void MakeScan(auto& record, const auto& createScan, const auto& badRequest) {
 
     auto handleType = [&]<template <typename...> typename T>() {
         switch (settings.vector_type()) {
-            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
+            case Ydb::Table::KMeansTreeSettings::VECTOR_TYPE_FLOAT:
                 return createScan.template operator()<T<float>>();
-            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
+            case Ydb::Table::KMeansTreeSettings::VECTOR_TYPE_UINT8:
                 return createScan.template operator()<T<ui8>>();
-            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
+            case Ydb::Table::KMeansTreeSettings::VECTOR_TYPE_INT8:
                 return createScan.template operator()<T<i8>>();
-            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT:
+            case Ydb::Table::KMeansTreeSettings::VECTOR_TYPE_BIT:
                 return badRequest("TODO(mbkkt) bit vector type is not supported");
             default:
                 return badRequest("Wrong vector type");
@@ -237,10 +237,10 @@ void MakeScan(auto& record, const auto& createScan, const auto& badRequest) {
         badRequest("Shouldn't be specified similarity and distance at the same time");
     } else if (settings.has_similarity()) {
         switch (settings.similarity()) {
-            case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
+            case Ydb::Table::KMeansTreeSettings::SIMILARITY_COSINE:
                 handleType.template operator()<TCosineSimilarity>();
                 break;
-            case Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT:
+            case Ydb::Table::KMeansTreeSettings::SIMILARITY_INNER_PRODUCT:
                 handleType.template operator()<TMaxInnerProductSimilarity>();
                 break;
             default:
@@ -249,15 +249,15 @@ void MakeScan(auto& record, const auto& createScan, const auto& badRequest) {
         }
     } else if (settings.has_distance()) {
         switch (settings.distance()) {
-            case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
+            case Ydb::Table::KMeansTreeSettings::DISTANCE_COSINE:
                 // We don't need to have separate implementation for distance, because clusters will be same as for
                 // similarity
                 handleType.template operator()<TCosineSimilarity>();
                 break;
-            case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
+            case Ydb::Table::KMeansTreeSettings::DISTANCE_MANHATTAN:
                 handleType.template operator()<TL1Distance>();
                 break;
-            case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
+            case Ydb::Table::KMeansTreeSettings::DISTANCE_EUCLIDEAN:
                 handleType.template operator()<TL2Distance>();
                 break;
             default:

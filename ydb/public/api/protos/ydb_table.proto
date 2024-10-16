@@ -60,7 +60,7 @@ message GlobalIndexSettings {
     PartitioningSettings partitioning_settings = 3;
 }
 
-message VectorIndexSettings {
+message KMeansTreeSettings {
     enum Distance {
         DISTANCE_UNSPECIFIED = 0;
         DISTANCE_COSINE = 1;
@@ -106,7 +106,7 @@ message GlobalUniqueIndex {
 message GlobalVectorKMeansTreeIndex {
     GlobalIndexSettings level_table_settings = 1;
     GlobalIndexSettings posting_table_settings = 2;
-    VectorIndexSettings vector_settings = 3;
+    KMeansTreeSettings vector_settings = 3;
 }
 
 // Represent secondary index

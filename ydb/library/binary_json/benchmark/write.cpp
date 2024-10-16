@@ -35,7 +35,7 @@ TString GetTestJsonString() {
     return NJson::WriteJson(GetTestJson(2, 100));
 }
 
-static void BenchSimdJson(benchmark::State& state) {
+static void BenchWriteSimdJson(benchmark::State& state) {
   TString value = GetTestJsonString();
   TStringBuf buf(value);
   for (auto _ : state) {

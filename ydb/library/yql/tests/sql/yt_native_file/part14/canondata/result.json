@@ -1756,9 +1756,9 @@
     ],
     "test.test[join-do_not_suppres_equijoin_input_sorts--Debug]": [
         {
-            "checksum": "39a7da36195278939749cfd0c802df2d",
-            "size": 4192,
-            "uri": "https://{canondata_backend}/212715/554ca8a35165199bfbc0a64aabd14c9754eff60c/resource.tar.gz#test.test_join-do_not_suppres_equijoin_input_sorts--Debug_/opt.yql"
+            "checksum": "705cc48e359738da82085e2ce49d6eb2",
+            "size": 4213,
+            "uri": "https://{canondata_backend}/1880306/fc65cec48f2afac2a67325b7ac55e41ecfa39dc8/resource.tar.gz#test.test_join-do_not_suppres_equijoin_input_sorts--Debug_/opt.yql"
         }
     ],
     "test.test[join-do_not_suppres_equijoin_input_sorts--Plan]": [

@@ -1794,7 +1794,7 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
     }
 }
 
-void TPartition::ContinueProcessTxsAndUserActs(const TActorContext&)
+void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(!KVWriteInProgress);
 
@@ -1805,14 +1805,22 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext&)
     auto visitor = [this](auto& event) {
         return this->PreProcessUserActionOrTransaction(event);
     };
+
+    const bool wasContinueBatching = CurrentBatchProcessResults.size() == 1
+        && CurrentBatchProcessResults.contains(EProcessResult::ContinueBatching);
+    CurrentBatchProcessResults.clear();
+
     while (BatchingState == ETxBatchingState::PreProcessing && !UserActionAndTransactionEvents.empty()) {
         if (ChangingConfig) {
             BatchingState = ETxBatchingState::Finishing;
             break;
         }
         auto& front = UserActionAndTransactionEvents.front();
-        switch (std::visit(visitor, front.Event)) {
+        const auto result = std::visit(visitor, front.Event);
+        ++CurrentBatchProcessResults[result];
+        switch (result) {
         case EProcessResult::Continue:
+        case EProcessResult::ContinueBatching:
             MoveUserActOrTxToCommitState();
             FirstEvent = false;
             break;
@@ -1832,6 +1840,12 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext&)
         }
         CurrentBatchSize += 1;
     }
+    if (!wasContinueBatching && CurrentBatchProcessResults.size() == 1 && CurrentBatchProcessResults.contains(EProcessResult::ContinueBatching)) {
+        return ctx.Schedule(
+            TDuration::MilliSeconds(Config.GetPartitionConfig().GetWriteBatching().GetIntervalMilliSeconds()),
+            new TEvPQ::TEvProceedTxAndUserActs());
+    }
+    CurrentBatchProcessResults.clear();
     if (UserActionAndTransactionEvents.empty()) {
         BatchingState = ETxBatchingState::Executing;
         return;
@@ -1847,6 +1861,7 @@ void TPartition::MoveUserActOrTxToCommitState() {
 
 void TPartition::ProcessCommitQueue() {
     CurrentBatchSize = 0;
+    CurrentBatchBytes = 0;
 
     Y_ABORT_UNLESS(!KVWriteInProgress);
     if (!PersistRequest) {
@@ -2254,6 +2269,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                 .External = false,
                 .IgnoreQuotaDeadline = true,
                 .HeartbeatVersion = std::nullopt,
+                .AllowBatching = false,
             }, std::nullopt};
             msg.Internal = true;
 

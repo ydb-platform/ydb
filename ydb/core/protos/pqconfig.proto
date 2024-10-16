@@ -274,6 +274,13 @@ message TPartitionConfig {
     repeated TChannelProfile ExplicitChannelProfiles = 14;
 
     optional TMirrorPartitionConfig MirrorFrom = 15;
+
+    message TWriteBatching {
+        optional uint32 IntervalMilliSeconds = 1 [default = 100];
+        optional uint64 MinBytes = 2 [default = 4096];
+    }
+
+    optional TWriteBatching WriteBatching = 17;
 };
 
 message TPartitionKeyRange {

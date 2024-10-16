@@ -97,6 +97,7 @@ message TPersQueuePartitionRequest {
         optional bool IgnoreQuotaDeadline = 16 [ default = false ];
 
         optional NKikimrPQ.THeartbeat Heartbeat = 17; // mutually exclusive with Data & related fields
+        optional bool AllowBatching = 18 [ default = false ];
     }
 
     message TCmdUpdateWriteTimestamp {

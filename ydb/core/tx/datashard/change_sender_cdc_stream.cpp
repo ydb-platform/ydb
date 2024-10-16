@@ -122,6 +122,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
             auto& cmd = *request.MutablePartitionRequest()->AddCmdWrite();
             cmd.SetSourceId(NSourceIdEncoding::EncodeSimple(SourceId));
             cmd.SetIgnoreQuotaDeadline(true);
+            cmd.SetAllowBatching(true);
 
             TSerializer serializer(*Serializer, cmd);
             record.Accept(serializer);

@@ -14,7 +14,7 @@
 
 namespace NKikimr::NKqp::NWorkload {
 
-inline constexpr TDuration FUTURE_WAIT_TIMEOUT = TDuration::Seconds(30);
+inline constexpr TDuration FUTURE_WAIT_TIMEOUT = TDuration::Seconds(60);
 
 
 // Query runner
@@ -24,8 +24,9 @@ struct TQueryRunnerSettings {
 
     // Query settings
     FLUENT_SETTING_DEFAULT(ui32, NodeIndex, 0);
-    FLUENT_SETTING_DEFAULT(TString, PoolId, "");
+    FLUENT_SETTING_DEFAULT(std::optional<TString>, PoolId, std::nullopt);
     FLUENT_SETTING_DEFAULT(TString, UserSID, "user@" BUILTIN_SYSTEM_DOMAIN);
+    FLUENT_SETTING_DEFAULT(TVector<TString>, GroupSIDs, {});
     FLUENT_SETTING_DEFAULT(TString, Database, "");
 
     // Runner settings
@@ -69,6 +70,7 @@ struct TYdbSetupSettings {
     FLUENT_SETTING_DEFAULT(TString, DomainName, "Root");
     FLUENT_SETTING_DEFAULT(bool, CreateSampleTenants, false);
     FLUENT_SETTING_DEFAULT(bool, EnableResourcePools, true);
+    FLUENT_SETTING_DEFAULT(bool, EnableResourcePoolsOnServerless, false);
     FLUENT_SETTING_DEFAULT(bool, EnableMetadataObjectsOnServerless, true);
     FLUENT_SETTING_DEFAULT(bool, EnableExternalDataSourcesOnServerless, true);
 
@@ -80,6 +82,7 @@ struct TYdbSetupSettings {
     FLUENT_SETTING_DEFAULT(double, QueryMemoryLimitPercentPerNode, -1);
     FLUENT_SETTING_DEFAULT(double, DatabaseLoadCpuThreshold, -1);
 
+    NResourcePool::TPoolSettings GetDefaultPoolSettings() const;
     TIntrusivePtr<IYdbSetup> Create() const;
 
     TString GetDedicatedTenantName() const;
@@ -113,6 +116,7 @@ public:
     virtual void WaitPoolHandlersCount(i64 finalCount, std::optional<i64> initialCount = std::nullopt, TDuration timeout = FUTURE_WAIT_TIMEOUT) const = 0;
     virtual void StopWorkloadService(ui64 nodeIndex = 0) const = 0;
     virtual void ValidateWorkloadServiceCounters(bool checkTableCounters = true, const TString& poolId = "") const = 0;
+    virtual TEvFetchDatabaseResponse::TPtr FetchDatabase(const TString& database) const = 0;
 
     // Coomon helpers
     virtual TTestActorRuntime* GetRuntime() const = 0;
@@ -126,12 +130,6 @@ struct TSampleQueries {
     template <typename TResult>
     static void CheckSuccess(const TResult& result) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-    }
-
-    template <typename TResult>
-    static void CheckOverloaded(const TResult& result, const TString& poolId) {
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::OVERLOADED, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Too many pending requests for pool " << poolId);
     }
 
     template <typename TResult>

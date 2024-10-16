@@ -42,7 +42,7 @@
                                                 "TopSortBy": ""
                                             },
                                             {
-                                                "Condition": "i = i",
+                                                "Condition": "J1_TBL.i = J2_TBL.i",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 6
@@ -62,7 +62,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 3,
                                                         "Plans": [
                                                             {

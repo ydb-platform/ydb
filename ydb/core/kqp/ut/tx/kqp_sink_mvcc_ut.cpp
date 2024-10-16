@@ -227,9 +227,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
             )"), TTxControl::Tx(tx->GetId()).CommitTx()).ExtractValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
-            if (!GetIsOlap()) {
-                UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED), result.GetIssues().ToString());
-            }
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED), result.GetIssues().ToString());
         }
     };
 
@@ -298,6 +296,95 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
     Y_UNIT_TEST(OlapReadWriteTxFailsOnConcurrentWrite3) {
         TReadWriteTxFailsOnConcurrentWrite3 tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
+    class TNamedStatement : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+
+            auto session1 = client.GetSession().GetValueSync().GetSession();
+
+            {
+                auto result = session1.ExecuteQuery(Q_(R"(
+                    $data = SELECT * FROM `/Root/KV`;
+                    DELETE FROM `/Root/KV` WHERE 1=1;
+                    SELECT COUNT(*) FROM `/Root/KV`;
+                    SELECT COUNT(*) FROM $data;
+                    DELETE FROM `/Root/KV` ON SELECT 424242u AS Key, "One" As Value;
+                    UPSERT INTO `/Root/KV` (Key, Value) VALUES (424242u, "One");
+                    SELECT COUNT(*) FROM `/Root/KV`;
+                    SELECT COUNT(*) FROM $data;
+                )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[0u]])", FormatResultSetYson(result.GetResultSet(0)));
+                CompareYson(R"([[0u]])", FormatResultSetYson(result.GetResultSet(1)));
+                CompareYson(R"([[1u]])", FormatResultSetYson(result.GetResultSet(2)));
+                CompareYson(R"([[1u]])", FormatResultSetYson(result.GetResultSet(3)));
+            }
+        }
+    };
+
+    Y_UNIT_TEST(OltpNamedStatementNoSink) {
+        TNamedStatement tester;
+        tester.SetDisableSinks(true);
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(OltpNamedStatement) {
+        TNamedStatement tester;
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(OlapNamedStatement) {
+        TNamedStatement tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
+    class TMultiSinks: public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+
+            auto session1 = client.GetSession().GetValueSync().GetSession();
+
+            {
+                auto result = session1.ExecuteQuery(Q_(R"(
+                    UPSERT INTO `/Root/KV` (Key, Value) VALUES (1u, "1");
+                    UPSERT INTO `/Root/KV` (Key, Value) VALUES (1u, "2");
+                )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+            {
+                auto result = session1.ExecuteQuery(Q_(R"(
+                    SELECT Value FROM `/Root/KV` WHERE Key = 1u;
+                )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[["2"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+    };
+
+    Y_UNIT_TEST(OltpMultiSinksNoSinks) {
+        TMultiSinks tester;
+        tester.SetDisableSinks(true);
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(OltpMultiSinks) {
+        TMultiSinks tester;
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(OlapMultiSinks) {
+        TMultiSinks tester;
         tester.SetIsOlap(true);
         tester.Execute();
     }

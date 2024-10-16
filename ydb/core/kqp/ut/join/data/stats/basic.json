@@ -1,0 +1,22 @@
+{
+    "/Root/R": {
+        "n_rows": 10,
+        "byte_size": 100
+    },
+    "/Root/S": {
+        "n_rows": 10,
+        "byte_size": 100
+    },
+    "/Root/T": {
+        "n_rows": 10,
+        "byte_size": 100
+    },
+    "/Root/U": {
+        "n_rows": 10,
+        "byte_size": 100
+    },
+    "/Root/V": {
+        "n_rows": 10,
+        "byte_size": 100
+    }
+}

@@ -30,6 +30,7 @@ ydb/core/kqp/ut/service [*/*]*
 ydb/core/kqp/ut/service KqpQueryService.ExecuteQueryPgTableSelect
 ydb/core/kqp/ut/service KqpQueryService.QueryOnClosedSession
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
+ydb/core/mind/hive/ut THiveTest.DrainWithHiveRestart
 ydb/core/persqueue/ut [*/*]*
 ydb/core/persqueue/ut TPQTest.*DirectRead*
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient

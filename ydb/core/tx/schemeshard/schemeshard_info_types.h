@@ -2996,8 +2996,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         enum EState : ui32 {
             Sample = 0,
             // Recompute,
-            // Reshuffle,
-            // Local,
+            Reshuffle,
+            Local,
         };
         ui32 Level = 0;
 
@@ -3027,7 +3027,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             return Parent < ParentEnd;
         }
         bool NeedsAnotherState() const {
-            return false;
+            return State == Sample /*|| State == Recompute*/;
         }
 
         bool NextState() {

@@ -826,7 +826,7 @@ namespace NKikimr {
 
         // ensure that we are dying for the first time
         Y_ABORT_UNLESS(!Dead);
-        if (RequestHandleClass && PoolCounters) {
+        if (RequestHandleClass && PoolCounters && FirstResponse) {
             PoolCounters->GetItem(*RequestHandleClass, RequestBytes).Register(
                 RequestBytes, GeneratedSubrequests, GeneratedSubrequestBytes, Timer.Passed());
         }
@@ -857,6 +857,7 @@ namespace NKikimr {
 
         // send the reply to original request sender
         Send(source, ev.release(), 0, cookie);
+        FirstResponse = false;
     };
 
     void TBlobStorageGroupRequestActor::SendResponse(std::unique_ptr<IEventBase>&& ev, TBlobStorageGroupProxyTimeStats *timeStats) {

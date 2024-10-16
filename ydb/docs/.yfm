@@ -2,7 +2,7 @@ allowHTML: true
 langs: ['en','ru']
 apply-presets: true
 allowCustomResources: true
-included: false
+included: true
 resources:
   style:
     - _assets/tags.css   

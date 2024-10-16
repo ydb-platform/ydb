@@ -68,6 +68,7 @@ YT_DEFINE_ERROR_ENUM(
     ((NoSuchJobShell)                         (219))
     ((JobResourceLimitsRestrictionsViolated)  (220))
     ((CannotUseBothAclAndAco)                 (221))
+    ((GangOperationsAllowedOnlyInFifoPools)   (222))
 );
 
 DEFINE_ENUM(EUnavailableChunkAction,

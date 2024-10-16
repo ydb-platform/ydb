@@ -389,12 +389,10 @@ void CheckGracefulShutdown(TTestActorRuntime &runtime,
 {   
     auto eventGracefulShutdown = MakeEventGracefulShutdown(host, port, address);
     TAutoPtr<IEventHandle> handle;
-    Y_UNUSED(runtime);
-    Y_UNUSED(sender);
-    // runtime.SendToPipe(MakeNodeBrokerID(), sender, eventGracefulShutdown.Release(), 0, GetPipeConfigWithRetries());
-    // auto replyGracefulShutdown = runtime.GrabEdgeEventRethrow<TEvNodeBroker::TEvGracefulShutdownResponse>(handle);
+    runtime.SendToPipe(MakeNodeBrokerID(), sender, eventGracefulShutdown.Release(), 0, GetPipeConfigWithRetries());
+    auto replyGracefulShutdown = runtime.GrabEdgeEventRethrow<TEvNodeBroker::TEvGracefulShutdownResponse>(handle);
 
-    // UNIT_ASSERT_VALUES_EQUAL(replyGracefulShutdown->Record.GetStatus().GetCode(), TStatus::OK);
+    UNIT_ASSERT_VALUES_EQUAL(replyGracefulShutdown->Record.GetStatus().GetCode(), TStatus::OK);
 }
 
 NKikimrNodeBroker::TEpoch GetEpoch(TTestActorRuntime &runtime,
@@ -1833,7 +1831,7 @@ Y_UNIT_TEST_SUITE(GracefulShutdown) {
         TActorId sender = runtime.AllocateEdgeActor();
 
         TString host = "host1";
-        ui16 port = 1301;
+        ui16 port = 1001;
         TString resolveHost = "host1.yandex.net";
         TString address = "1.2.3.4";
         auto epoch = GetEpoch(runtime, sender);

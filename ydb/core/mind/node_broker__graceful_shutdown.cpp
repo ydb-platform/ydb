@@ -21,7 +21,7 @@ public:
                const TActorContext &ctx)
     {
         const auto &rec = Event->Get()->Record;
-        auto host = rec.GetHost();
+        auto &host = rec.GetHost();
         auto port = rec.GetPort();
         LOG_ERROR_S(ctx, NKikimrServices::NODE_BROKER,
                     "Cannot Graceful Shutdown " << host << ":" << port << ": " << code << ": " << reason);
@@ -65,6 +65,7 @@ public:
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxGracefulShutdown Complete");
         Response->Record.MutableStatus()->SetCode(TStatus::OK);
         ctx.Send(Event->Sender, Response.Release());
+        Self->TxCompleted(this, ctx);
     }
 
 private:

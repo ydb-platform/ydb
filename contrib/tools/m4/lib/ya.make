@@ -84,9 +84,6 @@ SRCS(
     gl_oset.c
     gl_xlist.c
     gl_xoset.c
-    isnand.c
-    isnanl.c
-    isnanf.c
     localcharset.c
     lseek.c
     malloca.c

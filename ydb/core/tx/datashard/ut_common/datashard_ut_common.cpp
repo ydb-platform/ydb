@@ -1885,20 +1885,11 @@ void WaitTxNotification(Tests::TServer::TPtr server, ui64 txId) {
     WaitTxNotification(server, sender, txId);
 }
 
-NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runtime, ui64 tabletId, ui64 minPartCount, ui64 minRows) {
-    NKikimrTxDataShard::TEvPeriodicTableStats stats;
-    bool captured = false;
+void WaitTableStatsImpl(TTestActorRuntime& runtime, 
+    std::function<void(typename TEvDataShard::TEvPeriodicTableStats::TPtr&)> observerFunc,
+    bool& captured) {
 
-    auto observer = runtime.AddObserver<TEvDataShard::TEvPeriodicTableStats>([&](auto& ev) {
-        const auto& record = ev->Get()->Record;
-        if (record.GetDatashardId() == tabletId) {
-            Cerr << "Captured TEvDataShard::TEvPeriodicTableStats " << record.ShortDebugString() << Endl;
-            if (record.GetTableStats().GetPartCount() >= minPartCount && record.GetTableStats().GetRowCount() >= minRows) {
-                stats = record;
-                captured = true;
-            }
-        }
-    });
+    auto observer = runtime.AddObserver<TEvDataShard::TEvPeriodicTableStats>(observerFunc);
 
     for (int i = 0; i < 5 && !captured; ++i) {
         TDispatchOptions options;
@@ -1909,7 +1900,56 @@ NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runt
     observer.Remove();
 
     UNIT_ASSERT(captured);
+}
 
+NKikimrTxDataShard::TEvPeriodicTableStats WaitTableFollowerStats(TTestActorRuntime& runtime, ui64 tabletId, ui64 minRowReads, ui64 minRangeReadRows) {
+    NKikimrTxDataShard::TEvPeriodicTableStats stats;
+    bool captured = false;
+
+    auto observerFunc = [&](auto& ev) {
+        const NKikimrTxDataShard::TEvPeriodicTableStats& record = ev->Get()->Record;
+        Cerr << "Captured TEvDataShard::TEvPeriodicTableStats " << record.ShortDebugString() << Endl;
+
+        if (!record.GetFollowerId())
+            return;
+
+        if (record.GetDatashardId() != tabletId)
+            return;
+        
+        if (record.GetTableStats().GetRowReads() < minRowReads || record.GetTableStats().GetRangeReadRows() < minRangeReadRows)
+            return;
+
+        stats = record;
+        captured = true;
+    };
+
+    WaitTableStatsImpl(runtime, observerFunc, captured);
+    return stats;
+}
+
+
+NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runtime, ui64 tabletId, ui64 minPartCount, ui64 minRows) {
+    NKikimrTxDataShard::TEvPeriodicTableStats stats;
+    bool captured = false;
+
+    auto observerFunc = [&](auto& ev) {
+        const NKikimrTxDataShard::TEvPeriodicTableStats& record = ev->Get()->Record;
+        Cerr << "Captured TEvDataShard::TEvPeriodicTableStats " << record.ShortDebugString() << Endl;
+
+        if (record.GetFollowerId())
+            return;
+
+        if (record.GetDatashardId() != tabletId)
+            return;
+        
+        if (record.GetTableStats().GetPartCount() < minPartCount || record.GetTableStats().GetRowCount() < minRows)
+            return;
+
+        stats = record;
+        captured = true;
+    };
+
+    WaitTableStatsImpl(runtime, observerFunc, captured);
     return stats;
 }
 

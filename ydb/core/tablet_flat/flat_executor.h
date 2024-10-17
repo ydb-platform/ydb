@@ -625,7 +625,7 @@ public:
     void Describe(IOutputStream &out) const noexcept override
     {
         out
-            << (Stats->IsFollower ? "Follower" : "Leader")
+            << (Stats->IsFollower() ? "Follower" : "Leader")
             << "{" << Owner->TabletID()
             << ":" << Generation() << ":" << Step() << "}";
     }

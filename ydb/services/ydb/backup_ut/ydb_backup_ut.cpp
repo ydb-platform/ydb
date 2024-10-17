@@ -41,40 +41,34 @@ bool operator==(const TKeyRange& lhs, const TKeyRange& rhs) {
 
 namespace {
 
-#define Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(N, ENUM_TYPE)                                                            \
-    template <ENUM_TYPE Type>                                                                                      \
-    struct TTestCase##N : public TCurrentTestCase {                                                                \
-        TString ParametrizedTestName = #N "-" + ENUM_TYPE##_Name(Type);                                            \
-                                                                                                                   \
-        TTestCase##N() : TCurrentTestCase() {                                                                      \
-            Name_ = ParametrizedTestName.c_str();                                                                  \
-        }                                                                                                          \
-                                                                                                                   \
-        static THolder<NUnitTest::TBaseTestCase> Create()  { return ::MakeHolder<TTestCase##N<Type>>();  }         \
-        void Execute_(NUnitTest::TTestContext&) override;                                                          \
-    };                                                                                                             \
-    struct TTestRegistration##N {                                                                                  \
-        template <int I, int End>                                                                                  \
-        static constexpr void AddTestsForEnumRange() {                                                             \
-            if constexpr (I < End) {                                                                               \
-                TCurrentTest::AddTest(TTestCase##N<static_cast<ENUM_TYPE>(I)>::Create);                            \
-                AddTestsForEnumRange<I + 1, End>();                                                                \
-            }                                                                                                      \
-        }                                                                                                          \
-                                                                                                                   \
-        TTestRegistration##N() {                                                                                   \
-            AddTestsForEnumRange<1, ENUM_TYPE##_ARRAYSIZE>();                                                      \
-        }                                                                                                          \
-    };                                                                                                             \
-    static TTestRegistration##N testRegistration##N;                                                               \
-    template <ENUM_TYPE Type>                                                                                      \
-    void TTestCase##N<Type>::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
-
-#define Y_UNIT_TEST_ALL_SCHEME_OBJECT_TYPES(N) \
-        Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(N, NKikimrSchemeOp::EPathType)
-
-#define Y_UNIT_TEST_ALL_INDEX_TYPES(N) \
-        Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(N, NKikimrSchemeOp::EIndexType)                                                     
+#define Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(N, ENUM_TYPE) \
+    template <ENUM_TYPE Value> \
+    struct TTestCase##N : public TCurrentTestCase { \
+        TString ParametrizedTestName = #N "-" + ENUM_TYPE##_Name(Value); \
+\
+        TTestCase##N() : TCurrentTestCase() { \
+            Name_ = ParametrizedTestName.c_str(); \
+        } \
+\
+        static THolder<NUnitTest::TBaseTestCase> Create()  { return ::MakeHolder<TTestCase##N<Value>>();  } \
+        void Execute_(NUnitTest::TTestContext&) override; \
+    }; \
+    struct TTestRegistration##N { \
+        template <int I, int End> \
+        static constexpr void AddTestsForEnumRange() { \
+            if constexpr (I < End) { \
+                TCurrentTest::AddTest(TTestCase##N<static_cast<ENUM_TYPE>(I)>::Create); \
+                AddTestsForEnumRange<I + 1, End>(); \
+            } \
+        } \
+\
+        TTestRegistration##N() { \
+            AddTestsForEnumRange<0, ENUM_TYPE##_ARRAYSIZE>(); \
+        } \
+    }; \
+    static TTestRegistration##N testRegistration##N; \
+    template <ENUM_TYPE Value> \
+    void TTestCase##N<Value>::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)                                     
 
 #define DEBUG_HINT (TStringBuilder() << "at line " << __LINE__)
 
@@ -425,8 +419,6 @@ const char* ConvertIndexTypeToSQL(NKikimrSchemeOp::EIndexType indexType) {
             return "GLOBAL ASYNC";
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             return "GLOBAL UNIQUE";
-        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-            return "GLOBAL UNIQUE";
         default:
             UNIT_FAIL("No conversion to SQL for this index type");
             return nullptr;
@@ -660,10 +652,10 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-    Y_UNIT_TEST_ALL_SCHEME_OBJECT_TYPES(TestAllSchemeObjectTypes) {
+    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType) {
         using namespace NKikimrSchemeOp;
     
-        switch (Type) {
+        switch (Value) {
             case EPathTypeTable:
                 TestTableBackupRestore();
                 break;
@@ -698,6 +690,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EPathTypeColumnStore:
             case EPathTypeColumnTable:
                 break; // https://github.com/ydb-platform/ydb/issues/10459
+            case EPathTypeInvalid:
             case EPathTypeBackupCollection:
             case EPathTypeBlobDepot:
                 break; // not applicable
@@ -711,18 +704,20 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
     }
 
-    Y_UNIT_TEST_ALL_INDEX_TYPES(TestAllIndexTypes) {
+    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllIndexTypes, NKikimrSchemeOp::EIndexType) {
         using namespace NKikimrSchemeOp;
     
-        switch (Type) {
+        switch (Value) {
             case EIndexTypeGlobal:
             case EIndexTypeGlobalAsync:
-                TestTableWithIndexBackupRestore(Type);
+                TestTableWithIndexBackupRestore(Value);
                 break;
             case EIndexTypeGlobalUnique:
                 break; // https://github.com/ydb-platform/ydb/issues/10468
             case EIndexTypeGlobalVectorKmeansTree:
                 break; // https://github.com/ydb-platform/ydb/issues/10469
+            case EIndexTypeInvalid:
+                break; // not applicable
             default:
                 UNIT_FAIL("Client backup/restore were not implemented for this index type");
         }
@@ -960,10 +955,10 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
-    Y_UNIT_TEST_ALL_SCHEME_OBJECT_TYPES(TestAllSchemeObjectTypes) {
+    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType) {
         using namespace NKikimrSchemeOp;
     
-        switch (Type) {
+        switch (Value) {
             case EPathTypeTable:
                 TestTableBackupRestore();
                 break;
@@ -997,6 +992,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EPathTypeColumnStore:
             case EPathTypeColumnTable:
                 break; // https://github.com/ydb-platform/ydb/issues/10459
+            case EPathTypeInvalid:
             case EPathTypeBackupCollection:
             case EPathTypeBlobDepot:
                 break; // not applicable
@@ -1010,18 +1006,20 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         }
     }
 
-    Y_UNIT_TEST_ALL_INDEX_TYPES(TestAllIndexTypes) {
+    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllIndexTypes, NKikimrSchemeOp::EIndexType) {
         using namespace NKikimrSchemeOp;
     
-        switch (Type) {
+        switch (Value) {
             case EIndexTypeGlobal:
             case EIndexTypeGlobalAsync:
-                TestTableWithIndexBackupRestore(Type);
+                TestTableWithIndexBackupRestore(Value);
                 break;
             case EIndexTypeGlobalUnique:
                 break; // https://github.com/ydb-platform/ydb/issues/10468
             case EIndexTypeGlobalVectorKmeansTree:
                 break; // https://github.com/ydb-platform/ydb/issues/10469
+            case EIndexTypeInvalid:
+                break; // not applicable
             default:
                 UNIT_FAIL("S3 backup/restore were not implemented for this index type");
         }

@@ -60,6 +60,7 @@ SRCS(
 RESOURCE(
     ../test/data/002_full_part.pages abi/002_full_part.pages
     ../test/data/008_basics_db.redo abi/008_basics_db.redo
+    ../test/data/clock-pro.txt clock-pro.txt
 )
 
 PEERDIR(

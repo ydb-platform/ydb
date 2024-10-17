@@ -413,7 +413,7 @@ Y_UNIT_TEST(ClockPro) {
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 20, 2}));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 36, 4}));
 
     RestartAndClearCache(env);
 
@@ -431,7 +431,7 @@ Y_UNIT_TEST(ClockPro) {
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 21, 2}));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 22, 2}));
 
     retried = {};
     for (i64 key = 99; key >= 0; --key) {
@@ -439,7 +439,7 @@ Y_UNIT_TEST(ClockPro) {
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 20, 2}));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 41, 2}));
 
     RestartAndClearCache(env);
 
@@ -472,7 +472,7 @@ Y_UNIT_TEST(ClockPro) {
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{99, 99, 13}));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{99, 98, 13}));
 
     // read the key again again
     retried = {};
@@ -496,7 +496,7 @@ Y_UNIT_TEST(ClockPro) {
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 14, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 13}));
 }
 
 Y_UNIT_TEST(ReplacementPolicySwitch) {

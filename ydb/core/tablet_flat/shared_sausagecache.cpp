@@ -19,6 +19,7 @@ TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonito
     , FreshBytes(counters->GetCounter("fresh"))
     , StagingBytes(counters->GetCounter("staging"))
     , WarmBytes(counters->GetCounter("warm"))
+    , ColdTarget(counters->GetCounter("ColdTarget"))
     , MemLimitBytes(counters->GetCounter("MemLimitBytes"))
     , ConfigLimitBytes(counters->GetCounter("ConfigLimitBytes"))
     , ActivePages(counters->GetCounter("ActivePages"))
@@ -321,7 +322,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             case NKikimrSharedCache::S3FIFO:
                 return MakeHolder<TS3FIFOCache<TPage, TS3FIFOPageTraits>>(1);
             case NKikimrSharedCache::ClockPro:
-                return MakeHolder<TClockProCache<TPage, TClockProPageTraits>>(1);
+                return MakeHolder<TClockProCache<TPage, TClockProPageTraits>>(1, Config->Counters->ColdTarget);
             case NKikimrSharedCache::ThreeLeveledLRU:
             default: {
                 TCacheCacheConfig cacheCacheConfig(1, Config->Counters->FreshBytes, Config->Counters->StagingBytes, Config->Counters->WarmBytes);

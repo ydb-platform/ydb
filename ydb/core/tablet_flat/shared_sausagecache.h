@@ -30,6 +30,8 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
     const TCounterPtr StagingBytes;
     const TCounterPtr WarmBytes;
 
+    const TCounterPtr ColdTarget;
+
     const TCounterPtr MemLimitBytes;
     const TCounterPtr ConfigLimitBytes;
     const TCounterPtr ActivePages;

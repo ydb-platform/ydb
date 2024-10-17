@@ -68,7 +68,7 @@ TOptimizerStatistics::TOptimizerStatistics(
     TIntrusivePtr<TKeyColumns> keyColumns,
     TIntrusivePtr<TColumnStatMap> columnMap,
     EStorageType storageType,
-    std::shared_ptr<const IProviderStatistics> specific)
+    std::shared_ptr<IProviderStatistics> specific)
     : Type(type)
     , Nrows(nrows)
     , Ncols(ncols)

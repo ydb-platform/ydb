@@ -42,9 +42,13 @@ public:
     bool HasSession() const;
     ui32 GetSession() const;
 
+    bool IsDataEnded() const;
+    void SetDataEnded(bool value);
+
 private:
     THolder<NKikimrReplication::TRunWorkerCommand> Command;
     TMaybe<ui32> Session;
+    bool DataEnded = false;
 };
 
 }

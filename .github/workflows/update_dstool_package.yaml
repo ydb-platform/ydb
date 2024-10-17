@@ -15,7 +15,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.6'
+          python-version: '3.6.15'
 
       - name: Install dependencies
         run: |
@@ -36,11 +36,11 @@ jobs:
           mv ydb/apps/dstool/setup.py .
           python -m build
 
-      - name: Upload package to PyPI
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: |
-          set -ex
-          cd ${{ github.workspace }}/ydb
-          python -m twine upload dist/*
+#      - name: Upload package to PyPI
+#        env:
+#          TWINE_USERNAME: __token__
+#          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+#        run: |
+#          set -ex
+#          cd ${{ github.workspace }}/ydb
+#          python -m twine upload dist/*

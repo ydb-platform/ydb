@@ -24,6 +24,9 @@
 
   [Примеры на GitHub](https://github.com/ydb-platform/ydb-python-sdk/tree/main/examples/topic)
 
+- Node.js
+
+  [Примеры на GitHub](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/topic-service)
 
 {% endlist %}
 
@@ -59,40 +62,66 @@
   TTopicClient topicClient(driver);
   ```
 
-- Java
+  - Java
 
-  Для работы с топиками создаются экземпляры транспорта {{ ydb-short-name }} и клиента.
+    Для работы с топиками создаются экземпляры транспорта {{ ydb-short-name }} и клиента.
 
-  Транспорт {{ ydb-short-name }} отвечает за взаимодействие приложения и {{ ydb-short-name }} на транспортном уровне. Он должен существовать на всем протяжении жизненного цикла работы с топиками и должен быть инициализирован перед созданием клиента.
+    Транспорт {{ ydb-short-name }} отвечает за взаимодействие приложения и {{ ydb-short-name }} на транспортном уровне. Он должен существовать на всем протяжении жизненного цикла работы с топиками и должен быть инициализирован перед созданием клиента.
 
-  Фрагмент кода приложения для инициализации транспорта {{ ydb-short-name }}:
+    Фрагмент кода приложения для инициализации транспорта {{ ydb-short-name }}:
 
-  ```java
-  try (GrpcTransport transport = GrpcTransport.forConnectionString(connString)
-          .withAuthProvider(CloudAuthHelper.getAuthProviderFromEnviron())
-          .build()) {
-      // Use YDB transport
+    ```java
+    try (GrpcTransport transport = GrpcTransport.forConnectionString(connString)
+            .withAuthProvider(CloudAuthHelper.getAuthProviderFromEnviron())
+            .build()) {
+        // Use YDB transport
+    }
+    ```
+
+    В этом примере используется вспомогательный метод `CloudAuthHelper.getAuthProviderFromEnviron()`, получающий токен из переменных окружения.
+    Например, `YDB_ACCESS_TOKEN_CREDENTIALS`.
+    Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../concepts/auth.md).
+
+    Клиент сервиса топиков ([исходный код](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/TopicClient.java#L34)) работает поверх транспорта {{ ydb-short-name }} и отвечает как за управляющие операции с топиками, так и за создание писателей и читателей.
+
+    Фрагмент кода приложения для создания клиента:
+
+    ```java
+    try (TopicClient topicClient = TopicClient.newClient(transport)
+                  .setCompressionExecutor(compressionExecutor)
+                  .build()) {
+      // Use topic client
+    }
+    ```
+
+  В обоих примерах кода выше используется блок [try-with-resources](https://docs.oracle.com/javase/tutorial/essential/exceptions/tryResourceClose.html), что позволяет автоматически закрывать клиент и транспорт при выходе из этого блока, так как оба являются наследниками `AutoCloseable`.
+
+- Node.js
+
+  ```ts
+  import {Driver as YDB, getCredentialsFromEnv} from 'ydb-sdk';
+  const logger = getDefaultLogger();
+  const authService = getCredentialsFromEnv(logger);
+  const db = new YDB({
+    endpoint: ENDPOINT, // i.e.: grpc(s)://<hostname>
+    database: DATABASE, // i.e.: '/local'
+    authService, logger
+  });
+  if (!(await db.ready(3000))) throw new Error('Driver is not ready!');
+  try {
+    await db.topic...
+    
+    ...
+  } finally {
+    await db.destroy();
   }
   ```
 
-  В этом примере используется вспомогательный метод `CloudAuthHelper.getAuthProviderFromEnviron()`, получающий токен из переменных окружения.
-  Например, `YDB_ACCESS_TOKEN_CREDENTIALS`.
+  В этом примере используется вспомогательный метод `getCredentialsFromEnv()`, который получает токен из переменных окружения, например, `YDB_ACCESS_TOKEN_CREDENTIALS`.
   Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../concepts/auth.md).
 
-  Клиент сервиса топиков ([исходный код](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/TopicClient.java#L34)) работает поверх транспорта {{ ydb-short-name }} и отвечает как за управляющие операции с топиками, так и за создание писателей и читателей.
-
-  Фрагмент кода приложения для создания клиента:
-
-  ```java
-  try (TopicClient topicClient = TopicClient.newClient(transport)
-                .setCompressionExecutor(compressionExecutor)
-                .build()) {
-    // Use topic client
-  }
-  ```
-
-  В обоих примерах кода выше используется блок ([try-with-resources](https://docs.oracle.com/javase/tutorial/essential/exceptions/tryResourceClose.html)).
-  Это позволяет автоматически закрывать клиент и транспорт при выходе из этого блока, т.к. оба являются наследниками `AutoCloseable`.
+  Для корректной работы важно работу с драйвером выполнять в блоке `try / finally` и завершать работу с
+  драйвером `await db.destroy()`.  Прим.: использование конструкции TypeScript `using` будет доступно в будущих версиях SDK.
 
 {% endlist %}
 
@@ -167,6 +196,27 @@
                   .build());
   ```
 
+- Node.js
+
+  Полный список поддерживаемых параметров можно посмотреть в [документации SDK](https://github-link.vercel.app/api?ghUrl=https://github.com/ydb-platform/ydb-nodejs-sdk/blob/main/src/topic/topic-client.ts&q=type%20ICreateTopicArgs).
+
+  Пример создания топика со списком поддерживаемых кодеков и минимальным количеством партиций
+
+  ```ts
+  await db.topic.createTopic({
+    path: 'demoTopic',
+    supportedCodecs: {
+      codecs: [Ydb.Topic.Codec.CODEC_RAW],
+    },
+    partitioningSettings: {
+      minActivePartitions: 3,
+    },
+    consumers: [{
+      name: 'demo',
+    }],
+  });
+  ```
+
 {% endlist %}
 
 ### Изменение топика {#alter-topic}
@@ -238,6 +288,24 @@
                           .build())
                   .build());
 
+- Node.js
+
+  При изменении топика в параметрах метода `alterTopic` нужно указать путь топика и параметры, которые будут изменяться.
+
+  Полный список настроек можно посмотреть [в коде SDK](https://github-link.vercel.app/api?ghUrl=https://github.com/ydb-platform/ydb-nodejs-sdk/blob/main/src/topic/topic-client.ts&q=type%20IAlterTopicArgs).
+
+  ```ts
+  await db.topic.alterTopic({
+      path: 'demoTopic',
+      addConsumers: [{
+          name: 'anotherqDemoConsumer',
+      }],
+      setSupportedCodecs: {
+          codecs: [Ydb.Topic.Codec.CODEC_RAW, Codec.CODEC_GZIP],
+      },
+  });
+  ```
+
 {% endlist %}
 
 ### Получение информации о топике {#describe-topic}
@@ -294,6 +362,18 @@
   TopicDescription description = topicDescriptionResult.getValue();
   ```
 
+- Node.js
+
+  Для получения информации о топике используется метод `describeTopic`.
+
+  Список полей описания можно посмотреть [в коде SDK](https://github-link.vercel.app/api?ghUrl=https://github.com/ydb-platform/ydb-nodejs-sdk/blob/main/src/topic/topic-client.ts&q=type%20IOperationResult).
+
+  ```ts
+  logger.info(await db.topic.describeTopic({
+      path: 'demoTopic',
+  }));
+  ```
+
 {% endlist %}
 
 ### Удаление топика {#drop-topic}
@@ -324,6 +404,14 @@
 
   ```java
   topicClient.dropTopic(topicPath);
+  ```
+
+- Node.js
+
+  ```ts
+  await db.topic.dropTopic({
+    path: 'demoTopic',
+  });
   ```
 
 {% endlist %}
@@ -436,6 +524,19 @@
               logger.error("Init failed with ex: ", ex);
               return null;
           });
+  ```
+
+- Node.js
+
+  Запись в топик начинается с создания писателя методом `db.topic.createWriter()`.
+
+  Полный список параметров смотри [в коде SDK](https://github-link.vercel.app/api?ghUrl=https://github.com/ydb-platform/ydb-nodejs-sdk/blob/main/src/topic/topic-client.ts&q=type%20ICreateWriterArgs).
+
+  ```ts
+  const writer = await db.topic.createWriter({
+    path: 'demoTopic',
+    getLastSeqNo: true, // seqNo will be assigned automatically
+  });
   ```
 
 {% endlist %}
@@ -576,6 +677,24 @@
   }
   ```
 
+- Node.js
+
+  Для этого достаточно использовать метод метода без ожидания его завершения.
+
+  Полезно при этом логировать ошибку его исполнения.
+
+  Полный список параметров смотри [в коде SDK](https://github-link.vercel.app/api?ghUrl=https://github.com/ydb-platform/ydb-nodejs-sdk/blob/main/src/topic/topic-client.ts&q=type%20ISendArgs).
+
+  ```ts
+  writer.send({
+    codec: Ydb.Topic.Codec.CODEC_RAW,
+    messages: [{
+        data: Buffer.from('Hello, world'),
+        uncompressedSize: 'Hello, world'.length,
+    }],
+  }).catch((err) => logger.error(err));
+  ```
+
 {% endlist %}
 
 ### Запись сообщений с подтверждением о сохранении на сервере
@@ -688,6 +807,22 @@
         });
   ```
 
+- Node.js
+
+  Для этого достаточно дождаться в `Promise.then()` или через `await` результата выполнения метода `db.topic.send()`.
+
+  Полный список параметров смотри [в коде SDK](https://github-link.vercel.app/api?ghUrl=https://github.com/ydb-platform/ydb-nodejs-sdk/blob/main/src/topic/topic-client.ts&q=type%20ISendArgs).
+
+  ```ts
+  logger.info(await writer.send({
+    codec: Ydb.Topic.Codec.CODEC_RAW,
+    messages: [{
+        data: Buffer.from('Hello, world'),
+        uncompressedSize: 'Hello, world'.length,
+    }],
+  }));
+  ```
+
 {% endlist %}
 
 ### Выбор кодека для сжатия сообщений {#codec}
@@ -710,7 +845,6 @@
   ```
 
   Если необходимо в рамках сессии записи отправить сообщение, сжатое другим кодеком, можно использовать метод `WriteEncoded` с указанием кодека и размера расжатого сообщения. Для успешной записи этим способом используемый кодек должен быть разрешён в настройках топика.
-
 
 - Go
 
@@ -748,6 +882,20 @@
           .setMessageGroupId(producerAndGroupID)
           .setCodec(Codec.ZSTD)
           .build();
+  ```
+
+- Node.js
+
+  Для этого надо указать параметр codeс в параметрах метода `db.topic.send()`.
+
+  ```ts
+  await writer.send({
+    codec: Ydb.Topic.Codec.CODEC_RAW,
+    messages: [{
+        data: Buffer.from('Hello, world'),
+        uncompressedSize: 'Hello, world'.length,
+    }],
+  });
   ```
 
 {% endlist %}
@@ -838,6 +986,32 @@
   ```java
   Message message = reader.receive();
   List<MetadataItem> metadata = message.getMetadataItems();
+  ```
+
+- Node.js
+
+  Для этого надо указать параметр metadataItems в параметрах метода `db.topic.send()`
+
+  Полный список параметров смотри [в коде SDK](https://github-link.vercel.app/api?ghUrl=https://github.com/ydb-platform/ydb-nodejs-sdk/blob/main/src/topic/topic-client.ts&q=type%20ISendArgs).
+
+  ```ts
+  writer.send({
+                codec: Ydb.Topic.Codec.CODEC_RAW,
+                messages: [{
+                    data: Buffer.from(`Message N${n}`),
+                    uncompressedSize: `Message N${n}`.length,
+                    metadataItems: [
+                        {
+                            key: 'key',
+                            value: new TextEncoder().encode('value'),
+                        },
+                        {
+                            key: 'key2',
+                            value: new TextEncoder().encode('value2'),
+                        }
+                    ],
+                }],
+           })
   ```
 
 {% endlist %}
@@ -1001,6 +1175,10 @@
 
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
+- Node.js
+
+  Функциональность находится в разработке.
+
 {% endlist %}
 
 
@@ -1148,6 +1326,42 @@
           });
   ```
 
+- Node.js
+
+  Для создания читателя необходимо указать, из каких топиков (`topicsReadSettings`) будет осуществляться чтение, а также название консьюмера (`consumerName`), которое должно быть указано при создании топиков.
+
+  А так же максимальный размер сообщений которые могут одновременно находится в очереди на обработку на клиенте (`receiveBufferSizeInBytes`).
+
+  Полный список параметров смотри [в коде SDK](https://github-link.vercel.app/api?ghUrl=https://github.com/ydb-platform/ydb-nodejs-sdk/blob/main/src/topic/topic-client.ts&q=type%20ICreateReaderArgs).
+
+  ```ts
+  const reader = await db.topic.createReader({
+    topicsReadSettings: [{
+        path: 'demoTopic',
+    }],
+    consumer: 'demoConsumer',
+    receiveBufferSizeInBytes: 10_000_000,
+  });
+  ```
+
+  Если надо ограничить читателя по времени работы, можно это сделать через контекст:
+
+  ```ts
+  const reader = await db.topic.createReader(Context.createNew({
+    timeout: 3000,
+  }).ctx, ...);
+  ```
+
+  Если нужен читатель с возможностью прекращения его работы по cancel() или donе():
+
+  ```ts
+  ctx .wrap({ ... }, (ctx, cancel, done) => {
+    const reader = await db.topic.createReader(ctx, { ...});
+    ...
+    cancel(); // done();
+  });
+  ```
+
 {% endlist %}
 
 Вы также можете использовать расширенный вариант создания подключения, чтобы указать несколько топиков и задать параметры чтения. Следующий код создаст подключение к топикам `my-topic` и `my-specific-topic` через читателя `my-consumer`:
@@ -1208,6 +1422,22 @@
           .build();
   ```
 
+- Node.js
+
+  Полный список параметров смотри [в коде SDK](https://github-link.vercel.app/api?ghUrl=https://github.com/ydb-platform/ydb-nodejs-sdk/blob/main/src/topic/topic-client.ts&q=type%20ICreateReaderArgs).
+
+  ```ts
+  const reader = await db.topic.createReader({
+    topicsReadSettings: [{
+        path: 'demoTopic1',
+        path: 'demoTopic2',
+        path: 'demoTopic4',
+    }],
+    consumer: 'demoConsumer',
+    receiveBufferSizeInBytes: 10_000_000,
+  });
+  ```
+
 {% endlist %}
 
 ### Чтение сообщений {#reading-messages}
@@ -1241,6 +1471,17 @@
 - Java
 
   SDK получает данные с сервера партиями и буферизирует их. В зависимости от задач клиентский код может читать сообщения из буфера по одному или пакетами.
+
+- Node.js
+
+  SDK получает данные с сервера партиями и буферизирует их. В зависимости от задач клиентский код может читать сообщения из буфера по одному или пакетами.
+
+  ```ts
+  for await (const message of reader.messages) {
+      logger.info(`Message: ${message.data!.toString()}`);
+      await message.commit();
+  }
+  ```
 
 {% endlist %}
 
@@ -1291,6 +1532,17 @@
 - Java (async)
 
   В асинхронном клиенте нет возможности читать сообщения по одному.
+
+- Node.js
+
+  Чтобы читать сообщения без подтверждения обработки, по одному, используйте следующий код:
+
+  ```ts
+  for await (const message of reader.messages) {
+      logger.info(`Message: ${message.data!.toString()}`);
+      ...
+  }
+  ```
 
 {% endlist %}
 
@@ -1360,6 +1612,10 @@
   }
   ```
 
+- Node.js
+
+  Функциональность находится в разработке.
+
 {% endlist %}
 
 ### Чтение с подтверждением обработки сообщений {#commit}
@@ -1422,6 +1678,18 @@
                  logger.info("message committed successfully");
              }
          });
+  ```
+
+- Node.js
+
+  Для подтверждения обработки сообщения достаточно вызвать у сообщения метод `commit`.
+
+  ```ts
+  for await (const message of reader.messages) {
+      logger.info(`Message: ${message.data!.toString()}`);
+      ...
+      await message.commit();
+  }
   ```
 
 {% endlist %}
@@ -1499,6 +1767,10 @@
              });
   }
   ```
+
+- Node.js
+
+  Функциональность находится в разработке.
 
 {% endlist %}
 
@@ -1595,6 +1867,10 @@
 
   Также поддерживается настройка читателя `setReadFrom` для чтения событий с отметками времени записи не меньше данной.
 
+- Node.js
+
+  Функциональность находится в разработке.
+
 {% endlist %}
 
 ### Чтение без указания Consumer'а {#no-consumer}
@@ -1626,6 +1902,10 @@
               .build());
   }
   ```
+
+- Node.js
+
+  Функциональность находится в разработке.
 
 {% endlist %}
 
@@ -1769,7 +2049,11 @@
   }
   ```
 
-{% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
+  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
+
+- Node.js
+
+  Функциональность находится в разработке.
 
 {% endlist %}
 
@@ -1852,6 +2136,10 @@
   }
   ```
 
+- Node.js
+
+  Функциональность находится в разработке.
+
 {% endlist %}
 
 #### Жесткое прерывание чтения {#hard-stop}
@@ -1923,6 +2211,10 @@
       logger.info("Partition session {} is closed.", event.getPartitionSession().getPartitionId());
   }
   ```
+
+- Node.js
+
+  Функциональность находится в разработке.
 
 {% endlist %}
 

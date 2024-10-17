@@ -817,14 +817,14 @@ bool TSqlTranslation::CreateIndexSettingEntry(const TIdentifier &id,
                 Ctx.Error() << "Invalid distance: " << stringValue;
                 return false;
             }
-            vectorIndexSettings.Metric = value;
+            vectorIndexSettings.Distance = value;
         } else if (to_lower(id.Name) == "similarity") {
             const auto [success, value, stringValue] = GetIndexSettingValue<TVectorIndexSettings::ESimilarity>(node);
             if (!success) {
                 Ctx.Error() << "Invalid similarity: " << stringValue;
                 return false;
             }
-            vectorIndexSettings.Metric = value;
+            vectorIndexSettings.Similarity = value;
         } else if (to_lower(id.Name) == "vector_type") {
             const auto [success, value, stringValue] = GetIndexSettingValue<TVectorIndexSettings::EVectorType>(node);
             if (!success) {

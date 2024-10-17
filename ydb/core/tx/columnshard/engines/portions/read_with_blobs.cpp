@@ -112,6 +112,7 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
     constructor.SetMinSnapshotDeprecated(to->GetSnapshot());
     constructor.SetSchemaVersion(to->GetVersion());
     constructor.MutableMeta().ResetTierName(targetTier);
+    constructor.MutableMeta().UpdateRecordsMeta(NPortion::EProduced::EVICTED);
 
     TIndexInfo::TSecondaryData secondaryData;
     secondaryData.MutableExternalData() = entityChunksNew;

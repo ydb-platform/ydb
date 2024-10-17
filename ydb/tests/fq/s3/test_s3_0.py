@@ -668,6 +668,69 @@ Pear,15,33'''
         assert result_set.rows[2].items[0].int64_value == 30
         assert sum(kikimr.control_plane.get_metering(1)) == 10
 
+    @yq_v2
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_json_list_formats(self, kikimr, s3, client, unique_prefix):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("fbucket")
+        bucket.create(ACL='public-read')
+        bucket.objects.all().delete()
+
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        fruits = '''[
+    { "date" : "", "datetime" : "", "timestamp" : "", "interval" : "", "date32" : "", "datetime64" : "", "timestamp64" : "", "interval64" : "", "tzDate" : "", "tzDateTime" : "", "tzTimestamp" : "" },
+    { "date" : "", "datetime" : "", "timestamp" : "", "interval" : "", "date32" : "", "datetime64" : "", "timestamp64" : "", "interval64" : "", "tzDate" : "", "tzDateTime" : "", "tzTimestamp" : "" },
+    { "date" : "", "datetime" : "", "timestamp" : "", "interval" : "", "date32" : "", "datetime64" : "", "timestamp64" : "", "interval64" : "", "tzDate" : "", "tzDateTime" : "", "tzTimestamp" : "" }
+]'''
+        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='timestamp.json', ContentType='text/plain')
+
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT *
+            FROM `{storage_connection_name}`.`/timestamp.json`
+            WITH (
+                format="json_list",
+                schema=(
+                    `date` date,
+                    `datetime` datetime,
+                    `timestamp` timestamp,
+                    `interval` interval,
+                    `date32` date32,
+                    `datetime64` datetime64,
+                    `timestamp64` timestamp64,
+                    `interval64` interval64,
+                    `tzDate` tzDate,
+                    `tzDateTime` tzDateTime,
+                    `tzTimestamp` tzTimestamp
+                ));
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+
+        error_message = str(client.describe_query(query_id).result)
+        assert "Date, Timestamp and Interval types are not allowed in json_list format" in error_message
+        assert "Date" in error_message
+        assert "Datetime" in error_message
+        assert "Timestamp" in error_message
+        assert "Interval" in error_message
+        assert "Date32" in error_message
+        assert "Datetime64" in error_message
+        assert "Timestamp64" in error_message
+        assert "Interval64" in error_message
+        assert "TzDate" in error_message
+        assert "TzDatetime" in error_message
+        assert "TzTimestamp" in error_message
+
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_with_hopping(self, kikimr, s3, client, unique_prefix):

@@ -1660,6 +1660,30 @@ bool ValidateFormatForInput(
             return false;
         }
     }
+    else if (schemaStructRowType && format == TStringBuf("json_list")) {
+        bool failedSchemaColumns = false;
+
+        for (const TItemExprType* item : schemaStructRowType->GetItems()) {
+            if (excludeFields && excludeFields(item->GetName())) {
+                continue;
+            }
+            const TTypeAnnotationNode* rowType = item->GetItemType();
+            if (rowType->GetKind() == ETypeAnnotationKind::Optional) {
+                rowType = rowType->Cast<TOptionalExprType>()->GetItemType();
+            }
+
+            if (rowType->GetKind() == ETypeAnnotationKind::Data
+                && IsDataTypeDateOrTzDateOrInterval(rowType->Cast<TDataExprType>()->GetSlot())) {
+                ctx.AddError(TIssue(TStringBuilder() << "Date, Timestamp and Interval types are not allowed in json_list format (you have '"
+                    << item->GetName() << " " << FormatType(rowType) << "' field)"));
+                failedSchemaColumns = true;
+            }
+        }
+
+        if (failedSchemaColumns) {
+            return false;
+        }
+    }
     return true;
 }
 

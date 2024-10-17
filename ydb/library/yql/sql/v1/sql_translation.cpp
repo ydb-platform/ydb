@@ -707,11 +707,10 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
         //const auto& with = node.GetBlock4();
         auto& index = indexes.back();
         if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree) {
-            index.IndexSettings = TVectorIndexSettings();
+            auto& vectorSettings = index.IndexSettings.emplace<TVectorIndexSettings>();
             if (!CreateIndexSettings(node.GetBlock10().GetRule_with_index_settings1(), index.Type, index.IndexSettings)) {
                 return false;
             }
-            const auto &vectorSettings = std::get<TVectorIndexSettings>(index.IndexSettings);
             if (!vectorSettings.Validate(Ctx)) {
                 return false;
             }
@@ -840,6 +839,20 @@ bool TSqlTranslation::CreateIndexSettingEntry(const TIdentifier &id,
                 return false;
             }
             vectorIndexSettings.VectorDimension = value;
+        } else if (to_lower(id.Name) == "clusters") {
+            const auto [success, value, stringValue] = GetIndexSettingValue<ui64>(node);
+            if (!success || value > Max<ui32>()) {
+                Ctx.Error() << "Invalid clusters: " << stringValue;
+                return false;
+            }
+            vectorIndexSettings.Clusters = value;
+        } else if (to_lower(id.Name) == "levels") {
+            const auto [success, value, stringValue] = GetIndexSettingValue<ui64>(node);
+            if (!success || value > Max<ui32>()) {
+                Ctx.Error() << "Invalid levels: " << stringValue;
+                return false;
+            }
+            vectorIndexSettings.Levels = value;
         } else {
             Ctx.Error() << "Unknown index setting: " << id.Name;
             return false;

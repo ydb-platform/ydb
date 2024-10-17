@@ -32,16 +32,8 @@ Y_DECLARE_OUT_SPEC(, Ydb::Import::ImportProgress::Progress, stream, value) {
     stream << Ydb::Import::ImportProgress_Progress_Name(value);
 }
 
-Y_DECLARE_OUT_SPEC(, Ydb::Table::KMeansTreeSettings::Distance, stream, value) {
-    stream << Ydb::Table::KMeansTreeSettings::Distance_Name(value);
-}
-
-Y_DECLARE_OUT_SPEC(, Ydb::Table::KMeansTreeSettings::Similarity, stream, value) {
-    stream << Ydb::Table::KMeansTreeSettings::Similarity_Name(value);
-}
-
-Y_DECLARE_OUT_SPEC(, Ydb::Table::KMeansTreeSettings::VectorType, stream, value) {
-    stream << Ydb::Table::KMeansTreeSettings::VectorType_Name(value);
+Y_DECLARE_OUT_SPEC(, Ydb::Table::VectorIndexSettings::Metric, stream, value) {
+    stream << Ydb::Table::VectorIndexSettings::Metric_Name(value);
 }
 
 Y_DECLARE_OUT_SPEC(, Ydb::Table::IndexBuildState_State, stream, value) {

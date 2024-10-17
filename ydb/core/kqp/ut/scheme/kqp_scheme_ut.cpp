@@ -2894,7 +2894,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 .AddNullableColumn("Key", EPrimitiveType::Uint64)
                 .AddNullableColumn("Embedding", EPrimitiveType::String)
                 .SetPrimaryKeyColumn("Key")
-                .AddVectorKMeansTreeSecondaryIndex("vector_idx", {"Embedding"},
+                .AddVectorKMeansTreeIndex("vector_idx", {"Embedding"},
                     { NYdb::NTable::TVectorIndexSettings::EDistance::Cosine,
                       NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
                       1024});
@@ -2932,7 +2932,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 .AddNullableColumn("Embedding", EPrimitiveType::String)
                 .AddNullableColumn("Covered", EPrimitiveType::String)
                 .SetPrimaryKeyColumn("Key")
-                .AddVectorKMeansTreeSecondaryIndex("vector_idx", {"Embedding"}, {"Covered"},
+                .AddVectorKMeansTreeIndex("vector_idx", {"Embedding"}, {"Covered"},
                     { NYdb::NTable::TVectorIndexSettings::EDistance::Cosine,
                       NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
                       1024});

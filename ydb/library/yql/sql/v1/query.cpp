@@ -293,7 +293,9 @@ static INode::TPtr CreateVectorIndexSettings(const TVectorIndexSettings& vectorI
     }
 
     settings = L(settings, Q(Y(Q("vector_type"), Q(ToString(*vectorIndexSettings.VectorType)))));
-    settings = L(settings, Q(Y(Q("vector_dimension"), Q(ToString(*vectorIndexSettings.VectorDimension)))));
+    settings = L(settings, Q(Y(Q("vector_dimension"), Q(ToString(vectorIndexSettings.VectorDimension)))));
+    settings = L(settings, Q(Y(Q("clusters"), Q(ToString(vectorIndexSettings.Clusters)))));
+    settings = L(settings, Q(Y(Q("levels"), Q(ToString(vectorIndexSettings.Levels)))));
 
     return settings;
 }

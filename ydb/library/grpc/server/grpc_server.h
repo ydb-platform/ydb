@@ -262,12 +262,18 @@ public:
     };
 
 public:
-    void SetGlobalLimiterHandle(TGlobalLimiter* /*limiter*/) override {}
+    void SetGlobalLimiterHandle(TGlobalLimiter* limiter) override {
+        Limiter_ = limiter;
+    }
+
     void StopService() noexcept override;
     size_t RequestsInProgress() const override;
 
     bool RegisterRequestCtx(ICancelableContext* req);
     void DeregisterRequestCtx(ICancelableContext* req);
+
+    virtual bool IncRequest();
+    virtual void DecRequest();
 
     TShutdownGuard ProtectShutdown() noexcept {
         AtomicIncrement(GuardCount_);
@@ -322,6 +328,8 @@ private:
     // Note: benchmarks showed 4 shards is enough to scale to ~30 threads
     TVector<TShard> Shards_{ size_t(4) };
     std::atomic<size_t> NextShard_{ 0 };
+
+    NYdbGrpc::TGlobalLimiter* Limiter_ = nullptr;
 };
 
 template<typename T>

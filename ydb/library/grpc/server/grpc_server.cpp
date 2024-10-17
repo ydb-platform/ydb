@@ -89,6 +89,20 @@ void TGrpcServiceProtectiable::DeregisterRequestCtx(ICancelableContext* req) {
     }
 }
 
+bool TGrpcServiceProtectiable::IncRequest() {
+    if (Limiter_) {
+        return Limiter_->Inc();
+    }
+    return true;
+}
+
+void TGrpcServiceProtectiable::DecRequest() {
+    if (Limiter_) {
+        Limiter_->Dec();
+        Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
+    }
+}
+
 TGRpcServer::TGRpcServer(const TServerOptions& opts)
     : Options_(opts)
     , Limiter_(Options_.MaxGlobalRequestInFlight)

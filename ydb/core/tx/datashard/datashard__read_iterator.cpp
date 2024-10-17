@@ -1974,7 +1974,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxReadViaPipeline execute"
-            << ": at tablet# " << Self->TabletID());
+            << ": at tablet# " << Self->TabletID() << ", FollowerId " << Self->FollowerId());
 
         auto readIt = Self->ReadIterators.find(ReadId);
         if (readIt == Self->ReadIterators.end() && !Op) {

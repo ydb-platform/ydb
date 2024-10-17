@@ -811,6 +811,7 @@ message TEvPeriodicTableStats {
     optional bool IsDstSplit = 13;
 
     repeated TEvPeriodicTableStats Tables = 14;
+    optional uint32 FollowerId = 15;
 }
 
 message TObjectStorageListingFilter {

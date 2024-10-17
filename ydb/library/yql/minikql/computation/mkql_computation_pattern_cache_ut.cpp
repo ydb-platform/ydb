@@ -630,6 +630,42 @@ Y_UNIT_TEST_SUITE(ComputationPatternCache) {
         }
     }
 
+    Y_UNIT_TEST(DoubleNotifyPatternCompiled) {
+        class TMockComputationPattern final : public IComputationPattern {
+        public:
+            explicit TMockComputationPattern(size_t codeSize) : Size_(codeSize) {}
+
+            void Compile(TString, IStatsRegistry*) override { Compiled_ = true; }
+            bool IsCompiled() const override { return Compiled_; }
+            size_t CompiledCodeSize() const override { return Size_; }
+            void RemoveCompiledCode() override { Compiled_ = false; }
+            THolder<IComputationGraph> Clone(const TComputationOptsFull&) override { return {}; }
+            bool GetSuitableForCache() const override { return true; }
+
+        private:
+            const size_t Size_;
+            bool Compiled_ = false;
+        };
+
+        const TString key = "program";
+        const ui32 cacheSize = 2;
+        TComputationPatternLRUCache cache({cacheSize, cacheSize});
+
+        auto entry = std::make_shared<TPatternCacheEntry>();
+        entry->Pattern = MakeIntrusive<TMockComputationPattern>(1u);
+        cache.EmplacePattern(key, entry);
+
+        for (ui32 i = 0; i < cacheSize + 1; ++i) {
+            entry->Pattern->Compile("", nullptr);
+            cache.NotifyPatternCompiled(key);
+        }
+
+        entry = std::make_shared<TPatternCacheEntry>();
+        entry->Pattern = MakeIntrusive<TMockComputationPattern>(cacheSize + 1);
+        entry->Pattern->Compile("", nullptr);
+        cache.EmplacePattern(key, entry);
+    }
+
     Y_UNIT_TEST(AddPerf) {
         TTimer t("all: ");
         TScopedAlloc alloc(__LOCATION__);

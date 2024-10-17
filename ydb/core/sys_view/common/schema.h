@@ -80,7 +80,7 @@ struct Schema : NIceDb::Schema {
         struct LastTtlRowsErased    : Column<26, NScheme::NTypeIds::Uint64> {};
         struct FollowerId           : Column<27, NScheme::NTypeIds::Uint32> {};
 
-        using TKey = TableKey<OwnerId, PathId, PartIdx>;
+        using TKey = TableKey<OwnerId, PathId, PartIdx, FollowerId>;
         using TColumns = TableColumns<
             OwnerId,
             PathId,

@@ -1394,7 +1394,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
             UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
 
-            UNIT_ASSERT_VALUES_EQUAL(keyColumns.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(keyColumns.size(), 4);
             UNIT_ASSERT_STRINGS_EQUAL(keyColumns[0], "OwnerId");
 
             UNIT_ASSERT_VALUES_EQUAL(table.GetPartitionStats().size(), 0);

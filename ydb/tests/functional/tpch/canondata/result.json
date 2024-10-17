@@ -1,0 +1,11 @@
+{
+    "test_generator.TestTpchGenerator.test_s1": {
+        "uri": "file://test_generator.TestTpchGenerator.test_s1/tpch.s1.hash"
+    },
+    "test_generator.TestTpchGenerator.test_s1_parts": {
+        "uri": "file://test_generator.TestTpchGenerator.test_s1_parts/tpch.s1.hash"
+    },
+    "test_generator.TestTpchGenerator.test_s1_state": {
+        "uri": "file://test_generator.TestTpchGenerator.test_s1_state/tpch.s1.hash"
+    }
+}

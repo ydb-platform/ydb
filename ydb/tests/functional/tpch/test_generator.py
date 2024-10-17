@@ -1,0 +1,153 @@
+# -*- coding: utf-8 -*-
+
+from __future__ import annotations
+
+import os
+import logging
+import csv
+import hashlib
+import pytest
+import json
+
+from ydb.tests.library.common import yatest_common
+from ydb.tests.oss.canonical import set_canondata_root
+
+logger = logging.getLogger(__name__)
+
+
+def ydb_bin():
+    if os.getenv('YDB_CLI_BINARY'):
+        return yatest_common.binary_path(os.getenv('YDB_CLI_BINARY'))
+    raise RuntimeError('YDB_CLI_BINARY enviroment variable is not specified')
+
+
+class TpchGeneratorBase(object):
+    table_keys = {
+        'customer': ['c_custkey'],
+        'lineitem': ['l_linenumber', 'l_orderkey'],
+        'nation': ['n_nationkey'],
+        'orders': ['o_orderkey'],
+        'part': ['p_partkey'],
+        'partsupp': ['ps_partkey', 'ps_suppkey'],
+        'region': ['r_regionkey'],
+        'supplier': ['s_suppkey'],
+    }
+
+    @classmethod
+    def execute_generator(cls, output_path, scale=1, import_args=[], generator_args=[]):
+        return yatest_common.execute(
+            [
+                ydb_bin(),
+                '--endpoint', 'grpc://localhost',
+                '--database', '/Root/db',
+                'workload', 'tpch', '-p', f'/Root/db/tpch/s{scale}',
+                'import', '-f', output_path,
+            ]
+            + [str(arg) for arg in import_args]
+            + ['generator', '--scale', str(scale)]
+            + [str(arg) for arg in generator_args],
+            wait=False,
+        )
+
+    @staticmethod
+    def canonical_result(output_result, tmp_path):
+        with open(tmp_path, 'w') as f:
+            f.write(output_result)
+        return yatest_common.canonical_file(tmp_path, local=True, universal_lines=True)
+
+    @staticmethod
+    def calc_hashes(files: str | list[str], keys: list[str]):
+        if not isinstance(files, list):
+            files = [files]
+        rows: dict[str, str] = {}
+        for file_path in files:
+            if not os.path.exists(file_path):
+                continue
+            with open(file_path, 'r') as f:
+                reader = csv.DictReader(f, delimiter='|', quotechar=None, quoting=csv.QUOTE_NONE)
+                fields = sorted([name for name in reader.fieldnames])
+                for row in reader:
+
+                    def _str(field_names):
+                        return '|'.join([row[field] for field in field_names])
+
+                    rows[_str(keys)] = _str(fields)
+        m = hashlib.md5()
+        for _, row in sorted(rows.items()):
+            m.update(row.encode())
+        return len(rows), m.hexdigest()
+
+    @classmethod
+    def scale_hash(cls, paths: str | list[str], scale=1):
+        if not isinstance(paths, list):
+            paths = [paths]
+        result = []
+        for fname, keys in sorted(cls.table_keys.items()):
+            count, md5 = cls.calc_hashes([os.path.join(path, fname) for path in paths], keys)
+            result += [
+                f'{fname} count: {count}',
+                f'{fname} md5: {md5}',
+            ]
+        return '\n'.join(result)
+
+    @classmethod
+    def setup_class(cls):
+        set_canondata_root('ydb/tests/functional/tpch/canondata')
+
+
+class TestTpchGenerator(TpchGeneratorBase):
+    @pytest.fixture(autouse=True, scope='function')
+    def init_test(self, tmp_path):
+        self._tmp_path = tmp_path
+
+    def tmp_path(self, *paths):
+        return os.path.join(self._tmp_path, *paths)
+
+    def get_cannonical(self, paths, execs):
+        for exe in execs:
+            exe.wait(check_exit_code=True)
+        return self.canonical_result(self.scale_hash(paths), self.tmp_path('tpch.s1.hash'))
+
+    def test_s1(self):
+        out_fpath = self.tmp_path('tpch.s1')
+        return self.get_cannonical(
+            paths=[out_fpath],
+            execs=[self.execute_generator(out_fpath)]
+        )
+
+    def test_s1_parts(self):
+        parts_count = 10
+        paths = []
+        execs = []
+        for part_index in range(parts_count):
+            paths.append(self.tmp_path(f'tpch.s1.{part_index}_{parts_count}'))
+            execs.append(
+                self.execute_generator(
+                    output_path=paths[-1],
+                    generator_args=['--proccess-count', parts_count, '--proccess-index', part_index]
+                )
+            )
+        return self.get_cannonical(paths=paths, execs=execs)
+
+    def test_s1_state(self):
+        state_path = self.tmp_path('state.json')
+        with open(state_path, 'w') as f:
+            json.dump({
+                'sources': {
+                    'customer': {'position': 75342},
+                    'nation': {'position': 13},
+                    'orders': {'position': 757845},
+                    'part': {'position': 134567},
+                    'region': {'position': 2},
+                    'supplier': {'position': 7832},
+                }
+            }, f)
+        paths = [self.tmp_path(path) for path in ['tpch.s1.1', 'tpch.s1.2']]
+        execs = [
+            self.execute_generator(output_path=paths[0]),
+            self.execute_generator(
+                output_path=paths[1],
+                generator_args=['--state', state_path],
+            ),
+        ]
+        return self.get_cannonical(paths=paths, execs=execs)

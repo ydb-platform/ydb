@@ -29,6 +29,7 @@ RECURSE(
     serverless
     sqs
     suite_tests
+    tcph
     tenants
     ttl
     wardens

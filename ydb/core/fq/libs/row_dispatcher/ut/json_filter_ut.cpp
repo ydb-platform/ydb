@@ -54,16 +54,16 @@ Y_UNIT_TEST_SUITE(TJsonFilterTests) {
     Y_UNIT_TEST_F(Simple1, TFixture) {
         TMap<ui64, TString> result;
         MakeFilter(
-            {"a1", "a2"},
-            {"String", "UInt64"},
+            {"a1", "a2", "a@3"},
+            {"String", "UInt64", "Optional<String>"},
             "where a2 > 100",
             [&](ui64 offset, const TString& json) {
                 result[offset] = json;
             });
-        Filter->Push({5}, {{"hello1"}, {"99"}});
-        Filter->Push({6}, {{"hello2"}, {"101"}});
+        Filter->Push({5}, {{"hello1"}, {"99"}, {"zapuskaem"}});
+        Filter->Push({6}, {{"hello2"}, {"101"}, {"gusya"}});
         UNIT_ASSERT_VALUES_EQUAL(1, result.size());
-        UNIT_ASSERT_VALUES_EQUAL(R"({"a1":"hello2","a2":101})", result[6]);
+        UNIT_ASSERT_VALUES_EQUAL(R"({"a1":"hello2","a2":101,"a@3":"gusya"})", result[6]);
     }
 
     Y_UNIT_TEST_F(Simple2, TFixture) {

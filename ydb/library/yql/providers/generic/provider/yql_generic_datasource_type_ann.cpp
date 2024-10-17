@@ -49,7 +49,11 @@ namespace NYql {
         }
 
         TStatus HandleSourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-            if (!EnsureArgsCount(*input, 5, ctx)) {
+            if (!EnsureArgsCount(*input, 6, ctx)) {
+                return TStatus::Error;
+            }
+
+            if (!EnsureWorldType(*input->Child(TGenSourceSettings::idx_World), ctx)) {
                 return TStatus::Error;
             }
 

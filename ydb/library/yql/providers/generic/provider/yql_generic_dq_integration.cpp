@@ -85,6 +85,7 @@ namespace NYql {
                     // clang-format off
                     return Build<TDqSourceWrap>(ctx, read->Pos())
                         .Input<TGenSourceSettings>()
+                            .World(genReadTable.World())
                             .Cluster(genReadTable.DataSource().Cluster())
                             .Table(genReadTable.Table())
                             .Token<TCoSecureParam>()

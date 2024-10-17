@@ -323,7 +323,10 @@ void BuildSequencerChannels(TKqpTasksGraph& graph, const TStageInfo& stageInfo, 
         if (aic != autoIncrementColumns.end()) {
             auto sequenceIt = tableInfo->Sequences.find(column);
             if (sequenceIt != tableInfo->Sequences.end()) {
-                columnProto->SetDefaultFromSequence(sequenceIt->second);
+                auto sequencePath = sequenceIt->second.first;
+                auto sequencePathId = sequenceIt->second.second;
+                columnProto->SetDefaultFromSequence(sequencePath);
+                sequencePathId.ToMessage(columnProto->MutableDefaultFromSequencePathId());
                 columnProto->SetDefaultKind(
                     NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE);
             } else {

@@ -495,16 +495,14 @@ public:
     {
         BuildTxTransformer = new TKqpBuildTxTransformer();
 
-        const bool enableSpillingGenericQuery =
-            kqpCtx->IsGenericQuery() && config->SpillingEnabled() &&
-            config->EnableSpillingGenericQuery;
+        config->EnableSpillingGenericQuery &= (kqpCtx->IsGenericQuery() && config->SpillingEnabled());
 
         DataTxTransformer = TTransformationPipeline(&typesCtx)
             .AddServiceTransformers()
             .Add(TExprLogTransformer::Sync("TxOpt", NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE), "TxOpt")
             .Add(*TypeAnnTransformer, "TypeAnnotation")
             .AddPostTypeAnnotation(/* forSubgraph */ true)
-            .Add(CreateKqpBuildPhyStagesTransformer(enableSpillingGenericQuery, typesCtx, config->BlockChannelsMode), "BuildPhysicalStages")
+            .Add(CreateKqpBuildPhyStagesTransformer(config->EnableSpillingGenericQuery, typesCtx, config->BlockChannelsMode), "BuildPhysicalStages")
             // TODO(ilezhankin): "BuildWideBlockChannels" transformer is required only for BLOCK_CHANNELS_FORCE mode.
             .Add(CreateKqpBuildWideBlockChannelsTransformer(typesCtx, config->BlockChannelsMode), "BuildWideBlockChannels")
             .Add(*BuildTxTransformer, "BuildPhysicalTx")

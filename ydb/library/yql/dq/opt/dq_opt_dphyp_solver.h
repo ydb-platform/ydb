@@ -433,7 +433,7 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
     for (auto joinAlgo : AllJoinAlgos) {
         if (ctx.IsJoinApplicable(left, right, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind)){
             auto cost = ctx.ComputeJoinStats(*left->Stats, *right->Stats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeCardHint).Cost;
-            if (cost < bestCost) {
+            if (cost <= bestCost) {
                 bestCost = cost;
                 bestAlgo = joinAlgo;
                 bestJoinIsReversed = false;
@@ -443,7 +443,7 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
         if (isCommutative) {
             if (ctx.IsJoinApplicable(right, left, rightJoinKeys, leftJoinKeys, joinAlgo, joinKind)){
                 auto cost = ctx.ComputeJoinStats(*right->Stats, *left->Stats,  rightJoinKeys, leftJoinKeys, joinAlgo, joinKind, maybeCardHint).Cost;
-                if (cost < bestCost) {
+                if (cost <= bestCost) {
                     bestCost = cost;
                     bestAlgo = joinAlgo;
                     bestJoinIsReversed = true;

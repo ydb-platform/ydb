@@ -45,10 +45,11 @@
             "Base": "TCallable",
             "Match": {"Type": "CallableBase"},
             "Children": [
-                {"Index": 0, "Name": "Paths", "Type": "TS3Paths"},
-                {"Index": 1, "Name": "Token", "Type": "TCoSecureParam"},
-                {"Index": 2, "Name": "RowsLimitHint", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "Path", "Type": "TCoAtom"}
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Paths", "Type": "TS3Paths"},
+                {"Index": 2, "Name": "Token", "Type": "TCoSecureParam"},
+                {"Index": 3, "Name": "RowsLimitHint", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "Path", "Type": "TCoAtom"}
             ]
         },
         {
@@ -56,9 +57,9 @@
             "Base": "TS3SourceSettingsBase",
             "Match": {"Type": "Callable", "Name": "S3SourceSettings"},
             "Children": [
-                {"Index": 4, "Name": "SizeLimit", "Type": "TExprBase", "Optional": true},
-                {"Index": 5, "Name": "PathPattern", "Type": "TExprBase", "Optional": true},
-                {"Index": 6, "Name": "PathPatternVariant", "Type": "TExprBase", "Optional": true}
+                {"Index": 5, "Name": "SizeLimit", "Type": "TExprBase", "Optional": true},
+                {"Index": 6, "Name": "PathPattern", "Type": "TExprBase", "Optional": true},
+                {"Index": 7, "Name": "PathPatternVariant", "Type": "TExprBase", "Optional": true}
             ]
         },
         {
@@ -66,10 +67,10 @@
             "Base": "TS3SourceSettingsBase",
             "Match": {"Type": "Callable", "Name": "S3ParseSettings"},
             "Children": [
-                {"Index": 4, "Name": "Format", "Type": "TCoAtom"},
-                {"Index": 5, "Name": "RowType", "Type": "TExprBase"},
-                {"Index": 6, "Name": "FilterPredicate", "Type": "TCoLambda"},
-                {"Index": 7, "Name": "Settings", "Type": "TExprBase", "Optional": true}
+                {"Index": 5, "Name": "Format", "Type": "TCoAtom"},
+                {"Index": 6, "Name": "RowType", "Type": "TExprBase"},
+                {"Index": 7, "Name": "FilterPredicate", "Type": "TCoLambda"},
+                {"Index": 8, "Name": "Settings", "Type": "TExprBase", "Optional": true}
             ]
         },
         {

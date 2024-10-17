@@ -21,17 +21,10 @@ def ydb_bin():
     raise RuntimeError('YDB_CLI_BINARY enviroment variable is not specified')
 
 
-class TpchGeneratorBase(object):
-    table_keys = {
-        'customer': ['c_custkey'],
-        'lineitem': ['l_linenumber', 'l_orderkey'],
-        'nation': ['n_nationkey'],
-        'orders': ['o_orderkey'],
-        'part': ['p_partkey'],
-        'partsupp': ['ps_partkey', 'ps_suppkey'],
-        'region': ['r_regionkey'],
-        'supplier': ['s_suppkey'],
-    }
+class TpcGeneratorBase(object):
+    table_keys: dict[str, list[str]]
+    workload: str
+    s1_state: dict[str, int]
 
     @classmethod
     def execute_generator(cls, output_path, scale=1, import_args=[], generator_args=[]):
@@ -40,7 +33,7 @@ class TpchGeneratorBase(object):
                 ydb_bin(),
                 '--endpoint', 'grpc://localhost',
                 '--database', '/Root/db',
-                'workload', 'tpch', '-p', f'/Root/db/tpch/s{scale}',
+                'workload', cls.workload, '-p', f'/Root/db/{cls.workload}/s{scale}',
                 'import', '-f', output_path,
             ]
             + [str(arg) for arg in import_args]
@@ -92,10 +85,8 @@ class TpchGeneratorBase(object):
 
     @classmethod
     def setup_class(cls):
-        set_canondata_root('ydb/tests/functional/tpch/canondata')
+        set_canondata_root(f'ydb/tests/functional/{cls.workload}/canondata')
 
-
-class TestTpchGenerator(TpchGeneratorBase):
     @pytest.fixture(autouse=True, scope='function')
     def init_test(self, tmp_path):
         self._tmp_path = tmp_path
@@ -106,10 +97,10 @@ class TestTpchGenerator(TpchGeneratorBase):
     def get_cannonical(self, paths, execs):
         for exe in execs:
             exe.wait(check_exit_code=True)
-        return self.canonical_result(self.scale_hash(paths), self.tmp_path('tpch.s1.hash'))
+        return self.canonical_result(self.scale_hash(paths), self.tmp_path('s1.hash'))
 
     def test_s1(self):
-        out_fpath = self.tmp_path('tpch.s1')
+        out_fpath = self.tmp_path('s1')
         return self.get_cannonical(
             paths=[out_fpath],
             execs=[self.execute_generator(out_fpath)]
@@ -120,7 +111,7 @@ class TestTpchGenerator(TpchGeneratorBase):
         paths = []
         execs = []
         for part_index in range(parts_count):
-            paths.append(self.tmp_path(f'tpch.s1.{part_index}_{parts_count}'))
+            paths.append(self.tmp_path(f's1.{part_index}_{parts_count}'))
             execs.append(
                 self.execute_generator(
                     output_path=paths[-1],
@@ -134,15 +125,11 @@ class TestTpchGenerator(TpchGeneratorBase):
         with open(state_path, 'w') as f:
             json.dump({
                 'sources': {
-                    'customer': {'position': 75342},
-                    'nation': {'position': 13},
-                    'orders': {'position': 757845},
-                    'part': {'position': 134567},
-                    'region': {'position': 2},
-                    'supplier': {'position': 7832},
+                    k: {'position': v}
+                    for k, v in self.s1_state.items()
                 }
             }, f)
-        paths = [self.tmp_path(path) for path in ['tpch.s1.1', 'tpch.s1.2']]
+        paths = [self.tmp_path(path) for path in ['s1.1', 's1.2']]
         execs = [
             self.execute_generator(output_path=paths[0]),
             self.execute_generator(
@@ -151,3 +138,27 @@ class TestTpchGenerator(TpchGeneratorBase):
             ),
         ]
         return self.get_cannonical(paths=paths, execs=execs)
+
+
+class TestTpchGenerator(TpcGeneratorBase):
+    workload = 'tpch'
+
+    table_keys = {
+        'customer': ['c_custkey'],
+        'lineitem': ['l_linenumber', 'l_orderkey'],
+        'nation': ['n_nationkey'],
+        'orders': ['o_orderkey'],
+        'part': ['p_partkey'],
+        'partsupp': ['ps_partkey', 'ps_suppkey'],
+        'region': ['r_regionkey'],
+        'supplier': ['s_suppkey'],
+    }
+
+    s1_state = {
+        'customer': 75342,
+        'nation': 13,
+        'orders': 757845,
+        'part': 134567,
+        'region': 2,
+        'supplier': 7832,
+    }

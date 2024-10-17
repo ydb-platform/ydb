@@ -151,6 +151,8 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     , TtlReadAheadHi(0, 0, 128*1024*1024)
     , IncrementalRestoreReadAheadLo(0, 0, 64*1024*1024)
     , IncrementalRestoreReadAheadHi(0, 0, 128*1024*1024)
+    , CdcInitialScanReadAheadLo(0, 0, 64*1024*1024)
+    , CdcInitialScanReadAheadHi(0, 0, 128*1024*1024)
     , EnableLockedWrites(1, 0, 1)
     , MaxLockedWritesPerKey(1000, 0, 1000000)
     , EnableLeaderLeases(1, 0, 1)
@@ -327,6 +329,9 @@ void TDataShard::IcbRegister() {
 
         appData->Icb->RegisterSharedControl(IncrementalRestoreReadAheadLo, "DataShardControls.IncrementalRestoreReadAheadLo");
         appData->Icb->RegisterSharedControl(IncrementalRestoreReadAheadHi, "DataShardControls.IncrementalRestoreReadAheadHi");
+
+        appData->Icb->RegisterSharedControl(CdcInitialScanReadAheadLo, "DataShardControls.CdcInitialScanReadAheadLo");
+        appData->Icb->RegisterSharedControl(CdcInitialScanReadAheadHi, "DataShardControls.CdcInitialScanReadAheadHi");
 
         IcbRegistered = true;
     }

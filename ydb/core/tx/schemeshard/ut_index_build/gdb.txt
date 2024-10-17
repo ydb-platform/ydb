@@ -1,0 +1,205 @@
++set args +IndexBuildTest::VectorIndexDescriptionIsPersisted
++break /home/deminds/github/ydb/ydb/core/tx/schemeshard/ut_index_build/ut_index_build.cpp:1070
+Breakpoint 1 at 0x2746929a: file /home/deminds/github/ydb/ydb/core/tx/schemeshard/ut_index_build/ut_index_build.cpp, line 1070.
++break /home/deminds/github/ydb/ydb/core/tx/schemeshard/schemeshard__operation_create_table.cpp:80
+Breakpoint 2 at 0x37b81e1b: file /home/deminds/github/ydb/ydb/core/tx/schemeshard/schemeshard__operation_create_table.cpp, line 80.
++break /home/deminds/github/ydb/ydb/core/tx/schemeshard/schemeshard_impl.cpp:6627
+Breakpoint 3 at 0x3731121d: file /home/deminds/github/ydb/ydb/core/tx/schemeshard/schemeshard_impl.cpp, line 6627.
++break /home/deminds/github/ydb/ydb/core/tx/schemeshard/ut_index_build/ut_index_build.cpp:1076
+Breakpoint 4 at 0x2746960b: file /home/deminds/github/ydb/ydb/core/tx/schemeshard/ut_index_build/ut_index_build.cpp, line 1076.
++r
+Starting program: /home/deminds/github/ydb/ydb/core/tx/schemeshard/ut_index_build/ydb-core-tx-schemeshard-ut_index_build +IndexBuildTest::VectorIndexDescriptionIsPersisted
+warning: File "/usr/lib/x86_64-linux-gnu/libthread_db-1.0.so" auto-loading has been declined by your `auto-load safe-path' set to "$debugdir:$datadir/auto-load".
+To enable execution of this file add
+	add-auto-load-safe-path /usr/lib/x86_64-linux-gnu/libthread_db-1.0.so
+line to your configuration file "/home/deminds/.config/gdb/gdbinit".
+To completely disable this security protection add
+	set auto-load safe-path /
+line to your configuration file "/home/deminds/.config/gdb/gdbinit".
+For more information about this security protection see the
+"Auto-loading safe path" section in the GDB manual.  E.g., run from the shell:
+	info "(gdb)Auto-loading safe path"
+warning: Unable to find libthread_db matching inferior's thread library, thread debugging will not be available.
+[New LWP 2895003]
+[New LWP 2895004]
+[New LWP 2895005]
+[New LWP 2895006]
+[New LWP 2895007]
+[New LWP 2895008]
+[New LWP 2895009]
+[New LWP 2895010]
+[New LWP 2895011]
+[New LWP 2895012]
+[New LWP 2895013]
+[New LWP 2895014]
+[New LWP 2895015]
+[New LWP 2895016]
+[New LWP 2895017]
+[New LWP 2895018]
+[New LWP 2895019]
+[New LWP 2895020]
+[New LWP 2895021]
+[New LWP 2895022]
+[New LWP 2895023]
+[LWP 2895023 exited]
+[LWP 2895022 exited]
+[LWP 2895020 exited]
+[LWP 2895021 exited]
+[LWP 2895019 exited]
+[LWP 2895018 exited]
+[LWP 2895017 exited]
+[LWP 2895016 exited]
+[LWP 2895015 exited]
+[LWP 2895014 exited]
+[LWP 2895013 exited]
+[LWP 2895012 exited]
+[LWP 2895011 exited]
+[LWP 2895010 exited]
+[LWP 2895009 exited]
+[LWP 2895008 exited]
+[LWP 2895007 exited]
+[LWP 2895006 exited]
+[LWP 2895005 exited]
+[LWP 2895004 exited]
+[LWP 2895003 exited]
+[New LWP 2895024]
+[New LWP 2895025]
+[New LWP 2895027]
+[New LWP 2895028]
+[New LWP 2895029]
+[New LWP 2895030]
+[New LWP 2895031]
+[New LWP 2895032]
+
+Thread 1 "ydb-core-tx-sch" hit Breakpoint 2, (anonymous namespace)::InitPartitioning(NKikimrSchemeOp::TTableDescription const&, NKikimr::NScheme::TTypeRegistry const*, TVector<unsigned int, std::__y1::allocator<unsigned int>> const&, TVector<NKikimr::NScheme::TTypeInfo, std::__y1::allocator<NKikimr::NScheme::TTypeInfo>> const&, TBasicString<char, std::__y1::char_traits<char>>&, TVector<NKikimr::NSchemeShard::TTableShardInfo, std::__y1::allocator<NKikimr::NSchemeShard::TTableShardInfo>>&, NKikimr::NSchemeShard::TSchemeLimits const&) (op=..., typeRegistry=0x46c4bec08940, keyColIds=TVector (length=1, capacity=1) = {...}, keyColTypeIds=TVector (length=1, capacity=1) = {...}, errStr="", partitions=empty TVector (capacity=0), limits=...) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/schemeshard__operation_create_table.cpp:80
+80	        if (!TSchemeShard::FillSplitPartitioning(rangeEnds, keyColTypeIds, op.GetSplitBoundary(), errStr)) {
++n
+85	    for (ui32 i = 0; i < rangeEnds.size(); ++i) {
++bt
+#0  (anonymous namespace)::InitPartitioning(NKikimrSchemeOp::TTableDescription const&, NKikimr::NScheme::TTypeRegistry const*, TVector<unsigned int, std::__y1::allocator<unsigned int>> const&, TVector<NKikimr::NScheme::TTypeInfo, std::__y1::allocator<NKikimr::NScheme::TTypeInfo>> const&, TBasicString<char, std::__y1::char_traits<char>>&, TVector<NKikimr::NSchemeShard::TTableShardInfo, std::__y1::allocator<NKikimr::NSchemeShard::TTableShardInfo>>&, NKikimr::NSchemeShard::TSchemeLimits const&) (op=..., typeRegistry=0x46c4bec08940, keyColIds=TVector (length=1, capacity=1) = {...}, keyColTypeIds=TVector (length=1, capacity=1) = {...}, errStr="", partitions=empty TVector (capacity=0), limits=...) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/schemeshard__operation_create_table.cpp:85
+#1  0x0000000037b8147e in (anonymous namespace)::DoInitPartitioning(TIntrusivePtr<NKikimr::NSchemeShard::TTableInfo, TDefaultIntrusivePtrOps<NKikimr::NSchemeShard::TTableInfo>>, NKikimrSchemeOp::TTableDescription const&, NKikimr::NScheme::TTypeRegistry const*, TBasicString<char, std::__y1::char_traits<char>>&, TVector<NKikimr::NSchemeShard::TTableShardInfo, std::__y1::allocator<NKikimr::NSchemeShard::TTableShardInfo>>&, NKikimr::NSchemeShard::TSchemeLimits const&) (tableInfo=TIntrusivePtr<NKikimr::NSchemeShard::TTableInfo> = {...}, op=..., typeRegistry=0x46c4bec08940, errStr="", partitions=empty TVector (capacity=0), limits=...) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/schemeshard__operation_create_table.cpp:130
+#2  0x0000000037b7dffe in (anonymous namespace)::TCreateTable::Propose(TBasicString<char, std::__y1::char_traits<char>> const&, NKikimr::NSchemeShard::TOperationContext&) (this=0x46c4bec55d40, owner="root@builtin", context=...) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/schemeshard__operation_create_table.cpp:595
+#3  0x000000003784cfd6 in NKikimr::NSchemeShard::TSchemeShard::IgniteOperation (this=0x46c4bf4cd000, request=..., context=...) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/schemeshard__operation.cpp:158
+#4  0x00000000378ce3c6 in NKikimr::NSchemeShard::TSchemeShard::TTxOperationPropose::Execute (this=0x46c4bf40ff00, txc=..., ctx=...) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/schemeshard__operation.cpp:316
+#5  0x000000002aaead90 in NKikimr::NTabletFlatExecutor::TExecutor::ExecuteTransaction (this=0x46c4bf0acb80, seat=TAutoPtr<NKikimr::NTabletFlatExecutor::TSeat> = {...}, ctx=...) at /home/deminds/github/ydb/ydb/core/tablet_flat/flat_executor.cpp:1715
+#6  0x000000002aae86ce in NKikimr::NTabletFlatExecutor::TExecutor::DoExecute (this=0x46c4bf0acb80, self=TAutoPtr<NKikimr::NTabletFlatExecutor::ITransaction> = {...}, allowImmediate=true, ctx=...) at /home/deminds/github/ydb/ydb/core/tablet_flat/flat_executor.cpp:1687
+#7  0x000000002aaec52b in NKikimr::NTabletFlatExecutor::TExecutor::Execute (this=0x46c4bf0acb80, self=..., ctx=...) at /home/deminds/github/ydb/ydb/core/tablet_flat/flat_executor.cpp:1691
+#8  0x000000002aabb953 in NKikimr::NTabletFlatExecutor::TTabletExecutedFlat::Execute (this=0x46c4bf4cd050, transaction=TAutoPtr<NKikimr::NTabletFlatExecutor::ITransaction> = {...}) at /home/deminds/github/ydb/ydb/core/tablet_flat/tablet_flat_executed.cpp:39
+#9  0x000000002aabb85a in NKikimr::NTabletFlatExecutor::TTabletExecutedFlat::Execute (this=0x46c4bf4cd050, transaction=..., ctx=...) at /home/deminds/github/ydb/ydb/core/tablet_flat/tablet_flat_executed.cpp:34
+#10 0x00000000372f27ba in NKikimr::NSchemeShard::TSchemeShard::Handle (this=0x46c4bf4cd000, ev=TAutoPtr<NActors::TEventHandle<NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>> = {...}, ctx=...) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/schemeshard_impl.cpp:5353
+#11 0x000000003729389b in NKikimr::NSchemeShard::TSchemeShard::StateWork (this=0x46c4bf4cd000, ev=TAutoPtr<NActors::IEventHandle> = {...}) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/schemeshard_impl.cpp:4628
+#12 0x00000000281c58be in NActors::TActorCallbackBehaviour::Receive (this=0x46c4bf4cd030, actor=0x46c4bf4cd000, ev=TAutoPtr<NActors::IEventHandle> = {...}) at /home/deminds/github/ydb/ydb/library/actors/core/actor.cpp:252
+#13 0x0000000028249d23 in NActors::IActor::Receive (this=0x46c4bf4cd000, ev=TAutoPtr<NActors::IEventHandle> = {...}) at /home/deminds/github/ydb/ydb/library/actors/core/actor.h:534
+#14 0x000000003cb9daeb in NActors::TTestActorRuntimeBase::SendInternal (this=0x7fffffffc610, ev=TAutoPtr<NActors::IEventHandle> = {...}, nodeIndex=0, viaActorSystem=false) at /home/deminds/github/ydb/ydb/library/actors/testlib/test_runtime.cpp:1686
+#15 0x000000003cb9ada8 in NActors::TTestActorRuntimeBase::DispatchEventsInternal (this=0x7fffffffc610, options=..., simDeadline=...) at /home/deminds/github/ydb/ydb/library/actors/testlib/test_runtime.cpp:1287
+#16 0x000000003cb9f7d0 in NActors::TTestActorRuntimeBase::WaitForEdgeEvents(std::__y1::function<bool (NActors::TTestActorRuntimeBase&, TAutoPtr<NActors::IEventHandle, TDelete>&)>, TSet<NActors::TActorId, TLess<NActors::TActorId>, std::__y1::allocator<NActors::TActorId>> const&, TDuration) (this=0x7fffffffc610, filter=..., edgeFilter=..., simTimeout=...) at /home/deminds/github/ydb/ydb/library/actors/testlib/test_runtime.cpp:1546
+#17 0x000000003f3f49f4 in NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult* NActors::TTestActorRuntimeBase::GrabEdgeEventIf<NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(TAutoPtr<NActors::IEventHandle, TDelete>&, std::__y1::function<bool (NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult const&)>, TDuration) (this=0x7fffffffc610, handle=TAutoPtr<NActors::IEventHandle> = {...}, predicate=..., simTimeout=...) at /home/deminds/github/ydb/ydb/library/actors/testlib/test_runtime.h:442
+#18 0x000000003f3978ee in NActors::TTestActorRuntimeBase::GrabEdgeEvent<NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult> (this=0x7fffffffc610, handle=TAutoPtr<NActors::IEventHandle> = {...}, simTimeout=...) at /home/deminds/github/ydb/ydb/library/actors/testlib/test_runtime.h:506
+#19 0x000000003f397c80 in NSchemeShardUT_Private::TestModificationResults(NActors::TTestActorRuntime&, unsigned long, TVector<NSchemeShardUT_Private::TExpectedResult, std::__y1::allocator<NSchemeShardUT_Private::TExpectedResult>> const&) (runtime=..., txId=101, expectedResults=TVector (length=1, capacity=1) = {...}) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/ut_helpers/helpers.cpp:177
+#20 0x000000003f3a21f2 in NSchemeShardUT_Private::TestCreateIndexedTable(NActors::TTestActorRuntime&, unsigned long, unsigned long, TBasicString<char, std::__y1::char_traits<char>> const&, TBasicString<char, std::__y1::char_traits<char>> const&, TVector<NSchemeShardUT_Private::TExpectedResult, std::__y1::allocator<NSchemeShardUT_Private::TExpectedResult>> const&, TVector<NSchemeShardUT_Private::TPathVersion, std::__y1::allocator<NSchemeShardUT_Private::TPathVersion>> const&) (runtime=..., schemeShardId=72057594046678944, txId=101, parentPath="/MyRoot", scheme="\n", ' ' <repeats 12 times>, "TableDescription {\n", ' ' <repeats 14 times>, "Name: \"vectors\"\n", ' ' <repeats 14 times>, "Columns { Name: \"id\" Type: \"Uint64\" }\n", ' ' <repeats 14 times>, "Columns { Name: \"embedding\" Type: \"String\" }\n", ' ' <repeats 14 times>, "Columns { Nam"..., expectedResults=TVector (length=1, capacity=1) = {...}, applyIf=empty TVector (capacity=0)) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/ut_helpers/helpers.cpp:822
+#21 0x000000003f3a224b in NSchemeShardUT_Private::TestCreateIndexedTable(NActors::TTestActorRuntime&, unsigned long, TBasicString<char, std::__y1::char_traits<char>> const&, TBasicString<char, std::__y1::char_traits<char>> const&, TVector<NSchemeShardUT_Private::TExpectedResult, std::__y1::allocator<NSchemeShardUT_Private::TExpectedResult>> const&, TVector<NSchemeShardUT_Private::TPathVersion, std::__y1::allocator<NSchemeShardUT_Private::TPathVersion>> const&) (runtime=..., txId=101, parentPath="/MyRoot", scheme="\n", ' ' <repeats 12 times>, "TableDescription {\n", ' ' <repeats 14 times>, "Name: \"vectors\"\n", ' ' <repeats 14 times>, "Columns { Name: \"id\" Type: \"Uint64\" }\n", ' ' <repeats 14 times>, "Columns { Name: \"embedding\" Type: \"String\" }\n", ' ' <repeats 14 times>, "Columns { Nam"..., expectedResults=TVector (length=1, capacity=1) = {...}, applyIf=empty TVector (capacity=0)) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/ut_helpers/helpers.cpp:822
+#22 0x0000000027469182 in NTestSuiteIndexBuildTest::TTestCaseVectorIndexDescriptionIsPersisted::Execute_ (this=0x46c4bedad780, ut_context=...) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/ut_index_build/ut_index_build.cpp:1022
+#23 0x000000002747ad43 in NTestSuiteIndexBuildTest::TCurrentTest::Execute()::'lambda'()::operator()() const (this=0x7fffffffd9b8) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/ut_index_build/ut_index_build.cpp:18
+#24 0x000000002747acb5 in decltype(std::declval<NTestSuiteIndexBuildTest::TCurrentTest::Execute()::'lambda'()&>()()) std::__y1::__invoke[abi:v180000]<NTestSuiteIndexBuildTest::TCurrentTest::Execute()::'lambda'()&>(NTestSuiteIndexBuildTest::TCurrentTest::Execute()::'lambda'()&) (__f=...) at /home/deminds/github/ydb/contrib/libs/cxxsupp/libcxx/include/__type_traits/invoke.h:344
+#25 0x000000002747ac75 in void std::__y1::__invoke_void_return_wrapper<void, true>::__call[abi:v180000]<NTestSuiteIndexBuildTest::TCurrentTest::Execute()::'lambda'()&>(NTestSuiteIndexBuildTest::TCurrentTest::Execute()::'lambda'()&) (__args=...) at /home/deminds/github/ydb/contrib/libs/cxxsupp/libcxx/include/__type_traits/invoke.h:419
+#26 0x000000002747ac4d in std::__y1::__function::__alloc_func<NTestSuiteIndexBuildTest::TCurrentTest::Execute()::'lambda'(), std::__y1::allocator<NTestSuiteIndexBuildTest::TCurrentTest::Execute()::'lambda'()>, void ()>::operator()[abi:v180000]() (this=0x7fffffffd9b8) at /home/deminds/github/ydb/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:195
+#27 0x000000002747a039 in std::__y1::__function::__func<NTestSuiteIndexBuildTest::TCurrentTest::Execute()::'lambda'(), std::__y1::allocator<NTestSuiteIndexBuildTest::TCurrentTest::Execute()::'lambda'()>, void ()>::operator()() (this=0x7fffffffd9b0) at /home/deminds/github/ydb/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:366
+#28 0x00000000260e0a12 in std::__y1::__function::__value_func<void ()>::operator()[abi:v180000]() const (this=0x7fffffffd9b0) at /home/deminds/github/ydb/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:519
+#29 0x00000000260d83d5 in std::__y1::function<void ()>::operator()() const (this=0x7fffffffd9b0) at /home/deminds/github/ydb/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:1170
+#30 0x000000002786954e in TColoredProcessor::Run(std::__y1::function<void ()>, TBasicString<char, std::__y1::char_traits<char>> const&, char const*, bool) (this=0x7fffffffdf08, f=..., suite="IndexBuildTest", name=0x1ae09d6c "VectorIndexDescriptionIsPersisted", forceFork=false) at /home/deminds/github/ydb/library/cpp/testing/unittest/utmain.cpp:525
+#31 0x000000002783d706 in NUnitTest::TTestBase::Run(std::__y1::function<void ()>, TBasicString<char, std::__y1::char_traits<char>> const&, char const*, bool) (this=0x46c4bf2dd7c0, f=..., suite="IndexBuildTest", name=0x1ae09d6c "VectorIndexDescriptionIsPersisted", forceFork=false) at /home/deminds/github/ydb/library/cpp/testing/unittest/registar.cpp:374
+#32 0x00000000274782d2 in NTestSuiteIndexBuildTest::TCurrentTest::Execute (this=0x46c4bf2dd7c0) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/ut_index_build/ut_index_build.cpp:18
+#33 0x000000002783dfc7 in NUnitTest::TTestFactory::Execute (this=0x40627748 <NUnitTest::TTestFactory::Instance()::f>) at /home/deminds/github/ydb/library/cpp/testing/unittest/registar.cpp:495
+#34 0x0000000027867228 in NUnitTest::RunMain (argc=2, argv=0x7fffffffe198) at /home/deminds/github/ydb/library/cpp/testing/unittest/utmain.cpp:872
+#35 0x0000000027866152 in main (argc=2, argv=0x7fffffffe198) at /home/deminds/github/ydb/library/cpp/testing/unittest_main/main.cpp:4
++c
+Continuing.
+
+Thread 1 "ydb-core-tx-sch" hit Breakpoint 1, NTestSuiteIndexBuildTest::TTestCaseVectorIndexDescriptionIsPersisted::Execute_ (this=0x46c4bedad780, ut_context=...) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/ut_index_build/ut_index_build.cpp:1070
+warning: Source file is more recent than executable.
+1070	        const ui64 buildIndexTx = ++txId;
++c
+Continuing.
+
+Thread 1 "ydb-core-tx-sch" hit Breakpoint 4, NTestSuiteIndexBuildTest::TTestCaseVectorIndexDescriptionIsPersisted::Execute_ (this=0x46c4bedad780, ut_context=...) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/ut_index_build/ut_index_build.cpp:1076
+1076	        Cerr << "\ttesting, index build settings before reboot:\n" << TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx).GetIndexBuild().GetSettings().DebugString();
++c
+Continuing.
+
+Thread 1 "ydb-core-tx-sch" hit Breakpoint 2, (anonymous namespace)::InitPartitioning(NKikimrSchemeOp::TTableDescription const&, NKikimr::NScheme::TTypeRegistry const*, TVector<unsigned int, std::__y1::allocator<unsigned int>> const&, TVector<NKikimr::NScheme::TTypeInfo, std::__y1::allocator<NKikimr::NScheme::TTypeInfo>> const&, TBasicString<char, std::__y1::char_traits<char>>&, TVector<NKikimr::NSchemeShard::TTableShardInfo, std::__y1::allocator<NKikimr::NSchemeShard::TTableShardInfo>>&, NKikimr::NSchemeShard::TSchemeLimits const&) (op=..., typeRegistry=0x46c4bec08940, keyColIds=TVector (length=2, capacity=2) = {...}, keyColTypeIds=TVector (length=2, capacity=2) = {...}, errStr="", partitions=empty TVector (capacity=0), limits=...) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/schemeshard__operation_create_table.cpp:80
+80	        if (!TSchemeShard::FillSplitPartitioning(rangeEnds, keyColTypeIds, op.GetSplitBoundary(), errStr)) {
++p keyColIds
+$1 = TVector (length=2, capacity=2) = {[0] = 1, [1] = 2}
++n
+
+Thread 1 "ydb-core-tx-sch" hit Breakpoint 3, NKikimr::NSchemeShard::TSchemeShard::FillSplitPartitioning(TVector<TBasicString<char, std::__y1::char_traits<char>>, std::__y1::allocator<TBasicString<char, std::__y1::char_traits<char>>>>&, TArrayRef<NKikimr::NScheme::TTypeInfo const> const&, google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TSplitBoundary> const&, TBasicString<char, std::__y1::char_traits<char>>&) (rangeEnds=empty TVector (capacity=0), keyColTypes=..., boundaries=..., errStr="Value of type Uint32 expected in tuple at position 0") at /home/deminds/github/ydb/ydb/core/tx/schemeshard/schemeshard_impl.cpp:6627
+6627	            errStr = Sprintf("Error at split boundary %d: %s", i, errStr.data());
++bt
+#0  NKikimr::NSchemeShard::TSchemeShard::FillSplitPartitioning(TVector<TBasicString<char, std::__y1::char_traits<char>>, std::__y1::allocator<TBasicString<char, std::__y1::char_traits<char>>>>&, TArrayRef<NKikimr::NScheme::TTypeInfo const> const&, google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TSplitBoundary> const&, TBasicString<char, std::__y1::char_traits<char>>&) (rangeEnds=empty TVector (capacity=0), keyColTypes=..., boundaries=..., errStr="Value of type Uint32 expected in tuple at position 0") at /home/deminds/github/ydb/ydb/core/tx/schemeshard/schemeshard_impl.cpp:6627
+#1  0x0000000037b81e5f in (anonymous namespace)::InitPartitioning(NKikimrSchemeOp::TTableDescription const&, NKikimr::NScheme::TTypeRegistry const*, TVector<unsigned int, std::__y1::allocator<unsigned int>> const&, TVector<NKikimr::NScheme::TTypeInfo, std::__y1::allocator<NKikimr::NScheme::TTypeInfo>> const&, TBasicString<char, std::__y1::char_traits<char>>&, TVector<NKikimr::NSchemeShard::TTableShardInfo, std::__y1::allocator<NKikimr::NSchemeShard::TTableShardInfo>>&, NKikimr::NSchemeShard::TSchemeLimits const&) (op=..., typeRegistry=0x46c4bec08940, keyColIds=TVector (length=2, capacity=2) = {...}, keyColTypeIds=TVector (length=2, capacity=2) = {...}, errStr="Value of type Uint32 expected in tuple at position 0", partitions=empty TVector (capacity=0), limits=...) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/schemeshard__operation_create_table.cpp:80
+#2  0x0000000037b8147e in (anonymous namespace)::DoInitPartitioning(TIntrusivePtr<NKikimr::NSchemeShard::TTableInfo, TDefaultIntrusivePtrOps<NKikimr::NSchemeShard::TTableInfo>>, NKikimrSchemeOp::TTableDescription const&, NKikimr::NScheme::TTypeRegistry const*, TBasicString<char, std::__y1::char_traits<char>>&, TVector<NKikimr::NSchemeShard::TTableShardInfo, std::__y1::allocator<NKikimr::NSchemeShard::TTableShardInfo>>&, NKikimr::NSchemeShard::TSchemeLimits const&) (tableInfo=TIntrusivePtr<NKikimr::NSchemeShard::TTableInfo> = {...}, op=..., typeRegistry=0x46c4bec08940, errStr="Value of type Uint32 expected in tuple at position 0", partitions=empty TVector (capacity=0), limits=...) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/schemeshard__operation_create_table.cpp:130
+#3  0x0000000037b7dffe in (anonymous namespace)::TCreateTable::Propose(TBasicString<char, std::__y1::char_traits<char>> const&, NKikimr::NSchemeShard::TOperationContext&) (this=0x46c4bec45800, owner="root@builtin", context=...) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/schemeshard__operation_create_table.cpp:595
+#4  0x000000003784cfd6 in NKikimr::NSchemeShard::TSchemeShard::IgniteOperation (this=0x46c4bf4f4000, request=..., context=...) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/schemeshard__operation.cpp:158
+#5  0x00000000378ce3c6 in NKikimr::NSchemeShard::TSchemeShard::TTxOperationPropose::Execute (this=0x46c4bf410900, txc=..., ctx=...) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/schemeshard__operation.cpp:316
+#6  0x000000002aaead90 in NKikimr::NTabletFlatExecutor::TExecutor::ExecuteTransaction (this=0x46c4bf0acb80, seat=TAutoPtr<NKikimr::NTabletFlatExecutor::TSeat> = {...}, ctx=...) at /home/deminds/github/ydb/ydb/core/tablet_flat/flat_executor.cpp:1715
+#7  0x000000002aae86ce in NKikimr::NTabletFlatExecutor::TExecutor::DoExecute (this=0x46c4bf0acb80, self=TAutoPtr<NKikimr::NTabletFlatExecutor::ITransaction> = {...}, allowImmediate=true, ctx=...) at /home/deminds/github/ydb/ydb/core/tablet_flat/flat_executor.cpp:1687
+#8  0x000000002aaec52b in NKikimr::NTabletFlatExecutor::TExecutor::Execute (this=0x46c4bf0acb80, self=..., ctx=...) at /home/deminds/github/ydb/ydb/core/tablet_flat/flat_executor.cpp:1691
+#9  0x000000002aabb953 in NKikimr::NTabletFlatExecutor::TTabletExecutedFlat::Execute (this=0x46c4bf4f4050, transaction=TAutoPtr<NKikimr::NTabletFlatExecutor::ITransaction> = {...}) at /home/deminds/github/ydb/ydb/core/tablet_flat/tablet_flat_executed.cpp:39
+#10 0x000000002aabb85a in NKikimr::NTabletFlatExecutor::TTabletExecutedFlat::Execute (this=0x46c4bf4f4050, transaction=..., ctx=...) at /home/deminds/github/ydb/ydb/core/tablet_flat/tablet_flat_executed.cpp:34
+#11 0x00000000372f27ba in NKikimr::NSchemeShard::TSchemeShard::Handle (this=0x46c4bf4f4000, ev=TAutoPtr<NActors::TEventHandle<NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>> = {...}, ctx=...) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/schemeshard_impl.cpp:5353
+#12 0x000000003729389b in NKikimr::NSchemeShard::TSchemeShard::StateWork (this=0x46c4bf4f4000, ev=TAutoPtr<NActors::IEventHandle> = {...}) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/schemeshard_impl.cpp:4628
+#13 0x00000000281c58be in NActors::TActorCallbackBehaviour::Receive (this=0x46c4bf4f4030, actor=0x46c4bf4f4000, ev=TAutoPtr<NActors::IEventHandle> = {...}) at /home/deminds/github/ydb/ydb/library/actors/core/actor.cpp:252
+#14 0x0000000028249d23 in NActors::IActor::Receive (this=0x46c4bf4f4000, ev=TAutoPtr<NActors::IEventHandle> = {...}) at /home/deminds/github/ydb/ydb/library/actors/core/actor.h:534
+#15 0x000000003cb9daeb in NActors::TTestActorRuntimeBase::SendInternal (this=0x7fffffffc610, ev=TAutoPtr<NActors::IEventHandle> = {...}, nodeIndex=0, viaActorSystem=false) at /home/deminds/github/ydb/ydb/library/actors/testlib/test_runtime.cpp:1686
+#16 0x000000003cb9ada8 in NActors::TTestActorRuntimeBase::DispatchEventsInternal (this=0x7fffffffc610, options=..., simDeadline=...) at /home/deminds/github/ydb/ydb/library/actors/testlib/test_runtime.cpp:1287
+#17 0x000000003cb9f7d0 in NActors::TTestActorRuntimeBase::WaitForEdgeEvents(std::__y1::function<bool (NActors::TTestActorRuntimeBase&, TAutoPtr<NActors::IEventHandle, TDelete>&)>, TSet<NActors::TActorId, TLess<NActors::TActorId>, std::__y1::allocator<NActors::TActorId>> const&, TDuration) (this=0x7fffffffc610, filter=..., edgeFilter=..., simTimeout=...) at /home/deminds/github/ydb/ydb/library/actors/testlib/test_runtime.cpp:1546
+#18 0x000000003f579894 in NKikimr::NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult* NActors::TTestActorRuntimeBase::GrabEdgeEventIf<NKikimr::NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(TAutoPtr<NActors::IEventHandle, TDelete>&, std::__y1::function<bool (NKikimr::NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult const&)>, TDuration) (this=0x7fffffffc610, handle=TAutoPtr<NActors::IEventHandle> = {...}, predicate=..., simTimeout=...) at /home/deminds/github/ydb/ydb/library/actors/testlib/test_runtime.h:442
+#19 0x000000003f567c8e in NActors::TTestActorRuntimeBase::GrabEdgeEvent<NKikimr::NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult> (this=0x7fffffffc610, handle=TAutoPtr<NActors::IEventHandle> = {...}, simTimeout=...) at /home/deminds/github/ydb/ydb/library/actors/testlib/test_runtime.h:506
+#20 0x000000003f567437 in NSchemeShardUT_Private::TestWaitNotification(NActors::TTestActorRuntime&, TSet<unsigned long, TLess<unsigned long>, std::__y1::allocator<unsigned long>>, NActors::TActorId) (runtime=..., txIds=..., subscriberActorId=[1:345:12334]) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/ut_helpers/test_env.cpp:770
+#21 0x000000003f567f9c in NSchemeShardUT_Private::TTestEnv::TestWaitNotification(NActors::TTestActorRuntime&, TSet<unsigned long, TLess<unsigned long>, std::__y1::allocator<unsigned long>>, unsigned long) (this=0x7fffffffc580, runtime=..., txIds=..., schemeshardId=72057594046678944) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/ut_helpers/test_env.cpp:784
+#22 0x000000003f568168 in NSchemeShardUT_Private::TTestEnv::TestWaitNotification (this=0x7fffffffc580, runtime=..., txId=102, schemeshardId=72057594046678944) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/ut_helpers/test_env.cpp:794
+#23 0x00000000274697b1 in NTestSuiteIndexBuildTest::TTestCaseVectorIndexDescriptionIsPersisted::Execute_ (this=0x46c4bedad780, ut_context=...) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/ut_index_build/ut_index_build.cpp:1081
+#24 0x000000002747ad43 in NTestSuiteIndexBuildTest::TCurrentTest::Execute()::'lambda'()::operator()() const (this=0x7fffffffd9b8) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/ut_index_build/ut_index_build.cpp:18
+#25 0x000000002747acb5 in decltype(std::declval<NTestSuiteIndexBuildTest::TCurrentTest::Execute()::'lambda'()&>()()) std::__y1::__invoke[abi:v180000]<NTestSuiteIndexBuildTest::TCurrentTest::Execute()::'lambda'()&>(NTestSuiteIndexBuildTest::TCurrentTest::Execute()::'lambda'()&) (__f=...) at /home/deminds/github/ydb/contrib/libs/cxxsupp/libcxx/include/__type_traits/invoke.h:344
+#26 0x000000002747ac75 in void std::__y1::__invoke_void_return_wrapper<void, true>::__call[abi:v180000]<NTestSuiteIndexBuildTest::TCurrentTest::Execute()::'lambda'()&>(NTestSuiteIndexBuildTest::TCurrentTest::Execute()::'lambda'()&) (__args=...) at /home/deminds/github/ydb/contrib/libs/cxxsupp/libcxx/include/__type_traits/invoke.h:419
+#27 0x000000002747ac4d in std::__y1::__function::__alloc_func<NTestSuiteIndexBuildTest::TCurrentTest::Execute()::'lambda'(), std::__y1::allocator<NTestSuiteIndexBuildTest::TCurrentTest::Execute()::'lambda'()>, void ()>::operator()[abi:v180000]() (this=0x7fffffffd9b8) at /home/deminds/github/ydb/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:195
+#28 0x000000002747a039 in std::__y1::__function::__func<NTestSuiteIndexBuildTest::TCurrentTest::Execute()::'lambda'(), std::__y1::allocator<NTestSuiteIndexBuildTest::TCurrentTest::Execute()::'lambda'()>, void ()>::operator()() (this=0x7fffffffd9b0) at /home/deminds/github/ydb/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:366
+#29 0x00000000260e0a12 in std::__y1::__function::__value_func<void ()>::operator()[abi:v180000]() const (this=0x7fffffffd9b0) at /home/deminds/github/ydb/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:519
+#30 0x00000000260d83d5 in std::__y1::function<void ()>::operator()() const (this=0x7fffffffd9b0) at /home/deminds/github/ydb/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:1170
+#31 0x000000002786954e in TColoredProcessor::Run(std::__y1::function<void ()>, TBasicString<char, std::__y1::char_traits<char>> const&, char const*, bool) (this=0x7fffffffdf08, f=..., suite="IndexBuildTest", name=0x1ae09d6c "VectorIndexDescriptionIsPersisted", forceFork=false) at /home/deminds/github/ydb/library/cpp/testing/unittest/utmain.cpp:525
+#32 0x000000002783d706 in NUnitTest::TTestBase::Run(std::__y1::function<void ()>, TBasicString<char, std::__y1::char_traits<char>> const&, char const*, bool) (this=0x46c4bf2dd7c0, f=..., suite="IndexBuildTest", name=0x1ae09d6c "VectorIndexDescriptionIsPersisted", forceFork=false) at /home/deminds/github/ydb/library/cpp/testing/unittest/registar.cpp:374
+#33 0x00000000274782d2 in NTestSuiteIndexBuildTest::TCurrentTest::Execute (this=0x46c4bf2dd7c0) at /home/deminds/github/ydb/ydb/core/tx/schemeshard/ut_index_build/ut_index_build.cpp:18
+#34 0x000000002783dfc7 in NUnitTest::TTestFactory::Execute (this=0x40627748 <NUnitTest::TTestFactory::Instance()::f>) at /home/deminds/github/ydb/library/cpp/testing/unittest/registar.cpp:495
+#35 0x0000000027867228 in NUnitTest::RunMain (argc=2, argv=0x7fffffffe198) at /home/deminds/github/ydb/library/cpp/testing/unittest/utmain.cpp:872
+#36 0x0000000027866152 in main (argc=2, argv=0x7fffffffe198) at /home/deminds/github/ydb/library/cpp/testing/unittest_main/main.cpp:4
++l
+6622	        TVector<TString> memoryOwner;
+6623	        if (boundary.HasSerializedKeyPrefix()) {
+6624	            prefix.Parse(boundary.GetSerializedKeyPrefix());
+6625	            rangeEnd = TVector<TCell>(prefix.GetCells().begin(), prefix.GetCells().end());
+6626	        } else if (!NMiniKQL::CellsFromTuple(nullptr, boundary.GetKeyPrefix(), keyColTypes, {}, false, rangeEnd, errStr, memoryOwner)) {
+6627	            errStr = Sprintf("Error at split boundary %d: %s", i, errStr.data());
+6628	            return false;
+6629	        }
+6630	        rangeEnd.resize(keyColTypes.size());     // Extend with NULLs
+6631	        rangeEnds.push_back(TSerializedCellVec::Serialize(rangeEnd));
++l -
+6612	}
+6613	
+6614	bool TSchemeShard::FillSplitPartitioning(TVector<TString>& rangeEnds, const TConstArrayRef<NScheme::TTypeInfo>& keyColTypes,
+6615	                                             const::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TSplitBoundary> &boundaries,
+6616	                                             TString& errStr) {
+6617	    for (int i = 0; i < boundaries.size(); ++i) {
+6618	        // Convert split boundary to serialized range end
+6619	        auto& boundary = boundaries.Get(i);
+6620	        TVector<TCell> rangeEnd;
+6621	        TSerializedCellVec prefix;
++p boundary
+$2 = (const NKikimrSchemeOp::TSplitBoundary &) @0x46c4bb92b9b0: {<google::protobuf::Message> = {<google::protobuf::MessageLite> = {_vptr$MessageLite = 0x3f8828a0 <vtable for NKikimrSchemeOp::TSplitBoundary+16>, _internal_metadata_ = {ptr_ = 0, static kUnknownFieldsTagMask = 1, static kPtrTagMask = 1, static kPtrValueMask = -2}}, <No data fields>}, static kIndexInFileMessages = 16, static _class_data_ = {copy_to_from = 0x27b78970 <google::protobuf::Message::CopyWithSourceCheck(google::protobuf::Message&, google::protobuf::Message const&)>, merge_to_from = 0x28c76d30 <NKikimrSchemeOp::TSplitBoundary::MergeImpl(google::protobuf::Message&, google::protobuf::Message const&)>}, {_impl_ = {_has_bits_ = {has_bits_ = {2}}, _cached_size_ = {atom_ = 0}, serializedkeyprefix_ = {tagged_ptr_ = {ptr_ = 0x4058f978 <google::protobuf::internal::fixed_address_empty_string>}}, keyprefix_ = 0x46c4be5b0c00}}}
++p boundary.DebugString()
+$3 = "KeyPrefix {\n  Tuple {\n    Optional {\n      Bytes: \"alice\"\n    }\n  }\n}\n"
++p errStr
+$4 = "Value of type Uint32 expected in tuple at position 0"
++p keyColTypes
+$5 = (const TConstArrayRef<NScheme::TTypeInfo> &) @0x7fffffff2f60: {T_ = 0x46c4bb987880, S_ = 2}
++q

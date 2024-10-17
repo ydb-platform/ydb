@@ -102,6 +102,8 @@ namespace NLs {
     void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc PartitionCount(ui32 count);
     TCheckFunc PartitionKeys(TVector<TString> lastShardKeys);
+    template <typename T>
+    TCheckFunc PartitionKeyPrefixes(TVector<T>&& keyPrefixes);
     TCheckFunc FollowerCount(ui32 count);
     TCheckFunc CrossDataCenterFollowerCount(ui32 count);
     TCheckFunc AllowFollowerPromotion(bool val);
@@ -141,7 +143,7 @@ namespace NLs {
     TCheckFunc IndexState(NKikimrSchemeOp::EIndexState state);
     TCheckFunc IndexKeys(const TVector<TString>& keyNames);
     TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames);
-    
+
     TCheckFunc VectorIndexDescription(Ydb::Table::VectorIndexSettings_Distance dist,
                                       Ydb::Table::VectorIndexSettings_Similarity similarity,
                                       Ydb::Table::VectorIndexSettings_VectorType vectorType,

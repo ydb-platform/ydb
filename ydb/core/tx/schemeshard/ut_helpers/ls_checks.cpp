@@ -1,4 +1,5 @@
 #include "ls_checks.h"
+#include "helpers.h"
 
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
@@ -853,8 +854,8 @@ TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames) {
     };
 }
 
-TCheckFunc VectorIndexDescription(Ydb::Table::VectorIndexSettings_Distance dist, 
-                                  Ydb::Table::VectorIndexSettings_Similarity similarity, 
+TCheckFunc VectorIndexDescription(Ydb::Table::VectorIndexSettings_Distance dist,
+                                  Ydb::Table::VectorIndexSettings_Similarity similarity,
                                   Ydb::Table::VectorIndexSettings_VectorType vectorType,
                                   ui32 vectorDimension
                                   ) {
@@ -1311,10 +1312,56 @@ TCheckFunc PartitionKeys(TVector<TString> lastShardKeys) {
         const auto& pathDescr = record.GetPathDescription();
         UNIT_ASSERT_VALUES_EQUAL(lastShardKeys.size(), pathDescr.TablePartitionsSize());
         for (size_t i = 0; i < lastShardKeys.size(); ++i) {
-            UNIT_ASSERT_STRING_CONTAINS(pathDescr.GetTablePartitions(i).GetEndOfRangeKeyPrefix(), lastShardKeys[i]);
+            const auto& partition = pathDescr.GetTablePartitions(i);
+            UNIT_ASSERT_STRING_CONTAINS_C(
+                partition.GetEndOfRangeKeyPrefix(), lastShardKeys[i],
+                "partition number: " << i << '\n' << partition.DebugString() // it helps to print past the '\0'
+                    << partition.GetEndOfRangeKeyPrefix().Quote() << '\n'
+                    << lastShardKeys[i].Quote() << '\n'
+            );
         }
     };
 }
+
+namespace {
+
+// Serializes / deserializes the first component of the CellVec.
+template <typename T>
+struct TSplitBoundarySerializer {
+    static TString Serialize(T splitBoundary) {
+        const auto cell = TCell::Make(splitBoundary);
+        TSerializedCellVec cellVec(TArrayRef<const TCell>(&cell, 1));
+        return cellVec.ReleaseBuffer();
+    }
+
+    static T Deserialize(const TString& serialized) {
+        TSerializedCellVec cellVec(serialized);
+        auto& cell = cellVec.GetCells()[0];
+        return cell.IsNull() ? T() : cell.AsValue<T>();
+    }
+};
+
+}
+
+template <typename T>
+TCheckFunc PartitionKeyPrefixes(TVector<T>&& keyPrefixes) {
+    return [keyPrefixes = std::move(keyPrefixes)] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        const auto& pathDescr = record.GetPathDescription();
+        UNIT_ASSERT_VALUES_EQUAL(pathDescr.TablePartitionsSize(), keyPrefixes.size() + 1);
+        // do not check the last key prefix, it would always be ""
+        for (size_t i = 0; i < keyPrefixes.size(); ++i) {
+            const auto& partition = pathDescr.GetTablePartitions(i);
+            T actual = TSplitBoundarySerializer<T>::Deserialize(partition.GetEndOfRangeKeyPrefix());
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                actual, keyPrefixes[i],
+                "partition number: " << i << '\n'
+                    << partition.DebugString() // to print all the '\0' in the actual key prefix
+            );
+        }
+    };
+}
+
+template TCheckFunc PartitionKeyPrefixes<ui32>(TVector<ui32>&&);
 
 TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {

@@ -1007,6 +1007,131 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         });
     }
 
+    Y_UNIT_TEST(VectorIndexDescriptionIsPersisted) {
+        TTestBasicRuntime runtime;
+
+        TTestEnvOptions opts;
+        opts.EnableBackgroundCompaction(false);
+        opts.DisableStatsBatching(true);
+        TTestEnv env(runtime, opts);
+
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "vectors"
+            Columns { Name: "id" Type: "Uint64" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "covered" Type: "String" }
+            KeyColumnNames: [ "id" ]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto globalIndexSettings = []{
+            Ydb::Table::GlobalIndexSettings globalIndexSettings;
+            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
+                partition_at_keys {
+                    split_points {
+                        type { tuple_type { elements { optional_type { item { type_id: UINT32 } } } } }
+                        value { items { uint32_value: 12345 } }
+                    }
+                    split_points {
+                        type { tuple_type { elements { optional_type { item { type_id: UINT32 } } } } }
+                        value { items { uint32_value: 54321 } }
+                    }
+                }
+                partitioning_settings {
+                    min_partitions_count: 3
+                    max_partitions_count: 3
+                }
+            )", &globalIndexSettings));
+            return NYdb::NTable::TGlobalIndexSettings::FromProto(globalIndexSettings);
+        }();
+
+        auto vectorIndexSettings = []{
+            Ydb::Table::VectorIndexSettings vectorIndexSettings;
+            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
+                distance: DISTANCE_COSINE,
+                vector_type: VECTOR_TYPE_FLOAT,
+                vector_dimension: 1024
+            )", &vectorIndexSettings));
+            using T = NYdb::NTable::TVectorIndexSettings;
+            return std::make_unique<T>(T::FromProto(vectorIndexSettings));
+        }();
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> indexCreationBlocker(runtime, [](const auto& ev) {
+            const auto& modifyScheme = ev->Get()->Record.GetTransaction(0);
+            return modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexBuild;
+        });
+
+        const ui64 buildIndexTx = ++txId;
+        TestBuildIndex(runtime,  buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", TBuildIndexConfig{
+            "by_embedding", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, { "embedding" }, { "covered" },
+            { globalIndexSettings, globalIndexSettings }, std::move(vectorIndexSettings)
+        });
+
+        Cerr << "\ttesting, index build settings before reboot:\n" << TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx).GetIndexBuild().GetSettings().DebugString();
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        indexCreationBlocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+            buildIndexOperation.DebugString()
+        );
+
+        Cerr << "\ttesting, index build settings after reboot:\n" << buildIndexOperation.GetIndexBuild().GetSettings().DebugString();
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/by_embedding"), {
+            NLs::PathExist,
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
+            NLs::IndexKeys({"embedding"}),
+            NLs::IndexDataColumns({"covered"}),
+            NLs::VectorIndexDescription(
+                Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
+                Ydb::Table::VectorIndexSettings::SIMILARITY_UNSPECIFIED,
+                Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
+                1024
+            ),
+        });
+
+        using namespace NKikimr::NTableIndex::NTableVectorKmeansTreeIndex;
+        TestDescribeResult(DescribePrivatePath(runtime, JoinFsPaths("/MyRoot/vectors/by_embedding", LevelTable), true, true), {
+            NLs::IsTable,
+            NLs::CheckColumns(
+                LevelTable,
+                { LevelTable_ParentColumn, LevelTable_IdColumn, LevelTable_EmbeddingColumn },
+                {},
+                { LevelTable_ParentColumn, LevelTable_IdColumn },
+                true
+            ),
+            NLs::PartitionCount(3),
+            NLs::MinPartitionsCountEqual(3),
+            NLs::MaxPartitionsCountEqual(3),
+            NLs::PartitionKeyPrefixes<ui32>({12345, 54321})
+        });
+        ;
+        TestDescribeResult(DescribePrivatePath(runtime, JoinFsPaths("/MyRoot/vectors/by_embedding", PostingTable), true, true), {
+            NLs::IsTable,
+            NLs::CheckColumns(
+                PostingTable,
+                { PostingTable_ParentColumn, "id", "covered" },
+                {},
+                { PostingTable_ParentColumn, "id" },
+                true
+            ),
+            NLs::PartitionCount(3),
+            NLs::MinPartitionsCountEqual(3),
+            NLs::MaxPartitionsCountEqual(3),
+            NLs::PartitionKeyPrefixes<ui32>({12345, 54321})
+        });
+    }
+
     Y_UNIT_TEST(DropIndex) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

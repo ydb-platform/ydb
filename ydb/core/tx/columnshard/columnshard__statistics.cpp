@@ -4,26 +4,65 @@
 
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/subscriber/subscribers/analyze_subscriber.h>
 
 #include <ydb/library/minsketch/count_min_sketch.h>
 
 
 namespace NKikimr::NColumnShard {
 
-void TColumnShard::Handle(NStat::TEvStatistics::TEvAnalyzeTable::TPtr& ev, const TActorContext&) {
+void TColumnShard::Handle(NStat::TEvStatistics::TEvAnalyzeTable::TPtr& ev, const TActorContext& ctx) {
     auto& requestRecord = ev->Get()->Record;
-    // TODO Start a potentially long analysis process.
-    // ...
 
-
-
-    // Return the response when the analysis is completed
     auto response = std::make_unique<NStat::TEvStatistics::TEvAnalyzeTableResponse>();
     auto& responseRecord = response->Record;
     responseRecord.SetOperationId(requestRecord.GetOperationId());
     responseRecord.MutablePathId()->CopyFrom(requestRecord.GetTable().GetPathId());
     responseRecord.SetShardTabletId(TabletID());
-    Send(ev->Sender, response.release(), 0, ev->Cookie);
+
+    if (requestRecord.TypesSize() > 0 && (requestRecord.TypesSize() > 1 || requestRecord.GetTypes(0) != NKikimrStat::TYPE_COUNT_MIN_SKETCH)) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "Unsupported statistic type in analyze request");
+
+        responseRecord.SetStatus(NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
+        Send(ev->Sender, response.release(), 0, ev->Cookie);
+        return;
+    }
+
+    AFL_VERIFY(HasIndex());
+    auto index = GetIndexAs<NOlap::TColumnEngineForLogs>();
+    auto spg = index.GetGranuleOptional(requestRecord.GetTable().GetPathId().GetLocalId());
+    AFL_VERIFY(spg);
+
+    auto actualSchema = index.GetVersionedIndex().GetLastCriticalSchema();
+    if (!actualSchema) {  // never was actualized
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("warning", "Table was never actualized, it could mean no statistics enabled");
+
+        responseRecord.SetStatus(NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+        Send(ev->Sender, response.release(), 0, ev->Cookie);
+        return;
+
+    }
+    ui64 actualVersion = actualSchema->GetVersion();
+    ui32 totalVisiblePortions = 0;
+    ui32 actualVisiblePortions = 0;
+
+    for (const auto& [_, portionInfo] : spg->GetPortions()) {
+        if (portionInfo->IsVisible(GetMaxReadVersion())) {
+            std::shared_ptr<NOlap::ISnapshotSchema> portionSchema = portionInfo->GetSchema(index.GetVersionedIndex());
+            totalVisiblePortions++;
+            if (portionSchema->GetVersion() >= actualVersion) {
+                actualVisiblePortions++;
+            }
+        }
+    }
+
+    if (totalVisiblePortions > 0 && actualVisiblePortions == totalVisiblePortions) {
+        responseRecord.SetStatus(NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+        Send(ev->Sender, response.release(), 0, ev->Cookie);
+    } else {
+        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "wait_analyze");
+        Subscribers->RegisterSubscriber(std::make_shared<NSubscriber::TAnalyzeSubscriber>(ev->Sender, ev->Cookie, ctx, std::move(response)));
+    }
 }
 
 void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext&) {

@@ -213,7 +213,7 @@ private:
         EraseEntry(entry);
         Entries.erase(entryIt);
 
-        ColdTarget = Min(ColdTarget + entry->Size, Limit);
+        ColdTarget = Min(ColdTarget + TPageTraits::GetSize(page), Limit);
         ColdTargetCounter->Set(ColdTarget);
 
         auto result = EvictWhileFull();

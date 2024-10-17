@@ -18,6 +18,7 @@
 #include <ydb/core/base/ticket_parser.h>
 
 #include "mon_impl.h"
+#include "dynamic_counters_page.h"
 
 namespace NActors {
 
@@ -93,7 +94,7 @@ namespace NActors {
     }
 
     IMonPage* TSyncHttpMon::RegisterCountersPage(const TString &path, const TString &title, TIntrusivePtr<TDynamicCounters> counters) {
-        TDynamicCountersPage* page = new TDynamicCountersPage(path, title, counters);
+        TDynamicCountersPage* page = new TFilteredDynamicCountersPage(Config, path, title, counters);
         page->SetUnknownGroupPolicy(EUnknownGroupPolicy::Ignore);
         Register(page);
         return page;

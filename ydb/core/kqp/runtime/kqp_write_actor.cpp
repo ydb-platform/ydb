@@ -361,7 +361,6 @@ public:
     }
 
     void ResolveTable() {
-        Counters->WriteActorsShardResolve->Inc();
         SchemeEntry.reset();
         SchemeRequest.reset();
 
@@ -385,11 +384,8 @@ public:
         entry.ShowPrivatePath = true;
         request->ResultSet.emplace_back(entry);
 
-        WriteActorStateSpan =  NWilson::TSpan(TWilsonKqp::WriteActorTableNavigate, WriteActorSpan.GetTraceId(),
-            "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
-
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvInvalidateTable(TableId, {}), 0, 0, WriteActorSpan.GetTraceId());
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, 0, WriteActorSpan.GetTraceId());
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvInvalidateTable(TableId, {}), 0, 0);
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request)), 0, 0);
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -448,7 +444,7 @@ public:
         request->ResultSet.emplace_back(std::move(keyRange));
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));
-        Send(MakeSchemeCacheID(), resolveReq.Release(), 0, 0, WriteActorSpan.GetTraceId());
+        Send(MakeSchemeCacheID(), resolveReq.Release());
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
@@ -1064,13 +1060,6 @@ private:
 
         NYql::TIssues issues;
         issues.AddIssue(std::move(issue));
-
-        if (WriteActorStateSpan) {
-            WriteActorStateSpan.EndError(issues.ToOneLineString());
-        }
-        if (WriteActorSpan) {
-            WriteActorSpan.EndError(issues.ToOneLineString());
-        }
 
         Callbacks->OnAsyncOutputError(OutputIndex, std::move(issues), statusCode);
     }

@@ -1,0 +1,16 @@
+customer count: 150000
+customer md5: c9b14b4900e2d53efe9416b9d7d28617
+lineitem count: 6001215
+lineitem md5: 9de3ad69995d71d02d35bb97a2a35e26
+nation count: 25
+nation md5: 0d596dd4716b82f2ea7b5e36e8b8971b
+orders count: 1500000
+orders md5: 0606506aaf52e98d68147e32a5b44c4f
+part count: 200000
+part md5: fe83d7b3d3f0855b9d74b2ad1448f89c
+partsupp count: 800000
+partsupp md5: 26effd384e1748d342293828ecf93702
+region count: 5
+region md5: f996476d51da00bc64740d9198171c7f
+supplier count: 10000
+supplier md5: 426ca02b9612f2b092717cfcd3a59e74

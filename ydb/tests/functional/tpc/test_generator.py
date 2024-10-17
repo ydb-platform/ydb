@@ -8,9 +8,11 @@ import csv
 import hashlib
 import pytest
 import json
+import random
 
 from ydb.tests.library.common import yatest_common
 from ydb.tests.oss.canonical import set_canondata_root
+from threading import Thread
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +24,8 @@ def ydb_bin():
 
 
 class TpcGeneratorBase(object):
-    table_keys: dict[str, list[str]]
+    tables: dict[str, tuple[list[str], dict[int, int]]]
     workload: str
-    s1_state: dict[str, int]
 
     @classmethod
     def execute_generator(cls, output_path, scale=1, import_args=[], generator_args=[]):
@@ -74,13 +75,21 @@ class TpcGeneratorBase(object):
     def scale_hash(cls, paths: str | list[str], scale=1):
         if not isinstance(paths, list):
             paths = [paths]
-        result = []
-        for fname, keys in sorted(cls.table_keys.items()):
-            count, md5 = cls.calc_hashes([os.path.join(path, fname) for path in paths], keys)
-            result += [
-                f'{fname} count: {count}',
-                f'{fname} md5: {md5}',
-            ]
+        tables = list(sorted(cls.tables.items()))
+        result = [''] * 2 * len(tables)
+        threads = []
+
+        def _calc_hash(result: list[str], index: int):
+            fname, table = tables[index]
+            count, md5 = cls.calc_hashes([os.path.join(path, fname) for path in paths], table[0])
+            result[index * 2] = f'{fname} count: {count}'
+            result[index * 2 + 1] = f'{fname} md5: {md5}'
+
+        for index in range(len(tables)):
+            threads.append(Thread(target=_calc_hash, args=(result, index)))
+            threads[-1].start()
+        for t in threads:
+            t.join()
         return '\n'.join(result)
 
     @classmethod
@@ -125,8 +134,8 @@ class TpcGeneratorBase(object):
         with open(state_path, 'w') as f:
             json.dump({
                 'sources': {
-                    k: {'position': v}
-                    for k, v in self.s1_state.items()
+                    k: {'position': int(v[1][1] * random.uniform(0.25, 0.75))}
+                    for k, v in self.tables.items()
                 }
             }, f)
         paths = [self.tmp_path(path) for path in ['s1.1', 's1.2']]
@@ -142,23 +151,13 @@ class TpcGeneratorBase(object):
 
 class TestTpchGenerator(TpcGeneratorBase):
     workload = 'tpch'
-
-    table_keys = {
-        'customer': ['c_custkey'],
-        'lineitem': ['l_linenumber', 'l_orderkey'],
-        'nation': ['n_nationkey'],
-        'orders': ['o_orderkey'],
-        'part': ['p_partkey'],
-        'partsupp': ['ps_partkey', 'ps_suppkey'],
-        'region': ['r_regionkey'],
-        'supplier': ['s_suppkey'],
-    }
-
-    s1_state = {
-        'customer': 75342,
-        'nation': 13,
-        'orders': 757845,
-        'part': 134567,
-        'region': 2,
-        'supplier': 7832,
+    tables = {
+        'customer': (['c_custkey'], {1: 150000}),
+        'lineitem': (['l_linenumber', 'l_orderkey'], {1: 6001215}),
+        'nation': (['n_nationkey'], {1: 25}),
+        'orders': (['o_orderkey'], {1: 1500000}),
+        'part': (['p_partkey'], {1: 200000}),
+        'partsupp': (['ps_partkey', 'ps_suppkey'], {1: 800000}),
+        'region': (['r_regionkey'], {1: 5}),
+        'supplier': (['s_suppkey'], {1: 10000})
     }

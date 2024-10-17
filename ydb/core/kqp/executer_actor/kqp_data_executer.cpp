@@ -238,6 +238,7 @@ public:
                     ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
 
                     if (TxManager) {
+                        LOG_D("TEST::ADDDSHARD>> R " << lock.GetDataShard() << " " << stageInfo.Meta.TablePath << " " << TxManager->GetShardsCount());
                         TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
                         TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
                         TxManager->AddLock(lock.GetDataShard(), lock);
@@ -1088,7 +1089,7 @@ private:
 
         NDataIntegrity::LogIntegrityTrails("PlannedTx", Request.UserTraceId, TxId, {}, TlsActivationContext->AsActorContext());
 
-        LOG_T("Execute planned transaction, coordinator: " << TxCoordinator);
+        LOG_D("Execute planned transaction, coordinator: " << TxCoordinator << " for " << affectedSet.size() << "shards");
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(ev.Release(), TxCoordinator, /* subscribe */ true));
     }
 
@@ -1738,7 +1739,8 @@ private:
             << ", Executing KQP transaction on shard: " << shardId
             << ", tasks: [" << JoinStrings(shardState.TaskIds.begin(), shardState.TaskIds.end(), ",") << "]"
             << ", lockTxId: " << lockTxId
-            << ", locks: " << dataTransaction.GetKqpTransaction().GetLocks().ShortDebugString());
+            << ", locks: " << dataTransaction.GetKqpTransaction().GetLocks().ShortDebugString()
+            << ", immediate: " << ImmediateTx);
 
         std::unique_ptr<IEventBase> ev;
         if (isOlap) {

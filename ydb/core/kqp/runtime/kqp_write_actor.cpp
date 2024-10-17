@@ -294,6 +294,7 @@ public:
     void UpdateShards() {
         // TODO: Maybe there are better ways to initialize new shards...
         for (const auto& shardInfo : ShardedWriteController->GetPendingShards()) {
+            CA_LOG_D("TEST::ADDDSHARD>> W " << shardInfo.ShardId << " " << TablePath << " " << TxManager->GetShardsCount());
             TxManager->AddShard(shardInfo.ShardId, IsOlap(), TablePath);
             TxManager->AddAction(shardInfo.ShardId, IKqpTransactionManager::EAction::WRITE);
             if (shardInfo.HasRead) {
@@ -1502,11 +1503,12 @@ public:
         for (const auto& shardInfo : commitInfo.ShardsInfo) {
             auto& item = *affectedSet.Add();
             item.SetTabletId(shardInfo.ShardId);
+            Y_ABORT_UNLESS(shardInfo.AffectedFlags != 0);
             item.SetFlags(shardInfo.AffectedFlags);
         }
 
         //TODO: NDataIntegrity
-        CA_LOG_D("Execute planned transaction, coordinator: " << commitInfo.Coordinator << " volitale=" << ((transaction.GetFlags() & TEvTxProxy::TEvProposeTransaction::FlagVolatile) != 0));
+        CA_LOG_D("Execute planned transaction, coordinator: " << commitInfo.Coordinator << " volitale=" << ((transaction.GetFlags() & TEvTxProxy::TEvProposeTransaction::FlagVolatile) != 0) << " shards=" << affectedSet.size());
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(ev.Release(), commitInfo.Coordinator, /* subscribe */ true));
     }
 

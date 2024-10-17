@@ -2,6 +2,7 @@
 
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard_cdc_stream_common.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/engine/mkql_proto.h>
@@ -346,44 +347,8 @@ public:
 class TConfigurePartsAtTable: public NCdcStreamState::TConfigurePartsAtTable {
 protected:
     void FillNotice(const TPathId& pathId, NKikimrTxDataShard::TFlatSchemeTransaction& tx, TOperationContext& context) const override {
-        Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
-        auto path = context.SS->PathsById.at(pathId);
-
-        Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        auto table = context.SS->Tables.at(pathId);
-
         auto& notice = *tx.MutableCreateCdcStreamNotice();
-        PathIdFromPathId(pathId, notice.MutablePathId());
-        notice.SetTableSchemaVersion(table->AlterVersion + 1);
-
-        bool found = false;
-        for (const auto& [childName, childPathId] : path->GetChildren()) {
-            Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
-            auto childPath = context.SS->PathsById.at(childPathId);
-
-            if (!childPath->IsCdcStream() || childPath->Dropped()) {
-                continue;
-            }
-
-            Y_ABORT_UNLESS(context.SS->CdcStreams.contains(childPathId));
-            auto stream = context.SS->CdcStreams.at(childPathId);
-
-            if (stream->State != TCdcStreamInfo::EState::ECdcStreamStateInvalid) {
-                continue;
-            }
-
-            Y_VERIFY_S(!found, "Too many cdc streams are planned to create"
-                << ": found# " << PathIdFromPathId(notice.GetStreamDescription().GetPathId())
-                << ", another# " << childPathId);
-            found = true;
-
-            Y_ABORT_UNLESS(stream->AlterData);
-            context.SS->DescribeCdcStream(childPathId, childName, stream->AlterData, *notice.MutableStreamDescription());
-
-            if (stream->AlterData->State == TCdcStreamInfo::EState::ECdcStreamStateScan) {
-                notice.SetSnapshotName("ChangefeedInitialScan");
-            }
-        }
+        NCdc::FillNotice(pathId, context, notice);
     }
 
 public:

@@ -29,12 +29,12 @@ void TPathInfo::AddInsertedSize(const i64 size, const ui64 overloadLimit) {
     SetInsertedOverload((ui64)InsertedSize > overloadLimit);
 }
 
-bool TPathInfo::EraseCommitted(const TCommittedData& data, const std::shared_ptr<TVersionCounters>& versionCounters) {
+bool TPathInfo::EraseCommitted(const TCommittedData& data) {
     Summary->RemovePriority(*this);
     const bool result = Committed.erase(data);
     if (result) {
-        AFL_VERIFY(versionCounters);
-        versionCounters->VersionRemoveRef(data.GetSchemaVersion(), 1);
+        AFL_VERIFY(Summary != nullptr);
+        Summary->VersionCounters->VersionRemoveRef(data.GetSchemaVersion(), 1);
     }
     AddCommittedSize(-1 * (i64)data.BlobSize(), TCompactionLimits::OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID);
     Summary->AddPriority(*this);
@@ -47,15 +47,15 @@ bool TPathInfo::HasCommitted(const TCommittedData& data) {
     return Committed.contains(data);
 }
 
-bool TPathInfo::AddCommitted(TCommittedData&& data, const std::shared_ptr<TVersionCounters>& versionCounters, const bool load) {
+bool TPathInfo::AddCommitted(TCommittedData&& data, const bool load) {
     const ui64 dataSize = data.BlobSize();
     Summary->RemovePriority(*this);
     AddCommittedSize(data.BlobSize(), TCompactionLimits::OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID);
     ui64 version = data.GetSchemaVersion();
     bool result = Committed.emplace(std::move(data)).second;
     if (result) {
-        AFL_VERIFY(versionCounters);
-        versionCounters->VersionAddRef(version, 1);
+        AFL_VERIFY(Summary != nullptr);
+        Summary->VersionCounters->VersionAddRef(version, 1);
     }
     Summary->AddPriority(*this);
     Summary->OnNewCommitted(dataSize, load);

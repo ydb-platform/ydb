@@ -44,11 +44,11 @@ namespace NYql::NDq {
 
         template <typename T>
         T ExtractFromConstFuture(const NThreading::TFuture<T>& f) {
-            //We want to avoid making a copy of data stored in a future.
-            //But there is no direct way to extract data from a const future5
-            //So, we make a copy of the future, that is cheap. Then, extract the value from this copy.
-            //It destructs the value in the original future, but this trick is legal and documented here:
-            //https://docs.yandex-team.ru/arcadia-cpp/cookbook/concurrency
+            // We want to avoid making a copy of data stored in a future.
+            // But there is no direct way to extract data from a const future5
+            // So, we make a copy of the future, that is cheap. Then, extract the value from this copy.
+            // It destructs the value in the original future, but this trick is legal and documented here:
+            // https://docs.yandex-team.ru/arcadia-cpp/cookbook/concurrency
             return NThreading::TFuture<T>(f).ExtractValueSync();
         }
 
@@ -84,19 +84,20 @@ namespace NYql::NDq {
             , HolderFactory(holderFactory)
             , ColumnDestinations(CreateColumnDestination())
             , MaxKeysInRequest(maxKeysInRequest)
-            , Request(
-                  0,
-                  KeyTypeHelper->GetValueHash(),
-                  KeyTypeHelper->GetValueEqual())
         {
         }
 
         ~TGenericLookupActor() {
-            auto guard = Guard(*Alloc);
-            KeyTypeHelper.reset();
-            TKeyTypeHelper empty;
-            Request = IDqAsyncLookupSource::TUnboxedValueMap(0, empty.GetValueHash(), empty.GetValueEqual());
+            Free();
         }
+
+    private:
+        void Free() {
+            auto guard = Guard(*Alloc);
+            Request.reset();
+            KeyTypeHelper.reset();
+        }
+    public:
 
         void Bootstrap() {
             auto dsi = LookupSource.data_source_instance();
@@ -112,17 +113,22 @@ namespace NYql::NDq {
 
         static constexpr char ActorName[] = "GENERIC_PROVIDER_LOOKUP_ACTOR";
 
-    private: //IDqAsyncLookupSource
+    private: // IDqAsyncLookupSource
         size_t GetMaxSupportedKeysInRequest() const override {
             return MaxKeysInRequest;
         }
-        void AsyncLookup(IDqAsyncLookupSource::TUnboxedValueMap&& request) override {
+        void AsyncLookup(std::weak_ptr<IDqAsyncLookupSource::TUnboxedValueMap> request) override {
             auto guard = Guard(*Alloc);
-            CreateRequest(std::move(request));
+            CreateRequest(request.lock());
+        }
+        void PassAway() override {
+            Free();
+            TBase::PassAway();
         }
 
-    private: //events
+    private: // events
         STRICT_STFUNC(StateFunc,
+                      hFunc(TEvLookupRequest, Handle);
                       hFunc(TEvListSplitsIterator, Handle);
                       hFunc(TEvListSplitsPart, Handle);
                       hFunc(TEvReadSplitsIterator, Handle);
@@ -189,19 +195,32 @@ namespace NYql::NDq {
             FinalizeRequest();
         }
 
-        void Handle(TEvError::TPtr) {
-            FinalizeRequest();
+        void Handle(TEvError::TPtr ev) {
+            auto actorSystem = TActivationContext::ActorSystem();
+            auto error = ev->Get()->Error;
+            auto errEv = std::make_unique<IDqComputeActorAsyncInput::TEvAsyncInputError>(
+                                  -1,
+                                  NConnector::ErrorToIssues(error),
+                                  NConnector::ErrorToDqStatus(error));
+            actorSystem->Send(new NActors::IEventHandle(ParentId, SelfId(), errEv.release()));
         }
 
         void Handle(NActors::TEvents::TEvPoison::TPtr) {
             PassAway();
         }
 
+        void Handle(TEvLookupRequest::TPtr ev) {
+            auto guard = Guard(*Alloc);
+            CreateRequest(ev->Get()->Request.lock());
+        }
+
     private:
-        void CreateRequest(IDqAsyncLookupSource::TUnboxedValueMap&& request) {
-            YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " Got LookupRequest for " << request.size() << " keys";
-            Y_ABORT_IF(InProgress);
-            Y_ABORT_IF(request.size() == 0 || request.size() > MaxKeysInRequest);
+        void CreateRequest(std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> request) {
+            if (!request) {
+                return;
+            }
+            YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " Got LookupRequest for " << request->size() << " keys";
+            Y_ABORT_IF(request->size() == 0 || request->size() > MaxKeysInRequest);
 
             Request = std::move(request);
             NConnector::NApi::TListSplitsRequest splitRequest;
@@ -253,7 +272,7 @@ namespace NYql::NDq {
         void ProcessReceivedData(const NConnector::NApi::TReadSplitsResponse& resp) {
             Y_ABORT_UNLESS(resp.payload_case() == NConnector::NApi::TReadSplitsResponse::PayloadCase::kArrowIpcStreaming);
             auto guard = Guard(*Alloc);
-            NKikimr::NArrow::NSerialization::TSerializerContainer deser = NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer(); //todo move to class' member
+            NKikimr::NArrow::NSerialization::TSerializerContainer deser = NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer(); // todo move to class' member
             const auto& data = deser->Deserialize(resp.arrow_ipc_streaming());
             Y_ABORT_UNLESS(data.ok());
             const auto& value = data.ValueOrDie();
@@ -273,20 +292,20 @@ namespace NYql::NDq {
                 for (size_t j = 0; j != columns.size(); ++j) {
                     (ColumnDestinations[j].first == EColumnDestination::Key ? keyItems : outputItems)[ColumnDestinations[j].second] = columns[j][i];
                 }
-                if (auto* v = Request.FindPtr(key)) {
-                    *v = std::move(output); //duplicates will be overwritten
+                if (auto* v = Request->FindPtr(key)) {
+                    *v = std::move(output); // duplicates will be overwritten
                 }
             }
         }
 
         void FinalizeRequest() {
-            YQL_CLOG(DEBUG, ProviderGeneric) << "Sending lookup results for " << Request.size() << " keys";
+            YQL_CLOG(DEBUG, ProviderGeneric) << "Sending lookup results for " << Request->size() << " keys";
             auto guard = Guard(*Alloc);
-            auto ev = new IDqAsyncLookupSource::TEvLookupResult(Alloc, std::move(Request));
+            auto ev = new IDqAsyncLookupSource::TEvLookupResult(Request);
+            Request.reset();
             TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
             LookupResult = {};
             ReadSplitsIterator = {};
-            InProgress = false;
         }
 
         static void SendError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, const NConnector::NApi::TError& error) {
@@ -352,7 +371,7 @@ namespace NYql::NDq {
             select.mutable_from()->Settable(LookupSource.table());
 
             NConnector::NApi::TPredicate_TDisjunction disjunction;
-            for (const auto& [k, _] : Request) {
+            for (const auto& [k, _] : *Request) {
                 NConnector::NApi::TPredicate_TConjunction conjunction;
                 for (ui32 c = 0; c != KeyType->GetMembersCount(); ++c) {
                     NConnector::NApi::TPredicate_TComparison eq;
@@ -378,13 +397,12 @@ namespace NYql::NDq {
         const NYql::Generic::TLookupSource LookupSource;
         const NKikimr::NMiniKQL::TStructType* const KeyType;
         const NKikimr::NMiniKQL::TStructType* const PayloadType;
-        const NKikimr::NMiniKQL::TStructType* const SelectResultType; //columns from KeyType + PayloadType
+        const NKikimr::NMiniKQL::TStructType* const SelectResultType; // columns from KeyType + PayloadType
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         const std::vector<std::pair<EColumnDestination, size_t>> ColumnDestinations;
         const size_t MaxKeysInRequest;
-        std::atomic_bool InProgress;
-        IDqAsyncLookupSource::TUnboxedValueMap Request;
-        NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator; //TODO move me to TEvReadSplitsPart
+        std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> Request;
+        NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator; // TODO move me to TEvReadSplitsPart
         NKikimr::NMiniKQL::TKeyPayloadPairVector LookupResult;
     };
 

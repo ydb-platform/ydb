@@ -35,11 +35,11 @@ jobs:
           mv ${{ github.workspace }}/ydb/apps/dstool/setup.py ${{ github.workspace }}
           python -m build
 
-#      - name: Upload package to PyPI
-#        env:
-#          TWINE_USERNAME: __token__
-#          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-#        run: |
-#          set -ex
-#          cd ${{ github.workspace }}/ydb
-#          python -m twine upload dist/*
+      - name: Upload package to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          set -ex
+          cd ${{ github.workspace }}/ydb
+          python -m twine upload dist/*

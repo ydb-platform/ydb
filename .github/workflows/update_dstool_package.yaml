@@ -31,10 +31,7 @@ jobs:
       - name: Compile proto files and build package
         run: |
           set -ex
-          ls
-          cd ${{ github.workspace }}/ydb
-          ls
-          ./ydb/apps/dstool/compile_protos.py --ydb-root ./
+          ${{ github.workspace }}/ydb/ydb/apps/dstool/compile_protos.py --ydb-root ${{ github.workspace }}/ydb
           mv ydb/apps/dstool/setup.py .
           python -m build
 

@@ -1710,7 +1710,7 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
     Database->Begin(Stamp(), env);
 
     LWTRACK(TransactionExecuteBegin, seat->Self->Orbit, seat->UniqID);
-    
+
     txc.StartExecutionSpan();
     const bool done = seat->Self->Execute(txc, ctx.MakeFor(OwnerActorId));
     txc.FinishExecutionSpan();
@@ -1943,7 +1943,7 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
                 }
                 logl << "]";
             }
-            
+
             auto *req = new NPageCollection::TFetch(0, pageCollectionInfo->PageCollection, std::move(pages), pad->GetWaitingTraceId());
 
             loadPages += toLoad.first;
@@ -4661,7 +4661,7 @@ void TExecutor::Handle(TEvPrivate::TEvActivateCompactionChanges::TPtr& ev, const
 void TExecutor::CommitCompactionChanges(
         ui32 tableId,
         const NTable::TCompactionChanges& changes,
-        NKikimrSchemeOp::ECompactionStrategy strategy)
+        NKikimrCompaction::ECompactionStrategy strategy)
 {
     if (!changes.SliceChanges && !changes.StateChanges) {
         // Don't bother unless there's something to do
@@ -4692,7 +4692,7 @@ void TExecutor::CommitCompactionChanges(
 void TExecutor::ApplyCompactionChanges(
         TCompactionChangesCtx& ctx,
         const NTable::TCompactionChanges& changes,
-        NKikimrSchemeOp::ECompactionStrategy strategy)
+        NKikimrCompaction::ECompactionStrategy strategy)
 {
     const ui32 tableId = ctx.Proto.GetTableId();
 

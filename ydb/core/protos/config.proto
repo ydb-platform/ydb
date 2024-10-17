@@ -15,6 +15,7 @@ import "ydb/core/protos/counters_schemeshard.proto";
 import "ydb/core/protos/datashard_config.proto";
 import "ydb/core/protos/drivemodel.proto";
 import "ydb/core/protos/feature_flags.proto";
+import "ydb/core/protos/compaction.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/hive.proto";
 import "ydb/core/protos/http_config.proto";
@@ -230,7 +231,7 @@ message TDomainsConfig {
 
     message TNamedCompactionPolicy {
         optional string Name = 1;
-        optional NKikimrSchemeOp.TCompactionPolicy Policy = 2;
+        optional NKikimrCompaction.TCompactionPolicy Policy = 2;
     }
 
     message TSecurityConfig {
@@ -962,7 +963,7 @@ message TConfigsDispatcherConfig {
 
 message TCompactionPolicy {
     optional string Name = 1;
-    optional NKikimrSchemeOp.TCompactionPolicy CompactionPolicy = 2;
+    optional NKikimrCompaction.TCompactionPolicy CompactionPolicy = 2;
 }
 
 message TExecutionPolicy {

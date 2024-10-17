@@ -277,6 +277,10 @@ private:
     }
 
     bool ExtractBatch(TString& errorMessage) override {
+        if (AllRows.empty()) {
+            errorMessage = "Empty rows list";
+            return false;
+        }
         Batch = RowsToBatch(AllRows, errorMessage);
         return Batch.get();
     }

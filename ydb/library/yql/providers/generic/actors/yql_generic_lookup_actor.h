@@ -15,6 +15,7 @@ namespace NYql::NDq {
         NConnector::IClient::TPtr connectorClient,
         ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         NActors::TActorId parentId,
+        ::NMonitoring::TDynamicCounterPtr taskCounters,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
         NYql::Generic::TLookupSource&& lookupSource,

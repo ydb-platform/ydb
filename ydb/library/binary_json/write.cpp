@@ -712,13 +712,17 @@ template <typename TOnDemandValue>
 TMaybe<TBinaryJson> SerializeToBinaryJsonImpl(const TStringBuf json) {
     thread_local simdjson::ondemand::parser parser;
     const simdjson::padded_string paddedJson(json);
-    auto doc = parser.iterate(paddedJson);
-    if (doc.error() != simdjson::SUCCESS) {
-        return false;
-    }
     TBinaryJsonCallbacks callbacks(/* throwException */ false);
-    if (SimdJsonToJsonIndex(doc.value_unsafe(), callbacks) != simdjson::SUCCESS) {
-        return false;
+    try {
+        auto doc = parser.iterate(paddedJson);
+        if (doc.error() != simdjson::SUCCESS) {
+            return Nothing();
+        }
+        if (SimdJsonToJsonIndex(doc.value_unsafe(), callbacks) != simdjson::SUCCESS) {
+            return Nothing();
+        }
+    } catch (const simdjson::simdjson_error&) {
+        return Nothing();
     }
     TBinaryJsonSerializer serializer(std::move(callbacks).GetResult());
     return std::move(serializer).Serialize();

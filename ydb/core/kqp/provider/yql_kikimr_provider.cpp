@@ -831,7 +831,7 @@ void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperat
     TableDescriptionToTableInfoImpl(desc, op, std::back_inserter(infos));
 }
 
-Ydb::Table::VectorIndexSettings_Distance VectorIndexSettingsParseDistance(std::string_view distance) {
+Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseDistance(std::string_view distance) {
     if (distance == "cosine")
         return Ydb::Table::VectorIndexSettings::DISTANCE_COSINE;
     else if (distance == "manhattan")
@@ -842,7 +842,7 @@ Ydb::Table::VectorIndexSettings_Distance VectorIndexSettingsParseDistance(std::s
         YQL_ENSURE(false, "Wrong index setting distance: " << distance);
 };
 
-Ydb::Table::VectorIndexSettings_Similarity VectorIndexSettingsParseSimilarity(std::string_view similarity) {
+Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseSimilarity(std::string_view similarity) {
     if (similarity == "cosine")
         return Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE;
     else if (similarity == "inner_product")

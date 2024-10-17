@@ -1178,10 +1178,12 @@ namespace NSQLTranslationV1 {
             , Bit           /* "bit" */
         };
 
-        using TMetric = std::variant<std::monostate, EDistance, ESimilarity>;
-        TMetric Metric;
+        std::optional<EDistance> Distance;
+        std::optional<ESimilarity> Similarity;
         std::optional<EVectorType> VectorType;
-        std::optional<ui32> VectorDimension;
+        ui32 VectorDimension = 0;
+        ui32 Clusters = 0;
+        ui32 Levels = 0;
 
         bool Validate(TContext& ctx) const;
     };

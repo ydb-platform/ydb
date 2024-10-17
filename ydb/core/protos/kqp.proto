@@ -126,7 +126,7 @@ message TKqpPathIdProto {
 }
 
 message TVectorIndexKmeansTreeDescription {
-    optional Ydb.Table.VectorIndexSettings Settings = 1;
+    optional Ydb.Table.KMeansTreeSettings Settings = 1;
 }
 
 message TIndexDescriptionProto {

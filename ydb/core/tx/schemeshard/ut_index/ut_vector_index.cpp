@@ -46,7 +46,6 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               NLs::IndexKeys({"embedding"}),
               NLs::IndexDataColumns({"covered"}),
               NLs::VectorIndexDescription(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
-                                          Ydb::Table::VectorIndexSettings::SIMILARITY_UNSPECIFIED,
                                           Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
                                           1024
                                           ),
@@ -96,7 +95,6 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               NLs::IndexKeys({"embedding"}),
               NLs::IndexDataColumns({"embedding"}),
               NLs::VectorIndexDescription(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
-                                          Ydb::Table::VectorIndexSettings::SIMILARITY_UNSPECIFIED,
                                           Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
                                           1024
                                           ),

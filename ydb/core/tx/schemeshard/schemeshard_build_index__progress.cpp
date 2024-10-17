@@ -550,7 +550,8 @@ private:
         ev->Record.SetId(ui64(BuildId));
 
         PathIdFromPathId(buildInfo.TablePathId, ev->Record.MutablePathId());        
-        *ev->Record.MutableSettings() = std::get<1>(buildInfo.SpecializedIndexDescription).GetSettings();
+        *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
+            buildInfo.SpecializedIndexDescription).GetSettings().settings();
         ev->Record.SetUpload(buildInfo.KMeans.GetUpload());
         ev->Record.SetParent(buildInfo.KMeans.Parent);
         ev->Record.SetChild(buildInfo.KMeans.ChildBegin);

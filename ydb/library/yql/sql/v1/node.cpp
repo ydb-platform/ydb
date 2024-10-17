@@ -3459,7 +3459,7 @@ TNodePtr BuildNamedExpr(TNodePtr parent) {
 }
 
 bool TVectorIndexSettings::Validate(TContext& ctx) const {
-    if (Distance || Similarity) {
+    if (!Distance && !Similarity) {
         ctx.Error() << "either distance or similarity should be set";
         return false;
     } 

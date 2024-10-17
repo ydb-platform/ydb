@@ -1702,18 +1702,19 @@ public:
                                     YQL_ENSURE(TryFromString(value, num), "Wrong " << key << ": " << value);
                                     return num;
                                 };
+                                const auto value = vectorSetting.Value().Cast<TCoAtom>().StringValue();
                                 if (vectorSetting.Name().Value() == "distance") {
-                                    protoVectorSettings.mutable_settings()->set_metric(VectorIndexSettingsParseDistance(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                    protoVectorSettings.mutable_settings()->set_metric(VectorIndexSettingsParseDistance(value));
                                 } else if (vectorSetting.Name().Value() == "similarity") {
-                                    protoVectorSettings.mutable_settings()->set_metric(VectorIndexSettingsParseSimilarity(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                    protoVectorSettings.mutable_settings()->set_metric(VectorIndexSettingsParseSimilarity(value));
                                 } else if (vectorSetting.Name().Value() == "vector_type") {
-                                    protoVectorSettings.mutable_settings()->set_vector_type(VectorIndexSettingsParseVectorType(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                    protoVectorSettings.mutable_settings()->set_vector_type(VectorIndexSettingsParseVectorType(value));
                                 } else if (vectorSetting.Name().Value() == "vector_dimension") {
-                                    protoVectorSettings.mutable_settings()->set_vector_dimension(parseU32("vector_dimension", vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                    protoVectorSettings.mutable_settings()->set_vector_dimension(parseU32("vector_dimension", value));
                                 } else if (vectorSetting.Name().Value() == "clusters") {
-                                    protoVectorSettings.mutable_settings()->set_vector_dimension(parseU32("clusters", vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                    protoVectorSettings.set_clusters(parseU32("clusters", value));
                                 } else if (vectorSetting.Name().Value() == "levels") {
-                                    protoVectorSettings.mutable_settings()->set_vector_dimension(parseU32("levels", vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                    protoVectorSettings.set_levels(parseU32("levels", value));
                                 } else {
                                     YQL_ENSURE(false, "Wrong vector setting name: " << vectorSetting.Name().Value());
                                 }

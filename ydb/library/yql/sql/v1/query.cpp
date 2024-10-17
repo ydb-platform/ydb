@@ -289,7 +289,7 @@ static INode::TPtr CreateVectorIndexSettings(const TVectorIndexSettings& vectorI
     } else if (vectorIndexSettings.Distance) {
         settings = L(settings, Q(Y(Q("distance"), Q(ToString(*vectorIndexSettings.Distance)))));
     } else if (vectorIndexSettings.Similarity) {
-        settings = L(settings, Q(Y(Q("similarity"), Q(ToString(*vectorIndexSettings.Distance)))));
+        settings = L(settings, Q(Y(Q("similarity"), Q(ToString(*vectorIndexSettings.Similarity)))));
     } else {
         Y_ENSURE(false, "distance or similarity should be set");
     }

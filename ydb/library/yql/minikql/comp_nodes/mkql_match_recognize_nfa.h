@@ -283,8 +283,7 @@ private:
         return {input, output};
     }
 public:
-    using TPatternConfigurationPtr = TNfaTransitionGraph::TPtr;
-    static TPatternConfigurationPtr Create(const TRowPattern& pattern, const THashMap<TString, size_t>& varNameToIndex) {
+    static TNfaTransitionGraph::TPtr Create(const TRowPattern& pattern, const THashMap<TString, size_t>& varNameToIndex) {
         auto result = std::make_shared<TNfaTransitionGraph>();
         TNfaTransitionGraphBuilder builder(result);
         auto item = builder.BuildTerms(pattern, varNameToIndex);

@@ -68,7 +68,7 @@ struct TFixture : public TPqIoTestFixture {
     auto ExpectCoordinatorRequest(NActors::TActorId coordinatorId) {
         auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvCoordinatorRequest>(coordinatorId, TDuration::Seconds(5));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
-        return eventHolder.Get();
+        return eventHolder;
     }
 
     void ExpectStartSession(ui64 expectedOffset, NActors::TActorId rowDispatcherId) {

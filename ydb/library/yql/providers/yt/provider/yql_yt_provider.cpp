@@ -309,6 +309,7 @@ void TYtState::Reset() {
     Checkpoints.clear();
     WalkFoldersState.clear();
     NextEpochId = 1;
+    FlowDependsOnId = 0;
 }
 
 void TYtState::EnterEvaluation(ui64 id) {

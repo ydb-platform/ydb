@@ -112,6 +112,7 @@ struct TYtState : public TThrRefBase {
     std::unordered_set<ui32> HybridInFlightOprations;
     THashMap<ui64, TWalkFoldersImpl> WalkFoldersState;
     ui32 PlanLimits = 10;
+    i32 FlowDependsOnId = 0;
 
 private:
     std::unordered_map<ui64, TYtVersionedConfiguration::TState> ConfigurationEvalStates_;

@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
             return joinArg;
         } else if constexpr (std::is_convertible_v<TJoinArg, std::string>) {
             std::shared_ptr<IBaseOptimizerNode> root = std::make_shared<TRelOptimizerNode>(joinArg, std::make_shared<TOptimizerStatistics>());
-            root->Stats->Nrows = rand() % 50'000 + 1;
+            root->Stats->Nrows = rand() % 100 + 1;
             return root;
         } else {
             static_assert(

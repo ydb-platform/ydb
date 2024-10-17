@@ -281,11 +281,11 @@ private:
             }
 
             if (columnType.StartsWith("Optional")) {
-                str << "IF(" << columnNames[i] << " IS NOT NULL, Unwrap(CAST(" << columnNames[i] << " as " << columnType << ")), NULL)";
+                str << "IF(`" << columnNames[i] << "` IS NOT NULL, Unwrap(CAST(`" << columnNames[i] << "` as " << columnType << ")), NULL)";
             } else {
-                str << "Unwrap(CAST(" << columnNames[i] << " as " << columnType << "))";
+                str << "Unwrap(CAST(`" << columnNames[i] << "` as " << columnType << "))";
             }
-            str << " as " << columnNames[i] << ((i != columnNames.size() - 1) ? "," : "");
+            str << " as `" << columnNames[i] << '`' << ((i != columnNames.size() - 1) ? "," : "");
         }
         str << " FROM Input;\n";
         str << "$filtered = SELECT * FROM $fields " << whereFilter << ";\n";

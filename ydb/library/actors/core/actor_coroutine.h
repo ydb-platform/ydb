@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/system/context.h>
+#include <util/system/event.h>
 #include <util/system/filemap.h>
 
 #include "actor_bootstrapped.h"

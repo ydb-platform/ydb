@@ -227,7 +227,7 @@ protected:
             .RightJoinKeyNames(join.RightJoinKeyNames())
             .TTL(ctx.NewAtom(pos, 300)) //TODO configure me
             .MaxCachedRows(ctx.NewAtom(pos, 1'000'000)) //TODO configure me
-            .MaxDelay(ctx.NewAtom(pos, 1'000'000)) //Configure me
+            .MaxDelayedRows(ctx.NewAtom(pos, 1'000'000)) //Configure me
         .Done();
 
         auto lambda = Build<TCoLambda>(ctx, pos)

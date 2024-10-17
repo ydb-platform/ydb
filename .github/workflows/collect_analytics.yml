@@ -26,7 +26,7 @@ jobs:
         ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
     - name: Install dependencies
       run: |
-        python3 -m pip install ydb ydb[yc] codeowners
+        python3 -m pip install ydb ydb[yc] codeowners pandas
     - name: Collect testowners 
       run: python3 .github/scripts/analytics/upload_testowners.py
     - name: Collect test history data with window 1 days relwithdebinfo for main
@@ -43,5 +43,7 @@ jobs:
       run: python3 .github/scripts/analytics/flaky_tests_history_n_runs.py --runs=50 --build_type=release-asan
     - name: Collect all muted and not muted tests
       run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch main
+    - name: Collect all test monitor (how long tests in state)
+      run: python3 .github/scripts/analytics/tests_monitor.py --branch main
 
 

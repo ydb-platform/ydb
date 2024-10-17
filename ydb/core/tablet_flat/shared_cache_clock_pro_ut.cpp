@@ -285,7 +285,8 @@ Y_UNIT_TEST_SUITE(TClockProCache) {
     }
 
     Y_UNIT_TEST(Canon) {
-        TClockProCache<TPage, TPageTraits> cache(200);
+        TCounterPtr coldTargetCounter = new NMonitoring::TCounterForPtr;
+        TClockProCache<TPage, TPageTraits> cache(200, coldTargetCounter);
         const auto raw = NResource::Find("clock-pro.txt");
 
         TMap<ui32, THolder<TPage>> pages;

@@ -498,7 +498,7 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
     return 0;
 }
 
-void InitFq(const NFq::NConfig::TConfig& fqConfig, TVector<std::pair<TActorId, TActorSetupCmd>>& additionalLocalServices) {
+void InitFq(const NFq::NConfig::TConfig& fqConfig, IPqGateway::TPtr pqGateway, TVector<std::pair<TActorId, TActorSetupCmd>>& additionalLocalServices) {
     if (fqConfig.HasRowDispatcher() && fqConfig.GetRowDispatcher().GetEnabled()) {
         NFq::IYqSharedResources::TPtr iSharedResources = NFq::CreateYqSharedResources(
             fqConfig,
@@ -513,7 +513,8 @@ void InitFq(const NFq::NConfig::TConfig& fqConfig, TVector<std::pair<TActorId, T
             yqSharedResources,
             credentialsFactory,
             "/tenant",
-            MakeIntrusive<NMonitoring::TDynamicCounters>());
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
+            pqGateway);
 
         additionalLocalServices.emplace_back(
             NFq::RowDispatcherServiceActorId(),
@@ -910,6 +911,7 @@ int RunMain(int argc, const char* argv[])
 
     TGatewaysConfig gatewaysConfig;
     ReadGatewaysConfig(gatewaysCfgFile, &gatewaysConfig, sqlFlags);
+    UpdateSqlFlagsFromQContext(qContext, sqlFlags);
     PatchGatewaysConfig(&gatewaysConfig, mrJobBin, mrJobUdfsDir, numYtThreads, res.Has("keep-temp"));
     if (runOptions.AnalyzeQuery) {
         auto* setting = gatewaysConfig.MutableDq()->AddDefaultSettings();
@@ -1087,7 +1089,7 @@ int RunMain(int argc, const char* argv[])
         }
     }
     TVector<std::pair<TActorId, TActorSetupCmd>> additionalLocalServices;
-    InitFq(fqConfig, additionalLocalServices);
+    InitFq(fqConfig, pqGateway, additionalLocalServices);
 
     std::function<NActors::IActor*(void)> metricsPusherFactory = {};
 
@@ -1135,7 +1137,7 @@ int RunMain(int argc, const char* argv[])
 
         moduleResolver = std::make_shared<TModuleResolver>(std::move(modules), ctx.NextUniqueId, clusterMapping, sqlFlags, hasValidate);
     } else {
-        if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, clusters)) {
+        if (GetYqlModuleResolver(ctx, moduleResolver, {}, clusters, sqlFlags).empty()) {
             *runOptions.ErrStream << "Errors loading default YQL libraries:" << Endl;
             ctx.IssueManager.GetIssues().PrintTo(*runOptions.ErrStream);
             return 1;

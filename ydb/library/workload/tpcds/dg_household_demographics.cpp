@@ -12,12 +12,14 @@ TTpcDSGeneratorHouseholdDemographics::TTpcDSGeneratorHouseholdDemographics(const
     : TBulkDataGenerator(owner, HOUSEHOLD_DEMOGRAPHICS)
 {}
 
-void TTpcDSGeneratorHouseholdDemographics::GenerateRows(TContexts& ctxs) {
+void TTpcDSGeneratorHouseholdDemographics::GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) {
     TVector<W_HOUSEHOLD_DEMOGRAPHICS_TBL> hhDemoList(ctxs.front().GetCount());
     for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
         mk_w_household_demographics(&hhDemoList[i], ctxs.front().GetStart() + i);
         tpcds_row_stop(TableNum);
     }
+    g.Release();
+
     TCsvItemWriter<W_HOUSEHOLD_DEMOGRAPHICS_TBL> writer(ctxs.front().GetCsv().Out);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writer, hd_demo_sk);
     CSV_WRITER_REGISTER_FIELD_KEY(writer, "hd_income_band_sk", hd_income_band_id);

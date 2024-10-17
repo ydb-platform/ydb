@@ -5,7 +5,9 @@ namespace NKikimr::NCache {
 
 template <typename TItem>
 struct ICacheCache {
-    virtual TItem* EvictNext() Y_WARN_UNUSED_RESULT = 0;
+    // returns evicted elements as list
+    // in most common scenarios it has only one item 
+    virtual TIntrusiveList<TItem> EvictNext() Y_WARN_UNUSED_RESULT = 0;
 
     // returns evicted elements as list
     virtual TIntrusiveList<TItem> Touch(TItem *item) Y_WARN_UNUSED_RESULT = 0;

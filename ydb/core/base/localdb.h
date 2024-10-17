@@ -3,7 +3,7 @@
 #include <util/generic/map.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/list.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/compaction.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <google/protobuf/util/message_differencer.h>
 
@@ -19,9 +19,9 @@ struct TCompactionPolicy : public TThrRefBase {
 
         TBackgroundPolicy();
         TBackgroundPolicy(ui32 threshold, ui32 priorityBase, double timeFactor, const TString &resourceBrokerTask);
-        TBackgroundPolicy(const NKikimrSchemeOp::TCompactionPolicy::TBackgroundPolicy &policyPb);
+        TBackgroundPolicy(const NKikimrCompaction::TCompactionPolicy::TBackgroundPolicy &policyPb);
 
-        void Serialize(NKikimrSchemeOp::TCompactionPolicy::TBackgroundPolicy& policyPb) const;
+        void Serialize(NKikimrCompaction::TCompactionPolicy::TBackgroundPolicy& policyPb) const;
 
         bool operator ==(const TBackgroundPolicy& p) const {
             return (Threshold == p.Threshold
@@ -50,9 +50,9 @@ struct TCompactionPolicy : public TThrRefBase {
                           ui64 forceSizeToCompact, const TString &resourceBrokerTask,
                           bool keepInCache,
                           const TBackgroundPolicy &backgroundCompactionPolicy = TBackgroundPolicy());
-        TGenerationPolicy(const NKikimrSchemeOp::TCompactionPolicy::TGenerationPolicy &policyPb);
+        TGenerationPolicy(const NKikimrCompaction::TCompactionPolicy::TGenerationPolicy &policyPb);
 
-        void Serialize(NKikimrSchemeOp::TCompactionPolicy::TGenerationPolicy& policyPb) const;
+        void Serialize(NKikimrCompaction::TCompactionPolicy::TGenerationPolicy& policyPb) const;
 
         bool operator ==(const TGenerationPolicy& p) const {
             return SizeToCompact == p.SizeToCompact
@@ -91,16 +91,16 @@ struct TCompactionPolicy : public TThrRefBase {
     ui64 LogOverheadSizeToSnapshot;
     ui32 LogOverheadCountToSnapshot;
     ui32 DroppedRowsPercentToCompact;
-    NKikimrSchemeOp::ECompactionStrategy CompactionStrategy;
-    NKikimrSchemeOp::TCompactionPolicy::TShardPolicy ShardPolicy;
+    NKikimrCompaction::ECompactionStrategy CompactionStrategy;
+    NKikimrCompaction::TCompactionPolicy::TShardPolicy ShardPolicy;
     bool KeepEraseMarkers;
 
     TVector<TGenerationPolicy> Generations;
 
     TCompactionPolicy();
-    explicit TCompactionPolicy(const NKikimrSchemeOp::TCompactionPolicy& policyPb);
+    explicit TCompactionPolicy(const NKikimrCompaction::TCompactionPolicy& policyPb);
 
-    void Serialize(NKikimrSchemeOp::TCompactionPolicy& policyPb) const;
+    void Serialize(NKikimrCompaction::TCompactionPolicy& policyPb) const;
 
     bool operator ==(const TCompactionPolicy& p) const {
         return InMemSizeToSnapshot == p.InMemSizeToSnapshot

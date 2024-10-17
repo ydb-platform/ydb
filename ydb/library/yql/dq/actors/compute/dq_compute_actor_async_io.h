@@ -288,6 +288,7 @@ public:
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         IRandomProvider *const RandomProvider;
+        NWilson::TTraceId TraceId;
     };
 
     struct TInputTransformArguments {

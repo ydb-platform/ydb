@@ -4,6 +4,7 @@
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/mkql_terminator.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/json_filter.h>
 #include <ydb/core/fq/libs/actors/logging/log.h>
@@ -15,11 +16,24 @@ using TCallback = NFq::TJsonFilter::TCallback;
 const char* OffsetFieldName = "_offset";
 TString LogPrefix = "JsonFilter: ";
 
+NYT::TNode CreateTypeNode(const TString& fieldType) {
+    return NYT::TNode::CreateList()
+        .Add("DataType")
+        .Add(fieldType);
+}
+
 void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldType) {
     node.Add(
         NYT::TNode::CreateList()
             .Add(fieldName)
-            .Add(NYT::TNode::CreateList().Add("DataType").Add(fieldType))
+            .Add(CreateTypeNode(fieldType))
+    );
+}
+
+void AddOptionalField(NYT::TNode& node, const TString& fieldName, const TString& fieldType) {
+    node.Add(NYT::TNode::CreateList()
+        .Add(fieldName)
+        .Add(NYT::TNode::CreateList().Add("OptionalType").Add(CreateTypeNode(fieldType)))
     );
 }
 
@@ -27,7 +41,7 @@ NYT::TNode MakeInputSchema(const TVector<TString>& columns) {
     auto structMembers = NYT::TNode::CreateList();
     AddField(structMembers, OffsetFieldName, "Uint64");
     for (const auto& col : columns) {
-        AddField(structMembers, col, "String");
+        AddOptionalField(structMembers, col, "String");
     }
     return NYT::TNode::CreateList().Add("StructType").Add(std::move(structMembers));
 }
@@ -53,7 +67,7 @@ private:
     TVector<NYT::TNode> Schemas;
 };
 
-class TFilterInputConsumer : public NYql::NPureCalc::IConsumer<std::pair<ui64, const TVector<TVector<std::string_view>>&>> {
+class TFilterInputConsumer : public NYql::NPureCalc::IConsumer<std::pair<const TVector<ui64>&, const TVector<TVector<std::string_view>>&>> {
 public:
     TFilterInputConsumer(
         const TFilterInputSpec& spec,
@@ -91,7 +105,7 @@ public:
         }
     }
 
-    void OnObject(std::pair<ui64, const TVector<TVector<std::string_view>>&> values) override {
+    void OnObject(std::pair<const TVector<ui64>&, const TVector<TVector<std::string_view>>&> values) override {
         Y_ENSURE(FieldsPositions.size() == values.second.size());
 
         NKikimr::NMiniKQL::TThrowingBindTerminator bind;
@@ -107,12 +121,13 @@ public:
                     static_cast<ui32>(values.second.size() + 1),
                     items);
 
-                items[OffsetPosition] = NYql::NUdf::TUnboxedValuePod(values.first++);
+                items[OffsetPosition] = NYql::NUdf::TUnboxedValuePod(values.first[rowId]);
 
                 size_t fieldId = 0;
                 for (const auto& column : values.second) {
-                    NYql::NUdf::TStringValue str(column[rowId]);
-                    items[FieldsPositions[fieldId++]] = NYql::NUdf::TUnboxedValuePod(std::move(str));
+                    items[FieldsPositions[fieldId++]] = column[rowId].data()  // Check that std::string_view was initialized in json_parser
+                        ? NKikimr::NMiniKQL::MakeString(column[rowId]).MakeOptional()
+                        : NKikimr::NUdf::TUnboxedValuePod();
                 }
 
                 Worker->Push(std::move(result));
@@ -200,7 +215,7 @@ struct NYql::NPureCalc::TInputSpecTraits<TFilterInputSpec> {
     static constexpr bool IsPartial = false;
     static constexpr bool SupportPushStreamMode = true;
 
-    using TConsumerType = THolder<NYql::NPureCalc::IConsumer<std::pair<ui64, const TVector<TVector<std::string_view>>&>>>;
+    using TConsumerType = THolder<NYql::NPureCalc::IConsumer<std::pair<const TVector<ui64>&, const TVector<TVector<std::string_view>>&>>>;
 
     static TConsumerType MakeConsumer(
         const TFilterInputSpec& spec,
@@ -242,9 +257,9 @@ public:
         LOG_ROW_DISPATCHER_DEBUG("Program created");
     }
 
-    void Push(ui64 offset, const TVector<TVector<std::string_view>>& values) {
+    void Push(const TVector<ui64>& offsets, const TVector<TVector<std::string_view>>& values) {
         Y_ENSURE(values, "Expected non empty schema");
-        InputConsumer->OnObject(std::make_pair(offset, values));
+        InputConsumer->OnObject(std::make_pair(offsets, values));
     }
 
     TString GetSql() const {
@@ -264,7 +279,13 @@ private:
             } else if (columnType == "Optional<Json>") {
                 columnType = "Optional<String>";
             }
-            str << "CAST(" << columnNames[i] << " as " << columnType << ") as " << columnNames[i] << ((i != columnNames.size() - 1) ? "," : "");
+
+            if (columnType.StartsWith("Optional")) {
+                str << "IF(" << columnNames[i] << " IS NOT NULL, Unwrap(CAST(" << columnNames[i] << " as " << columnType << ")), NULL)";
+            } else {
+                str << "Unwrap(CAST(" << columnNames[i] << " as " << columnType << "))";
+            }
+            str << " as " << columnNames[i] << ((i != columnNames.size() - 1) ? "," : "");
         }
         str << " FROM Input;\n";
         str << "$filtered = SELECT * FROM $fields " << whereFilter << ";\n";
@@ -277,7 +298,7 @@ private:
 
 private:
     THolder<NYql::NPureCalc::TPushStreamProgram<TFilterInputSpec, TFilterOutputSpec>> Program;
-    THolder<NYql::NPureCalc::IConsumer<std::pair<ui64, const TVector<TVector<std::string_view>>&>>> InputConsumer;
+    THolder<NYql::NPureCalc::IConsumer<std::pair<const TVector<ui64>&, const TVector<TVector<std::string_view>>&>>> InputConsumer;
     const TString Sql;
 };
 
@@ -292,8 +313,8 @@ TJsonFilter::TJsonFilter(
 TJsonFilter::~TJsonFilter() {
 }
 
-void TJsonFilter::Push(ui64 offset, const TVector<TVector<std::string_view>>& values) {
-    Impl->Push(offset, values);
+void TJsonFilter::Push(const TVector<ui64>& offsets, const TVector<TVector<std::string_view>>& values) {
+    Impl->Push(offsets, values);
 }
 
 TString TJsonFilter::GetSql() {

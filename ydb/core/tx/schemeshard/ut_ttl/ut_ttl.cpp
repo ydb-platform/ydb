@@ -39,9 +39,9 @@ void CheckTtlSettings(TTestActorRuntime& runtime, NLs::TCheckFunc func, const ch
 }
 
 Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
-    void CreateTableShouldSucceed(const char* name, const char* ttlColumnType, const char* unit = "UNIT_AUTO") {
+    void CreateTableShouldSucceed(const char* name, const char* ttlColumnType, bool enableTablePgTypes, const char* unit = "UNIT_AUTO") {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(enableTablePgTypes));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -61,14 +61,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         CheckTtlSettings(runtime, OltpTtlChecker, name);
     }
 
-    Y_UNIT_TEST(CreateTableShouldSucceed) {
-        for (auto ct : {"Date", "Datetime", "Timestamp"}) {
-            CreateTableShouldSucceed(Sprintf("TTLTableWith%sColumn", ct).data(), ct);
+    Y_UNIT_TEST_FLAG(CreateTableShouldSucceed, EnableTablePgTypes) {
+        const auto& datetimeTypes = EnableTablePgTypes
+            ? TVector<const char*>{"Date", "Datetime", "Timestamp", "Date32", "Datetime64", "Timestamp64", "pgdate", "pgtimestamp"}
+            : TVector<const char*>{"Date", "Datetime", "Timestamp", "Date32", "Datetime64", "Timestamp64"};
+        for (const auto& ct : datetimeTypes) {
+            CreateTableShouldSucceed(Sprintf("TTLTableWith%sColumn", ct).data(), ct, EnableTablePgTypes);
         }
 
-        for (auto ct : {"Uint32", "Uint64", "DyNumber"}) {
+        const auto& intTypes = EnableTablePgTypes
+            ? TVector<const char*>{"Uint32", "Uint64", "DyNumber", "pgint4", "pgint8"}
+            : TVector<const char*>{"Uint32", "Uint64", "DyNumber"};
+        for (const auto& ct : intTypes) {
             for (auto unit : {"UNIT_SECONDS", "UNIT_MILLISECONDS", "UNIT_MICROSECONDS", "UNIT_NANOSECONDS"}) {
-                CreateTableShouldSucceed(Sprintf("TTLTableWith%sColumn_%s", ct, unit).data(), ct, unit);
+                CreateTableShouldSucceed(Sprintf("TTLTableWith%sColumn_%s", ct, unit).data(), ct, EnableTablePgTypes, unit);
             }
         }
     }
@@ -109,9 +115,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         )", {NKikimrScheme::StatusSchemeError});
     }
 
-    void CreateTableShouldFailOnWrongUnit(const char* ttlColumnType, const char* unit) {
+    void CreateTableShouldFailOnWrongUnit(const char* ttlColumnType, bool enableTablePgTypes, const char* unit) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(enableTablePgTypes));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -128,15 +134,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         )", ttlColumnType, unit), {NKikimrScheme::StatusSchemeError});
     }
 
-    Y_UNIT_TEST(CreateTableShouldFailOnWrongUnit) {
-        for (auto ct : {"Date", "Datetime", "Timestamp"}) {
+    Y_UNIT_TEST_FLAG(CreateTableShouldFailOnWrongUnit, EnableTablePgTypes) {
+        const auto& datetimeTypes = EnableTablePgTypes
+            ? TVector<const char*>{"Date", "Datetime", "Timestamp", "Date32", "Datetime64", "Timestamp64", "pgdate", "pgtimestamp"}
+            : TVector<const char*>{"Date", "Datetime", "Timestamp", "Date32", "Datetime64", "Timestamp64"};
+        for (auto ct : datetimeTypes) {
             for (auto unit : {"UNIT_SECONDS", "UNIT_MILLISECONDS", "UNIT_MICROSECONDS", "UNIT_NANOSECONDS"}) {
-                CreateTableShouldFailOnWrongUnit(ct, unit);
+                CreateTableShouldFailOnWrongUnit(ct, EnableTablePgTypes, unit);
             }
         }
 
-        for (auto ct : {"Uint32", "Uint64", "DyNumber"}) {
-            CreateTableShouldFailOnWrongUnit(ct, "UNIT_AUTO");
+        const auto& intTypes = EnableTablePgTypes
+            ? TVector<const char*>{"Uint32", "Uint64", "DyNumber", "pgint4", "pgint8"}
+            : TVector<const char*>{"Uint32", "Uint64", "DyNumber"};
+        for (auto ct : intTypes) {
+            CreateTableShouldFailOnWrongUnit(ct, EnableTablePgTypes, "UNIT_AUTO");
         }
     }
 

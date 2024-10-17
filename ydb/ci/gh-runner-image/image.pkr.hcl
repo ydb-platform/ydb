@@ -39,7 +39,7 @@ apt-get update
 # wait for unattended-upgrade is finished
 apt-get -o DPkg::Lock::Timeout=600 -y --no-install-recommends dist-upgrade
 apt-get -y install --no-install-recommends \
-  antlr3 clang-12 clang-14 cmake docker.io git jq libaio-dev libaio1 libicu70 libidn11-dev libkrb5-3 \
+  antlr3 antlr4 clang-12 clang-14 cmake docker.io git jq libaio-dev libaio1 libicu70 libidn11-dev libkrb5-3 \
   liblttng-ust1 lld-14 llvm-14 m4 make ninja-build parallel postgresql-client postgresql-client \
   python-is-python3 python3-pip s3cmd s3cmd zlib1g linux-tools-common linux-tools-generic
 

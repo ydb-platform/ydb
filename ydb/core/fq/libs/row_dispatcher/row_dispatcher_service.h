@@ -6,6 +6,7 @@
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
 #include "events/data_plane.h"
 
 #include <ydb/library/actors/core/actor.h>
@@ -20,6 +21,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcherService(
     const TYqSharedResources::TPtr& yqSharedResources,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& tenant,
-    const ::NMonitoring::TDynamicCounterPtr& counters);
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    const NYql::IPqGateway::TPtr& pqGateway);
 
 } // namespace NFq

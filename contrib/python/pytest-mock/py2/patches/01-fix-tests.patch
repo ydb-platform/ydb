@@ -1,0 +1,90 @@
+--- contrib/python/pytest-mock/py2/tests/test_pytest_mock.py	(index)
++++ contrib/python/pytest-mock/py2/tests/test_pytest_mock.py	(working tree)
+@@ -387,6 +387,7 @@ def test_static_method_subclass_spy(mocker):
+     assert spy.spy_return == 20
+ 
+ 
++@pytest.mark.skip("Skip testdir")
+ def test_callable_like_spy(testdir, mocker):
+     testdir.makepyfile(
+         uut="""
+@@ -494,6 +495,7 @@ def test_assert_called_wrapper(mocker):
+     stub.assert_called()
+ 
+ 
++@pytest.mark.skip
+ @pytest.mark.usefixtures("needs_assert_rewrite")
+ def test_assert_called_args_with_introspection(mocker):
+     stub = mocker.stub()
+@@ -510,6 +512,7 @@ def test_assert_called_args_with_introspection(mocker):
+         stub.assert_called_once_with(*wrong_args)
+ 
+ 
++@pytest.mark.skip
+ @pytest.mark.usefixtures("needs_assert_rewrite")
+ def test_assert_called_kwargs_with_introspection(mocker):
+     stub = mocker.stub()
+@@ -543,6 +546,7 @@ def test_assert_has_calls(mocker):
+         stub.assert_has_calls([mocker.call("bar")])
+ 
+ 
++@pytest.mark.skip("Skip testdir")
+ def test_monkeypatch_ini(mocker, testdir):
+     # Make sure the following function actually tests something
+     stub = mocker.stub()
+@@ -590,6 +594,7 @@ def test_patched_method_parameter_name(mocker):
+     m.assert_called_once_with(method="get", args={"type": "application/json"})
+ 
+ 
++@pytest.mark.skip("Skip testdir")
+ def test_monkeypatch_native(testdir):
+     """Automatically disable monkeypatching when --tb=native.
+     """
+@@ -615,6 +620,7 @@ def test_monkeypatch_native(testdir):
+     )  # make sure there are no duplicated tracebacks (#44)
+ 
+ 
++@pytest.mark.skip("Skip testdir")
+ def test_monkeypatch_no_terminal(testdir):
+     """Don't crash without 'terminal' plugin.
+     """
+@@ -631,6 +637,7 @@ def test_monkeypatch_no_terminal(testdir):
+     assert result.stdout.lines == []
+ 
+ 
++@pytest.mark.skip("Skip testdir")
+ @pytest.mark.skipif(sys.version_info[0] < 3, reason="Py3 only")
+ def test_standalone_mock(testdir):
+     """Check that the "mock_use_standalone" is being used.
+@@ -661,6 +668,7 @@ def runpytest_subprocess(testdir, *args):
+         return testdir.runpytest(*args)
+ 
+ 
++@pytest.mark.skip("Skip testdir")
+ @pytest.mark.usefixtures("needs_assert_rewrite")
+ def test_detailed_introspection(testdir):
+     """Check that the "mock_use_standalone" is being used.
+@@ -700,6 +708,7 @@ def test_detailed_introspection(testdir):
+     result.stdout.fnmatch_lines(expected_lines)
+ 
+ 
++@pytest.mark.skip("Skip testdir")
+ def test_missing_introspection(testdir):
+     testdir.makepyfile(
+         """
+@@ -723,6 +732,7 @@ def test_assert_called_with_unicode_arguments(mocker):
+         stub.assert_called_with(u"lak")
+ 
+ 
++@pytest.mark.skip("Skip testdir")
+ def test_plain_stopall(testdir):
+     """patch.stopall() in a test should not cause an error during unconfigure (#137)"""
+     testdir.makepyfile(
+@@ -776,6 +786,7 @@ def test_abort_patch_context_manager(mocker):
+     assert str(excinfo.value) == expected_error_msg
+ 
+ 
++@pytest.mark.skip("Skip testdir")
+ def test_abort_patch_context_manager_with_stale_pyc(testdir):
+     """Ensure we don't trigger an error in case the frame where mocker.patch is being
+     used doesn't have a 'context' (#169)"""

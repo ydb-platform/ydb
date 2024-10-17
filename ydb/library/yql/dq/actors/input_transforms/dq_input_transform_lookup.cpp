@@ -43,6 +43,7 @@ public:
         const NMiniKQL::TStructType* lookupPayloadType,
         const NMiniKQL::TMultiType* outputRowType,
         TOutputRowColumnOrder&& outputRowColumnOrder,
+        size_t maxDelayedRows,
         size_t cacheLimit,
         std::chrono::seconds cacheTtl
     )
@@ -65,6 +66,7 @@ public:
         , OutputRowColumnOrder(std::move(outputRowColumnOrder))
         , InputFlowFetchStatus(NUdf::EFetchStatus::Yield)
         , LruCache(std::make_unique<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl>(cacheLimit, lookupKeyType))
+        , MaxDelayedRows(maxDelayedRows)
         , CacheTtl(cacheTtl)
         , ReadyQueue(OutputRowType)
     {
@@ -147,8 +149,9 @@ private: //events
 
     void Handle(IDqAsyncLookupSource::TEvLookupResult::TPtr ev) {
         auto startCycleCount = GetCycleCountFast();
-        if (!KeysForLookup)
+        if (!KeysForLookup) {
             return;
+        }
         auto guard = BindAllocator();
         const auto now = std::chrono::steady_clock::now();
         auto lookupResult = ev->Get()->Result.lock();
@@ -219,7 +222,10 @@ private: //IDqComputeActorAsyncInput
             NUdf::TUnboxedValue inputRow = HolderFactory.CreateDirectArrayHolder(InputRowType->GetElementsCount(), inputRowItems);
             const auto now = std::chrono::steady_clock::now();
             LruCache->Prune(now);
+            size_t rowLimit = std::numeric_limits<size_t>::max();
+            size_t row = 0;
             while (
+                row < rowLimit &&
                 (KeysForLookup->size() < MaxKeysInRequest) &&
                 ((InputFlowFetchStatus = FetchWideInputValue(inputRowItems)) == NUdf::EFetchStatus::Ok)) {
                 NUdf::TUnboxedValue* keyItems;
@@ -235,9 +241,14 @@ private: //IDqComputeActorAsyncInput
                 if (auto lookupPayload = LruCache->Get(key, now)) {
                     AddReadyQueue(key, other, &*lookupPayload);
                 } else {
+                    if (AwaitingQueue.empty()) {
+                        // look ahead at most MaxDelayedRows after first missing
+                        rowLimit = row + MaxDelayedRows;
+                    }
                     AwaitingQueue.emplace_back(key, std::move(other));
                     KeysForLookup->emplace(std::move(key), NUdf::TUnboxedValue{});
                 }
+                ++row;
             }
             if (Batches && (!KeysForLookup->empty() || !ReadyQueue.RowCount())) {
                 Batches->Inc();
@@ -325,6 +336,7 @@ protected:
 
     NUdf::EFetchStatus InputFlowFetchStatus;
     std::unique_ptr<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl> LruCache;
+    size_t MaxDelayedRows;
     std::chrono::seconds CacheTtl;
     using TInputKeyOtherPair = std::pair<NUdf::TUnboxedValue, NUdf::TUnboxedValue>;
     using TAwaitingQueue = std::deque<TInputKeyOtherPair, NKikimr::NMiniKQL::TMKQLAllocator<TInputKeyOtherPair>>; //input row split in two parts: key columns and other columns
@@ -594,6 +606,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             lookupPayloadType,
             outputRowType,
             std::move(outputColumnsOrder),
+            settings.GetMaxDelayedRows(),
             settings.GetCacheLimit(),
             std::chrono::seconds(settings.GetCacheTtlSeconds())
         ) :
@@ -614,6 +627,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             lookupPayloadType,
             outputRowType,
             std::move(outputColumnsOrder),
+            settings.GetMaxDelayedRows(),
             settings.GetCacheLimit(),
             std::chrono::seconds(settings.GetCacheTtlSeconds())
         );

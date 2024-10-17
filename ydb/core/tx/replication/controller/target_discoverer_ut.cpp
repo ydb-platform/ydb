@@ -3,6 +3,7 @@
 
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
+#include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -129,6 +130,33 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         const auto& toAdd = ev->Get()->ToAdd;
         UNIT_ASSERT_VALUES_EQUAL(toAdd.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).SrcPath, "/Root/Table");
+    }
+
+    Y_UNIT_TEST(InvalidCredentials) {
+        TEnv env;
+        env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
+
+        env.CreateTable("/Root", *MakeTableDescription(DummyTable()));
+
+        // create aux proxy
+        NKikimrReplication::TStaticCredentials staticCreds;
+        staticCreds.SetUser("user");
+        staticCreds.SetPassword("password");
+        const auto ydbProxy = env.GetRuntime().Register(CreateYdbProxy(
+            env.GetEndpoint(), env.GetDatabase(), false /* ssl */, staticCreds));
+
+        env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, ydbProxy,
+            TVector<std::pair<TString, TString>>{
+                {"/Root", "/Root/Replicated"},
+            }
+        ));
+
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvDiscoveryTargetsResult>(env.GetSender());
+        UNIT_ASSERT(!ev->Get()->IsSuccess());
+
+        const auto& failed = ev->Get()->Failed;
+        UNIT_ASSERT_VALUES_EQUAL(failed.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(failed.at(0).Error.GetStatus(), NYdb::EStatus::CLIENT_UNAUTHENTICATED);
     }
 }
 

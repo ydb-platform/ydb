@@ -42,6 +42,7 @@ void TCompletionLogWrite::Exec(TActorSystem *actorSystem) {
     NHPTimer::STime now = HPNow();
     for (auto it = LogWriteQueue.begin(); it != LogWriteQueue.end(); ++it) {
         TLogWrite &evLog = *(*it);
+        evLog.Replied = true;
         TLogWrite *&batch = batchMap[evLog.Owner];
         LOG_DEBUG_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PCtx->PDiskId
                 << " ReqId# " << evLog.ReqId.Id << " TEvLogResult Sender# " << evLog.Sender.LocalId()
@@ -98,17 +99,12 @@ void TCompletionLogWrite::Exec(TActorSystem *actorSystem) {
 }
 
 void TCompletionLogWrite::Release(TActorSystem *actorSystem) {
-    switch (Result) {
-    case EIoResult::Ok:
-    case EIoResult::Unknown:
-        break;
-    default:
-        for (TLogWrite *logWrite : LogWriteQueue) {
-            auto res = MakeHolder<TEvLogResult>(NKikimrProto::CORRUPTED, NKikimrBlobStorage::StatusIsValid,
-                    ErrorReason);
-            actorSystem->Send(logWrite->Sender, res.Release());
-            PDisk->Mon.WriteLog.CountResponse();
-        }
+    for (TLogWrite *logWrite : LogWriteQueue) {
+        auto res = MakeHolder<TEvLogResult>(NKikimrProto::CORRUPTED, NKikimrBlobStorage::StatusIsValid,
+                ErrorReason);
+        logWrite->Replied = true;
+        actorSystem->Send(logWrite->Sender, res.Release());
+        PDisk->Mon.WriteLog.CountResponse();
     }
 
     delete this;

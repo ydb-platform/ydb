@@ -273,7 +273,11 @@ void TYsonStructMeta::LoadStruct(
         pendingParameters.erase(parameter);
     });
 
-    for (const auto parameter : pendingParameters) {
+    auto sortedPendingParameters = std::vector(pendingParameters.begin(), pendingParameters.end());
+    Sort(sortedPendingParameters, [] (const auto* lhs, const auto* rhs) {
+        return lhs->GetKey() < rhs->GetKey();
+    });
+    for (const auto parameter : sortedPendingParameters) {
         parameter->Load(target, /*cursor*/ nullptr, createLoadOptions(parameter->GetKey()));
     }
 

@@ -1581,11 +1581,12 @@ TPlanViewConfig::TPlanViewConfig() {
 }
 
 
-void TPlanVisualizer::LoadPlans(const TString& plans) {
+void TPlanVisualizer::LoadPlans(const TString& plans, bool simplified) {
+    Config.Simplified = simplified;
     NJson::TJsonReaderConfig jsonConfig;
     NJson::TJsonValue jsonNode;
     if (NJson::ReadJsonTree(plans, &jsonConfig, &jsonNode)) {
-        if (auto* topNode = jsonNode.GetValueByPath("Plan")) {
+        if (auto* topNode = jsonNode.GetValueByPath(simplified ? "SimplifiedPlan" : "Plan")) {
             if (auto* subNode = topNode->GetValueByPath("Plans")) {
                 for (auto& plan : subNode->GetArray()) {
                     if (auto* typeNode = plan.GetValueByPath("Node Type")) {

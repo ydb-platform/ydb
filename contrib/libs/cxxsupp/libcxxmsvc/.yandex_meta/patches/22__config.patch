@@ -1,0 +1,236 @@
+diff --git a/include/__config b/include/__config
+index 0f32067..2914d9a 100644
+--- a/include/__config
++++ b/include/__config
+@@ -9,8 +9,7 @@
+ 
+ #ifndef _LIBCPP_CONFIG
+ #define _LIBCPP_CONFIG
+-
+-#include <__config_site>
++#include <__wrappers_config>
+ 
+ #if defined(_MSC_VER) && !defined(__clang__)
+ #  if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
+@@ -22,6 +21,33 @@
+ #  pragma GCC system_header
+ #endif
+ 
++// Move outside #ifdef __cplusplus because this needs to work in both C and C++ headers.
++#if defined(__apple_build_version__)
++#  define _LIBCPP_COMPILER_CLANG_BASED
++#  define _LIBCPP_APPLE_CLANG_VER (__apple_build_version__ / 10000)
++#elif defined(__clang__)
++#define _LIBCPP_COMPILER_CLANG
++#  define _LIBCPP_COMPILER_CLANG_BASED
++#  define _LIBCPP_CLANG_VER (__clang_major__ * 100 + __clang_minor__)
++#elif defined(__GNUC__)
++#define _LIBCPP_COMPILER_GCC
++#elif defined(_MSC_VER)
++#define _LIBCPP_COMPILER_MSVC
++
++#if _MSVC_LANG >= 201705L
++#  define _LIBCPP_STD_VER 20
++#elif _MSVC_LANG == 201703L
++#  define _LIBCPP_STD_VER 17
++#else
++#  define _LIBCPP_STD_VER 14
++#endif
++
++#define Y_UCRT_INCLUDE_NEXT(x) <Y_UCRT_INCLUDE/x>
++#define Y_MSVC_INCLUDE_NEXT(x) <Y_MSVC_INCLUDE/x>
++#elif defined(__IBMCPP__)
++#define _LIBCPP_COMPILER_IBM
++#endif
++
+ #ifdef __cplusplus
+ 
+ #define _LIBCPP_VERSION 15000
+@@ -48,7 +74,7 @@
+ #  define _LIBCPP_OBJECT_FORMAT_ELF   1
+ #elif defined(__MACH__)
+ #  define _LIBCPP_OBJECT_FORMAT_MACHO 1
+-#elif defined(_WIN32)
++#elif defined(_WIN32) || defined(__CYGWIN__)
+ #  define _LIBCPP_OBJECT_FORMAT_COFF  1
+ #elif defined(__wasm__)
+ #  define _LIBCPP_OBJECT_FORMAT_WASM  1
+@@ -190,20 +216,6 @@
+ #define __has_include(...) 0
+ #endif
+ 
+-#if defined(__apple_build_version__)
+-#  define _LIBCPP_COMPILER_CLANG_BASED
+-#  define _LIBCPP_APPLE_CLANG_VER (__apple_build_version__ / 10000)
+-#elif defined(__clang__)
+-#  define _LIBCPP_COMPILER_CLANG_BASED
+-#  define _LIBCPP_CLANG_VER (__clang_major__ * 100 + __clang_minor__)
+-#elif defined(__GNUC__)
+-#  define _LIBCPP_COMPILER_GCC
+-#elif defined(_MSC_VER)
+-#  define _LIBCPP_COMPILER_MSVC
+-#elif defined(__IBMCPP__)
+-#  define _LIBCPP_COMPILER_IBM
+-#endif
+-
+ #if defined(_LIBCPP_COMPILER_GCC) && __cplusplus < 201103L
+ #error "libc++ does not support using GCC with C++03. Please enable C++11"
+ #endif
+@@ -405,7 +417,9 @@
+ #if __has_attribute(using_if_exists)
+ # define _LIBCPP_HAS_TIMESPEC_GET
+ # define _LIBCPP_HAS_QUICK_EXIT
+-# define _LIBCPP_HAS_ALIGNED_ALLOC
++#  ifndef _LIBCPP_MSVCRT
++#    define _LIBCPP_HAS_ALIGNED_ALLOC
++#  endif
+ #else
+ #if (defined(__ISO_C_VISIBLE) && (__ISO_C_VISIBLE >= 2011)) || __cplusplus >= 201103L
+ #  if defined(__FreeBSD__)
+@@ -575,11 +589,50 @@ typedef __char32_t char32_t;
+ #error "MSVC versions prior to Visual Studio 2015 are not supported"
+ #endif
+ 
++#define _LIBCPP_HAS_IS_FINAL
+ #define __alignof__ __alignof
+ #define _LIBCPP_NORETURN __declspec(noreturn)
+ #define _ALIGNAS(x) __declspec(align(x))
+ #define _ALIGNAS_TYPE(x) alignas(x)
+ 
++#define _LIBCPP_UNDERLYING_TYPE(T) __underlying_type(T)
++#define _LIBCPP_IS_LITERAL(T) __is_literal_type(T)
++#undef __has_feature
++#define __has_feature(x) __has_feature_##x
++#define __has_feature_is_standard_layout 1
++#define __has_feature_is_trivially_copyable 1
++#define __has_feature_is_trivial 1
++#define __has_feature_is_pod 1
++#define __has_feature_cxx_noexcept 1
++#define __has_feature_has_nothrow_assign 1
++#define __has_feature_is_union 1
++#define __has_feature_is_class 1
++#define __has_feature_is_enum 1
++#define __has_feature_is_convertible_to 1
++#define __has_feature_is_empty 1
++#define __has_feature_is_polymorphic 1
++#define __has_feature_has_virtual_destructor 1
++#define __has_feature_cxx_reference_qualified_functions 1
++#define __has_feature_is_constructible 1
++#define __has_feature_is_trivially_constructible 1
++#define __has_feature_is_trivially_assignable 1
++#define __has_feature_is_convertible_to 1
++#define __has_feature_has_trivial_constructor 1
++#define __has_feature_has_trivial_destructor 1
++#define __has_feature_has_nothrow_constructor 1
++#define __has_feature_has_nothrow_copy 1
++#define __has_feature_cxx_explicit_conversions 1
++
++#undef __has_builtin
++#define __has_builtin(x) __has_builtin_##x
++#define __has_builtin___builtin_addressof 1
++#if defined(_MSC_VER) && defined(__CUDACC__)
++    // nvcc fails to compile __builtin_is_constant_evaluated() at the time
++#   define _LIBCPP_HAS_NO_BUILTIN_IS_CONSTANT_EVALUATED 1
++#else
++#   define __has_builtin___builtin_is_constant_evaluated 1
++#endif
++
+ #define _LIBCPP_WEAK
+ 
+ #define _LIBCPP_HAS_NO_ASAN
+@@ -1023,7 +1076,6 @@ typedef unsigned int   char32_t;
+ #  define _LIBCPP_DEPRECATED_WITH_CHAR8_T
+ #endif
+ 
+-// Macros to enter and leave a state where deprecation warnings are suppressed.
+ #if defined(_LIBCPP_COMPILER_CLANG_BASED) || defined(_LIBCPP_COMPILER_GCC)
+ #   define _LIBCPP_SUPPRESS_DEPRECATED_PUSH \
+         _Pragma("GCC diagnostic push") \
+@@ -1125,7 +1177,8 @@ extern "C" _LIBCPP_FUNC_VIS void __sanitizer_annotate_contiguous_container(
+       defined(__APPLE__) || \
+       defined(__sun__) || \
+       defined(__MVS__) || \
+-      defined(_AIX)
++      defined(_AIX) || \
++      defined(__CYGWIN__)
+ #    define _LIBCPP_HAS_THREAD_API_PTHREAD
+ #  elif defined(__Fuchsia__)
+      // TODO(44575): Switch to C11 thread API when possible.
+@@ -1258,6 +1311,10 @@ extern "C" _LIBCPP_FUNC_VIS void __sanitizer_annotate_contiguous_container(
+ #  define _LIBCPP_CONSTINIT
+ #endif
+ 
++#if !__has_builtin(__builtin_is_constant_evaluated) || (defined(_LIBCPP_COMPILER_GCC) && _GNUC_VER < 900) || __CUDACC_VER_MAJOR__ == 10
++#define _LIBCPP_HAS_NO_BUILTIN_IS_CONSTANT_EVALUATED
++#endif
++
+ #if __has_attribute(diagnose_if) && !defined(_LIBCPP_DISABLE_ADDITIONAL_DIAGNOSTICS)
+ #  define _LIBCPP_DIAGNOSE_WARNING(...) \
+      __attribute__((diagnose_if(__VA_ARGS__, "warning")))
+@@ -1279,7 +1336,13 @@ extern "C" _LIBCPP_FUNC_VIS void __sanitizer_annotate_contiguous_container(
+ #  define _LIBCPP_FALLTHROUGH() ((void)0)
+ #endif
+ 
+-#if __has_attribute(__nodebug__)
++#if defined(_LIBCPP_COMPILER_CLANG_BASED)
++# define _LIBCPP_REINITIALIZES_OBJECT [[clang::reinitializes]]
++#else
++# define _LIBCPP_REINITIALIZES_OBJECT
++#endif
++
++#if __has_attribute(__nodebug__) && !defined(__CUDACC__)
+ #define _LIBCPP_NODEBUG __attribute__((__nodebug__))
+ #else
+ #define _LIBCPP_NODEBUG
+@@ -1308,7 +1371,8 @@ extern "C" _LIBCPP_FUNC_VIS void __sanitizer_annotate_contiguous_container(
+ #endif
+ 
+ #if defined(_LIBCPP_ABI_MICROSOFT) && \
+-    (defined(_LIBCPP_COMPILER_MSVC) || __has_declspec_attribute(empty_bases))
++   (defined(_LIBCPP_COMPILER_MSVC) || __has_declspec_attribute(empty_bases)) && \
++    !defined(__CUDACC__)
+ #  define _LIBCPP_DECLSPEC_EMPTY_BASES __declspec(empty_bases)
+ #else
+ #  define _LIBCPP_DECLSPEC_EMPTY_BASES
+@@ -1333,7 +1397,11 @@ extern "C" _LIBCPP_FUNC_VIS void __sanitizer_annotate_contiguous_container(
+ #define _LIBCPP_HAS_NO_CXX20_COROUTINES
+ #endif
+ 
+-#if defined(_LIBCPP_COMPILER_IBM)
++// Yandex-specific: We build our own libc++, so it has everything available
++#define _LIBCPP_DISABLE_AVAILABILITY
++// End of Yandex-specific
++
++#if defined(_LIBCPP_COMPILER_IBM) || defined(__CUDACC__)
+ #define _LIBCPP_HAS_NO_PRAGMA_PUSH_POP_MACRO
+ #endif
+ 
+@@ -1418,6 +1486,28 @@ extern "C" _LIBCPP_FUNC_VIS void __sanitizer_annotate_contiguous_container(
+ # define _LIBCPP_ATTRIBUTE_FORMAT(archetype, format_string_index, first_format_arg_index) /* nothing */
+ #endif
+ 
++#if __has_cpp_attribute(msvc::no_unique_address)
++   // MSVC implements [[no_unique_address]] as a silent no-op currently.
++   // (If/when MSVC breaks its C++ ABI, it will be changed to work as intended.)
++   // However, MSVC implements [[msvc::no_unique_address]] which does what
++   // [[no_unique_address]] is supposed to do, in general.
++
++   // Clang-cl does not yet (14.0) implement either [[no_unique_address]] or
++   // [[msvc::no_unique_address]] though. If/when it does implement
++   // [[msvc::no_unique_address]], this should be preferred though.
++#  define _LIBCPP_NO_UNIQUE_ADDRESS [[msvc::no_unique_address]]
++#elif __has_cpp_attribute(no_unique_address)
++#  define _LIBCPP_NO_UNIQUE_ADDRESS [[no_unique_address]]
++#else
++#  define _LIBCPP_NO_UNIQUE_ADDRESS /* nothing */
++   // Note that this can be replaced by #error as soon as clang-cl
++   // implements msvc::no_unique_address, since there should be no C++20
++   // compiler that doesn't support one of the two attributes at that point.
++   // We geenrally don't want to use this macro outside of C++20-only code,
++   // because using it conditionally in one language version only would make
++   // the ABI inconsistent.
++#endif
++
+ #if __has_cpp_attribute(msvc::no_unique_address)
+    // MSVC implements [[no_unique_address]] as a silent no-op currently.
+    // (If/when MSVC breaks its C++ ABI, it will be changed to work as intended.)

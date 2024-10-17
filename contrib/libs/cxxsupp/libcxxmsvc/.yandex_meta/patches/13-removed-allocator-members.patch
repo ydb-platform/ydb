@@ -1,0 +1,13 @@
+diff --git a/include/__memory/allocator.h b/include/__memory/allocator.h
+index 318c19d..cd02a22 100644
+--- a/include/__memory/allocator.h
++++ b/include/__memory/allocator.h
+@@ -26,7 +26,7 @@ _LIBCPP_BEGIN_NAMESPACE_STD
+ 
+ template <class _Tp> class allocator;
+ 
+-#if _LIBCPP_STD_VER <= 17
++#if _LIBCPP_STD_VER <= 17 || defined(_LIBCPP_ENABLE_CXX20_REMOVED_ALLOCATOR_MEMBERS)
+ template <>
+ class _LIBCPP_TEMPLATE_VIS allocator<void>
+ {

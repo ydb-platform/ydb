@@ -441,9 +441,6 @@ Y_UNIT_TEST(TzTimestamp64) {
 
 Y_UNIT_TEST(Decimal) {
     const TVector<std::tuple<NYql::NDecimal::TInt128, TString, TString>> values = {
-        {-NYql::NDecimal::Nan(),
-            "00",
-            "FF"},
         {-NYql::NDecimal::Inf(),
             "01",
             "FE"},

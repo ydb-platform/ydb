@@ -1,3 +1,5 @@
+#include <ydb/core/base/backtrace.h>
+
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/events/events.h>
 
@@ -9,6 +11,8 @@
 #include <ydb/core/testlib/actor_helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/tests/fq/pq_async_io/ut_helpers.h>
+
+#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 
 namespace {
 
@@ -31,6 +35,8 @@ public:
         Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_TRACE);
         Runtime.SetDispatchTimeout(TDuration::Seconds(5));
 
+        NKikimr::EnableYDBBacktraceFormat();
+
         ReadActorId1 = Runtime.AllocateEdgeActor();
         ReadActorId2 = Runtime.AllocateEdgeActor();
         RowDispatcherActorId = Runtime.AllocateEdgeActor();
@@ -42,6 +48,16 @@ public:
         Config.SetSendStatusPeriodSec(2);
         Config.SetWithoutConsumer(true);
 
+        auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
+        auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
+   
+        NYql::TPqGatewayServices pqServices(
+            yqSharedResources->UserSpaceYdbDriver,
+            nullptr,
+            nullptr,
+            std::make_shared<NYql::TPqGatewayConfig>(),
+            nullptr);
+
         TopicSession = Runtime.Register(NewTopicSession(
             topicPath,
             Config,
@@ -49,7 +65,8 @@ public:
             0,
             Driver,
             CredentialsProviderFactory,
-            MakeIntrusive<NMonitoring::TDynamicCounters>()
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
+            CreatePqNativeGateway(pqServices)
             ).release());
         Runtime.EnableScheduleForActor(TopicSession);
 
@@ -373,7 +390,8 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
         TString json1 = "{\"dt\":101,\"value\":\"value1\", \"field1\":\"field1\"}";
         TString json2 = "{\"dt\":102,\"value\":\"value2\", \"field1\":\"field2\"}";
-    
+
+        Sleep(TDuration::Seconds(3));
         PQWrite({ json1, json2 }, topicName);
         ExpectNewDataArrived({ReadActorId1, ReadActorId2});
         ExpectMessageBatch(ReadActorId1, { "{\"dt\":101,\"value\":\"value1\"}", "{\"dt\":102,\"value\":\"value2\"}" });

@@ -896,6 +896,19 @@ const TPath::TChecker& TPath::TChecker::IsResourcePool(EStatus status) const {
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::IsBackupCollection(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsBackupCollection()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a backup collection"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
 const TPath::TChecker& TPath::TChecker::PathShardsLimit(ui64 delta, EStatus status) const {
     if (Failed) {
         return *this;
@@ -1536,6 +1549,8 @@ bool TPath::IsCommonSensePath() const {
         bool ok = (*item)->IsDirectory() || (*item)->IsDomainRoot();
         // Temporarily olap stores are treated like directories
         ok = ok || (*item)->IsOlapStore();
+        // Temporarily backup collections are treated like directories
+        ok = ok || (*item)->IsBackupCollection();
         if (!ok) {
             return false;
         }

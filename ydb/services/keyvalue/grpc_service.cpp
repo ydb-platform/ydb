@@ -22,18 +22,6 @@ void TKeyValueGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc
     SetupIncomingRequests(std::move(logger));
 }
 
-void TKeyValueGRpcService::SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) {
-    Limiter = limiter;
-}
-
-bool TKeyValueGRpcService::IncRequest() {
-    return Limiter->Inc();
-}
-
-void TKeyValueGRpcService::DecRequest() {
-    Limiter->Dec();
-}
-
 void TKeyValueGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
 

@@ -1,0 +1,309 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSL-1.0              0c343589979bf7b72c670455ba9f8279
+BELONGS ya.make
+    License text:
+            //  Copyright 2012 Eric Niebler. Distributed under the Boost
+            //  Software License, Version 1.0. (See accompanying file
+            //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/proto/transform/detail/expand_pack.hpp [15:17]
+        include/boost/proto/transform/detail/pack_impl.hpp [15:17]
+
+KEEP     BSL-1.0              563e4f804388196518aa056f2cf30221
+BELONGS ya.make
+    License text:
+        //  Copyright 2010 Eric Niebler. Distributed under the Boost
+        //  Software License, Version 1.0. (See accompanying file
+        //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/proto/detail/as_expr.hpp [7:9]
+        include/boost/proto/functional.hpp [5:7]
+        include/boost/proto/functional/fusion.hpp [5:7]
+        include/boost/proto/functional/fusion/at.hpp [5:7]
+        include/boost/proto/functional/fusion/pop_back.hpp [5:7]
+        include/boost/proto/functional/fusion/pop_front.hpp [5:7]
+        include/boost/proto/functional/fusion/push_back.hpp [5:7]
+        include/boost/proto/functional/fusion/push_front.hpp [5:7]
+        include/boost/proto/functional/fusion/reverse.hpp [5:7]
+        include/boost/proto/functional/std.hpp [5:7]
+        include/boost/proto/functional/std/utility.hpp [5:7]
+
+KEEP     BSL-1.0              597dc579281e71ba9d4dd39bf2d15a12
+BELONGS ya.make
+    License text:
+        //  Copyright 2008 Eric Niebler. Distributed under the Boost
+        //  Software License, Version 1.0. (See accompanying file
+        //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/proto/args.hpp [6:8]
+        include/boost/proto/context.hpp [5:7]
+        include/boost/proto/context/callable.hpp [9:11]
+        include/boost/proto/context/default.hpp [7:9]
+        include/boost/proto/context/null.hpp [7:9]
+        include/boost/proto/core.hpp [6:8]
+        include/boost/proto/debug.hpp [5:7]
+        include/boost/proto/deep_copy.hpp [5:7]
+        include/boost/proto/detail/as_lvalue.hpp [5:7]
+        include/boost/proto/detail/decltype.hpp [5:7]
+        include/boost/proto/detail/deprecated.hpp [6:8]
+        include/boost/proto/detail/dont_care.hpp [5:7]
+        include/boost/proto/detail/expr_funop.hpp [5:7]
+        include/boost/proto/detail/ignore_unused.hpp [6:8]
+        include/boost/proto/detail/is_noncopyable.hpp [5:7]
+        include/boost/proto/detail/local.hpp [5:7]
+        include/boost/proto/detail/poly_function.hpp [7:9]
+        include/boost/proto/detail/static_const.hpp [5:7]
+        include/boost/proto/domain.hpp [7:9]
+        include/boost/proto/eval.hpp [5:7]
+        include/boost/proto/expr.hpp [5:7]
+        include/boost/proto/extends.hpp [5:7]
+        include/boost/proto/fusion.hpp [5:7]
+        include/boost/proto/generate.hpp [6:8]
+        include/boost/proto/literal.hpp [6:8]
+        include/boost/proto/make_expr.hpp [7:9]
+        include/boost/proto/matches.hpp [6:8]
+        include/boost/proto/operators.hpp [6:8]
+        include/boost/proto/proto.hpp [5:7]
+        include/boost/proto/proto_fwd.hpp [5:7]
+        include/boost/proto/proto_typeof.hpp [6:8]
+        include/boost/proto/repeat.hpp [5:7]
+        include/boost/proto/tags.hpp [5:7]
+        include/boost/proto/traits.hpp [7:9]
+        include/boost/proto/transform.hpp [5:7]
+        include/boost/proto/transform/arg.hpp [5:7]
+        include/boost/proto/transform/call.hpp [5:7]
+        include/boost/proto/transform/default.hpp [6:8]
+        include/boost/proto/transform/fold.hpp [5:7]
+        include/boost/proto/transform/fold_tree.hpp [5:7]
+        include/boost/proto/transform/impl.hpp [5:7]
+        include/boost/proto/transform/lazy.hpp [5:7]
+        include/boost/proto/transform/make.hpp [5:7]
+        include/boost/proto/transform/pass_through.hpp [8:10]
+        include/boost/proto/transform/when.hpp [5:7]
+
+KEEP     BSL-1.0              7532067c3573c5daab384401428cd124
+BELONGS ya.make
+    License text:
+        //  Copyright 2011 Eric Niebler. Distributed under the Boost
+        //  Software License, Version 1.0. (See accompanying file
+        //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/proto/detail/template_arity.hpp [5:7]
+        include/boost/proto/transform/integral_c.hpp [5:7]
+
+KEEP     BSL-1.0              77795e223e37217964bfdecbffd04c93
+BELONGS ya.make
+    License text:
+            //  Copyright 2008 Eric Niebler. Distributed under the Boost
+            //  Software License, Version 1.0. (See accompanying file
+            //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/proto/context/detail/callable_eval.hpp [23:25]
+        include/boost/proto/context/detail/default_eval.hpp [19:21]
+        include/boost/proto/context/detail/null_eval.hpp [19:21]
+        include/boost/proto/detail/and_n.hpp [15:17]
+        include/boost/proto/detail/args.hpp [28:30]
+        include/boost/proto/detail/basic_expr.hpp [28:30]
+        include/boost/proto/detail/class_member_traits.hpp [15:17]
+        include/boost/proto/detail/deduce_domain_n.hpp [21:23]
+        include/boost/proto/detail/deep_copy.hpp [27:29]
+        include/boost/proto/detail/expr.hpp [33:35]
+        include/boost/proto/detail/extends_funop.hpp [25:27]
+        include/boost/proto/detail/extends_funop_const.hpp [24:26]
+        include/boost/proto/detail/funop.hpp [23:25]
+        include/boost/proto/detail/generate_by_value.hpp [15:17]
+        include/boost/proto/detail/lambda_matches.hpp [21:23]
+        include/boost/proto/detail/make_expr.hpp [15:17]
+        include/boost/proto/detail/make_expr_.hpp [15:17]
+        include/boost/proto/detail/make_expr_funop.hpp [15:17]
+        include/boost/proto/detail/matches_.hpp [29:31]
+        include/boost/proto/detail/memfun_funop.hpp [15:17]
+        include/boost/proto/detail/or_n.hpp [15:17]
+        include/boost/proto/detail/poly_function_funop.hpp [20:22]
+        include/boost/proto/detail/poly_function_traits.hpp [15:17]
+        include/boost/proto/detail/preprocessed/args.hpp [6:8]
+        include/boost/proto/detail/preprocessed/class_member_traits.hpp [5:7]
+        include/boost/proto/detail/preprocessed/make_expr.hpp [5:7]
+        include/boost/proto/detail/preprocessed/make_expr_funop.hpp [5:7]
+        include/boost/proto/detail/preprocessed/memfun_funop.hpp [5:7]
+        include/boost/proto/detail/preprocessed/or_n.hpp [5:7]
+        include/boost/proto/detail/preprocessed/poly_function_traits.hpp [5:7]
+        include/boost/proto/detail/preprocessed/template_arity_helper.hpp [5:7]
+        include/boost/proto/detail/preprocessed/vararg_matches_impl.hpp [5:7]
+        include/boost/proto/detail/template_arity_helper.hpp [15:17]
+        include/boost/proto/detail/traits.hpp [20:22]
+        include/boost/proto/detail/unpack_expr_.hpp [80:82]
+        include/boost/proto/detail/vararg_matches_impl.hpp [15:17]
+        include/boost/proto/transform/detail/call.hpp [26:28]
+        include/boost/proto/transform/detail/construct_funop.hpp [15:17]
+        include/boost/proto/transform/detail/construct_pod_funop.hpp [15:17]
+        include/boost/proto/transform/detail/default_function_impl.hpp [19:21]
+        include/boost/proto/transform/detail/fold_impl.hpp [73:75]
+        include/boost/proto/transform/detail/lazy.hpp [15:17]
+        include/boost/proto/transform/detail/make.hpp [33:35]
+        include/boost/proto/transform/detail/make_gcc_workaround.hpp [24:26]
+        include/boost/proto/transform/detail/pass_through_impl.hpp [35:37]
+        include/boost/proto/transform/detail/preprocessed/construct_funop.hpp [5:7]
+        include/boost/proto/transform/detail/preprocessed/construct_pod_funop.hpp [5:7]
+        include/boost/proto/transform/detail/preprocessed/lazy.hpp [5:7]
+        include/boost/proto/transform/detail/preprocessed/when.hpp [5:7]
+        include/boost/proto/transform/detail/when.hpp [15:17]
+
+KEEP     BSL-1.0              78e141595344e7e88ebac427a369a9d6
+BELONGS ya.make
+    License text:
+        //  Copyright 2012 Eric Niebler. Distributed under the Boost
+        //  Software License, Version 1.0. (See accompanying file
+        //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/proto/detail/any.hpp [5:7]
+        include/boost/proto/functional/range.hpp [5:7]
+        include/boost/proto/functional/range/begin.hpp [5:7]
+        include/boost/proto/functional/range/empty.hpp [5:7]
+        include/boost/proto/functional/range/end.hpp [5:7]
+        include/boost/proto/functional/range/rbegin.hpp [5:7]
+        include/boost/proto/functional/range/rend.hpp [5:7]
+        include/boost/proto/functional/range/size.hpp [5:7]
+        include/boost/proto/functional/std/iterator.hpp [5:7]
+        include/boost/proto/transform/detail/pack.hpp [5:7]
+        include/boost/proto/transform/env.hpp [5:7]
+
+KEEP     BSL-1.0              9fb8b120ca696580426b88ed5a5c689b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/proto/detail/expr.hpp [61:63]
+        include/boost/proto/detail/preprocessed/expr.hpp [5:7]
+
+KEEP     BSL-1.0              b862f691db6b1f393df1444cfd7c7ca7
+BELONGS ya.make
+    License text:
+        //          Distributed under the Boost Software License, Version 1.0.
+        //                 See accompanying file LICENSE.txt or copy at
+        //                     http://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/proto/detail/remove_typename.hpp [6:8]
+
+KEEP     BSL-1.0              c6aa4544098c85be9acaf93ddfa53cc1
+BELONGS ya.make
+    License text:
+            //  Copyright 2008 Eric Niebler. Distributed under the Boost
+            //  Software License, Version 1.0. (See accompanying file
+            //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/proto/context/detail/preprocessed/callable_eval.hpp [5:7]
+        include/boost/proto/context/detail/preprocessed/default_eval.hpp [5:7]
+        include/boost/proto/context/detail/preprocessed/null_eval.hpp [5:7]
+        include/boost/proto/detail/preprocessed/and_n.hpp [5:7]
+        include/boost/proto/detail/preprocessed/basic_expr.hpp [5:7]
+        include/boost/proto/detail/preprocessed/deduce_domain_n.hpp [5:7]
+        include/boost/proto/detail/preprocessed/deep_copy.hpp [5:7]
+        include/boost/proto/detail/preprocessed/expr_variadic.hpp [5:7]
+        include/boost/proto/detail/preprocessed/extends_funop.hpp [5:7]
+        include/boost/proto/detail/preprocessed/extends_funop_const.hpp [5:7]
+        include/boost/proto/detail/preprocessed/funop.hpp [5:7]
+        include/boost/proto/detail/preprocessed/generate_by_value.hpp [5:7]
+        include/boost/proto/detail/preprocessed/lambda_matches.hpp [5:7]
+        include/boost/proto/detail/preprocessed/make_expr_.hpp [5:7]
+        include/boost/proto/detail/preprocessed/matches_.hpp [5:7]
+        include/boost/proto/detail/preprocessed/poly_function_funop.hpp [5:7]
+        include/boost/proto/detail/preprocessed/traits.hpp [5:7]
+        include/boost/proto/detail/preprocessed/unpack_expr_.hpp [5:7]
+        include/boost/proto/transform/detail/preprocessed/call.hpp [5:7]
+        include/boost/proto/transform/detail/preprocessed/default_function_impl.hpp [6:8]
+        include/boost/proto/transform/detail/preprocessed/expand_pack.hpp [5:7]
+        include/boost/proto/transform/detail/preprocessed/fold_impl.hpp [5:7]
+        include/boost/proto/transform/detail/preprocessed/make.hpp [5:7]
+        include/boost/proto/transform/detail/preprocessed/make_gcc_workaround.hpp [6:8]
+        include/boost/proto/transform/detail/preprocessed/pack_impl.hpp [5:7]
+        include/boost/proto/transform/detail/preprocessed/pass_through_impl.hpp [7:9]
+
+KEEP     BSL-1.0              e30802d624ab26a07227b82c6380e880
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/proto/detail/deduce_domain.hpp [7:9]

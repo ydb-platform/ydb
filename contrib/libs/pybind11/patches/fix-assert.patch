@@ -1,0 +1,12 @@
+--- a/include/pybind11/detail/type_caster_base.h	(index)
++++ b/include/pybind11/detail/type_caster_base.h	(working tree)
+@@ -70,7 +70,8 @@ public:
+         if (get_stack_top() != this) {
+             pybind11_fail("loader_life_support: internal error");
+         }
+-        set_stack_top(parent);
++        if (parent)
++            set_stack_top(parent);
+         for (auto *item : keep_alive) {
+             Py_DECREF(item);
+         }

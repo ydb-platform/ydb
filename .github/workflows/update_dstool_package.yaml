@@ -41,5 +41,4 @@ jobs:
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
           set -ex
-          cd ${{ github.workspace }}/ydb
           python -m twine upload dist/*

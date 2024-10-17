@@ -106,7 +106,7 @@ public:
 
     virtual void KikimrStart();
     virtual void BusyLoop();
-    virtual void KikimrStop(bool graceful);
+    virtual void KikimrStop(bool graceful, const TKikimrRunConfig& runConfig);
 
     static TIntrusivePtr<TKikimrRunner> CreateKikimrRunner(
             const TKikimrRunConfig& runConfig,

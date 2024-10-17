@@ -161,3 +161,33 @@ class TestTpchGenerator(TpcGeneratorBase):
         'region': (['r_regionkey'], {1: 5}),
         'supplier': (['s_suppkey'], {1: 10000})
     }
+
+
+class TestTpcdsGenerator(TpcGeneratorBase):
+    workload = 'tpcds'
+    tables = {
+        'call_center': (['cc_call_center_sk'], {1: 6}),
+        'catalog_page': (['cp_catalog_page_sk'], {1: 11718}),
+        'catalog_returns': (['cr_item_sk', 'cr_order_number'], {1: 144067}),
+        'catalog_sales': (['cs_item_sk', 'cs_order_number'], {1: 1441548}),
+        'customer': (['c_customer_sk'], {1: 100000}),
+        'customer_address': (['ca_address_sk'], {1: 50000}),
+        'customer_demographics': (['cd_demo_sk'], {1: 1920800}),
+        'date_dim': (['d_date_sk'], {1: 73049}),
+        'household_demographics': (['hd_demo_sk'], {1: 7200}),
+        'income_band': (['ib_income_band_sk'], {1: 20}),
+        'inventory': (['inv_date_sk', 'inv_item_sk', 'inv_warehouse_sk'], {1: 11745000}),
+        'item': (['i_item_sk'], {1: 18000}),
+        'promotion': (['p_promo_sk'], {1: 300}),
+        'reason': (['r_reason_sk'], {1: 35}),
+        'ship_mode': (['sm_ship_mode_sk'], {1: 20}),
+        'store': (['s_store_sk'], {1: 12}),
+        'store_returns': (['sr_item_sk', 'sr_ticket_number'], {1: 287514}),
+        'store_sales': (['ss_item_sk', 'ss_ticket_number'], {1: 2880404}),
+        'time_dim': (['t_time_sk'], {1: 86400}),
+        'warehouse': (['w_warehouse_sk'], {1: 5}),
+        'web_page': (['wp_web_page_sk'], {1: 60}),
+        'web_returns': (['wr_item_sk', 'wr_order_number'], {1: 71763}),
+        'web_sales': (['ws_item_sk', 'ws_order_number'], {1: 719384}),
+        'web_site': (['web_site_sk'], {1: 30}),
+    }

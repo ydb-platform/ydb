@@ -15,13 +15,13 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.6'
+          python-version: '3.7.13'
 
       - name: Install dependencies
         run: |
           set -ex
           python -m pip install --upgrade pip
-          pip install build twine
+          pip install build twine grpcio-tools setuptools
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,9 +31,8 @@ jobs:
       - name: Compile proto files and build package
         run: |
           set -ex
-          cd ${{ github.workspace }}/ydb
-          ./ydb/apps/dstool/compile_protos.py --ydb-root ./
-          mv ydb/apps/dstool/setup.py .
+          ${{ github.workspace }}/ydb/apps/dstool/compile_protos.py --ydb-root ${{ github.workspace }}
+          mv ${{ github.workspace }}/ydb/apps/dstool/setup.py ${{ github.workspace }}
           python -m build
 
       - name: Upload package to PyPI
@@ -42,5 +41,4 @@ jobs:
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
           set -ex
-          cd ${{ github.workspace }}/ydb
           python -m twine upload dist/*

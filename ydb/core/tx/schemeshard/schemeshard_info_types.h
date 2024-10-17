@@ -2991,7 +2991,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         // TODO(mbkkt) move to TVectorIndexKmeansTreeDescription
         ui32 K = 4;
         ui32 Levels = 5;
-        
+
         // progress
         enum EState : ui32 {
             Sample = 0,
@@ -3007,7 +3007,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         EState State = Sample;
 
         ui32 ChildBegin = 1;  // included
-    
+
         static ui32 BinPow(ui32 k, ui32 l) {
             ui32 r = 1;
             while (l != 0) {
@@ -3282,7 +3282,26 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         indexInfo->IndexName = row.template GetValue<Schema::IndexBuild::IndexName>();
         indexInfo->IndexType = row.template GetValue<Schema::IndexBuild::IndexType>();
 
-        // TODO load indexInfo->ImplTableDescriptions
+        // Restore the operation details: ImplTableDescriptions and SpecializedIndexDescription.
+        if (row.template HaveValue<Schema::IndexBuild::CreationConfig>()) {
+            NKikimrSchemeOp::TIndexCreationConfig creationConfig;
+            Y_ABORT_UNLESS(creationConfig.ParseFromString(row.template GetValue<Schema::IndexBuild::CreationConfig>()));
+
+            auto& descriptions = *creationConfig.MutableIndexImplTableDescriptions();
+            indexInfo->ImplTableDescriptions.reserve(descriptions.size());
+            for (auto& description : descriptions) {
+                indexInfo->ImplTableDescriptions.emplace_back(std::move(description));
+            }
+
+            switch (creationConfig.GetSpecializedIndexDescriptionCase()) {
+                case NKikimrSchemeOp::TIndexCreationConfig::kVectorIndexKmeansTreeDescription:
+                    indexInfo->SpecializedIndexDescription = std::move(*creationConfig.MutableVectorIndexKmeansTreeDescription());
+                    break;
+                case NKikimrSchemeOp::TIndexCreationConfig::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
+                    /* do nothing */
+                    break;
+            }
+        }
 
         indexInfo->State = TIndexBuildInfo::EState(
             row.template GetValue<Schema::IndexBuild::State>());

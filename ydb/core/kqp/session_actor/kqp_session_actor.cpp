@@ -866,6 +866,9 @@ public:
             return false;
         }
         QueryState->TxCtx->HasUncommittedChangesRead = ::NKikimr::NKqp::HasUncommittedChangesRead(QueryState->TxCtx->ModifiedTables, phyQuery);
+        if (QueryState->TxCtx->HasUncommittedChangesRead) {
+            QueryState->TxCtx->ModifiedTables.clear();   
+        }
 
         QueryState->TxCtx->SetTempTables(QueryState->TempTablesState);
         auto [success, issues] = QueryState->TxCtx->ApplyTableOperations(phyQuery.GetTableOps(), phyQuery.GetTableInfos(),

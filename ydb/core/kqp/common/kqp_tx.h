@@ -339,6 +339,7 @@ public:
     bool HasOltpTable = false;
     bool HasTableWrite = false;
     bool HasUncommittedChangesRead = false;
+    THashSet<NKikimr::TTableId> ModifiedTables;
 
     TShardIdToTableInfoPtr ShardIdToTableInfo = std::make_shared<TShardIdToTableInfo>();
 };

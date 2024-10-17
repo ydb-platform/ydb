@@ -643,9 +643,9 @@
     ],
     "test.test[blocks-combine_hashed_min--Peephole]": [
         {
-            "checksum": "fe48deb06089372a1be7b0f21a39fafa",
-            "size": 3530,
-            "uri": "https://{canondata_backend}/1942100/460fd0564dd37c75913eb7e3e5f96a12d70b483a/resource.tar.gz#test.test_blocks-combine_hashed_min--Peephole_/opt.yql"
+            "checksum": "6a4ee50207cc13b68ec0b901b5c90bbc",
+            "size": 3482,
+            "uri": "https://{canondata_backend}/1889210/5d1223c56711b5ccfa2ce8980fabbe18f3a04d58/resource.tar.gz#test.test_blocks-combine_hashed_min--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_hashed_min--Plan]": [
@@ -671,9 +671,9 @@
     ],
     "test.test[blocks-combine_hashed_minmax_double--Peephole]": [
         {
-            "checksum": "ed48b0c0f01f1031a11943749017abb4",
-            "size": 2862,
-            "uri": "https://{canondata_backend}/1942100/460fd0564dd37c75913eb7e3e5f96a12d70b483a/resource.tar.gz#test.test_blocks-combine_hashed_minmax_double--Peephole_/opt.yql"
+            "checksum": "4eed869d74a2e6927965254eaabfaef9",
+            "size": 2858,
+            "uri": "https://{canondata_backend}/1889210/5d1223c56711b5ccfa2ce8980fabbe18f3a04d58/resource.tar.gz#test.test_blocks-combine_hashed_minmax_double--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_hashed_minmax_double--Plan]": [
@@ -699,9 +699,9 @@
     ],
     "test.test[blocks-combine_hashed_set--Peephole]": [
         {
-            "checksum": "65b13975fe3b35dcf2a50f4c796a12c9",
-            "size": 2268,
-            "uri": "https://{canondata_backend}/1942100/460fd0564dd37c75913eb7e3e5f96a12d70b483a/resource.tar.gz#test.test_blocks-combine_hashed_set--Peephole_/opt.yql"
+            "checksum": "c8527dced2050b347b8abb2b106e392e",
+            "size": 2248,
+            "uri": "https://{canondata_backend}/1817427/bbd43b1ed3e4b4e4804e9367a38fc8672c2b46db/resource.tar.gz#test.test_blocks-combine_hashed_set--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_hashed_set--Plan]": [

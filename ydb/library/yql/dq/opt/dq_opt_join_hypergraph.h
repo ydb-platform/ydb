@@ -481,8 +481,21 @@ private:
                     auto iNode = Graph_.GetNodesByRelNames({joinCondById[i].RelName});
                     auto jNode = Graph_.GetNodesByRelNames({joinCondById[j].RelName});
 
-                    if (Graph_.FindEdgeBetween(iNode, jNode)) {
-                        continue; 
+                    if (auto* maybeEdge = Graph_.FindEdgeBetween(iNode, jNode)) {
+                        auto addUniqueKey = [](auto& vector, const auto& key) {
+                            if (std::find(vector.begin(), vector.end(), key) == vector.end()) {
+                                vector.push_back(key);
+                            }
+                        };
+
+                        auto& revEdge = Graph_.GetEdge(maybeEdge->ReversedEdgeId);
+                        addUniqueKey(revEdge.LeftJoinKeys, joinCondById[j]);
+                        addUniqueKey(revEdge.RightJoinKeys, joinCondById[i]);
+
+                        auto& edge = Graph_.GetEdge(revEdge.ReversedEdgeId);
+                        addUniqueKey(edge.LeftJoinKeys, joinCondById[i]);
+                        addUniqueKey(edge.RightJoinKeys, joinCondById[j]);
+                        continue;
                     }
 
                     Graph_.AddEdge(THyperedge(iNode, jNode, InnerJoin, false, false, true, {joinCondById[i]}, {joinCondById[j]}));

@@ -263,7 +263,11 @@ private:
                     continue;
                 }
 
-                Send(SequenceProxyId, new TEvSequenceProxy::TEvNextVal(Settings.GetDatabase(), col.DefaultFromSequencePathId), 0, colIdx);
+                if (col.DefaultFromSequencePathId != TPathId()) {
+                    Send(SequenceProxyId, new TEvSequenceProxy::TEvNextVal(Settings.GetDatabase(), col.DefaultFromSequencePathId), 0, colIdx);
+                } else {
+                    Send(SequenceProxyId, new TEvSequenceProxy::TEvNextVal(Settings.GetDatabase(), col.DefaultFromSequence), 0, colIdx);
+                }
                 WaitingReplies++;
             }
         }

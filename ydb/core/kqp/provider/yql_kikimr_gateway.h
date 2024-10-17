@@ -253,6 +253,10 @@ struct TTableSettings {
 };
 
 struct TKikimrPathId {
+
+    static const ui64 InvalidOwnerId = Max<ui64>();
+    static const ui64 InvalidTableId = Max<ui64>();
+
     explicit TKikimrPathId(const std::pair<ui64, ui64>& raw)
         : Raw(raw) {}
 
@@ -263,7 +267,7 @@ struct TKikimrPathId {
         : TKikimrPathId(std::make_pair(message->GetOwnerId(), message->GetTableId())) {}
 
     TKikimrPathId()
-        : TKikimrPathId(std::make_pair(0, 0)) {}
+        : TKikimrPathId(InvalidOwnerId, InvalidTableId) {}
 
     ui64 OwnerId() const { return Raw.first; }
     ui64 TableId() const { return Raw.second; }

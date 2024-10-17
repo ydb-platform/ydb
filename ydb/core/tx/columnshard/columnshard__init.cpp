@@ -103,7 +103,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
     {
         ACFL_DEBUG("step", "TTablesManager::Load_Start");
-        TTablesManager tManagerLocal(Self->StoragesManager, Self->TabletID());
+        TTablesManager tManagerLocal(Self->StoragesManager, Self->TabletID(), Self->VersionCounters);
         {
             TMemoryProfileGuard g("TTxInit/TTablesManager");
             if (!tManagerLocal.InitFromDB(db)) {
@@ -129,7 +129,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     {
         ACFL_DEBUG("step", "TInsertTable::Load_Start");
         TMemoryProfileGuard g("TTxInit/InsertTable");
-        auto localInsertTable = std::make_unique<NOlap::TInsertTable>();
+        auto localInsertTable = std::make_unique<NOlap::TInsertTable>(Self->VersionCounters);
         for (auto&& i : Self->TablesManager.GetTables()) {
             localInsertTable->RegisterPathInfo(i.first);
         }

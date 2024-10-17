@@ -135,7 +135,8 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TChunksNormalizer::DoInit(const 
         return tasks;
     }
 
-    TTablesManager tablesManager(controller.GetStoragesManager(), 0);
+    std::shared_ptr<NOlap::TVersionCounters> versionCounters = std::make_shared<NOlap::TVersionCounters>();
+    TTablesManager tablesManager(controller.GetStoragesManager(), 0, versionCounters);
     if (!tablesManager.InitFromDB(db)) {
         ACFL_TRACE("normalizer", "TChunksNormalizer")("error", "can't initialize tables manager");
         return TConclusionStatus::Fail("Can't load index");

@@ -40,7 +40,7 @@ extern int easysrc_slist_count; /* Number of curl_slist variables */
 extern CURLcode easysrc_init(void);
 extern CURLcode easysrc_add(struct slist_wc **plist, const char *bupf);
 extern CURLcode easysrc_addf(struct slist_wc **plist,
-                             const char *fmt, ...) CURL_PRINTF(2, 3);
+                             const char *fmt, ...);
 extern CURLcode easysrc_perform(void);
 extern CURLcode easysrc_cleanup(void);
 

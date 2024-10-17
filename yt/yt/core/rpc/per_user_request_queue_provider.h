@@ -7,7 +7,7 @@
 #include <yt/yt/library/profiling/sensor.h>
 #include <yt/yt/library/syncmap/map.h>
 
-#include <yt/yt/core/misc/atomic_object.h>
+#include <library/cpp/yt/threading/atomic_object.h>
 
 namespace NYT::NRpc {
 

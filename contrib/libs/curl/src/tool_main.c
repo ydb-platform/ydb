@@ -35,6 +35,8 @@
 #include <fcntl.h>
 #endif
 
+#define ENABLE_CURLX_PRINTF
+/* use our own printf() functions */
 #include "curlx.h"
 
 #include "tool_cfgable.h"
@@ -79,7 +81,7 @@ int _CRT_glob = 0;
 #if defined(HAVE_PIPE) && defined(HAVE_FCNTL)
 /*
  * Ensure that file descriptors 0, 1 and 2 (stdin, stdout, stderr) are
- * open before starting to run. Otherwise, the first three network
+ * open before starting to run.  Otherwise, the first three network
  * sockets opened by curl could be used for input sources, downloaded data
  * or error logs as they will effectively be stdin, stdout and/or stderr.
  *
@@ -106,9 +108,9 @@ static void memory_tracking_init(void)
 {
   char *env;
   /* if CURL_MEMDEBUG is set, this starts memory tracking message logging */
-  env = curl_getenv("CURL_MEMDEBUG");
+  env = curlx_getenv("CURL_MEMDEBUG");
   if(env) {
-    /* use the value as filename */
+    /* use the value as file name */
     char fname[CURL_MT_LOGFNAME_BUFSIZE];
     if(strlen(env) >= CURL_MT_LOGFNAME_BUFSIZE)
       env[CURL_MT_LOGFNAME_BUFSIZE-1] = '\0';
@@ -120,7 +122,7 @@ static void memory_tracking_init(void)
        without an alloc! */
   }
   /* if CURL_MEMLIMIT is set, this enables fail-on-alloc-number-N feature */
-  env = curl_getenv("CURL_MEMLIMIT");
+  env = curlx_getenv("CURL_MEMLIMIT");
   if(env) {
     char *endptr;
     long num = strtol(env, &endptr, 10);
@@ -217,7 +219,7 @@ static void main_free(struct GlobalConfig *config)
 */
 #ifdef _UNICODE
 #if defined(__GNUC__)
-/* GCC does not know about wmain() */
+/* GCC doesn't know about wmain() */
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmissing-prototypes"
 #pragma GCC diagnostic ignored "-Wmissing-declarations"
@@ -247,7 +249,7 @@ int main(int argc, char *argv[])
   result = win32_init();
   if(result) {
     errorf(&global, "(%d) Windows-specific init failed", result);
-    return (int)result;
+    return result;
   }
 #endif
 

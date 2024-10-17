@@ -1,5 +1,6 @@
 #include "helpers.h"
 
+#include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/rowset.h>
 #include <yt/yt/client/api/table_client.h>
 
@@ -56,6 +57,17 @@ void ToProto(
     proto->set_ping_ancestors(options.PingAncestors);
     proto->set_suppress_transaction_coordinator_sync(options.SuppressTransactionCoordinatorSync);
     proto->set_suppress_upstream_sync(options.SuppressUpstreamSync);
+}
+
+void FromProto(
+    NApi::TTransactionalOptions* options,
+    const NProto::TTransactionalOptions& proto)
+{
+    FromProto(&options->TransactionId, proto.transaction_id());
+    options->Ping = proto.ping();
+    options->PingAncestors = proto.ping_ancestors();
+    options->SuppressTransactionCoordinatorSync = proto.suppress_transaction_coordinator_sync();
+    options->SuppressUpstreamSync = proto.suppress_upstream_sync();
 }
 
 void ToProto(
@@ -424,6 +436,30 @@ void FromProto(
 
     FromProto(&result->Statistics, proto.statistics());
     FromProto(&result->Errors, proto.errors());
+}
+
+void ToProto(
+    NProto::TJobTraceEvent* proto,
+    const NApi::TJobTraceEvent& result)
+{
+    ToProto(proto->mutable_operation_id(), result.OperationId);
+    ToProto(proto->mutable_job_id(), result.JobId);
+    ToProto(proto->mutable_trace_id(), result.TraceId);
+    proto->set_event_index(result.EventIndex);
+    proto->set_event(result.Event);
+    proto->set_event_time(ToProto<i64>(result.EventTime));
+}
+
+void FromProto(
+    NApi::TJobTraceEvent* result,
+    const NProto::TJobTraceEvent& proto)
+{
+    FromProto(&result->OperationId, proto.operation_id());
+    FromProto(&result->JobId, proto.job_id());
+    FromProto(&result->TraceId, proto.trace_id());
+    result->EventIndex = proto.event_index();
+    result->Event = proto.event();
+    result->EventTime = TInstant::FromValue(proto.event_time());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1922,28 +1958,22 @@ void FillRequest(
     const NYPath::TRichYPath& path,
     const TDistributedWriteSessionStartOptions& options)
 {
-    Y_UNUSED(req, path, options);
+    ToProto(req->mutable_path(), path);
+
+    if (options.TransactionId) {
+        ToProto(req->mutable_transactional_options(), options);
+    }
 }
 
-void FromProto(
+void ParseRequest(
+    NYPath::TRichYPath* mutablePath,
     TDistributedWriteSessionStartOptions* mutableOptions,
     const TReqStartDistributedWriteSession& req)
 {
-    Y_UNUSED(req, mutableOptions);
-}
-
-void FromProto(
-    TDistributedWriteSession* mutableSession,
-    TRspStartDistributedWriteSession&& rsp)
-{
-    Y_UNUSED(mutableSession, rsp);
-}
-
-void ToProto(
-    TRspStartDistributedWriteSession* rsp,
-    const TDistributedWriteSessionPtr& session)
-{
-    Y_UNUSED(rsp, session);
+    *mutablePath = FromProto<NYPath::TRichYPath>(req.path());
+    if (req.has_transactional_options()) {
+        FromProto(mutableOptions, req.transactional_options());
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1953,52 +1983,44 @@ void FillRequest(
     TDistributedWriteSessionPtr session,
     const TDistributedWriteSessionFinishOptions& options)
 {
-    Y_UNUSED(req, session, options);
+    req->set_session(ConvertToYsonString(session).ToString());
+    req->set_max_children_per_attach_request(options.MaxChildrenPerAttachRequest);
 }
 
-void FromProto(
+void ParseRequest(
+    TDistributedWriteSessionPtr* mutableSession,
     TDistributedWriteSessionFinishOptions* mutableOptions,
     const TReqFinishDistributedWriteSession& req)
 {
-    Y_UNUSED(req, mutableOptions);
-}
-
-void FromProto(
-    TDistributedWriteSession* mutableSession,
-    const TReqFinishDistributedWriteSession& req)
-{
-    Y_UNUSED(mutableSession, req);
+    *mutableSession = ConvertTo<TDistributedWriteSessionPtr>(TYsonString(req.session()));
+    mutableOptions->MaxChildrenPerAttachRequest = req.max_children_per_attach_request();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void FillRequest(
-    TReqParticipantWriteTable* req,
-    const TDistributedWriteCookiePtr& cookie,
-    const TParticipantTableWriterOptions& options)
+    TReqWriteTableFragment* req,
+    const TFragmentWriteCookiePtr& cookie,
+    const TFragmentTableWriterOptions& options)
 {
-    Y_UNUSED(req, cookie, options);
+    req->set_cookie(ConvertToYsonString(cookie).ToString());
+
+    if (options.Config) {
+        req->set_config(ConvertToYsonString(*options.Config).ToString());
+    }
 }
 
-void FromProto(
-    TParticipantTableWriterOptions* mutableOptions,
-    const TReqParticipantWriteTable& req)
+void ParseRequest(
+    TFragmentWriteCookiePtr* mutableCookie,
+    TFragmentTableWriterOptions* mutableOptions,
+    const TReqWriteTableFragment& req)
 {
-    Y_UNUSED(req, mutableOptions);
-}
-
-void FromProto(
-    TDistributedWriteCookie* cookie,
-    const TReqParticipantWriteTable& req)
-{
-    Y_UNUSED(cookie, req);
-}
-
-void ToProto(
-    TRspParticipantWriteTable* rsp,
-    const TDistributedWriteCookiePtr& cookie)
-{
-    Y_UNUSED(rsp, cookie);
+    *mutableCookie = ConvertTo<TFragmentWriteCookiePtr>(TYsonString(req.cookie()));
+    if (req.has_config()) {
+        mutableOptions->Config = ConvertTo<TTableWriterConfigPtr>(TYsonString(req.config()));
+    } else {
+        mutableOptions->Config = ConvertTo<TTableWriterConfigPtr>(TYsonString(TStringBuf("{}")));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

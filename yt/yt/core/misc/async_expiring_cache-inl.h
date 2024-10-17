@@ -343,6 +343,27 @@ void TAsyncExpiringCache<TKey, TValue>::ForceRefresh(const TKey& key, const T& v
 }
 
 template <class TKey, class TValue>
+void TAsyncExpiringCache<TKey, TValue>::PingEntry(const TKey& key)
+{
+    auto now = NProfiling::GetCpuInstant();
+    auto guard = ReaderGuard(SpinLock_);
+
+    if (auto it = Map_.find(key); it != Map_.end() && it->second->Promise.IsSet()) {
+        const auto& entry = it->second;
+        if (!entry->Promise.Get().IsOK()) {
+            return;
+        }
+
+        entry->AccessDeadline = now + NProfiling::DurationToCpuDuration(Config()->ExpireAfterAccessTime);
+        entry->UpdateDeadline = now + NProfiling::DurationToCpuDuration(Config()->ExpireAfterSuccessfulUpdateTime);
+        if (!Config()->BatchUpdate) {
+            ScheduleEntryRefresh(entry, key, Config_->RefreshTime);
+        }
+
+    }
+}
+
+template <class TKey, class TValue>
 void TAsyncExpiringCache<TKey, TValue>::Set(const TKey& key, TErrorOr<TValue> valueOrError)
 {
     auto isValueOK = valueOrError.IsOK();

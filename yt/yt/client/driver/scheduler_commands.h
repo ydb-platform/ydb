@@ -137,6 +137,20 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TGetJobTraceCommand
+    : public TSimpleOperationCommandBase<NApi::TGetJobTraceOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetJobTraceCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TGetJobFailContextCommand
     : public TSimpleOperationCommandBase<NApi::TGetJobFailContextOptions>
 {

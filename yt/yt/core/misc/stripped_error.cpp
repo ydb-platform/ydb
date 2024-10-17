@@ -801,7 +801,7 @@ void AppendError(TStringBuilderBase* builder, const TError& error, int indent)
         [[unlikely]] if (!tokenizer.ParseNext()) {
             Cerr <<
                 NYT::Format(
-                    "%v *** Empty toke encountered while formatting TError attribute (Key: %v, Value: %v"
+                    "%v *** Empty token encountered while formatting TError attribute (Key: %v, Value: %v)"
                     "(BuilderAccumulatedData: %v)",
                     TInstant::Now(),
                     key,

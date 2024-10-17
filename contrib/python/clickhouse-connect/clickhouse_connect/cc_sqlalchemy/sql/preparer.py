@@ -1,6 +1,6 @@
 from sqlalchemy.sql.compiler import IdentifierPreparer
 
-from clickhouse_connect.driver.query import quote_identifier
+from clickhouse_connect.driver.binding import quote_identifier
 
 
 class ChIdentifierPreparer(IdentifierPreparer):

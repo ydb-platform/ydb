@@ -216,6 +216,15 @@ bool bitset_inplace_union(bitset_t *CROARING_CBITSET_RESTRICT b1,
     return true;
 }
 
+bool bitset_empty(const bitset_t *bitset) {
+    for (size_t k = 0; k < bitset->arraysize; k++) {
+        if (bitset->array[k] != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
 size_t bitset_minimum(const bitset_t *bitset) {
     for (size_t k = 0; k < bitset->arraysize; k++) {
         uint64_t w = bitset->array[k];
@@ -223,7 +232,7 @@ size_t bitset_minimum(const bitset_t *bitset) {
             return roaring_trailing_zeroes(w) + k * 64;
         }
     }
-    return 0;
+    return SIZE_MAX;
 }
 
 bool bitset_grow(bitset_t *bitset, size_t newarraysize) {

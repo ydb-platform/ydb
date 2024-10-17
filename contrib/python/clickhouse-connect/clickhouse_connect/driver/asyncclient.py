@@ -13,7 +13,7 @@ from clickhouse_connect.datatypes.base import ClickHouseType
 from clickhouse_connect.driver.insert import InsertContext
 
 
-# pylint: disable=too-many-public-methods, too-many-instance-attributes, too-many-arguments, too-many-locals
+# pylint: disable=too-many-public-methods,too-many-instance-attributes,too-many-arguments,too-many-positional-arguments,too-many-locals
 class AsyncClient:
     """
     AsyncClient is a wrapper around the ClickHouse Client object that allows for async calls to the ClickHouse server.

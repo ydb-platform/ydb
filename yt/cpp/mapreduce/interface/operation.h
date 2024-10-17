@@ -3048,6 +3048,70 @@ struct TGetFailedJobInfoOptions
 ////////////////////////////////////////////////////////////////////////////////
 
 ///
+/// @brief Options for @ref NYT::IClient::GetJobTrace.
+struct TGetJobTraceOptions
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TGetJobTraceOptions;
+    /// @endcond
+
+    ///
+    /// @brief Id of the job.
+    FLUENT_FIELD_OPTION(TJobId, JobId);
+
+    ///
+    /// @brief Id of the trace.
+    FLUENT_FIELD_OPTION(TJobTraceId, TraceId);
+
+    ///
+    /// @brief Search for traces with time >= `FromTime`.
+    FLUENT_FIELD_OPTION(i64, FromTime);
+
+    ///
+    /// @brief Search for traces with time <= `ToTime`.
+    FLUENT_FIELD_OPTION(i64, ToTime);
+
+    ///
+    /// @brief Search for traces with event index >= `FromEventIndex`.
+    FLUENT_FIELD_OPTION(i64, FromEventIndex);
+
+    ///
+    /// @brief Search for traces with event index >= `ToEventIndex`.
+    FLUENT_FIELD_OPTION(i64, ToEventIndex);
+};
+
+///
+/// @brief Response for @ref NYT::IOperation::GetJobTrace.
+struct TJobTraceEvent
+{
+    ///
+    /// @brief Id of the operation.
+    TOperationId OperationId;
+
+    ///
+    /// @brief Id of the job.
+    TJobId JobId;
+
+    ///
+    /// @brief Id of the trace.
+    TJobTraceId TraceId;
+
+    ///
+    /// @brief Index of the trace event.
+    i64 EventIndex;
+
+    ///
+    /// @brief Raw evenr in json format.
+    TString Event;
+
+    ///
+    /// @brief Time of the event.
+    TInstant EventTime;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+///
 /// @brief Interface representing an operation.
 struct IOperation
     : public TThrRefBase

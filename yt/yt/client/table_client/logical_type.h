@@ -170,7 +170,7 @@ class TDecimalLogicalType
 {
 public:
     static constexpr int MinPrecision = 1;
-    static constexpr int MaxPrecision = 35;
+    static constexpr int MaxPrecision = 76;
 
 public:
     TDecimalLogicalType(int precision, int scale);

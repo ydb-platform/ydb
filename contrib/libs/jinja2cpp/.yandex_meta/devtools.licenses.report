@@ -1,0 +1,125 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     MIT                  4dfb1f9f7c68ff4156bccff8f3de1b60
+BELONGS ya.make
+    License text:
+        [![GitHub License](https://img.shields.io/badge/license-Mozilla-blue.svg)](https://raw.githubusercontent.com/jinja2cpp/Jinja2Cpp/master/LICENSE)
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 85.71
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.md [12:12]
+
+KEEP     MIT                  6b45d159c11839114dfda208e6140eda
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/robin_hood.h [15:31]
+
+KEEP     MPL-2.0              81bec2692a2a04ebc459d6dca672caf4
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: LICENSE at line 363
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MPL-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://mpl.mozilla.org/2012/01/03/announcing-mpl-2-0/, http://www.mozilla.com/MPL/2.0/, https://spdx.org/licenses/MPL-2.0
+    Files with this license:
+        LICENSE [1:373]
+
+KEEP     MIT                  8384d75c38c570f3edb87cf9f64f2ec2
+BELONGS ya.make
+    License text:
+        // SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/robin_hood.h [12:12]
+
+KEEP     MIT                  a6e9f2d79eb73e6e422759b53da6152a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        include/jinja2cpp/polymorphic_value.h [5:20]
+
+KEEP     MIT                  b6657f1432f3f3405667101097117109
+BELONGS ya.make
+    License text:
+        // Licensed under the MIT License <http://opensource.org/licenses/MIT>.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/robin_hood.h [11:11]
+
+KEEP     MPL-1.1              bbcc868f743e472bc5bc01c0a6b359a5
+BELONGS ya.make
+    License text:
+        [![GitHub License](https://img.shields.io/badge/license-Mozilla-blue.svg)](https://raw.githubusercontent.com/jinja2cpp/Jinja2Cpp/master/LICENSE)
+    Scancode info:
+        Original SPDX id: MPL-1.1
+        Score           : 90.00
+        Match type      : TAG
+        Links           : http://www.mozilla.com/MPL/1.1/index.html, http://www.mozilla.org/MPL/MPL-1.1.html, https://spdx.org/licenses/MPL-1.1
+    Files with this license:
+        README.md [12:12]
+
+KEEP     MIT                  e7fc849ec7d035354afc7a26365b817d
+BELONGS ya.make
+    License text:
+         * under the guidelines and in accordance with the MIT License.  *
+         * http://www.opensource.org/licenses/MIT                        *
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 81.82
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/lexertk.h [11:12]

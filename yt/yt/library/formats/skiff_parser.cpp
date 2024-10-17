@@ -300,6 +300,7 @@ const auto precision = denullifiedType.GetPrecision();
         CASE(EWireType::Int32);
         CASE(EWireType::Int64);
         CASE(EWireType::Int128);
+        CASE(EWireType::Int256);
 #undef CASE
         case EWireType::Yson32:
             return CreatePrimitiveTypeConverter(wireType, fieldDescription.IsRequired(), columnId, ysonConverter);

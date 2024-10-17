@@ -262,7 +262,7 @@ class ConnectionPool(RequestInterface):
         queued_requests = [request for request in self._requests if request.is_queued()]
         for pool_request in queued_requests:
             origin = pool_request.request.url.origin
-            avilable_connections = [
+            available_connections = [
                 connection
                 for connection in self._connections
                 if connection.can_handle_request(origin) and connection.is_available()
@@ -277,9 +277,9 @@ class ConnectionPool(RequestInterface):
             # 2. We can create a new connection to handle the request.
             # 3. We can close an idle connection and then create a new connection
             #    to handle the request.
-            if avilable_connections:
+            if available_connections:
                 # log: "reusing existing connection"
-                connection = avilable_connections[0]
+                connection = available_connections[0]
                 pool_request.assign_to_connection(connection)
             elif len(self._connections) < self._max_connections:
                 # log: "creating new connection"

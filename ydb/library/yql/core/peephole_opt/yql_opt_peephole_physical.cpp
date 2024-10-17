@@ -1987,15 +1987,19 @@ TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {
             collectionSize > 0)
         {
             TExprNodeList orItems;
+            auto falseLiteral = MakeBool(input->Pos(), false, ctx);
             for (size_t i = 0; i < collectionSize; ++i) {
                 TExprNode::TPtr collectionItem = collection->ChildPtr(i);
                 if (tableSource) {
                     collectionItem = ctx.NewCallable(input->Pos(), "SingleMember", { collectionItem });
                 }
                 orItems.push_back(ctx.Builder(input->Pos())
-                    .Callable("==")
-                        .Add(0, lookup)
-                        .Add(1, collectionItem)
+                    .Callable("Coalesce")
+                        .Callable(0, "==")
+                            .Add(0, lookup)
+                            .Add(1, collectionItem)
+                        .Seal()
+                        .Add(1, falseLiteral)
                     .Seal()
                     .Build()
                 );

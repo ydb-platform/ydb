@@ -598,3 +598,14 @@ message TEvRequestScaleRecommendation {
 message TEvResponseScaleRecommendation {
     optional uint32 RecommendedNodes = 1;
 }
+
+message TEvCommitCutTabletHistory {
+   optional fixed64 TabletID = 1;
+   repeated uint32 Channels = 2;
+}
+
+
+message TEvRevertCutTabletHistory {
+   optional fixed64 TabletID = 1;
+   repeated uint32 Channels = 2;
+}

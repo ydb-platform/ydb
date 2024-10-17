@@ -126,11 +126,20 @@ public:
 
 
                     // tablet booted successfully, we may actually cut history now
-                    while (!leader.DeletedHistory.empty() && leader.DeletedHistory.front().DeletedAtGeneration < leader.KnownGeneration) {
-                        leader.WasAliveSinceCutHistory = true;
-                        const auto& entry = leader.DeletedHistory.front();
-                        db.Table<Schema::TabletChannelGen>().Key(TabletId, entry.Channel, entry.Entry.FromGeneration).Delete();
-                        leader.DeletedHistory.pop();
+                    for (ui32 channel = 0; channel < leader.DeletedHistory.size(); ++channel) {
+                        auto& deletedHistory = leader.DeletedHistory[channel];
+                        while (!deletedHistory.empty() && deletedHistory.front().DeletedAtGeneration < leader.KnownGeneration) {
+                            leader.WasAliveSinceCutHistory = true;
+                            const auto& entry = deletedHistory.front();
+                            if (entry.CutHistoryMode != NKikimrTabletBase::TEvCutTabletHistory::CutHistoryModeAuto) {
+                                break;
+                                // We do not expect different modes of cutting history in one channel
+                                // If for some reason in the same channel we do an auto cut after a manual cut,
+                                // The auto cut will also wait for the manual command
+                            }
+                            db.Table<Schema::TabletChannelGen>().Key(TabletId, channel, entry.Entry.FromGeneration).Delete();
+                            deletedHistory.pop();
+                        }
                     }
                 } else {
                     db.Table<Schema::TabletFollowerTablet>().Key(TabletId, FollowerId).Update(

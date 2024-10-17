@@ -68,10 +68,25 @@ public:
     }
 };
 
+class TGranuleTiersSummary {
+private:
+    using TSummaryByTier = std::map<std::optional<TString>, TDataClassSummary>;
+    YDB_READONLY_DEF(TSummaryByTier, Tiers);
+
+public:
+    void AddPortion(const TPortionInfo& portionInfo) {
+        Tiers[portionInfo.GetMeta().GetTierNameOptional()].AddPortion(portionInfo);
+    }
+    void RemovePortion(const TPortionInfo& portionInfo) {
+        Tiers[portionInfo.GetMeta().GetTierNameOptional()].RemovePortion(portionInfo);
+    }
+};
+
 class TGranuleAdditiveSummary {
 private:
     TDataClassSummary Inserted;
     TDataClassSummary Compacted;
+    TGranuleTiersSummary ByTier;
     friend class TGranuleMeta;
 public:
     const TDataClassSummary& GetInserted() const {
@@ -89,6 +104,9 @@ public:
     ui64 GetActivePortionsCount() const {
         return Inserted.GetPortionsCount() + Compacted.GetPortionsCount();
     }
+    const std::map<std::optional<TString>, TDataClassSummary>& GetSummaryByTier() const {
+        return ByTier.GetTiers();
+    }
 
     class TEditGuard: TNonCopyable {
     private:
@@ -103,7 +121,8 @@ public:
         }
 
         ~TEditGuard() {
-            Counters.OnPortionsDataRefresh(Owner.GetInserted(), Owner.GetCompacted());
+            Counters.OnPortionsDataRefresh(
+                Owner.GetInserted(), Owner.GetCompacted(), { Owner.GetSummaryByTier().begin(), Owner.GetSummaryByTier().end() });
         }
 
         void AddPortion(const TPortionInfo& info) {
@@ -112,6 +131,7 @@ public:
             } else {
                 Owner.Compacted.AddPortion(info);
             }
+            Owner.ByTier.AddPortion(info);
         }
         void RemovePortion(const TPortionInfo& info) {
             if (info.GetMeta().GetProduced() == NPortion::EProduced::INSERTED) {
@@ -119,6 +139,7 @@ public:
             } else {
                 Owner.Compacted.RemovePortion(info);
             }
+            Owner.ByTier.RemovePortion(info);
         }
     };
 

@@ -223,6 +223,13 @@ private:
 
     NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataUsageBytes;
 
+    NMonitoring::TDynamicCounters::TCounterPtr PortionsLoadingTimeCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr ColumnsLoadingTimeCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr IndexesLoadingTimeCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr LoadPortionsFailCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr LoadColumnsFailCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr LoadIndexFailCounter;
+
     TAgentGranuleDataCounters GranuleDataAgent;
     std::vector<std::shared_ptr<TIncrementalHistogram>> BlobSizeDistribution;
     std::vector<std::shared_ptr<TIncrementalHistogram>> PortionSizeDistribution;
@@ -328,6 +335,31 @@ public:
     void OnGranuleOptimizerLocked() const {
         GranuleOptimizerLocked->Add(1);
     }
+
+    void SetPortionLoadingTime(ui64 microSeconds) const {
+        PortionsLoadingTimeCounter->Set(microSeconds);
+    }
+
+    void SetColumnLoadingTime(ui64 microSeconds) const {
+        ColumnsLoadingTimeCounter->Set(microSeconds);
+    }
+
+    void SetIndexesLoadingTime(ui64 microSeconds) const {
+        IndexesLoadingTimeCounter->Set(microSeconds);
+    }
+
+    void AddLoadPortionsFail() const {
+        LoadPortionsFailCounter->Add(1);
+    }
+
+    void AddLoadColumnsFail() const {
+        LoadColumnsFailCounter->Add(1);
+    }
+
+    void AddLoadIndexFail() const {
+        LoadIndexFailCounter->Add(1);
+    }
+
 
     TEngineLogsCounters();
 };

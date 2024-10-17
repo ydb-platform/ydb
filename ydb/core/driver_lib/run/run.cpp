@@ -65,6 +65,7 @@
 
 #include <ydb/core/mind/local.h>
 #include <ydb/core/mind/tenant_pool.h>
+#include <ydb/core/mind/node_broker.h>
 #include <ydb/core/base/hive.h>
 
 #include <ydb/core/base/tablet_resolver.h>
@@ -1750,8 +1751,27 @@ void TKikimrRunner::KikimrStart() {
     ThreadSigmask(SIG_UNBLOCK);
 }
 
-void TKikimrRunner::KikimrStop(bool graceful) {
-    Y_UNUSED(graceful);
+void TKikimrRunner::KikimrStop(bool graceful, const TKikimrRunConfig& runConfig) {
+
+    bool enableReleaseNodeNameOnGracefulShutdown = AppData->FeatureFlags.GetEnableReleaseNodeNameOnGracefulShutdown();
+
+    if (graceful && enableReleaseNodeNameOnGracefulShutdown) {
+        using namespace NKikimr::NNodeBroker;
+        using TEvent = TEvNodeBroker::TEvGracefulShutdownRequest;
+        auto& nodeInfo = runConfig.AppConfig.GetDynamicNodeConfig().GetNodeInfo();
+        
+        NTabletPipe::TClientConfig pipeConfig;
+        pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
+        auto pipe = NTabletPipe::CreateClient({}, MakeNodeBrokerID(), pipeConfig);
+        TActorId nodeBrokerPipe = ActorSystem->Register(pipe);
+
+        THolder<TEvent> event = MakeHolder<TEvent>();
+        event->Record.SetHost(nodeInfo.GetHost());
+        event->Record.SetPort(nodeInfo.GetPort());
+        event->Record.SetAddress(nodeInfo.GetAddress());
+
+        ActorSystem->Send(new IEventHandle(nodeBrokerPipe, {}, event.Release()));
+    }
 
     if (EnabledGrpcService) {
         ActorSystem->Send(new IEventHandle(NGRpcService::CreateGrpcPublisherServiceActorId(), {}, new TEvents::TEvPoisonPill));

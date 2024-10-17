@@ -1600,8 +1600,6 @@ class GnuCompiler(Compiler):
         super(GnuCompiler, self).print_compiler()
 
         emit('C_COMPILER', '"{}"'.format(self.tc.c_compiler))
-        emit('C_COMPILER_OLD_UNQUOTED', self.tc.c_compiler)
-        emit('C_COMPILER_OLD', '${quo:C_COMPILER_OLD_UNQUOTED}')
         emit('OPTIMIZE', self.optimize)
         emit('WERROR_MODE', self.tc.werror_mode)
         emit('_C_FLAGS', self.c_flags)
@@ -2126,7 +2124,6 @@ class MSVCCompiler(MSVC, Compiler):
         emit('CXX_COMPILER_UNQUOTED', '"{}"'.format(self.tc.cxx_compiler))
         emit('CXX_COMPILER_OLD_UNQUOTED', self.tc.cxx_compiler)
         emit('C_COMPILER_UNQUOTED', '"{}"'.format(self.tc.c_compiler))
-        emit('C_COMPILER_OLD_UNQUOTED', self.tc.c_compiler)
         emit('MASM_COMPILER_UNQUOTED', '"{}"'.format(self.tc.masm_compiler))
         emit('MASM_COMPILER_OLD_UNQUOTED', self.tc.masm_compiler)
         append('C_DEFINES', defines)

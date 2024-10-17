@@ -907,10 +907,12 @@ public:
 
         void MakeNextBatches(i64 maxDataSize, ui64 maxCount) {
             YQL_ENSURE(BatchesInFlight == 0);
+            YQL_ENSURE(!IsEmpty());
             i64 dataSize = 0;
+            // For columnshard batch can be slightly larger than the limit.
             while (BatchesInFlight < maxCount
                     && BatchesInFlight < Batches.size()
-                    && dataSize + GetBatch(BatchesInFlight).GetMemory() <= maxDataSize) {
+                    && (dataSize + GetBatch(BatchesInFlight).GetMemory() <= maxDataSize || BatchesInFlight == 0)) {
                 dataSize += GetBatch(BatchesInFlight).GetMemory();
                 ++BatchesInFlight;
             }
@@ -1355,12 +1357,14 @@ private:
             const auto& writeInfo = WriteInfos.at(token);
             for (auto& [shardId, batches] : writeInfo.Serializer->FlushBatchesForce()) {
                 for (auto& batch : batches) {
-                    ShardsInfo.GetShard(shardId).PushBatch(TBatchWithMetadata{
-                        .Token = token,
-                        .Data = std::move(batch),
-                        .HasRead = (writeInfo.Metadata.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE
-                            && writeInfo.Metadata.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT),
-                    });
+                    if (batch && !batch->IsEmpty()) {
+                        ShardsInfo.GetShard(shardId).PushBatch(TBatchWithMetadata{
+                            .Token = token,
+                            .Data = std::move(batch),
+                            .HasRead = (writeInfo.Metadata.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE
+                                && writeInfo.Metadata.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT),
+                        });
+                    }
                 }
             }
         } else {

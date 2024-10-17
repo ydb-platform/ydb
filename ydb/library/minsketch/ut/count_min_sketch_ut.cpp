@@ -10,14 +10,14 @@ Y_UNIT_TEST_SUITE(CountMinSketch) {
         std::unique_ptr<TCountMinSketch> countMin(TCountMinSketch::Create(256, 8));
 
         TString str1("foo");
-        countMin->Count(str1.Data(), str1.Size());
-        auto probe1 = countMin->Probe(str1.Data(), str1.size());
+        countMin->Count(str1.data(), str1.size());
+        auto probe1 = countMin->Probe(str1.data(), str1.size());
 
         TString str2("bar");
         for (size_t i = 0; i < 4; ++i) {
-            countMin->Count(str2.Data(), str2.Size());
+            countMin->Count(str2.data(), str2.size());
         }
-        auto probe2 = countMin->Probe(str2.Data(), str2.size());
+        auto probe2 = countMin->Probe(str2.data(), str2.size());
 
         ui32 integer1 = 1234567890U;
         countMin->Count((const char *)&integer1, sizeof(ui32));
@@ -44,14 +44,14 @@ Y_UNIT_TEST_SUITE(CountMinSketch) {
         std::unique_ptr<TCountMinSketch> countMinB(TCountMinSketch::Create(256, 8));
 
         TString str("foo");
-        countMinA->Count(str.Data(), str.Size());
+        countMinA->Count(str.data(), str.size());
 
         ui32 integer = 0;
         countMinB->Count((const char *)&integer, sizeof(ui32));
 
         *countMinA += *countMinB;
 
-        auto probe1 = countMinA->Probe(str.Data(), str.size());
+        auto probe1 = countMinA->Probe(str.data(), str.size());
         auto probe2 = countMinA->Probe((const char *)&integer, sizeof(ui32));
 
         UNIT_ASSERT_VALUES_EQUAL(probe1, 1);

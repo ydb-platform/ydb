@@ -5,6 +5,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -574,5 +575,5 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
       NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
       NLs::IndexKeys({"indexed"}),
         });
-    }    
+    }
 }

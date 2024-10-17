@@ -2249,9 +2249,9 @@
     ],
     "test.test[EquiJoin-SqlInToJoin-Debug]": [
         {
-            "checksum": "2b2ca2f3a7e7714e9c2a8fe13d96ebd4",
-            "size": 6974,
-            "uri": "https://{canondata_backend}/1937367/d7ac164e16bfc347a93897e4b847d9ae20585e5f/resource.tar.gz#test.test_EquiJoin-SqlInToJoin-Debug_/opt.yql"
+            "checksum": "88f378fa346be357905f2e01c8828060",
+            "size": 7046,
+            "uri": "https://{canondata_backend}/995452/612b9345cb2669ff34a6b3774eaf94c43ac98bb0/resource.tar.gz#test.test_EquiJoin-SqlInToJoin-Debug_/opt.yql"
         },
         {
             "checksum": "1ceb9b814056836d8278a4fc8463bedf",
@@ -4272,9 +4272,9 @@
     ],
     "test.test[ManyInputTables-LengthOfWeakConcatTables-Debug]": [
         {
-            "checksum": "15ba2ece76bca92ed008b26eb51283c4",
-            "size": 1900,
-            "uri": "https://{canondata_backend}/1925842/10082a9422a4aa36d413e7a0729f64ea52764084/resource.tar.gz#test.test_ManyInputTables-LengthOfWeakConcatTables-Debug_/opt.yql"
+            "checksum": "96ae088e6429989eaa0682fc801c58bf",
+            "size": 1924,
+            "uri": "https://{canondata_backend}/995452/612b9345cb2669ff34a6b3774eaf94c43ac98bb0/resource.tar.gz#test.test_ManyInputTables-LengthOfWeakConcatTables-Debug_/opt.yql"
         },
         {
             "checksum": "1463114aaa1d3c9c875872bc003566cb",

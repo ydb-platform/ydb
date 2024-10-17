@@ -1,0 +1,45 @@
+--- contrib/python/pytest-localserver/py2/pytest_localserver/https.py	(index)
++++ contrib/python/pytest-localserver/py2/pytest_localserver/https.py	(working tree)
+@@ -8,8 +8,8 @@ import os.path
+ from pytest_localserver.http import ContentServer
+ 
+ #: default server certificate
+-DEFAULT_CERTIFICATE = os.path.join(
+-    os.path.abspath(os.path.dirname(__file__)), 'server.pem')
++
++DEFAULT_CERTIFICATE = os.path.join(os.getcwd(), 'server.pem')
+ 
+ 
+ class SecureContentServer (ContentServer):
+--- contrib/python/pytest-localserver/py2/pytest_localserver/plugin.py	(index)
++++ contrib/python/pytest-localserver/py2/pytest_localserver/plugin.py	(working tree)
+@@ -5,6 +5,9 @@
+ #
+ # This program is release under the MIT license. You can find the full text of
+ # the license in the LICENSE file.
++import os
++import pkgutil
++
+ import pytest
+ 
+ 
+@@ -62,10 +65,15 @@ def httpsserver(request):
+     SSL encryption.
+     """
+     from pytest_localserver import https
+-    server = https.SecureContentServer()
+-    server.start()
+-    request.addfinalizer(server.stop)
+-    return server
++    try:
++        with open(https.DEFAULT_CERTIFICATE, 'wb') as f:
++            f.write(pkgutil.get_data('pytest_localserver', 'server.pem'))
++        server = https.SecureContentServer()
++        server.start()
++        request.addfinalizer(server.stop)
++        yield server
++    finally:
++        os.remove(https.DEFAULT_CERTIFICATE)
+ 
+ 
+ @pytest.fixture

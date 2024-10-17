@@ -71,7 +71,7 @@ IQuantileDigestPtr CreateTDigest(const TTDigestConfigPtr& config)
 IQuantileDigestPtr LoadQuantileDigest(TStringBuf serialized)
 {
     NProto::TQuantileDigest quantileDigest;
-    if (!quantileDigest.ParseFromArray(serialized.begin(), serialized.Size())) {
+    if (!quantileDigest.ParseFromArray(serialized.begin(), serialized.size())) {
         THROW_ERROR_EXCEPTION("Failed to parse quantile digest from proto");
     }
 

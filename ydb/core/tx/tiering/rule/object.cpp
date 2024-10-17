@@ -65,7 +65,7 @@ bool TTieringRule::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Val
     if (!decoder.Read(decoder.GetDefaultColumnIdx(), DefaultColumn, r)) {
         return false;
     }
-    if (DefaultColumn.Empty()) {
+    if (DefaultColumn.empty()) {
         return false;
     }
     NJson::TJsonValue jsonDescription;

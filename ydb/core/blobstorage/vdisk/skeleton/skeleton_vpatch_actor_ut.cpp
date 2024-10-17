@@ -735,7 +735,7 @@ namespace NKikimr {
                 bool quickXorDiffs = false)
         {
             ui32 nodeCount = type.TotalPartCount();
-            TVPatchTestGeneralData testData(type, data.Size(), nodeCount);
+            TVPatchTestGeneralData testData(type, data.size(), nodeCount);
 
             for (ui32 nodeIdx = 0; nodeIdx < nodeCount; ++nodeIdx) {
                 std::unique_ptr<TEvBlobStorage::TEvVPatchStart> start = testData.CreateVPatchStart(nodeIdx, nodeIdx);

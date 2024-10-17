@@ -10,6 +10,8 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
+from ydb.library.yql.providers.generic.connector.tests.utils.scenario.ydb import OneTimeWaiter
+import conftest
 
 DEBUG = 0
 
@@ -395,6 +397,12 @@ TESTCASES = [
 ]
 
 
+one_time_waiter = OneTimeWaiter(
+    docker_compose_file_path=conftest.docker_compose_file_path,
+    expected_tables=["simple_table", "join_table", "dummy_table"],
+)
+
+
 class TestJoinStreaming(TestYdsBase):
     @yq_v1
     @pytest.mark.parametrize(
@@ -412,6 +420,7 @@ class TestJoinStreaming(TestYdsBase):
             name=ydb_conn_name,
             database_id='local',
         )
+        one_time_waiter.wait()
 
         sql = R'''
             $input = SELECT * FROM myyds.`{input_topic}`;
@@ -486,6 +495,8 @@ class TestJoinStreaming(TestYdsBase):
             table_name=table_name,
             streamlookup=R'/*+ streamlookup() */' if streamlookup else '',
         )
+
+        one_time_waiter.wait()
 
         query_id = fq_client.create_query(
             f"streamlookup_{partitions_count}{streamlookup}{testcase}", sql, type=fq.QueryContent.QueryType.STREAMING

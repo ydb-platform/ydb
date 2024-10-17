@@ -14,7 +14,7 @@ void RecreateOwner(TActorTestContext& testCtx, TVDiskIDOwnerRound& vdisk) {
 }
 
 void TestChunkWriteReleaseRun() {
-    TActorTestContext testCtx({ false });
+    TActorTestContext testCtx{{}};
 
     const TVDiskID vDiskID(0, 1, 0, 0, 0);
     const auto evInitRes = testCtx.TestResponse<NPDisk::TEvYardInitResult>(
@@ -49,7 +49,7 @@ void TestChunkWriteReleaseRun() {
         UNIT_ASSERT(ok);
         pDisk->RouteRequest(log);
     }
-    pDisk->ProcessLogWriteQueueAndCommits();
+    pDisk->ProcessLogWriteQueue();
 
     {
         TString chunkWriteData = PrepareData(1024);

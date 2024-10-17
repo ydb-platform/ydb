@@ -481,7 +481,7 @@ private:
             }
         }
         nextDescription.Hash = nextHash;
-        if (!nextDescription.Hash->Empty()) {
+        if (!nextDescription.Hash->empty()) {
             YQL_CLOG(INFO, ProviderYt) << "Using publish hash \"" << HexEncode(*nextDescription.Hash) << "\" for table " << cluster << "." << path << "#" << commitEpoch;
         }
 

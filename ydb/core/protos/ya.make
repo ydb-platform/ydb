@@ -32,6 +32,7 @@ SRCS(
     change_exchange.proto
     channel_purpose.proto
     cms.proto
+    compaction.proto
     compile_service_config.proto
     config.proto
     config_units.proto

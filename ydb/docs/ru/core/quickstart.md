@@ -134,6 +134,50 @@
 
    10. Получите доступ к порту 8765 снаружи Kubernetes через `kubectl port-forward database-minikube-sample-0 8765` для продолжения.
 
+- Kind
+
+   1. Установите интерфейс командной строки Kubernetes [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl) и менеджер пакетов [Helm 3](https://helm.sh/docs/intro/install/).
+
+   2. Установите [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/).
+
+   3. Склонируйте репозиторий с [{{ ydb-short-name }} Kubernetes Operator](https://github.com/ydb-platform/ydb-kubernetes-operator):
+
+      ```bash
+      git clone https://github.com/ydb-platform/ydb-kubernetes-operator && cd ydb-kubernetes-operator
+      ```
+
+   4. Создайте Kind кластер и дождитесь его готовности:
+
+      ```bash
+      kind create cluster --config=samples/kind/kind-config.yaml  --wait 5m
+      ```
+
+   5. Установите на кластер контроллер {{ ydb-short-name }}:
+
+      ```bash
+      helm upgrade --install ydb-operator deploy/ydb-operator --set metrics.enabled=false
+      ```
+
+   6. Примените манифест для создания хранилища данных {{ ydb-short-name }}:
+
+      ```bash
+      kubectl apply -f samples/kind/storage.yaml
+      ```
+
+   7. Подождите, пока `kubectl get storages.ydb.tech` станет `Ready`.
+
+   8. Примените манифест для создания базы данных:
+
+      ```bash
+      kubectl apply -f samples/kind/database.yaml
+      ```
+
+   9. Подождите, пока `kubectl get databases.ydb.tech` станет `Ready`.
+
+   10. После обработки манифеста создаётся объект StatefulSet, описывающий набор динамических узлов. Созданная база данных будет доступна изнутри кластера Kubernetes по DNS-имени `database-kind-sample` на портах 2135 и 8765.
+
+   11. Получите доступ к порту 8765 снаружи Kubernetes через `kubectl port-forward database-kind-sample-0 8765` для продолжения.
+
 {% endlist %}
 
 
@@ -287,6 +331,32 @@ FLATTEN LIST BY keys AS key
 
    ```bash
    helm delete ydb-operator
+   ```
+
+- Kind
+
+   Чтобы удалить базу данных {{ ydb-short-name }}, достаточно удалить сопоставленный с ней ресурс Database:
+
+   ```bash
+   kubectl delete database.ydb.tech database-kind-sample
+   ```
+
+   Чтобы удалить кластер {{ ydb-short-name }}, выполните следующие команды (все данные будут потеряны):
+
+   ```bash
+   kubectl delete storage.ydb.tech storage-kind-sample
+   ```
+
+   Чтобы удалить контроллер {{ ydb-short-name }} из кластера Kubernetes, удалите релиз, созданный Helm:
+
+   ```bash
+   helm delete ydb-operator
+   ```
+
+   Чтобы удалить кластер Kind целиком, выполните следующую команду:
+
+   ```bash
+   kind delete cluster
    ```
 
 {% endlist %}

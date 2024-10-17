@@ -1,0 +1,21 @@
+diff --git a/include/__memory/unique_ptr.h b/include/__memory/unique_ptr.h
+index 93a77b7..e746d56 100644
+--- a/include/__memory/unique_ptr.h
++++ b/include/__memory/unique_ptr.h
+@@ -39,6 +39,7 @@
+ #include <__utility/forward.h>
+ #include <__utility/move.h>
+ #include <cstddef>
++#include <stlfwd>
+ 
+ #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
+ #  pragma GCC system_header
+@@ -123,7 +124,7 @@ struct __unique_ptr_deleter_sfinae<_Deleter&> {
+ #  define _LIBCPP_UNIQUE_PTR_TRIVIAL_ABI
+ #endif
+ 
+-template <class _Tp, class _Dp = default_delete<_Tp> >
++template <class _Tp, class _Dp>
+ class _LIBCPP_UNIQUE_PTR_TRIVIAL_ABI _LIBCPP_TEMPLATE_VIS unique_ptr {
+ public:
+   typedef _Tp element_type;

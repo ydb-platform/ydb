@@ -811,6 +811,7 @@ message TEvPeriodicTableStats {
     optional bool IsDstSplit = 13;
 
     repeated TEvPeriodicTableStats Tables = 14;
+    optional uint32 FollowerId = 15;
 }
 
 message TObjectStorageListingFilter {
@@ -1826,6 +1827,24 @@ message TEvRead {
 
     // Limits total number of rows which iterator can read.
     optional uint64 TotalRowsLimit = 12;
+
+    enum EHint {
+        // No hits. This is the default.
+        HINT_NONE = 0;
+
+        // This hint should be specified for batch queries. DataShard will
+        // attempt to run this query as a scan when possible, minimizing
+        // effects on concurrent OLTP queries.
+        HINT_BATCH = 1;
+
+        // This hint should be specified for low priority queries. DataShard
+        // will attempt to use low-priority reads when possible, minimizing
+        // effects on concurrent OLTP queries.
+        HINT_LOW_PRIORITY = 2;
+    }
+
+    // Optional bit flags with hints
+    optional uint32 Hints = 13;
 
     // Request must contain either keys, queries or program
     // mixed requests are not supported

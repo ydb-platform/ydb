@@ -865,7 +865,7 @@ public:
                             "Write transactions between column and row tables are disabled at current time.");
             return false;
         }
-        QueryState->TxCtx->HasUncommittedChangesRead = ::NKikimr::NKqp::HasUncommittedChangesRead(QueryState->ModifiedTables, phyQuery);
+        QueryState->TxCtx->HasUncommittedChangesRead = ::NKikimr::NKqp::HasUncommittedChangesRead(QueryState->TxCtx->ModifiedTables, phyQuery);
 
         QueryState->TxCtx->SetTempTables(QueryState->TempTablesState);
         auto [success, issues] = QueryState->TxCtx->ApplyTableOperations(phyQuery.GetTableOps(), phyQuery.GetTableInfos(),

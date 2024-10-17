@@ -74,6 +74,14 @@ extern "C" {
 void ec_init_tables(int k, int rows, unsigned char* a, unsigned char* gftbls);
 
 /**
+ * @brief Initialize tables for fast Erasure Code encode and decode, runs baseline version.
+ *
+ * Baseline version of ec_encode_data() with same parameters.
+ */
+
+void ec_init_tables_base(int k, int rows, unsigned char* a, unsigned char* gftbls);
+
+/**
  * @brief Generate or decode erasure codes on blocks of data, runs appropriate version.
  *
  * Given a list of source data blocks, generate one or multiple blocks of
@@ -926,7 +934,10 @@ void gf_gen_cauchy1_matrix(unsigned char *a, int m, int k);
 /**
  * @brief Invert a matrix in GF(2^8)
  *
- * @param in  input matrix
+ * Attempts to construct an n x n inverse of the input matrix. Returns non-zero
+ * if singular. Will always destroy input matrix in process.
+ *
+ * @param in  input matrix, destroyed by invert process
  * @param out output matrix such that [in] x [out] = [I] - identity matrix
  * @param n   size of matrix [nxn]
  * @returns 0 successful, other fail on singular input matrix

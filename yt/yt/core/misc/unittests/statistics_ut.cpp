@@ -90,14 +90,14 @@ TEST(TStatistics, AddSample)
 
     statistics.Merge(CreateStatistics({
         {"key"_L / "subkey"_L / "x"_L, 5},
-        {"key"_L / "subkey"_L / "z"_L, 9}}));
+        {"key"_L / "subkey"_L / "z"_L, 9}})).ThrowOnError();
 
     EXPECT_EQ(10, GetNumericValue(statistics, "key"_L / "subkey"_L / "x"_L));
     EXPECT_EQ(7, GetNumericValue(statistics, "key"_L / "subkey"_L / "y"_L));
     EXPECT_EQ(9, GetNumericValue(statistics, "key"_L / "subkey"_L / "z"_L));
 
     EXPECT_THROW(
-        statistics.Merge(CreateStatistics({{"key"_L, 5}})),
+        statistics.Merge(CreateStatistics({{"key"_L, 5}})).ThrowOnError(),
         std::exception);
 
     statistics.AddSample("key"_L / "subkey"_L / "x"_L, 10);
@@ -231,20 +231,20 @@ TEST(TTaggedStatistics, AppendStatistics)
         statistics.AddSample("abc"_L / "def"_L, 1);
         statistics.AddSample("abc"_L / "defg"_L, 2);
         statistics.AddSample("xyz"_L, 3);
-        taggedStatistics.AppendStatistics(statistics, 1);
+        taggedStatistics.AppendStatistics(statistics, 1).ThrowOnError();
     }
 
     {
         TStatistics statistics;
         statistics.AddSample("abc"_L / "def"_L, 1);
         statistics.AddSample("ijk"_L, 2);
-        taggedStatistics.AppendStatistics(statistics, 2);
+        taggedStatistics.AppendStatistics(statistics, 2).ThrowOnError();
     }
 
     {
         TStatistics statistics;
         statistics.AddSample("abc"_L / "def"_L, 2);
-        taggedStatistics.AppendStatistics(statistics, 1);
+        taggedStatistics.AppendStatistics(statistics, 1).ThrowOnError();
     }
 
     {
@@ -269,13 +269,13 @@ TEST(TTaggedStatistics, AppendStatistics)
     {
         TStatistics statistics;
         statistics.AddSample("xyz"_L / "suffix"_L, 1);
-        EXPECT_THROW(taggedStatistics.AppendStatistics(statistics, 3), std::exception);
+        EXPECT_THROW(taggedStatistics.AppendStatistics(statistics, 3).ThrowOnError(), std::exception);
     }
 
     {
         TStatistics statistics;
         statistics.AddSample("abc"_L, 1); // prefix
-        EXPECT_THROW(taggedStatistics.AppendStatistics(statistics, 3), std::exception);
+        EXPECT_THROW(taggedStatistics.AppendStatistics(statistics, 3).ThrowOnError(), std::exception);
     }
 }
 

@@ -510,4 +510,34 @@ OPENSSL_1_1_1a {
     local: *;
 } OPENSSL_1_1_1;
 
+OPENSSL_1_1_1i {
+    global:
+        SSL_CIPHER_get_prf_nid;
+        SSL_CTX_set_quic_method;
+        SSL_get_peer_quic_transport_params;
+        SSL_get_peer_quic_transport_version;
+        SSL_get_quic_transport_version;
+        SSL_is_quic;
+        SSL_process_quic_post_handshake;
+        SSL_provide_quic_data;
+        SSL_quic_max_handshake_flight_len;
+        SSL_quic_read_level;
+        SSL_quic_write_level;
+        SSL_set_quic_method;
+        SSL_set_quic_transport_params;
+        SSL_set_quic_transport_version;
+        SSL_set_quic_use_legacy_codepoint;
+} OPENSSL_1_1_1a;
+
+OPENSSL_1_1_1j {
+    global:
+        SSL_set_quic_early_data_enabled;
+} OPENSSL_1_1_1i;
+
+OPENSSL_1_1_1k {
+    global:
+        SSL_new_session_ticket;
+    local: *;
+} OPENSSL_1_1_1j;
+
 

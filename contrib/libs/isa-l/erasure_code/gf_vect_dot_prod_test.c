@@ -31,7 +31,7 @@
 #include <stdlib.h>
 #include <string.h>		// for memset, memcmp
 #include "erasure_code.h"
-// #include "types.h"
+#include "test.h"
 
 #ifndef FUNCTION_UNDER_TEST
 # define FUNCTION_UNDER_TEST gf_vect_dot_prod
@@ -43,7 +43,7 @@
 #define str(s) #s
 #define xstr(s) str(s)
 
-#define TEST_LEN 2048
+#define TEST_LEN 8192
 #define TEST_SIZE (TEST_LEN/2)
 
 #ifndef TEST_SOURCES
@@ -171,8 +171,11 @@ int main(int argc, char *argv[])
 		printf("dprod:");
 		dump(dest, 25);
 		return -1;
-	} else
+	}
+#ifdef TEST_VERBOSE
+	else
 		putchar('.');
+#endif
 
 	// Rand data test
 	for (rtest = 0; rtest < RANDOMS; rtest++) {
@@ -199,7 +202,9 @@ int main(int argc, char *argv[])
 			return -1;
 		}
 
+#ifdef TEST_VERBOSE
 		putchar('.');
+#endif
 	}
 
 	// Rand data test with varied parameters
@@ -228,7 +233,9 @@ int main(int argc, char *argv[])
 				return -1;
 			}
 
+#ifdef TEST_VERBOSE
 			putchar('.');
+#endif
 		}
 	}
 
@@ -396,7 +403,9 @@ int main(int argc, char *argv[])
 				return -1;
 			}
 		}
+#ifdef TEST_VERBOSE
 		putchar('.');
+#endif
 	}
 
 	// Run tests at end of buffer for Electric Fence
@@ -428,7 +437,9 @@ int main(int argc, char *argv[])
 			return -1;
 		}
 
+#ifdef TEST_VERBOSE
 		putchar('.');
+#endif
 	}
 
 	// Test rand ptr alignment if available
@@ -485,7 +496,9 @@ int main(int argc, char *argv[])
 			return -1;
 		}
 
+#ifdef TEST_VERBOSE
 		putchar('.');
+#endif
 	}
 
 	// Test all size alignment

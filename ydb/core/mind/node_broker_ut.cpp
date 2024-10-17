@@ -369,12 +369,12 @@ void CheckRegistration(TTestActorRuntime &runtime,
                       false, path, Nothing(), name);
 }
 
-TAutoPtr<TEvNodeBroker::TEvGracefulShutdownRequest>
+THolder<TEvNodeBroker::TEvGracefulShutdownRequest>
 MakeEventGracefulShutdown (const TString& host,
                            ui16 port,
                            const TString& address) 
 {
-    TAutoPtr<TEvNodeBroker::TEvGracefulShutdownRequest> eventGracefulShutdown = new TEvNodeBroker::TEvGracefulShutdownRequest;
+    auto eventGracefulShutdown = MakeHolder<TEvNodeBroker::TEvGracefulShutdownRequest>();
     eventGracefulShutdown->Record.SetHost(host);
     eventGracefulShutdown->Record.SetPort(port);
     eventGracefulShutdown->Record.SetAddress(address);

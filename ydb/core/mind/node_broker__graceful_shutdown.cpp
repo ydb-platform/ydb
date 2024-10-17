@@ -1,7 +1,7 @@
 #include "node_broker_impl.h"
-#include "node_broker__scheme.h"
 
 #include <ydb/core/protos/counters_node_broker.pb.h>
+
 namespace NKikimr::NNodeBroker {
 
 using namespace NKikimrNodeBroker;
@@ -21,8 +21,8 @@ public:
                const TActorContext &ctx)
     {
         const auto &rec = Event->Get()->Record;
-        auto &host = rec.GetHost();
-        auto port = rec.GetPort();
+        const auto &host = rec.GetHost();
+        const ui16 port = rec.GetPort();
         LOG_ERROR_S(ctx, NKikimrServices::NODE_BROKER,
                     "Cannot Graceful Shutdown " << host << ":" << port << ": " << code << ": " << reason);
 
@@ -34,16 +34,16 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
-        auto &rec = Event->Get()->Record;
-        auto &host = rec.GetHost();
-        ui16 port = (ui16)rec.GetPort();
-        auto &addr = rec.GetAddress();
+        const auto &rec = Event->Get()->Record;
+        const auto &host = rec.GetHost();
+        const ui16 port = (ui16)rec.GetPort();
+        const auto &addr = rec.GetAddress();
 
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxGracefulShutdown Execute");
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
                     "Graceful Shutdown request from " << host << ":" << port << " ");
 
-        Response = new TEvNodeBroker::TEvGracefulShutdownResponse;
+        Response = MakeHolder<TEvNodeBroker::TEvGracefulShutdownResponse>();
 
         auto it = Self->Hosts.find(std::make_tuple(host, addr, port));
         if (it != Self->Hosts.end()) {
@@ -70,7 +70,7 @@ public:
 
 private:
     TEvNodeBroker::TEvGracefulShutdownRequest::TPtr Event;
-    TAutoPtr<TEvNodeBroker::TEvGracefulShutdownResponse> Response;
+    THolder<TEvNodeBroker::TEvGracefulShutdownResponse> Response;
 };
 
 ITransaction *TNodeBroker::CreateTxGracefulShutdown(TEvNodeBroker::TEvGracefulShutdownRequest::TPtr &ev)

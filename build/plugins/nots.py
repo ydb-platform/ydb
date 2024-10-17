@@ -345,7 +345,6 @@ def _create_pm(unit: NotsUnitType) -> 'BasePackageManager':
         sources_path=unit.resolve(sources_path),
         build_root="$B",
         build_path=unit.path().replace("$S", "$B", 1),
-        contribs_path=unit.get("NPM_CONTRIBS_PATH"),
         nodejs_bin_path=None,
         script_path=None,
         module_path=module_path,
@@ -385,31 +384,6 @@ def on_set_append_with_directive(unit: NotsUnitType, var_name: str, directive: s
     wrapped = [f'${{{directive}:"{v}"}}' for v in values]
 
     __set_append(unit, var_name, " ".join(wrapped))
-
-
-@_with_report_configure_error
-def on_from_npm_lockfiles(unit, *args):
-    from lib.nots.package_manager.base import PackageManagerError
-
-    # This is contrib with pnpm-lock.yaml files only
-    # Force set to pnpm
-    unit.set(["PM_TYPE", "pnpm"])
-    pm = _create_pm(unit)
-    lf_paths = []
-
-    for lf_path in args:
-        abs_lf_path = unit.resolve(unit.resolve_arc_path(lf_path))
-        if abs_lf_path:
-            lf_paths.append(abs_lf_path)
-        elif unit.get("TS_STRICT_FROM_NPM_LOCKFILES") == "yes":
-            ymake.report_configure_error("lockfile not found: {}".format(lf_path))
-
-    try:
-        for pkg in pm.extract_packages_meta_from_lockfiles(lf_paths):
-            unit.on_from_npm([pkg.tarball_url, pkg.sky_id, pkg.integrity, pkg.integrity_algorithm, pkg.tarball_path])
-    except PackageManagerError as e:
-        logger.warn(str(e))
-        pass
 
 
 def _check_nodejs_version(unit: NotsUnitType, major: int) -> None:
@@ -800,28 +774,6 @@ def _select_matching_version(
 
 @_with_report_configure_error
 def on_prepare_deps_configure(unit: NotsUnitType) -> None:
-    contrib_path = unit.get("NPM_CONTRIBS_PATH")
-    if contrib_path == '-':
-        unit.on_prepare_deps_configure_no_contrib()
-        return
-    unit.onpeerdir(contrib_path)
-    pm = _create_pm(unit)
-    pj = pm.load_package_json_from_dir(pm.sources_path)
-    has_deps = pj.has_dependencies()
-    ins, outs = pm.calc_prepare_deps_inouts(unit.get("_TARBALLS_STORE"), has_deps)
-
-    if has_deps:
-        unit.onpeerdir(pm.get_local_peers_from_package_json())
-        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("input", ["hide"], sorted(ins)))
-        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("output", ["hide"], sorted(outs)))
-
-    else:
-        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("output", [], sorted(outs)))
-        unit.set(["_PREPARE_DEPS_CMD", "$_PREPARE_NO_DEPS_CMD"])
-
-
-@_with_report_configure_error
-def on_prepare_deps_configure_no_contrib(unit: NotsUnitType) -> None:
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
     has_deps = pj.has_dependencies()

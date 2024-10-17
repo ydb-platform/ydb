@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/api/grpc/draft/ydb_clickhouse_internal_v1.pb.h>
 
 // TODO: Bad dependency???

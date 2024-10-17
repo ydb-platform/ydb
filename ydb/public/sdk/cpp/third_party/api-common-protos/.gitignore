@@ -1,0 +1,11 @@
+OWNERS
+README.google
+google/internal
+google/protobuf
+.project
+artman-genfiles/
+bazel-api-common-protos
+bazel-bin
+bazel-genfiles
+bazel-out
+bazel-testlogs

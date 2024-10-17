@@ -4,6 +4,8 @@
 
 #include <util/datetime/base.h>
 #include <util/string/builder.h>
+#include <util/generic/hash.h>
+#include <util/generic/vector.h>
 
 #include <algorithm>
 

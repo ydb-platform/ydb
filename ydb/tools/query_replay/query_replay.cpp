@@ -1,8 +1,8 @@
 #include "query_replay.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/result/result.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -187,11 +187,11 @@ public:
         TValueParser& idParser = parser.ColumnParser("query_id");
         TValueParser& queryText = parser.ColumnParser("query_text");
         do {
-            TString queryId = std::move(idParser.GetOptionalString().GetRef());
+            TString queryId = std::move(idParser.GetOptionalString().value());
             if (AllQueries.find(queryId) != AllQueries.end())
                 continue;
 
-            ui64 QueryHash = CityHash64(queryText.GetOptionalString().GetRef());
+            ui64 QueryHash = CityHash64(queryText.GetOptionalString().value());
 
             if (Hashes.find(QueryHash) != Hashes.end() || QueryHash % Modulo != ShardId)
                 continue;

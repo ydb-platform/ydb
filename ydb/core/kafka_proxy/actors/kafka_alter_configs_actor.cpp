@@ -17,7 +17,7 @@ public:
             TIntrusiveConstPtr<NACLib::TUserToken> userToken,
             TString topicPath,
             TString databaseName,
-            const std::function<void(const EKafkaErrors, const TString&)> sendResultCallback)
+            const std::function<void(const EKafkaErrors, const std::string&)> sendResultCallback)
         : TKafkaTopicModificationRequest(userToken, topicPath, databaseName, sendResultCallback)
     {
     };

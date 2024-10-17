@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
                 [] (const NYql::TIssue& issue) {
-                    return issue.GetMessage().Contains("/Root/Test");
+                    return issue.GetMessage().contains("/Root/Test");
                 }), result.GetIssues().ToString());
 
             result = session2.ExecuteQuery(Q_(R"(
@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
             commitResult.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_C(HasIssue(commitResult.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
                 [] (const NYql::TIssue& issue) {
-                    return issue.GetMessage().Contains("/Root/Test");
+                    return issue.GetMessage().contains("/Root/Test");
                 }), commitResult.GetIssues().ToString());
 
             result = session2.ExecuteQuery(Q_(R"(
@@ -195,7 +195,7 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
                 [] (const NYql::TIssue& issue) {
-                    return issue.GetMessage().Contains("/Root/Test");
+                    return issue.GetMessage().contains("/Root/Test");
                 }), result.GetIssues().ToString());
 
             result = session1.ExecuteQuery(Q1_(R"(
@@ -254,7 +254,7 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
                 [] (const NYql::TIssue& issue) {
-                    return issue.GetMessage().Contains("/Root/Test");
+                    return issue.GetMessage().contains("/Root/Test");
                 }), result.GetIssues().ToString());
 
             result = session1.ExecuteQuery(Q1_(R"(

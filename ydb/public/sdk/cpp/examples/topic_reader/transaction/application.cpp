@@ -1,7 +1,6 @@
 #include "application.h"
-#include <util/system/env.h>
 
-TApplication::TRow::TRow(ui64 key, const TString& value) :
+TApplication::TRow::TRow(uint64_t key, const std::string& value) :
     Key(key),
     Value(value)
 {
@@ -13,8 +12,8 @@ TApplication::TApplication(const TOptions& options)
         .SetNetworkThreadsNum(2)
         .SetEndpoint(options.Endpoint)
         .SetDatabase(options.Database)
-        .SetAuthToken(GetEnv("YDB_TOKEN"))
-        .SetLog(CreateLogBackend("cerr", Min(options.LogPriority, TLOG_RESOURCES)));
+        .SetAuthToken(std::getenv("YDB_TOKEN") ? std::getenv("YDB_TOKEN") : "")
+        .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", std::min(options.LogPriority, TLOG_RESOURCES)).Release()));
     if (options.UseSecureConnection) {
         config.UseSecureConnection();
     }
@@ -38,7 +37,7 @@ void TApplication::CreateTopicReadSession(const TOptions& options)
 
     ReadSession = TopicClient->CreateReadSession(settings);
 
-    Cout << "Topic session was created" << Endl;
+    std::cout << "Topic session was created" << std::endl;
 }
 
 void TApplication::CreateTableSession()
@@ -49,7 +48,7 @@ void TApplication::CreateTableSession()
 
     TableSession = result.GetSession();
 
-    Cout << "Table session was created" << Endl;
+    std::cout << "Table session was created" << std::endl;
 }
 
 void TApplication::Run()
@@ -121,7 +120,7 @@ void TApplication::CommitTransaction()
 
     auto result = Transaction->Commit(settings).GetValueSync();
 
-    Cout << "Commit: " << static_cast<NYdb::TStatus&>(result) << Endl;
+    std::cout << "Commit: " << ToString(static_cast<const NYdb::TStatus&>(result)) << std::endl;
 }
 
 void TApplication::TryCommitTransaction()
@@ -149,7 +148,7 @@ void TApplication::InsertRowsIntoTable()
 {
     Y_ABORT_UNLESS(Transaction);
 
-    TString query = "                                                            \
+    std::string query = "                                                            \
         DECLARE $rows AS List<Struct<                                            \
             id: Uint64,                                                          \
             value: String                                                        \
@@ -192,5 +191,5 @@ void TApplication::InsertRowsIntoTable()
 
 void TApplication::AppendTableRow(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message)
 {
-    Rows.emplace_back(RandomNumber<ui64>(), message.GetData());
+    Rows.emplace_back(Dist(MersenneEngine), message.GetData());
 }

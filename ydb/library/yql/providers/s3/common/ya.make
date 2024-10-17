@@ -18,7 +18,7 @@ PEERDIR(
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/s3/events
     ydb/library/yql/public/issue
-    ydb/library/yql/public/issue/protos
+    ydb/public/sdk/cpp/src/library/yql_common/issue/protos
 )
 
 IF (CLANG AND NOT WITH_VALGRIND)

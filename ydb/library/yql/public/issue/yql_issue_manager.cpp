@@ -38,8 +38,8 @@ void TIssueManager::LeaveScope() {
         auto nestedIssue = subIssue->GetSubIssues().front();
         if (!nestedIssue->GetSubIssues().empty() && nestedIssue->Position == subIssue->Position && nestedIssue->EndPosition == subIssue->EndPosition) {
             auto msg = subIssue->GetMessage();
-            if (nestedIssue->GetMessage()) {
-                if (msg) {
+            if (!nestedIssue->GetMessage().empty()) {
+                if (!msg.empty()) {
                     msg.append(", ");
                 }
                 msg.append(nestedIssue->GetMessage());

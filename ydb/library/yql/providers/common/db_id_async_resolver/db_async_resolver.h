@@ -1,10 +1,13 @@
 #pragma once
 
-#include <library/cpp/threading/future/future.h>
-#include <util/string/builder.h>
-#include <util/string/cast.h>
 #include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
+
+#include <library/cpp/threading/future/future.h>
+
+#include <util/generic/hash.h>
+#include <util/string/builder.h>
+#include <util/string/cast.h>
 
 namespace NYql {
 

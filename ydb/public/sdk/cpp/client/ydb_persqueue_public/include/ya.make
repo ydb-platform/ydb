@@ -1,9 +1,6 @@
 LIBRARY()
 
-GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/client/ydb_persqueue_public/include/control_plane.h)
-GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/client/ydb_persqueue_public/include/read_events.h)
-GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/client/ydb_persqueue_public/include/write_events.h)
-GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/client/ydb_persqueue_public/include/write_session.h)
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
 
 SRCS(
     aliases.h
@@ -16,11 +13,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/api/grpc
-    ydb/public/api/grpc/draft
-    ydb/public/api/protos
-
-    ydb/library/yql/public/issue/protos
+    ydb/public/sdk/cpp/src/client/persqueue_public/include
 )
 
 END()

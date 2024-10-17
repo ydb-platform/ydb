@@ -12,7 +12,7 @@ PEERDIR(
     ydb/library/yql/public/types
     ydb/library/yql/utils/log
     ydb/public/lib/experimental
-    ydb/public/sdk/cpp/client/ydb_driver
+    ydb/public/sdk/cpp/src/client/driver
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/providers/ydb/proto
 )

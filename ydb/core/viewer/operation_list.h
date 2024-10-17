@@ -3,6 +3,7 @@
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/viewer/yaml/yaml.h>
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 namespace NKikimr::NViewer {
 

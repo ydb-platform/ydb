@@ -4,7 +4,7 @@
 #include "topic_workload_stats_collector.h"
 #include "topic_workload_reader_transaction_support.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/logger/log.h>
 #include <util/generic/string.h>

@@ -30,6 +30,7 @@ PEERDIR(
     ydb/library/yql/core/expr_nodes
     ydb/library/aclib/protos
     library/cpp/protobuf/json
+    library/cpp/getopt
 )
 
 YQL_LAST_ABI_VERSION()

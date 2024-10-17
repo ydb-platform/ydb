@@ -1,11 +1,13 @@
 LIBRARY()
 
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
+
 SRCS(
-    handlers.cpp
+    handlers.h
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp/client/ydb_types/exceptions
+    ydb/public/sdk/cpp/src/client/types/fatal_error_handlers
 )
 
 END()

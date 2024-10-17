@@ -5,7 +5,7 @@
 #include <ydb/core/client/server/ic_nodes_cache_service.h>
 #include <ydb/core/persqueue/utils.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/library/persqueue/obfuscate/obfuscate.h>
+#include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 

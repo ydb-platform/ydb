@@ -4,7 +4,7 @@
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
 #include <util/stream/str.h>
 #include <util/string/builder.h>
 #include <util/string/printf.h>
@@ -415,7 +415,7 @@ TFuture<TStatus> ProcessCheckpoints(
             *parser.ColumnParser("modified_by").GetOptionalTimestamp());
 
         if (loadGraphDescription) {
-            if (const TMaybe<TString> graphDescription = parser.ColumnParser("graph_description").GetOptionalString(); graphDescription && *graphDescription) {
+            if (const std::optional<std::string> graphDescription = parser.ColumnParser("graph_description").GetOptionalString(); graphDescription && !graphDescription.value().empty()) {
                 NProto::TCheckpointGraphDescription graphDesc;
                 if (!graphDesc.ParseFromString(*graphDescription)) {
                     NYql::TIssues issues;
@@ -1088,7 +1088,7 @@ TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> TCheckpointStor
 
                         TResultSetParser parser = queryResult.GetResultSetParser(0);
                         if (parser.TryNextRow()) {
-                            result->Size = parser.ColumnParser(0).GetOptionalUint64().GetOrElse(0);
+                            result->Size = parser.ColumnParser(0).GetOptionalUint64().value_or(0);
                         } else {
                             result->Size = 0;
                         }

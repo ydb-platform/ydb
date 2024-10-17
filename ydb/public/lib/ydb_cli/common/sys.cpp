@@ -1,6 +1,6 @@
 #include "sys.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
 
 namespace NYdb::NConsoleClient {
 
@@ -9,9 +9,9 @@ bool IsSystemObject(const NScheme::TSchemeEntry& entry) {
         return false;
     }
 
-    return entry.Name.StartsWith("~")
-        || entry.Name.StartsWith(".sys")
-        || entry.Name.StartsWith(".metadata");
+    return entry.Name.starts_with("~")
+        || entry.Name.starts_with(".sys")
+        || entry.Name.starts_with(".metadata");
 }
 
 }

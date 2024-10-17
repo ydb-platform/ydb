@@ -8,7 +8,6 @@ SRCS(
     range_walker_ut.cpp
     retry_ut.cpp
     url_builder_ut.cpp
-    utf8_ut.cpp
 )
 
 END()

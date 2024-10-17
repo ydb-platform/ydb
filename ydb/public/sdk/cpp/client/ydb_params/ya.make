@@ -1,18 +1,13 @@
 LIBRARY()
 
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
+
 SRCS(
-    params.cpp
-    impl.cpp
+    params.h
 )
 
 PEERDIR(
-    ydb/public/api/protos
-    ydb/public/sdk/cpp/client/ydb_types/fatal_error_handlers
-    ydb/public/sdk/cpp/client/ydb_value
+    ydb/public/sdk/cpp/src/client/params
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)

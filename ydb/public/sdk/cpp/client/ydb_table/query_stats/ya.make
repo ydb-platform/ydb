@@ -1,13 +1,13 @@
 LIBRARY()
 
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
+
 SRCS(
-    stats.cpp
+    stats.h
 )
 
 PEERDIR(
-    contrib/libs/protobuf
-    ydb/public/api/protos
-    ydb/public/sdk/cpp/client/ydb_query
+    ydb/public/sdk/cpp/src/client/table/query_stats
 )
 
 END()

@@ -445,7 +445,7 @@ void TLeaderElection::Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev) {
         // Wait OnChanged.
         return;
     }
-    TString data = description.GetOwners()[0].GetData();
+    auto data = TString{description.GetOwners()[0].GetData()};
     NActorsProto::TActorId protoId;
     if (!protoId.ParseFromString(data)) {
         Y_ABORT("ParseFromString");

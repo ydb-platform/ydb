@@ -1,0 +1,14 @@
+CC=cl.exe
+CFLAGS=/Wall /Za
+RM=del
+
+TEST_ROUNDTRIP=test_roundtrip.exe
+
+all: roundtrip
+
+roundtrip: test_roundtrip.c ../fastlz.c refimpl.c
+	$(CC) -o $(TEST_ROUNDTRIP)  $(CFLAGS) -I.. test_roundtrip.c ../fastlz.c refimpl.c
+	$(TEST_ROUNDTRIP)
+
+clean :
+	$(RM) $(TEST_ROUNDTRIP) *.obj

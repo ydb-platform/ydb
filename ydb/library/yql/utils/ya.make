@@ -43,6 +43,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/public/sdk/cpp/src/library/yql_common/utils
     ydb/library/actors/util
     ydb/library/yql/core/issue/protos
     library/cpp/digest/md5

@@ -1,12 +1,17 @@
 LIBRARY()
 
-PEERDIR(
-    contrib/libs/protobuf
-    ydb/library/grpc/client
-    ydb/library/yql/public/issue
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
+
+SRCS(
+    fluent_settings_helpers.h
+    request_settings.h
+    s3_settings.h
+    status_codes.h
+    ydb.h
 )
 
-GENERATE_ENUM_SERIALIZATION(s3_settings.h)
-GENERATE_ENUM_SERIALIZATION(status_codes.h)
+PEERDIR(
+    ydb/public/sdk/cpp/src/client/types
+)
 
 END()

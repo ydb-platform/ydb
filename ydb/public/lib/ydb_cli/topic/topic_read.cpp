@@ -75,7 +75,7 @@ namespace NYdb::NConsoleClient {
     }
 
     namespace {
-        const TString FormatBody(const TString& body, ETransformBody transform) {
+        const std::string FormatBody(const std::string& body, ETransformBody transform) {
             if (transform == ETransformBody::Base64) {
                 return Base64Encode(body);
             }
@@ -317,7 +317,7 @@ namespace NYdb::NConsoleClient {
             if (future.HasValue()) {
                 // TODO(shmel1k@): throttling?
                 // TODO(shmel1k@): think about limiting size of events
-                TVector<NTopic::TReadSessionEvent::TEvent> events = ReadSession_->GetEvents(true);
+                std::vector<NTopic::TReadSessionEvent::TEvent> events = ReadSession_->GetEvents(true);
                 for (auto& event : events) {
                     if (int status = HandleEvent(event, output); status) {
                         return status;

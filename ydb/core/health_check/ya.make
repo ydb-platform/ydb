@@ -12,7 +12,7 @@ PEERDIR(
     ydb/library/aclib
     ydb/public/api/protos
     ydb/public/api/grpc
-    ydb/library/yql/public/issue/protos
+    ydb/public/sdk/cpp/src/library/yql_common/issue/protos
 )
 
 END()

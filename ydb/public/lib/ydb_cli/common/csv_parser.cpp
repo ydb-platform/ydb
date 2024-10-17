@@ -95,7 +95,7 @@ public:
             Builder.Yson(token);
             break;
         case EPrimitiveType::Uuid:
-            Builder.Uuid(token);
+            Builder.Uuid(TUuidValue{token});
             break;
         case EPrimitiveType::Float:
             Builder.Float(GetArithmetic<float>(token));
@@ -180,11 +180,11 @@ public:
     void BuildValue(TStringBuf token) {
         switch (Parser.GetKind()) {
         case TTypeParser::ETypeKind::Primitive: {
-            BuildPrimitive(TString(token));
+            BuildPrimitive(std::string{token});
             break;
         }
         case TTypeParser::ETypeKind::Decimal: {
-            Builder.Decimal(TDecimalValue(TString(token), Parser.GetDecimal().Precision, Parser.GetDecimal().Scale));
+            Builder.Decimal(TDecimalValue(std::string(token), Parser.GetDecimal().Precision, Parser.GetDecimal().Scale));
             break;
         }
         case TTypeParser::ETypeKind::Optional: {
@@ -301,7 +301,7 @@ private:
 
 TCsvParseException FormatError(const std::exception& inputError,
                                const TCsvParser::TParseMetadata& meta,
-                               std::optional<TString> columnName = {}) {
+                               const std::optional<std::string>& columnName = {}) {
     auto outputError = TCsvParseException() << "Error during CSV parsing";
     if (meta.Line.has_value()) {
         outputError << " in line " << meta.Line.value();
@@ -320,7 +320,7 @@ TValue FieldToValue(TTypeParser& parser,
                     TStringBuf token,
                     const std::optional<TString>& nullValue,
                     const TCsvParser::TParseMetadata& meta,
-                    TString columnName) {
+                    const std::string& columnName) {
     try {
         TCsvToYdbConverter converter(parser, nullValue);
         return converter.Convert(token);
@@ -342,7 +342,7 @@ TStringBuf Consume(NCsvFormat::CsvSplitter& splitter,
 }
 
 TCsvParser::TCsvParser(TString&& headerRow, const char delimeter, const std::optional<TString>& nullValue,
-                       const std::map<TString, TType>* paramTypes,
+                       const std::map<std::string, TType>* paramTypes,
                        const std::map<TString, TString>* paramSources) 
     : HeaderRow(std::move(headerRow))
     , Delimeter(delimeter)
@@ -355,7 +355,7 @@ TCsvParser::TCsvParser(TString&& headerRow, const char delimeter, const std::opt
 }
 
 TCsvParser::TCsvParser(TVector<TString>&& header, const char delimeter, const std::optional<TString>& nullValue,
-                       const std::map<TString, TType>* paramTypes,
+                       const std::map<std::string, TType>* paramTypes,
                        const std::map<TString, TString>* paramSources) 
     : Header(std::move(header))
     , Delimeter(delimeter)
@@ -398,7 +398,7 @@ void TCsvParser::GetParams(TString&& data, TParamsBuilder& builder, const TParse
 void TCsvParser::GetValue(TString&& data, TValueBuilder& builder, const TType& type, const TParseMetadata& meta) const {
     NCsvFormat::CsvSplitter splitter(data, Delimeter);
     auto headerIt = Header.cbegin();
-    std::map<TString, TStringBuf> fields;
+    std::map<std::string, TStringBuf> fields;
     do {
         if (headerIt == Header.cend()) {
             throw FormatError(yexception() << "Header contains less fields than data. Header: \"" << HeaderRow << "\", data: \"" << data << "\"", meta);
@@ -416,7 +416,7 @@ void TCsvParser::GetValue(TString&& data, TValueBuilder& builder, const TType& t
     TTypeParser parser(type);
     parser.OpenStruct();
     while (parser.TryNextMember()) {
-        TString name = parser.GetMemberName();
+        std::string name = parser.GetMemberName();
         if (name == "__ydb_skip_column_name") {
             continue;
         }

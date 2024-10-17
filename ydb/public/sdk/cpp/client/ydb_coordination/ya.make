@@ -1,25 +1,13 @@
 LIBRARY()
 
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
+
 SRCS(
-    coordination.cpp
-    proto_accessor.cpp
+    coordination.h
 )
 
-GENERATE_ENUM_SERIALIZATION(coordination.h)
-
 PEERDIR(
-    ydb/public/api/grpc
-    ydb/public/sdk/cpp/client/impl/ydb_internal/make_request
-    ydb/public/sdk/cpp/client/ydb_common_client
-    ydb/public/sdk/cpp/client/ydb_common_client/impl
-    ydb/public/sdk/cpp/client/ydb_driver
-    ydb/public/sdk/cpp/client/ydb_proto
-    ydb/public/sdk/cpp/client/ydb_types
-    ydb/public/sdk/cpp/client/ydb_types/status
+    ydb/public/sdk/cpp/src/client/coordination
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)

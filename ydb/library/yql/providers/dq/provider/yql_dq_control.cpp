@@ -5,9 +5,9 @@
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 
-#include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb-cpp-sdk/library/yson_value/ydb_yson_value.h>
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb-cpp-sdk/library/grpc/client/grpc_client_low.h>
 
 #include <library/cpp/svnversion/svnversion.h>
 

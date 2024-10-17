@@ -1,15 +1,13 @@
 LIBRARY()
 
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
+
 SRCS(
-    status.cpp
+    status.h
 )
 
 PEERDIR(
-    library/cpp/threading/future
-    ydb/public/sdk/cpp/client/impl/ydb_internal/plain_status
-    ydb/public/sdk/cpp/client/ydb_types
-    ydb/public/sdk/cpp/client/ydb_types/fatal_error_handlers
-    ydb/library/yql/public/issue
+    ydb/public/sdk/cpp/src/client/types/status
 )
 
 END()

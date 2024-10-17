@@ -10,22 +10,23 @@
 
 namespace NYql {
 
-TMaybe<double> TYtProviderContext::ColumnNumUniqueValues(const TDynBitMap& relMap,  const TString& columnName) const {
-    auto entry = ColumnIndex_.find(columnName);
+TMaybe<double> TYtProviderContext::ColumnNumUniqueValues(const TDynBitMap& relMap,  const NDq::TJoinColumn& joinColumn) const {
+    auto entry = ColumnIndex_.find(joinColumn.AttributeName);
     if (entry == ColumnIndex_.end()) {
         return Nothing();
     }
     for (const auto& relColEntry : entry->second) {
         int relIndex = relColEntry.first;
         int colIndex = relColEntry.second;
-        if (relMap[relIndex] && RelInfo_[relIndex].ColumnInfo[colIndex].EstimatedUniqueCount) {
+        if (relMap[relIndex] && RelInfo_[relIndex].Label == joinColumn.RelName &&
+            RelInfo_[relIndex].ColumnInfo[colIndex].EstimatedUniqueCount) {
             return RelInfo_[relIndex].ColumnInfo[colIndex].EstimatedUniqueCount;
         }
     }
     return Nothing();
 }
 
-TString TYtProviderContext::DebugStatistic(const TVector<TString>& columns, const TOptimizerStatistics& stat) const {
+TString TYtProviderContext::DebugStatistic(const TVector<NDq::TJoinColumn>& columns, const TOptimizerStatistics& stat) const {
     std::stringstream ss;
     const auto* specific = static_cast<TYtProviderStatistic*>(stat.Specific.get());
     ss << "Rels: [";
@@ -40,12 +41,12 @@ TString TYtProviderContext::DebugStatistic(const TVector<TString>& columns, cons
     ss << "]\n";
     ss << "Columns = [";
     i = 0;
-    for (const auto& columnName : columns) {
+    for (const auto& joinColumn : columns) {
         if (i > 0) {
             ss << ", ";
         }
-        ss << columnName;
-        auto numUniques = ColumnNumUniqueValues(specific->RelBitmap, columnName);
+        ss << joinColumn.AttributeName;
+        auto numUniques = ColumnNumUniqueValues(specific->RelBitmap, joinColumn);
         if (numUniques) {
             ss << " (" << *numUniques << " uniques)";
         } else {
@@ -67,10 +68,10 @@ TString TYtProviderContext::DebugStatistic(const TVector<TString>& columns, cons
     return ss.str();
 }
 
-TMaybe<double> TYtProviderContext::FindMaxUniqueVals(const TYtProviderStatistic& specific, const TVector<TString>& columns) const {
+TMaybe<double> TYtProviderContext::FindMaxUniqueVals(const TYtProviderStatistic& specific, const TVector<NDq::TJoinColumn>& columns) const {
     TMaybe<double> result;
-    for (const auto& columnName : columns) {
-        auto val = ColumnNumUniqueValues(specific.RelBitmap, columnName);
+    for (const auto& joinColumn : columns) {
+        auto val = ColumnNumUniqueValues(specific.RelBitmap, joinColumn);
         if (val && (!result || *val > *result)) {
             result = val;
         }
@@ -108,14 +109,15 @@ bool TYtProviderContext::IsMapJoinApplicable(const TOptimizerStatistics& stat) c
         *specific->SizeInfo.MapJoinMemSize < Limits_.MapJoinMemLimit;
 }
 
-bool TYtProviderContext::IsLookupJoinApplicable(const TOptimizerStatistics& table, const TOptimizerStatistics& lookupTable, const TVector<TString>& tableJoinKeys) const {
+bool TYtProviderContext::IsLookupJoinApplicable(const TOptimizerStatistics& table, const TOptimizerStatistics& lookupTable, const TVector<NDq::TJoinColumn>& tableJoinKeys) const {
     const TYtProviderStatistic* tableSpecific = static_cast<const TYtProviderStatistic*>(table.Specific.get());
     const TYtProviderStatistic* lookupTableSpecific = static_cast<const TYtProviderStatistic*>(lookupTable.Specific.get());
-    if (tableSpecific->SortColumns.empty()) {
+    if (table.Type != EStatisticsType::BaseTable || tableSpecific->SortColumns.empty()) {
         return false;
     }
-    if (std::find(tableJoinKeys.begin(), tableJoinKeys.end(), tableSpecific->SortColumns[0]) ==
-        tableJoinKeys.end()) {
+    const auto& relName = RelInfo_[tableSpecific->RelBitmap.FirstNonZeroBit()].Label;
+    NDq::TJoinColumn sortColumn(relName, tableSpecific->SortColumns[0]);
+    if (std::find(tableJoinKeys.begin(), tableJoinKeys.end(), sortColumn) == tableJoinKeys.end()) {
         return false;
     }
     if (lookupTable.Nrows > Limits_.LookupJoinMaxRows ||
@@ -129,9 +131,8 @@ bool TYtProviderContext::IsLookupJoinApplicable(const TOptimizerStatistics& tabl
 bool TYtProviderContext::IsJoinApplicable(
     const std::shared_ptr<IBaseOptimizerNode>& left,
     const std::shared_ptr<IBaseOptimizerNode>& right,
-    const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& /*joinConditions*/,
-    const TVector<TString>& leftJoinKeys,
-    const TVector<TString>& /*rightJoinKeys*/,
+    const TVector<NDq::TJoinColumn>& leftJoinKeys,
+    const TVector<NDq::TJoinColumn>& /*rightJoinKeys*/,
     EJoinAlgoType joinAlgo,
     EJoinKind /*joinKind*/) {
     if (joinAlgo == EJoinAlgoType::LookupJoin) {
@@ -146,8 +147,8 @@ bool TYtProviderContext::IsJoinApplicable(
 TOptimizerStatistics TYtProviderContext::ComputeJoinStats(
     const TOptimizerStatistics& leftStats,
     const TOptimizerStatistics& rightStats,
-    const TVector<TString>& leftJoinKeys,
-    const TVector<TString>& rightJoinKeys,
+    const TVector<NDq::TJoinColumn>& leftJoinKeys,
+    const TVector<NDq::TJoinColumn>& rightJoinKeys,
     EJoinAlgoType joinAlgo,
     EJoinKind /*joinKind*/,
     TCardinalityHints::TCardinalityHint* /*maybeHint*/) const {
@@ -180,8 +181,8 @@ TOptimizerStatistics TYtProviderContext::ComputeJoinStats(
     double rightReadBytes = rightStats.ByteSize;
 
     if (joinAlgo == EJoinAlgoType::LookupJoin) {
-        auto leftJoinUniques = FindMaxUniqueVals(*leftSpecific, TVector<TString>{leftJoinKeys[0]});
-        auto rightJoinUniques = FindMaxUniqueVals(*rightSpecific, TVector<TString>{rightJoinKeys[0]});
+        auto leftJoinUniques = FindMaxUniqueVals(*leftSpecific, TVector<NDq::TJoinColumn>{leftJoinKeys[0]});
+        auto rightJoinUniques = FindMaxUniqueVals(*rightSpecific, TVector<NDq::TJoinColumn>{rightJoinKeys[0]});
         if (leftJoinUniques && rightJoinUniques && *rightJoinUniques < *leftJoinUniques) {
             leftReadBytes *= *rightJoinUniques / *leftJoinUniques;
         }

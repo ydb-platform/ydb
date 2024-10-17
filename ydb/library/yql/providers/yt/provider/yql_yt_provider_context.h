@@ -44,8 +44,8 @@ public:
     virtual TOptimizerStatistics ComputeJoinStats(
         const TOptimizerStatistics& leftStats,
         const TOptimizerStatistics& rightStats,
-        const TVector<TString>& leftJoinKeys,
-        const TVector<TString>& rightJoinKeys,
+        const TVector<NDq::TJoinColumn>& leftJoinKeys,
+        const TVector<NDq::TJoinColumn>& rightJoinKeys,
         EJoinAlgoType joinAlgo,
         EJoinKind joinKind,
         TCardinalityHints::TCardinalityHint* maybeHint = nullptr) const override;
@@ -53,14 +53,13 @@ public:
     bool IsJoinApplicable(
         const std::shared_ptr<IBaseOptimizerNode>& leftStats,
         const std::shared_ptr<IBaseOptimizerNode>& rightStats,
-        const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
-        const TVector<TString>& leftJoinKeys,
-        const TVector<TString>& rightJoinKeys,
+        const TVector<NDq::TJoinColumn>& leftJoinKeys,
+        const TVector<NDq::TJoinColumn>& rightJoinKeys,
         EJoinAlgoType joinAlgo,
         EJoinKind joinKind) override;
 
 private:
-    bool IsLookupJoinApplicable(const TOptimizerStatistics& table, const TOptimizerStatistics& lookupTable, const TVector<TString>& tableJoinKeys) const;
+    bool IsLookupJoinApplicable(const TOptimizerStatistics& table, const TOptimizerStatistics& lookupTable, const TVector<NDq::TJoinColumn>& tableJoinKeys) const;
 
     bool IsMapJoinApplicable(const TOptimizerStatistics& table) const;
 
@@ -68,11 +67,11 @@ private:
 
     TVector<TYtColumnStatistic> MergeColumnStatistics(const TYtProviderStatistic& leftSpecific, const TYtProviderStatistic& rightSpecific, const TDynBitMap& outputBitmap) const;
 
-    TMaybe<double> FindMaxUniqueVals(const TYtProviderStatistic& specific, const TVector<TString>& columns) const;
+    TMaybe<double> FindMaxUniqueVals(const TYtProviderStatistic& specific, const TVector<NDq::TJoinColumn>& columns) const;
 
-    TMaybe<double> ColumnNumUniqueValues(const TDynBitMap& relMap,  const TString& columnName) const;
+    TMaybe<double> ColumnNumUniqueValues(const TDynBitMap& relMap,  const NDq::TJoinColumn& columnName) const;
 
-    TString DebugStatistic(const TVector<TString>& columns, const TOptimizerStatistics& stat) const;
+    TString DebugStatistic(const TVector<NDq::TJoinColumn>& columns, const TOptimizerStatistics& stat) const;
 
     const TJoinAlgoLimits Limits_;
     TVector<TYtProviderRelInfo> RelInfo_;

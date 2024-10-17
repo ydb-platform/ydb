@@ -8523,6 +8523,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (IsNull(input->Head())) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
         bool isOptional = false;
         const TVariantExprType* variantType;
         if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
@@ -8578,6 +8583,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Y_UNUSED(output);
         if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (IsNull(input->Head())) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
         }
 
         if (!EnsureVariantType(input->Head(), ctx.Expr)) {
@@ -8746,6 +8756,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
             variantType = itemType->Cast<TVariantExprType>();
         }
+        else if (IsNull(input->Head())) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        } 
         else {
             if (!EnsureVariantType(input->Head(), ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;

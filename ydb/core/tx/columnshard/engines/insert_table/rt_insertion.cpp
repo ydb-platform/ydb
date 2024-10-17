@@ -125,7 +125,7 @@ bool TInsertionSummary::EraseCommitted(const TCommittedData& data) {
         return false;
     }
 
-    if (!pathInfo->EraseCommitted(data, VersionCounters)) {
+    if (!pathInfo->EraseCommitted(data)) {
         Counters.Committed.SkipErase(data.BlobSize());
         return false;
     } else {

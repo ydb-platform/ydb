@@ -153,6 +153,7 @@ private:
     mutable TInstant NextActualizations = TInstant::Zero();
 
     NGranule::NPortionsIndex::TPortionsIndex PortionsIndex;
+    std::shared_ptr<TVersionCounters> VersionCounters;
 
     void OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore);
     void OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard);
@@ -330,7 +331,7 @@ public:
     void OnCompactionFailed(const TString& reason);
     void OnCompactionFinished();
 
-    void UpsertPortion(const TPortionInfo& info, TVersionCounters& versionCounters);
+    void UpsertPortion(const TPortionInfo& info);
 
     TString DebugString() const {
         return TStringBuilder() << "(granule:" << GetPathId() << ";"
@@ -341,7 +342,7 @@ public:
             ;
     }
 
-    std::shared_ptr<TPortionInfo> UpsertPortionOnLoad(TPortionInfo&& portion, TVersionCounters& versionCounters);
+    std::shared_ptr<TPortionInfo> UpsertPortionOnLoad(TPortionInfo&& portion);
 
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
         return Portions;
@@ -377,9 +378,9 @@ public:
         return it->second;
     }
 
-    bool ErasePortion(const ui64 portion, TVersionCounters& versionCounters);
+    bool ErasePortion(const ui64 portion);
 
-    explicit TGranuleMeta(const ui64 pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex);
+    explicit TGranuleMeta(const ui64 pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex, const std::shared_ptr<TVersionCounters>& versionCounters);
 
     bool Empty() const noexcept { return Portions.empty(); }
 };

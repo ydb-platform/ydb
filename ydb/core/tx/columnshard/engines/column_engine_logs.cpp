@@ -254,7 +254,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
         for (auto&& [granuleId, pathConstructors] : constructors) {
             auto g = GetGranulePtrVerified(granuleId);
             for (auto&& [portionId, constructor] : pathConstructors) {
-                g->UpsertPortionOnLoad(constructor.Build(false), *VersionCounters);
+                g->UpsertPortionOnLoad(constructor.Build(false));
             }
         }
     }
@@ -506,7 +506,7 @@ void TColumnEngineForLogs::UpsertPortion(const TPortionInfo& portionInfo, const 
         UpdatePortionStats(portionInfo, EStatsUpdateType::ADD);
     }
 
-    GetGranulePtrVerified(portionInfo.GetPathId())->UpsertPortion(portionInfo, *VersionCounters);
+    GetGranulePtrVerified(portionInfo.GetPathId())->UpsertPortion(portionInfo);
 }
 
 bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool updateStats) {
@@ -521,7 +521,7 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
         if (updateStats) {
             UpdatePortionStats(*p, EStatsUpdateType::ERASE);
         }
-        Y_ABORT_UNLESS(spg.ErasePortion(portion, *VersionCounters));
+        Y_ABORT_UNLESS(spg.ErasePortion(portion));
         return true;
     }
 }
@@ -602,7 +602,7 @@ void TColumnEngineForLogs::OnTieringModified(const std::shared_ptr<NColumnShard:
 }
 
 void TColumnEngineForLogs::DoRegisterTable(const ui64 pathId) {
-    std::shared_ptr<TGranuleMeta> g = GranulesStorage->RegisterTable(pathId, SignalCounters.RegisterGranuleDataCounters(), VersionedIndex);
+    std::shared_ptr<TGranuleMeta> g = GranulesStorage->RegisterTable(pathId, SignalCounters.RegisterGranuleDataCounters(), VersionedIndex, VersionCounters);
     if (ActualizationStarted) {
         g->StartActualizationIndex();
         g->RefreshScheme();

@@ -243,7 +243,7 @@ private:
         TMemoryPool valueDataPool(256);
         const auto& rows = GetProtoRequest(Request.get())->Getrows().Getvalue().Getitems();
 
-        if (AllRows.empty()) {
+        if (rows.empty()) {
             errorMessage = "No rows to upload";
             return false;
         }

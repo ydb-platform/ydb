@@ -217,7 +217,9 @@ private: //IDqComputeActorAsyncInput
                 bool nullsInKey = false;
                 for (size_t i = 0; i != LookupInputIndexes.size(); ++i) {
                     keyItems[i] = inputRowItems[LookupInputIndexes[i]];
-                    nullsInKey |= !keyItems[i];
+                    if (!keyItems[i]) {
+                        nullsInKey = true;
+                    }
                 }
                 for (size_t i = 0; i != OtherInputIndexes.size(); ++i) {
                     otherItems[i] = inputRowItems[OtherInputIndexes[i]];

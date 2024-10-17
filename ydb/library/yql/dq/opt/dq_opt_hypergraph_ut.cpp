@@ -423,6 +423,22 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
         }
     }
 
+    Y_UNIT_TEST(ManyCondsBetweenJoinForTransitiveClosure) {
+        auto join = Join(Join("A", "B", "A.PUDGE=B.PUDGE,A.DOTA=B.DOTA"), "C", "A.PUDGE=C.PUDGE,A.DOTA=C.DOTA");
+
+        auto graph = MakeJoinHypergraph<TNodeSet64>(join);
+        Cout << graph.String() << Endl;
+
+        auto B = graph.GetNodesByRelNames({"B"});
+        auto C = graph.GetNodesByRelNames({"C"});
+        UNIT_ASSERT(graph.FindEdgeBetween(B, C));
+
+        {
+            auto optimizedJoin = Enumerate(join, TOptimizerHints::Parse("Rows(B C # 0)"));
+            UNIT_ASSERT(HaveSameConditionCount(optimizedJoin, join));
+        }
+    }
+
     auto MakeClique(size_t size) {
         std::shared_ptr<IBaseOptimizerNode> root = Join("R0", "R1", "R0.id=R1.id");
 

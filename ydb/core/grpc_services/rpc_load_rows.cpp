@@ -278,7 +278,7 @@ private:
 
     bool ExtractBatch(TString& errorMessage) override {
         if (AllRows.empty()) {
-            errorMessage = "Empty rows list";
+            errorMessage = "No rows to upload";
             return false;
         }
         Batch = RowsToBatch(AllRows, errorMessage);

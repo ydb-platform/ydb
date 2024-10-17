@@ -309,7 +309,7 @@ message TTableServiceConfig {
 
     optional bool EnableImplicitQueryParameterTypes = 66 [ default = false ];
 
-    optional string EnableSpillingNodes = 67 [ default = "" ];
+    optional string EnableSpillingNodes = 67 [ default = "None" ];
 
     message TComputeSchedulerSettings {
         optional uint64 AdvanceTimeIntervalUsec = 1 [default = 50000];

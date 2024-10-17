@@ -283,7 +283,6 @@ private:
     }
 
     bool ExtractBatch(TString& errorMessage) override {
-        Y_ABORT_UNLESS(!AllRows.empty());
         Batch = RowsToBatch(AllRows, errorMessage);
         return Batch.get();
     }

@@ -33,7 +33,6 @@ SYSTEM=${YDB_INSTALL_TEST_SYSTEM:-$(uname -s)} # $(uname -o) is not supported on
 MACHINE=${YDB_INSTALL_TEST_MACHINE:-$(uname -m)}
 
 GOOS=""
-GOARCH=""
 YDB_BIN="ydb"
 SHELL_NAME=$(basename "${SHELL}")
 
@@ -53,19 +52,6 @@ case ${SYSTEM} in
         ;;
      *)
         printf "'%s' system is not supported yet, or something is going wrong.\\n" "${SYSTEM}", "${CONTACT_SUPPORT_MESSAGE}"
-        exit 1
-          ;;
-esac
-
-case ${MACHINE} in
-    x86_64 | amd64 | i686-64)
-        GOARCH="amd64"
-        ;;
-    arm64)
-        GOARCH="arm64"
-        ;;
-     *)
-        printf "'%s' machines are not supported yet, or something is going wrong.\\n%s" "${MACHINE}" "${CONTACT_SUPPORT_MESSAGE}"
         exit 1
           ;;
 esac
@@ -153,7 +139,7 @@ trap cleanup EXIT
 
 # Download and show progress.
 TMP_YDB="${TMP_INSTALL_PATH}/${YDB_BIN}"
-curl_with_retry "${YDB_STORAGE_URL}/release/${YDB_VERSION}/${GOOS}/${GOARCH}/${YDB_BIN}" -o "${TMP_YDB}"
+curl_with_retry "${YDB_STORAGE_URL}/release/${YDB_VERSION}/${GOOS}/amd64/${YDB_BIN}" -o "${TMP_YDB}"
 
 chmod +x "${TMP_YDB}"
 # Check that all is ok, and print full version to stdout.

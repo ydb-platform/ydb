@@ -1,0 +1,16 @@
+    YT-18818: Disable GC_DEBUG in relwithdebinfo mode
+
+    REVIEW: 3716232
+--- contrib/tools/python3/Modules/gcmodule.c	(11f41021041cc1f16e346fd25bc37037b47700ea)
++++ contrib/tools/python3/Modules/gcmodule.c	(32de4cb7380e0b1efe00e6abf514e690933e781c)
+@@ -41,7 +41,9 @@ module gc
+ 
+ 
+ #ifdef Py_DEBUG
+-#  define GC_DEBUG
++#  ifndef GC_NDEBUG
++#    define GC_DEBUG
++#  endif
+ #endif
+ 
+ #define GC_NEXT _PyGCHead_NEXT

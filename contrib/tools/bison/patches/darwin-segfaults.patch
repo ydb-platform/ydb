@@ -1,0 +1,22 @@
+--- contrib/tools/bison/lib/obstack.h	(ef06a7dccff68bd15f669606131c541d158d4b1a)
++++ contrib/tools/bison/lib/obstack.h	(1efd2cc9274f1f5a222e759093d27c8d38825028)
+@@ -511,4 +511,8 @@ __extension__                                                           \
+ }       /* C++ */
+ #endif
+ 
++#if !defined(obstack_printf)
++int obstack_printf(struct obstack *obs, const char *format, ...);
++#endif
++
+ #endif /* _OBSTACK_H */
+--- contrib/tools/bison/lib/obstack_printf.c	(ef06a7dccff68bd15f669606131c541d158d4b1a)
++++ contrib/tools/bison/lib/obstack_printf.c	(1efd2cc9274f1f5a222e759093d27c8d38825028)
+@@ -26,6 +26,8 @@
+ #include <stdarg.h>
+ #include <stdlib.h>
+ 
++int obstack_vprintf(struct obstack *obs, const char *format, va_list args);
++
+ /* Grow an obstack with formatted output.  Return the number of bytes
+    added to OBS.  No trailing nul byte is added, and the object should
+    be closed with obstack_finish before use.

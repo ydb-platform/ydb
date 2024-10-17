@@ -454,7 +454,7 @@ std::shared_ptr<arrow::RecordBatch> VectorToBatch(const std::vector<struct TData
     TString err;
     NArrow::TArrowBatchBuilder batchBuilder;
     batchBuilder.Start(TDataRow::MakeYdbSchema(), 0, 0, err);
-    UNIT_ASSERT_C(err.Empty(), err);
+    UNIT_ASSERT_C(err.empty(), err);
 
     for (const TDataRow& row : rows) {
         NKikimr::TDbTupleRef key;

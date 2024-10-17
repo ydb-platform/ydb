@@ -1,0 +1,21 @@
+--- contrib/python/hyperlink/py2/hyperlink/hypothesis.py	(index)
++++ contrib/python/hyperlink/py2/hyperlink/hypothesis.py	(working tree)
+@@ -13,6 +13,8 @@ except ImportError:
+ 
+     __all__ = ()  # type: Tuple[str, ...]
+ else:
++    import io
++    import pkgutil
+     from csv import reader as csv_reader
+     from os.path import dirname, join
+     from string import ascii_letters, digits
+@@ -76,7 +78,8 @@ else:
+             dataFileName = join(
+                 dirname(__file__), "idna-tables-properties.csv.gz"
+             )
+-            with open_gzip(dataFileName) as dataFile:
++            data = io.BytesIO(pkgutil.get_data(__name__, "idna-tables-properties.csv.gz"))
++            with open_gzip(data) as dataFile:
+                 reader = csv_reader(
+                     (line.decode("utf-8") for line in dataFile),
+                     delimiter=",",

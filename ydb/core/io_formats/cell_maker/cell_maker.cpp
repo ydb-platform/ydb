@@ -54,9 +54,9 @@ namespace {
         };
 
         int processed = 0;
-        result = Singleton<TCvt>()->StringToDouble(value.Data(), value.Size(), &processed);
+        result = Singleton<TCvt>()->StringToDouble(value.data(), value.size(), &processed);
 
-        return static_cast<size_t>(processed) == value.Size();
+        return static_cast<size_t>(processed) == value.size();
     }
 
     template <>

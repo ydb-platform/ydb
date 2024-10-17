@@ -16,7 +16,7 @@ namespace NTable {
 
 using namespace NTabletFlatScheme;
 
-using NKikimrSchemeOp::ECompactionStrategy;
+using NKikimrCompaction::ECompactionStrategy;
 
 using TCompactionPolicy = NLocalDb::TCompactionPolicy;
 
@@ -128,7 +128,7 @@ public:
         TDuration LogFlushPeriod = TDuration::MicroSeconds(500);
         ui32 LimitInFlyTx = 0;
         TString ResourceProfile = "default";
-        ECompactionStrategy DefaultCompactionStrategy = NKikimrSchemeOp::CompactionStrategyGenerational;
+        ECompactionStrategy DefaultCompactionStrategy = NKikimrCompaction::CompactionStrategyGenerational;
     };
 
     const TTableInfo* GetTableInfo(ui32 id) const { return const_cast<TScheme*>(this)->GetTableInfo(id); }
@@ -172,11 +172,11 @@ public:
     {
         if (auto *table = GetTableInfo(id)) {
             auto strategy = table->CompactionPolicy->CompactionStrategy;
-            if (strategy != NKikimrSchemeOp::CompactionStrategyUnset) {
-                if (strategy == NKikimrSchemeOp::CompactionStrategySharded) {
+            if (strategy != NKikimrCompaction::CompactionStrategyUnset) {
+                if (strategy == NKikimrCompaction::CompactionStrategySharded) {
                     // Sharded strategy doesn't exist anymore
                     // Use the safe generational strategy instead
-                    strategy = NKikimrSchemeOp::CompactionStrategyGenerational;
+                    strategy = NKikimrCompaction::CompactionStrategyGenerational;
                 }
                 return strategy;
             }

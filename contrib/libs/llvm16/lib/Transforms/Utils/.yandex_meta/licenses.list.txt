@@ -1,0 +1,35 @@
+====================Apache-2.0 WITH LLVM-exception====================
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+
+
+====================Apache-2.0 WITH LLVM-exception====================
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+
+====================COPYRIGHT====================
+      Type *SizeTy = M.getDataLayout().getIntPtrType(C);
+      Type *SizePtrTy = SizeTy->getPointerTo();
+      GlobalVariable *GV = new GlobalVariable(M, SizeTy, /*isConstant=*/false,
+
+
+====================COPYRIGHT====================
+  PointerType *VoidStar = Type::getInt8PtrTy(C);
+  Type *AtExitFuncArgs[] = {VoidStar};
+  FunctionType *AtExitFuncTy =
+      FunctionType::get(Type::getVoidTy(C), AtExitFuncArgs,
+                        /*isVarArg=*/false);
+
+
+====================COPYRIGHT====================
+  Type *DsoHandleTy = Type::getInt8Ty(C);
+  Constant *DsoHandle = M.getOrInsertGlobal("__dso_handle", DsoHandleTy, [&] {
+    auto *GV = new GlobalVariable(M, DsoHandleTy, /*isConstant=*/true,
+
+
+====================COPYRIGHT====================
+  if (C) {
+    ValueLatticeElement CV;
+    CV.markConstant(C);
+    mergeInValue(&I, CV);
+    return;

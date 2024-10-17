@@ -23,7 +23,7 @@ void TKafkaFindCoordinatorActor::Bootstrap(const NActors::TActorContext& ctx) {
         return;
     }
 
-    bool withProxy = Context->Config.HasProxy() && !Context->Config.GetProxy().GetHostname().Empty();
+    bool withProxy = Context->Config.HasProxy() && !Context->Config.GetProxy().GetHostname().empty();
     if (withProxy) {
         SendResponseOkAndDie(Context->Config.GetProxy().GetHostname(), Context->Config.GetProxy().GetPort(), NKafka::ProxyNodeId, ctx);
         return;

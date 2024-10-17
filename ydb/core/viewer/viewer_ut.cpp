@@ -1935,4 +1935,103 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_EQUAL_C(rows.size(), ROWS_LIMIT, response);
     }
 
+    Y_UNIT_TEST(Plan2SvgOK) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetMonitoringPortOffset(monPort, true);
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+
+        TString tinyPlan = R"json({
+            "Plan" : {
+                "Node Type" : "Query",
+                "PlanNodeType" : "Query",
+                "Plans" : [
+                    {
+                        "Node Type" : "ResultSet",
+                        "PlanNodeType" : "ResultSet",
+                        "Plans" : [
+                            {
+                                "Node Type" : "Limit"
+                            }
+                        ]
+                    }
+                ]
+            }
+        })json";
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = "test_ydb_token";
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/plan2svg", tinyPlan, &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
+        UNIT_ASSERT_C(response.StartsWith("<svg"), response);
+    }
+
+    Y_UNIT_TEST(Plan2SvgBad) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetMonitoringPortOffset(monPort, true);
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+
+        TString brokenPlan = R"json({
+            "Plan" : {
+                "Node Type" : "Query",
+                "PlanNodeType" : "Query",
+                "Plans" : [
+                    {
+                        "Node Type" : "ResultSet",
+                        "PlanNodeType" : "ResultSet",
+                        "Plans" : [
+                            {
+                                "Node Type" : "Limit",
+                                "Plans" : [
+                                    {
+                                        "Node Type" : "Merge",
+                                        "CTE Name": "TableFullScan_15",
+                                        "PlanNodeType" : "Connection"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        })json";
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = "test_ydb_token";
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/plan2svg", brokenPlan, &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_BAD_REQUEST, statusCode << ": " << response);
+        UNIT_ASSERT_C(response.StartsWith("Conversion error"), response);
+    }
+
 }

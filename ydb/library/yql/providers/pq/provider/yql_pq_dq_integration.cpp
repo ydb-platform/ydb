@@ -147,6 +147,7 @@ public:
 
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TDqPqTopicSource>()
+                    .World(pqReadTopic.World())
                     .Topic(pqReadTopic.Topic())
                     .Columns(std::move(columnNames))
                     .Settings(BuildTopicReadSettings(clusterName, dqSettings, read->Pos(), format, ctx))
@@ -263,15 +264,17 @@ public:
                 if (auto predicate = topicSource.FilterPredicate(); !NYql::IsEmptyFilterPredicate(predicate)) {
                     TStringBuilder err;
                     if (!NYql::SerializeFilterPredicate(predicate, &predicateProto, err)) {
-                        ythrow yexception() << "Failed to serialize filter predicate for source: " << err;
+                        ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
+                        predicateProto.Clear();
                     }
                 }
 
-                //sharedReading = true;
-                sharedReading = sharedReading && (format == "json_each_row");
+                sharedReading = sharedReading && (format == "json_each_row" || format == "raw");
                 TString predicateSql = NYql::FormatWhere(predicateProto);
                 if (sharedReading) {
-                    srcDesc.SetPredicate(predicateSql);
+                    if (format == "json_each_row") {
+                        srcDesc.SetPredicate(predicateSql);
+                    }
                     srcDesc.SetSharedReading(true);
                 }
                 protoSettings.PackFrom(srcDesc);

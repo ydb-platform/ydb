@@ -26,7 +26,7 @@ PEERDIR(
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/proto
     ydb/library/yql/providers/pq/provider
-    ydb/library/yql/public/purecalc/common
+    ydb/core/fq/libs/row_dispatcher/purecalc_no_pg_wrapper
     ydb/public/sdk/cpp/client/ydb_scheme
     ydb/public/sdk/cpp/client/ydb_table
 )
@@ -34,6 +34,8 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE(purecalc_no_pg_wrapper)
 
 IF(NOT EXPORT_CMAKE)
     RECURSE_FOR_TESTS(

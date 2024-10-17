@@ -35,6 +35,10 @@ public:
     inline constexpr ui32 Size() const noexcept { return Size_; }
     inline constexpr bool Empty() const noexcept { return Size_ == 0; }
 
+    inline constexpr TDataType data() const noexcept { return Data_; }
+    inline constexpr ui32 size() const noexcept { return Size_; }
+    inline constexpr bool empty() const noexcept { return Size_ == 0; }
+
 protected:
     TDataType Data_ = nullptr;
     ui32 Size_ = 0U;

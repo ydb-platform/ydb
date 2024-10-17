@@ -3973,9 +3973,9 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus FromBytesWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus FromBytesWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
-        if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -3993,25 +3993,33 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto dataTypeName = input->Child(1)->Content();
-        auto slot = NKikimr::NUdf::FindDataSlot(dataTypeName);
-        if (!slot) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), TStringBuilder() << "Unknown datatype: " << dataTypeName));
-            return IGraphTransformer::TStatus::Error;
+        auto targetDataTypeName = input->Child(1)->Content();
+        const TDataExprType* targetDataType = nullptr;
+        auto targetSlot = NKikimr::NUdf::FindDataSlot(targetDataTypeName);
+        if (!targetSlot) {
+            auto typeExpr = ctx.Expr.Builder(input->Child(1)->Pos()).Callable("ParseType")
+                    .Add(0, input->ChildPtr(1))
+                .Seal().Build();
+            auto parseTypeResult = ParseTypeWrapper(typeExpr, typeExpr, ctx);
+            if (parseTypeResult == IGraphTransformer::TStatus::Error) {
+                return parseTypeResult;
+            }
+
+            if (!EnsureType(*typeExpr, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            auto type = typeExpr->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            if (!EnsureDataType(input->Child(1)->Pos(), *type, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            targetDataType = type->Cast<TDataExprType>();
+            targetSlot = targetDataType->GetSlot();
         }
 
-        const bool isDecimal = IsDataTypeDecimal(*slot);
-        if (!EnsureArgsCount(*input, isDecimal ? 4 : 2, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        auto dataTypeAnn = isDecimal ?
-            ctx.Expr.MakeType<TDataExprParamsType>(*slot, input->Child(2)->Content(), input->Child(3)->Content()):
-            ctx.Expr.MakeType<TDataExprType>(*slot);
+        auto dataTypeAnn = targetDataType ? targetDataType : ctx.Expr.MakeType<TDataExprType>(*targetSlot);
         input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(dataTypeAnn));
-        if (isDecimal && !input->GetTypeAnn()->Cast<TDataExprParamsType>()->Validate(input->Pos(), ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -5441,9 +5449,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     }
 
     IGraphTransformer::TStatus ToBytesWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (IsNull(input->Head())) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
         }
 
         bool isOptional;
@@ -12209,7 +12221,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["SessionWindowTraits"] = &SessionWindowTraitsWrapper;
         Functions["FromString"] = &FromStringWrapper;
         Functions["StrictFromString"] = &StrictFromStringWrapper;
-        Functions["FromBytes"] = &FromBytesWrapper;
         Functions["Convert"] = &ConvertWrapper;
         Functions["AlterTo"] = &AlterToWrapper;
         Functions["ToIntegral"] = &ToIntegralWrapper;
@@ -12725,6 +12736,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["SafeCast"] = &CastWrapper<false>;
         ExtFunctions["StrictCast"] = &CastWrapper<true>;
         ExtFunctions["Version"] = &VersionWrapper;
+        ExtFunctions["FromBytes"] = &FromBytesWrapper;
 
         ExtFunctions["Aggregate"] = &AggregateWrapper;
         ExtFunctions["AggregateCombine"] = &AggregateWrapper;

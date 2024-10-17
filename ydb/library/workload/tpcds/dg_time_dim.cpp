@@ -12,12 +12,14 @@ TTpcDSGeneratorTimeDim::TTpcDSGeneratorTimeDim(const TTpcdsWorkloadDataInitializ
     : TBulkDataGenerator(owner, TIME)
 {}
 
-void TTpcDSGeneratorTimeDim::GenerateRows(TContexts& ctxs) {
+void TTpcDSGeneratorTimeDim::GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) {
     TVector<W_TIME_TBL> timeList(ctxs.front().GetCount());
     for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
         mk_w_time(&timeList[i], ctxs.front().GetStart() + i);
         tpcds_row_stop(TableNum);
     }
+    g.Release();
+
     TCsvItemWriter<W_TIME_TBL> writer(ctxs.front().GetCsv().Out);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writer, t_time_sk);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, t_time_id);

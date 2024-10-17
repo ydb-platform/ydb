@@ -649,7 +649,7 @@ public:
     {
         auto* resp = CreateResponse();
         resp->set_status(status);
-        if (!errorMsg.Empty() || issues) {
+        if (!errorMsg.empty() || issues) {
             const NYql::TIssue& issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, errorMsg);
             auto* protoIssue = resp->add_issues();
             NYql::IssueToMessage(issue, protoIssue);

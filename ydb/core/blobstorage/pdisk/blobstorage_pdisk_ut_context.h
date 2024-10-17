@@ -11,19 +11,15 @@ namespace NKikimr {
 class TTestContext {
 public:
     ui64 PDiskGuid = 0;
-    const char* Dir = nullptr;
     TIntrusivePtr<NPDisk::TSectorMap> SectorMap;
     THolder<TTempDir> TempDir;
+    TString Path;
 
     using EDiskMode = NPDisk::NSectorMap::EDiskMode;
-    TTestContext(bool makeTempDir, bool useSectorMap, EDiskMode diskMode = EDiskMode::DM_NONE, ui64 sectorMapSize = 0) {
-        if (makeTempDir) {
-            TempDir.Reset(new TTempDir);
-            Dir = TempDir->Name().c_str();
-        }
-        if (useSectorMap) {
-            SectorMap = new NPDisk::TSectorMap(sectorMapSize, diskMode);
-        }
+    TTestContext(bool useSectorMap, EDiskMode diskMode = EDiskMode::DM_NONE, ui64 diskSize = 0);
+
+    const char *GetDir() {
+        return TempDir ? TempDir->Name().c_str() : nullptr;
     }
 
     bool IsFormatedDiskExpected() {
@@ -32,8 +28,8 @@ public:
                 return true;
             }
         }
-        if (Dir) {
-            return NFs::Exists(Dir);
+        if (TempDir) {
+            return NFs::Exists(TempDir->Name());
         }
         return false;
     }

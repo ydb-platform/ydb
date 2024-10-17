@@ -1,6 +1,7 @@
 #include "service.h"
 #include "http_request.h"
 
+#include <ydb/core/statistics/common.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/database/database.h>
 
@@ -15,6 +16,7 @@
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/protos/statistics.pb.h>
 #include <ydb/core/protos/data_events.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -22,6 +24,7 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
+#include <util/datetime/cputimer.h>
 
 namespace NKikimr {
 namespace NStat {
@@ -103,8 +106,7 @@ struct TAggregationStatistics {
                     ? &Nodes[i] : nullptr;
             }
         }
-        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Child node with the specified id was not found");
+        SA_LOG_E("Child node with the specified id was not found");
         return nullptr;
     }
 };
@@ -211,15 +213,13 @@ public:
             hFunc(NMon::TEvHttpInfoRes, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                LOG_CRIT_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                    "NStat::TStatService: unexpected event# " << ev->GetTypeRewrite() << " " << ev->ToString());
+                SA_LOG_CRIT("NStat::TStatService: unexpected event# " << ev->GetTypeRewrite() << " " << ev->ToString());
         }
     }
 
 private:
     void HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
-        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Subscribed for config changes on node " << SelfId().NodeId());
+        SA_LOG_I("Subscribed for config changes on node " << SelfId().NodeId());
     }
 
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
@@ -239,8 +239,7 @@ private:
 
     bool IsNotCurrentRound(ui64 round) {
         if (round != AggregationStatistics.Round) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Event round " << round << " is different from the current " << AggregationStatistics.Round);
+            SA_LOG_D("Event round " << round << " is different from the current " << AggregationStatistics.Round);
             return true;
         }
         return false;
@@ -286,7 +285,7 @@ private:
 
             for (auto& statistic : column.GetStatistics()) {
                 if (statistic.GetType() == NKikimr::NStat::COUNT_MIN_SKETCH) {
-                    auto data = statistic.GetData().Data();
+                    auto data = statistic.GetData().data();
                     auto sketch = reinterpret_cast<const TCountMinSketch*>(data);
                     auto& current = AggregationStatistics.CountMinSketches[tag];
 
@@ -305,8 +304,7 @@ private:
         const auto& record = ev->Get()->Record;
         const auto tabletId = record.GetShardTabletId();
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Received TEvStatisticsResponse TabletId: " << tabletId);
+        SA_LOG_D("Received TEvStatisticsResponse TabletId: " << tabletId);
 
         const auto round = ev->Cookie;
         if (IsNotCurrentRound(round)) {
@@ -334,8 +332,7 @@ private:
         const auto round = record.GetRound();
 
         if (IsNotCurrentRound(round)) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "Skip TEvAggregateKeepAliveAck");
+            SA_LOG_D("Skip TEvAggregateKeepAliveAck");
             return;
         }
 
@@ -345,8 +342,7 @@ private:
     void Handle(TEvPrivate::TEvKeepAliveAckTimeout::TPtr& ev) {
         const auto round = ev->Get()->Round;
         if (IsNotCurrentRound(round)) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "Skip TEvKeepAliveAckTimeout");
+            SA_LOG_D("Skip TEvKeepAliveAckTimeout");
             return;
         }
 
@@ -361,8 +357,7 @@ private:
 
         // the parent node is unavailable
         // invalidate the subtree with the root in the current node
-        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Parent node " << AggregationStatistics.ParentNode.NodeId() << " is unavailable");
+        SA_LOG_I("Parent node " << AggregationStatistics.ParentNode.NodeId() << " is unavailable");
 
 
         ResetAggregationStatistics();
@@ -371,8 +366,7 @@ private:
     void Handle(TEvPrivate::TEvDispatchKeepAlive::TPtr& ev) {
         const auto round = ev->Get()->Round;
         if (IsNotCurrentRound(round)) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "Skip TEvDispatchKeepAlive");
+            SA_LOG_D("Skip TEvDispatchKeepAlive");
             return;
         }
 
@@ -386,8 +380,7 @@ private:
         const auto round = ev->Get()->Round;
 
         if (IsNotCurrentRound(round)) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "Skip TEvKeepAliveTimeout");
+            SA_LOG_D("Skip TEvKeepAliveTimeout");
             return;
         }
 
@@ -395,8 +388,7 @@ private:
         auto node = AggregationStatistics.GetProcessingChildNode(nodeId);
 
         if (node == nullptr) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "Skip TEvKeepAliveTimeout");
+            SA_LOG_D("Skip TEvKeepAliveTimeout");
             return;
         }
 
@@ -411,8 +403,7 @@ private:
 
         node->Status = TAggregationStatistics::TNode::EStatus::Unavailable;
         ++AggregationStatistics.PprocessedNodes;
-        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Node " << nodeId << " is unavailable");
+        SA_LOG_I("Node " << nodeId << " is unavailable");
 
         if (AggregationStatistics.IsCompleted()) {
             OnAggregateStatisticsFinished();
@@ -424,8 +415,7 @@ private:
         const auto round = record.GetRound();
 
         if (IsNotCurrentRound(round)) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "Skip TEvAggregateKeepAlive");
+            SA_LOG_D("Skip TEvAggregateKeepAlive");
             return;
         }
 
@@ -433,8 +423,7 @@ private:
         auto node = AggregationStatistics.GetProcessingChildNode(nodeId);
 
         if (node == nullptr) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "Skip TEvAggregateKeepAlive");
+            SA_LOG_D( "Skip TEvAggregateKeepAlive");
             return;
         }
 
@@ -446,15 +435,13 @@ private:
     }
 
     void Handle(TEvStatistics::TEvAggregateStatisticsResponse::TPtr& ev) {
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Received TEvAggregateStatisticsResponse SenderNodeId: " << ev->Sender.NodeId());
+        SA_LOG_D("Received TEvAggregateStatisticsResponse SenderNodeId: " << ev->Sender.NodeId());
 
         const auto& record = ev->Get()->Record;
         const auto round = record.GetRound();
 
         if (IsNotCurrentRound(round)) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "Skip TEvAggregateStatisticsResponse");
+            SA_LOG_D("Skip TEvAggregateStatisticsResponse");
             return;
         }
 
@@ -462,8 +449,7 @@ private:
         auto node = AggregationStatistics.GetProcessingChildNode(nodeId);
 
         if (node == nullptr) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "Skip TEvAggregateStatisticsResponse");
+            SA_LOG_D("Skip TEvAggregateStatisticsResponse");
             return;
         }
 
@@ -503,8 +489,7 @@ private:
     }
 
     void SendAggregateStatisticsResponse() {
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Send aggregate statistics response to node: " << AggregationStatistics.ParentNode.NodeId());
+        SA_LOG_D("Send aggregate statistics response to node: " << AggregationStatistics.ParentNode.NodeId());
 
         auto response = std::make_unique<TEvStatistics::TEvAggregateStatisticsResponse>();
         auto& record = response->Record;
@@ -523,7 +508,7 @@ private:
             auto data = it->second.Statistics->AsStringBuf();
             auto statistics = column->AddStatistics();
             statistics->SetType(NKikimr::NStat::COUNT_MIN_SKETCH);
-            statistics->SetData(data.Data(), data.Size());
+            statistics->SetData(data.data(), data.size());
         }
 
         auto failedTablets = record.MutableFailedTablets();
@@ -589,8 +574,7 @@ private:
         const auto& record = ev->Get()->Record;
         const auto round = record.GetRound();
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Received TEvAggregateStatistics from node: " << ev->Sender.NodeId()
+        SA_LOG_D("Received TEvAggregateStatistics from node: " << ev->Sender.NodeId()
             << ", Round: " << round << ", current Round: " << AggregationStatistics.Round);
 
         // reset previous state
@@ -669,8 +653,7 @@ private:
             return;
         }
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Handle TEvStatistics::TEvGetStatistics, request id = " << requestId 
+        SA_LOG_D("Handle TEvStatistics::TEvGetStatistics, request id = " << requestId
             << ", ReplyToActorId = " << request.ReplyToActorId
             << ", StatRequests.size() = " << request.StatRequests.size());
 
@@ -714,8 +697,7 @@ private:
 
         auto cookie = navigate->Cookie;
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult, request id = " << cookie);           
+        SA_LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult, request id = " << cookie);
 
         if (cookie == ResolveSACookie) {
             Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
@@ -731,7 +713,14 @@ private:
                 ConnectToSA();
                 SyncNode();
             } else {
-                ReplyAllFailed();
+                for (auto it = InFlight.begin(); it != InFlight.end();) {
+                    if (EStatType::COUNT_MIN_SKETCH == it->second.StatType) {
+                        ++it;
+                        continue;
+                    }
+                    ReplyFailed(it->first, false);
+                    it = InFlight.erase(it);
+                }
             }
             return;
         }
@@ -837,8 +826,7 @@ private:
     }
 
     void Handle(TEvStatistics::TEvPropagateStatistics::TPtr& ev) {
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "EvPropagateStatistics, node id = " << SelfId().NodeId());
+        SA_LOG_D("EvPropagateStatistics, node id = " << SelfId().NodeId());
 
         Send(ev->Sender, new TEvStatistics::TEvPropagateStatisticsResponse);
 
@@ -922,21 +910,18 @@ private:
     void Handle(TEvPrivate::TEvStatisticsRequestTimeout::TPtr& ev) {
         const auto round = ev->Get()->Round;
         if (IsNotCurrentRound(round)) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "Skip TEvStatisticsRequestTimeout");
+            SA_LOG_D("Skip TEvStatisticsRequestTimeout");
             return;
         }
 
         const auto tabletId = ev->Get()->TabletId;
         auto tabletPipe = AggregationStatistics.LocalTablets.TabletsPipes.find(tabletId);
         if (tabletPipe == AggregationStatistics.LocalTablets.TabletsPipes.end()) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "Tablet " << tabletId << " has already been processed");
+            SA_LOG_D("Tablet " << tabletId << " has already been processed");
             return;
         }
 
-        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "No result was received from the tablet " << tabletId);
+        SA_LOG_E("No result was received from the tablet " << tabletId);
 
         auto clientId = tabletPipe->second;
         OnTabletError(tabletId);
@@ -961,15 +946,13 @@ private:
         NTabletPipe::SendData(SelfId(), clientId, request.release(), round);
         Schedule(Settings.StatisticsRequestTimeout, new TEvPrivate::TEvStatisticsRequestTimeout(round, tabletId));
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "TEvStatisticsRequest send"
+        SA_LOG_D("TEvStatisticsRequest send"
             << ", client id = " << clientId
             << ", path = " << *path);
     }
 
     void OnTabletError(ui64 tabletId) {
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Tablet " << tabletId << " is not local.");
+        SA_LOG_D("Tablet " << tabletId << " is not local.");
 
         const auto error = NKikimrStat::TEvAggregateStatisticsResponse::TYPE_NON_LOCAL_TABLET;
         AggregationStatistics.FailedTablets.emplace_back(tabletId, 0, error);
@@ -987,8 +970,7 @@ private:
         const auto& clientId = ev->Get()->ClientId;
         const auto& tabletId = ev->Get()->TabletId;
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "EvClientConnected"
+        SA_LOG_D("EvClientConnected"
             << ", node id = " << ev->Get()->ClientId.NodeId()
             << ", client id = " << clientId
             << ", server id = " << ev->Get()->ServerId
@@ -1017,16 +999,14 @@ private:
             return;
         }
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Skip EvClientConnected");
+        SA_LOG_D("Skip EvClientConnected");
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
         const auto& clientId = ev->Get()->ClientId;
         const auto& tabletId = ev->Get()->TabletId;
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "EvClientDestroyed"
+        SA_LOG_D("EvClientDestroyed"
             << ", node id = " << ev->Get()->ClientId.NodeId()
             << ", client id = " << clientId
             << ", server id = " << ev->Get()->ServerId
@@ -1048,8 +1028,7 @@ private:
             return;
         }
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Skip EvClientDestroyed");
+        SA_LOG_D("Skip EvClientDestroyed");
     }
 
     void Handle(TEvStatistics::TEvStatisticsIsDisabled::TPtr&) {
@@ -1059,13 +1038,19 @@ private:
 
     void Handle(TEvStatistics::TEvLoadStatisticsQueryResponse::TPtr& ev) {
         ui64 cookie = ev->Get()->Cookie;
-
         auto itLoadQuery = LoadQueriesInFlight.find(cookie);
         Y_ABORT_UNLESS(itLoadQuery != LoadQueriesInFlight.end());
         auto [requestId, requestIndex] = itLoadQuery->second;
 
+        SA_LOG_D("TEvLoadStatisticsQueryResponse, request id = " << requestId);
+
         auto itRequest = InFlight.find(requestId);
-        Y_ABORT_UNLESS(itRequest != InFlight.end());
+        if (InFlight.end() == itRequest) {
+            SA_LOG_E("TEvLoadStatisticsQueryResponse, request id = " << requestId
+                << ". Request not found in InFlight");
+            return;
+        }
+
         auto& request = itRequest->second;
 
         auto& response = request.StatResponses[requestIndex];
@@ -1075,7 +1060,7 @@ private:
             response.Success = true;
             auto& data = ev->Get()->Data;
             Y_ABORT_UNLESS(data);
-            response.CountMinSketch.CountMin.reset(TCountMinSketch::FromString(data->Data(), data->Size()));
+            response.CountMinSketch.CountMin.reset(TCountMinSketch::FromString(data->data(), data->size()));
         } else {
             response.Success = false;
         }
@@ -1092,8 +1077,7 @@ private:
     }
 
     void Handle(TEvPrivate::TEvRequestTimeout::TPtr& ev) {
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "EvRequestTimeout"
+        SA_LOG_D("EvRequestTimeout"
             << ", pipe client id = " << ev->Get()->PipeClientId
             << ", schemeshard count = " << ev->Get()->NeedSchemeShards.size());
 
@@ -1125,8 +1109,7 @@ private:
         NTabletPipe::TClientConfig pipeConfig{.RetryPolicy = policy};
         SAPipeClientId = Register(NTabletPipe::CreateClient(SelfId(), StatisticsAggregatorId, pipeConfig));
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "ConnectToSA(), pipe client id = " << SAPipeClientId);
+        SA_LOG_D("ConnectToSA(), pipe client id = " << SAPipeClientId);
     }
 
     void SyncNode() {
@@ -1155,8 +1138,7 @@ private:
             Schedule(RequestTimeout, timeout.release());
         }
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "SyncNode(), pipe client id = " << SAPipeClientId);
+        SA_LOG_D("SyncNode(), pipe client id = " << SAPipeClientId);
     }
 
     void ReplySuccess(ui64 requestId, bool eraseRequest) {
@@ -1166,8 +1148,7 @@ private:
         }
         auto& request = itRequest->second;
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "ReplySuccess(), request id = " << requestId 
+        SA_LOG_D("ReplySuccess(), request id = " << requestId
             << ", ReplyToActorId = " << request.ReplyToActorId
             << ", StatRequests.size() = " << request.StatRequests.size());
 
@@ -1213,8 +1194,7 @@ private:
         }
         auto& request = itRequest->second;
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "ReplyFailed(), request id = " << requestId);
+        SA_LOG_D("ReplyFailed(), request id = " << requestId);
 
         auto result = std::make_unique<TEvStatistics::TEvGetStatisticsResult>();
         result->Success = false;

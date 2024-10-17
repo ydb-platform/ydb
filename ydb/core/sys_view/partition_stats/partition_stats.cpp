@@ -580,95 +580,95 @@ private:
 
         using TPartitionStatsResult = NKikimrSysView::TPartitionStatsResult;
         using TPartitionStats = NKikimrSysView::TPartitionStats;
-        using TExtractor = std::function<TCell(const TPartitionStatsResult&, const TPartitionStats&)>;
+        using TExtractor = std::function<TCell(const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats&)>;
         using TSchema = Schema::PartitionStats;
 
         struct TExtractorsMap : public THashMap<NTable::TTag, TExtractor> {
             TExtractorsMap() {
-                insert({TSchema::OwnerId::ColumnId, [] (const TPartitionStatsResult& r, const TPartitionStats&) {
-                    return TCell::Make<ui64>(r.GetKey().GetOwnerId());
+                insert({TSchema::OwnerId::ColumnId, [] (const TPartitionStatsResult& shard, const TPartitionStats&, const TPartitionStats&) {
+                    return TCell::Make<ui64>(shard.GetKey().GetOwnerId());
                 }});
-                insert({TSchema::PathId::ColumnId, [] (const TPartitionStatsResult& r, const TPartitionStats&) {
-                    return TCell::Make<ui64>(r.GetKey().GetPathId());
+                insert({TSchema::PathId::ColumnId, [] (const TPartitionStatsResult& shard, const TPartitionStats&, const TPartitionStats&) {
+                    return TCell::Make<ui64>(shard.GetKey().GetPathId());
                 }});
-                insert({TSchema::PartIdx::ColumnId, [] (const TPartitionStatsResult& r, const TPartitionStats&) {
-                    return TCell::Make<ui64>(r.GetKey().GetPartIdx());
+                insert({TSchema::PartIdx::ColumnId, [] (const TPartitionStatsResult& shard, const TPartitionStats&, const TPartitionStats&) {
+                    return TCell::Make<ui64>(shard.GetKey().GetPartIdx());
                 }});
-                insert({TSchema::DataSize::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& s) {
-                    return TCell::Make<ui64>(s.GetDataSize());
+                insert({TSchema::DataSize::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& leaderStats, const TPartitionStats&) {
+                    return TCell::Make<ui64>(leaderStats.GetDataSize());
                 }});
-                insert({TSchema::RowCount::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& s) {
-                    return TCell::Make<ui64>(s.GetRowCount());
+                insert({TSchema::RowCount::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& leaderStats, const TPartitionStats&) {
+                    return TCell::Make<ui64>(leaderStats.GetRowCount());
                 }});
-                insert({TSchema::IndexSize::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& s) {
-                    return TCell::Make<ui64>(s.GetIndexSize());
+                insert({TSchema::IndexSize::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& leaderStats, const TPartitionStats&) {
+                    return TCell::Make<ui64>(leaderStats.GetIndexSize());
                 }});
-                insert({TSchema::CPUCores::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& s) {
-                    return TCell::Make<double>(s.GetCPUCores());
+                insert({TSchema::CPUCores::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return TCell::Make<double>(stats.GetCPUCores());
                 }});
-                insert({TSchema::TabletId::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& s) {
-                    return TCell::Make<ui64>(s.GetTabletId());
+                insert({TSchema::TabletId::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return TCell::Make<ui64>(stats.GetTabletId());
                 }});
-                insert({TSchema::Path::ColumnId, [] (const TPartitionStatsResult& r, const TPartitionStats&) {
-                    if (!r.HasPath()) {
+                insert({TSchema::Path::ColumnId, [] (const TPartitionStatsResult& shard, const TPartitionStats&, const TPartitionStats&) {
+                    if (!shard.HasPath()) {
                         return TCell();
                     }
-                    auto& path = r.GetPath();
+                    auto& path = shard.GetPath();
                     return TCell(path.data(), path.size());
                 }});
-                insert({TSchema::NodeId::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& s) {
-                    return s.HasNodeId() ? TCell::Make<ui32>(s.GetNodeId()) : TCell();
+                insert({TSchema::NodeId::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return stats.HasNodeId() ? TCell::Make<ui32>(stats.GetNodeId()) : TCell();
                 }});
-                insert({TSchema::StartTime::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& s) {
-                    return s.HasStartTime() ? TCell::Make<ui64>(s.GetStartTime() * 1000) : TCell();
+                insert({TSchema::StartTime::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return stats.HasStartTime() ? TCell::Make<ui64>(stats.GetStartTime() * 1000) : TCell();
                 }});
-                insert({TSchema::AccessTime::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& s) {
-                    return s.HasAccessTime() ? TCell::Make<ui64>(s.GetAccessTime() * 1000) : TCell();
+                insert({TSchema::AccessTime::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return stats.HasAccessTime() ? TCell::Make<ui64>(stats.GetAccessTime() * 1000) : TCell();
                 }});
-                insert({TSchema::UpdateTime::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& s) {
-                    return s.HasUpdateTime() ? TCell::Make<ui64>(s.GetUpdateTime() * 1000) : TCell();
+                insert({TSchema::UpdateTime::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return stats.HasUpdateTime() ? TCell::Make<ui64>(stats.GetUpdateTime() * 1000) : TCell();
                 }});
-                insert({TSchema::InFlightTxCount::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& s) {
-                    return TCell::Make<ui32>(s.GetInFlightTxCount());
+                insert({TSchema::InFlightTxCount::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return TCell::Make<ui32>(stats.GetInFlightTxCount());
                 }});
-                insert({TSchema::RowUpdates::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& s) {
-                    return TCell::Make<ui64>(s.GetRowUpdates());
+                insert({TSchema::RowUpdates::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return TCell::Make<ui64>(stats.GetRowUpdates());
                 }});
-                insert({TSchema::RowDeletes::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& s) {
-                    return TCell::Make<ui64>(s.GetRowDeletes());
+                insert({TSchema::RowDeletes::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return TCell::Make<ui64>(stats.GetRowDeletes());
                 }});
-                insert({TSchema::RowReads::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& s) {
-                    return TCell::Make<ui64>(s.GetRowReads());
+                insert({TSchema::RowReads::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return TCell::Make<ui64>(stats.GetRowReads());
                 }});
-                insert({TSchema::RangeReads::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& s) {
-                    return TCell::Make<ui64>(s.GetRangeReads());
+                insert({TSchema::RangeReads::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return TCell::Make<ui64>(stats.GetRangeReads());
                 }});
-                insert({TSchema::RangeReadRows::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& s) {
-                    return TCell::Make<ui64>(s.GetRangeReadRows());
+                insert({TSchema::RangeReadRows::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return TCell::Make<ui64>(stats.GetRangeReadRows());
                 }});
-                insert({TSchema::ImmediateTxCompleted::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& s) {
-                    return TCell::Make<ui64>(s.GetImmediateTxCompleted());
+                insert({TSchema::ImmediateTxCompleted::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return TCell::Make<ui64>(stats.GetImmediateTxCompleted());
                 }});
-                insert({TSchema::CoordinatedTxCompleted::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& s) {
-                    return TCell::Make<ui64>(s.GetPlannedTxCompleted());
+                insert({TSchema::CoordinatedTxCompleted::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return TCell::Make<ui64>(stats.GetPlannedTxCompleted());
                 }});
-                insert({TSchema::TxRejectedByOverload::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& s) {
-                    return TCell::Make<ui64>(s.GetTxRejectedByOverload());
+                insert({TSchema::TxRejectedByOverload::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return TCell::Make<ui64>(stats.GetTxRejectedByOverload());
                 }});
-                insert({TSchema::TxRejectedByOutOfStorage::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& s) {
-                    return TCell::Make<ui64>(s.GetTxRejectedBySpace());
+                insert({TSchema::TxRejectedByOutOfStorage::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return TCell::Make<ui64>(stats.GetTxRejectedBySpace());
                 }});
-                insert({TSchema::LastTtlRunTime::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& s) {
-                    return s.HasTtlStats() ? TCell::Make<ui64>(s.GetTtlStats().GetLastRunTime() * 1000) : TCell();
+                insert({TSchema::LastTtlRunTime::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return stats.HasTtlStats() ? TCell::Make<ui64>(stats.GetTtlStats().GetLastRunTime() * 1000) : TCell();
                 }});
-                insert({TSchema::LastTtlRowsProcessed::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& s) {
-                    return s.HasTtlStats() ? TCell::Make<ui64>(s.GetTtlStats().GetLastRowsProcessed()) : TCell();
+                insert({TSchema::LastTtlRowsProcessed::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return stats.HasTtlStats() ? TCell::Make<ui64>(stats.GetTtlStats().GetLastRowsProcessed()) : TCell();
                 }});
-                insert({TSchema::LastTtlRowsErased::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& s) {
-                    return s.HasTtlStats() ? TCell::Make<ui64>(s.GetTtlStats().GetLastRowsErased()) : TCell();
+                insert({TSchema::LastTtlRowsErased::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return stats.HasTtlStats() ? TCell::Make<ui64>(stats.GetTtlStats().GetLastRowsErased()) : TCell();
                 }});
-                insert({TSchema::FollowerId::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats& s) {
-                    return TCell::Make<ui32>(s.GetFollowerId());
+                insert({TSchema::FollowerId::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return TCell::Make<ui32>(stats.GetFollowerId());
                 }});                
             }
         };
@@ -677,13 +677,13 @@ private:
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         TVector<TCell> cells;
 
-        auto addCellsToBatch = [&] (const TPartitionStatsResult& shardStats, const TPartitionStats& followerStats) {
+        auto addCellsToBatch = [&] (const TPartitionStatsResult& shardStats, const TPartitionStats& leaderStats, const TPartitionStats& stats) {
             for (auto& column : Columns) {
                 auto extractor = extractors.find(column.Tag);
                 if (extractor == extractors.end()) {
                     cells.push_back(TCell());
                 } else {
-                    cells.push_back(extractor->second(shardStats, followerStats));
+                    cells.push_back(extractor->second(shardStats, leaderStats, stats));
                 }
             }
             TArrayRef<const TCell> ref(cells);
@@ -692,13 +692,21 @@ private:
         };
 
         for (const TPartitionStatsResult& shardStats : record.GetStats()) {
-            for (const TPartitionStats& followerStats : shardStats.GetStats()) {
-                addCellsToBatch(shardStats, followerStats);
-            }
-
-            // Only at the very beginning, when there is no statistics from shards
-            if (Y_UNLIKELY(shardStats.GetStats().empty())) {
-                addCellsToBatch(shardStats, {});
+            if (!shardStats.GetStats().empty()) {
+                // Find leader stats
+                auto leaderStats = std::find_if(shardStats.GetStats().begin(), shardStats.GetStats().end(), [](const TPartitionStats& stats) {
+                    return stats.GetFollowerId() == 0;
+                });
+                // Leader is set during TEvSysView::TEvSetPartitioning
+                Y_ABORT_UNLESS(leaderStats != shardStats.GetStats().end());
+                
+                // Enumerate all stats
+                for (const TPartitionStats& stats : shardStats.GetStats()) {
+                    addCellsToBatch(shardStats, *leaderStats, stats);
+                }
+            } else {
+                // Only at the very beginning, when there is no statistics from shards
+                addCellsToBatch(shardStats, {}, {});
             }
         }
 

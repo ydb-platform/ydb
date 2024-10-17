@@ -4,6 +4,9 @@
 #include <concepts>
 #include <util/generic/string.h>
 #include <util/string/builder.h>
+
+#include <google/protobuf/message.h>
+
 using TString = TBasicString<char>;
 
 class TGroupIdTag;

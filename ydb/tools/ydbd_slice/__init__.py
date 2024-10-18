@@ -315,7 +315,7 @@ def deduce_nodes_from_args(args, walle_provider, ssh_user):
         sys.exit("unable to deduce hosts")
 
     logger.info("use nodes '%s'", result)
-    return nodes.Nodes(result, args.dry_run, ssh_user=ssh_user, queued=args.jobs_queue_depth)
+    return nodes.Nodes(result, args.dry_run, ssh_user=ssh_user, queue_size=args.cmd_queue_size)
 
 
 def ya_build(arcadia_root, artifact, opts, dry_run):
@@ -1188,11 +1188,11 @@ def main(walle_provider=None):
             help=''
         )
         parser.add_argument(
-            "--jobs-queue-depth",
-            metavar="DEPTH",
+            "--cmd-queue-size",
+            metavar="SIZE",
             type=int,
             default=0,
-            help='number of parallel jobs to execute'
+            help='the size of the command queue (for ssh commands), which limits their parallel execution on remote nodes'
         )
 
         modes = parser.add_subparsers()

@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class Nodes(object):
-    def __init__(self, nodes, dry_run=False, ssh_user=None, queued=0):
+    def __init__(self, nodes, dry_run=False, ssh_user=None, queue_size=0):
         assert isinstance(nodes, list)
         assert len(nodes) > 0
         assert isinstance(nodes[0], str)
@@ -17,8 +17,8 @@ class Nodes(object):
         self._dry_run = bool(dry_run)
         self._ssh_user = ssh_user
         self._logger = logger.getChild(self.__class__.__name__)
-        self._queue = queue.Queue(queued)
-        self._qsize = queued
+        self._queue = queue.Queue(queue_size)
+        self._qsize = queue_size
 
     @property
     def nodes_list(self):

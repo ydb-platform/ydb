@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               KeyColumnNames: ["embedding"]
               DataColumnNames: ["covered"]
               Type: EIndexTypeGlobalVectorKmeansTree
-              VectorIndexKmeansTreeDescription: { Settings : { distance: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } }
+              VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } } }
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               KeyColumnNames: ["embedding"]
               DataColumnNames: ["embedding"]
               Type: EIndexTypeGlobalVectorKmeansTree
-              VectorIndexKmeansTreeDescription: { Settings : { distance: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } }
+              VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } } }
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               KeyColumnNames: ["embedding"]
               DataColumnNames: ["covered1", "covered2"]
               Type: EIndexTypeGlobalVectorKmeansTree
-              VectorIndexKmeansTreeDescription: { Settings : { distance: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } }
+              VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } } }
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -198,7 +198,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               Name: "idx_vector"
               KeyColumnNames: ["%s"]
               Type: EIndexTypeGlobalVectorKmeansTree
-              VectorIndexKmeansTreeDescription: { Settings : { distance: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } }
+              VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } } }
             }
         )", NTableIndex::NTableVectorKmeansTreeIndex::PostingTable_ParentColumn, NTableIndex::NTableVectorKmeansTreeIndex::PostingTable_ParentColumn), {NKikimrScheme::StatusInvalidParameter});
 
@@ -215,7 +215,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               KeyColumnNames: ["embedding"]
               DataColumnNames: ["id"]
               Type: EIndexTypeGlobalVectorKmeansTree
-              VectorIndexKmeansTreeDescription: { Settings : { distance: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } }
+              VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } } }
             }
         )", {NKikimrScheme::StatusInvalidParameter});
     }     

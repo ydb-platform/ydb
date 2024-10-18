@@ -485,7 +485,9 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
 
     Y_UNIT_TEST(JoinTopologiesBenchmark) {
         #if defined(_asan_enabled_)
-            enum { CliqueSize = 3, ChainSize = 3, StarSize = 3 };
+            enum { CliqueSize = 0, ChainSize = 0, StarSize = 0 };
+            std::cerr << "test is not running for ASAN!" << std::endl;
+            return;
         #elif !defined(NDEBUG)
             enum { CliqueSize = 11, ChainSize = 71, StarSize = 15 };
         #else

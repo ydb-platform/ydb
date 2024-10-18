@@ -516,7 +516,7 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
                 return nullptr;
             auto&& name = *flag.Child(TCoNameValueTuple::idx_Name);
             if (name.IsAtom({"TTL", "MaxCachedRows", "MaxDelayedRows"})) {
-                if (joinAlgo.IsAtom("StreamLookup")) {
+                if (joinAlgo.IsAtom("StreamLookupJoin")) {
                    if (!EnsureTupleSize(flag, 2, ctx))
                        return nullptr;
                    continue;

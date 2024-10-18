@@ -12,6 +12,13 @@ TAutoPtr<TLogBackend> TLogBackendBuildHelper::CreateLogBackendFromLogConfig(cons
     } else if (logConfig.HasBackendFileName()) {
         logBackend = NActors::CreateFileBackend(logConfig.GetBackendFileName());
     }
+
+    if (logBackend && logConfig.GetSysLogToStdErr()) {
+        logBackend = NActors::CreateCompositeLogBackend(
+            {logBackend, NActors::CreateStderrBackend()}
+        );
+    }
+
     return logBackend;
 }
 

@@ -155,6 +155,13 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
     }
 
     TStringBuf joinType = joinTuple.Type().Value();
+
+    if (linkSettings.JoinAlgo == EJoinAlgoType::StreamLookupJoin) {
+        YQL_ENSURE(joinType == TStringBuf("Left"), "Streamlookup supports only LEFT JOIN ... ANY");
+        YQL_ENSURE(!leftAny, "Streamlookup ANY LEFT join is not implemented");
+        YQL_ENSURE(rightAny, "Streamlookup supports only LEFT JOIN ... ANY");
+    }
+
     TSet<std::pair<TStringBuf, TStringBuf>> resultKeys;
     if (joinType != TStringBuf("RightOnly") && joinType != TStringBuf("RightSemi")) {
         resultKeys.insert(left->Keys.begin(), left->Keys.end());

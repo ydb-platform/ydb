@@ -899,39 +899,31 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(CDC_PartitionSplit_AutosplitByLoad) {
+    Y_UNIT_TEST(WithDir_PartitionSplit_AutosplitByLoad) {
         TTopicSdkTestSetup setup = CreateSetup();
         auto client = setup.MakeClient();
         auto tableClient = setup.MakeTableClient();
         auto session = tableClient.CreateSession().GetValueSync().GetSession();
 
-        ExecuteQuery(session, R"(
-            --!syntax_v1
-            CREATE TABLE `/Root/origin` (
-                id Uint64,
-                value Text,
-                PRIMARY KEY (id)
-            );
-        )");
+        setup.GetServer().AnnoyingClient->MkDir("/Root", "dir");
 
         ExecuteQuery(session, R"(
             --!syntax_v1
-            ALTER TABLE `/Root/origin`
-                ADD CHANGEFEED `feed` WITH (
-                    MODE = 'UPDATES',
-                    FORMAT = 'JSON',
-                    TOPIC_AUTO_PARTITIONING = 'ENABLED'
+            CREATE TOPIC `/Root/dir/origin`
+                WITH (
+                    AUTO_PARTITIONING_STRATEGY = 'SCALE_UP',
+                    MAX_ACTIVE_PARTITIONS = 50
                 );
         )");
 
         {
-            auto describe = client.DescribeTopic("/Root/origin/feed").GetValueSync();
+            auto describe = client.DescribeTopic("/Root/dir/origin").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
         }
 
         ui64 balancerTabletId;
         {
-            auto pathDescr = setup.GetServer().AnnoyingClient->Ls("/Root/origin/feed/streamImpl")->Record.GetPathDescription().GetSelf();
+            auto pathDescr = setup.GetServer().AnnoyingClient->Ls("/Root/dir/origin")->Record.GetPathDescription().GetSelf();
             balancerTabletId = pathDescr.GetBalancerTabletID();
             Cerr << ">>>>> BalancerTabletID=" << balancerTabletId << Endl << Flush;
             UNIT_ASSERT(balancerTabletId);
@@ -946,7 +938,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             size_t partitionCount = 0;
             for (size_t i = 0; i < 10; ++i) {
                 Sleep(TDuration::Seconds(1));
-                auto describe = client.DescribeTopic("/Root/origin/feed").GetValueSync();
+                auto describe = client.DescribeTopic("/Root/dir/origin").GetValueSync();
                 partitionCount = describe.GetTopicDescription().GetPartitions().size();
                 if (partitionCount == 3) {
                     break;

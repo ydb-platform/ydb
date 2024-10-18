@@ -162,6 +162,7 @@ protected:
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         bool ownMemoryQuota = true, bool passExceptions = false,
+        bool verboseMemoryLimitException = false,
         const ::NMonitoring::TDynamicCounterPtr& taskCounters = nullptr,
         NWilson::TTraceId traceId = {},
         TIntrusivePtr<NActors::TProtoArenaHolder> arena = nullptr,
@@ -182,6 +183,7 @@ protected:
         , ComputeActorSpan(NKikimr::TWilsonKqp::ComputeActor, std::move(traceId), "ComputeActor")
         , Running(!Task.GetCreateSuspended())
         , PassExceptions(passExceptions)
+        , VerboseMemoryLimitException(verboseMemoryLimitException)
     {
         Alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(
                     __LOCATION__,
@@ -318,7 +320,7 @@ protected:
     virtual bool DoHandleChannelsAfterFinishImpl() = 0;
 
     void OnMemoryLimitExceptionHandler() {
-        TString memoryConsumptionDetails = MemoryLimits.MemoryQuotaManager->MemoryConsumptionDetails();
+        TString memoryConsumptionDetails = MemoryLimits.MemoryQuotaManager->MemoryConsumptionDetails(VerboseMemoryLimitException);
         TStringBuilder failureReason = TStringBuilder()
             << "Mkql memory limit exceeded, allocated by task " << Task.GetId() << ": " << GetMkqlMemoryLimit()
             << ", host: " << HostName()
@@ -1953,6 +1955,7 @@ private:
     bool Running = true;
     TInstant LastSendStatsTime;
     bool PassExceptions = false;
+    bool VerboseMemoryLimitException = false;
     bool Terminated = false;
 protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr MkqlMemoryQuota;

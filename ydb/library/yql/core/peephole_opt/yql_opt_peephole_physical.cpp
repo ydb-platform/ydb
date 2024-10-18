@@ -1974,32 +1974,27 @@ TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {
     auto collection = input->HeadPtr();
     auto lookup = input->ChildPtr(1);
     auto options = input->ChildPtr(2);
+    const bool nullableCollectionItems = IsSqlInCollectionItemsNullable(NNodes::TCoSqlIn(input));
 
     const bool ansiIn = HasSetting(*options, "ansi");
     const bool tableSource = HasSetting(*options, "tableSource");
     static const size_t MaxCollectionItemsToExpandAsOrChain = 5;
-    const bool hasOptionals = collection->GetTypeAnn()->HasOptionalOrNull() ||
-                              lookup->GetTypeAnn()->HasOptionalOrNull();
-    if (ansiIn || !hasOptionals) {
+    if (ansiIn || !nullableCollectionItems) {
         const size_t collectionSize = collection->ChildrenSize();
         if ((collection->IsCallable("AsList") || collection->IsList()) &&
             collectionSize <= MaxCollectionItemsToExpandAsOrChain &&
             collectionSize > 0)
         {
             TExprNodeList orItems;
-            auto falseLiteral = MakeBool(input->Pos(), false, ctx);
             for (size_t i = 0; i < collectionSize; ++i) {
                 TExprNode::TPtr collectionItem = collection->ChildPtr(i);
                 if (tableSource) {
                     collectionItem = ctx.NewCallable(input->Pos(), "SingleMember", { collectionItem });
                 }
                 orItems.push_back(ctx.Builder(input->Pos())
-                    .Callable("Coalesce")
-                        .Callable(0, "==")
-                            .Add(0, lookup)
-                            .Add(1, collectionItem)
-                        .Seal()
-                        .Add(1, falseLiteral)
+                    .Callable("==")
+                        .Add(0, lookup)
+                        .Add(1, collectionItem)
                     .Seal()
                     .Build()
                 );
@@ -2072,7 +2067,6 @@ TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {
             .Build();
     }
 
-    const bool nullableCollectionItems = IsSqlInCollectionItemsNullable(NNodes::TCoSqlIn(input));
     if (ansiIn && (nullableCollectionItems || lookupType->HasOptionalOrNull())) {
         YQL_CLOG(DEBUG, CorePeepHole) << "ANSI IN: with nullable items in collection or lookup";
         YQL_ENSURE(dict);

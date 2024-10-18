@@ -620,7 +620,7 @@ class TJsonNodes : public TViewerPipeClient {
         ENodeFields result = ENodeFields::COUNT;
         if (field == "NodeId" || field == "Id") {
             result = ENodeFields::NodeId;
-        } else if (field == "Host") {
+        } else if (field == "Host" || field == "HostName") {
             result = ENodeFields::HostName;
         } else if (field == "NodeName") {
             result = ENodeFields::NodeName;
@@ -1023,20 +1023,34 @@ public:
                 UptimeSeconds = 0;
                 InvalidateNodes();
             }
-            if (!Filter.empty() && FieldsAvailable.test(+ENodeFields::NodeInfo)) {
-                TVector<TString> filterWords = SplitString(Filter, " ");
-                TNodeView nodeView;
-                for (TNode* node : NodeView) {
-                    for (const TString& word : filterWords) {
-                        if (node->GetHostName().Contains(word) || ::ToString(node->GetNodeId()).Contains(word)) {
-                            nodeView.push_back(node);
-                            break;
+            if (!Filter.empty()) {
+                bool allFieldsPresent =
+                    (!FieldsRequired.test(+ENodeFields::NodeId) || FieldsAvailable.test(+ENodeFields::NodeId)) &&
+                    (!FieldsRequired.test(+ENodeFields::HostName) || FieldsAvailable.test(+ENodeFields::HostName)) &&
+                    (!FieldsRequired.test(+ENodeFields::NodeName) || FieldsAvailable.test(+ENodeFields::NodeName));
+                if (allFieldsPresent) {
+                    TVector<TString> filterWords = SplitString(Filter, " ");
+                    TNodeView nodeView;
+                    for (TNode* node : NodeView) {
+                        for (const TString& word : filterWords) {
+                            if (FieldsRequired.test(+ENodeFields::NodeId) && ::ToString(node->GetNodeId()).Contains(word)) {
+                                nodeView.push_back(node);
+                                break;
+                            }
+                            if (FieldsRequired.test(+ENodeFields::HostName) && node->GetHostName().Contains(word)) {
+                                nodeView.push_back(node);
+                                break;
+                            }
+                            if (FieldsRequired.test(+ENodeFields::NodeName) && node->GetNodeName().Contains(word)) {
+                                nodeView.push_back(node);
+                                break;
+                            }
                         }
                     }
+                    NodeView.swap(nodeView);
+                    Filter.clear();
+                    InvalidateNodes();
                 }
-                NodeView.swap(nodeView);
-                Filter.clear();
-                InvalidateNodes();
             }
             if (!FilterGroup.empty() && FieldsAvailable.test(+FilterGroupBy)) {
                 TNodeView nodeView;

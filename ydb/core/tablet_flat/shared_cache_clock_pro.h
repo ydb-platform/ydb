@@ -64,7 +64,7 @@ public:
     {}
 
     TIntrusiveList<TPage> EvictNext() override {
-        if (SizeHot + SizeCold == 0) {
+        if (GetSize() == 0) {
             return {};
         }
 
@@ -116,6 +116,10 @@ public:
             Limit = limit;
             ColdTarget = Min(ColdTarget, Limit);
         }
+    }
+
+    ui64 GetSize() const override {
+        return SizeHot + SizeCold;
     }
 
     TString Dump() const {

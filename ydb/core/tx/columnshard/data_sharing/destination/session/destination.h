@@ -113,6 +113,8 @@ public:
 
     [[nodiscard]] TConclusionStatus DataReceived(THashMap<ui64, NEvents::TPathIdData>&& data, TColumnEngineForLogs& index, const std::shared_ptr<IStoragesManager>& manager);
 
+    void TransferSchema(NColumnShard::TColumnShard* columnShard, const std::vector<NKikimrSchemeOp::TColumnTableSchema>& schemeHistory, const TTabletId sourceTabletId);
+
     ui32 GetSourcesInProgressCount() const;
     void SendCurrentCursorAck(const NColumnShard::TColumnShard& shard, const std::optional<TTabletId> tabletId);
 

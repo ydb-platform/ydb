@@ -76,6 +76,13 @@ NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestin
     return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxDataFromSource(self, selfPtr, data, sourceTabletId));
 }
 
+void TDestinationSession::TransferSchema(NColumnShard::TColumnShard* /* columnShard */, const std::vector<NKikimrSchemeOp::TColumnTableSchema>& /* schemeHistory */, const TTabletId sourceTabletId) {
+    auto ev = std::make_unique<NEvents::TEvAckTransferSchemeHistory>(GetSessionId());
+
+    NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
+        new TEvPipeCache::TEvForward(ev.release(), (ui64)sourceTabletId, true), IEventHandle::FlagTrackDelivery, GetRuntimeId());
+}
+
 NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::ReceiveFinished(NColumnShard::TColumnShard* self, const TTabletId sourceTabletId, const std::shared_ptr<TDestinationSession>& selfPtr) {
     if (GetCursorVerified(sourceTabletId).GetDataFinished()) {
         return TConclusionStatus::Fail("session finished already");

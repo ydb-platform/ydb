@@ -878,6 +878,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
         //explore params
         const auto& measures = params->ChildRef(0);
+        const auto& skip = params->ChildRef(2);
         const auto& pattern = params->ChildRef(3);
         const auto& defines = params->ChildRef(4);
 
@@ -920,6 +921,10 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             };
         }
 
+        auto to = skip->Child(0)->Content();
+        MKQL_ENSURE(to.SkipPrefix("AfterMatchSkip_"), R"(MATCH_RECOGNIZE: <row pattern skip to> should start with "AfterMatchSkip_")");
+        const auto afterMatchSkipPastLastRow = to == "PastLastRow";
+
         const auto streamingMode = FromString<bool>(settings->Child(0)->Child(1)->Content());
 
         return ctx.ProgramBuilder.MatchRecognizeCore(
@@ -929,6 +934,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
                 getMeasures,
                 NYql::NMatchRecognize::ConvertPattern(pattern, ctx.ExprCtx),
                 getDefines,
+                afterMatchSkipPastLastRow,
                 streamingMode
                 );
     });

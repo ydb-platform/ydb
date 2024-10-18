@@ -73,19 +73,6 @@ public:
         SetupIncomingRequests(std::move(logger));
     }
 
-    void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) override {
-        Limiter_ = limiter;
-    }
-
-    bool IncRequest() {
-        return Limiter_->Inc();
-    }
-
-    void DecRequest() {
-        Limiter_->Dec();
-        Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
-    }
-
 protected:
     virtual void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) = 0;
 
@@ -97,8 +84,6 @@ protected:
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
     const NActors::TActorId GRpcRequestProxyId_;
     const TVector<NActors::TActorId> GRpcProxies_;
-
-    NYdbGrpc::TGlobalLimiter* Limiter_ = nullptr;
 };
 
 }

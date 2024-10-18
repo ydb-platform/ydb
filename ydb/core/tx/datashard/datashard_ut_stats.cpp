@@ -1,3 +1,4 @@
+#include "datashard_ut_common_kqp.h"
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_make.h>
@@ -6,6 +7,7 @@
 namespace NKikimr {
 
 using namespace NKikimr::NDataShard;
+using namespace NKikimr::NDataShard::NKqpHelpers;
 using namespace NSchemeShard;
 using namespace Tests;
 
@@ -465,6 +467,54 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         NDataShard::gDbStatsDataSizeResolution = gDbStatsDataSizeResolutionBefore;
         NDataShard::gDbStatsRowCountResolution = gDbStatsRowCountResolutionBefore;
     }
+
+    Y_UNIT_TEST(Follower) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableForceFollowers(true);
+
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+        
+        //runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        auto [shards, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions()
+                .Followers(3));
+        ui64 shard1 = shards.at(0);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2);");
+
+       {
+            Cerr << "... waiting leader stats" << Endl;
+            auto stats = WaitTableStats(runtime, shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowUpdates(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 2);
+        }        
+        
+        {
+            auto selectResult = KqpSimpleStaleRoExec(runtime, "SELECT * FROM `/Root/table-1`", "/Root");
+            TString expectedSelectResult = 
+                "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+                "{ items { uint32_value: 2 } items { uint32_value: 2 } }";
+            UNIT_ASSERT_VALUES_EQUAL(selectResult, expectedSelectResult);
+        }
+
+        {
+            Cerr << "... waiting for follower stats" << Endl;
+            auto stats = WaitTableFollowerStats(runtime, shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
+            UNIT_ASSERT_GE(stats.GetFollowerId(), 1);
+            UNIT_ASSERT_LE(stats.GetFollowerId(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRangeReadRows(), 2);
+        }
+    }    
 
 } // Y_UNIT_TEST_SUITE(DataShardStats)
 

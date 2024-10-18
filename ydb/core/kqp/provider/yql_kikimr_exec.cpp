@@ -1697,19 +1697,24 @@ public:
                             YQL_ENSURE(indexSettings.Maybe<TCoNameValueTupleList>());
                             for (const auto& vectorSetting : indexSettings.Cast<TCoNameValueTupleList>()) {
                                 YQL_ENSURE(vectorSetting.Value().Maybe<TCoAtom>());
+                                auto parseU32 = [] (const char* key, const TString& value) {
+                                    ui32 num = 0;
+                                    YQL_ENSURE(TryFromString(value, num), "Wrong " << key << ": " << value);
+                                    return num;
+                                };
+                                const auto value = vectorSetting.Value().Cast<TCoAtom>().StringValue();
                                 if (vectorSetting.Name().Value() == "distance") {
-                                    protoVectorSettings.set_distance(VectorIndexSettingsParseDistance(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                    protoVectorSettings.mutable_settings()->set_metric(VectorIndexSettingsParseDistance(value));
                                 } else if (vectorSetting.Name().Value() == "similarity") {
-                                    protoVectorSettings.set_similarity(VectorIndexSettingsParseSimilarity(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                    protoVectorSettings.mutable_settings()->set_metric(VectorIndexSettingsParseSimilarity(value));
                                 } else if (vectorSetting.Name().Value() == "vector_type") {
-                                    protoVectorSettings.set_vector_type(VectorIndexSettingsParseVectorType(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                    protoVectorSettings.mutable_settings()->set_vector_type(VectorIndexSettingsParseVectorType(value));
                                 } else if (vectorSetting.Name().Value() == "vector_dimension") {
-                                    auto parseInt = [] (const TString vectorDimensionStr) {
-                                        ui32 vectorDimension;
-                                        YQL_ENSURE(TryFromString(vectorDimensionStr, vectorDimension), "Wrong vector_dimension: " << vectorDimensionStr);
-                                        return vectorDimension;
-                                    };
-                                    protoVectorSettings.set_vector_dimension(parseInt(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                    protoVectorSettings.mutable_settings()->set_vector_dimension(parseU32("vector_dimension", value));
+                                } else if (vectorSetting.Name().Value() == "clusters") {
+                                    protoVectorSettings.set_clusters(parseU32("clusters", value));
+                                } else if (vectorSetting.Name().Value() == "levels") {
+                                    protoVectorSettings.set_levels(parseU32("levels", value));
                                 } else {
                                     YQL_ENSURE(false, "Wrong vector setting name: " << vectorSetting.Name().Value());
                                 }

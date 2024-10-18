@@ -102,7 +102,7 @@ void TPersQueueReadBalancer::Die(const TActorContext& ctx) {
 void TPersQueueReadBalancer::OnActivateExecutor(const TActorContext &ctx) {
     ResourceMetrics = Executor()->GetResourceMetrics();
     Become(&TThis::StateWork);
-    if (Executor()->GetStats().IsFollower)
+    if (Executor()->GetStats().IsFollower())
         Y_ABORT("is follower works well with Balancer?");
     else
         Execute(new TTxPreInit(this), ctx);

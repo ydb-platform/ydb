@@ -67,6 +67,11 @@ message TKqpPhyColumnTypeParam {
     }
 }
 
+message TKqpPhySequenceId {
+    uint64 OwnerId = 2;
+    uint64 LocalPathId = 3;
+}
+
 message TKqpPhyColumn {
 
     TKqpPhyColumnId Id = 1;
@@ -80,6 +85,7 @@ message TKqpPhyColumn {
     // flag that indicates that column is currently under the build
     // operation.
     optional bool IsBuildInProgress = 7;
+    optional TKqpPhySequenceId DefaultFromSequencePathId = 8;
 }
 
 enum EKqpPhyTableKind {

@@ -1,4 +1,4 @@
-import "ydb/core/protos/flat_scheme_op.proto";
+import "ydb/core/protos/compaction.proto";
 import "ydb/core/scheme/protos/type_info.proto";
 
 package NTabletFlatScheme;
@@ -63,7 +63,7 @@ message TAlterRecord {
     optional bool NotNull = 24 [default = false];
 
     optional uint64 ExecutorCacheSize = 100;
-    optional NKikimrSchemeOp.TCompactionPolicy CompactionPolicy = 101;
+    optional NKikimrCompaction.TCompactionPolicy CompactionPolicy = 101;
     optional bool ExecutorAllowLogBatching = 102;
     optional uint64 ExecutorLogFlushPeriod = 103;
     optional uint32 ExecutorLimitInFlyTx = 104;

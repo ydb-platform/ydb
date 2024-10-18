@@ -150,6 +150,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
         }
         const bool hasPartitioning = objectStorage.projection_size() || objectStorage.partitioned_by_size();
         issues.AddIssues(ValidateFormatSetting(objectStorage.format(), objectStorage.format_setting(), location, hasPartitioning));
+        issues.AddIssues(ValidateJsonListFormat(objectStorage.format(), schema, objectStorage.partitioned_by()));
         issues.AddIssues(ValidateRawFormat(objectStorage.format(), schema, objectStorage.partitioned_by()));
         if (hasPartitioning) {
             if (NYql::NS3::HasWildcards(location)) {
@@ -260,6 +261,30 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, "unknown format setting " + key));
             }
         }
+        return issues;
+    }
+
+    template<typename TScheme>
+    static NYql::TIssues ValidateJsonListFormat(const TString& format, const TScheme& schema, const google::protobuf::RepeatedPtrField<TString>& partitionedBy) {
+        NYql::TIssues issues;
+        if (format != "json_list"sv) {
+            return issues;
+        }
+
+        TSet<TString> partitionedBySet{partitionedBy.begin(), partitionedBy.end()};
+
+        for (const auto& column: schema.column()) {
+            if (partitionedBySet.contains(column.name())) {
+                continue;
+            }
+            if (ValidateDateOrTimeType(column.type())) {
+                issues.AddIssue(MakeErrorIssue(
+                    Ydb::StatusIds::BAD_REQUEST,
+                    TStringBuilder{} << "Date, Timestamp and Interval types are not allowed in json_list format (you have '" 
+                        << column.name() << " " << NYdb::TType(column.type()).ToString() << "' field)"));
+            }
+        }
+
         return issues;
     }
 
@@ -797,6 +822,50 @@ private:
 
     static bool ValidateStringType(const NYdb::TType& columnType) {
         static const std::vector<NYdb::TType> availableTypes = GetStringTypes();
+        return FindIf(availableTypes, [&columnType](const auto& availableType) { return NYdb::TypesEqual(availableType, columnType); }) != availableTypes.end();
+    }
+
+    static std::vector<NYdb::TType> GetDateOrTimeTypes() {
+        NYdb::TType dateType = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::Date).Build();
+        NYdb::TType datetimeType = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::Datetime).Build();
+        NYdb::TType timestampType = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::Timestamp).Build();
+        NYdb::TType intervalType = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::Interval).Build();
+        NYdb::TType date32Type = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::Date32).Build();
+        NYdb::TType datetime64Type = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::Datetime64).Build();
+        NYdb::TType timestamp64Type = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::Timestamp64).Build();
+        NYdb::TType interval64Type = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::Interval64).Build();
+        NYdb::TType tzdateType = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::TzDate).Build();
+        NYdb::TType tzdatetimeType = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::TzDatetime).Build();
+        NYdb::TType tztimestampType = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::TzTimestamp).Build();
+        const std::vector<NYdb::TType> result {
+            dateType,
+            datetimeType,
+            timestampType,
+            intervalType,
+            date32Type,
+            datetime64Type,
+            timestamp64Type,
+            interval64Type,
+            tzdateType,
+            tzdatetimeType,
+            tztimestampType,
+            NYdb::TTypeBuilder{}.Optional(dateType).Build(),
+            NYdb::TTypeBuilder{}.Optional(datetimeType).Build(),
+            NYdb::TTypeBuilder{}.Optional(timestampType).Build(),
+            NYdb::TTypeBuilder{}.Optional(intervalType).Build(),
+            NYdb::TTypeBuilder{}.Optional(date32Type).Build(),
+            NYdb::TTypeBuilder{}.Optional(datetime64Type).Build(),
+            NYdb::TTypeBuilder{}.Optional(timestamp64Type).Build(),
+            NYdb::TTypeBuilder{}.Optional(interval64Type).Build(),
+            NYdb::TTypeBuilder{}.Optional(tzdateType).Build(),
+            NYdb::TTypeBuilder{}.Optional(tzdatetimeType).Build(),
+            NYdb::TTypeBuilder{}.Optional(tztimestampType).Build()
+        };
+        return result;
+    }
+
+    static bool ValidateDateOrTimeType(const NYdb::TType& columnType) {
+        static const std::vector<NYdb::TType> availableTypes = GetDateOrTimeTypes();
         return FindIf(availableTypes, [&columnType](const auto& availableType) { return NYdb::TypesEqual(availableType, columnType); }) != availableTypes.end();
     }
 

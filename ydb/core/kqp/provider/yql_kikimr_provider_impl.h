@@ -243,8 +243,8 @@ void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperat
 void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperation op,
     TVector<NKqpProto::TKqpTableInfo>& infos);
 
-Ydb::Table::VectorIndexSettings_Distance VectorIndexSettingsParseDistance(std::string_view distance);
-Ydb::Table::VectorIndexSettings_Similarity VectorIndexSettingsParseSimilarity(std::string_view similarity);
+Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseDistance(std::string_view distance);
+Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseSimilarity(std::string_view similarity);
 Ydb::Table::VectorIndexSettings_VectorType VectorIndexSettingsParseVectorType(std::string_view vectorType);  
 
 bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral);

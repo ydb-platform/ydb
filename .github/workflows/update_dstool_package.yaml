@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      name: pypi
+      name: robot-ydb
       url: https://pypi.org/p/ydb-dstool
     permissions:
       id-token: write

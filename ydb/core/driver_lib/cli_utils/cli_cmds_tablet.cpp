@@ -8,82 +8,6 @@
 namespace NKikimr {
 namespace NDriverClient {
 
-class TClientCommandKeyValueRequest : public TClientCommandBase {
-public:
-    TClientCommandKeyValueRequest()
-        : TClientCommandBase("request", { "req" }, "Request to KV tablet")
-    {}
-
-    TString ProtoBuf;
-    TAutoPtr<NKikimrClient::TKeyValueRequest> Request;
-    TString OutputFile;
-    TString InputFile;
-
-    int OnResponse(const NKikimrClient::TResponse& response) {
-        if (!OutputFile.empty()) {
-            Y_ABORT_UNLESS(response.ReadResultSize() == 1);
-            Y_ABORT_UNLESS(response.GetReadResult(0).HasStatus());
-            Y_ABORT_UNLESS(response.GetReadResult(0).GetStatus() == NKikimrProto::OK);
-            Y_ABORT_UNLESS(response.GetReadResult(0).HasValue());
-            TFile file(OutputFile, CreateNew | WrOnly);
-            TString data = response.GetReadResult(0).GetValue();
-            file.Write(data.data(), data.size());
-            file.Close();
-        } else if (!InputFile.empty()) {
-            Y_ABORT_UNLESS(response.WriteResultSize() == 1);
-            Y_ABORT_UNLESS(response.GetWriteResult(0).HasStatus());
-            Y_ABORT_UNLESS(response.GetWriteResult(0).GetStatus() == NKikimrProto::OK);
-        } else {
-            Cout << GetString(response) << Endl;
-        }
-        return 0;
-    }
-
-    virtual int Run(TConfig& config) override {
-        TAutoPtr<NMsgBusProxy::TBusKeyValue> request(new NMsgBusProxy::TBusKeyValue());
-        if (Request != nullptr)
-            request->Record.MergeFrom(*Request);
-        if (config.TabletId != 0)
-            request->Record.SetTabletId(config.TabletId);
-        return MessageBusCall<NMsgBusProxy::TBusKeyValue, NMsgBusProxy::TBusResponse>(config, request,
-            [this](const NMsgBusProxy::TBusResponse& response) -> int { return OnResponse(response.Record); });
-    }
-
-    virtual void Config(TConfig& config) override {
-        TClientCommand::Config(config);
-        config.SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<REQUEST>", "Request protobuf or file with request protobuf");
-        config.Opts->AddLongOption("of", "output file path, protobuf must contain single read command!").Optional()
-            .RequiredArgument("PATH").StoreResult(&OutputFile);
-        config.Opts->AddLongOption("if", "input file path, protobuf must contain single write command!").Optional()
-            .RequiredArgument("PATH").StoreResult(&InputFile);
-        if (!(OutputFile.empty() || InputFile.empty())) {
-            ythrow TWithBackTrace<yexception>() << "Use either --of or --if!";
-        }
-    }
-
-    virtual void Parse(TConfig& config) override {
-        TClientCommand::Parse(config);
-        ProtoBuf = config.ParseResult->GetFreeArgs().at(0);
-        Request = GetProtobuf<NKikimrClient::TKeyValueRequest>(ProtoBuf);
-        if (!InputFile.empty()) {
-            Y_ABORT_UNLESS(Request->CmdWriteSize() == 1);
-            Y_ABORT_UNLESS(Request->GetCmdWrite(0).HasKey());
-            Y_ABORT_UNLESS(!Request->GetCmdWrite(0).HasValue());
-            TString data = TUnbufferedFileInput(InputFile).ReadAll();
-            Request->MutableCmdWrite(0)->SetValue(data);
-        }
-    }
-};
-
-class TClientCommandKeyValue : public TClientCommandTree {
-public:
-    TClientCommandKeyValue()
-        : TClientCommandTree("keyvalue", { "kv" })
-    {
-        AddCommand(std::make_unique<TClientCommandKeyValueRequest>());
-    }
-};
 
 template<class TRequest, class TResponse>
 class TClientCommandTabletCommon {
@@ -302,7 +226,6 @@ public:
     TClientCommandTabletN()
         : TClientCommandTree("#", {}, "<tablet id>")
     {
-        AddCommand(std::make_unique<TClientCommandKeyValue>());
         AddCommand(std::make_unique<TClientCommandTabletExec>());
         AddCommand(std::make_unique<TClientCommandTabletKill>());
         AddCommand(std::make_unique<TClientCommandTabletSchemeTx>());

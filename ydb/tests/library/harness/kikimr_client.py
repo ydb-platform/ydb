@@ -13,7 +13,6 @@ import functools
 from google.protobuf.text_format import Parse
 from ydb.core.protos import blobstorage_config_pb2
 import ydb.core.protos.msgbus_pb2 as msgbus
-import ydb.core.protos.msgbus_kv_pb2 as msgbus_kv
 import ydb.core.protos.flat_scheme_op_pb2 as flat_scheme_op_pb2
 import ydb.core.protos.grpc_pb2_grpc as grpc_server
 from ydb.core.protos import flat_scheme_op_pb2 as flat_scheme_op
@@ -248,82 +247,6 @@ class KiKiMRMessageBusClient(object):
             'HiveCreateTablet'
         )
 
-    def local_enumerate_tablets(self, tablet_type, node_id=1):
-        request = msgbus.TLocalEnumerateTablets()
-        request.DomainUid = self.__domain_id
-        request.NodeId = node_id
-        request.TabletType = int(tablet_type)
-
-        return self.invoke(request, 'LocalEnumerateTablets')
-
-    def kv_cmd_write(self, tablet_id, cmd_writes, generation=None):
-        request = msgbus_kv.TKeyValueRequest()
-        for cmd in cmd_writes:
-            write_cmd = request.CmdWrite.add()
-            write_cmd.Key = to_bytes(cmd.key)
-            write_cmd.Value = to_bytes(cmd.value)
-        request.TabletId = tablet_id
-        if generation is not None:
-            request.Generation = generation
-
-        response = self.invoke(request, 'KeyValue')
-        return response
-
-    def kv_cmd_read(self, tablet_id, cmd_reads, generation=None):
-
-        request = msgbus_kv.TKeyValueRequest()
-        for cmd in cmd_reads:
-            read_cmd = request.CmdRead.add()
-            read_cmd.Key = to_bytes(cmd.key)
-            if cmd.offset is not None:
-                read_cmd.Offset = cmd.offset
-            if cmd.size is not None:
-                read_cmd.Size = cmd.size
-        request.TabletId = tablet_id
-        if generation is not None:
-            request.Generation = generation
-
-        response = self.invoke(request, 'KeyValue')
-        return response
-
-    def increment_generation(self, tablet_id):
-        request = msgbus_kv.TKeyValueRequest()
-        request.CmdIncrementGeneration.CopyFrom(request.TCmdIncrementGeneration())
-        request.TabletId = tablet_id
-
-        return self.invoke(request, 'KeyValue')
-
-    def kv_cmd_read_range(self, tablet_id, cmd_range_reads, generation=None):
-
-        request = msgbus_kv.TKeyValueRequest()
-        for cmd in cmd_range_reads:
-            read_range = request.CmdReadRange.add()
-            read_range.IncludeData = cmd.include_data
-            if cmd.limit_bytes:
-                read_range.LimitBytes = cmd.limit_bytes
-            read_range.Range.From = to_bytes(cmd.from_key)
-            read_range.Range.IncludeFrom = cmd.include_from
-            read_range.Range.To = to_bytes(cmd.to_key)
-            read_range.Range.IncludeTo = cmd.include_to
-        request.TabletId = tablet_id
-        if generation is not None:
-            request.Generation = generation
-
-        return self.invoke(request, 'KeyValue')
-
-    def kv_cmd_rename(self, tablet_id, cmd_renames, generation=None):
-
-        request = msgbus_kv.TKeyValueRequest()
-        for cmd in cmd_renames:
-            rename_cmd = request.CmdRename.add()
-            rename_cmd.OldKey = to_bytes(cmd.old_key)
-            rename_cmd.NewKey = to_bytes(cmd.new_key)
-        request.TabletId = tablet_id
-        if generation is not None:
-            request.Generation = generation
-
-        return self.invoke(request, 'KeyValue')
-
     def console_request(self, request_text, raise_on_error=True):
         request = msgbus.TConsoleRequest()
         Parse(request_text, request)
@@ -344,45 +267,6 @@ class KiKiMRMessageBusClient(object):
         if raise_on_error and response.Status.Code != StatusIds.SUCCESS:
             raise RuntimeError('add_config_item failed: %s: %s' % (response.Status.Code, response.Status.Reason))
         return response
-
-    def kv_cmd_delete_range(self, tablet_id, cmd_range_delete, generation=None):
-
-        request = msgbus_kv.TKeyValueRequest()
-        for cmd in cmd_range_delete:
-            delete_range = request.CmdDeleteRange.add()
-            delete_range.Range.From = to_bytes(cmd.from_key)
-            delete_range.Range.IncludeFrom = cmd.include_from
-            delete_range.Range.To = to_bytes(cmd.to_key)
-            delete_range.Range.IncludeTo = cmd.include_to
-        request.TabletId = tablet_id
-        if generation is not None:
-            request.Generation = generation
-
-        return self.invoke(request, 'KeyValue')
-
-    def kv_copy_range(self, tablet_id, key_range, prefix_to_add, prefix_to_remove=None):
-        request = msgbus_kv.TKeyValueRequest()
-        request.TabletId = tablet_id
-
-        clone_range = request.CmdCopyRange.add()
-        clone_range.Range.From = to_bytes(key_range.from_key)
-        clone_range.Range.IncludeFrom = key_range.include_from
-        clone_range.Range.To = to_bytes(key_range.to_key)
-        clone_range.Range.IncludeTo = key_range.include_to
-        clone_range.PrefixToAdd = to_bytes(prefix_to_add)
-        if prefix_to_remove is not None:
-            clone_range.PrefixToRemove = to_bytes(prefix_to_remove)
-
-        return self.invoke(request, 'KeyValue')
-
-    def kv_request(self, tablet_id, kv_request, generation=None, deadline_ms=None):
-        request = kv_request.protobuf
-        request.TabletId = tablet_id
-        if generation is not None:
-            request.Generation = generation
-        if deadline_ms is not None:
-            request.DeadlineInstantMs = deadline_ms
-        return self.invoke(request, 'KeyValue')
 
     def tablet_kill(self, tablet_id, assert_success=False):
         request = RestartTabletRequest(tablet_id=tablet_id)

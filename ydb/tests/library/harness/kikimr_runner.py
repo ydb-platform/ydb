@@ -240,6 +240,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._slots = {}
         self.__server = 'localhost'
         self.__client = None
+        self.__kv_client = None
+        self.__scheme_client = None
         self.__storage_pool_id_allocator = itertools.count(1)
         self.__config_path = None
         self._slot_index_allocator = itertools.count(1)
@@ -308,6 +310,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
         self.__initialy_prepared = True
         self.__client = None
+        self.__kv_client = None
+        self.__scheme_client = None
         self.__instantiate_udfs_dir()
         self.__write_configs()
         for _ in self.__configurator.all_node_ids():

@@ -122,8 +122,8 @@ Y_UNIT_TEST(BuildOptimizerTree2Tables) {
 
     UNIT_ASSERT_VALUES_EQUAL(left->Label, "c");
     UNIT_ASSERT_VALUES_EQUAL(right->Label, "n");
-    UNIT_ASSERT_VALUES_EQUAL(left->Stats->Nrows, 100000);
-    UNIT_ASSERT_VALUES_EQUAL(right->Stats->Nrows, 1000);
+    UNIT_ASSERT_VALUES_EQUAL(left->Stats.Nrows, 100000);
+    UNIT_ASSERT_VALUES_EQUAL(right->Stats.Nrows, 1000);
 }
 
 Y_UNIT_TEST(BuildOptimizerTree2TablesComplexLabel) {
@@ -149,8 +149,8 @@ Y_UNIT_TEST(BuildOptimizerTree2TablesComplexLabel) {
 
     UNIT_ASSERT_VALUES_EQUAL(left->Label, "c");
     UNIT_ASSERT_VALUES_EQUAL(right->Label, "n");
-    UNIT_ASSERT_VALUES_EQUAL(left->Stats->Nrows, 1000000);
-    UNIT_ASSERT_VALUES_EQUAL(right->Stats->Nrows, 10000);
+    UNIT_ASSERT_VALUES_EQUAL(left->Stats.Nrows, 1000000);
+    UNIT_ASSERT_VALUES_EQUAL(right->Stats.Nrows, 10000);
 }
 
 Y_UNIT_TEST(BuildYtJoinTree2Tables) {

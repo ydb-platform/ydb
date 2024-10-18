@@ -131,6 +131,7 @@ public:
 
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TDqPqTopicSource>()
+                    .World(pqReadTopic.World())
                     .Topic(pqReadTopic.Topic())
                     .Columns(std::move(columns))
                     .Settings(BuildTopicReadSettings(clusterName, dqSettings, read->Pos(), ctx))

@@ -54,7 +54,7 @@ namespace NKikimr {
     bool HugeHeapDefragmentationRequired(
         ui32 hugeCanBeFreedChunks,
         ui32 hugeTotalChunks,
-        float defragThreshold) {
+        double defragThreshold) {
         
         if (hugeCanBeFreedChunks < 10)
             return false;

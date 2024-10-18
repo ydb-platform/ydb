@@ -2,6 +2,7 @@
 
 #include <util/system/yassert.h>
 #include <util/generic/vector.h>
+#include <utility>
 
 // Implementation of disjoint-set data structure with union by rank and path compression.
 // See http://en.wikipedia.org/wiki/Disjoint-set_data_structure
@@ -11,14 +12,12 @@ public:
 
 private:
     mutable TVector<TElement> Parents;
-    TVector<size_t> Ranks;
     TVector<size_t> Sizes;
     size_t NumberOfSets;
 
 public:
     TDisjointSets(size_t setCount)
         : Parents(setCount)
-        , Ranks(setCount, 0)
         , Sizes(setCount, 1)
         , NumberOfSets(setCount)
     {
@@ -51,14 +50,11 @@ public:
             return;
 
         --NumberOfSets;
-        if (Ranks[canonic1] < Ranks[canonic2]) {
-            Parents[canonic1] = canonic2;
-            Sizes[canonic2] += Sizes[canonic1];
-        } else {
-            Parents[canonic2] = canonic1;
-            Sizes[canonic1] += Sizes[canonic2];
-            Ranks[canonic2] += Ranks[canonic1] == Ranks[canonic2] ? 1 : 0;
+        if (Sizes[canonic1] > Sizes[canonic2]) {
+            std::swap(canonic1, canonic2);
         }
+        Parents[canonic1] = canonic2;
+        Sizes[canonic2] += Sizes[canonic1];
     }
 
     void Expand(size_t setCount) {
@@ -68,13 +64,11 @@ public:
 
         size_t prevSize = Parents.size();
         Parents.resize(setCount);
-        Ranks.resize(setCount);
         Sizes.resize(setCount);
         NumberOfSets += setCount - prevSize;
 
         for (size_t i = prevSize; i < setCount; ++i) {
             Parents[i] = i;
-            Ranks[i] = 0;
             Sizes[i] = 1;
         }
     }

@@ -111,6 +111,22 @@ public:
         ops->Send(ActorId, ev.Release());
     }
 
+    void SendWorkerDataEnd(IActorOps* ops, const TWorkerId& id, ui64 partitionId, const TVector<ui64>&& adjacentPartitionsIds, const TVector<ui64>&& childPartitionsIds) {
+        auto ev = MakeHolder<TEvService::TEvWorkerDataEnd>();
+        auto& record = ev->Record;
+
+        id.Serialize(*record.MutableWorker());
+        record.SetPartitionId(partitionId);
+        for (auto id : adjacentPartitionsIds) {
+            record.AddAdjacentPartitionsIds(id);
+        }
+        for (auto id : childPartitionsIds) {
+            record.AddChildPartitionsIds(id);
+        }
+
+        ops->Send(ActorId, ev.Release());
+    }
+
     void Shutdown(IActorOps* ops) const {
         for (const auto& [_, actorId] : Workers) {
             ops->Send(actorId, new TEvents::TEvPoison());
@@ -340,6 +356,25 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         session.StopWorker(this, id);
     }
 
+    void Handle(TEvWorker::TEvDataEnd::TPtr& ev) {
+        LOG_T("Handle " << ev->Get()->ToString());
+
+        auto* session = SessionFromWorker(ev->Sender);
+        if (!session) {
+            return;
+        }
+
+        if (!session->HasWorker(ev->Sender)) {
+            LOG_E("Cannot find worker"
+                << ": worker# " << ev->Sender);
+            return;
+        }
+
+        LOG_I("Worker has ended"
+            << ": worker# " << ev->Sender);
+        session->SendWorkerDataEnd(this, session->GetWorkerId(ev->Sender), ev->Get()->PartitionId, std::move(ev->Get()->AdjacentPartitionsIds), std::move(ev->Get()->ChildPartitionsIds));
+    }
+
     void Handle(TEvWorker::TEvGone::TPtr& ev) {
         LOG_T("Handle " << ev->Get()->ToString());
 
@@ -428,6 +463,7 @@ public:
             hFunc(TEvService::TEvHandshake, Handle);
             hFunc(TEvService::TEvRunWorker, Handle);
             hFunc(TEvService::TEvStopWorker, Handle);
+            hFunc(TEvWorker::TEvDataEnd, Handle);
             hFunc(TEvWorker::TEvGone, Handle);
             hFunc(TEvWorker::TEvStatus, Handle);
             sFunc(TEvents::TEvPoison, PassAway);

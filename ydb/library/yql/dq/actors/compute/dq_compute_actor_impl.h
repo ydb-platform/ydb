@@ -109,6 +109,8 @@ protected:
 public:
     void Bootstrap() {
         try {
+            Alloc->SetGUCSettings(GUCSettings);
+            
             StartTime = TInstant::Now();
             {
                 TStringBuilder prefixBuilder;
@@ -195,7 +197,6 @@ protected:
             ComputeActorSpan.Attribute("stageId", static_cast<int>(Task.GetStageId()));
         }
 
-        Alloc->SetGUCSettings(GUCSettings);
         InitMonCounters(taskCounters);
         if (ownMemoryQuota) {
             MemoryQuota = InitMemoryQuota();

@@ -218,12 +218,8 @@ public:
             info.MutableActorIds().emplace_back(result);
             return result;
         } else {
-            std::shared_ptr<TGUCSettings> GUCSettings;
-            if (!args.SerializedGUCSettings.empty()) {
-                GUCSettings = std::make_shared<TGUCSettings>(args.SerializedGUCSettings);
-            }
             IActor* computeActor = ::NKikimr::NKqp::CreateKqpComputeActor(args.ExecuterId, args.TxId, args.Task, AsyncIoFactory,
-                runtimeSettings, memoryLimits, std::move(args.TraceId), std::move(args.Arena), FederatedQuerySetup, GUCSettings,
+                runtimeSettings, memoryLimits, std::move(args.TraceId), std::move(args.Arena), FederatedQuerySetup, args.GUCSettings,
                 std::move(args.SchedulingOptions), args.BlockTrackingMode);
             return args.ShareMailbox ? TlsActivationContext->AsActorContext().RegisterWithSameMailbox(computeActor) :
                 TlsActivationContext->AsActorContext().Register(computeActor);

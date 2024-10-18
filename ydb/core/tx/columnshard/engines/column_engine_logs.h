@@ -201,12 +201,8 @@ public:
         VersionedIndex.RemoveVersion(version);
     }
 
-    ui64 LastSchemaVersion () const override {
-        return VersionedIndex.GetLastSchemaVersion();
-    }
-
     bool HasUnusedSchemaVersions() const override {
-        return VersionCounters->HasUnusedSchemaVersionsExcept(LastSchemaVersion());
+        return VersionCounters->HasUnusedSchemaVersionsExcept(GetVersionedIndex().GetLastSchemaVersion());
     }
 
 private:

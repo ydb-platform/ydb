@@ -371,6 +371,7 @@ namespace NSchemeShardUT_Private {
         TVector<TString> IndexColumns;
         TVector<TString> DataColumns;
         TVector<NYdb::NTable::TGlobalIndexSettings> GlobalIndexSettings = {};
+        std::variant<std::monostate, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription> SpecializedIndexDescription;
     };
 
     std::unique_ptr<TEvIndexBuilder::TEvCreateRequest> CreateBuildColumnRequest(ui64 id, const TString& dbName, const TString& src, const TString& columnName, const Ydb::TypedValue& literal);

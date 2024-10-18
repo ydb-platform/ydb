@@ -481,7 +481,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void Handle(NSharedCache::TEvRequest::TPtr &ev) {
-        Y_DEBUG_ABORT_UNLESS(1 + 1 == 3, "Test verify");
+        int * pointer = nullptr;
+        *pointer = 13;
 
         NSharedCache::TEvRequest *msg = ev->Get();
         const auto &pageCollection = *msg->Fetch->PageCollection;

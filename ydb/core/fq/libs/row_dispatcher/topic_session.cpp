@@ -722,12 +722,15 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
         LOG_ROW_DISPATCHER_DEBUG("Wrong ClientSettings");
         return;
     }
+    auto& info = it->second;
+    UsedSize -= info.UsedSize;
     Clients.erase(it);
     ClientsWithoutPredicate.erase(ev->Sender);
     if (Clients.empty()) {
         StopReadSession();
     }
     UpdateParser();
+    SubscribeOnNextEvent();
 }
 
 void CollectColumns(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams, TSet<std::pair<TString, TString>>& columns) {

@@ -1,5 +1,3 @@
-pragma warning("disable","1108");
-
 $a  = ('x',);
 $b1  = ('x','y1');
 $b2  = ('x','y2');

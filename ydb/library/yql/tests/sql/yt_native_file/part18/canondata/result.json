@@ -1101,6 +1101,27 @@
             "uri": "file://test.test_flatten_by-flatten_dict--Results_/extracted"
         }
     ],
+    "test.test[in-small_in_YQL-19183-ansi-Debug]": [
+        {
+            "checksum": "e65a97321b8cfdd29a6e58e028163fd9",
+            "size": 353,
+            "uri": "https://{canondata_backend}/1781765/7492edde287c9f07ed8ec57c3c042a2c04f5f847/resource.tar.gz#test.test_in-small_in_YQL-19183-ansi-Debug_/opt.yql"
+        }
+    ],
+    "test.test[in-small_in_YQL-19183-ansi-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1781765/7492edde287c9f07ed8ec57c3c042a2c04f5f847/resource.tar.gz#test.test_in-small_in_YQL-19183-ansi-Plan_/plan.txt"
+        }
+    ],
+    "test.test[in-small_in_YQL-19183-ansi-Results]": [
+        {
+            "checksum": "56de73c873cafff267843da0d2621330",
+            "size": 889,
+            "uri": "https://{canondata_backend}/1781765/7492edde287c9f07ed8ec57c3c042a2c04f5f847/resource.tar.gz#test.test_in-small_in_YQL-19183-ansi-Results_/results.txt"
+        }
+    ],
     "test.test[insert-append_missing_null-default.txt-Debug]": [
         {
             "checksum": "3a1c14ac80f371e90ad5e78ba82759a1",

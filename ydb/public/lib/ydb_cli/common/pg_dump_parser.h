@@ -10,31 +10,6 @@
 
 namespace NYdb::NConsoleClient {
 
-class TFixedStringStream : public IInputStream {
-public:
-    TFixedStringStream(const TString& data) 
-        : Data(data)
-    {}
-
-    TFixedStringStream(TString&& data) 
-        : Data(std::move(data))
-    {}
-
-    void MovePointer(size_t position = 0) {
-        Position = position;
-    }
-
-protected:
-    virtual size_t DoRead(void* buf, size_t len) override;
-    virtual size_t DoSkip(size_t len) override;
-    virtual size_t DoReadTo(TString& st, char ch) override;
-    virtual ui64 DoReadAll(IOutputStream& out) override;
-
-private:
-    TString Data;
-    size_t Position = 0;
-};
-
 class TPgDumpParser {
     class TSQLCommandNode {
         using TSelfPtr = std::unique_ptr<TSQLCommandNode>;

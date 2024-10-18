@@ -26,6 +26,11 @@ protected:
     bool RemoveBlobLinkOnComplete(const TUnifiedBlobId& blobId);
 
 public:
+    TInsertTableAccessor(ui64 tabletId)
+        : LoadCounters(tabletId)
+    {
+    }
+
     TPathInfo& RegisterPathInfo(const ui64 pathId) {
         return Summary.RegisterPathInfo(pathId);
     }
@@ -99,6 +104,11 @@ private:
 public:
     static constexpr const TDuration WaitCommitDelay = TDuration::Minutes(10);
     static constexpr ui64 CleanupPackageSize = 10000;
+
+    TInsertTable(ui64 tabletId)
+        : TInsertTableAccessor(tabletId)
+    {
+    }
 
     bool Insert(IDbWrapper& dbTable, TInsertedData&& data);
     TInsertionSummary::TCounters Commit(

@@ -68,18 +68,19 @@ private:
 
 
 public:
-    TLoadTimeSignals()
+    TLoadTimeSignals(ui64 tabletId)
         : TBase("Startup")
     {
-        TablesLoadingTimeCounter = TBase::GetValue("Startup/TablesLoadingTime");;
-        SchemaPresetLoadingTimeCounter = TBase::GetValue("Startup/SchemaPresetLoadingTime");;
-        TableVersionsLoadingTimeCounter = TBase::GetValue("Startup/TableVersionsLoadingTime");;
-        SchemaPresetVersionsLoadingTimeCounter = TBase::GetValue("Startup/SchemaPreseVersionstLoadingTime");;
+        TString suffix = TString("/") + ToString(tabletId);
+        TablesLoadingTimeCounter = TBase::GetValue("Startup/TablesLoadingTime" + suffix);
+        SchemaPresetLoadingTimeCounter = TBase::GetValue("Startup/SchemaPresetLoadingTime" + suffix);
+        TableVersionsLoadingTimeCounter = TBase::GetValue("Startup/TableVersionsLoadingTime" + suffix);
+        SchemaPresetVersionsLoadingTimeCounter = TBase::GetValue("Startup/SchemaPreseVersionstLoadingTime" + suffix);
 
-        TablesLoadingFailCounter = TBase::GetDeriviative("Startup/TablesLoadingFailCount");;
-        SchemaPresetLoadingFailCounter = TBase::GetDeriviative("Startup/SchemaPresetLoadingFailCount");;
-        TableVersionsLoadingFailCounter = TBase::GetDeriviative("Startup/TableVersionsLoadingFailCount");;
-        SchemaPresetVersionsLoadingFailCounter = TBase::GetDeriviative("Startup/SchemaPreseVersionstLoadingFailCount");;
+        TablesLoadingFailCounter = TBase::GetDeriviative("Startup/TablesLoadingFailCount" + suffix);
+        SchemaPresetLoadingFailCounter = TBase::GetDeriviative("Startup/SchemaPresetLoadingFailCount" + suffix);
+        TableVersionsLoadingFailCounter = TBase::GetDeriviative("Startup/TableVersionsLoadingFailCount" + suffix);
+        SchemaPresetVersionsLoadingFailCounter = TBase::GetDeriviative("Startup/SchemaPreseVersionstLoadingFailCount" + suffix);
     }
 
     void SetTablesLoadingTime(ui64 microSeconds) {

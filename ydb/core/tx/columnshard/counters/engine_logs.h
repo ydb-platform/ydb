@@ -361,7 +361,7 @@ public:
     }
 
 
-    TEngineLogsCounters();
+    TEngineLogsCounters(ui64 tabletId);
 };
 
 }

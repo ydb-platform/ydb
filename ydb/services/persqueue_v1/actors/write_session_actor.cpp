@@ -201,6 +201,10 @@ TWriteSessionActor<UseMigrationProtocol>::TWriteSessionActor(
     , LastSourceIdUpdate(TInstant::Zero())
 {
     Y_ASSERT(Request);
+
+    if (auto values = Request->GetStreamCtx()->GetPeerMetaValues(NYdb::YDB_APPLICATION_NAME); !values.empty()) {
+        UserAgent = values[0];
+    }
 }
 
 template<bool UseMigrationProtocol>
@@ -517,6 +521,14 @@ void TWriteSessionActor<UseMigrationProtocol>::SetupCounters()
     }
     SessionsCreated.Inc();
     SessionsActive.Inc();
+
+    constexpr auto protocol = UseMigrationProtocol ? "pqv1" : "topic";
+    BytesWrittenByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents")
+        ->GetSubgroup("host", "")
+        ->GetSubgroup("protocol", protocol)
+        ->GetSubgroup("topic", FullConverter->GetFederationPath())
+        ->GetSubgroup("user-agent", CleanupCounterValueString(UserAgent))
+        ->GetExpiringNamedCounter("sensor", "BytesWrittenByUserAgent", true);
 }
 
 template<bool UseMigrationProtocol>
@@ -1245,6 +1257,8 @@ void TWriteSessionActor<UseMigrationProtocol>::SendWriteRequest(typename TWriteR
                                                                      std::move(request->PartitionWriteRequest));
 
     ctx.Send(PartitionWriterCache, std::move(event));
+
+    BytesWrittenByUserAgent->Add(request->ByteSize);
 
     SentRequests.push_back(std::move(request));
 }

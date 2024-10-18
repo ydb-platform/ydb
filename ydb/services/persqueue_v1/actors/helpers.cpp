@@ -27,4 +27,27 @@ bool HasMessages(const Topic::StreamReadMessage::ReadResponse& data) {
     return false;
 }
 
+
+TString CleanupCounterValueString(const TString& value) {
+    TString clean;
+    for (auto c : value) {
+        switch (c) {
+        case '|':
+        case '*':
+        case '?':
+        case '"':
+        case '\'':
+        case '`':
+        case '\\':
+            continue;
+        default:
+            clean.push_back(c);
+            if (clean.size() == 200) {
+                break;
+            }
+        }
+    }
+    return clean;
+}
+
 }

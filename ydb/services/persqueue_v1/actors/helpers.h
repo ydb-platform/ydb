@@ -17,4 +17,6 @@ bool HasMessages(const PersQueue::V1::MigrationStreamingReadServerMessage::DataB
 
 bool HasMessages(const Topic::StreamReadMessage::ReadResponse& data);
 
+TString CleanupCounterValueString(const TString& value);
+
 }

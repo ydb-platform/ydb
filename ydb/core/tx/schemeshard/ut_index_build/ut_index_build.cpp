@@ -959,7 +959,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
 
         auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
         UNIT_ASSERT_VALUES_EQUAL_C(
-            buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+            (int)buildIndexOperation.GetIndexBuild().GetState(), (int)Ydb::Table::IndexBuildState::STATE_DONE,
             buildIndexOperation.DebugString()
         );
 

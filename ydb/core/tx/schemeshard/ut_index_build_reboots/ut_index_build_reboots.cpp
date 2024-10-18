@@ -492,14 +492,14 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
 
             {
                 auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
-                UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_PREPARING);
+                UNIT_ASSERT_VALUES_EQUAL((int)descr.GetIndexBuild().GetState(), (int)Ydb::Table::IndexBuildState::STATE_PREPARING);
             }
 
             t.TestEnv->TestWaitNotification(runtime, buildIndexId);
 
             {
                 auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
-                UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+                UNIT_ASSERT_VALUES_EQUAL((int)descr.GetIndexBuild().GetState(), (int)Ydb::Table::IndexBuildState::STATE_DONE);
             }
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {

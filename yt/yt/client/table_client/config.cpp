@@ -1,6 +1,6 @@
 #include "config.h"
 
-#include <yt/yt/client/table_client/helpers.h>
+#include "helpers.h"
 
 #include <yt/yt/client/tablet_client/config.h>
 #include <yt/yt/client/tablet_client/helpers.h>
@@ -467,6 +467,8 @@ void TChunkWriterOptions::Register(TRegistrar registrar)
 
     registrar.Parameter("schema_modification", &TThis::SchemaModification)
         .Default(ETableSchemaModification::None);
+    registrar.Parameter("versioned_write_options", &TThis::VersionedWriteOptions)
+        .Default();
     registrar.Parameter("max_heavy_columns", &TThis::MaxHeavyColumns)
         .Default(0);
 

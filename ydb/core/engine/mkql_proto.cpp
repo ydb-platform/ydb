@@ -328,6 +328,13 @@ bool CellToValue(NScheme::TTypeInfo type, const TCell& c, NKikimrMiniKQL::TValue
         val.MutableOptional()->SetText(c.Data(), c.Size());
         break;
 
+    case NScheme::NTypeIds::Decimal: {
+        const auto loHi = c.AsValue<std::pair<ui64, i64>>();
+        val.MutableOptional()->SetLow128(loHi.first);
+        val.MutableOptional()->SetHi128(loHi.second);
+        break;
+    }
+
     case NScheme::NTypeIds::Pg: {
         auto convert = NPg::PgNativeTextFromNativeBinary(c.AsBuf(), type.GetPgTypeDesc());
         if (convert.Error) {

@@ -1,0 +1,386 @@
+====================BSD-3-Clause====================
+	/* This code is originally from Tor.  Used with permission. */
+
+
+====================BSD-3-Clause====================
+   o Change the BSD license from 4 to 3-clause. (86df3ed Joakim Soderberg)
+
+
+====================BSD-3-Clause====================
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * * Redistributions of source code must retain the above copyright
+ * notice, this list of conditions and the following disclaimer.
+ *
+ * * Redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution.
+ *
+ * * Neither the name of the original author; nor the names of any contributors
+ * may be used to endorse or promote products derived from this software
+ * without specific prior written permission.
+ *
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER
+ * OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+====================BSD-3-Clause====================
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+
+
+====================BSD-3-Clause====================
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY SUN MICROSYSTEMS, INC. ``AS IS'' AND ANY
+ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL SUN MICROSYSTEMS, INC. BE LIABLE FOR ANY
+ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+====================BSD-3-Clause====================
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+====================BSD-3-Clause====================
+Libevent is available for use under the following license, commonly known
+as the 3-clause (or "modified") BSD license:
+
+
+====================BSD-3-Clause====================
+Portions of Libevent are based on works by others, also made available by
+them under the three-clause BSD license above.  The copyright notices are
+
+
+====================BSD-3-Clause====================
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+3. The name of the author may not be used to endorse or promote products
+   derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+====================BSD-3-Clause AND CC-PDDC====================
+ * modifications by Nick Mathewson.  Adam put his DNS software in the
+ * public domain.  You can find his original copyright below.  Please,
+ * aware that the code as part of Libevent is governed by the 3-clause
+ * BSD license above.
+ *
+ * This software is Public Domain. To view a copy of the public domain dedication,
+ * visit http://creativecommons.org/licenses/publicdomain/ or send a letter to
+ * Creative Commons, 559 Nathan Abbott Way, Stanford, California 94305, USA.
+
+
+====================CC-PDDC====================
+ * Public Domain code
+ *
+ * This software is Public Domain. To view a copy of the public domain dedication,
+ * visit http://creativecommons.org/licenses/publicdomain/ or send a letter to
+ * Creative Commons, 559 Nathan Abbott Way, Stanford, California 94305, USA.
+
+
+====================COPYRIGHT====================
+      Copyright (c) 2010 BitTorrent, Inc.
+
+
+====================COPYRIGHT====================
+   Copyright (c) 1998 Todd C. Miller <Todd.Miller@courtesan.com>
+
+
+====================COPYRIGHT====================
+   Copyright (c) 2000 Dug Song <dugsong@monkey.org>
+   Copyright (c) 1993 The Regents of the University of California.
+
+
+====================COPYRIGHT====================
+   Copyright (c) 2002 Christopher Clark
+
+
+====================COPYRIGHT====================
+   Copyright (c) 2003 Michael A. Davis <mike@datanerds.net>
+
+
+====================COPYRIGHT====================
+   Copyright (c) 2006 Maxim Yegorushkin <maxim.yegorushkin@gmail.com>
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 1996, David Mazieres <dm@uun.org>
+ * Copyright (c) 2008, Damien Miller <djm@openbsd.org>
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2000-2007 Niels Provos <provos@citi.umich.edu>
+ * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2002, Christopher Clark
+ * All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2002-2007 Niels Provos <provos@citi.umich.edu>
+ * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2002-2007 Niels Provos <provos@citi.umich.edu>
+ * Copyright (c) 2007-2012 Niels Provos, Nick Mathewson
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2003-2009 Niels Provos <provos@citi.umich.edu>
+ * Copyright (c) 2009-2012 Niels Provos and Nick Mathewson
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2005-2012 Niels Provos and Nick Mathewson
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2006-2007 Niels Provos <provos@citi.umich.edu>
+ * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2007 Sun Microsystems. All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
+ * Copyright (c) 2002-2006 Niels Provos <provos@citi.umich.edu>
+ * All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2008-2012 Niels Provos and Nick Mathewson
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2008-2012 Niels Provos, Nick Mathewson
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2009-2012 Niels Provos and Nick Mathewson
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2009-2012 Niels Provos, Nick Mathewson
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2012 Niels Provos and Nick Mathewson
+
+
+====================COPYRIGHT====================
+ * Copyright 2000-2007 Niels Provos <provos@citi.umich.edu>
+ * Copyright 2007-2012 Niels Provos, Nick Mathewson
+
+
+====================COPYRIGHT====================
+ * Copyright 2000-2009 Niels Provos <provos@citi.umich.edu>
+ * Copyright 2009-2012 Niels Provos and Nick Mathewson
+
+
+====================COPYRIGHT====================
+ * Copyright 2003-2009 Niels Provos <provos@citi.umich.edu>
+ * Copyright 2009-2012 Niels Provos and Nick Mathewson
+
+
+====================COPYRIGHT====================
+ * Copyright 2005, Nick Mathewson.  Implementation logic is adapted from code
+ * by Christopher Clark, retrofit to allow drop-in memory management, and to
+ * use the same interface as Niels Provos's tree.h.  This is probably still
+ * a derived work, so the original license below still applies.
+
+
+====================COPYRIGHT====================
+ * Copyright 2006-2007 Niels Provos
+ * Copyright 2007-2012 Niels Provos and Nick Mathewson
+
+
+====================COPYRIGHT====================
+ * Copyright 2007-2012 Niels Provos and Nick Mathewson
+ * Copyright 2000-2007 Niels Provos <provos@citi.umich.edu>
+ * Copyright 2003 Michael A. Davis <mike@datanerds.net>
+
+
+====================COPYRIGHT====================
+ * Portable version by Chris Davis, adapted for Libevent by Nick Mathewson
+ * Copyright (c) 2010 Chris Davis, Niels Provos, and Nick Mathewson
+ * Copyright (c) 2010-2012 Niels Provos and Nick Mathewson
+
+
+====================COPYRIGHT====================
+/* Copyright 2002 Christopher Clark */
+/* Copyright 2005-2012 Nick Mathewson */
+/* Copyright 2009-2012 Niels Provos and Nick Mathewson */
+/* See license at end. */
+
+
+====================COPYRIGHT====================
+/* Copyright 2006-2007 Niels Provos
+ * Copyright 2007-2012 Nick Mathewson and Niels Provos
+
+
+====================ISC====================
+   Permission to use, copy, modify, and distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
+
+   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+
+====================ISC====================
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+
+====================ISC====================
+The arc4module is available under the following, sometimes called the
+"OpenBSD" license:
+
+
+====================MIT====================
+      Permission is hereby granted, free of charge, to any person obtaining a
+      copy of this software and associated documentation files (the
+      "Software"), to deal in the Software without restriction, including
+      without limitation the rights to use, copy, modify, merge, publish,
+      distribute, sublicense, and/or sell copies of the Software, and to
+      permit persons to whom the Software is furnished to do so, subject to
+      the following conditions:
+
+      The above copyright notice and this permission notice shall be included
+      in all copies or substantial portions of the Software.
+
+      THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+      OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+      MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+      NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+      LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+      OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+      WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+====================MIT====================
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+====================MIT====================
+The Windows timer code is based on code from libutp, which is
+distributed under this license, sometimes called the "MIT" license.

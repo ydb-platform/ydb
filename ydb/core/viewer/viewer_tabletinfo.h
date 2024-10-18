@@ -82,12 +82,13 @@ public:
     }
 
     void Bootstrap() override {
-        BLOG_TRACE("Bootstrap()");
+        if (NeedToRedirect()) {
+            return;
+        }
         const auto& params(Event->Get()->Request.GetParams());
         TBase::RequestSettings.Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-        TString database = params.Get("database");
-        if (database) {
-            RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(database), TBase::SelfId(), EBoardLookupMode::Second));
+        if (Database) {
+            RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(Database), TBase::SelfId(), EBoardLookupMode::Second));
             Become(&TThis::StateRequestedLookup, TDuration::MilliSeconds(TBase::RequestSettings.Timeout), new TEvents::TEvWakeup());
             return;
         }

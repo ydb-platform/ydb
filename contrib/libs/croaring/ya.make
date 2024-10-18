@@ -10,13 +10,12 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(4.1.1)
+VERSION(4.1.7)
 
-ORIGINAL_SOURCE(https://github.com/RoaringBitmap/CRoaring/archive/v4.1.1.tar.gz)
+ORIGINAL_SOURCE(https://github.com/RoaringBitmap/CRoaring/archive/v4.1.7.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/croaring/include
-    contrib/libs/croaring/include/roaring
 )
 
 NO_COMPILER_WARNINGS()

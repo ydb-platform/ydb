@@ -1083,8 +1083,8 @@ public:
 
     void Read(TStringBuf data) override
     {
-        i64 restSize = data.Size();
-        const char* currentPtr = data.Data();
+        i64 restSize = data.size();
+        const char* currentPtr = data.data();
         while (restSize > 0) {
             i64 nextRequiredSize = Decoder_->next_required_size();
             auto currentSize = std::min(nextRequiredSize, restSize);

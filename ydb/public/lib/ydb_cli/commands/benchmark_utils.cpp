@@ -122,11 +122,20 @@ TString FullTablePath(const TString& database, const TString& table) {
 }
 
 
-void ThrowOnError(const TStatus& status) {
-    if (!status.IsSuccess()) {
-        ythrow yexception() << "Operation failed with status " << status.GetStatus() << ": "
-                            << status.GetIssues().ToString();
+TMaybe<TQueryBenchmarkResult> ResultByStatus(const TStatus& status, const TString& deadlineName) {
+    if (status.IsSuccess()) {
+        return Nothing();
     }
+    TStringBuilder errorInfo;
+    switch (status.GetStatus()) {
+        case NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED:
+            errorInfo << deadlineName << " deadline expiried: " << status.GetIssues();
+            break;
+        default:
+            errorInfo << "Operation failed with status " << status.GetStatus() << ": " << status.GetIssues().ToString();
+            break;
+    }
+    return TQueryBenchmarkResult::Error(errorInfo, "", "");
 }
 
 bool HasCharsInString(const TString& str) {
@@ -147,6 +156,7 @@ private:
     YDB_READONLY_DEF(TDuration, ServerTiming);
     YDB_READONLY_DEF(TString, QueryPlan);
     YDB_READONLY_DEF(TString, PlanAst);
+    YDB_ACCESSOR_DEF(TString, DeadlineName);
 
 public:
     virtual ~IQueryResultScanner() = default;
@@ -155,8 +165,15 @@ public:
     virtual void OnAfterRow() = 0;
     virtual void OnRowItem(const NYdb::TColumn& c, const NYdb::TValue& value) = 0;
     virtual void OnFinish() = 0;
-    void OnError(const TString& info) {
-        ErrorInfo = info;
+    void OnError(const NYdb::EStatus status, const TString& info) {
+        switch (status) {
+            case NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED:
+                ErrorInfo = TStringBuilder() << DeadlineName << " deadline expiried: " << info;
+                break;
+            default:
+                ErrorInfo = info;
+                break;
+        }
     }
 
     template <typename TIterator>
@@ -181,7 +198,7 @@ public:
 
             if (!streamPart.IsSuccess()) {
                 if (!streamPart.EOS()) {
-                    OnError(streamPart.GetIssues().ToString());
+                    OnError(streamPart.GetStatus(), streamPart.GetIssues().ToString());
                     return false;
                 }
                 break;
@@ -292,16 +309,34 @@ public:
     }
 };
 
-TQueryBenchmarkResult ExecuteImpl(const TString& query, NTable::TTableClient& client, bool explainOnly) {
+template<class TSettings>
+TMaybe<TQueryBenchmarkResult> SetTimeoutSettings(TSettings& settings, const TQueryBenchmarkDeadline& deadline) {
+    if (deadline.Deadline != TInstant::Max()) {
+        auto now = Now();
+        if (now >= deadline.Deadline) {
+            return TQueryBenchmarkResult::Error(deadline.Name + " deadline expiried", "", "");
+        }
+        settings.ClientTimeout(deadline.Deadline - now);
+    }
+    return Nothing();
+}
+
+TQueryBenchmarkResult ExecuteImpl(const TString& query, NTable::TTableClient& client, const TQueryBenchmarkDeadline& deadline, bool explainOnly) {
     TStreamExecScanQuerySettings settings;
     settings.CollectQueryStats(ECollectQueryStatsMode::Full);
     settings.Explain(explainOnly);
+    if (auto error = SetTimeoutSettings(settings, deadline)) {
+        return *error;
+    }
     auto it = client.StreamExecuteScanQuery(query, settings).GetValueSync();
-    ThrowOnError(it);
+    if (auto error = ResultByStatus(it, deadline.Name)) {
+        return *error;
+    }
 
     std::shared_ptr<TYSONResultScanner> scannerYson = std::make_shared<TYSONResultScanner>();
     std::shared_ptr<TCSVResultScanner> scannerCSV = std::make_shared<TCSVResultScanner>();
     TQueryResultScannerComposite composite;
+    composite.SetDeadlineName(deadline.Name);
     composite.AddScanner(scannerYson);
     composite.AddScanner(scannerCSV);
     if (!composite.Scan(it)) {
@@ -318,27 +353,33 @@ TQueryBenchmarkResult ExecuteImpl(const TString& query, NTable::TTableClient& cl
     }
 }
 
-TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client) {
-    return ExecuteImpl(query, client, false);
+TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client, const TQueryBenchmarkDeadline& deadline) {
+    return ExecuteImpl(query, client, deadline, false);
 }
 
-TQueryBenchmarkResult Explain(const TString& query, NTable::TTableClient& client) {
-    return ExecuteImpl(query, client, true);
+TQueryBenchmarkResult Explain(const TString& query, NTable::TTableClient& client, const TQueryBenchmarkDeadline& deadline) {
+    return ExecuteImpl(query, client, deadline, true);
 }
 
-TQueryBenchmarkResult ExecuteImpl(const TString& query, NQuery::TQueryClient& client, bool explainOnly) {
+TQueryBenchmarkResult ExecuteImpl(const TString& query, NQuery::TQueryClient& client, const TQueryBenchmarkDeadline& deadline, bool explainOnly) {
     NQuery::TExecuteQuerySettings settings;
     settings.StatsMode(NQuery::EStatsMode::Full);
     settings.ExecMode(explainOnly ? NQuery::EExecMode::Explain : NQuery::EExecMode::Execute);
+    if (auto error = SetTimeoutSettings(settings, deadline)) {
+        return *error;
+    }
     auto it = client.StreamExecuteQuery(
         query,
         NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
         settings).GetValueSync();
-    ThrowOnError(it);
+    if (auto error = ResultByStatus(it, deadline.Name)) {
+        return *error;
+    }
 
     std::shared_ptr<TYSONResultScanner> scannerYson = std::make_shared<TYSONResultScanner>();
     std::shared_ptr<TCSVResultScanner> scannerCSV = std::make_shared<TCSVResultScanner>();
     TQueryResultScannerComposite composite;
+    composite.SetDeadlineName(deadline.Name);
     composite.AddScanner(scannerYson);
     composite.AddScanner(scannerCSV);
     if (!composite.Scan(it)) {
@@ -355,12 +396,12 @@ TQueryBenchmarkResult ExecuteImpl(const TString& query, NQuery::TQueryClient& cl
     }
 }
 
-TQueryBenchmarkResult Execute(const TString& query, NQuery::TQueryClient& client) {
-    return ExecuteImpl(query, client, false);
+TQueryBenchmarkResult Execute(const TString& query, NQuery::TQueryClient& client, const TQueryBenchmarkDeadline& deadline) {
+    return ExecuteImpl(query, client, deadline, false);
 }
 
-TQueryBenchmarkResult Explain(const TString& query, NQuery::TQueryClient& client) {
-    return ExecuteImpl(query, client, true);
+TQueryBenchmarkResult Explain(const TString& query, NQuery::TQueryClient& client, const TQueryBenchmarkDeadline& deadline) {
+    return ExecuteImpl(query, client, deadline, true);
 }
 
 NJson::TJsonValue GetQueryLabels(ui32 queryId) {

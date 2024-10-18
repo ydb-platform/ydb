@@ -73,6 +73,7 @@ namespace NYdb::NConsoleClient {
         ui32 MinActivePartitions_;
         TMaybe<ui32> MaxActivePartitions_;
         ui32 PartitionWriteSpeedKbps_;
+        TMaybe<ui32> PartitionsPerTablet_;
     };
 
     class TCommandTopicAlter: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs, public TCommandWithMeteringMode, public TCommandWithAutoPartitioning {
@@ -136,7 +137,7 @@ namespace NYdb::NConsoleClient {
         TString ConsumerName_;
     };
 
-    class TCommandTopicConsumerDescribe: public TYdbCommand, public TCommandWithFormat, public TCommandWithTopicName {
+    class TCommandTopicConsumerDescribe: public TYdbCommand, public TCommandWithOutput, public TCommandWithTopicName {
     public:
         TCommandTopicConsumerDescribe();
         void Config(TConfig& config) override;
@@ -177,7 +178,7 @@ namespace NYdb::NConsoleClient {
     };
 
     class TCommandTopicRead: public TYdbCommand,
-                             public TCommandWithFormat,
+                             public TCommandWithMessagingFormat,
                              public TInterruptibleCommand,
                              public TCommandWithTopicName,
                              public TCommandWithTransformBody {
@@ -234,7 +235,7 @@ namespace NYdb::NConsoleClient {
     };
 
     class TCommandTopicWrite: public TYdbCommand,
-                              public TCommandWithFormat,
+                              public TCommandWithMessagingFormat,
                               public TInterruptibleCommand,
                               public TCommandWithTopicName,
                               public TCommandWithCodec,

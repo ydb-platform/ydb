@@ -22,7 +22,7 @@ constexpr bool DEFAULT_USE_FLOW = true;
 
 constexpr bool DEFAULT_USE_NATIVE_YT_TYPES = false;
 
-constexpr bool DEFAULT_USE_INTERMEDIATE_SCHEMA = true;
+constexpr bool DEFAULT_USE_INTERMEDIATE_STREAMS = false;
 
 constexpr bool DEFAULT_USE_SKIFF = true;
 
@@ -88,5 +88,7 @@ constexpr ui16 DEFAULT_MIN_COLUMN_GROUP_SIZE = 2;
 constexpr ui16 DEFAULT_MAX_COLUMN_GROUPS = 64;
 
 constexpr bool DEFAULT_DISABLE_FUSE_OPERATIONS = false;
+
+constexpr bool DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS = false;
 
 } // NYql

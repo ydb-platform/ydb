@@ -471,6 +471,13 @@ void IsResourcePool(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeResourcePool);
 }
 
+void IsBackupCollection(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
+    const auto& pathDescr = record.GetPathDescription();
+    const auto& selfPath = pathDescr.GetSelf();
+    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeBackupCollection);
+}
+
 TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns, bool strictCount) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT(record.HasPathDescription());
@@ -846,18 +853,16 @@ TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames) {
     };
 }
 
-TCheckFunc VectorIndexDescription(Ydb::Table::VectorIndexSettings_Distance dist, 
-                                  Ydb::Table::VectorIndexSettings_Similarity similarity, 
+TCheckFunc VectorIndexDescription(Ydb::Table::VectorIndexSettings_Metric metric, 
                                   Ydb::Table::VectorIndexSettings_VectorType vectorType,
                                   ui32 vectorDimension
                                   ) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         if (record.GetPathDescription().GetTableIndex().HasVectorIndexKmeansTreeDescription()) {
             const auto& settings = record.GetPathDescription().GetTableIndex().GetVectorIndexKmeansTreeDescription().GetSettings();
-            UNIT_ASSERT_VALUES_EQUAL(settings.distance(), dist);
-            UNIT_ASSERT_VALUES_EQUAL(settings.similarity(), similarity);
-            UNIT_ASSERT_VALUES_EQUAL(settings.vector_type(), vectorType);
-            UNIT_ASSERT_VALUES_EQUAL(settings.vector_dimension(), vectorDimension);
+            UNIT_ASSERT_VALUES_EQUAL(settings.settings().metric(), metric);
+            UNIT_ASSERT_VALUES_EQUAL(settings.settings().vector_type(), vectorType);
+            UNIT_ASSERT_VALUES_EQUAL(settings.settings().vector_dimension(), vectorDimension);
         } else {
             UNIT_FAIL("oneof SpecializedIndexDescription should be set.");
         }

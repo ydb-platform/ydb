@@ -227,6 +227,9 @@
     "test_ydb_impex.TestImpex.test_stdin[tsv-additional_args3-row]": {
         "uri": "file://test_ydb_impex.TestImpex.test_stdin_tsv-additional_args3-row_/result.output"
     },
+    "test_ydb_scheme.TestSchemeDescribe.test_describe_view": {
+        "uri": "file://test_ydb_scheme.TestSchemeDescribe.test_describe_view/result.output"
+    },
     "test_ydb_scripting.TestExecuteScriptFromStdinWithWideOutput.test_wide_table": {
         "uri": "file://test_ydb_scripting.TestExecuteScriptFromStdinWithWideOutput.test_wide_table/result.output"
     },
@@ -506,11 +509,107 @@
     "test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stdin_par_tsv[stream]": {
         "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stdin_par_tsv_stream_/result.output"
     },
-    "test_ydb_scripting.TestScriptingServiceHelp.test_help": {
-        "uri": "file://test_ydb_scripting.TestScriptingServiceHelp.test_help/result.output"
+    "test_ydb_sql.TestExecuteSqlFromStdinWithWideOutput.test_wide_table": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlFromStdinWithWideOutput.test_wide_table/result.output"
     },
-    "test_ydb_scripting.TestScriptingServiceHelp.test_help_ex": {
-        "uri": "file://test_ydb_scripting.TestScriptingServiceHelp.test_help_ex/result.output"
+    "test_ydb_sql.TestExecuteSqlWithParams.test_list": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParams.test_list/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParams.test_struct": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParams.test_struct/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParams.test_uint32": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParams.test_uint32/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParams.test_uint64_and_string": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParams.test_uint64_and_string/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromJson.test_script_from_file": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromJson.test_script_from_file/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_batching_adaptive_csv[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_batching_adaptive_csv_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_batching_adaptive_json[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_batching_adaptive_json_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_batching_adaptive_raw[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_batching_adaptive_raw_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_batching_adaptive_tsv[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_batching_adaptive_tsv_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_batching_full_csv[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_batching_full_csv_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_batching_full_json[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_batching_full_json_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_batching_full_raw[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_batching_full_raw_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_batching_full_tsv[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_batching_full_tsv_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_columns_bad_header_csv[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_columns_bad_header_csv_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_columns_bad_header_tsv[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_columns_bad_header_tsv_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_columns_no_header_csv[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_columns_no_header_csv_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_columns_no_header_tsv[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_columns_no_header_tsv_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_framing_newline_delimited_csv[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_framing_newline_delimited_csv_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_framing_newline_delimited_json[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_framing_newline_delimited_json_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_framing_newline_delimited_raw[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_framing_newline_delimited_raw_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_framing_newline_delimited_tsv[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_framing_newline_delimited_tsv_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_ignore_excess_parameters_csv[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_ignore_excess_parameters_csv_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_ignore_excess_parameters_json[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_ignore_excess_parameters_json_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_ignore_excess_parameters_tsv[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_ignore_excess_parameters_tsv_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_simple_csv[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_simple_csv_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_simple_json[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_simple_json_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_simple_tsv[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_simple_tsv_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_skip_rows_csv[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_skip_rows_csv_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_skip_rows_tsv[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_skip_rows_tsv_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_stdin_par_csv[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_stdin_par_csv_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_stdin_par_json[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_stdin_par_json_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_stdin_par_raw[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_stdin_par_raw_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_stdin_par_tsv[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_stdin_par_tsv_sql_/result.output"
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_data_query_csv": {
         "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_data_query_csv/result.output"

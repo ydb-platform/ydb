@@ -2062,11 +2062,11 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto params = TParamsBuilder().AddParam("$in").BeginList()
             .AddListItem().BeginStruct()
                 .AddMember("Key").Uint64(1)
-                .AddMember("Value").Decimal(TDecimalValue("10.123456789"))
+                .AddMember("Value").Decimal(TDecimalValue("10.123456789", 22, 9))
                 .EndStruct()
             .AddListItem().BeginStruct()
                 .AddMember("Key").Uint64(2)
-                .AddMember("Value").Decimal(TDecimalValue("20.987654321"))
+                .AddMember("Value").Decimal(TDecimalValue("20.987654321", 22, 9))
                 .EndStruct()
             .EndList().Build().Build();
 
@@ -2086,6 +2086,49 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         CompareYson(R"([
                 [[1u];["10.123456789"]];
                 [[2u];["20.987654321"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(DecimalColumn35) {
+        auto kikimr = DefaultKikimrRunner();
+
+        TTableClient client{kikimr.GetDriver()};
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        UNIT_ASSERT(session.CreateTable("/Root/DecimalTest",
+            TTableBuilder()
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Value", TDecimalType(35, 10))
+                .SetPrimaryKeyColumn("Key")
+                .Build()).GetValueSync().IsSuccess());
+
+        auto params = TParamsBuilder().AddParam("$in").BeginList()
+            .AddListItem().BeginStruct()
+                .AddMember("Key").Uint64(1)
+                .AddMember("Value").Decimal(TDecimalValue("555555555555555.123456789", 35, 10))
+                .EndStruct()
+            .AddListItem().BeginStruct()
+                .AddMember("Key").Uint64(2)
+                .AddMember("Value").Decimal(TDecimalValue("555555555555555.987654321", 35, 10))
+                .EndStruct()
+            .EndList().Build().Build();
+
+        auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+                DECLARE $in AS List<Struct<Key: Uint64, Value: Decimal(35, 10)>>;
+
+                REPLACE INTO `/Root/DecimalTest`
+                    SELECT Key, Value FROM AS_TABLE($in);
+            )", TTxControl::BeginTx().CommitTx(), params).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        result = session.ExecuteDataQuery(R"(
+                SELECT Key, Value FROM `/Root/DecimalTest` ORDER BY Key
+            )", TTxControl::BeginTx().CommitTx(), params).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        CompareYson(R"([
+                [[1u];["555555555555555.123456789"]];
+                [[2u];["555555555555555.987654321"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
@@ -3972,6 +4015,29 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()), querySettings).GetValueSync();
         AssertSuccessResult(result);
         AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 1);
+    }
+
+    Y_UNIT_TEST(AutoChooseIndexOrderByLimit) {
+        TKikimrSettings settings;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetIndexAutoChooseMode(NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_ONLY_POINTS);
+        settings.SetAppConfig(appConfig);
+
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session);
+
+        NYdb::NTable::TExecDataQuerySettings querySettings;
+        querySettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            SELECT Fk, Key FROM `/Root/SecondaryKeys` WHERE Fk = 1 ORDER BY Key DESC LIMIT 1;
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()), querySettings).GetValueSync();
+        AssertSuccessResult(result);
+        AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 0);
     }
 
     Y_UNIT_TEST(MultipleBroadcastJoin) {

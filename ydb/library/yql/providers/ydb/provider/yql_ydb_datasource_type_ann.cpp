@@ -29,7 +29,11 @@ public:
 
     TStatus HandleYdbSourceSettings(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         Y_UNUSED(output);
-        if (!EnsureArgsCount(*input, 3U, ctx)) {
+        if (!EnsureArgsCount(*input, 4, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureWorldType(*input->Child(TYdbSourceSettings::idx_World), ctx)) {
             return TStatus::Error;
         }
 

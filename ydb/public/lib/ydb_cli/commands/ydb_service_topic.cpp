@@ -306,6 +306,11 @@ namespace {
             .Optional()
             .StoreResult(&MaxActivePartitions_);
         AddAutoPartitioning(config, false);
+
+        config.Opts->AddLongOption("partitions-per-tablet", "Partitions per PQ tablet")
+            .Optional()
+            .Hidden()
+            .StoreResult(&PartitionsPerTablet_);
     }
 
     void TCommandTopicCreate::Parse(TConfig& config) {
@@ -347,6 +352,10 @@ namespace {
 
         settings.RetentionPeriod(TDuration::Hours(RetentionPeriodHours_));
         settings.RetentionStorageMb(RetentionStorageMb_);
+
+        if (PartitionsPerTablet_.Defined()) {
+            settings.AddAttribute("_partitions_per_tablet", ToString(*PartitionsPerTablet_));
+        }
 
         auto status = topicClient.CreateTopic(TopicName, settings).GetValueSync();
         ThrowOnError(status);
@@ -393,7 +402,7 @@ namespace {
     NYdb::NTopic::TAlterTopicSettings TCommandTopicAlter::PrepareAlterSettings(
         NYdb::NTopic::TDescribeTopicResult& describeResult) {
         auto settings = NYdb::NTopic::TAlterTopicSettings();
-        auto partitioningSettings = settings.BeginAlterPartitioningSettings();
+        auto& partitioningSettings = settings.BeginAlterPartitioningSettings();
 
         if (MinActivePartitions_.Defined() && (*MinActivePartitions_ != describeResult.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions())) {
             partitioningSettings.MinActivePartitions(*MinActivePartitions_);
@@ -616,7 +625,7 @@ namespace {
 
     void TCommandTopicConsumerDescribe::Parse(TConfig& config) {
         TYdbCommand::Parse(config);
-        ParseFormats();
+        ParseOutputFormats();
         ParseTopicName(config, 0);
     }
 
@@ -846,7 +855,7 @@ namespace {
     void TCommandTopicRead::ValidateConfig() {
         // TODO(shmel1k@): add more formats.
         if (!IsStreamingFormat(MessagingFormat) && (Limit_.Defined() && (Limit_ <= 0 || Limit_ > 500))) {
-            throw TMisuseException() << "OutputFormat " << OutputFormat << " is not compatible with "
+            throw TMisuseException() << "OutputFormat " << MessagingFormat << " is not compatible with "
                                      << "limit less and equal '0' or more than '500': '" << *Limit_ << "' was given";
         }
     }

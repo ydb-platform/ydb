@@ -286,10 +286,25 @@ class BaseMultiDictTest:
 
         assert d.keys() < {"key", "key2"}
 
-    def test_keys_is_set_less_equal(self, cls: Type[MutableMultiMapping[str]]) -> None:
-        d = cls([("key", "value1")])
+    @pytest.mark.parametrize(
+        ("contents", "expected"),
+        (
+            ([("key", "value1")], True),
+            ([("key", "value1"), ("key2", "value2")], True),
+            ([("key", "value1"), ("key2", "value2"), ("key3", "value3")], False),
+            ([("key", "value1"), ("key3", "value3")], False),
+        ),
+    )
+    def test_keys_is_set_less_equal(
+        self,
+        cls: Type[MutableMultiMapping[str]],
+        contents: List[Tuple[str, str]],
+        expected: bool,
+    ) -> None:
+        d = cls(contents)
 
-        assert d.keys() <= {"key"}
+        result = d.keys() <= {"key", "key2"}
+        assert result is expected
 
     def test_keys_is_set_equal(self, cls: Type[MutableMultiMapping[str]]) -> None:
         d = cls([("key", "value1")])
@@ -297,22 +312,94 @@ class BaseMultiDictTest:
         assert d.keys() == {"key"}
 
     def test_keys_is_set_greater(self, cls: Type[MutableMultiMapping[str]]) -> None:
-        d = cls([("key", "value1")])
+        d = cls([("key", "value1"), ("key2", "value2")])
 
-        assert {"key", "key2"} > d.keys()
+        assert d.keys() > {"key"}
 
+    @pytest.mark.parametrize(
+        ("set_", "expected"),
+        (
+            ({"key"}, True),
+            ({"key", "key2"}, True),
+            ({"key", "key2", "key3"}, False),
+            ({"key3"}, False),
+        ),
+    )
     def test_keys_is_set_greater_equal(
-        self,
-        cls: Type[MutableMultiMapping[str]],
+        self, cls: Type[MutableMultiMapping[str]], set_: Set[str], expected: bool
+    ) -> None:
+        d = cls([("key", "value1"), ("key2", "value2")])
+
+        result = d.keys() >= set_
+        assert result is expected
+
+    def test_keys_less_than_not_implemented(
+        self, cls: Type[MutableMultiMapping[str]]
     ) -> None:
         d = cls([("key", "value1")])
 
-        assert {"key"} >= d.keys()
+        sentinel_operation_result = object()
+
+        class RightOperand:
+            def __gt__(self, other: KeysView[str]) -> object:
+                assert isinstance(other, KeysView)
+                return sentinel_operation_result
+
+        assert (d.keys() < RightOperand()) is sentinel_operation_result
+
+    def test_keys_less_than_or_equal_not_implemented(
+        self, cls: Type[MutableMultiMapping[str]]
+    ) -> None:
+        d = cls([("key", "value1")])
+
+        sentinel_operation_result = object()
+
+        class RightOperand:
+            def __ge__(self, other: KeysView[str]) -> object:
+                assert isinstance(other, KeysView)
+                return sentinel_operation_result
+
+        assert (d.keys() <= RightOperand()) is sentinel_operation_result
+
+    def test_keys_greater_than_not_implemented(
+        self, cls: Type[MutableMultiMapping[str]]
+    ) -> None:
+        d = cls([("key", "value1")])
+
+        sentinel_operation_result = object()
+
+        class RightOperand:
+            def __lt__(self, other: KeysView[str]) -> object:
+                assert isinstance(other, KeysView)
+                return sentinel_operation_result
+
+        assert (d.keys() > RightOperand()) is sentinel_operation_result
+
+    def test_keys_greater_than_or_equal_not_implemented(
+        self, cls: Type[MutableMultiMapping[str]]
+    ) -> None:
+        d = cls([("key", "value1")])
+
+        sentinel_operation_result = object()
+
+        class RightOperand:
+            def __le__(self, other: KeysView[str]) -> object:
+                assert isinstance(other, KeysView)
+                return sentinel_operation_result
+
+        assert (d.keys() >= RightOperand()) is sentinel_operation_result
 
     def test_keys_is_set_not_equal(self, cls: Type[MutableMultiMapping[str]]) -> None:
         d = cls([("key", "value1")])
 
         assert d.keys() != {"key2"}
+
+    def test_keys_not_equal_unrelated_type(
+        self, cls: Type[MutableMultiMapping[str]]
+    ) -> None:
+        d = cls([("key", "value1")])
+
+        assert d.keys() != "other"
 
     def test_eq(self, cls: Type[MutableMultiMapping[str]]) -> None:
         d = cls([("key", "value1")])

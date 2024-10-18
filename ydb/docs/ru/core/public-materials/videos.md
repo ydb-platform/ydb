@@ -16,6 +16,8 @@
 
   {% include [True_Tech](./_includes/conferences/2024/True_Tech.md) %}
 
+  {% include [Heisenbug](./_includes/conferences/2024/Heisenbug.md) %}
+
 - 2023
 
   {% include [JPoint](./_includes/conferences/2023/JPoint.md) %}

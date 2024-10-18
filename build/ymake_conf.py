@@ -1527,10 +1527,6 @@ class GnuCompiler(Compiler):
                 '-fwasm-exceptions',
             ]
 
-        self.debug_info_flags = ['-g']
-        if self.target.is_linux:
-            self.debug_info_flags.append('-ggnu-pubnames')
-
         self.cross_suffix = '' if is_positive('FORCE_NO_PIC') else '.pic'
 
         self.optimize = None
@@ -1604,8 +1600,6 @@ class GnuCompiler(Compiler):
         super(GnuCompiler, self).print_compiler()
 
         emit('C_COMPILER', '"{}"'.format(self.tc.c_compiler))
-        emit('C_COMPILER_OLD_UNQUOTED', self.tc.c_compiler)
-        emit('C_COMPILER_OLD', '${quo:C_COMPILER_OLD_UNQUOTED}')
         emit('OPTIMIZE', self.optimize)
         emit('WERROR_MODE', self.tc.werror_mode)
         emit('_C_FLAGS', self.c_flags)
@@ -1619,7 +1613,6 @@ class GnuCompiler(Compiler):
         emit('CXX_COMPILER_OLD', '${quo:CXX_COMPILER_OLD_UNQUOTED}')
         # TODO(somov): Убрать чтение настройки из os.environ
         emit('USE_ARC_PROFILE', 'yes' if preset('USE_ARC_PROFILE') or os.environ.get('USE_ARC_PROFILE') else 'no')
-        emit('DEBUG_INFO_FLAGS', self.debug_info_flags)
 
         if self.build.is_coverage:
             emit('_IS_COVERAGE', 'yes')
@@ -2131,7 +2124,6 @@ class MSVCCompiler(MSVC, Compiler):
         emit('CXX_COMPILER_UNQUOTED', '"{}"'.format(self.tc.cxx_compiler))
         emit('CXX_COMPILER_OLD_UNQUOTED', self.tc.cxx_compiler)
         emit('C_COMPILER_UNQUOTED', '"{}"'.format(self.tc.c_compiler))
-        emit('C_COMPILER_OLD_UNQUOTED', self.tc.c_compiler)
         emit('MASM_COMPILER_UNQUOTED', '"{}"'.format(self.tc.masm_compiler))
         emit('MASM_COMPILER_OLD_UNQUOTED', self.tc.masm_compiler)
         append('C_DEFINES', defines)
@@ -2175,11 +2167,7 @@ class MSVCLinker(MSVC, Linker):
         linker_lib = self.tc.lib
 
         emit('_MSVC_LIB', '"{}"'.format(linker_lib))
-        emit('_MSVC_LIB_OLD_UNQUOTED', linker_lib)
-        emit('_MSVC_LIB_OLD', '${quo:_MSVC_LIB_OLD_UNQUOTED}')
         emit('_MSVC_LINK', '"{}"'.format(linker))
-        emit('_MSVC_LINK_OLD_UNQUOTED', linker)
-        emit('_MSVC_LINK_OLD', '${quo:_MSVC_LINK_OLD_UNQUOTED}')
 
         if self.build.is_release:
             emit('LINK_EXE_FLAGS_PER_TYPE', '$LINK_EXE_FLAGS_RELEASE')
@@ -2425,6 +2413,13 @@ class Cuda(object):
         emit('NVCC_ENV', '${env:_NVCC_ENV}')
         emit('_NVCC_ENV', 'PATH=$CUDA_ROOT/nvvm/bin:$CUDA_ROOT/bin')
 
+        if self.cuda_version.value.startswith('10.'):
+            emit('NVCC_STD_VER', '17')
+        elif self.cuda_version.value.startswith('11.'):
+            emit('NVCC_STD_VER', '17')
+        else:
+            emit('NVCC_STD_VER', '20')
+
     def print_macros(self):
         mtime = ' '
         custom_pid = ' '
@@ -2453,7 +2448,7 @@ class Cuda(object):
             if not self.cuda_version.from_user:
                 return False
 
-        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2'):
+        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6'):
             return True
         elif self.cuda_version.value in ('10.2', '11.4.19') and target.is_linux_armv8:
             return True

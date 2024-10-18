@@ -32,7 +32,7 @@ public:
     public:
         TString BuildQuery() const;
 
-        TColumnSchema& SetType(NScheme::TTypeId typeId);
+        TColumnSchema& SetType(const NScheme::TTypeInfo& typeInfo);
     };
 
     using TUpdatesBuilder = NColumnShard::TTableUpdatesBuilder;
@@ -92,7 +92,7 @@ public:
         const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const Ydb::StatusIds_StatusCode& opStatus = Ydb::StatusIds::SUCCESS);
     void BulkUpsert(const TColumnTable& table, std::shared_ptr<arrow::RecordBatch> batch,
         const Ydb::StatusIds_StatusCode& opStatus = Ydb::StatusIds::SUCCESS);
-    void ReadData(const TString& query, const TString& expected, const NYdb::EStatus opStatus = NYdb::EStatus::SUCCESS);
+    void ReadData(const TString& query, const TString& expected, const NYdb::EStatus opStatus = NYdb::EStatus::SUCCESS) const;
     void RebootTablets(const TString& tableName);
     void WaitTabletDeletionInHive(ui64 tabletId, TDuration duration);
     void SetCompression(const TColumnTableBase& columnTable, const TString& columnName, const TCompression& compression,

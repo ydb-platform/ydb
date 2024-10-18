@@ -12,6 +12,7 @@ RECURSE(
     dynumber
     folder_service
     formats
+    fyamlcpp
     grpc
     http_proxy
     keys
@@ -26,6 +27,7 @@ RECURSE(
     persqueue
     pretty_types_print
     protobuf_printer
+    rewrapper
     query_actor
     schlab
     security

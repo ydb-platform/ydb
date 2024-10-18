@@ -7,6 +7,7 @@ RECURSE(
     canonical
     clickbench
     cms
+    compatibility
     dynumber
     encryption
     hive

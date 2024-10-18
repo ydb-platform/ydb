@@ -65,7 +65,7 @@ TInsertionSummary::TCounters TInsertTable::CommitEphemeral(IDbWrapper& dbTable, 
 
     AddBlobLink(data.GetBlobRange().BlobId);
     const ui64 pathId = data.GetPathId();
-    auto& pathInfo = Summary.GetPathInfo(pathId);
+    auto& pathInfo = Summary.GetPathInfoVerified(pathId);
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "commit_insertion")("path_id", pathId)("blob_range", data.GetBlobRange().ToString());
     dbTable.Commit(data);
     pathInfo.AddCommitted(std::move(data));

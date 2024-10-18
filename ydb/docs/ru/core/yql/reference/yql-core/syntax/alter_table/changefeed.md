@@ -10,23 +10,23 @@
 
 ## Параметры потока изменений {#changefeed-options}
 
-* `MODE` — режим работы. Указывает, что именно будет записано в поток при каждом изменении данных в таблице.
-* `KEYS_ONLY` — будут записаны только компоненты первичного ключа и признак изменения.
-* `UPDATES` — будут записаны значения изменившихся столбцов, получившиеся в результате изменения.
-* `NEW_IMAGE` — будут записаны значения всех столбцов, получившиеся в результате изменения.
-* `OLD_IMAGE` — будут записаны значения всех столбцов, предшествующие изменению.
-* `NEW_AND_OLD_IMAGES` - комбинация режимов `NEW_IMAGE` и `OLD_IMAGE`. Будут записаны значения всех столбцов _до_ и _в результате_ изменения.
-* `FORMAT` — формат данных, в котором будут записаны данные.
-* `JSON` — записывать данные в формате {% if oss == true and backend_name == "YDB" %}[JSON](../../../../concepts/cdc.md#json-record-structure){% else %}JSON{% endif %}.
+* `MODE` — режим работы. Указывает, что именно будет записано в поток при каждом изменении данных в таблице:
+    * `KEYS_ONLY` — будут записаны только компоненты первичного ключа и признак изменения.
+    * `UPDATES` — будут записаны значения изменившихся столбцов, получившиеся в результате изменения.
+    * `NEW_IMAGE` — будут записаны значения всех столбцов, получившиеся в результате изменения.
+    * `OLD_IMAGE` — будут записаны значения всех столбцов, предшествующие изменению.
+    * `NEW_AND_OLD_IMAGES` - комбинация режимов `NEW_IMAGE` и `OLD_IMAGE`. Будут записаны значения всех столбцов _до_ и _в результате_ изменения.
+* `FORMAT` — формат данных, в котором будут записаны данные:
+    * `JSON` — записывать данные в формате {% if oss == true and backend_name == "YDB" %}[JSON](../../../../concepts/cdc.md#json-record-structure){% else %}JSON{% endif %}.
 
-{% if audience == "tech" %}
+    {% if audience == "tech" %}
 
-* `DYNAMODB_STREAMS_JSON` — записывать данные в {% if oss == true and backend_name == "YDB" %}[JSON-формате, совместимом с Amazon DynamoDB Streams](../../../../concepts/cdc#dynamodb-streams-json-record-structure){% else %}JSON-формате, совместимом с Amazon DynamoDB Streams{% endif %}.md.
-* `DEBEZIUM_JSON` — записывать данные в {% if oss == true and backend_name == "YDB" %}[JSON-формате, аналогичном Debezium формату](../../../../concepts/cdc.md#debezium-json-record-structure){% else %}JSON-формате, аналогичном Debezium формату{% endif %}.
+    * `DYNAMODB_STREAMS_JSON` — записывать данные в {% if oss == true and backend_name == "YDB" %}[JSON-формате, совместимом с Amazon DynamoDB Streams](../../../../concepts/cdc.md#dynamodb-streams-json-record-structure){% else %}JSON-формате, совместимом с Amazon DynamoDB Streams{% endif %}.
 
-{% endif %}
+    {% endif %}
 
-* `VIRTUAL_TIMESTAMPS` — включение-выключение {% if oss == true and backend_name == "YDB" %}[виртуальных меток времени](../../../../concepts/cdc.md#virtual-timestamps){% else %}виртуальных меток времени{% endif %}. По умолчанию выключено.
+    * `DEBEZIUM_JSON` — записывать данные в {% if oss == true and backend_name == "YDB" %}[JSON-формате, аналогичном Debezium формату](../../../../concepts/cdc.md#debezium-json-record-structure){% else %}JSON-формате, аналогичном Debezium формату{% endif %}.
+* `VIRTUAL_TIMESTAMPS` — включение-выключение {% if oss == true and backend_name == "YDB" %}[виртуальных меток времени](../../../../concepts/cdc.md#virtual-timestamps){% else %}виртуальных меток времени{% endif %}.
 * `RETENTION_PERIOD` — {% if oss == true and backend_name == "YDB" %}[время хранения записей](../../../../concepts/cdc.md#retention-period){% else %}время хранения записей{% endif %}. Тип значения — `Interval`, значение по умолчанию — 24 часа (`Interval('PT24H')`).
 * `TOPIC_MIN_ACTIVE_PARTITIONS` — {% if oss == true and backend_name == "YDB" %}[количество партиций топика](../../../../concepts/cdc.md#topic-partitions){% else %}количество партиций топика{% endif %}. По умолчанию количество партиций топика равно количеству партиций таблицы.
 * `INITIAL_SCAN` — включение-выключение {% if oss == true and backend_name == "YDB" %}[первоначального сканирования](../../../../concepts/cdc.md#initial-scan){% else %}первоначального сканирования{% endif %} таблицы. По умолчанию выключено.

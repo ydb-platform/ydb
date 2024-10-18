@@ -1008,6 +1008,7 @@ void TPartition::Handle(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx)
                        "PQ: %" PRIu64 ", Partition: %" PRIu32 ", Step: %" PRIu64 ", TxId: %" PRIu64,
                        TabletID, Partition.OriginalPartitionId,
                        ev->Get()->Step, ev->Get()->TxId);
+        PendingExplicitMessageGroups = ev->Get()->ExplicitMessageGroups;
     } else {
         Y_ABORT_UNLESS(!TransactionsInflight.empty(),
                        "PQ: %" PRIu64 ", Partition: %" PRIu32 ", Step: %" PRIu64 ", TxId: %" PRIu64,
@@ -1187,10 +1188,19 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
     } else {
         auto insRes = TransactionsInflight.emplace(tx->ProposeConfig->TxId, tx);
         Y_ABORT_UNLESS(insRes.second);
-        Send(Tablet,
-             MakeHolder<TEvPQ::TEvProposePartitionConfigResult>(tx->ProposeConfig->Step,
+        auto result = MakeHolder<TEvPQ::TEvProposePartitionConfigResult>(tx->ProposeConfig->Step,
                                                                 tx->ProposeConfig->TxId,
-                                                                Partition).Release());
+                                                                Partition);
+
+        result->Data.SetPartitionId(Partition.OriginalPartitionId);
+        for (auto& [id, v] : SourceIdStorage.GetInMemorySourceIds()) {
+            if (v.Explicit) {
+                auto* m = result->Data.AddMessageGroup();
+                m->SetId(id);
+                m->SetSeqNo(v.SeqNo);
+            }
+        }
+        Send(Tablet, result.Release());
     }
 }
 
@@ -1207,9 +1217,6 @@ void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorCont
         protoInfo.SetSourceId(sourceId);
 
         auto info = SourceManager.Get(sourceId);
-        if (info.State == TSourceIdInfo::EState::Unknown) {
-            continue;
-        }
 
         Y_ABORT_UNLESS(info.Offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, info.Offset);
         Y_ABORT_UNLESS(info.SeqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, info.SeqNo);
@@ -2052,8 +2059,7 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t, 
     } else if (t->ProposeConfig) {
         Y_ABORT_UNLESS(ChangingConfig);
         ChangeConfig = MakeSimpleShared<TEvPQ::TEvChangePartitionConfig>(TopicConverter,
-                                                                         t->ProposeConfig->Config,
-                                                                         t->ProposeConfig->BootstrapConfig);
+                                                                         t->ProposeConfig->Config);
         PendingPartitionConfig = GetPartitionConfig(ChangeConfig->Config);
         SendChangeConfigReply = false;
     }
@@ -2139,8 +2145,7 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
 {
     ChangeConfig =
         MakeSimpleShared<TEvPQ::TEvChangePartitionConfig>(TopicConverter,
-                                                          event.Config,
-                                                          event.BootstrapConfig);
+                                                          event.Config);
     PendingPartitionConfig = GetPartitionConfig(ChangeConfig->Config);
 
     SendChangeConfigReply = false;
@@ -2383,9 +2388,10 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
 
     if (ChangeConfig) {
         EndChangePartitionConfig(std::move(ChangeConfig->Config),
-                                 std::move(ChangeConfig->BootstrapConfig),
+                                 PendingExplicitMessageGroups,
                                  ChangeConfig->TopicConverter,
                                  ctx);
+        PendingExplicitMessageGroups.reset();
     }
 
     for (auto& user : AffectedUsers) {
@@ -2450,7 +2456,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
 }
 
 void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
-                                          NKikimrPQ::TBootstrapConfig&& bootstrapConfig,
+                                          const TEvPQ::TMessageGroupsPtr& explicitMessageGroups,
                                           NPersQueue::TTopicConverterPtr topicConverter,
                                           const TActorContext& ctx)
 {
@@ -2458,14 +2464,12 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     PartitionConfig = GetPartitionConfig(Config);
     PartitionGraph = MakePartitionGraph(Config);
 
-    for (const auto& mg : bootstrapConfig.GetExplicitMessageGroups()) {
-        TMaybe<TPartitionKeyRange> keyRange;
-        if (mg.HasKeyRange()) {
-            keyRange = TPartitionKeyRange::Parse(mg.GetKeyRange());
+    if (explicitMessageGroups) {
+        for (const auto& [id, group] : *explicitMessageGroups) {
+            NPQ::TPartitionKeyRange keyRange = group.KeyRange;
+            TSourceIdInfo sourceId(group.SeqNo, 0, ctx.Now(), std::move(keyRange), false);
+            SourceIdStorage.RegisterSourceIdInfo(id, std::move(sourceId), true);
         }
-
-        TSourceIdInfo sourceId(0, 0, ctx.Now(), std::move(keyRange), false);
-        SourceIdStorage.RegisterSourceIdInfo(mg.GetId(), std::move(sourceId), true);
     }
 
     TopicConverter = topicConverter;
@@ -2477,15 +2481,14 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
         InitSplitMergeSlidingWindow();
     }
 
-    Send(ReadQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config, bootstrapConfig));
-    Send(WriteQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config, bootstrapConfig));
+    Send(ReadQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+    Send(WriteQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
     TotalPartitionWriteSpeed = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
 
     if (Config.GetPartitionConfig().HasMirrorFrom()) {
         if (Mirrorer) {
             ctx.Send(Mirrorer->Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter,
-                                                                          Config,
-                                                                          bootstrapConfig));
+                                                                          Config));
         } else {
             CreateMirrorerActor();
         }
@@ -3123,8 +3126,8 @@ void TPartition::AddCmdWriteConfig(NKikimrClient::TKeyValueRequest& request)
     Y_ABORT_UNLESS(ChangeConfig->Config.SerializeToString(&data));
 
     auto write = request.AddCmdWrite();
-    write->SetKey(key.Data(), key.Size());
-    write->SetValue(data.Data(), data.Size());
+    write->SetKey(key.data(), key.size());
+    write->SetValue(data.data(), data.size());
     write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
 }
 

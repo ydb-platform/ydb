@@ -10,7 +10,6 @@ import unittest
 
 from pyasn1.codec.der.decoder import decode as der_decoder
 from pyasn1.codec.der.encoder import encode as der_encoder
-from pyasn1.compat.octets import str2octs
 
 from pyasn1_modules import pem
 from pyasn1_modules import rfc5280
@@ -85,7 +84,7 @@ Q4eikPk4LQey
             count += 1
             if attr['type'] == rfc5755.id_aca_authenticationInfo:
                 self.assertEqual(
-                    str2octs('password'), attr['values'][0]['authInfo'])
+                    b'password', attr['values'][0]['authInfo'])
 
         self.assertEqual(5, count)
 

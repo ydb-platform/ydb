@@ -39,7 +39,7 @@ void VisitAllFields(const NProtoBuf::Message& msg, Callback& callback) {
 struct TTokenCollector {
     void operator()(const NProtoBuf::Message& message) {
         if (const auto* token = dynamic_cast<const NSQLv1Generated::TToken*>(&message)) {
-            if (!Tokens.Empty()) {
+            if (!Tokens.empty()) {
                 Tokens << ' ';
             }
             Tokens << token->GetValue();
@@ -707,11 +707,10 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
         //const auto& with = node.GetBlock4();
         auto& index = indexes.back();
         if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree) {
-            index.IndexSettings = TVectorIndexSettings();
+            auto& vectorSettings = index.IndexSettings.emplace<TVectorIndexSettings>();
             if (!CreateIndexSettings(node.GetBlock10().GetRule_with_index_settings1(), index.Type, index.IndexSettings)) {
                 return false;
             }
-            const auto &vectorSettings = std::get<TVectorIndexSettings>(index.IndexSettings);
             if (!vectorSettings.Validate(Ctx)) {
                 return false;
             }
@@ -756,7 +755,7 @@ bool TSqlTranslation::CreateIndexSettings(const TRule_with_index_settings& setti
 
 template<typename T>
 std::tuple<bool, T, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
-    T value;
+    T value{};
     // id_or_type
     if (node.HasAlt_index_setting_value1()) {
         const TString stringValue = to_lower(IdEx(node.GetAlt_index_setting_value1().GetRule_id_or_type1(), *this).Name);
@@ -785,7 +784,7 @@ template<>
 std::tuple<bool, ui64, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
     const auto& intNode = node.GetAlt_index_setting_value3().GetRule_integer1();
     const TString stringValue = Token(intNode.GetToken1());
-    ui64 value;
+    ui64 value = 0;
     TString suffix;
     if (!ParseNumbers(Ctx, stringValue, value, suffix)) {
         return {false, value, stringValue};
@@ -795,7 +794,7 @@ std::tuple<bool, ui64, TString> TSqlTranslation::GetIndexSettingValue(const TRul
 
 template<>
 std::tuple<bool, bool, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
-    bool value;
+    bool value = false;
     const TString stringValue = to_lower(Token(node.GetAlt_index_setting_value4().GetRule_bool_value1().GetToken1()));;
     if (!TryFromString<bool>(stringValue, value)) {
         return {false, value, stringValue};
@@ -818,14 +817,14 @@ bool TSqlTranslation::CreateIndexSettingEntry(const TIdentifier &id,
                 Ctx.Error() << "Invalid distance: " << stringValue;
                 return false;
             }
-            vectorIndexSettings.Metric = value;
+            vectorIndexSettings.Distance = value;
         } else if (to_lower(id.Name) == "similarity") {
             const auto [success, value, stringValue] = GetIndexSettingValue<TVectorIndexSettings::ESimilarity>(node);
             if (!success) {
                 Ctx.Error() << "Invalid similarity: " << stringValue;
                 return false;
             }
-            vectorIndexSettings.Metric = value;
+            vectorIndexSettings.Similarity = value;
         } else if (to_lower(id.Name) == "vector_type") {
             const auto [success, value, stringValue] = GetIndexSettingValue<TVectorIndexSettings::EVectorType>(node);
             if (!success) {
@@ -840,6 +839,20 @@ bool TSqlTranslation::CreateIndexSettingEntry(const TIdentifier &id,
                 return false;
             }
             vectorIndexSettings.VectorDimension = value;
+        } else if (to_lower(id.Name) == "clusters") {
+            const auto [success, value, stringValue] = GetIndexSettingValue<ui64>(node);
+            if (!success || value > Max<ui32>()) {
+                Ctx.Error() << "Invalid clusters: " << stringValue;
+                return false;
+            }
+            vectorIndexSettings.Clusters = value;
+        } else if (to_lower(id.Name) == "levels") {
+            const auto [success, value, stringValue] = GetIndexSettingValue<ui64>(node);
+            if (!success || value > Max<ui32>()) {
+                Ctx.Error() << "Invalid levels: " << stringValue;
+                return false;
+            }
+            vectorIndexSettings.Levels = value;
         } else {
             Ctx.Error() << "Unknown index setting: " << id.Name;
             return false;

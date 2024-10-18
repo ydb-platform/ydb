@@ -117,6 +117,7 @@ message TQueryRequest {
     optional string UserSID = 33;
     optional uint64 OutputChunkMaxSize = 34;
     optional string PoolId = 35;
+    optional string DatabaseId = 36;
 }
 
 message TKqpPathIdProto {
@@ -125,7 +126,7 @@ message TKqpPathIdProto {
 }
 
 message TVectorIndexKmeansTreeDescription {
-    optional Ydb.Table.VectorIndexSettings Settings = 1;
+    optional Ydb.Table.KMeansTreeSettings Settings = 1;
 }
 
 message TIndexDescriptionProto {
@@ -250,7 +251,7 @@ message TQueryResponseExtraInfo {
 message TQueryResponse {
     optional bytes SessionId = 1;
     reserved 2; // (deprecated) QueryErrors
-    repeated NKikimrMiniKQL.TResult Results = 3;
+    // repeated NKikimrMiniKQL.TResult Results = 3;
     // optional TQueryProfile Profile = 4; // TODO: Deprecate, use QueryStats
     reserved 4;
     optional bytes PreparedQuery = 5;
@@ -406,7 +407,7 @@ message TEvPingSessionResponse {
 
 message TEvDataQueryStreamPart {
     optional NActorsProto.TActorId GatewayActorId = 1;
-    repeated NKikimrMiniKQL.TResult Results = 2;
+    repeated Ydb.ResultSet Results = 2;
 };
 
 message TCancelQueryRequest {
@@ -552,6 +553,7 @@ message TEvStartKqpTasksRequest {
     optional string SchedulerGroup = 9;
     optional double MemoryPoolPercent = 10 [default = 100];
     optional string Database = 11;
+    optional string DatabaseId = 17;
     optional uint64 LockTxId = 13;
     optional uint32 LockNodeId = 14;
 

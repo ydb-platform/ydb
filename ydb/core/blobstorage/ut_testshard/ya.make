@@ -3,10 +3,6 @@ UNITTEST()
     SIZE(MEDIUM)
     TIMEOUT(600)
 
-    IF (SANITIZER_TYPE)
-        REQUIREMENTS(ram:32)
-    ENDIF()
-
     SRCS(
         main.cpp
     )

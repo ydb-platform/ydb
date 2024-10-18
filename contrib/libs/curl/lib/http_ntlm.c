@@ -40,7 +40,6 @@
 #include "strcase.h"
 #include "http_ntlm.h"
 #include "curl_ntlm_core.h"
-#include "curl_ntlm_wb.h"
 #include "curl_base64.h"
 #include "vauth/vauth.h"
 #include "url.h"
@@ -124,7 +123,7 @@ CURLcode Curl_input_ntlm(struct Curl_easy *data,
 }
 
 /*
- * This is for creating ntlm header output
+ * This is for creating NTLM header output
  */
 CURLcode Curl_output_ntlm(struct Curl_easy *data, bool proxy)
 {
@@ -188,10 +187,10 @@ CURLcode Curl_output_ntlm(struct Curl_easy *data, bool proxy)
     passwdp = "";
 
 #ifdef USE_WINDOWS_SSPI
-  if(!s_hSecDll) {
+  if(!Curl_hSecDll) {
     /* not thread safe and leaks - use curl_global_init() to avoid */
     CURLcode err = Curl_sspi_global_init();
-    if(!s_hSecDll)
+    if(!Curl_hSecDll)
       return err;
   }
 #ifdef SECPKG_ATTR_ENDPOINT_BINDINGS
@@ -201,7 +200,7 @@ CURLcode Curl_output_ntlm(struct Curl_easy *data, bool proxy)
 
   Curl_bufref_init(&ntlmmsg);
 
-  /* connection is already authenticated, don't send a header in future
+  /* connection is already authenticated, do not send a header in future
    * requests so go directly to NTLMSTATE_LAST */
   if(*state == NTLMSTATE_TYPE3)
     *state = NTLMSTATE_LAST;
@@ -266,10 +265,6 @@ void Curl_http_auth_cleanup_ntlm(struct connectdata *conn)
 {
   Curl_auth_cleanup_ntlm(&conn->ntlm);
   Curl_auth_cleanup_ntlm(&conn->proxyntlm);
-
-#if defined(NTLM_WB_ENABLED)
-  Curl_http_auth_cleanup_ntlm_wb(conn);
-#endif
 }
 
 #endif /* !CURL_DISABLE_HTTP && USE_NTLM */

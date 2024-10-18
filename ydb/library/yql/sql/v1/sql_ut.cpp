@@ -32,7 +32,7 @@ TString ToString(const TParsedTokenList& tokens) {
         if (token.Name == "WS" || token.Name == "EOF") {
             continue;
         }
-        if (!reconstructedQuery.Empty()) {
+        if (!reconstructedQuery.empty()) {
             reconstructedQuery << ' ';
         }
         reconstructedQuery << token.Content;
@@ -571,7 +571,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(WarnUnknownJoinStrategyHint) {
         NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a JOIN /*+ xmerge() */ plato.Input AS b USING (key);");
         UNIT_ASSERT(res.Root);
-        UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:41: Warning: Unsupported join strategy: xmerge, code: 4534\n");
+        UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:41: Warning: Unsupported join hint: xmerge, code: 4534\n");
     }
 
     Y_UNIT_TEST(ReverseLabels) {
@@ -4312,6 +4312,17 @@ select FormatType($f());
                                           "<main>:6:39: Error: Unknown correlation name: t\n");
     }
 
+    Y_UNIT_TEST(ErrOrderByIgnoredButCheckedForMissingColumns) {
+        auto req = "$src = SELECT key FROM (SELECT 1 as key, 2 as subkey) ORDER BY x; SELECT * FROM $src;";
+        ExpectFailWithError(req, "<main>:1:8: Warning: ORDER BY without LIMIT in subquery will be ignored, code: 4504\n"
+                                 "<main>:1:64: Error: Column x is not in source column set\n");
+
+        req = "$src = SELECT key FROM plato.Input ORDER BY x; SELECT * FROM $src;";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Warning: ORDER BY without LIMIT in subquery will be ignored, code: 4504\n");
+    }
+
     Y_UNIT_TEST(InvalidTtlInterval) {
         auto req = R"(
             USE plato;
@@ -5046,10 +5057,10 @@ Y_UNIT_TEST_SUITE(JsonValue) {
                 TStringBuilder query;
                 query << "$json = CAST(@@{\"key\": 1238}@@ as Json);\n"
                     << "SELECT JSON_VALUE($json, \"strict $.key\"";
-                if (!onEmpty.first.Empty()) {
+                if (!onEmpty.first.empty()) {
                     query << " " << onEmpty.first << " ON EMPTY";
                 }
-                if (!onError.first.Empty()) {
+                if (!onError.first.empty()) {
                     query << " " << onError.first << " ON ERROR";
                 }
                 query << ");\n";
@@ -5221,13 +5232,13 @@ Y_UNIT_TEST_SUITE(JsonQuery) {
                     TStringBuilder query;
                     query << R"($json = CAST(@@{"key": [123]}@@ as Json);
                     SELECT JSON_QUERY($json, "strict $.key" )" << wrap.first;
-                    if (!onEmpty.first.Empty()) {
+                    if (!onEmpty.first.empty()) {
                         if (wrap.first.StartsWith("WITH ")) {
                             continue;
                         }
                         query << " " << onEmpty.first << " ON EMPTY";
                     }
-                    if (!onError.first.Empty()) {
+                    if (!onError.first.empty()) {
                         query << " " << onError.first << " ON ERROR";
                     }
                     query << ");\n";
@@ -7206,14 +7217,14 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifier) {
                 CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
                     RANK=20,
                     RESOURCE_POOL='wgUserQueries',
-                    MEMBERNAME='yandex_query@abc'
+                    MEMBER_NAME='yandex_query@abc'
                 );
             )sql");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"membername" '"yandex_query@abc") '('"rank" (Int32 '"20")) '('"resource_pool" '"wgUserQueries"))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"member_name" '"yandex_query@abc") '('"rank" (Int32 '"20")) '('"resource_pool" '"wgUserQueries"))#");
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
             }
         };
@@ -7243,7 +7254,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifier) {
         NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
                 ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
-                    SET (RANK = 30, Weight = 5, MEMBERNAME = "test@user"),
+                    SET (RANK = 30, Weight = 5, MEMBER_NAME = "test@user"),
                     RESET (Resource_Pool);
             )sql");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
@@ -7251,7 +7262,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifier) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alterObject))#");
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('features '('('"membername" '"test@user") '('"rank" (Int32 '"30")) '('"weight" (Int32 '"5")))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('features '('('"member_name" '"test@user") '('"rank" (Int32 '"30")) '('"weight" (Int32 '"5")))))#");
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#('('resetFeatures '('"resource_pool")))#");
             }
         };

@@ -51,8 +51,7 @@ public:
 
         if (added) {
             DataShard.GetSnapshotManager().InitSnapshotExpireTime(key, ctx.Now());
-            if (DataShard.GetSnapshotManager().HasExpiringSnapshots())
-                DataShard.PlanCleanup(ctx);
+            DataShard.PlanCleanup(ctx);
 
             return EExecutionStatus::ExecutedNoMoreRestarts;
         } else {

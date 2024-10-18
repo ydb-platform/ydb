@@ -2,6 +2,7 @@
 
 #include <queue>
 
+#include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/workload_service/actors/actors.h>
 #include <ydb/core/kqp/workload_service/common/cpu_quota_manager.h>
@@ -20,8 +21,8 @@ struct TDatabaseState {
 
     std::vector<TEvPlaceRequestIntoPool::TPtr> PendingRequersts = {};
     std::unordered_set<TString> PendingSessionIds = {};
-    std::unordered_map<TString, std::vector<TEvCleanupRequest::TPtr>> PendingCancelRequests = {};
-    std::unordered_map<TString, std::unordered_set<TActorId>> PendingSubscriptions = {};
+    std::unordered_map<TString, std::vector<TEvCleanupRequest::TPtr>> PendingCancelRequests = {};  // Session ID to requests
+    std::unordered_map<TString, std::unordered_set<TActorId>> PendingSubscriptions = {};  // Pool ID to subscribers
     bool HasDefaultPool = false;
     bool Serverless = false;
     bool DatabaseUnsupported = false;
@@ -32,23 +33,23 @@ struct TDatabaseState {
         const TString& poolId = ev->Get()->PoolId;
         auto& subscribers = PendingSubscriptions[poolId];
         if (subscribers.empty()) {
-            ActorContext.Register(CreatePoolFetcherActor(ActorContext.SelfID, ev->Get()->Database, poolId, nullptr));
+            ActorContext.Register(CreatePoolFetcherActor(ActorContext.SelfID, ev->Get()->DatabaseId, poolId, nullptr));
         }
 
         subscribers.emplace(ev->Sender);
     }
 
     void DoPlaceRequest(TEvPlaceRequestIntoPool::TPtr ev) {
-        TString database = ev->Get()->Database;
+        TString databaseId = ev->Get()->DatabaseId;
         PendingSessionIds.emplace(ev->Get()->SessionId);
         PendingRequersts.emplace_back(std::move(ev));
 
         if (!EnabledResourcePoolsOnServerless && (TInstant::Now() - LastUpdateTime) > IDLE_DURATION) {
-            ActorContext.Register(CreateDatabaseFetcherActor(ActorContext.SelfID, database));
+            ActorContext.Register(CreateDatabaseFetcherActor(ActorContext.SelfID, DatabaseIdToDatabase(databaseId)));
         } else if (!DatabaseUnsupported) {
             StartPendingRequests();
         } else {
-            ReplyContinueError(Ydb::StatusIds::UNSUPPORTED, {NYql::TIssue(TStringBuilder() << "Unsupported database: " << database)});
+            ReplyContinueError(Ydb::StatusIds::UNSUPPORTED, {NYql::TIssue(TStringBuilder() << "Unsupported database: " << databaseId)});
         }
     }
 
@@ -62,15 +63,15 @@ struct TDatabaseState {
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS && poolHandler) {
             ActorContext.Send(poolHandler, new TEvPrivate::TEvUpdatePoolSubscription(ev->Get()->PathId, subscribers));
         } else {
-            const TString& database = ev->Get()->Database;
+            const TString& databaseId = ev->Get()->DatabaseId;
             for (const auto& subscriber : subscribers) {
-                ActorContext.Send(subscriber, new TEvUpdatePoolInfo(database, poolId, std::nullopt, std::nullopt));
+                ActorContext.Send(subscriber, new TEvUpdatePoolInfo(databaseId, poolId, std::nullopt, std::nullopt));
             }
         }
         subscribers.clear();
     }
 
-    void UpdateDatabaseInfo(const TEvPrivate::TEvFetchDatabaseResponse::TPtr& ev) {
+    void UpdateDatabaseInfo(const TEvFetchDatabaseResponse::TPtr& ev) {
         DatabaseUnsupported = ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED;
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             ReplyContinueError(ev->Get()->Status, GroupIssues(ev->Get()->Issues, "Failed to fetch database info"));
@@ -78,7 +79,7 @@ struct TDatabaseState {
         }
 
         if (Serverless != ev->Get()->Serverless) {
-            ActorContext.Send(MakeKqpProxyID(ActorContext.SelfID.NodeId()), new TEvUpdateDatabaseInfo(ev->Get()->Database, ev->Get()->Serverless));
+            ActorContext.Send(MakeKqpProxyID(ActorContext.SelfID.NodeId()), new TEvKqp::TEvUpdateDatabaseInfo(ev->Get()->Database, ev->Get()->DatabaseId, ev->Get()->Serverless));
         }
 
         LastUpdateTime = TInstant::Now();
@@ -163,8 +164,8 @@ struct TPoolState {
     void DoCleanupRequest(TEvCleanupRequest::TPtr event) {
         for (const auto& poolHandler : PreviousPoolHandlers) {
             ActorContext.Send(poolHandler, new TEvCleanupRequest(
-                event->Get()->Database, event->Get()->SessionId, event->Get()->PoolId,
-                event->Get()->Duration, event->Get()->CpuConsumed
+                event->Get()->DatabaseId, event->Get()->SessionId,
+                event->Get()->PoolId, event->Get()->Duration, event->Get()->CpuConsumed
             ));
         }
         ActorContext.Send(event->Forward(PoolHandler));

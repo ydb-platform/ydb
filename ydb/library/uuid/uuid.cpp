@@ -38,7 +38,7 @@ TString UuidBytesToString(const TString& in) {
 
 void UuidBytesToString(const TString& in, IOutputStream& out) {
     ui16 dw[8];
-    std::memcpy(dw, in.Data(), sizeof(dw));
+    std::memcpy(dw, in.data(), sizeof(dw));
     NUuid::UuidToString(dw, out);
 }
 

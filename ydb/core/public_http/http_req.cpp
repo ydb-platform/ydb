@@ -107,7 +107,7 @@ namespace NKikimr::NPublicHttp {
     }
 
     TString HttpCodeFamily(TStringBuf code) {
-        if (code.Size() != 3) {
+        if (code.size() != 3) {
             return "unknown";
         }
 
@@ -226,8 +226,8 @@ namespace NKikimr::NPublicHttp {
                 ", method: " << Request->Method <<
                 ", url: " << Request->URL <<
                 ", content type: " << ContentType <<
-                ", request body size: " << Request->Body.Size() <<
-                ", response body size: " << body.Size() <<
+                ", request body size: " << Request->Body.size() <<
+                ", response body size: " << body.size() <<
                 ", elapsed: " << elapsed <<
                 ", from: " << Request->Address <<
                 ", forwarded for: " << ForwardedFor <<

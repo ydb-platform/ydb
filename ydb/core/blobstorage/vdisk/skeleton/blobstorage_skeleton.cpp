@@ -93,10 +93,10 @@ namespace NKikimr {
             ctx.Send(NodeWardenServiceId,
                      new TEvBlobStorage::TEvControllerUpdateDiskStatus(
                          SelfVDiskId,
-                         OverloadHandler ? OverloadHandler->GetIntegralRankPercent() : 0,
                          SelfId().NodeId(),
                          Config->BaseInfo.PDiskId,
-                         Config->BaseInfo.VDiskSlotId));
+                         Config->BaseInfo.VDiskSlotId,
+                         OverloadHandler ? OverloadHandler->GetIntegralRankPercent() : 0));
             // repeat later
             ctx.Schedule(Config->WhiteboardUpdateInterval, new TEvTimeToUpdateWhiteboard());
         }
@@ -1247,7 +1247,7 @@ namespace NKikimr {
             TInstant now = TAppData::TimeProvider->Now();
             LOG_DEBUG_S(ctx, BS_VDISK_OTHER, VCtx->VDiskLogPrefix << "TEvVStatus Marker# BSVS20");
             auto aid = ctx.Register(CreateStatusRequestHandler(VCtx, Db->SkeletonID, Db->SyncerID, Db->SyncLogID,
-                IFaceMonGroup, SelfVDiskId, Db->GetVDiskIncarnationGuid(), GInfo, ev, ctx.SelfID, now, ReplDone));
+                IFaceMonGroup, SelfVDiskId, Db->GetVDiskIncarnationGuid(), GInfo, ev, ctx.SelfID, now, ReplDone, Config->BaseInfo.ReadOnly));
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
@@ -1930,7 +1930,7 @@ namespace NKikimr {
 
                 // create Hull
                 Hull = std::make_shared<THull>(Db->LsnMngr, PDiskCtx, Db->SkeletonID,
-                        Config->FeatureFlags.GetUseVDisksBalancing(), std::move(*ev->Get()->Uncond),
+                        Config->BalancingEnableDelete, std::move(*ev->Get()->Uncond),
                         ctx.ExecutorThread.ActorSystem, Config->BarrierValidation);
                 ActiveActors.Insert(Hull->RunHullServices(Config, HullLogCtx, Db->SyncLogFirstLsnToKeep,
                         Db->LoggerID, Db->LogCutterID, ctx), ctx, NKikimrServices::BLOBSTORAGE);
@@ -2556,15 +2556,31 @@ namespace NKikimr {
                 // don't run balancing for the static group
                 return;
             }
-            if (!Config->FeatureFlags.GetUseVDisksBalancing() || VCtx->Top->GType.GetErasure() == TErasureType::ErasureMirror3of4) {
+            bool balancingEnabled = Config->BalancingEnableSend || Config->BalancingEnableDelete;
+            if (!balancingEnabled || VCtx->Top->GType.GetErasure() == TErasureType::ErasureMirror3of4) {
                 return;
             }
             if (BalancingId) {
                 Send(BalancingId, new NActors::TEvents::TEvPoison());
                 ActiveActors.Erase(BalancingId);
             }
+            TBalancingCfg balancingCfg{
+                .EnableSend=Config->BalancingEnableSend,
+                .EnableDelete=Config->BalancingEnableDelete,
+                .BalanceOnlyHugeBlobs=Config->BalancingBalanceOnlyHugeBlobs,
+                .JobGranularity=Config->BalancingJobGranularity,
+                .BatchSize=Config->BalancingBatchSize,
+                .MaxToSendPerEpoch=Config->BalancingMaxToSendPerEpoch,
+                .MaxToDeletePerEpoch=Config->BalancingMaxToDeletePerEpoch,
+                .ReadBatchTimeout=Config->BalancingReadBatchTimeout,
+                .SendBatchTimeout=Config->BalancingSendBatchTimeout,
+                .RequestBlobsOnMainTimeout=Config->BalancingRequestBlobsOnMainTimeout,
+                .DeleteBatchTimeout=Config->BalancingDeleteBatchTimeout,
+                .EpochTimeout=Config->BalancingEpochTimeout,
+                .TimeToSleepIfNothingToDo=Config->BalancingTimeToSleepIfNothingToDo,
+            };
             auto balancingCtx = std::make_shared<TBalancingCtx>(
-                VCtx, PDiskCtx, HugeBlobCtx, SelfId(), Hull->GetSnapshot(), Config, GInfo, MinREALHugeBlobInBytes);
+                balancingCfg, VCtx, PDiskCtx, HugeBlobCtx, SelfId(), Hull->GetSnapshot(), Config, GInfo, MinREALHugeBlobInBytes);
             BalancingId = ctx.Register(CreateBalancingActor(balancingCtx));
             ActiveActors.Insert(BalancingId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }

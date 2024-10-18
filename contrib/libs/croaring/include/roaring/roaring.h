@@ -552,6 +552,10 @@ size_t roaring_bitmap_shrink_to_fit(roaring_bitmap_t *r);
  * This function is endian-sensitive. If you have a big-endian system (e.g., a
  * mainframe IBM s390x), the data format is going to be big-endian and not
  * compatible with little-endian systems.
+ *
+ * When serializing data to a file, we recommend that you also use
+ * checksums so that, at deserialization, you can be confident
+ * that you are recovering the correct data.
  */
 size_t roaring_bitmap_serialize(const roaring_bitmap_t *r, char *buf);
 
@@ -615,7 +619,10 @@ roaring_bitmap_t *roaring_bitmap_portable_deserialize(const char *buf);
  * https://github.com/RoaringBitmap/RoaringFormatSpec
  *
  * The function itself is safe in the sense that it will not cause buffer
- * overflows. However, for correct operations, it is assumed that the bitmap
+ * overflows: it will not read beyond the scope of the provided buffer
+ * (buf,maxbytes).
+ *
+ * However, for correct operations, it is assumed that the bitmap
  * read was once serialized from a valid bitmap (i.e., it follows the format
  * specification). If you provided an incorrect input (garbage), then the bitmap
  * read may not be in a valid state and following operations may not lead to
@@ -625,8 +632,10 @@ roaring_bitmap_t *roaring_bitmap_portable_deserialize(const char *buf);
  * but not for random inputs.
  *
  * You may use roaring_bitmap_internal_validate to check the validity of the
- * bitmap prior to using it. You may also use other strategies to check for
- * corrupted inputs (e.g., checksums).
+ * bitmap prior to using it.
+ *
+ * We recommend that you use checksums to check that serialized data corresponds
+ * to a serialized bitmap.
  *
  * This function is endian-sensitive. If you have a big-endian system (e.g., a
  * mainframe IBM s390x), the data format is going to be big-endian and not
@@ -688,6 +697,10 @@ size_t roaring_bitmap_portable_size_in_bytes(const roaring_bitmap_t *r);
  * This function is endian-sensitive. If you have a big-endian system (e.g., a
  * mainframe IBM s390x), the data format is going to be big-endian and not
  * compatible with little-endian systems.
+ *
+ * When serializing data to a file, we recommend that you also use
+ * checksums so that, at deserialization, you can be confident
+ * that you are recovering the correct data.
  */
 size_t roaring_bitmap_portable_serialize(const roaring_bitmap_t *r, char *buf);
 
@@ -722,6 +735,10 @@ size_t roaring_bitmap_frozen_size_in_bytes(const roaring_bitmap_t *r);
  * This function is endian-sensitive. If you have a big-endian system (e.g., a
  * mainframe IBM s390x), the data format is going to be big-endian and not
  * compatible with little-endian systems.
+ *
+ * When serializing data to a file, we recommend that you also use
+ * checksums so that, at deserialization, you can be confident
+ * that you are recovering the correct data.
  */
 void roaring_bitmap_frozen_serialize(const roaring_bitmap_t *r, char *buf);
 

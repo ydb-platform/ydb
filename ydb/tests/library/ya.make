@@ -117,4 +117,5 @@ PEERDIR(
 
 END()
 
+RECURSE(compatibility)
 RECURSE_FOR_TESTS(ut)

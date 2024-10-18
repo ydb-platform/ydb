@@ -757,6 +757,43 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         }
     }
 
+    Y_UNIT_TEST(ControlPlane_BackCompatibility) {
+        auto topicName = "back-compatibility-test";
+
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        {
+            TCreateTopicSettings createSettings;
+            createSettings
+                .BeginConfigurePartitioningSettings()
+                    .MinActivePartitions(3)
+                .EndConfigurePartitioningSettings();
+            client.CreateTopic(topicName, createSettings).Wait();
+        }
+
+        {
+            auto describeAfterAlter = client.DescribeTopic(topicName).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), 3);
+        }
+
+        {
+            TAlterTopicSettings alterSettings;
+            alterSettings
+                .BeginAlterPartitioningSettings()
+                    .MinActivePartitions(5)
+                .EndAlterTopicPartitioningSettings();
+            client.AlterTopic(topicName, alterSettings).Wait();
+        }
+
+        {
+            auto describeAfterAlter = client.DescribeTopic(topicName).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), 5);
+        }
+    }
+
     Y_UNIT_TEST(ControlPlane_PauseAutoPartitioning) {
         auto topicName = "autoscalit-topic";
 
@@ -884,6 +921,68 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             Sleep(TDuration::Seconds(5));
             auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
             UNIT_ASSERT_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 5);
+        }
+    }
+
+    void ExecuteQuery(NYdb::NTable::TSession& session, const TString& query ) {
+        const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(CDC_PartitionSplit_AutosplitByLoad) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        auto client = setup.MakeClient();
+        auto tableClient = setup.MakeTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/origin` (
+                id Uint64,
+                value Text,
+                PRIMARY KEY (id)
+            );
+        )");
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/origin`
+                ADD CHANGEFEED `feed` WITH (
+                    MODE = 'UPDATES',
+                    FORMAT = 'JSON',
+                    TOPIC_AUTO_PARTITIONING = 'ENABLED'
+                );
+        )");
+
+        {
+            auto describe = client.DescribeTopic("/Root/origin/feed").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
+        }
+
+        ui64 balancerTabletId;
+        {
+            auto pathDescr = setup.GetServer().AnnoyingClient->Ls("/Root/origin/feed/streamImpl")->Record.GetPathDescription().GetSelf();
+            balancerTabletId = pathDescr.GetBalancerTabletID();
+            Cerr << ">>>>> BalancerTabletID=" << balancerTabletId << Endl << Flush;
+            UNIT_ASSERT(balancerTabletId);
+        }
+
+        {
+            const auto edge = setup.GetRuntime().AllocateEdgeActor();
+            setup.GetRuntime().SendToPipe(balancerTabletId, edge, new TEvPQ::TEvPartitionScaleStatusChanged(0, NKikimrPQ::EScaleStatus::NEED_SPLIT));
+        }
+
+        {
+            size_t partitionCount = 0;
+            for (size_t i = 0; i < 10; ++i) {
+                Sleep(TDuration::Seconds(1));
+                auto describe = client.DescribeTopic("/Root/origin/feed").GetValueSync();
+                partitionCount = describe.GetTopicDescription().GetPartitions().size();
+                if (partitionCount == 3) {
+                    break;
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(partitionCount, 3);
         }
     }
 

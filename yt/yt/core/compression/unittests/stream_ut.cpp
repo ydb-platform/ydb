@@ -66,7 +66,7 @@ TEST(TBrotliStreamTest, IncompleteStream)
 {
     TString manyAs(64 * 1024, 'a');
     auto compressed = Compress<TBrotliCompress>(manyAs);
-    TString truncated(compressed.Data(), compressed.Size() - 1);
+    TString truncated(compressed.data(), compressed.size() - 1);
     EXPECT_THROW(Decompress<TBrotliDecompress>(truncated), std::exception);
 }
 

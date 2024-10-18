@@ -13,9 +13,9 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/utils.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
-#include <ydb/library/services/services.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/sys_view/common/schema.h>
@@ -26,6 +26,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+
 #include <library/cpp/json/writer/json.h>
 
 #include <util/generic/algorithm.h>
@@ -242,6 +244,7 @@ namespace {
             entry.BlobDepotInfo.Drop();
             entry.BlockStoreVolumeInfo.Drop();
             entry.FileStoreInfo.Drop();
+            entry.BackupCollectionInfo.Drop();
         }
 
         static void SetErrorAndClear(TResolveContext* context, TResolve::TEntry& entry, const bool isDescribeDenied) {
@@ -761,6 +764,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             FileStoreInfo.Drop();
             ViewInfo.Drop();
             ResourcePoolInfo.Drop();
+            BackupCollectionInfo.Drop();
         }
 
         void FillTableInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
@@ -977,6 +981,75 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             } while (++low != Partitioning->end());
 
             return partitions;
+        }
+
+        static void FillTopicPartitioning(
+                const NKikimrSchemeOp::TPersQueueGroupDescription& pqDesc,
+                TVector<NScheme::TTypeInfo>& schema,
+                TVector<NKikimr::TKeyDesc::TPartitionInfo>& partitioning)
+        {
+            const auto& pqConfig = pqDesc.GetPQTabletConfig();
+
+            if (::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType()) {
+                partitioning.reserve(pqDesc.GetPartitions().size());
+                for (const auto& partition : pqDesc.GetPartitions()) {
+                    partitioning.emplace_back(partition.GetPartitionId());
+                }
+
+                return;
+            }
+
+            if (pqConfig.GetPartitionKeySchema().empty()) {
+                return;
+            }
+
+            schema.reserve(pqConfig.PartitionKeySchemaSize());
+            for (const auto& keySchema : pqConfig.GetPartitionKeySchema()) {
+                if (keySchema.GetTypeId() == NScheme::NTypeIds::Pg) {
+                    schema.push_back(NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(keySchema.GetTypeInfo().GetPgTypeId())));
+                } else {
+                    schema.push_back(NScheme::TTypeInfo(keySchema.GetTypeId()));
+                }
+            }
+
+            partitioning.reserve(pqDesc.PartitionsSize());
+            for (const auto& partition : pqDesc.GetPartitions()) {
+                auto keyRange = NPQ::TPartitionKeyRange::Parse(partition.GetKeyRange());
+                Y_ABORT_UNLESS(!keyRange.FromBound || keyRange.FromBound->GetCells().size() == schema.size());
+                Y_ABORT_UNLESS(!keyRange.ToBound || keyRange.ToBound->GetCells().size() == schema.size());
+
+                auto& info = partitioning.emplace_back(partition.GetPartitionId());
+                if (keyRange.ToBound) {
+                    info.Range = NKikimr::TKeyDesc::TPartitionRangeInfo{
+                        .EndKeyPrefix = *keyRange.ToBound,
+                    };
+                } else {
+                    info.Range = NKikimr::TKeyDesc::TPartitionRangeInfo{};
+                }
+            }
+
+            Sort(partitioning.begin(), partitioning.end(), [&schema](const auto& lhs, const auto& rhs) {
+                Y_ABORT_UNLESS(lhs.Range && rhs.Range);
+                Y_ABORT_UNLESS(lhs.Range->EndKeyPrefix || rhs.Range->EndKeyPrefix);
+
+                if (!lhs.Range->EndKeyPrefix) {
+                    return false;
+                }
+
+                if (!rhs.Range->EndKeyPrefix) {
+                    return true;
+                }
+
+                Y_ABORT_UNLESS(lhs.Range->EndKeyPrefix && rhs.Range->EndKeyPrefix);
+
+                const int compares = CompareTypedCellVectors(
+                    lhs.Range->EndKeyPrefix.GetCells().data(),
+                    rhs.Range->EndKeyPrefix.GetCells().data(),
+                    schema.data(), schema.size()
+                );
+
+                return (compares < 0);
+            });
         }
 
         bool IsSysTable() const {
@@ -1207,6 +1280,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             DESCRIPTION_PART(FileStoreInfo);
             DESCRIPTION_PART(ViewInfo);
             DESCRIPTION_PART(ResourcePoolInfo);
+            DESCRIPTION_PART(BackupCollectionInfo);
 
             #undef DESCRIPTION_PART
 
@@ -1487,6 +1561,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 if (Created) {
                     NPQ::Migrate(*pathDesc.MutablePersQueueGroup()->MutablePQTabletConfig());
                     FillInfo(Kind, PQGroupInfo, std::move(*pathDesc.MutablePersQueueGroup()));
+                    FillTopicPartitioning(PQGroupInfo->Description, PQGroupInfo->Schema, PQGroupInfo->Partitioning);
+                    PQGroupInfo->PartitionChooser = NPQ::CreatePartitionChooser(PQGroupInfo->Description);
+                    PQGroupInfo->PartitionGraph = std::make_shared<NPQ::TPartitionGraph>(NPQ::MakePartitionGraph(PQGroupInfo->Description));
                 }
                 break;
             case NKikimrSchemeOp::EPathTypeCdcStream:
@@ -1535,6 +1612,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             case NKikimrSchemeOp::EPathTypeResourcePool:
                 Kind = TNavigate::KindResourcePool;
                 FillInfo(Kind, ResourcePoolInfo, std::move(*pathDesc.MutableResourcePoolDescription()));
+                break;
+            case NKikimrSchemeOp::EPathTypeBackupCollection:
+                Kind = TNavigate::KindBackupCollection;
+                FillInfo(Kind, BackupCollectionInfo, std::move(*pathDesc.MutableBackupCollectionDescription()));
                 break;
             case NKikimrSchemeOp::EPathTypeInvalid:
                 Y_DEBUG_ABORT("Invalid path type");
@@ -1608,6 +1689,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         break;
                     case NKikimrSchemeOp::EPathTypeResourcePool:
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindResourcePool);
+                        break;
+                    case NKikimrSchemeOp::EPathTypeBackupCollection:
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindBackupCollection);
                         break;
                     case NKikimrSchemeOp::EPathTypeTableIndex:
                     case NKikimrSchemeOp::EPathTypeInvalid:
@@ -1830,6 +1914,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.FileStoreInfo = FileStoreInfo;
             entry.ViewInfo = ViewInfo;
             entry.ResourcePoolInfo = ResourcePoolInfo;
+            entry.BackupCollectionInfo = BackupCollectionInfo;
         }
 
         bool CheckColumns(TResolveContext* context, TResolve::TEntry& entry,
@@ -2128,6 +2213,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         // ResourcePool specific
         TIntrusivePtr<TNavigate::TResourcePoolInfo> ResourcePoolInfo;
 
+        // BackupCollection specific
+        TIntrusivePtr<TNavigate::TBackupCollectionInfo> BackupCollectionInfo;
     }; // TCacheItem
 
     struct TMerger {

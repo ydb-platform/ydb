@@ -122,14 +122,7 @@ void IndexProtoToMetadata(const TIndexProto& indexes, NYql::TKikimrTableMetadata
 }
 
 TString GetTypeName(const NScheme::TTypeInfoMod& typeInfoMod) {
-    TString typeName;
-    if (typeInfoMod.TypeInfo.GetTypeId() != NScheme::NTypeIds::Pg) {
-        YQL_ENSURE(NScheme::TryGetTypeName(typeInfoMod.TypeInfo.GetTypeId(), typeName));
-    } else {
-        YQL_ENSURE(typeInfoMod.TypeInfo.GetPgTypeDesc(), "no pg type descriptor");
-        typeName = NPg::PgTypeNameFromTypeDesc(typeInfoMod.TypeInfo.GetPgTypeDesc(), typeInfoMod.TypeMod);
-    }
-    return typeName;
+    return NScheme::TypeName(typeInfoMod.TypeInfo, typeInfoMod.TypeMod);
 }
 
 TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
@@ -842,6 +835,11 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             .Subscribe([promise, externalDataSourceMetadata, settings](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
                         {
                             UpdateExternalDataSourceSecretsValue(externalDataSourceMetadata, result.GetValue());
+                            if (!externalDataSourceMetadata.Success()) {
+                                promise.SetValue(externalDataSourceMetadata);
+                                return;
+                            }
+
                             NExternalSource::IExternalSource::TPtr externalSource;
                             if (settings.ExternalSourceFactory) {
                                 externalSource = settings.ExternalSourceFactory->GetOrCreate(externalDataSourceMetadata.Metadata->ExternalSource.Type);

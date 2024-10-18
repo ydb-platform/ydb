@@ -16,7 +16,7 @@ struct TSetup {
         settings.Arena = &Arena;
         Formatter = NSQLFormat::MakeSqlFormatter(settings);
     }
-    
+
     void Run(const TCases& cases, NSQLFormat::EFormatMode mode = NSQLFormat::EFormatMode::Pretty) {
         for (const auto& c : cases) {
             NYql::TIssues issues;

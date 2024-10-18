@@ -4450,17 +4450,23 @@ TRuntimeNode TProgramBuilder::ToBytes(TRuntimeNode data) {
     return UnaryDataFunction(data, __func__, TDataFunctionFlags::HasStringResult | TDataFunctionFlags::AllowOptionalArgs | TDataFunctionFlags::CommonOptionalResult);
 }
 
-TRuntimeNode TProgramBuilder::FromBytes(TRuntimeNode data, NUdf::TDataTypeId schemeType) {
+TRuntimeNode TProgramBuilder::FromBytes(TRuntimeNode data, TType* targetType) {
     auto type = data.GetStaticType();
     bool isOptional;
     auto dataType = UnpackOptionalData(type, isOptional);
     MKQL_ENSURE(dataType->GetSchemeType() == NUdf::TDataType<char*>::Id, "Expected String");
 
-    auto outDataType = NewDataType(schemeType);
-    auto resultType = NewOptionalType(outDataType);
+    auto resultType = NewOptionalType(targetType);
     TCallableBuilder callableBuilder(Env, __func__, resultType);
     callableBuilder.Add(data);
-    callableBuilder.Add(NewDataLiteral(static_cast<ui32>(schemeType)));
+    auto targetDataType = AS_TYPE(TDataType, targetType);
+    callableBuilder.Add(NewDataLiteral(static_cast<ui32>(targetDataType->GetSchemeType())));
+    if (targetDataType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id) {
+        const auto& params = static_cast<const TDataDecimalType*>(targetType)->GetParams();
+        callableBuilder.Add(NewDataLiteral(params.first));
+        callableBuilder.Add(NewDataLiteral(params.second));
+    }
+
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
@@ -5894,7 +5900,7 @@ TRuntimeNode TProgramBuilder::ScalarApply(const TArrayRef<const TRuntimeNode>& a
 
 TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode stream, TRuntimeNode dict,
     EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns,
-    const TArrayRef<const ui32>& leftKeyDrops
+    const TArrayRef<const ui32>& leftKeyDrops, TType* returnType
 ) {
     if constexpr (RuntimeVersion < 51U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
@@ -5923,46 +5929,7 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode stream, TRuntimeNode
             return NewDataLiteral(idx);
         });
 
-    const auto leftStreamItems = ValidateBlockStreamType(stream.GetStaticType(), false);
-    const THashSet<ui32> leftKeyDropsSet(leftKeyDrops.cbegin(), leftKeyDrops.cend());
-    TVector<TType*> returnJoinItems;
-    for (size_t i = 0; i < leftStreamItems.size(); i++) {
-        if (leftKeyDropsSet.contains(i)) {
-            continue;
-        }
-        returnJoinItems.push_back(leftStreamItems[i]);
-    }
-
-    const auto payloadType = AS_TYPE(TDictType, dict.GetStaticType())->GetPayloadType();
-    const auto payloadItemType = payloadType->IsList()
-                               ? AS_TYPE(TListType, payloadType)->GetItemType()
-                               : payloadType;
-    if (joinKind == EJoinKind::Inner || joinKind == EJoinKind::Left) {
-        // XXX: This is the contract ensured by the expression compiler and
-        // optimizers to ease the processing of the dict payload in wide context.
-        MKQL_ENSURE(payloadItemType->IsTuple(), "Dict payload has to be a Tuple");
-        const auto payloadItems = AS_TYPE(TTupleType, payloadItemType)->GetElements();
-        TVector<TType*> dictBlockItems;
-        dictBlockItems.reserve(payloadItems.size());
-        for (const auto& payloadItem : payloadItems) {
-            MKQL_ENSURE(!payloadItem->IsBlock(), "Dict payload item has to be non-block");
-            const auto itemType = joinKind == EJoinKind::Inner ? payloadItem
-                                : NewOptionalType(payloadItem);
-            dictBlockItems.emplace_back(NewBlockType(itemType, TBlockType::EShape::Many));
-        }
-        // Block length column has to be the last column in wide block stream item,
-        // so all contents of the dict payload should be appended to the resulting
-        // wide type before the block size column.
-        const auto blockLenPos = std::prev(returnJoinItems.end());
-        returnJoinItems.insert(blockLenPos, dictBlockItems.cbegin(), dictBlockItems.cend());
-    } else {
-        // XXX: This is the contract ensured by the expression compiler and
-        // optimizers for join types that don't require the right (i.e. dict) part.
-        MKQL_ENSURE(payloadItemType->IsVoid(), "Dict payload has to be Void");
-    }
-    TType* returnJoinType = NewStreamType(NewMultiType(returnJoinItems));
-
-    TCallableBuilder callableBuilder(Env, __func__, returnJoinType);
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(stream);
     callableBuilder.Add(dict);
     callableBuilder.Add(NewDataLiteral((ui32)joinKind));

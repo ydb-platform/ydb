@@ -38,6 +38,8 @@ public:
     static const TString TsvFormatString;
     static const TString CsvDelimiter;
     static const TString CsvFormatString;
+    static const TString PsvDelimiter;
+    static const TString PsvFormatString;
 
 protected:
     virtual TString DoGetDDLQueries() const = 0;

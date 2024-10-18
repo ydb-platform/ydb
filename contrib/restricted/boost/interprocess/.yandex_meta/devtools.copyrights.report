@@ -1,0 +1,745 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 050be61242b0e0219d0b0f3ddd65a898
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2012-2013. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/sync/detail/common_algorithms.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0aa197418350ce1baad48ead251f36a4
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2010-2012.
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/detail/move.hpp [3:5]
+        include/boost/interprocess/detail/robust_emulation.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0e00627118b1aa126c93a4d188f1689d
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2009-2012. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/containers/containers_fwd.hpp [3:5]
+        include/boost/interprocess/detail/file_locking_helpers.hpp [3:5]
+        include/boost/interprocess/detail/intermodule_singleton.hpp [3:5]
+        include/boost/interprocess/detail/intermodule_singleton_common.hpp [3:5]
+        include/boost/interprocess/detail/managed_global_memory.hpp [3:5]
+        include/boost/interprocess/detail/portable_intermodule_singleton.hpp [3:5]
+        include/boost/interprocess/detail/windows_intermodule_singleton.hpp [3:5]
+        include/boost/interprocess/detail/xsi_shared_memory_file_wrapper.hpp [3:5]
+        include/boost/interprocess/xsi_shared_memory.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 127ca1debadc86c9870fadcd69654480
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2001, 2002, 2003 Peter Dimov and Multi Media Ltd.
+        //  Copyright 2004-2005 Peter Dimov
+        //  Copyright 2007-2012 Ion Gaztanaga
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/smart_ptr/detail/sp_counted_base_atomic.hpp [12:14]
+        include/boost/interprocess/smart_ptr/detail/sp_counted_impl.hpp [16:18]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 15ae8814b00bf7c2e807dfdd8c253473
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1998
+         * Silicon Graphics Computer Systems, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/streams/bufferstream.hpp [17:18]
+        include/boost/interprocess/streams/vectorstream.hpp [17:18]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1877c8c0d80d7b1ea728c21778641fa6
+BELONGS ya.make
+    License text:
+        // (C) Copyright John Maddock 2000.
+        // (C) Copyright Ion Gaztanaga 2005-2012.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/detail/type_traits.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 29ef0d00b2aae64d2f0f466fcb3faa99
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2011 Vicente J. Botet Escriba
+        // Copyright (C) 2021 Ion Gaztanaga
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/sync/cv_status.hpp [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2be4c5530322f675f4699b1fecb8bdd0
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2005-2015. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/detail/transform_iterator.hpp [3:4]
+        include/boost/interprocess/detail/utilities.hpp [3:4]
+        include/boost/interprocess/detail/win32_api.hpp [3:5]
+        include/boost/interprocess/detail/workaround.hpp [3:5]
+        include/boost/interprocess/exceptions.hpp [3:5]
+        include/boost/interprocess/offset_ptr.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 32f3e9a485f1df17b5b5c669b5cf8a43
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2005-2013. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/detail/os_thread_functions.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 36fea81184c5ae64a7624098ffc18c64
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2001-2003
+        // William E. Kempf
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/sync/interprocess_recursive_mutex.hpp [15:16]
+        include/boost/interprocess/sync/posix/mutex.hpp [15:16]
+        include/boost/interprocess/sync/posix/recursive_mutex.hpp [15:16]
+        include/boost/interprocess/sync/spin/recursive_mutex.hpp [15:16]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3ca4379da2fa49ccbaaf67782ff8bd4f
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2002 Peter Dimov and Multi Media Ltd.
+        //  Copyright (c) 2008 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/detail/os_thread_functions.hpp [15:16]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4846b8bf3ce57674103bf8bc473c1e01
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2005-2016.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/detail/mpl.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5348d350427534b5faf65a0d59e7e25d
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2020-2021. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/detail/char_wchar_holder.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 57edbb76525ea1f3bdb3c0226d2bd138
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2011-2012. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/sync/windows/named_condition.hpp [3:5]
+        include/boost/interprocess/sync/windows/named_condition_any.hpp [3:5]
+        include/boost/interprocess/sync/windows/named_mutex.hpp [3:5]
+        include/boost/interprocess/sync/windows/named_recursive_mutex.hpp [3:5]
+        include/boost/interprocess/sync/windows/named_semaphore.hpp [3:5]
+        include/boost/interprocess/sync/windows/named_sync.hpp [3:5]
+        include/boost/interprocess/sync/windows/winapi_mutex_wrapper.hpp [3:5]
+        include/boost/interprocess/sync/windows/winapi_semaphore_wrapper.hpp [3:5]
+        include/boost/interprocess/sync/windows/winapi_wrapper_common.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5c85c701ea71a691c59490ec39b34ede
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/smart_ptr/detail/bad_weak_ptr.hpp [5:8]
+        include/boost/interprocess/smart_ptr/detail/shared_count.hpp [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5db5d507e9e07c6fbe5e4cb7336a9321
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2001, 2002, 2003 Peter Dimov and Multi Media Ltd.
+        //  Copyright 2004-2005 Peter Dimov
+        //  Copyright 2007-2012 Ion Gaztanaga
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/smart_ptr/detail/sp_counted_base_atomic.hpp [12:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 63cd6a98b4cad3093701dc43bdbb5bd4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/smart_ptr/shared_ptr.hpp [5:9]
+        include/boost/interprocess/smart_ptr/weak_ptr.hpp [5:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6aa5a368ddf82ac8765157c83c7cbccb
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2001, 2002, 2003 Peter Dimov and Multi Media Ltd.
+        //  Copyright 2004-2005 Peter Dimov
+        //  Copyright 2007-2012 Ion Gaztanaga
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/smart_ptr/detail/sp_counted_base_atomic.hpp [12:14]
+        include/boost/interprocess/smart_ptr/detail/sp_counted_impl.hpp [16:18]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6b3739203926d66bd02ccd13e7de0e21
+BELONGS ya.make
+    License text:
+        // (C) Copyright Stephen Cleary 2000.
+        // (C) Copyright Ion Gaztanaga 2007-2012.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/detail/math_functions.hpp [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6c84f67bc267aa5792c9ce1502ce694e
+BELONGS ya.make
+    License text:
+        // (C) Copyright Howard Hinnant 2007-2010. Distributed under the Boost
+        // Software License, Version 1.0. (see http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/sync/interprocess_sharable_mutex.hpp [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 705c5d090b50e4c47ff6b9307ec838aa
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/smart_ptr/intrusive_ptr.hpp [5:8]
+        include/boost/interprocess/smart_ptr/scoped_ptr.hpp [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 74c00c2f52672a47f166fbceab9c147e
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2011 Vicente J. Botet Escriba
+        // Copyright (C) 2021 Ion Gaztanaga
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/sync/cv_status.hpp [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 776cc7e58c2d3434091396c0c43068d3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/smart_ptr/detail/bad_weak_ptr.hpp [5:8]
+        include/boost/interprocess/sync/spin/interprocess_barrier.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7afcace3c11d1de9ed95382d1d122b39
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/sync/spin/wait.hpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8012a67c0eb379c33d0eb9550cd0b925
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2006-2012
+        // (C) Copyright Markus Schoepflin 2007
+        // (C) Copyright Bryce Lelbach 2010
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/detail/atomic.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 85dbed9eb111a8ba961b4871d50c00f6
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2007-2012. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/allocators/detail/node_tools.hpp [3:5]
+        include/boost/interprocess/detail/interprocess_tester.hpp [3:5]
+        include/boost/interprocess/detail/math_functions.hpp [3:4]
+        include/boost/interprocess/smart_ptr/deleter.hpp [3:3]
+        include/boost/interprocess/smart_ptr/detail/sp_counted_base.hpp [3:3]
+        include/boost/interprocess/sync/shm/named_creation_functor.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 867a1c22c4ac2ccaab801cc1559066f4
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2009. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/xsi_key.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 878bdc8a748b4f845c717d1e57e8953d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/smart_ptr/enable_shared_from_this.hpp [5:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8a32ac58437975fa8d08b309ba44c586
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2021-2021.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/detail/timed_utils.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 93298a574c18187d2a2c7398406ca6da
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2012-2012. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/detail/config_external_begin.hpp [3:5]
+        include/boost/interprocess/detail/config_external_end.hpp [3:5]
+        include/boost/interprocess/sync/detail/condition_any_algorithm.hpp [3:5]
+        include/boost/interprocess/sync/detail/locks.hpp [3:5]
+        include/boost/interprocess/sync/interprocess_condition_any.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 96370b4387f2e07a55f47b3531512279
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/errors.hpp [13:16]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 99b0e8de6a1418d7b7de62fe775f9abf
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/smart_ptr/detail/shared_count.hpp [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9f416aa8f1e6678b0d6d5857d642b969
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2002 Peter Dimov and Multi Media Ltd.
+        //  Copyright (c) 2008 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/detail/os_thread_functions.hpp [15:16]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9fe58de5a87c382ac6ec5e085c48cd94
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2001, 2002, 2003 Peter Dimov and Multi Media Ltd.
+        //  Copyright 2004-2005 Peter Dimov
+        //  Copyright 2006      Ion Gaztanaga
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/smart_ptr/detail/sp_counted_impl.hpp [16:18]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a7eb31adebbe4ac555a6d1f417f84187
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2006-2012
+        // (C) Copyright Markus Schoepflin 2007
+        // (C) Copyright Bryce Lelbach 2010
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/detail/atomic.hpp [3:5]
+        include/boost/interprocess/detail/file_wrapper.hpp [3:5]
+        include/boost/interprocess/detail/managed_open_or_create_impl.hpp [3:5]
+        include/boost/interprocess/smart_ptr/detail/shared_count.hpp [5:9]
+        include/boost/interprocess/smart_ptr/enable_shared_from_this.hpp [5:8]
+        include/boost/interprocess/smart_ptr/intrusive_ptr.hpp [5:8]
+        include/boost/interprocess/smart_ptr/scoped_ptr.hpp [5:9]
+        include/boost/interprocess/smart_ptr/shared_ptr.hpp [5:9]
+        include/boost/interprocess/smart_ptr/weak_ptr.hpp [5:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a8a1037395e0ad6175aa2ab2e85af5b6
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2005-2012.
+        // (C) Copyright Gennaro Prota 2003 - 2004.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/detail/pointer_type.hpp [3:4]
+        include/boost/interprocess/detail/transform_iterator.hpp [3:4]
+        include/boost/interprocess/detail/utilities.hpp [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b13bccd796707ee307c756c5292480d5
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/smart_ptr/scoped_ptr.hpp [5:9]
+        include/boost/interprocess/smart_ptr/shared_ptr.hpp [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cba287530567f506b4683cd1a18cce1d
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2014-2015. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/detail/nothrow.hpp [3:5]
+        include/boost/interprocess/detail/simple_swap.hpp [5:7]
+        include/boost/interprocess/detail/std_fwd.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cef1ae82ac7cfc6fbbbae11befc918d0
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2008-2012. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/allocators/detail/allocator_common.hpp [3:5]
+        include/boost/interprocess/containers/allocation_type.hpp [3:5]
+        include/boost/interprocess/containers/deque.hpp [3:5]
+        include/boost/interprocess/containers/flat_map.hpp [3:5]
+        include/boost/interprocess/containers/flat_set.hpp [3:5]
+        include/boost/interprocess/containers/list.hpp [3:5]
+        include/boost/interprocess/containers/map.hpp [3:5]
+        include/boost/interprocess/containers/pair.hpp [3:5]
+        include/boost/interprocess/containers/set.hpp [3:5]
+        include/boost/interprocess/containers/slist.hpp [3:5]
+        include/boost/interprocess/containers/stable_vector.hpp [3:5]
+        include/boost/interprocess/containers/string.hpp [3:5]
+        include/boost/interprocess/containers/vector.hpp [3:5]
+        include/boost/interprocess/containers/version_type.hpp [3:5]
+        include/boost/interprocess/detail/variadic_templates_tools.hpp [3:5]
+        include/boost/interprocess/managed_xsi_shared_memory.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d13138d28bff8572a5d27fe6a28aab70
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/errors.hpp [13:16]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dade72e8f17d6f5ad231015a08f18f49
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2006-2014. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/smart_ptr/unique_ptr.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dc62618d07d5b3ba2ac5fd96522c9d05
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2023-2024. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/timed_utils.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e8f7853c4a6700eeac6f2514116bb8a9
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2006-2012
+        // (C) Copyright Markus Schoepflin 2007
+        // (C) Copyright Bryce Lelbach 2010
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/detail/atomic.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e9c01b978ee54abfd69646f14ef22a7a
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2007-2014. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/detail/shared_dir_helpers.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL eb5cebe314db358e0f35ffe2fb48f762
+BELONGS ya.make
+    License text:
+        // (C) Copyright Ion Gaztanaga 2005-2012. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/allocators/adaptive_pool.hpp [3:5]
+        include/boost/interprocess/allocators/allocator.hpp [3:5]
+        include/boost/interprocess/allocators/cached_adaptive_pool.hpp [3:5]
+        include/boost/interprocess/allocators/cached_node_allocator.hpp [3:5]
+        include/boost/interprocess/allocators/detail/adaptive_node_pool.hpp [3:5]
+        include/boost/interprocess/allocators/detail/node_pool.hpp [3:5]
+        include/boost/interprocess/allocators/node_allocator.hpp [3:5]
+        include/boost/interprocess/allocators/private_adaptive_pool.hpp [3:5]
+        include/boost/interprocess/allocators/private_node_allocator.hpp [3:5]
+        include/boost/interprocess/anonymous_shared_memory.hpp [3:5]
+        include/boost/interprocess/creation_tags.hpp [3:5]
+        include/boost/interprocess/detail/cast_tags.hpp [3:5]
+        include/boost/interprocess/detail/config_begin.hpp [3:5]
+        include/boost/interprocess/detail/config_end.hpp [3:5]
+        include/boost/interprocess/detail/in_place_interface.hpp [3:5]
+        include/boost/interprocess/detail/managed_memory_impl.hpp [3:5]
+        include/boost/interprocess/detail/min_max.hpp [3:3]
+        include/boost/interprocess/detail/named_proxy.hpp [3:5]
+        include/boost/interprocess/detail/os_file_functions.hpp [3:5]
+        include/boost/interprocess/detail/pointer_type.hpp [3:4]
+        include/boost/interprocess/detail/segment_manager_helper.hpp [3:5]
+        include/boost/interprocess/detail/type_traits.hpp [2:3]
+        include/boost/interprocess/errors.hpp [3:5]
+        include/boost/interprocess/file_mapping.hpp [3:5]
+        include/boost/interprocess/indexes/flat_map_index.hpp [3:5]
+        include/boost/interprocess/indexes/iset_index.hpp [3:5]
+        include/boost/interprocess/indexes/iunordered_set_index.hpp [3:5]
+        include/boost/interprocess/indexes/map_index.hpp [3:5]
+        include/boost/interprocess/indexes/null_index.hpp [3:5]
+        include/boost/interprocess/interprocess_fwd.hpp [3:5]
+        include/boost/interprocess/ipc/message_queue.hpp [3:5]
+        include/boost/interprocess/managed_external_buffer.hpp [3:5]
+        include/boost/interprocess/managed_heap_memory.hpp [3:5]
+        include/boost/interprocess/managed_mapped_file.hpp [3:5]
+        include/boost/interprocess/managed_shared_memory.hpp [3:5]
+        include/boost/interprocess/managed_windows_shared_memory.hpp [3:5]
+        include/boost/interprocess/mapped_region.hpp [3:5]
+        include/boost/interprocess/mem_algo/detail/mem_algo_common.hpp [3:5]
+        include/boost/interprocess/mem_algo/detail/simple_seq_fit_impl.hpp [3:5]
+        include/boost/interprocess/mem_algo/rbtree_best_fit.hpp [3:5]
+        include/boost/interprocess/mem_algo/simple_seq_fit.hpp [3:5]
+        include/boost/interprocess/permissions.hpp [3:5]
+        include/boost/interprocess/segment_manager.hpp [3:5]
+        include/boost/interprocess/shared_memory_object.hpp [3:5]
+        include/boost/interprocess/streams/bufferstream.hpp [3:5]
+        include/boost/interprocess/streams/vectorstream.hpp [3:5]
+        include/boost/interprocess/sync/detail/condition_algorithm_8a.hpp [3:5]
+        include/boost/interprocess/sync/file_lock.hpp [3:5]
+        include/boost/interprocess/sync/interprocess_condition.hpp [3:5]
+        include/boost/interprocess/sync/interprocess_mutex.hpp [3:5]
+        include/boost/interprocess/sync/interprocess_recursive_mutex.hpp [3:5]
+        include/boost/interprocess/sync/interprocess_semaphore.hpp [3:5]
+        include/boost/interprocess/sync/interprocess_sharable_mutex.hpp [7:9]
+        include/boost/interprocess/sync/interprocess_upgradable_mutex.hpp [5:7]
+        include/boost/interprocess/sync/lock_options.hpp [3:5]
+        include/boost/interprocess/sync/mutex_family.hpp [3:5]
+        include/boost/interprocess/sync/named_condition.hpp [3:5]
+        include/boost/interprocess/sync/named_condition_any.hpp [3:5]
+        include/boost/interprocess/sync/named_mutex.hpp [3:5]
+        include/boost/interprocess/sync/named_recursive_mutex.hpp [3:5]
+        include/boost/interprocess/sync/named_semaphore.hpp [3:5]
+        include/boost/interprocess/sync/named_sharable_mutex.hpp [3:5]
+        include/boost/interprocess/sync/named_upgradable_mutex.hpp [3:5]
+        include/boost/interprocess/sync/null_mutex.hpp [3:5]
+        include/boost/interprocess/sync/posix/condition.hpp [3:5]
+        include/boost/interprocess/sync/posix/mutex.hpp [3:5]
+        include/boost/interprocess/sync/posix/named_mutex.hpp [3:5]
+        include/boost/interprocess/sync/posix/named_semaphore.hpp [3:5]
+        include/boost/interprocess/sync/posix/pthread_helpers.hpp [3:5]
+        include/boost/interprocess/sync/posix/recursive_mutex.hpp [3:5]
+        include/boost/interprocess/sync/posix/semaphore.hpp [3:5]
+        include/boost/interprocess/sync/posix/semaphore_wrapper.hpp [3:5]
+        include/boost/interprocess/sync/posix/timepoint_to_timespec.hpp [3:5]
+        include/boost/interprocess/sync/scoped_lock.hpp [3:5]
+        include/boost/interprocess/sync/sharable_lock.hpp [3:5]
+        include/boost/interprocess/sync/shm/named_condition.hpp [3:5]
+        include/boost/interprocess/sync/shm/named_condition_any.hpp [3:5]
+        include/boost/interprocess/sync/shm/named_mutex.hpp [3:5]
+        include/boost/interprocess/sync/shm/named_recursive_mutex.hpp [3:5]
+        include/boost/interprocess/sync/shm/named_semaphore.hpp [3:5]
+        include/boost/interprocess/sync/shm/named_upgradable_mutex.hpp [3:5]
+        include/boost/interprocess/sync/spin/condition.hpp [3:5]
+        include/boost/interprocess/sync/spin/mutex.hpp [3:5]
+        include/boost/interprocess/sync/spin/recursive_mutex.hpp [3:5]
+        include/boost/interprocess/sync/spin/semaphore.hpp [3:5]
+        include/boost/interprocess/sync/upgradable_lock.hpp [3:5]
+        include/boost/interprocess/sync/windows/condition.hpp [3:5]
+        include/boost/interprocess/sync/windows/mutex.hpp [3:5]
+        include/boost/interprocess/sync/windows/recursive_mutex.hpp [3:5]
+        include/boost/interprocess/sync/windows/semaphore.hpp [3:5]
+        include/boost/interprocess/sync/windows/sync_utils.hpp [3:5]
+        include/boost/interprocess/windows_shared_memory.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f3fec170734df3a8a40a5e82f887b3e2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/interprocess/sync/spin/wait.hpp [3:6]

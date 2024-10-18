@@ -1,4 +1,4 @@
-PRAGMA ydb.OptimizerHints = 'Card(R S # 1)';
+PRAGMA ydb.OptimizerHints = 'Rows(R S # 1)';
 
 
 SELECT *

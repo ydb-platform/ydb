@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.77.0)
+VERSION(1.78.0)
 
-ORIGINAL_SOURCE(https://github.com/boostorg/asio/archive/boost-1.77.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/boostorg/asio/archive/boost-1.78.0.tar.gz)
 
 PEERDIR(
     contrib/libs/openssl
@@ -36,5 +36,9 @@ PEERDIR(
 ADDINCL(
     GLOBAL contrib/restricted/boost/asio/include
 )
+
+NO_COMPILER_WARNINGS()
+
+NO_UTIL()
 
 END()

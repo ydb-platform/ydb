@@ -1,5 +1,7 @@
 #include "schemeshard__operation_common_external_table.h"
 
+#include <ydb/core/scheme/scheme_types_proto.h>
+
 #include <utility>
 
 namespace NKikimr::NSchemeShard::NExternalTable {
@@ -21,16 +23,16 @@ bool ValidateLocation(const TString& location, TString& errStr) {
         errStr = "Location must not be empty";
         return false;
     }
-    if (location.Size() > MAX_FIELD_SIZE) {
-        errStr = Sprintf("Maximum length of location must be less or equal equal to %u but got %lu", MAX_FIELD_SIZE, location.Size());
+    if (location.size() > MAX_FIELD_SIZE) {
+        errStr = Sprintf("Maximum length of location must be less or equal equal to %u but got %lu", MAX_FIELD_SIZE, location.size());
         return false;
     }
     return true;
 }
 
 bool ValidateContent(const TString& content, TString& errStr) {
-    if (content.Size() > MAX_PROTOBUF_SIZE) {
-        errStr = Sprintf("Maximum size of content must be less or equal equal to %u but got %lu", MAX_PROTOBUF_SIZE, content.Size());
+    if (content.size() > MAX_PROTOBUF_SIZE) {
+        errStr = Sprintf("Maximum size of content must be less or equal equal to %u but got %lu", MAX_PROTOBUF_SIZE, content.size());
         return false;
     }
     return true;
@@ -49,32 +51,6 @@ bool Validate(const TString& sourceType, const NKikimrSchemeOp::TExternalTableDe
         && ValidateLocation(desc.GetLocation(), errStr)
         && ValidateContent(desc.GetContent(), errStr)
         && ValidateDataSourcePath(desc.GetDataSourcePath(), errStr);
-}
-
-Ydb::Type CreateYdbType(const NScheme::TTypeInfo& typeInfo, bool notNull) {
-    Ydb::Type ydbType;
-    switch (typeInfo.GetTypeId()) {
-    case NScheme::NTypeIds::Pg : {
-        auto typeDesc = typeInfo.GetPgTypeDesc();
-        auto* pgProto = ydbType.mutable_pg_type();
-        pgProto->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
-        pgProto->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));        
-        break;
-    }
-    case NScheme::NTypeIds::Decimal : {
-        auto decimalType = typeInfo.GetDecimalType();
-        auto* decimalProto = ydbType.mutable_decimal_type();
-        decimalProto->set_precision(decimalType.GetPrecision());
-        decimalProto->set_scale(decimalType.GetScale());        
-        break;
-    }
-    default : {
-        auto& item = notNull ? ydbType : *ydbType.mutable_optional_type()->mutable_item();
-        item.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(typeInfo.GetTypeId()));        
-        break;
-    }
-    }
-    return ydbType;
 }
 
 std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
@@ -123,17 +99,9 @@ std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
         }
 
         auto typeName = NMiniKQL::AdaptLegacyYqlType(col.GetType());
-        if (typeName == "Decimal(22,9)"sv) {
-            //
-            // typename is reformatted as above
-            // should discard (SCALE,PRECISION)
-            // they are validated to be (22,9)
-            //
-            typeName = "Decimal"sv;
-        }
 
         NScheme::TTypeInfo typeInfo;
-        if (!typeRegistry->GetTypeInfo(typeName, colName, typeInfo, errStr)) {
+        if (!GetTypeInfo(typeRegistry->GetType(typeName), col.GetTypeInfo(), typeName, colName, typeInfo, errStr)) {
             return std::make_pair(nullptr, errStr);
         }
 
@@ -150,7 +118,7 @@ std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
 
         auto& schemaColumn= *schema.add_column();
         schemaColumn.set_name(colName);
-        *schemaColumn.mutable_type() = CreateYdbType(typeInfo, col.GetNotNull());
+        NScheme::ProtoFromTypeInfo(typeInfo, *schemaColumn.mutable_type(), col.GetNotNull());
     }
 
     try {

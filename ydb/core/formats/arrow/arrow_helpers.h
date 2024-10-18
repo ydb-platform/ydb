@@ -41,6 +41,6 @@ void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
                        std::vector<std::shared_ptr<arrow::RecordBatch>>& out);
 
 std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::RecordBatch> original);
-std::shared_ptr<arrow::Table> ReallocateBatch(const std::shared_ptr<arrow::Table>& original);
+std::shared_ptr<arrow::Table> ReallocateBatch(const std::shared_ptr<arrow::Table>& original, arrow::MemoryPool* pool = arrow::default_memory_pool());
 
 }

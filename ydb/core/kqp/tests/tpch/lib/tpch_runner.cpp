@@ -97,7 +97,7 @@ void BuildRow(const TString& line, const TVector<TTableColumn>& columns, TValueB
             if (optional) {
                 Y_ABORT("Optional<Decimal>");
             } else {
-                cell.Decimal(TDecimalValue(ToString(value)));
+                cell.Decimal(TDecimalValue(ToString(value), typeParser.GetDecimal().Precision, typeParser.GetDecimal().Scale));
             }
         } else {
             Y_ABORT("type kind `%s` not supported yet", ToString(typeParser.GetKind()).c_str());

@@ -8,16 +8,16 @@ inputs:
     required: true
     description: "s3 key secret"
   s3_bucket:
-    required: true
+    required: false
     description: "s3 bucket"
   s3_endpoint:
     required: true
     description: "s3 endpoint"
   folder_prefix:
-    required: true
+    required: false
     description: "folder prefix"
   build_preset:
-    required: true
+    required: false
     description: "build preset like relwithdebinfo"
 runs:
   using: "composite"
@@ -35,7 +35,14 @@ runs:
         host_base = storage.yandexcloud.net
         host_bucket = %(bucket)s.storage.yandexcloud.net
         EOF
-        
+      env:
+        s3_key_id: ${{ inputs.s3_key_id }}
+        s3_secret_access_key: ${{ inputs.s3_key_secret }}
+
+    - name: export s3 path variables
+      shell: bash
+      if: inputs.build_preset
+      run: |
         folder="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
         
         BUILD_PRESET="${{ inputs.build_preset }}"
@@ -58,6 +65,3 @@ runs:
         echo "S3_URL_PREFIX=${{ inputs.s3_endpoint }}/${{ inputs.s3_bucket }}/${{ github.repository }}/${{ github.workflow }}/${{ github.run_id }}/${{ inputs.folder_prefix }}${folder}" >> $GITHUB_ENV
         echo "S3_TEST_ARTIFACTS_BUCKET_PATH=s3://${{ inputs.s3_bucket }}/testing_out_stuff/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{ inputs.folder_prefix }}${folder}" >> $GITHUB_ENV
         echo "S3_TEST_ARTIFACTS_URL_PREFIX=${{ inputs.s3_endpoint }}/${{ inputs.s3_bucket }}/testing_out_stuff/${{ github.repository }}/${{ github.workflow }}/${{ github.run_id }}/${{ inputs.folder_prefix }}${folder}" >> $GITHUB_ENV
-      env:
-        s3_key_id: ${{ inputs.s3_key_id }}
-        s3_secret_access_key: ${{ inputs.s3_key_secret }}

@@ -246,6 +246,9 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     }
 
     TShardIdx shardIdx = Self->TabletIdToShardIdx[datashardId];
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "PersistSingleStats for pathId " << pathId.LocalPathId << " shard idx " << shardIdx << " data size " << dataSize << " row count " << rowCount
+    );
     const auto* shardInfo = Self->ShardInfos.FindPtr(shardIdx);
     if (!shardInfo) {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -321,11 +324,10 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             const TPathId tablePathId = TPathId(TOwnerId(pathId.OwnerId), TLocalPathId(table.GetTableLocalId()));
 
             if (Self->ColumnTables.contains(tablePathId)) {
-                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "add stats for exists table with pathId=" << tablePathId);
 
-                auto columnTable = Self->ColumnTables.TakeVerified(tablePathId);
-                columnTable->UpdateTableStats(tablePathId, newTableStats);
+                Self->ColumnTables.GetVerifiedPtr(tablePathId)->UpdateTableStats(shardIdx, tablePathId, newTableStats);
             } else {
                 LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                            "failed add stats for table with pathId=" << tablePathId);
@@ -336,7 +338,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    "PersistSingleStats: ColumnTable rec.GetColumnTables() size=" << rec.GetTables().size());
 
-        auto columnTable = Self->ColumnTables.TakeVerified(pathId);
+        auto columnTable = Self->ColumnTables.GetVerifiedPtr(pathId);
         oldAggrStats = columnTable->GetStats().Aggregated;
         columnTable->UpdateShardStats(shardIdx, newStats);
         newAggrStats = columnTable->GetStats().Aggregated;

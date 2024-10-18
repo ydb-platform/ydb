@@ -38,6 +38,7 @@ public:
         , Snapshot(settings.GetSnapshot().GetStep(), settings.GetSnapshot().GetTxId())
         , AllowInconsistentReads(settings.GetAllowInconsistentReads())
         , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())
+        , NodeLockId(settings.HasLockNodeId() ? settings.GetLockNodeId() : TMaybe<ui32>())
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
         , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), args.TypeEnv, args.HolderFactory, args.InputDesc))
         , Counters(counters)
@@ -277,8 +278,6 @@ private:
     void Handle(TEvDataShard::TEvReadResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        CA_LOG_D("TEvReadResult was received for table: " << StreamLookupWorker->GetTablePath() <<
-            ", readId: " << record.GetReadId() << ", finished: " << record.GetFinished());
 
         auto readIt = Reads.find(record.GetReadId());
         if (readIt == Reads.end() || readIt->second.State != EReadState::Running) {
@@ -287,6 +286,27 @@ private:
         }
 
         auto& read = readIt->second;
+
+        CA_LOG_D("Recv TEvReadResult (stream lookup) from ShardID=" << read.ShardId
+            << ", Table = " << StreamLookupWorker->GetTablePath()
+            << ", ReadId=" << record.GetReadId()
+            << ", Status=" << Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())
+            << ", Finished=" << record.GetFinished()
+            << ", RowCount=" << record.GetRowCount()
+            << ", TxLocks= " << [&]() {
+                TStringBuilder builder;
+                for (const auto& lock : record.GetTxLocks()) {
+                    builder << lock.ShortDebugString();
+                }
+                return builder;
+            }()
+            << ", BrokenTxLocks= " << [&]() {
+                TStringBuilder builder;
+                for (const auto& lock : record.GetBrokenTxLocks()) {
+                    builder << lock.ShortDebugString();
+                }
+                return builder;
+            }());
 
         for (auto& lock : record.GetBrokenTxLocks()) {
             BrokenLocks.push_back(lock);
@@ -456,10 +476,21 @@ private:
             record.SetLockTxId(*LockTxId);
         }
 
+        if (NodeLockId) {
+            record.SetLockNodeId(*NodeLockId);
+        }
+
         auto defaultSettings = GetDefaultReadSettings()->Record;
         record.SetMaxRows(defaultSettings.GetMaxRows());
         record.SetMaxBytes(defaultSettings.GetMaxBytes());
         record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+
+        CA_LOG_D(TStringBuilder() << "Send EvRead (stream lookup) to shardId=" << shardId
+            << ", readId = " << record.GetReadId()
+            << ", tablePath: " << StreamLookupWorker->GetTablePath()
+            << ", snapshot=(txid=" << record.GetSnapshot().GetTxId() << ", step=" << record.GetSnapshot().GetStep() << ")"
+            << ", lockTxId=" << record.GetLockTxId()
+            << ", lockNodeId=" << record.GetLockNodeId());
 
         Send(MainPipeCacheId, new TEvPipeCache::TEvForward(request.Release(), shardId, true),
             IEventHandle::FlagTrackDelivery, 0, LookupActorSpan.GetTraceId());
@@ -586,6 +617,7 @@ private:
     IKqpGateway::TKqpSnapshot Snapshot;
     const bool AllowInconsistentReads;
     const TMaybe<ui64> LockTxId;
+    const TMaybe<ui32> NodeLockId;
     std::unordered_map<ui64, TReadState> Reads;
     std::unordered_map<ui64, TShardState> ReadsPerShard;
     std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;

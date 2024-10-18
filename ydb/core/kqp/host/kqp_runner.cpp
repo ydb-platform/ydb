@@ -116,17 +116,7 @@ public:
     }
 
     void FillResult(TResult& queryResult) const override {
-        TVector<NKikimrMiniKQL::TResult*> results;
-        for (auto& phyResult : TransformCtx.PhysicalQueryResults) {
-            auto result = google::protobuf::Arena::CreateMessage<NKikimrMiniKQL::TResult>(
-                queryResult.ProtobufArenaPtr.get());
-
-            result->CopyFrom(phyResult);
-            results.push_back(result);
-        }
-
         queryResult.QueryStats.CopyFrom(TransformCtx.QueryStats);
-        queryResult.Results = std::move(results);
     }
 
 private:

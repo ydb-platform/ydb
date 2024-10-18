@@ -1,13 +1,16 @@
 #pragma once
-#include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
 
 namespace NKikimr::NOlap {
 
@@ -18,11 +21,17 @@ protected:
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Table);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, Filter);
     YDB_READONLY(bool, UseFilter, false);
+
 public:
     TFetchedData(const bool useFilter)
-        : UseFilter(useFilter)
-    {
+        : UseFilter(useFilter) {
+    }
 
+    ui32 GetFilteredCount(const ui32 recordsCount, const ui32 defLimit) const {
+        if (!Filter) {
+            return std::min(defLimit, recordsCount);
+        }
+        return Filter->GetFilteredCount().value_or(recordsCount);
     }
 
     void SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ISnapshotSchema& schema);
@@ -60,11 +69,41 @@ public:
         return (Filter && Filter->IsTotalDenyFilter()) || (Table && !Table->num_rows());
     }
 
+    void Clear() {
+        Filter = std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildDenyFilter());
+        Table = nullptr;
+    }
+
     void AddFilter(const std::shared_ptr<NArrow::TColumnFilter>& filter) {
         if (!filter) {
             return;
         }
         return AddFilter(*filter);
+    }
+
+    void CutFilter(const ui32 recordsCount, const ui32 limit, const bool reverse) {
+        auto filter = std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter());
+        ui32 recordsCountImpl = Filter ? Filter->GetFilteredCount().value_or(recordsCount) : recordsCount;
+        if (recordsCountImpl < limit) {
+            return;
+        }
+        if (reverse) {
+            filter->Add(false, recordsCountImpl - limit);
+            filter->Add(true, limit);
+        } else {
+            filter->Add(true, limit);
+            filter->Add(false, recordsCountImpl - limit);
+        }
+        if (Filter) {
+            if (UseFilter) {
+                AddFilter(*filter);
+            } else {
+                AddFilter(Filter->CombineSequentialAnd(*filter));
+            }
+        } else {
+            AddFilter(*filter);
+        }
+        
     }
 
     void AddFilter(const NArrow::TColumnFilter& filter) {
@@ -106,13 +145,13 @@ public:
             AFL_VERIFY(mergeResult.IsSuccess())("error", mergeResult.GetErrorMessage());
         }
     }
-
 };
 
 class TFetchedResult {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Batch);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, NotAppliedFilter);
+
 public:
     TFetchedResult(std::unique_ptr<TFetchedData>&& data)
         : Batch(data->GetTable())
@@ -124,4 +163,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap

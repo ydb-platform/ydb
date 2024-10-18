@@ -22,6 +22,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
+#include <ydb/core/protos/yql_translation_settings.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -406,6 +407,7 @@ enum EMetaSerializationType : ui64 {
 
 struct TViewPersistedData {
     TString QueryText;
+    NYql::NProto::TTranslationSettings CapturedContext;
 };
 
 struct TKikimrTableMetadata : public TThrRefBase {
@@ -854,7 +856,7 @@ public:
 
     struct TQueryResult : public TGenericResult {
         TString SessionId;
-        TVector<NKikimrMiniKQL::TResult*> Results;
+        TVector<Ydb::ResultSet*> Results;
         TMaybe<NKikimrKqp::TQueryProfile> Profile; // TODO: Deprecate.
         NKqpProto::TKqpStatsQuery QueryStats;
         std::unique_ptr<NKikimrKqp::TPreparedQuery> PreparingQuery;

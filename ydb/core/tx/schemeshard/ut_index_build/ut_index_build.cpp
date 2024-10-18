@@ -667,6 +667,36 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         env.TestWaitNotification(runtime, {txId, txId - 1});
     }
 
+    Y_UNIT_TEST(CheckLimitWithDroppedIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TSchemeLimits lowLimits;
+        lowLimits.MaxTableIndices = 1;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint64" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "Index1", {"value"}, Ydb::StatusIds::SUCCESS);
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            IndexName: "Index1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "Index2", {"value"}, Ydb::StatusIds::SUCCESS);
+        env.TestWaitNotification(runtime, txId);
+    }
+
     Y_UNIT_TEST(Lock) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

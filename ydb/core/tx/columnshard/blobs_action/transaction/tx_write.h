@@ -43,7 +43,7 @@ private:
     std::vector<std::shared_ptr<TTxController::ITransactionOperator>> ResultOperators;
 
 
-    bool InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TWriteId writeId);
+    bool InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TInsertWriteId writeId);
 
     TStringBuilder TxPrefix() const {
         return TStringBuilder() << "TxWrite[" << ToString(TabletTxNo) << "] ";

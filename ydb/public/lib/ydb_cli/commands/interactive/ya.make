@@ -4,6 +4,7 @@ SRCS(
     interactive_cli.cpp
     line_reader.cpp
     yql_highlight.cpp
+    yql_position.cpp
 )
 
 PEERDIR(

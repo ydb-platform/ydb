@@ -1,6 +1,7 @@
 #include "yql_highlight.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+
 #include <util/string/split.h>
 #include <util/system/compiler.h>
 #include <util/charset/wide.h>
@@ -181,17 +182,17 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
 
     Y_UNIT_TEST(Typing) {
         const TString query =
-            "SELECT "
-            "  123467, \"Hello, {name}!\", "
-            "  (1 + (5 * 1 / 0)), MIN(identifier), "
-            "  Bool(field), Math::Sin(var) "
+            "SELECT \n"
+            "  123467, \"Hello, {name}!\", \n"
+            "  (1 + (5 * 1 / 0)), MIN(identifier), \n"
+            "  Bool(field), Math::Sin(var) \n"
             "FROM `local/test/space/table` JOIN test;";
 
         const TString pattern =
-            "kkkkkk "
-            "  nnnnnno sssssssssssssssso "
-            "  on o on o n o nooo fffovvvvvvvvvvoo "
-            "  ttttovvvvvoo ffffoofffovvvo "
+            "kkkkkk  "
+            "  nnnnnno sssssssssssssssso  "
+            "  on o on o n o nooo fffovvvvvvvvvvoo  "
+            "  ttttovvvvvoo ffffoofffovvvo  "
             "kkkk qqqqqqqqqqqqqqqqqqqqqqqq kkkk vvvvo";
 
         YQLHighlight highlight(Coloring);

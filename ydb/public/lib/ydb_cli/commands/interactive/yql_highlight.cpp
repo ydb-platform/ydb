@@ -1,5 +1,7 @@
 #include "yql_highlight.h"
 
+#include <ydb/public/lib/ydb_cli/commands/interactive/yql_position.h>
+
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/sql/settings/translation_settings.h>
 #include <ydb/library/yql/sql/v1/lexer/lexer.h>
@@ -125,12 +127,13 @@ namespace NYdb {
 
         void YQLHighlight::Apply(TStringBuf queryUtf8, Colors& colors) {
             Tokens = Tokenize(TString(queryUtf8));
+            auto mapping = YQLPositionMapping::Build(TString(queryUtf8));
 
             for (std::size_t i = 0; i < Tokens.size() - 1; ++i) {
                 const auto& token = Tokens.at(i);
                 const auto color = ColorOf(token, i);
 
-                const std::ptrdiff_t start = token.RawPos;
+                const std::ptrdiff_t start = mapping.RawPos(token);
                 const std::ptrdiff_t length = GetNumberOfUTF8Chars(token.Content);
                 const std::ptrdiff_t stop = start + length;
 

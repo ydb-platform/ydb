@@ -1,0 +1,108 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSL-1.0              2077ca9d01c7e6d6029ec1763233c5b0
+BELONGS ya.make
+    License text:
+         * Distributed under the Boost Software License, Version 1.0.
+         * (See accompanying file LICENSE_1_0.txt or copy at
+         * https://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/scope/defer.hpp [2:4]
+        include/boost/scope/detail/compact_storage.hpp [2:4]
+        include/boost/scope/detail/config.hpp [2:4]
+        include/boost/scope/detail/footer.hpp [2:4]
+        include/boost/scope/detail/header.hpp [2:4]
+        include/boost/scope/detail/is_nonnull_default_constructible.hpp [2:4]
+        include/boost/scope/detail/is_not_like.hpp [2:4]
+        include/boost/scope/detail/move_or_copy_assign_ref.hpp [2:4]
+        include/boost/scope/detail/move_or_copy_construct_ref.hpp [2:4]
+        include/boost/scope/detail/type_traits/conjunction.hpp [2:4]
+        include/boost/scope/detail/type_traits/disjunction.hpp [2:4]
+        include/boost/scope/detail/type_traits/is_final.hpp [2:4]
+        include/boost/scope/detail/type_traits/is_invocable.hpp [2:4]
+        include/boost/scope/detail/type_traits/is_nothrow_invocable.hpp [2:4]
+        include/boost/scope/detail/type_traits/is_nothrow_swappable.hpp [2:4]
+        include/boost/scope/detail/type_traits/is_swappable.hpp [2:4]
+        include/boost/scope/detail/type_traits/negation.hpp [2:4]
+        include/boost/scope/error_code_checker.hpp [2:4]
+        include/boost/scope/exception_checker.hpp [2:4]
+        include/boost/scope/fd_deleter.hpp [2:4]
+        include/boost/scope/fd_resource_traits.hpp [2:4]
+        include/boost/scope/scope_exit.hpp [2:4]
+        include/boost/scope/scope_fail.hpp [2:4]
+        include/boost/scope/scope_success.hpp [2:4]
+        include/boost/scope/unique_fd.hpp [2:4]
+        include/boost/scope/unique_resource.hpp [2:4]
+        include/boost/scope/unique_resource_fwd.hpp [2:4]
+
+KEEP     BSL-1.0              2c7a3fa82e66676005cd4ee2608fd7d2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        LICENSE [1:23]
+
+KEEP     BSL-1.0              49af97cadb10453f2b05003f793e4adc
+BELONGS ya.make
+    License text:
+        Distributed under the [Boost Software License, Version 1.0](https://www.boost.org/LICENSE_1_0.txt).
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 94.44
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [28:28]
+
+KEEP     BSL-1.0              a5006bb276a0e8fcc0c080cd5a14814e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 55.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [17:17]

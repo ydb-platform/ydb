@@ -340,10 +340,12 @@ public:
 
     bool IsIdle() const override
     {
-        return
-            Underlying_->IsIdle() &&
-            ActiveIOCount_ == 0 &&
-            !Failed_;
+        return ActiveIOCount_ == 0 && !Failed_;
+    }
+
+    bool IsReusable() const override
+    {
+        return IsIdle() && Underlying_->IsReusable();
     }
 
     TFuture<void> Abort() override

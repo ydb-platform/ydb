@@ -119,6 +119,9 @@ EObjectType SchemaTypeFromType(EObjectType type);
 //! Returns the regular type for a given schema #type.
 EObjectType TypeFromSchemaType(EObjectType type);
 
+//! Formats object type into string (taking schemas into account).
+TString FormatObjectType(EObjectType type);
+
 //! Constructs the id from its parts.
 TObjectId MakeId(
     EObjectType type,

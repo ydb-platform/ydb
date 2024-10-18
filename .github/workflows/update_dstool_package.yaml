@@ -11,6 +11,10 @@ jobs:
   update-dstool:
     name: Update dstool package
     runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+
     steps:
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -36,9 +40,4 @@ jobs:
           python -m build
 
       - name: Upload package to PyPI
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: |
-          set -ex
-          python -m twine upload dist/*
+        uses: pypa/gh-action-pypi-publish@release/v1.8

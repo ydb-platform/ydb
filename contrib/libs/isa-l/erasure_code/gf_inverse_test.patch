@@ -1,4 +1,0 @@
-59c59
-< 				d ^= gf_mul_erasure(a[n * i + k], b[n * k + j]);
----
-> 				d ^= gf_mul(a[n * i + k], b[n * k + j]);

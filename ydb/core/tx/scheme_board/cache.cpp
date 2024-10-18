@@ -231,6 +231,7 @@ namespace {
             entry.Columns.clear();
             entry.NotNullColumns.clear();
             entry.Indexes.clear();
+            entry.Sequences.clear();
             entry.CdcStreams.clear();
             entry.RTMRVolumeInfo.Drop();
             entry.KesusInfo.Drop();
@@ -742,6 +743,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             KeyColumnTypes.clear();
             NotNullColumns.clear();
             Indexes.clear();
+            Sequences.clear();
             CdcStreams.clear();
             Partitioning = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
 
@@ -805,6 +807,11 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             Indexes.reserve(tableDesc.TableIndexesSize());
             for (const auto& index : tableDesc.GetTableIndexes()) {
                 Indexes.push_back(index);
+            }
+
+            Sequences.reserve(tableDesc.SequencesSize());
+            for (const auto& sequence : tableDesc.GetSequences()) {
+                Sequences.push_back(sequence);
             }
 
             CdcStreams.reserve(tableDesc.CdcStreamsSize());
@@ -1897,6 +1904,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.NotNullColumns = NotNullColumns;
             entry.Indexes = Indexes;
             entry.CdcStreams = CdcStreams;
+            entry.Sequences = Sequences;
             entry.DomainDescription = DomainDescription;
             entry.RTMRVolumeInfo = RtmrVolumeInfo;
             entry.KesusInfo = KesusInfo;
@@ -2165,6 +2173,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         THashSet<TString> NotNullColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
+        TVector<NKikimrSchemeOp::TSequenceDescription> Sequences;
         std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
 
         TIntrusivePtr<TNavigate::TDirEntryInfo> Self;

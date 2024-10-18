@@ -616,7 +616,7 @@ namespace NYql::NDqs {
         // FIXME RESOLVE BEFORE MERGE
         settings.SetCacheLimit(atoll(streamLookup.MaxCachedRows().StringValue().c_str()));
         settings.SetCacheTtlSeconds(atoll(streamLookup.TTL().StringValue().c_str()));
-        settings.SetMaxDelay(atoll(streamLookup.MaxDelay().StringValue().c_str()));
+        settings.SetMaxDelayedRows(atoll(streamLookup.MaxDelayedRows().StringValue().c_str()));
 
         const auto inputRowType = GetSeqItemType(streamLookup.Output().Stage().Program().Ref().GetTypeAnn());
         const auto outputRowType = GetSeqItemType(stage.Program().Args().Arg(inputIndex).Ref().GetTypeAnn());

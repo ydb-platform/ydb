@@ -186,6 +186,7 @@ message TDqInputTransformLookupSettings {
     bytes NarrowOutputRowType = 8; //Serialized struct type
     uint64 CacheLimit = 9;
     uint64 CacheTtlSeconds = 10;
+    uint64 MaxDelayedRows = 11;
 }
 
 message TDqTask {

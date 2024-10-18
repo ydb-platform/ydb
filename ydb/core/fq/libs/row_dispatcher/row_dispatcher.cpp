@@ -57,7 +57,7 @@ struct TEvPrivate {
     struct TEvPrintState : public NActors::TEventLocal<TEvPrintState, EvPrintState> {};
 };
 
-ui64 PrintStatePeriodSec = 60;
+ui64 PrintStatePeriodSec = 3;
 
 class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
@@ -84,19 +84,19 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     struct TopicSessionKey {
         TString Endpoint;
         TString Database;
-        TString TopicName;
+        TString TopicPath;
         ui64 PartitionId;
 
         size_t Hash() const noexcept {
             ui64 hash = std::hash<TString>()(Endpoint);
             hash = CombineHashes<ui64>(hash, std::hash<TString>()(Database));
-            hash = CombineHashes<ui64>(hash, std::hash<TString>()(TopicName));
+            hash = CombineHashes<ui64>(hash, std::hash<TString>()(TopicPath));
             hash = CombineHashes<ui64>(hash, std::hash<ui64>()(PartitionId));
             return hash;
         }
         bool operator==(const TopicSessionKey& other) const {
             return Endpoint == other.Endpoint && Database == other.Database
-                && TopicName == other.TopicName && PartitionId == other.PartitionId;
+                && TopicPath == other.TopicPath && PartitionId == other.PartitionId;
         }
     };
 
@@ -154,10 +154,12 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         TActorId TopicSessionId;
         const TString QueryId;
         ConsumerCounters Counters;
+        TopicSessionClientStatistic Stats;
     };
 
     struct SessionInfo {
         TMap<TActorId, TAtomicSharedPtr<ConsumerInfo>> Consumers;     // key - ReadActor actor id
+        TopicSessionCommonStatistic Stats;
     };
 
     struct TopicSessionInfo {
@@ -198,6 +200,7 @@ public:
     void Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvStatus::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev);
 
     void Handle(NActors::TEvents::TEvPing::TPtr& ev);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&);
@@ -223,6 +226,7 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvStopSession, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvSessionError, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStatus, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvSessionStatistic, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvPing, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed, Handle);
@@ -320,31 +324,70 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscrib
     Send(ev->Sender, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(*CoordinatorActorId), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
 }
 
+struct QueryStatItem {
+    ui64 Sum = 0;
+    ui64 Max = 0;
+    ui64 Count = 0;
+    void Add(ui64 value) {
+        Sum += value;
+        Max = std::max(Max, value);
+        ++Count;
+    }
+    ui64 GetAvg() {
+        return Count ? Sum / Count : 0.0;
+    }
+};
+
+struct QueryStat {
+    const TString QueryId;
+    QueryStatItem UnreadRows;
+    QueryStatItem UnreadBytes;
+
+    void AddRows(ui64 value) {
+        UnreadRows.Add(value);
+    }
+    void AddBytes(ui64 value) const {
+        UnreadBytes.Add(value);
+    }
+};
+
 void TRowDispatcher::PrintInternalState() {
     if (Consumers.empty()) {
         return;
     }
-    TStringStream str;
-    str << "Consumers:\n";
-    for (auto& [key, consumerInfo] : Consumers) {
-        str << "    query id " << consumerInfo->QueryId << ", partId: " << key.PartitionId << ", read actor id: " << key.ReadActorId
-            << ", queueId " << consumerInfo->EventQueueId << ", get next " << consumerInfo->Counters.GetNextBatch
-            << ", data arrived " << consumerInfo->Counters.NewDataArrived << ", message batch " << consumerInfo->Counters.MessageBatch << "\n";
-        str << "        ";
-        consumerInfo->EventsQueue.PrintInternalState(str);
-    }
 
-    str << "\nSessions:\n";
-    for (auto& [key, sessionInfo1] : TopicSessions) {
-        str << "  " << key.Endpoint << " / " << key.Database << " / " << key.TopicName << ", id: " << key.PartitionId << "\n";
-        for (auto& [actorId, sessionInfo2] : sessionInfo1.Sessions) {
-            str << "    session id: " << actorId << "\n";
-            for (auto& [actorId2, consumer] : sessionInfo2.Consumers) {
-                str << "      read actor id: " << actorId2  << "\n";
+    TMap<TString, QueryStat> queryStats;
+
+    TStringStream str;
+    str << "RowDispatcher statistics:\n";
+    for (auto& [key, sessionsInfo] : TopicSessions) {
+        str << "  " << key.Endpoint << " / " << key.Database << " / " << key.TopicPath << " / " << key.PartitionId;
+        for (auto& [actorId, sessionInfo] : sessionsInfo.Sessions) {
+            str << " / " << actorId << "\n";
+            str << "    unread bytes " << sessionInfo.Stats.UnreadBytes << "\n";
+            for (auto& [readActorId, consumer] : sessionInfo.Consumers) {
+                auto& stat = queryStats[consumer->QueryId];
+                stat.AddRows(consumer->Stats.UnreadRows);
+                stat.AddRows(consumer->Stats.UnreadBytes);
+
+                str << "    " << consumer->QueryId << " " << readActorId << " unread rows "
+                    << consumer->Stats.UnreadRows << " unread bytes " << consumer->Stats.UnreadBytes << " offset " << consumer->Stats.Offset
+                    << " get " << consumer->Counters.GetNextBatch
+                    << " arrived " << consumer->Counters.NewDataArrived << " batch " << consumer->Counters.MessageBatch << " ";
+                str << " retry queue: ";
+                consumer->EventsQueue.PrintInternalState(str);
             }
         }
     }
     LOG_ROW_DISPATCHER_DEBUG(str.Str());
+
+    for (const auto& [queryId, stat] : queryStats) {
+        auto queryGroup = Metrics.Counters->GetSubgroup("queryId", queryId);
+        queryGroup->GetCounter("MaxUnreadRows")->Set(stat.UnreadRows.Max);
+        queryGroup->GetCounter("AvgUnreadRows")->Set(stat.UnreadRows.GetAvg());
+        queryGroup->GetCounter("MaxUnreadBytes")->Set(stat.UnreadBytes.Max);
+        queryGroup->GetCounter("AvgUnreadBytes")->Set(stat.UnreadBytes.GetAvg());
+     }
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
@@ -383,6 +426,8 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
         LOG_ROW_DISPATCHER_DEBUG("Create new session " << readOffset);
         sessionActorId = ActorFactory->RegisterTopicSession(
             source.GetTopicPath(),
+            source.GetEndpoint(),
+            source.GetDatabase(),
             Config,
             SelfId(),
             ev->Get()->Record.GetPartitionId(),
@@ -580,6 +625,36 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStatus::TPtr& ev) {
 void TRowDispatcher::Handle(NFq::TEvPrivate::TEvPrintState::TPtr&) {
     Schedule(TDuration::Seconds(PrintStatePeriodSec), new NFq::TEvPrivate::TEvPrintState());
     PrintInternalState();
+}
+
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev) {
+    LOG_ROW_DISPATCHER_TRACE("TEvSessionStatistic from " << ev->Sender);
+    const auto& key = ev->Get()->Stat.SessionKey;
+    TopicSessionKey sessionKey{key.Endpoint, key.Database, key.TopicPath, key.PartitionId};
+
+    auto sessionsIt = TopicSessions.find(sessionKey);
+    if (sessionsIt == TopicSessions.end()) {
+        return;
+    }
+    auto& sessionsInfo = sessionsIt->second;
+    auto sessionIt = sessionsInfo.Sessions.find(ev->Sender);
+    if (sessionIt == sessionsInfo.Sessions.end()) {
+        return;
+    }
+
+    auto& sessionInfo = sessionIt->second;
+    sessionInfo.Stats = ev->Get()->Stat.Common;
+
+    for (const auto& clientStat : ev->Get()->Stat.Clients) {
+        auto it = sessionInfo.Consumers.find(clientStat.ReadActorId);
+        if (it == sessionInfo.Consumers.end()) {
+            continue;
+        }
+        auto consumerInfoPtr = it->second; 
+        consumerInfoPtr->Stats = clientStat;
+    }
+
+    // COmm
 }
 
 } // namespace

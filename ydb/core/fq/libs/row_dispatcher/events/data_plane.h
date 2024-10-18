@@ -9,6 +9,32 @@
 
 namespace NFq {
 
+
+struct TopicSessionClientStatistic {
+    NActors::TActorId ReadActorId;
+    ui32 PartitionId = 0;
+    ui64 UnreadRows = 0;
+    ui64 UnreadBytes = 0;
+    ui64 Offset = 0;
+};
+
+struct TopicSessionCommonStatistic {
+    ui64 UnreadBytes = 0;
+};
+
+struct TopicSessionParams {
+    TString Endpoint;
+    TString Database;
+    TString TopicPath;
+    ui64 PartitionId = 0;
+};
+
+struct TopicSessionStatistic {
+    TopicSessionParams SessionKey; 
+    TVector<TopicSessionClientStatistic> Clients;
+    TopicSessionCommonStatistic Common;
+};
+
 NActors::TActorId RowDispatcherServiceActorId();
 
 struct TEvRowDispatcher {
@@ -26,6 +52,7 @@ struct TEvRowDispatcher {
         EvCoordinatorChangesSubscribe,
         EvCoordinatorRequest,
         EvCoordinatorResult,
+        EvSessionStatistic,
         EvEnd,
     };
 
@@ -119,6 +146,12 @@ struct TEvRowDispatcher {
         NFq::NRowDispatcherProto::TEvSessionError, EEv::EvSessionError> {
         TEvSessionError() = default;
         NActors::TActorId ReadActorId;
+    };
+
+    struct TEvSessionStatistic : public NActors::TEventLocal<TEvSessionStatistic, EEv::EvSessionStatistic> {
+        TEvSessionStatistic(TopicSessionStatistic&& stat)
+        : Stat(stat) {}
+        TopicSessionStatistic Stat;
     };
 };
 

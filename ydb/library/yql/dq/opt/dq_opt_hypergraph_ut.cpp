@@ -548,8 +548,8 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
             return sum / static_cast<double>(v.size());
         };
 
-        std::cerr << Sprintf("Time for Enumerate(MakeClique(%ld)): mean: %f, values: [%s] seconds ", CliqueSize, mean(cliqueTime), JoinSeq(",", toString(cliqueTime)).c_str()) << std::endl;
-        std::cerr << Sprintf("Time for Enumerate(MakeStar(%ld)): mean: %f, values: [%s] seconds", StarSize, mean(starTime), JoinSeq(",", toString(starTime)).c_str()) << std::endl;
-        std::cerr << Sprintf("Time for Enumerate(MakeChain(%ld)): mean: %f, values [%s] seconds", ChainSize, mean(chainTime), JoinSeq(",", toString(chainTime)).c_str()) << std::endl;
+        std::cerr << Sprintf("Time for Enumerate(MakeClique(%u)): mean: %f, values: [%s] seconds ", CliqueSize, mean(cliqueTime), JoinSeq(",", toString(cliqueTime)).c_str()) << std::endl;
+        std::cerr << Sprintf("Time for Enumerate(MakeStar(%u)): mean: %f, values: [%s] seconds", StarSize, mean(starTime), JoinSeq(",", toString(starTime)).c_str()) << std::endl;
+        std::cerr << Sprintf("Time for Enumerate(MakeChain(%u)): mean: %f, values [%s] seconds", ChainSize, mean(chainTime), JoinSeq(",", toString(chainTime)).c_str()) << std::endl;
     }
 }

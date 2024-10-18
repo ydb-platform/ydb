@@ -5973,6 +5973,7 @@ TRuntimeNode TProgramBuilder::MatchRecognizeCore(
     const TArrayRef<std::pair<TStringBuf, TBinaryLambda>>& getMeasures,
     const NYql::NMatchRecognize::TRowPattern& pattern,
     const TArrayRef<std::pair<TStringBuf, TTernaryLambda>>& getDefines,
+    bool afterMatchSkipPastLastRow,
     bool streamingMode
 ) {
     MKQL_ENSURE(RuntimeVersion >= 42, "MatchRecognize is not supported in runtime version " << RuntimeVersion);
@@ -6126,6 +6127,7 @@ TRuntimeNode TProgramBuilder::MatchRecognizeCore(
     for (const auto& d: defineNodes) {
         callableBuilder.Add(d);
     }
+    callableBuilder.Add(NewDataLiteral(afterMatchSkipPastLastRow));
     callableBuilder.Add(NewDataLiteral(streamingMode));
     return TRuntimeNode(callableBuilder.Build(), false);
 }

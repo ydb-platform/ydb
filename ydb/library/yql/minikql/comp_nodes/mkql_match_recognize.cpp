@@ -49,12 +49,14 @@ public:
         NUdf::TUnboxedValue&& partitionKey,
         const TMatchRecognizeProcessorParameters& parameters,
         TNfaTransitionGraph::TPtr nfaTransitions,
-        const TContainerCacheOnContext& cache
+        const TContainerCacheOnContext& cache,
+        bool afterMatchSkipPastLastRow
     )
     : PartitionKey(std::move(partitionKey))
     , Parameters(parameters)
     , Nfa(nfaTransitions, parameters.MatchedVarsArg, parameters.Defines)
     , Cache(cache)
+    , AfterMatchSkipPastLastRow(afterMatchSkipPastLastRow)
     {
     }
 
@@ -94,6 +96,9 @@ public:
                     break;
             }
         }
+        if (AfterMatchSkipPastLastRow) {
+            Nfa.Clear();
+        }
         return result;
     }
     bool ProcessEndOfData(TComputationContext& ctx) {
@@ -106,6 +111,7 @@ public:
         Rows.Save(serializer);
         Nfa.Save(serializer);
         serializer.Write(MatchNumber);
+        serializer.Write(AfterMatchSkipPastLastRow);
     }
 
     void Load(TMrInputSerializer& serializer) {
@@ -113,6 +119,7 @@ public:
         Rows.Load(serializer);
         Nfa.Load(serializer);
         MatchNumber = serializer.Read<ui64>();
+        AfterMatchSkipPastLastRow = serializer.Read<bool>();
     }
 
 private:
@@ -122,6 +129,7 @@ private:
     TNfa Nfa;
     const TContainerCacheOnContext& Cache;
     ui64 MatchNumber = 0;
+    bool AfterMatchSkipPastLastRow;
 };
 
 class TStateForNonInterleavedPartitions
@@ -137,7 +145,8 @@ public:
         const TContainerCacheOnContext& cache,
         TComputationContext &ctx,
         TType* rowType,
-        const TMutableObjectOverBoxedValue<TValuePackerBoxed>& rowPacker
+        const TMutableObjectOverBoxedValue<TValuePackerBoxed>& rowPacker,
+        bool afterMatchSkipPastLastRow
     )
     : TComputationValue<TStateForNonInterleavedPartitions>(memInfo)
     , InputRowArg(inputRowArg)
@@ -149,6 +158,7 @@ public:
     , Terminating(false)
     , SerializerContext(ctx, rowType, rowPacker)
     , Ctx(ctx)
+    , AfterMatchSkipPastLastRow(afterMatchSkipPastLastRow)
     {}
 
     NUdf::TUnboxedValue Save() const override {
@@ -184,7 +194,8 @@ public:
                 std::move(key),
                 Parameters,
                 RowPatternConfiguration,
-                Cache
+                Cache,
+                AfterMatchSkipPastLastRow
             ));
             PartitionHandler->Load(in);
         }
@@ -250,8 +261,8 @@ public:
                     std::move(partitionKey),
                     Parameters,
                     RowPatternConfiguration,
-                    Cache
-            ));
+                    Cache,
+                    AfterMatchSkipPastLastRow));
             PartitionHandler->ProcessInputRow(std::move(temp), ctx);
         }
         if (Terminating) {
@@ -272,6 +283,7 @@ private:
     bool Terminating;
     TSerializerContext SerializerContext;
     TComputationContext& Ctx;
+    bool AfterMatchSkipPastLastRow;
 };
 
 class TStateForInterleavedPartitions
@@ -289,7 +301,8 @@ public:
         const TContainerCacheOnContext& cache,
         TComputationContext &ctx,
         TType* rowType,
-        const TMutableObjectOverBoxedValue<TValuePackerBoxed>& rowPacker
+        const TMutableObjectOverBoxedValue<TValuePackerBoxed>& rowPacker,
+        bool afterMatchSkipPastLastRow
     )
     : TComputationValue<TStateForInterleavedPartitions>(memInfo)
     , InputRowArg(inputRowArg)
@@ -300,6 +313,7 @@ public:
     , Cache(cache)
     , SerializerContext(ctx, rowType, rowPacker)
     , Ctx(ctx)
+    , AfterMatchSkipPastLastRow(afterMatchSkipPastLastRow)
     {}
 
     NUdf::TUnboxedValue Save() const override {
@@ -336,7 +350,8 @@ public:
                     std::move(key),
                     Parameters,
                     NfaTransitionGraph,
-                    Cache));
+                    Cache,
+                    AfterMatchSkipPastLastRow));
             pair.first->second->Load(in);
         }
 
@@ -403,7 +418,8 @@ private:
                     std::move(partitionKey),
                     Parameters,
                     NfaTransitionGraph,
-                    Cache
+                    Cache,
+                    AfterMatchSkipPastLastRow
             ));
         }
     }
@@ -422,6 +438,7 @@ private:
     const TContainerCacheOnContext& Cache;
     TSerializerContext SerializerContext;
     TComputationContext& Ctx;
+    bool AfterMatchSkipPastLastRow;
 };
 
 template<class State>
@@ -433,7 +450,8 @@ public:
        IComputationNode *partitionKey,
        TType* partitionKeyType,
        const TMatchRecognizeProcessorParameters& parameters,
-       TType* rowType
+       TType* rowType,
+       bool afterMatchSkipPastLastRow
     )
     :TBaseComputation(mutables, inputFlow, kind, EValueRepresentation::Embedded)
     , InputFlow(inputFlow)
@@ -444,6 +462,7 @@ public:
     , Cache(mutables)
     , RowType(rowType)
     , RowPacker(mutables)
+    , AfterMatchSkipPastLastRow(afterMatchSkipPastLastRow)
     {}
 
     NUdf::TUnboxedValue DoCalculate(NUdf::TUnboxedValue &stateValue, TComputationContext &ctx) const {
@@ -456,7 +475,8 @@ public:
                 Cache,
                 ctx,
                 RowType,
-                RowPacker
+                RowPacker,
+                AfterMatchSkipPastLastRow
             );
         } else if (stateValue.HasValue()) {
             MKQL_ENSURE(stateValue.IsBoxed(), "Expected boxed value");
@@ -471,7 +491,8 @@ public:
                     Cache,
                     ctx,
                     RowType,
-                    RowPacker
+                    RowPacker,
+                    AfterMatchSkipPastLastRow
                 );
                 state.Load2(stateValue);
                 stateValue = state;
@@ -520,6 +541,7 @@ private:
     const TContainerCacheOnContext Cache;
     TType* const RowType;
     TMutableObjectOverBoxedValue<TValuePackerBoxed> RowPacker;
+    bool AfterMatchSkipPastLastRow;
 };
 
 TOutputColumnOrder GetOutputColumnOrder(TRuntimeNode partitionKyeColumnsIndexes, TRuntimeNode measureColumnsIndexes) {
@@ -646,6 +668,7 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
     for (size_t i = 0; i != AS_VALUE(TListLiteral, varNames)->GetItemsCount(); ++i) {
         defines.push_back(callable.GetInput(inputIndex++));
     }
+    const auto& afterMatchSkipPastLastRow = callable.GetInput(inputIndex++);
     const auto& streamingMode = callable.GetInput(inputIndex++);
     MKQL_ENSURE(callable.GetInputsCount() == inputIndex, "Wrong input count");
 
@@ -677,6 +700,7 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
             , partitionKeySelector.GetStaticType()
             , std::move(parameters)
             , rowType
+            , AS_VALUE(TDataLiteral, afterMatchSkipPastLastRow)->AsValue().Get<bool>()
         );
     } else {
         return new TMatchRecognizeWrapper<TStateForNonInterleavedPartitions>(ctx.Mutables
@@ -687,6 +711,7 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
             , partitionKeySelector.GetStaticType()
             , std::move(parameters)
             , rowType
+            , AS_VALUE(TDataLiteral, afterMatchSkipPastLastRow)->AsValue().Get<bool>()
         );
     }
 }

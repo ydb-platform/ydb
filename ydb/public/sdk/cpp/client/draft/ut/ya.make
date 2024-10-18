@@ -11,8 +11,13 @@ ENDIF()
 
 FORK_SUBTESTS()
 
+PEERDIR(
+    ydb/public/sdk/cpp/client/draft/ut/helpers
+)
+
 SRCS(
     ydb_scripting_response_headers_ut.cpp
+    ydb_view_ut.cpp
 )
 
 END()

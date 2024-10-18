@@ -502,6 +502,11 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
     auto rightTableLabel = join.RightLabel().Maybe<TCoAtom>()
         ? join.RightLabel().Cast<TCoAtom>().Value()
         : TStringBuf("");
+    const auto& joinAlgo = *input->Child(TDqJoin::idx_JoinAlgo);
+    if (joinAlgo.IsAtom("StreamLooup") && !joinType.IsAtom("Left")) {
+        ctx.AddError(TIssue(ctx.GetPosition(joinType.Pos()), TStringBuilder() << "DqJoin: Unsupported DQ join type " << joinType.Content() << " for join algorithm " << joinAlgo.Content()));
+        return nullptr;
+    }
 
     if (input->ChildrenSize() > 9U) {
         auto&& flags = *input->Child(TDqJoin::idx_Flags);
@@ -510,6 +515,13 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
             if ( !EnsureTupleOfAtoms(flag, ctx) || !EnsureTupleMinSize(flag, 1, ctx))
                 return nullptr;
             auto&& name = *flag.Child(TCoNameValueTuple::idx_Name);
+            if (name.IsAtom({"TTL", "MaxCachedRows", "MaxDelayedRows"})) {
+                if (joinAlgo.IsAtom("StreamLookup")) {
+                   if (!EnsureTupleSize(flag, 2, ctx))
+                       return nullptr;
+                   continue;
+                }
+            } else
             if (name.IsAtom({"LeftAny", "RightAny"})) {
                 continue;
             }

@@ -5,30 +5,27 @@
 namespace NKikimr::NColumnShard {
 
 bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) {
-    LOG_S_DEBUG("TTxSchemaVersionsCleanup::Execute, tablet id " <<  Self->TabletID());
-    TMemoryProfileGuard mpg("TTxSchemaVersionsCleanup::Execute");
-    TBlobGroupSelector dsGroupSelector(Self->Info());
-    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TTxSchemaVersionsCleanup::Execute")("tablet_id", Self->TabletID());
     NIceDb::TNiceDb db(txc.DB);
 
     auto table = db.Table<NKikimr::NColumnShard::Schema::SchemaPresetVersionInfo>();
     ui64 lastVersion = Self->TablesManager.MutablePrimaryIndex().LastSchemaVersion();
-    Self->VersionCounters->EnumerateVersionsToErase([&](ui64 version, auto& key) {
+    Self->VersionCounters->EnumerateVersionsToErase([&](const ui64 version, const NOlap::TVersionCounters::TSchemaKey& key) {
         if (version != lastVersion) {
-            LOG_S_DEBUG("Removing schema version from db " << version << " tablet id " << Self->TabletID());
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Removing schema version from db")("vesion", version)("tablet_id", Self->TabletID());
             VersionsToRemove.insert(version);
-            table.Key(key.Id, key.PlanStep, key.TxId).Delete();
+            table.Key(key.GetId(), key.GetPlanStep(), key.GetTxId()).Delete();
         }
     });
 
     return true;
 }
 void TTxSchemaVersionsCleanup::Complete(const TActorContext& /*ctx*/) {
-    LOG_S_DEBUG("TTxSchemaVersionsCleanup::Complete, tablet id " <<  Self->TabletID());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TTxSchemaVersionsCleanup::Complete")("tablet_id", Self->TabletID());
     TMemoryProfileGuard mpg("TTxSchemaVersionsCleanup::Complete");
 
     for (ui64 version: VersionsToRemove) {
-        LOG_S_DEBUG("Removing schema version from memory " << version << " tablet id " << Self->TabletID());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Removing schema version from memory")("vesion", version)("tablet_id", Self->TabletID());
         Self->TablesManager.MutablePrimaryIndex().RemoveSchemaVersion(version);
         Self->VersionCounters->DeleteErasedVersion(version);
     }

@@ -139,10 +139,10 @@ void CompareResults(const NQuery::TExecuteQueryResult& first, const NQuery::TExe
     CompareResults(first.GetResultSets(), second.GetResultSets());
 }
 
-void InitializeTablesAndSecondaryViews(TSession& session) {
+void InitializeTablesAndSecondaryViews(NQuery::TSession& session) {
     const auto inputFolder = ArcadiaFromCurrentLocation(__SOURCE_FILE__, "input");
-    ExecuteDataDefinitionQuery(session, ReadWholeFile(inputFolder + "/create_tables_and_secondary_views.sql"));
-    ExecuteDataModificationQuery(session, ReadWholeFile(inputFolder + "/fill_tables.sql"));
+    ExecuteQuery(session, ReadWholeFile(inputFolder + "/create_tables_and_secondary_views.sql"));
+    ExecuteQuery(session, ReadWholeFile(inputFolder + "/fill_tables.sql"));
 }
 
 }
@@ -582,7 +582,7 @@ Y_UNIT_TEST_SUITE(TSelectFromViewTest) {
     Y_UNIT_TEST(ReadTestCasesFromFiles) {
         TKikimrRunner kikimr;
         EnableViewsFeatureFlag(kikimr);
-        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto session = kikimr.GetQueryClient().GetSession().ExtractValueSync().GetSession();
 
         InitializeTablesAndSecondaryViews(session);
         EnableLogging();
@@ -593,13 +593,13 @@ Y_UNIT_TEST_SUITE(TSelectFromViewTest) {
         TString testcase;
         while (testcase = testcases.Next()) {
             const auto pathPrefix = TStringBuilder() << testcasesFolder << '/' << testcase << '/';
-            ExecuteDataDefinitionQuery(session, ReadWholeFile(pathPrefix + "create_view.sql"));
+            ExecuteQuery(session, ReadWholeFile(pathPrefix + "create_view.sql"));
 
-            const auto etalonResults = ExecuteDataModificationQuery(session, ReadWholeFile(pathPrefix + "etalon_query.sql"));
-            const auto selectFromViewResults = ExecuteDataModificationQuery(session, ReadWholeFile(pathPrefix + "select_from_view.sql"));
+            const auto etalonResults = ExecuteQuery(session, ReadWholeFile(pathPrefix + "etalon_query.sql"));
+            const auto selectFromViewResults = ExecuteQuery(session, ReadWholeFile(pathPrefix + "select_from_view.sql"));
             CompareResults(etalonResults, selectFromViewResults);
 
-            ExecuteDataDefinitionQuery(session, ReadWholeFile(pathPrefix + "drop_view.sql"));
+            ExecuteQuery(session, ReadWholeFile(pathPrefix + "drop_view.sql"));
         }
     }
 

@@ -30,8 +30,6 @@ extern const struct Curl_handler Curl_handler_rtmpe;
 extern const struct Curl_handler Curl_handler_rtmpte;
 extern const struct Curl_handler Curl_handler_rtmps;
 extern const struct Curl_handler Curl_handler_rtmpts;
-
-void Curl_rtmp_version(char *version, size_t len);
 #endif
 
 #endif /* HEADER_CURL_RTMP_H */

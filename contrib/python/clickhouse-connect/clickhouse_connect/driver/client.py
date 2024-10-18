@@ -20,15 +20,15 @@ from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.insert import InsertContext
 from clickhouse_connect.driver.summary import QuerySummary
 from clickhouse_connect.driver.models import ColumnDef, SettingDef, SettingStatus
-from clickhouse_connect.driver.query import QueryResult, to_arrow, to_arrow_batches, QueryContext, arrow_buffer, \
-    quote_identifier
+from clickhouse_connect.driver.query import QueryResult, to_arrow, to_arrow_batches, QueryContext, arrow_buffer
+from clickhouse_connect.driver.binding import quote_identifier
 
 io.DEFAULT_BUFFER_SIZE = 1024 * 256
 logger = logging.getLogger(__name__)
 arrow_str_setting = 'output_format_arrow_string_as_string'
 
 
-# pylint: disable=too-many-public-methods, too-many-instance-attributes
+# pylint: disable=too-many-public-methods,too-many-arguments,too-many-positional-arguments,too-many-instance-attributes
 class Client(ABC):
     """
     Base ClickHouse Connect client
@@ -93,6 +93,8 @@ class Client(ABC):
             })
             if test_data[8:16] == b'\x01\x01\x05check':
                 self.protocol_version = PROTOCOL_VERSION_WITH_LOW_CARD
+        if self._setting_status('date_time_input_format').is_writable:
+            self.set_client_setting('date_time_input_format', 'best_effort')
         self.uri = uri
 
     def _validate_settings(self, settings: Optional[Dict[str, Any]]) -> Dict[str, str]:
@@ -171,7 +173,7 @@ class Client(ABC):
         :return: The string value of the setting, if it exists, or None
         """
 
-    # pylint: disable=too-many-arguments,unused-argument,too-many-locals
+    # pylint: disable=unused-argument,too-many-locals
     def query(self,
               query: Optional[str] = None,
               parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
@@ -303,7 +305,7 @@ class Client(ABC):
        :return: io.IOBase stream/iterator for the result
        """
 
-    # pylint: disable=duplicate-code,too-many-arguments,unused-argument
+    # pylint: disable=duplicate-code,unused-argument
     def query_np(self,
                  query: Optional[str] = None,
                  parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
@@ -341,7 +343,7 @@ class Client(ABC):
         """
         return self._context_query(locals(), use_numpy=True, streaming=True).np_stream
 
-    # pylint: disable=duplicate-code,too-many-arguments,unused-argument
+    # pylint: disable=duplicate-code,unused-argument
     def query_df(self,
                  query: Optional[str] = None,
                  parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
@@ -364,7 +366,7 @@ class Client(ABC):
         """
         return self._context_query(locals(), use_numpy=True, as_pandas=True).df_result
 
-    # pylint: disable=duplicate-code,too-many-arguments,unused-argument
+    # pylint: disable=duplicate-code,unused-argument
     def query_df_stream(self,
                         query: Optional[str] = None,
                         parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
@@ -571,7 +573,6 @@ class Client(ABC):
         :return: ClickHouse server is up and reachable
         """
 
-    # pylint: disable=too-many-arguments
     def insert(self,
                table: Optional[str] = None,
                data: Sequence[Sequence[Any]] = None,
@@ -777,9 +778,16 @@ class Client(ABC):
         :param fmt: Valid clickhouse format
         """
 
+    @abstractmethod
     def close(self):
         """
         Subclass implementation to close the connection to the server/deallocate the client
+        """
+
+    @abstractmethod
+    def close_connections(self):
+        """
+        Subclass implementation to disconnect all "re-used" client connections
         """
 
     def _context_query(self, lcls: dict, **overrides):

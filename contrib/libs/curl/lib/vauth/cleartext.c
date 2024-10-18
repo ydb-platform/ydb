@@ -100,38 +100,39 @@ CURLcode Curl_auth_create_plain_message(const char *authzid,
  * Curl_auth_create_login_message()
  *
  * This is used to generate an already encoded LOGIN message containing the
- * username or password ready for sending to the recipient.
+ * user name or password ready for sending to the recipient.
  *
  * Parameters:
  *
- * valuep  [in]     - The username or user's password.
+ * valuep  [in]     - The user name or user's password.
  * out     [out]    - The result storage.
  *
- * Returns void.
+ * Returns CURLE_OK on success.
  */
-void Curl_auth_create_login_message(const char *valuep, struct bufref *out)
+CURLcode Curl_auth_create_login_message(const char *valuep, struct bufref *out)
 {
   Curl_bufref_set(out, valuep, strlen(valuep), NULL);
+  return CURLE_OK;
 }
 
 /*
  * Curl_auth_create_external_message()
  *
  * This is used to generate an already encoded EXTERNAL message containing
- * the username ready for sending to the recipient.
+ * the user name ready for sending to the recipient.
  *
  * Parameters:
  *
- * user    [in]     - The username.
+ * user    [in]     - The user name.
  * out     [out]    - The result storage.
  *
- * Returns void.
+ * Returns CURLE_OK on success.
  */
-void Curl_auth_create_external_message(const char *user,
+CURLcode Curl_auth_create_external_message(const char *user,
                                            struct bufref *out)
 {
   /* This is the same formatting as the login message */
-  Curl_auth_create_login_message(user, out);
+  return Curl_auth_create_login_message(user, out);
 }
 
 #endif /* if no users */

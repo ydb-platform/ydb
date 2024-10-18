@@ -74,9 +74,8 @@ Y_UNIT_TEST(OrderJoinsDoesNothingWhenCBODisabled) {
 }
 
 Y_UNIT_TEST(NonReordable) {
-    auto stat = std::make_shared<TOptimizerStatistics>();
-    auto left = std::make_shared<TRelOptimizerNode>("a", stat);
-    auto right = std::make_shared<TRelOptimizerNode>("a", stat);
+    auto left = std::make_shared<TRelOptimizerNode>("a", TOptimizerStatistics());
+    auto right = std::make_shared<TRelOptimizerNode>("a", TOptimizerStatistics());
 
     TVector<NDq::TJoinColumn> leftKeys = {NDq::TJoinColumn{"a", "b"}};
     TVector<NDq::TJoinColumn> rightKeys = {NDq::TJoinColumn{"a","c"}};
@@ -90,12 +89,12 @@ Y_UNIT_TEST(NonReordable) {
     // Join tree is built from scratch with DPhyp, check the structure by comapring with Stats 
     UNIT_ASSERT(root->LeftArg->Kind == RelNodeType);
     UNIT_ASSERT(
-        std::static_pointer_cast<TRelOptimizerNode>(root->LeftArg)->Stats == left->Stats
+        &std::static_pointer_cast<TRelOptimizerNode>(root->LeftArg)->Stats == &left->Stats
     );
 
     UNIT_ASSERT(root->RightArg->Kind == RelNodeType);
     UNIT_ASSERT(
-        std::static_pointer_cast<TRelOptimizerNode>(root->RightArg)->Stats == right->Stats
+        &std::static_pointer_cast<TRelOptimizerNode>(root->RightArg)->Stats == &right->Stats
     );
 }
 
@@ -122,8 +121,8 @@ Y_UNIT_TEST(BuildOptimizerTree2Tables) {
 
     UNIT_ASSERT_VALUES_EQUAL(left->Label, "c");
     UNIT_ASSERT_VALUES_EQUAL(right->Label, "n");
-    UNIT_ASSERT_VALUES_EQUAL(left->Stats->Nrows, 100000);
-    UNIT_ASSERT_VALUES_EQUAL(right->Stats->Nrows, 1000);
+    UNIT_ASSERT_VALUES_EQUAL(left->Stats.Nrows, 100000);
+    UNIT_ASSERT_VALUES_EQUAL(right->Stats.Nrows, 1000);
 }
 
 Y_UNIT_TEST(BuildOptimizerTree2TablesComplexLabel) {
@@ -149,8 +148,8 @@ Y_UNIT_TEST(BuildOptimizerTree2TablesComplexLabel) {
 
     UNIT_ASSERT_VALUES_EQUAL(left->Label, "c");
     UNIT_ASSERT_VALUES_EQUAL(right->Label, "n");
-    UNIT_ASSERT_VALUES_EQUAL(left->Stats->Nrows, 1000000);
-    UNIT_ASSERT_VALUES_EQUAL(right->Stats->Nrows, 10000);
+    UNIT_ASSERT_VALUES_EQUAL(left->Stats.Nrows, 1000000);
+    UNIT_ASSERT_VALUES_EQUAL(right->Stats.Nrows, 10000);
 }
 
 Y_UNIT_TEST(BuildYtJoinTree2Tables) {

@@ -15,14 +15,14 @@ using namespace NNodes;
 using namespace NYql::NDq;
 
 std::shared_ptr<IBaseOptimizerNode> CreateChain(size_t size, TString onAttribute, TString tablePrefix="e") {
-    std::shared_ptr<IBaseOptimizerNode> root = std::make_shared<TRelOptimizerNode>(tablePrefix + "1", std::make_shared<TOptimizerStatistics>());
-    root->Stats->Labels = std::make_shared<TVector<TString>>(TVector<TString>{tablePrefix + "1"});
+    std::shared_ptr<IBaseOptimizerNode> root = std::make_shared<TRelOptimizerNode>(tablePrefix + "1", TOptimizerStatistics());
+    root->Stats.Labels = std::make_shared<TVector<TString>>(TVector<TString>{tablePrefix + "1"});
     for (size_t i = 1; i < size; ++i) {
         auto eiStr = tablePrefix + ToString(i + 1);
         auto eiPrevStr = tablePrefix + ToString(i);
 
-        auto ei = std::make_shared<TRelOptimizerNode>(eiStr, std::make_shared<TOptimizerStatistics>());
-        ei->Stats->Labels = std::make_shared<TVector<TString>>(TVector<TString>{eiStr});
+        auto ei = std::make_shared<TRelOptimizerNode>(eiStr, TOptimizerStatistics());
+        ei->Stats.Labels = std::make_shared<TVector<TString>>(TVector<TString>{eiStr});
 
         TVector<NDq::TJoinColumn> leftKeys = {TJoinColumn(eiPrevStr, onAttribute)};
         TVector<NDq::TJoinColumn> rightKeys = {TJoinColumn(eiStr, onAttribute)};
@@ -35,7 +35,20 @@ std::shared_ptr<IBaseOptimizerNode> CreateChain(size_t size, TString onAttribute
     return root;
 }
 
-template <typename TProviderContext = TBaseProviderContext>
+struct TTestContext : public TBaseProviderContext {
+    bool IsJoinApplicable(
+        const std::shared_ptr<IBaseOptimizerNode>& ,
+        const std::shared_ptr<IBaseOptimizerNode>& ,
+        const TVector<NDq::TJoinColumn>& ,
+        const TVector<NDq::TJoinColumn>& ,
+        EJoinAlgoType ,
+        EJoinKind 
+    ) override {
+        return true;
+    }
+};
+
+template <typename TProviderContext = TTestContext>
 std::shared_ptr<IBaseOptimizerNode> Enumerate(const std::shared_ptr<IBaseOptimizerNode>& root, const TOptimizerHints& hints = {}) {
     auto ctx = TProviderContext();
     auto optimizer = 
@@ -192,8 +205,8 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
         if constexpr (std::is_same_v<TJoinArg, std::shared_ptr<IBaseOptimizerNode>>) {
             return joinArg;
         } else if constexpr (std::is_convertible_v<TJoinArg, std::string>) {
-            std::shared_ptr<IBaseOptimizerNode> root = std::make_shared<TRelOptimizerNode>(joinArg, std::make_shared<TOptimizerStatistics>());
-            root->Stats->Nrows = rand() % 100 + 1;
+            std::shared_ptr<IBaseOptimizerNode> root = std::make_shared<TRelOptimizerNode>(joinArg, TOptimizerStatistics());
+            root->Stats.Nrows = rand() % 100 + 1;
             return root;
         } else {
             static_assert(
@@ -494,32 +507,49 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
             enum { CliqueSize = 15, ChainSize = 165, StarSize = 20 };
         #endif
 
-        {
-            size_t cliqueSize = CliqueSize;
-            auto startClique = std::chrono::high_resolution_clock::now();
-            Enumerate(MakeClique(cliqueSize));
-            auto endClique = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double> durationClique = endClique - startClique;
-            std::cerr << Sprintf("Time for Enumerate(MakeClique(%ld)): %f seconds", cliqueSize, durationClique.count()) << std::endl;
+        TVector<double> cliqueTime{};
+        TVector<double> starTime{};
+        TVector<double> chainTime{};
+
+        for (size_t i = 0; i < 1; ++i) {
+            {
+                auto startClique = std::chrono::high_resolution_clock::now();
+                Enumerate(MakeClique(CliqueSize));
+                auto endClique = std::chrono::high_resolution_clock::now();
+                std::chrono::duration<double> durationClique = endClique - startClique;
+                cliqueTime.push_back(durationClique.count());
+            }
+
+            {
+                auto startStar = std::chrono::high_resolution_clock::now();
+                Enumerate(MakeStar(StarSize));
+                auto endStar = std::chrono::high_resolution_clock::now();
+                std::chrono::duration<double> durationStar = endStar - startStar;
+                starTime.push_back(durationStar.count());
+            }
+
+            {
+                auto startChain = std::chrono::high_resolution_clock::now();
+                Enumerate(MakeChain(ChainSize));
+                auto endChain = std::chrono::high_resolution_clock::now();
+                std::chrono::duration<double> durationChain = endChain - startChain;
+                chainTime.push_back(durationChain.count());
+            }
         }
 
-        {
-            size_t starSize = StarSize;
-            auto startStar = std::chrono::high_resolution_clock::now();
-            Enumerate(MakeStar(starSize));
-            auto endStar = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double> durationStar = endStar - startStar;
-            std::cerr << Sprintf("Time for Enumerate(MakeStar(%ld)): %f seconds", starSize, durationStar.count()) << std::endl;
-        }
+        auto toString = [](const TVector<double>& v) -> TVector<TString> {
+            TVector<TString> res;
+            for (auto el: v) { res.push_back(ToString(el)); }
+            return res;
+        };
 
-        {
-            size_t chainSize = ChainSize;
-            auto startChain = std::chrono::high_resolution_clock::now();
-            Enumerate(MakeChain(chainSize));
-            auto endChain = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double> durationChain = endChain - startChain;
-            std::cerr << Sprintf("Time for Enumerate(MakeChain(%ld)): %f seconds", chainSize, durationChain.count()) << std::endl;
-        }
+        auto mean = [](const TVector<double>& v) -> double { 
+            double sum = std::accumulate(v.begin(), v.end(), 0.0);
+            return sum / static_cast<double>(v.size());
+        };
+
+        std::cerr << Sprintf("Time for Enumerate(MakeClique(%u)): mean: %f, values: [%s] seconds ", CliqueSize, mean(cliqueTime), JoinSeq(",", toString(cliqueTime)).c_str()) << std::endl;
+        std::cerr << Sprintf("Time for Enumerate(MakeStar(%u)): mean: %f, values: [%s] seconds", StarSize, mean(starTime), JoinSeq(",", toString(starTime)).c_str()) << std::endl;
+        std::cerr << Sprintf("Time for Enumerate(MakeChain(%u)): mean: %f, values [%s] seconds", ChainSize, mean(chainTime), JoinSeq(",", toString(chainTime)).c_str()) << std::endl;
     }
-
 }

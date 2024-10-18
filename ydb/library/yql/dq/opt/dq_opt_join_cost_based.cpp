@@ -221,10 +221,10 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
     if (join->RightArg->Kind == EOptimizerNodeKind::JoinNodeType) {
         ComputeStatistics(static_pointer_cast<TJoinOptimizerNode>(join->RightArg), ctx);
     }
-    join->Stats = std::make_shared<TOptimizerStatistics>(
+    join->Stats = TOptimizerStatistics(
         ctx.ComputeJoinStats(
-            *join->LeftArg->Stats, 
-            *join->RightArg->Stats,
+            join->LeftArg->Stats, 
+            join->RightArg->Stats,
             join->LeftJoinKeys, 
             join->RightJoinKeys, 
             EJoinAlgoType::GraceJoin,
@@ -365,7 +365,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     bool allRowStorage = std::all_of(
         rels.begin(), 
         rels.end(), 
-        [](std::shared_ptr<TRelOptimizerNode>& r) {return r->Stats->StorageType==EStorageType::RowStorage; });
+        [](std::shared_ptr<TRelOptimizerNode>& r) {return r->Stats.StorageType==EStorageType::RowStorage; });
 
     if (optLevel == 2 && allRowStorage) {
         return node;
@@ -396,7 +396,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
 
     // rewrite the join tree and record the output statistics
     TExprBase res = RearrangeEquiJoinTree(ctx, equiJoin, joinTree);
-    typesCtx.SetStats(res.Raw(), joinTree->Stats);
+    typesCtx.SetStats(res.Raw(), std::make_shared<TOptimizerStatistics>(joinTree->Stats));
     return res;
 
 }

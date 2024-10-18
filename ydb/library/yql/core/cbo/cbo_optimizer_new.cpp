@@ -71,7 +71,7 @@ void TRelOptimizerNode::Print(std::stringstream& stream, int ntabs) {
     for (int i = 0; i < ntabs; i++){
         stream << "    ";
     }
-    stream << *Stats << "\n";
+    stream << Stats << "\n";
 }
 
 TJoinOptimizerNode::TJoinOptimizerNode(
@@ -124,12 +124,12 @@ void TJoinOptimizerNode::Print(std::stringstream& stream, int ntabs) {
     }
     stream << "\n";
 
-    if (Stats) {
-        for (int i = 0; i < ntabs; i++){
-            stream << "    ";
-        }
-        stream << *Stats << "\n";
+
+    for (int i = 0; i < ntabs; i++){
+        stream << "    ";
     }
+    stream << Stats << "\n";
+    
 
     LeftArg->Print(stream, ntabs+1);
     RightArg->Print(stream, ntabs+1);

@@ -444,6 +444,7 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             }
             break;
         case EYtSettingType::Flow:
+        case EYtSettingType::BlockInput:
         case EYtSettingType::Anonymous:
             if (!EnsureTupleMinSize(*setting, 1, ctx)) {
                 return false;

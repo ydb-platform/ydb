@@ -182,32 +182,18 @@ static void CollectSinkStages(const NNodes::TDqQuery& dqQuery, THashSet<TExprNod
 }
 
 NNodes::TExprBase DqMergeQueriesWithSinks(NNodes::TExprBase dqQueryNode, TExprContext& ctx) {
-    NNodes::TDqQuery dqQuery = dqQueryNode.Cast<NNodes::TDqQuery>();
+    auto maybeDqQuery = dqQueryNode.Maybe<NNodes::TDqQuery>();
+    YQL_ENSURE(maybeDqQuery, "Expected DqQuery!");
+    auto dqQuery = maybeDqQuery.Cast();
 
-    THashSet<TExprNode::TPtr, TExprNode::TPtrHash> sinkStages;
-    CollectSinkStages(dqQuery, sinkStages);
-    TOptimizeExprSettings settings{nullptr};
-    settings.VisitLambdas = false;
-    bool deletedDqQueryChild = false;
-    TExprNode::TPtr newDqQueryNode;
-    auto status = OptimizeExpr(dqQueryNode.Ptr(), newDqQueryNode, [&sinkStages, &deletedDqQueryChild](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-        for (ui32 childIndex = 0; childIndex < node->ChildrenSize(); ++childIndex) {
-            TExprNode* child = node->Child(childIndex);
-            if (child->IsCallable(NNodes::TDqQuery::CallableName())) {
-                NNodes::TDqQuery dqQueryChild(child);
-                CollectSinkStages(dqQueryChild, sinkStages);
-                deletedDqQueryChild = true;
-                return ctx.ChangeChild(*node, childIndex, dqQueryChild.World().Ptr());
-            }
-        }
-        return node;
-    }, ctx, settings);
-    YQL_ENSURE(status != IGraphTransformer::TStatus::Error, "Failed to merge DqQuery nodes: " << status);
+    if (auto maybeDqQueryChild = dqQuery.World().Maybe<NNodes::TDqQuery>()) {
+        auto dqQueryChild = maybeDqQueryChild.Cast();
+        auto dqQueryBuilder = Build<TDqQuery>(ctx, dqQuery.Pos())
+            .World(dqQueryChild.World());
 
-    if (deletedDqQueryChild) {
-        auto dqQueryBuilder = Build<TDqQuery>(ctx, dqQuery.Pos());
-        dqQueryBuilder.World(newDqQueryNode->ChildPtr(TDqQuery::idx_World));
-
+        THashSet<TExprNode::TPtr, TExprNode::TPtrHash> sinkStages;
+        CollectSinkStages(dqQuery, sinkStages);
+        CollectSinkStages(maybeDqQueryChild.Cast(), sinkStages);
         auto sinkStagesBuilder = dqQueryBuilder.SinkStages();
         for (const TExprNode::TPtr& stage : sinkStages) {
             sinkStagesBuilder.Add(stage);

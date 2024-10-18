@@ -1,7 +1,6 @@
-#include "schemeshard__operation_db_changes.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/tx/tx_processing.h>
+#include "schemeshard__operation_db_changes.h"
 
 namespace NKikimr::NSchemeShard {
 

@@ -59,6 +59,10 @@
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/filestore/core/filestore.h>
 
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/blob_depot/events.h>
+
 #include <ydb/library/login/login.h>
 
 #include <util/generic/ptr.h>

@@ -1,4 +1,12 @@
-#include "schemeshard__operation.h"
+#include <util/generic/algorithm.h>
+
+#include <ydb/library/protobuf_printer/security_printer.h>
+
+#include <ydb/core/tablet/tablet_exception.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
+
+#include "schemeshard__operation_part.h"
 
 #include "schemeshard__dispatch_op.h"
 #include "schemeshard__operation_db_changes.h"
@@ -8,13 +16,9 @@
 #include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/tablet/tablet_exception.h>
-#include <ydb/core/tablet_flat/flat_cxx_database.h>
-#include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/schemeshard/generated/dispatch_op.h>
 
-#include <ydb/library/protobuf_printer/security_printer.h>
-
-#include <util/generic/algorithm.h>
+#include "schemeshard__operation.h"
 
 namespace NKikimr::NSchemeShard {
 
@@ -533,9 +537,9 @@ void OutOfScopeEventHandler<TEvDataShard::TEvSchemaChanged>(const TEvDataShard::
 template <class TEvType>
 struct TTxTypeFrom;
 
-#define DefineTxTypeFromSpecialization(TEvType, TxTypeValue)  \
+#define DefineTxTypeFromSpecialization(NS, TEvType, TxTypeValue) \
     template <> \
-    struct TTxTypeFrom<TEvType> { \
+    struct TTxTypeFrom<::NKikimr::NS::TEvType> { \
         static constexpr TTxType TxType = TxTypeValue; \
     };
 
@@ -722,8 +726,8 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxOperationReply(TOperati
     return new TTxOperationReply<TEvType>(this, id, ev);
 }
 
-#define DefineCreateTxOperationReplyFunc(TEvType, ...) \
-    template NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxOperationReply(TOperationId id, TEvType::TPtr& ev);
+#define DefineCreateTxOperationReplyFunc(NS, TEvType, ...) \
+    template NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxOperationReply(TOperationId id, ::NKikimr::NS::TEvType ## __HandlePtr& ev);
 
     SCHEMESHARD_INCOMING_EVENTS(DefineCreateTxOperationReplyFunc)
 #undef DefineCreateTxOperationReplyFunc

@@ -710,9 +710,9 @@ template <typename TOnDemandValue>
 }
 
 TConclusion<TBinaryJson> SerializeToBinaryJsonImpl(const TStringBuf json) {
-    thread_local simdjson::ondemand::parser parser;
-    const simdjson::padded_string paddedJson(json);
     TBinaryJsonCallbacks callbacks(/* throwException */ false);
+    const simdjson::padded_string paddedJson(json);
+    simdjson::ondemand::parser parser;
     try {
         auto doc = parser.iterate(paddedJson);
         if (auto status = doc.error(); status != simdjson::SUCCESS) {

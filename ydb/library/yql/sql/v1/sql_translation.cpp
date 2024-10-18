@@ -8,6 +8,7 @@
 
 #include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Lexer.h>
 #include <ydb/library/yql/sql/settings/partitioning.h>
+#include <ydb/library/yql/sql/v1/proto_parser/proto_parser.h>
 
 #include <util/generic/scope.h>
 #include <util/string/join.h>
@@ -53,21 +54,38 @@ TString CollectTokens(const TRule_select_stmt& selectStatement) {
     return tokenCollector.Tokens;
 }
 
-NSQLTranslation::TTranslationSettings CreateViewTranslationSettings(const NSQLTranslation::TTranslationSettings& base) {
-    NSQLTranslation::TTranslationSettings settings;
-    
-    settings.ClusterMapping = base.ClusterMapping;
-    settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
+bool RestoreContext(
+    TContext& ctx, const NSQLTranslation::TTranslationSettings& settings, const TString& contextRestorationQuery
+) {
+    const TString queryName = "context restoration query";
 
-    return settings;
+    const auto* ast = NSQLTranslationV1::SqlAST(
+        contextRestorationQuery, queryName, ctx.Issues,
+        settings.MaxErrors, settings.AnsiLexer, settings.Arena
+    );
+    if (!ast) {
+        return false;
+    }
+
+    TSqlQuery query(ctx, ctx.Settings.Mode, true);
+    auto node = query.Build(static_cast<const TSQLv1ParserAST&>(*ast));
+
+    return node && node->Init(ctx, nullptr) && node->Translate(ctx);
 }
 
-TNodePtr BuildViewSelect(const TRule_select_stmt& query, TContext& ctx) {
-    const auto viewTranslationSettings = CreateViewTranslationSettings(ctx.Settings);
-    TContext viewParsingContext(viewTranslationSettings, {}, ctx.Issues);
-    TSqlSelect select(viewParsingContext, viewTranslationSettings.Mode);
+TNodePtr BuildViewSelect(
+    const TRule_select_stmt& selectQuery,
+    TContext& parentContext,
+    const TString& contextRestorationQuery
+) {
+    TContext context(parentContext.Settings, {}, parentContext.Issues);
+    RestoreContext(context, context.Settings, contextRestorationQuery);
+
+    context.Settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
+
+    TSqlSelect select(context, context.Settings.Mode);
     TPosition pos;
-    auto source = select.Build(query, pos);
+    auto source = select.Build(selectQuery, pos);
     if (!source) {
         return nullptr;
     }
@@ -76,7 +94,7 @@ TNodePtr BuildViewSelect(const TRule_select_stmt& query, TContext& ctx) {
         std::move(source),
         false,
         false,
-        viewParsingContext.Scoped
+        context.Scoped
     );
 }
 
@@ -4506,12 +4524,32 @@ bool TSqlTranslation::ParseViewOptions(std::map<TString, TDeferredAtom>& feature
     return true;
 }
 
-bool TSqlTranslation::ParseViewQuery(std::map<TString, TDeferredAtom>& features,
-                                     const TRule_select_stmt& query) {
-    const TString queryText = CollectTokens(query);
-    features["query_text"] = {Ctx.Pos(), queryText};
+bool TSqlTranslation::ParseViewQuery(
+    std::map<TString, TDeferredAtom>& features,
+    const TRule_select_stmt& query
+) {
+    TString queryText = CollectTokens(query);
+    TString contextRestorationQuery;
+    {
+        const auto& service = Ctx.Scoped->CurrService;
+        const auto& cluster = Ctx.Scoped->CurrCluster;
+        const auto effectivePathPrefix = Ctx.GetPrefixPath(service, cluster);
 
-    const auto viewSelect = BuildViewSelect(query, Ctx);
+        // TO DO: capture all runtime pragmas in a similar fashion.
+        if (effectivePathPrefix != Ctx.Settings.PathPrefix) {
+            contextRestorationQuery = TStringBuilder() << "PRAGMA TablePathPrefix = \"" << effectivePathPrefix << "\";\n";
+        }
+
+        // TO DO: capture other compilation-affecting statements except USE.
+        if (cluster.GetLiteral() && *cluster.GetLiteral() != Ctx.Settings.DefaultCluster) {
+            contextRestorationQuery = TStringBuilder() << "USE " << *cluster.GetLiteral() << ";\n";
+        }
+    }
+    features["query_text"] = { Ctx.Pos(), contextRestorationQuery + queryText };
+
+    // AST is needed for ready-made validation of CREATE VIEW statement.
+    // Query is stored as plain text, not AST.
+    const auto viewSelect = BuildViewSelect(query, Ctx, contextRestorationQuery);
     if (!viewSelect) {
         return false;
     }

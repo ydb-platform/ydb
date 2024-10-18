@@ -1100,6 +1100,7 @@ public:
             if (SessionCtx->GetUserToken()) {
                 context.SetUserToken(*SessionCtx->GetUserToken());
             }
+            context.SetTranslationSettings(SessionCtx->Query().TranslationSettings);
 
             auto& phyTx = phyTxRemover.Capture(SessionCtx->Query().PreparingQuery->MutablePhysicalQuery());
             phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);

@@ -1,6 +1,7 @@
 #include "rewrite_io_utils.h"
 
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
@@ -15,24 +16,18 @@ using namespace NNodes;
 
 constexpr const char* QueryGraphNodeSignature = "SavedQueryGraph";
 
-NSQLTranslation::TTranslationSettings CreateViewTranslationSettings(const TString& cluster) {
-    NSQLTranslation::TTranslationSettings settings;
-
-    settings.DefaultCluster = cluster;
-    settings.ClusterMapping[cluster] = TString(NYql::KikimrProviderName);
-    settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
-
-    return settings;
-}
-
 TExprNode::TPtr CompileViewQuery(
-    const TString& query,
     TExprContext& ctx,
-    const TString& cluster,
-    IModuleResolver::TPtr moduleResolver
+    const NSQLTranslation::TTranslationSettings& outerSettings,
+    IModuleResolver::TPtr moduleResolver,
+    const TViewPersistedData& viewData
 ) {
+    auto translationSettings = outerSettings;
+    translationSettings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
+    NSQLTranslation::Deserialize(viewData.CapturedContext, translationSettings);
+
     TAstParseResult queryAst;
-    queryAst = NSQLTranslation::SqlToYql(query, CreateViewTranslationSettings(cluster));
+    queryAst = NSQLTranslation::SqlToYql(viewData.QueryText, translationSettings);
 
     ctx.IssueManager.AddIssues(queryAst.Issues);
     if (!queryAst.IsOk()) {
@@ -123,16 +118,16 @@ TExprNode::TPtr FindTopLevelRead(const TExprNode::TPtr& queryGraph) {
 TExprNode::TPtr RewriteReadFromView(
     const TExprNode::TPtr& node,
     TExprContext& ctx,
-    const TString& query,
-    const TString& cluster,
-    IModuleResolver::TPtr moduleResolver
+    const NSQLTranslation::TTranslationSettings& outerSettings,
+    IModuleResolver::TPtr moduleResolver,
+    const TViewPersistedData& viewData
 ) {
     const TCoRead readNode(node->ChildPtr(0));
     const auto worldBeforeThisRead = readNode.World().Ptr();
 
     TExprNode::TPtr queryGraph = FindSavedQueryGraph(readNode.Ptr());
     if (!queryGraph) {
-        queryGraph = CompileViewQuery(query, ctx, cluster, moduleResolver);
+        queryGraph = CompileViewQuery(ctx, outerSettings, moduleResolver, viewData);
         if (!queryGraph) {
             ctx.AddError(TIssue(ctx.GetPosition(readNode.Pos()),
                          "The query stored in the view cannot be compiled."));

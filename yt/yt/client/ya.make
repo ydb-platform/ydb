@@ -198,6 +198,11 @@ SRCS(
     kafka/requests.cpp
 )
 
+CONFIGURE_FILE(
+    api/rpc_proxy/protocol_version_variables.h.in
+    api/rpc_proxy/protocol_version_variables.h
+)
+
 SRCS(
     ${YT_SRCS}
     yt/yt/client/api/rpc_proxy/protocol_version_variables.h.in

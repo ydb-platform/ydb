@@ -574,7 +574,7 @@ SELECT COUNT(*) FROM public.t;");
         UNIT_ASSERT_EQUAL(res.Issues.Size(), 1);
 
         auto issue = *(res.Issues.begin());
-        UNIT_ASSERT(issue.GetMessage().Contains("VariableSetStmt, not supported BlockEngine option value: foo"));
+        UNIT_ASSERT(issue.GetMessage().contains("VariableSetStmt, not supported BlockEngine option value: foo"));
     }
 
     Y_UNIT_TEST(SetConfig_SearchPath) {

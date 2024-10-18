@@ -6,7 +6,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/fq/libs/config/protos
-    ydb/library/yql/public/issue/protos
+    ydb/public/sdk/cpp/src/library/yql_common/issue/protos
 )
 
 END()

@@ -22,7 +22,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb-cpp-sdk/library/grpc/client/grpc_client_low.h>
 
 #include <google/protobuf/any.h>
 
@@ -30,14 +30,14 @@
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
+#include <ydb-cpp-sdk/client/params/params.h>
+#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
 
-#include <ydb/public/lib/yson_value/ydb_yson_value.h>
-#include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb-cpp-sdk/library/yson_value/ydb_yson_value.h>
+#include <ydb-cpp-sdk/library/json_value/ydb_json_value.h>
 
 #include "ydb_common_ut.h"
 
@@ -842,7 +842,7 @@ static TString CreateSession(std::shared_ptr<grpc::Channel> channel) {
     return result.session_id();
 }
 
-void IncorrectConnectionStringPending(const TString& incorrectLocation) {
+void IncorrectConnectionStringPending(const std::string& incorrectLocation) {
     auto connection = NYdb::TDriver(incorrectLocation);
     auto client = NYdb::NTable::TTableClient(connection);
     auto session = client.CreateSession().ExtractValueSync().GetSession();
@@ -856,7 +856,7 @@ Y_UNIT_TEST_SUITE(GrpcConnectionStringParserTest) {
         bool done = false;
 
         {
-            TString location = TStringBuilder() << "localhost:" << grpc;
+            std::string location = TStringBuilder() << "localhost:" << grpc;
 
             // by default, location won't have database path
             auto connection = NYdb::TDriver(location);
@@ -1223,7 +1223,7 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
             UNIT_ASSERT(deferred.status() == Ydb::StatusIds::BAD_REQUEST);
             NYql::TIssues issues;
             NYql::IssuesFromMessage(deferred.issues(), issues);
-            UNIT_ASSERT(issues.ToString().Contains("invalid or unset index type"));
+            UNIT_ASSERT(issues.ToString().contains("invalid or unset index type"));
         }
     }
 
@@ -4252,7 +4252,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
                 auto parser = TValueParser(val);
                 parser.OpenTuple();
                 UNIT_ASSERT(parser.TryNextElement());
-                return parser.GetOptionalUint64().GetRef();
+                return parser.GetOptionalUint64().value();
             };
 
             int n = 0;

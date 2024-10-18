@@ -1,0 +1,2 @@
+add_subdirectory(enum_parser)
+add_subdirectory(rescompiler)

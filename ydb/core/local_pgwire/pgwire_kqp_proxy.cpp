@@ -8,7 +8,7 @@
 #include <ydb/core/pgproxy/pg_proxy_types.h>
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb-cpp-sdk/client/result/result.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
@@ -231,14 +231,14 @@ protected:
             std::optional<NYdb::TPgType> pgType = GetPgTypeFromYdbType(column.Type);
             if (pgType.has_value()) {
                 response->DataFields.push_back({
-                    .Name = column.Name,
+                    .Name = TString{column.Name},
                     .DataType = pgType->Oid,
                     .DataTypeSize = pgType->Typlen,
                     .DataTypeModifier = pgType->Typmod,
                 });
             } else {
                 response->DataFields.push_back({
-                    .Name = column.Name
+                    .Name = TString{column.Name}
                 });
             }
         }

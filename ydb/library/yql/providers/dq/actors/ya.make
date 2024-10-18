@@ -31,7 +31,7 @@ PEERDIR(
     ydb/library/yql/utils/backtrace
     ydb/library/yql/utils/log
     ydb/public/api/protos
-    ydb/public/lib/yson_value
+    ydb/public/sdk/cpp/src/library/yson_value
     ydb/library/yql/dq/common
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/runtime

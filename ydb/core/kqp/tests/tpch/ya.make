@@ -15,7 +15,7 @@ PEERDIR(
     library/cpp/json
     ydb/public/lib/ydb_cli/commands
     ydb/public/lib/ydb_cli/common
-    ydb/public/lib/yson_value
+    ydb/public/sdk/cpp/src/library/yson_value
 )
 
 END()

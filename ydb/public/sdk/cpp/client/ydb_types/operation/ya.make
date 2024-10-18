@@ -1,15 +1,13 @@
 LIBRARY()
 
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
+
 SRCS(
-    operation.cpp
-    out.cpp
+    operation.h
 )
 
 PEERDIR(
-    contrib/libs/protobuf
-    library/cpp/threading/future
-    ydb/public/lib/operation_id
-    ydb/public/sdk/cpp/client/ydb_types
+    ydb/public/sdk/cpp/src/client/types/operation
 )
 
 END()

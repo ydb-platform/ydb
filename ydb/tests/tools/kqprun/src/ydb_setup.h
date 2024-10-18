@@ -3,7 +3,7 @@
 #include "common.h"
 #include "actors.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_query/query.h>
+#include <ydb-cpp-sdk/client/query/query.h>
 
 
 namespace NKqpRun {

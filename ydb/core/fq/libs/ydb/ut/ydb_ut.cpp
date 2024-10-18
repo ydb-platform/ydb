@@ -464,7 +464,7 @@ Y_UNIT_TEST_SUITE(TFqYdbTest) {
 
         NYql::TIssues issues = future2.GetValueSync();
         UNIT_ASSERT(issues.Size() == 1);
-        UNIT_ASSERT(issues.ToString().Contains(text));
+        UNIT_ASSERT(issues.ToString().contains(text));
     }
 }
 

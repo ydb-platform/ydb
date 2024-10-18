@@ -1,11 +1,3 @@
 #pragma once
 
-#include <util/generic/string.h>
-
-#include <functional>
-
-namespace NYdb {
-
-void ThrowFatalError(const TString& str);
-
-} // namespace NYdb
+#include <ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>

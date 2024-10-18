@@ -1,24 +1,15 @@
 LIBRARY()
 
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
+
 SRCS(
-    ydb_dynamic_config.cpp
-    ydb_replication.cpp
-    ydb_scripting.cpp
-    ydb_view.cpp
+    ydb_dynamic_config.h
+    ydb_replication.h
+    ydb_scripting.h
 )
 
-GENERATE_ENUM_SERIALIZATION(ydb_replication.h)
-
 PEERDIR(
-    ydb/library/yql/public/issue
-    ydb/public/api/grpc/draft
-    ydb/public/sdk/cpp/client/ydb_table
-    ydb/public/sdk/cpp/client/ydb_types/operation
-    ydb/public/sdk/cpp/client/ydb_value
+    ydb/public/sdk/cpp/src/client/draft
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)

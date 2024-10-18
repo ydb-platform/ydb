@@ -1,12 +1,12 @@
 #include "ydb_service_table.h"
 
-#include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb-cpp-sdk/library/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/stat_visualization/flame_graph_builder.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <library/cpp/json/json_prettifier.h>
 #include <google/protobuf/util/json_util.h>
@@ -232,9 +232,9 @@ int TCommandCreateTable::Run(TConfig& config) {
             throw TMisuseException() << "Can't parse index \"" << index
                 << "\". Need exactly one colon. Expected format: \"<name>:<column1>[,<column2>,...]\"";
         }
-        TVector<TString> columns = StringSplitter(parts[1]).Split(',');
-        for (TString& column : columns) {
-            if (!column) {
+        std::vector<std::string> columns = StringSplitter(parts[1]).Split(',');
+        for (std::string& column : columns) {
+            if (column.empty()) {
                 throw TMisuseException() << "Can't parse index \"" << index
                     << "\". Empty column names found. Expected format: \"<name>:<column1>[,<column2>,...]\"";
             }
@@ -498,7 +498,7 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
 void TCommandExecuteQuery::PrintDataQueryResponse(NTable::TDataQueryResult& result) {
     {
         TResultSetPrinter printer(OutputFormat);
-        const TVector<TResultSet>& resultSets = result.GetResultSets();
+        const std::vector<TResultSet>& resultSets = result.GetResultSets();
         for (auto resultSetIt = resultSets.begin(); resultSetIt != resultSets.end(); ++resultSetIt) {
             if (resultSetIt != resultSets.begin()) {
                 printer.Reset();
@@ -507,12 +507,12 @@ void TCommandExecuteQuery::PrintDataQueryResponse(NTable::TDataQueryResult& resu
         }
     } // TResultSetPrinter destructor should be called before printing stats
 
-    const TMaybe<NTable::TQueryStats>& stats = result.GetStats();
-    if (stats.Defined()) {
+    const std::optional<NTable::TQueryStats>& stats = result.GetStats();
+    if (stats.has_value()) {
         Cout << Endl << "Statistics:" << Endl << stats->ToString();
         PrintFlameGraph(stats->GetPlan());
     }
-    if (FlameGraphPath && !stats.Defined())
+    if (FlameGraphPath && !stats.has_value())
     {
         Cout << Endl << "Flame graph is available for full or profile stats only" << Endl;
     }
@@ -631,7 +631,7 @@ namespace {
         if constexpr (std::is_same_v<TQueryPart, NTable::TScanQueryPart>) {
             return part.HasQueryStats();
         } else if constexpr (std::is_same_v<TQueryPart, NQuery::TExecuteQueryPart>) {
-            return !part.GetStats().Empty();
+            return part.GetStats().has_value();
         }
         Y_UNREACHABLE();
     }
@@ -731,7 +731,7 @@ int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
 template <typename TIterator>
 bool TCommandExecuteQuery::PrintQueryResponse(TIterator& result) {
     TMaybe<TString> stats;
-    TMaybe<TString> fullStats;
+    std::optional<std::string> fullStats;
     {
         TResultSetPrinter printer(OutputFormat, &IsInterrupted);
 
@@ -764,7 +764,7 @@ bool TCommandExecuteQuery::PrintQueryResponse(TIterator& result) {
         Cout << Endl << "Full statistics:" << Endl;
 
         TQueryPlanPrinter queryPlanPrinter(OutputFormat, /* analyzeMode */ true);
-        queryPlanPrinter.Print(*fullStats);
+        queryPlanPrinter.Print(TString{*fullStats});
     }
 
     PrintFlameGraph(fullStats);
@@ -776,7 +776,7 @@ bool TCommandExecuteQuery::PrintQueryResponse(TIterator& result) {
     return true;
 }
 
-void TCommandExecuteQuery::PrintFlameGraph(const TMaybe<TString>& plan)
+void TCommandExecuteQuery::PrintFlameGraph(const std::optional<std::string>& plan)
 {
     if (!FlameGraphPath) {
         return;
@@ -790,7 +790,7 @@ void TCommandExecuteQuery::PrintFlameGraph(const TMaybe<TString>& plan)
         return;
     }
     try {
-        NKikimr::NVisual::GenerateFlameGraphSvg(FlameGraphPath.GetRef(), *plan);
+        NKikimr::NVisual::GenerateFlameGraphSvg(FlameGraphPath.GetRef(), TString{*plan});
         Cout << Endl << "Resource usage flame graph is successfully saved to " << FlameGraphPath << Endl;
     }
     catch (const yexception &ex) {
@@ -840,7 +840,7 @@ void TCommandExplain::Config(TConfig& config) {
     config.SetFreeArgsNum(0);
 }
 
-void TCommandExplain::SaveDiagnosticsToFile(const TString& diagnostics) {
+void TCommandExplain::SaveDiagnosticsToFile(const std::string& diagnostics) {
     TFileOutput file(TStringBuilder() << "diagnostics_" << TGUID::Create().AsGuidString() << ".txt");
     file << diagnostics;
 }
@@ -1099,7 +1099,7 @@ int TCommandReadTable::Run(TConfig& config) {
         readTableSettings.Ordered(Ordered);
     }
     if (Columns) {
-        readTableSettings.Columns_ = StringSplitter(Columns).Split(',').ToList<TString>();
+        readTableSettings.Columns_ = StringSplitter(Columns).Split(',').ToList<std::string>();
     }
 
     if (From || To) {
@@ -1109,14 +1109,14 @@ int TCommandReadTable::Run(TConfig& config) {
         NTable::TTableDescription tableDescription = tableResult.GetTableDescription();
 
         if (From) {
-            TValue fromValue = JsonToYdbValue(From, GetKeyPrefixTypeFromJson(From, "from", tableDescription), InputBinaryStringEncoding);
+            TValue fromValue = JsonToYdbValue(std::string{From}, GetKeyPrefixTypeFromJson(From, "from", tableDescription), InputBinaryStringEncoding);
             readTableSettings.From(FromExclusive
                 ? NTable::TKeyBound::Exclusive(fromValue)
                 : NTable::TKeyBound::Inclusive(fromValue));
         }
 
         if (To) {
-            TValue toValue = JsonToYdbValue(To, GetKeyPrefixTypeFromJson(To, "to", tableDescription), InputBinaryStringEncoding);
+            TValue toValue = JsonToYdbValue(std::string{To}, GetKeyPrefixTypeFromJson(To, "to", tableDescription), InputBinaryStringEncoding);
             readTableSettings.To(ToExclusive
                 ? NTable::TKeyBound::Exclusive(toValue)
                 : NTable::TKeyBound::Inclusive(toValue));
@@ -1198,10 +1198,10 @@ void TCommandIndexAddGlobal::Parse(TConfig& config) {
 
 int TCommandIndexAddGlobal::Run(TConfig& config) {
     NTable::TTableClient client(CreateDriver(config));
-    auto columns = StringSplitter(Columns).Split(',').ToList<TString>();
-    TVector<TString> dataColumns;
+    auto columns = StringSplitter(Columns).Split(',').ToList<std::string>();
+    std::vector<std::string> dataColumns;
     if (DataColumns) {
-        dataColumns = StringSplitter(DataColumns).Split(',').ToList<TString>();
+        dataColumns = StringSplitter(DataColumns).Split(',').ToList<std::string>();
     }
 
     auto settings = NTable::TAlterTableSettings()

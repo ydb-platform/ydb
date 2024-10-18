@@ -25,15 +25,15 @@ void SetMetaField(NKikimrPQClient::TDataChunk& proto, const TString& key, const 
 TString GetSerializedData(const NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage& message) {
     NKikimrPQClient::TDataChunk proto;
     for (const auto& item : message.GetMeta(0)->Fields) {
-        SetMetaField(proto, item.first, item.second);
+        SetMetaField(proto, TString{item.first}, TString{item.second});
     }
-    proto.SetIp(message.GetIp(0));
+    proto.SetIp(TString{message.GetIp(0)});
     proto.SetSeqNo(message.GetSeqNo(0));
     proto.SetCreateTime(message.GetCreateTime(0).MilliSeconds());
     auto codec = NPQ::FromV1Codec(message.GetCodec());
     Y_ABORT_UNLESS(codec);
     proto.SetCodec(codec.value());
-    proto.SetData(message.GetData());
+    proto.SetData(TString{message.GetData()});
 
     TString str;
     bool res = proto.SerializeToString(&str);
@@ -45,26 +45,26 @@ TString GetSerializedData(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEv
     NKikimrPQClient::TDataChunk proto;
     for (const auto& item : message.GetMeta()->Fields) {
         if (item.first == "_ip") {
-            proto.SetIp(item.second);
+            proto.SetIp(TString{item.second});
         } else if (item.first == "_encoded_producer_id") {
             // Skip.
         } else {
-            SetMetaField(proto, item.first, item.second);
+            SetMetaField(proto, TString{item.first}, TString{item.second});
         }
     }
     auto& fields = message.GetMessageMeta()->Fields;
     if (!fields.empty()) {
         for (const auto& item : fields) {
             auto& metaItem = *proto.AddMessageMeta();
-            metaItem.set_key(item.first);
-            metaItem.set_value(item.second);
+            metaItem.set_key(TString{item.first});
+            metaItem.set_value(TString{item.second});
         }
     }
     proto.SetSeqNo(message.GetSeqNo());
     proto.SetCreateTime(message.GetCreateTime().MilliSeconds());
     auto codec = NPQ::FromTopicCodec(message.GetCodec());
     proto.SetCodec(codec);
-    proto.SetData(message.GetData());
+    proto.SetData(TString{message.GetData()});
 
     TString str;
     bool res = proto.SerializeToString(&str);

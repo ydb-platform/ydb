@@ -83,7 +83,7 @@ public:
     void Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketResult::TPtr &ev, const TActorContext &ctx) {
         const NKikimr::TEvTicketParser::TEvAuthorizeTicketResult &result(*ev->Get());
         if (result.Error) {
-            ReplyUnathorizedAndDie(ctx, result.Error.Message);
+            ReplyUnathorizedAndDie(ctx, TString(result.Error.Message));
             return;
         }
         bool found = false;

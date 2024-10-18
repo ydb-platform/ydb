@@ -7,8 +7,8 @@ SRCS(
     yql_decimal_serialize.cpp
 )
 
-END()
-
-RECURSE_FOR_TESTS(
-    ut
+PEERDIR(
+    ydb/public/sdk/cpp/src/library/yql_common/decimal
 )
+
+END()

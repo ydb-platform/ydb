@@ -1,6 +1,6 @@
 #include "rows_proto_splitter.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb-cpp-sdk/client/result/result.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
 
 namespace NFq {
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(SplitterBasic) {
         const auto& issuesStr = result.Issues.ToString();
         UNIT_ASSERT_C(!result.Success, issuesStr);
         UNIT_ASSERT_VALUES_EQUAL(result.ResultSets.size(), 0);
-        UNIT_ASSERT_C(issuesStr.Contains("Can not write Row[0] with size: 41 bytes"), issuesStr);
+        UNIT_ASSERT_C(issuesStr.contains("Can not write Row[0] with size: 41 bytes"), issuesStr);
     }
 }
 

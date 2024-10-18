@@ -1,0 +1,41 @@
+name: ppc64le_linux_gcc
+
+on: [push, pull_request]
+
+jobs:
+
+  ppc64le_linux_gcc:
+    runs-on: ubuntu-20.04
+    timeout-minutes: 10
+    env:
+      CC: /opt/powerpc64le-linux-musl-cross/bin/powerpc64le-linux-musl-gcc
+    steps:
+    - uses: actions/checkout@v3
+    - name: Retrieve test compression corpus
+      run: |
+        git clone https://github.com/ariya/compression-corpus.git
+        cd compression-corpus
+        cd enwik
+        unzip enwik8.zip
+    - run: sudo apt-get -y -qq update
+    - run: sudo apt install -y qemu-user
+    - name: Prepare cross-compiler
+      run: |
+        curl -O http://musl.cc/powerpc64le-linux-musl-cross.tgz
+        tar xzf powerpc64le-linux-musl-cross.tgz -C /opt
+    - name: Verify compiler version
+      run: /opt/powerpc64le-linux-musl-cross/bin/powerpc64le-linux-musl-gcc --version
+    - name: Perform round-trip tests
+      run: |
+        cd tests
+        make test_roundtrip CFLAGS=-static
+        file ./test_roundtrip
+        qemu-ppc64le ./test_roundtrip
+    - name: 'Build and run example: 6pack and 6unpack'
+      run: |
+        cd examples
+        make CFLAGS=-static
+        qemu-ppc64le ./6pack -v
+        qemu-ppc64le ./6pack ../compression-corpus/enwik/enwik8.txt archive.6pk
+        qemu-ppc64le ./6unpack -v
+        qemu-ppc64le ./6unpack archive.6pk

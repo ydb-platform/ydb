@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <util/string/printf.h>
@@ -184,7 +184,7 @@ private:
         auto result = Session.ExplainDataQuery(joinRequest).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        PrintPlan(result.GetPlan());
+        PrintPlan(TString{result.GetPlan()});
     }
 
     TKikimrRunner Kikimr;
@@ -207,7 +207,7 @@ void ExplainJoinOrderTestDataQueryWithStats(const TString& queryPath, const TStr
         auto result = session.ExplainDataQuery(query).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        PrintPlan(result.GetPlan());
+        PrintPlan(TString{result.GetPlan()});
     }
 }
 
@@ -361,7 +361,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             const TString query = GetStatic(queryPath);
 
             auto result = session.ExplainDataQuery(query).ExtractValueSync();
-            PrintPlan(result.GetPlan());
+            PrintPlan(TString{result.GetPlan()});
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
 
@@ -547,7 +547,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             auto result = session.ExplainDataQuery(query).ExtractValueSync();
 
             result.GetIssues().PrintTo(Cerr);
-            PrintPlan(result.GetPlan());
+            PrintPlan(TString{result.GetPlan()});
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             if (useStreamLookupJoin) {
@@ -558,7 +558,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
                 correctJoinOrderPath = correctJoinOrderPath.substr(0, correctJoinOrderPath.find(".json")) + "_column_store.json";      
             }
 
-            auto currentJoinOrder = GetPrettyJSON(GetDetailedJoinOrder(result.GetPlan()));
+            auto currentJoinOrder = GetPrettyJSON(GetDetailedJoinOrder(TString{result.GetPlan()}));
 
             /* to canonize the tests use --test-param CANONIZE_JOIN_ORDER_TESTS=TRUE */
             TString canonize = GetTestParam("CANONIZE_JOIN_ORDER_TESTS"); canonize.to_lower();
@@ -569,9 +569,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             }
 
             TString ref = GetStatic(correctJoinOrderPath);
-            Cout << "actual\n" << GetJoinOrder(result.GetPlan()).GetStringRobust() << Endl; 
+            Cout << "actual\n" << GetJoinOrder(TString{result.GetPlan()}).GetStringRobust() << Endl; 
             Cout << "expected\n" << GetJoinOrderFromDetailedJoinOrder(ref).GetStringRobust() << Endl;
-            UNIT_ASSERT(JoinOrderAndAlgosMatch(result.GetPlan(), ref));
+            UNIT_ASSERT(JoinOrderAndAlgosMatch(TString{result.GetPlan()}, ref));
         }
     }
 

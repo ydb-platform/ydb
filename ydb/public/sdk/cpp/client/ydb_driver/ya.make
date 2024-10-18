@@ -1,19 +1,13 @@
 LIBRARY()
 
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
+
 SRCS(
-    driver.cpp
+    driver.h
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp/client/impl/ydb_internal/common
-    ydb/public/sdk/cpp/client/impl/ydb_internal/grpc_connections
-    ydb/public/sdk/cpp/client/resources
-    ydb/public/sdk/cpp/client/ydb_common_client
-    ydb/public/sdk/cpp/client/ydb_types/status
+    ydb/public/sdk/cpp/src/client/driver
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)

@@ -2,8 +2,8 @@
 
 #include <library/cpp/getopt/last_getopt.h>
 
-#include <util/system/env.h>
-#include <util/stream/file.h>
+#include <cstdlib>
+#include <fstream>
 
 using namespace NLastGetopt;
 using namespace NYdb;
@@ -12,12 +12,19 @@ void StopHandler(int) {
     exit(1);
 }
 
+std::string ReadFile(const std::string& filename) {
+    std::ifstream input(filename);
+    std::stringstream data;
+    data << input.rdbuf();
+    return data.str();
+}
+
 int main(int argc, char** argv) {
     TOpts opts = TOpts::Default();
 
-    TString endpoint;
-    TString database;
-    TString certPath;
+    std::string endpoint;
+    std::string database;
+    std::string certPath;
 
     opts.AddLongOption('e', "endpoint", "YDB endpoint").Required().RequiredArgument("HOST:PORT")
         .StoreResult(&endpoint);
@@ -34,10 +41,10 @@ int main(int argc, char** argv) {
     auto driverConfig = TDriverConfig()
         .SetEndpoint(endpoint)
         .SetDatabase(database)
-        .SetAuthToken(GetEnv("YDB_TOKEN"));
+        .SetAuthToken(std::getenv("YDB_TOKEN") ? std::getenv("YDB_TOKEN") : "");
 
     if (!certPath.empty()) {
-        TString cert = TFileInput(certPath).ReadAll();
+        std::string cert = ReadFile(certPath);
         driverConfig.UseSecureConnection(cert);
     }
 

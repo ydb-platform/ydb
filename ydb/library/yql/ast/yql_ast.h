@@ -4,10 +4,12 @@
 #include "yql_errors.h"
 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
+#include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
+#include <util/generic/hash.h>
 #include <util/stream/output.h>
 #include <util/stream/str.h>
 #include <util/memory/pool.h>
@@ -188,7 +190,7 @@ struct TAstNode {
     inline ~TAstNode() {}
 
     void Destroy() {
-        TString().swap(Position.File);
+        std::string{}.swap(Position.File);
     }
 
 private:

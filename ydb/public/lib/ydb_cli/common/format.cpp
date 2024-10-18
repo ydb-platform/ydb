@@ -3,7 +3,7 @@
 #include <util/string/vector.h>
 #include <library/cpp/json/json_prettifier.h>
 
-#include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb-cpp-sdk/library/json_value/ydb_json_value.h>
 #include <ydb/library/arrow_parquet/result_set_parquet_printer.h>
 
 #include <iomanip>
@@ -747,11 +747,11 @@ void TResultSetPrinter::EndLineBeforeNextResult() {
 }
 
 void TResultSetPrinter::PrintPretty(const TResultSet& resultSet) {
-    const TVector<TColumn>& columns = resultSet.GetColumnsMeta();
+    const std::vector<TColumn>& columns = resultSet.GetColumnsMeta();
     TResultSetParser parser(resultSet);
     TVector<TString> columnNames;
     for (const auto& column : columns) {
-        columnNames.push_back(column.Name);
+        columnNames.push_back(TString{column.Name});
     }
 
     TPrettyTableConfig tableConfig;
@@ -788,7 +788,7 @@ void TResultSetPrinter::PrintJsonArray(const TResultSet& resultSet, EBinaryStrin
 }
 
 void TResultSetPrinter::PrintCsv(const TResultSet& resultSet, const char* delim) {
-    const TVector<TColumn>& columns = resultSet.GetColumnsMeta();
+    const std::vector<TColumn>& columns = resultSet.GetColumnsMeta();
     TResultSetParser parser(resultSet);
     while (parser.TryNextRow()) {
         for (ui32 i = 0; i < columns.size(); ++i) {

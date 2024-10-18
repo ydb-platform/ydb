@@ -1,0 +1,19 @@
+name: Code style
+
+on: [push, pull_request]
+
+jobs:
+
+  codestyle:
+    runs-on: ubuntu-20.04
+    timeout-minutes: 10
+    steps:
+    - uses: actions/checkout@v3
+    - run: sudo apt install -y clang-format-6.0
+      name: Install clang-format
+    - run: clang-format-6.0 --version
+    - run: bash tools/format-code.sh
+      name: Run code formatter
+    - run: git diff
+    - run: git diff --quiet HEAD
+      name: Check if the styling guide is followed

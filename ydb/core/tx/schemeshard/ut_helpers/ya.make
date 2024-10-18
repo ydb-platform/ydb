@@ -21,8 +21,8 @@ PEERDIR(
     ydb/core/tx/tx_proxy
     ydb/public/lib/scheme_types
     ydb/library/yql/public/issue
-    ydb/public/sdk/cpp/client/ydb_driver
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/table
 )
 
 SRCS(

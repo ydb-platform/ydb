@@ -1,4 +1,4 @@
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
 
 namespace NKikimr::NReplication::NTestHelpers {
 

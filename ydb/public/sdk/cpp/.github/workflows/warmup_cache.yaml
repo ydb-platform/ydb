@@ -1,0 +1,34 @@
+name: Warm up cache
+
+on:  
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+jobs:
+  main:
+    name: Build YDB C++ SDK and cache artifacts
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+      if: github.event.pull_request.head.sha == ''
+      with:
+        submodules: true
+    - name: Install dependencies
+      uses: ./.github/actions/prepare_vm
+    - name: Prepare ccache timestamp
+      id: ccache_cache_timestamp
+      shell: cmake -P {0}
+      run: |
+        string(TIMESTAMP current_date "%Y-%m-%d-%H;%M;%S" UTC)
+        message("::set-output name=timestamp::${current_date}")
+    - name: Cache files
+      uses: actions/cache@v4
+      with:
+        path: ~/.ccache
+        key: ubuntu-22.04-ccache-${{steps.ccache_cache_timestamp.outputs.timestamp}}
+        restore-keys: |
+          ubuntu-22.04-ccache-
+    - name: Build
+      uses: ./.github/actions/build

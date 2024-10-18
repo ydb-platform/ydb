@@ -11,7 +11,7 @@ PEERDIR(
     ydb/public/api/protos
     ydb/library/yql/core/issue/protos
     ydb/library/yql/dq/proto
-    ydb/library/yql/public/issue/protos
+    ydb/public/sdk/cpp/src/library/yql_common/issue/protos
     ydb/library/yql/public/types
 )
 

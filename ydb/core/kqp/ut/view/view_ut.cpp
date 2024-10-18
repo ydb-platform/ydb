@@ -1,7 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/library/yql/sql/sql.h>
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <util/folder/filelist.h>
 
@@ -117,14 +117,14 @@ TMaybe<bool> GetFromCacheStat(const TQueryStats& stats) {
     return proto.Getcompilation().Getfrom_cache();
 }
 
-void AssertFromCache(const TMaybe<TQueryStats>& stats, bool expectedValue) {
-    UNIT_ASSERT(stats.Defined());
+void AssertFromCache(const std::optional<TQueryStats>& stats, bool expectedValue) {
+    UNIT_ASSERT(stats.has_value());
     const auto isFromCache = GetFromCacheStat(*stats);
     UNIT_ASSERT_C(isFromCache.Defined(), stats->ToString());
     UNIT_ASSERT_VALUES_EQUAL_C(*isFromCache, expectedValue, stats->ToString());
 }
 
-void CompareResults(const TVector<TResultSet>& firstResults, const TVector<TResultSet>& secondResults) {
+void CompareResults(const std::vector<TResultSet>& firstResults, const std::vector<TResultSet>& secondResults) {
     UNIT_ASSERT_VALUES_EQUAL(firstResults.size(), secondResults.size());
     for (size_t i = 0; i < firstResults.size(); ++i) {
         CompareYson(FormatResultSetYson(firstResults[i]), FormatResultSetYson(secondResults[i]));
@@ -344,7 +344,7 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         {
             const auto creationResult = session.ExecuteSchemeQuery(creationQuery).GetValueSync();
             UNIT_ASSERT(!creationResult.IsSuccess());
-            UNIT_ASSERT(creationResult.GetIssues().ToString().Contains("error: path exist, request accepts it"));
+            UNIT_ASSERT(creationResult.GetIssues().ToString().contains("error: path exist, request accepts it"));
         }
     }
 
@@ -424,7 +424,7 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         {
             const auto dropResult = session.ExecuteSchemeQuery(dropQuery).GetValueSync();
             UNIT_ASSERT(!dropResult.IsSuccess());
-            UNIT_ASSERT(dropResult.GetIssues().ToString().Contains("Error: Path does not exist"));
+            UNIT_ASSERT(dropResult.GetIssues().ToString().contains("Error: Path does not exist"));
         }
     }
 

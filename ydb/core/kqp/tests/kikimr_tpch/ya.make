@@ -22,9 +22,9 @@ PEERDIR(
     ydb/core/kqp/tests/tpch/lib
     library/cpp/testing/unittest
     ydb/core/protos
-    ydb/library/grpc/client
+    ydb/public/sdk/cpp/src/library/grpc/client
     ydb/library/yql/public/udf/service/stub
-    ydb/public/lib/yson_value
+    ydb/public/sdk/cpp/src/library/yson_value
 )
 
 SIZE(MEDIUM)

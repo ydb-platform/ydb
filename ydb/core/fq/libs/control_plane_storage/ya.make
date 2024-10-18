@@ -39,8 +39,8 @@ PEERDIR(
     ydb/library/yql/providers/s3/path_generator
     ydb/library/yql/public/issue
     ydb/public/api/protos
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/table
 )
 
 YQL_LAST_ABI_VERSION()

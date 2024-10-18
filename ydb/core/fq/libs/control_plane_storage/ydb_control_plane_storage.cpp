@@ -15,7 +15,7 @@ void CollectDebugInfo(const TString& query, const TParams& params, TSession sess
     if (debugInfo) {
         try {
             auto explainResult = session.ExplainDataQuery(query).GetValue(TDuration::Minutes(1));
-            debugInfo->push_back({query, params, explainResult.GetPlan(), explainResult.GetAst(), {}});
+            debugInfo->push_back({query, params, TString{explainResult.GetPlan()}, TString{explainResult.GetAst()}, {}});
         } catch (...) {
             debugInfo->push_back({query, params, {}, {}, CurrentExceptionMessage()});
         }
@@ -354,7 +354,7 @@ void ReadIdempotencyKeyQuery(TSqlQueryBuilder& builder, const TString& scope, co
     }
 }
 
-std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> TDbRequester::Read(
+std::pair<TAsyncStatus, std::shared_ptr<std::vector<NYdb::TResultSet>>> TDbRequester::Read(
     const TString& query,
     const NYdb::TParams& params,
     const TRequestCounters& requestCounters,
@@ -363,7 +363,7 @@ std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> TDbRequester
     bool retryOnTli)
 {
     NActors::TActorSystem* const actorSystem = TActivationContext::ActorSystem();
-    auto resultSet = std::make_shared<TVector<NYdb::TResultSet>>();
+    auto resultSet = std::make_shared<std::vector<NYdb::TResultSet>>();
 
     std::shared_ptr<int> retryCount = std::make_shared<int>();
     auto handler = [=, requestCounters=requestCounters](TSession& session) mutable {
@@ -397,7 +397,7 @@ std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> TDbRequester
 
 TAsyncStatus TDbRequester::Validate(
     NActors::TActorSystem* actorSystem,
-    std::shared_ptr<TMaybe<TTransaction>> transaction,
+    std::shared_ptr<std::optional<TTransaction>> transaction,
     size_t item,
     const TVector<TValidationQuery>& validators,
     TSession session,
@@ -442,7 +442,7 @@ TAsyncStatus TDbRequester::Write(
 {
     NActors::TActorSystem* const actorSystem = TActivationContext::ActorSystem();
     std::shared_ptr<int> retryCount = std::make_shared<int>();
-    auto transaction = std::make_shared<TMaybe<TTransaction>>();
+    auto transaction = std::make_shared<std::optional<TTransaction>>();
     auto writeHandler = [=, retryOnTli=retryOnTli] (TSession session) {
         CollectDebugInfo(query, params, session, debugInfo);
         auto result = session.ExecuteDataQuery(query, validators ? TTxControl::Tx(**transaction).CommitTx() : TTxControl::BeginTx(transactionMode).CommitTx(), params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
@@ -520,7 +520,7 @@ NThreading::TFuture<void> TYdbControlPlaneStorageActor::PickTask(
 TAsyncStatus TDbRequester::ReadModifyWrite(
     const TString& readQuery,
     const NYdb::TParams& readParams,
-    const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>& prepare,
+    const std::function<std::pair<TString, NYdb::TParams>(const std::vector<NYdb::TResultSet>&)>& prepare,
     const TRequestCounters& requestCounters,
     TDebugInfoPtr debugInfo,
     const TVector<TValidationQuery>& validators,
@@ -529,8 +529,8 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
 {
     NActors::TActorSystem* const actorSystem = TActivationContext::ActorSystem();
     std::shared_ptr<int> retryCount = std::make_shared<int>();
-    auto resultSets = std::make_shared<TVector<NYdb::TResultSet>>();
-    auto transaction = std::make_shared<TMaybe<TTransaction>>();
+    auto resultSets = std::make_shared<std::vector<NYdb::TResultSet>>();
+    auto transaction = std::make_shared<std::optional<TTransaction>>();
 
     auto readModifyWriteHandler = [=](TSession session) {
         CollectDebugInfo(readQuery, readParams, session, debugInfo);
@@ -561,7 +561,7 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
             try {
                 auto [writeQuery, params] = future.GetValue();
                 if (!writeQuery) {
-                    return transaction->Get()->Commit().Apply([actorSystem=actorSystem] (const auto& future) {
+                    return transaction->value().Commit().Apply([actorSystem=actorSystem] (const auto& future) {
                         auto result = future.GetValue();
                         auto status = static_cast<TStatus>(result);
                         if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist

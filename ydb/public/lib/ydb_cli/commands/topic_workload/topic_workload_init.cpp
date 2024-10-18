@@ -4,7 +4,7 @@
 #include "topic_workload_describe.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
 
 using namespace NYdb::NConsoleClient;
 

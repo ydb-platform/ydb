@@ -284,7 +284,7 @@ Y_UNIT_TEST(ProposeResultLost_RwTx) {
                "State of operation is unknown."), record.GetResponse().DebugString());
 
                UNIT_ASSERT_C(HasIssue(issues, NKikimrIssues::TIssuesIds::TX_STATE_UNKNOWN, "", [] (const TIssue& issue) {
-               return issue.GetMessage().StartsWith("Tx state unknown for shard ");
+               return issue.GetMessage().starts_with("Tx state unknown for shard ");
            }), record.GetResponse().DebugString());
         });
 }

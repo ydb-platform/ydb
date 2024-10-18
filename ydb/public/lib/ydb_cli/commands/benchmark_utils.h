@@ -1,8 +1,8 @@
 #pragma once
 
 #include <library/cpp/json/json_value.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/query/client.h>
 #include <ydb/library/accessor/accessor.h>
 
 #include <vector>
@@ -33,7 +33,7 @@ struct TTestInfo {
 class TQueryResultInfo {
 protected:
     std::vector<std::vector<NYdb::TValue>> Result;
-    TVector<NYdb::TColumn> Columns;
+    std::vector<NYdb::TColumn> Columns;
 public:
     std::map<TString, ui32> GetColumnsRemap() const {
         std::map<TString, ui32> result;
@@ -47,7 +47,7 @@ public:
     const std::vector<std::vector<NYdb::TValue>>& GetResult() const {
         return Result;
     }
-    const TVector<NYdb::TColumn>& GetColumns() const {
+    const std::vector<NYdb::TColumn>& GetColumns() const {
         return Columns;
     }
     bool IsExpected(std::string_view expected) const;

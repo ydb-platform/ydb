@@ -1,6 +1,10 @@
 #include "data_generator.h"
+
+#include <library/cpp/resource/resource.h>
 #include <library/cpp/streams/factory/open_by_signature/factory.h>
+
 #include <util/stream/file.h>
+
 #include <thread>
 
 namespace NYdbWorkload {

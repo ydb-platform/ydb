@@ -47,6 +47,8 @@ extern "C" {
 #undef Max
 #undef TypeName
 #undef SortBy
+#undef Sort
+#undef Unique
 #undef LOG
 #undef INFO
 #undef NOTICE

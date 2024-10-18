@@ -23,7 +23,7 @@ TEST(TExpiringSetTest, Empty)
 TEST(TExpiringSetTest, ExpireSingle)
 {
     TExpiringSet<int> set;
-    set.SetTTl(TDuration::Seconds(2));
+    set.SetTtl(TDuration::Seconds(2));
 
     set.Insert(0_ts, 1);
     EXPECT_EQ(set.GetSize(), 1);
@@ -38,7 +38,7 @@ TEST(TExpiringSetTest, ExpireSingle)
 TEST(TExpiringSetTest, ExpireBatch)
 {
     TExpiringSet<int> set;
-    set.SetTTl(TDuration::Seconds(2));
+    set.SetTtl(TDuration::Seconds(2));
 
     set.InsertMany(0_ts, std::vector<int>{1, 2, 3});
     EXPECT_EQ(set.GetSize(), 3);
@@ -53,7 +53,7 @@ TEST(TExpiringSetTest, ExpireBatch)
 TEST(TExpiringSetTest, Reinsert)
 {
     TExpiringSet<int> set;
-    set.SetTTl(TDuration::Seconds(2));
+    set.SetTtl(TDuration::Seconds(2));
 
     set.Insert(0_ts, 1);
     EXPECT_EQ(set.GetSize(), 1);
@@ -71,7 +71,7 @@ TEST(TExpiringSetTest, Reinsert)
 TEST(TExpiringSetTest, Contains)
 {
     TExpiringSet<int> set;
-    set.SetTTl(TDuration::Seconds(1));
+    set.SetTtl(TDuration::Seconds(1));
 
     EXPECT_FALSE(set.Contains(1));
 
@@ -85,7 +85,7 @@ TEST(TExpiringSetTest, Contains)
 TEST(TExpiringSetTest, Clear)
 {
     TExpiringSet<int> set;
-    set.SetTTl(TDuration::Seconds(1));
+    set.SetTtl(TDuration::Seconds(1));
 
     set.Insert(0_ts, 1);
     EXPECT_EQ(set.GetSize(), 1);
@@ -99,7 +99,7 @@ TEST(TExpiringSetTest, Clear)
 TEST(TExpiringSetTest, RemoveBeforeExpire)
 {
     TExpiringSet<int> set;
-    set.SetTTl(TDuration::Seconds(1));
+    set.SetTtl(TDuration::Seconds(1));
 
     set.Insert(0_ts, 1);
     EXPECT_EQ(set.GetSize(), 1);
@@ -113,7 +113,7 @@ TEST(TExpiringSetTest, RemoveBeforeExpire)
 TEST(TExpiringSetTest, RemoveAfterExpire)
 {
     TExpiringSet<int> set;
-    set.SetTTl(TDuration::Seconds(1));
+    set.SetTtl(TDuration::Seconds(1));
 
     set.Insert(0_ts, 1);
     set.Expire(2_ts);

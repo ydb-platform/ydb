@@ -168,6 +168,7 @@ namespace NYql::NDq {
 
             *readRequest.add_splits() = split;
             readRequest.Setformat(NConnector::NApi::TReadSplitsRequest_EFormat::TReadSplitsRequest_EFormat_ARROW_IPC_STREAMING);
+            readRequest.set_filtering(NConnector::NApi::TReadSplitsRequest::FILTERING_MANDATORY);
             Connector->ReadSplits(readRequest).Subscribe([actorSystem = TActivationContext::ActorSystem(), selfId = SelfId()](const NConnector::TReadSplitsStreamIteratorAsyncResult& asyncResult) {
                 YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got ReadSplitsStreamIterator from Connector";
                 auto result = ExtractFromConstFuture(asyncResult);
@@ -194,8 +195,14 @@ namespace NYql::NDq {
             FinalizeRequest();
         }
 
-        void Handle(TEvError::TPtr) {
-            FinalizeRequest();
+        void Handle(TEvError::TPtr ev) {
+            auto actorSystem = TActivationContext::ActorSystem();
+            auto error = ev->Get()->Error;
+            auto errEv = std::make_unique<IDqComputeActorAsyncInput::TEvAsyncInputError>(
+                                  -1,
+                                  NConnector::ErrorToIssues(error),
+                                  NConnector::ErrorToDqStatus(error));
+            actorSystem->Send(new NActors::IEventHandle(ParentId, SelfId(), errEv.release()));
         }
 
         void Handle(NActors::TEvents::TEvPoison::TPtr) {

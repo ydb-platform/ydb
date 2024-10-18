@@ -1,0 +1,2 @@
+exclude:
+  - freezegun/_async*

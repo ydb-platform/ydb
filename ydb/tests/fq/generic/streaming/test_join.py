@@ -10,6 +10,8 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
+from ydb.library.yql.providers.generic.connector.tests.utils.scenario.ydb import OneTimeWaiter
+import conftest
 
 DEBUG = 0
 
@@ -129,6 +131,7 @@ TESTCASES = [
                 ('{"id":9,"user":3}', '{"id":9,"user_id":3,"lookup":"ydb30"}'),
                 ('{"id":2,"user":2}', '{"id":2,"user_id":2,"lookup":"ydb20"}'),
                 ('{"id":1,"user":1}', '{"id":1,"user_id":1,"lookup":"ydb10"}'),
+                ('{"id":10,"user":null}', '{"id":10,"user_id":null,"lookup":null}'),
                 ('{"id":4,"user":3}', '{"id":4,"user_id":3,"lookup":"ydb30"}'),
                 ('{"id":5,"user":3}', '{"id":5,"user_id":3,"lookup":"ydb30"}'),
                 ('{"id":6,"user":1}', '{"id":6,"user_id":1,"lookup":"ydb10"}'),
@@ -348,6 +351,10 @@ TESTCASES = [
                     '{"id":3,"za":2,"yb":"1","yc":114,"zd":115}',
                     '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":2,"yb":"1","yc":114,"zd":115}',
                 ),
+                (
+                    '{"id":3,"za":2,"yb":null,"yc":114,"zd":115}',
+                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":2,"yb":null,"yc":114,"zd":115}',
+                ),
             ]
         ),
     ),
@@ -389,10 +396,20 @@ TESTCASES = [
                     '{"id":3,"za":2,"yb":"1","yc":114,"zd":115}',
                     '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":2,"yb":"1","yc":114,"zd":115}',
                 ),
+                (
+                    '{"id":3,"za":null,"yb":"1","yc":114,"zd":115}',
+                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":null,"yb":"1","yc":114,"zd":115}',
+                ),
             ]
         ),
     ),
 ]
+
+
+one_time_waiter = OneTimeWaiter(
+    docker_compose_file_path=conftest.docker_compose_file_path,
+    expected_tables=["simple_table", "join_table", "dummy_table"],
+)
 
 
 class TestJoinStreaming(TestYdsBase):
@@ -412,6 +429,7 @@ class TestJoinStreaming(TestYdsBase):
             name=ydb_conn_name,
             database_id='local',
         )
+        one_time_waiter.wait()
 
         sql = R'''
             $input = SELECT * FROM myyds.`{input_topic}`;
@@ -486,6 +504,8 @@ class TestJoinStreaming(TestYdsBase):
             table_name=table_name,
             streamlookup=R'/*+ streamlookup() */' if streamlookup else '',
         )
+
+        one_time_waiter.wait()
 
         query_id = fq_client.create_query(
             f"streamlookup_{partitions_count}{streamlookup}{testcase}", sql, type=fq.QueryContent.QueryType.STREAMING

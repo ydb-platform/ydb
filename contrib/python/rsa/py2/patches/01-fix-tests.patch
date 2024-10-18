@@ -1,0 +1,15 @@
+--- contrib/python/rsa/py2/tests/test_load_save_keys.py	(index)
++++ contrib/python/rsa/py2/tests/test_load_save_keys.py	(working tree)
+@@ -185,9 +185,11 @@ class PemTest(unittest.TestCase):
+         self.assertEqual(CLEAN_PUBLIC_PEM, pem)
+ 
+     def test_load_from_disk(self):
++        from yatest.common import source_path
++
+         """Test loading a PEM file from disk."""
+ 
+-        fname = os.path.join(os.path.dirname(__file__), 'private.pem')
++        fname = source_path('contrib/python/rsa/py2/tests/private.pem')
+         with open(fname, mode='rb') as privatefile:
+             keydata = privatefile.read()
+         privkey = rsa.key.PrivateKey.load_pkcs1(keydata)

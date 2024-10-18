@@ -496,7 +496,7 @@ public:
             const auto& results = response.GetCmdReadResult().GetResult();
             for (auto& r : results) {
                 auto proto(NKikimr::GetDeserializedData(r.GetData()));
-                readBytesSize += proto.GetData().Size();
+                readBytesSize += proto.GetData().size();
             }
         }
         return readBytesSize;

@@ -20,7 +20,7 @@
 namespace NYql::NDq {
 class TDqAsyncIoFactory;
 
-const i64 PQRdReadDefaultFreeSpace = 16_MB;
+const i64 PQRdReadDefaultFreeSpace = 256_MB;
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     NPq::NProto::TDqPqTopicSource&& settings,

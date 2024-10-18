@@ -352,7 +352,7 @@ void TDataShard::Handle(TEvDataShard::TEvGetTableStats::TPtr& ev, const TActorCo
 template <class TTables>
 void ListTableNames(const TTables& tables, TStringBuilder& names) {
     for (auto& t : tables) {
-        if (!names.Empty()) {
+        if (!names.empty()) {
             names << ", ";
         }
         names << "[" << t.second->Path << "]";
@@ -589,7 +589,7 @@ void TDataShard::UpdateTableStats(const TActorContext &ctx) {
     if (LastDbStatsUpdateTime + gDbStatsReportInterval > now)
         return;
 
-    if (State != TShardState::Ready)
+    if (State != TShardState::Ready && State != TShardState::Readonly)
         return;
 
     LastDbStatsUpdateTime = now;

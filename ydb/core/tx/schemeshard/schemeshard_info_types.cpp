@@ -1436,14 +1436,14 @@ bool TPartitionConfigMerger::VerifyAlterParams(
     return true;
 }
 
-bool TPartitionConfigMerger::VerifyCompactionPolicy(const NKikimrSchemeOp::TCompactionPolicy &policy, TString &err)
+bool TPartitionConfigMerger::VerifyCompactionPolicy(const NKikimrCompaction::TCompactionPolicy &policy, TString &err)
 {
     if (policy.HasCompactionStrategy()) {
         switch (policy.GetCompactionStrategy()) {
-        case NKikimrSchemeOp::CompactionStrategyUnset:
-        case NKikimrSchemeOp::CompactionStrategyGenerational:
+        case NKikimrCompaction::CompactionStrategyUnset:
+        case NKikimrCompaction::CompactionStrategyGenerational:
             break;
-        case NKikimrSchemeOp::CompactionStrategySharded:
+        case NKikimrCompaction::CompactionStrategySharded:
         default:
             err = TStringBuilder()
                     << "Unsupported compaction strategy.";

@@ -19,8 +19,10 @@ SRCS(
     cli_cmds_node.cpp
     cli_cmds_root.cpp
     cli_cmds_server.cpp
+    cli_cmds_tablet.cpp
     cli_cmds_tenant.cpp
     cli_fakeinitshard.cpp
+    cli_keyvalue.cpp
     cli_persqueue.cpp
     cli_persqueue_cluster_discovery.cpp
     cli_persqueue_stress.cpp

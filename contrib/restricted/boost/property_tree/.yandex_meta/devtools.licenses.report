@@ -1,0 +1,102 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSL-1.0              2cc71fe4bd12718a9884bf7ff37269f3
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt or copy at
+        // http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/property_tree/detail/ptree_implementation.hpp [5:7]
+
+KEEP     BSL-1.0              bd5d1d3e2ab4557acb808f71d4a03783
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License, Version 1.0. 
+        // (See accompanying file LICENSE_1_0.txt or copy at 
+        // http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/property_tree/detail/exception_implementation.hpp [5:7]
+        include/boost/property_tree/detail/file_parser_error.hpp [4:6]
+        include/boost/property_tree/detail/info_parser_error.hpp [4:6]
+        include/boost/property_tree/detail/info_parser_read.hpp [4:6]
+        include/boost/property_tree/detail/info_parser_utils.hpp [4:6]
+        include/boost/property_tree/detail/info_parser_write.hpp [4:6]
+        include/boost/property_tree/detail/info_parser_writer_settings.hpp [5:7]
+        include/boost/property_tree/detail/ptree_utils.hpp [4:6]
+        include/boost/property_tree/detail/rapidxml.hpp [4:6]
+        include/boost/property_tree/detail/xml_parser_error.hpp [4:6]
+        include/boost/property_tree/detail/xml_parser_flags.hpp [4:6]
+        include/boost/property_tree/detail/xml_parser_read_rapidxml.hpp [4:6]
+        include/boost/property_tree/detail/xml_parser_utils.hpp [4:6]
+        include/boost/property_tree/detail/xml_parser_write.hpp [5:7]
+        include/boost/property_tree/detail/xml_parser_writer_settings.hpp [5:7]
+        include/boost/property_tree/exceptions.hpp [5:7]
+        include/boost/property_tree/id_translator.hpp [4:6]
+        include/boost/property_tree/info_parser.hpp [4:6]
+        include/boost/property_tree/ini_parser.hpp [5:7]
+        include/boost/property_tree/json_parser.hpp [5:7]
+        include/boost/property_tree/json_parser/detail/read.hpp [4:6]
+        include/boost/property_tree/json_parser/detail/write.hpp [4:6]
+        include/boost/property_tree/json_parser/error.hpp [4:6]
+        include/boost/property_tree/ptree.hpp [5:7]
+        include/boost/property_tree/ptree_fwd.hpp [5:7]
+        include/boost/property_tree/ptree_serialization.hpp [4:6]
+        include/boost/property_tree/stream_translator.hpp [4:6]
+        include/boost/property_tree/string_path.hpp [4:6]
+        include/boost/property_tree/xml_parser.hpp [5:7]
+
+KEEP     BSL-1.0              c0f98402a5f712c7486f8d6ef3cf7d68
+BELONGS ya.make
+    License text:
+        This software is distributed under the [Boost Software License, Version 1.0](http://www.boost.org/LICENSE_1_0.txt).
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 94.44
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [15:15]

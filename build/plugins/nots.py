@@ -28,6 +28,8 @@ COLOR_CODES = {
     "reset": "49",
 }
 
+REQUIRED_MISSING = "~~required~~"
+
 
 class ConsoleColors(dict):
     def __init__(self, color_codes):
@@ -878,6 +880,32 @@ def on_set_ts_test_for_vars(unit, for_mod):
 @_with_report_configure_error
 def on_ts_files(unit, *files):
     new_cmds = ['$COPY_CMD ${{input;context=TEXT:"{0}"}} ${{output;noauto:"{0}"}}'.format(f) for f in files]
+    all_cmds = unit.get("_TS_FILES_COPY_CMD")
+    if all_cmds:
+        new_cmds.insert(0, all_cmds)
+    unit.set(["_TS_FILES_COPY_CMD", " && ".join(new_cmds)])
+
+
+@_with_report_configure_error
+def on_ts_large_files(unit, destination: str, *files: list[str]):
+    if destination == REQUIRED_MISSING:
+        ymake.report_configure_error(
+            "Macro TS_LARGE_FILES() requires to use DESTINATION parameter.\n"
+            "   TS_LARGE_FILES(\n"
+            "       DESTINATION some_dir\n"
+            "       large/file1\n"
+            "       large/file2\n"
+            "   )\n"
+            "Docs: https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_PACKAGE#ts-large-files."
+        )
+        return
+
+    # TODO: FBP-1795
+    # ${BINDIR} prefix for input is important to resove to result of LARGE_FILES and not to SOURCEDIR
+    new_cmds = [
+        '$COPY_CMD ${{input;context=TEXT:"${{BINDIR}}/{0}"}} ${{output;noauto:"{1}/{0}"}}'.format(f, destination)
+        for f in files
+    ]
     all_cmds = unit.get("_TS_FILES_COPY_CMD")
     if all_cmds:
         new_cmds.insert(0, all_cmds)

@@ -1,0 +1,25 @@
+--- contrib/python/boto/py3/boto/plugin.py	(index)
++++ contrib/python/boto/py3/boto/plugin.py	(working tree)
+@@ -40 +40 @@ import glob
+-import imp
++import importlib
+@@ -73,6 +73 @@ def _import_module(filename):
+-    (file, filename, data) = imp.find_module(name, [path])
+-    try:
+-        return imp.load_module(name, file, filename, data)
+-    finally:
+-        if file:
+-            file.close()
++    return importlib.import_module(name, [path])
+--- contrib/python/boto/py3/boto/pyami/launch_ami.py	(index)
++++ contrib/python/boto/py3/boto/pyami/launch_ami.py	(working tree)
+@@ -25 +25 @@ import sys
+-import imp
++import importlib.util
+@@ -135 +135 @@ def main():
+-        l = imp.find_module(params['script_name'])
++        spec = importlib.util.find_spec(params['script_name'])
+@@ -139 +139,2 @@ def main():
+-        key.set_contents_from_file(l[0])
++        with open(spec.origin) as f:
++            key.set_contents_from_file(f)

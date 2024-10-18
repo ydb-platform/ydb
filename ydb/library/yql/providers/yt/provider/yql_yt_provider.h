@@ -48,7 +48,7 @@ struct TYtTableDescription: public TYtTableDescriptionBase {
     bool RowSpecSortReady = false;
 
     bool Fill(
-        const TString& cluster, const TString& table, TExprContext& ctx,
+        const TString& cluster, const TString& table, const TQContext& qContext, TExprContext& ctx,
         IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
         bool allowViewIsolation, IUdfResolver::TPtr udfResolver);
     void ToYson(NYson::TYsonWriter& writer, const TString& cluster, const TString& table, const TString& view) const;
@@ -56,7 +56,7 @@ struct TYtTableDescription: public TYtTableDescriptionBase {
         const THashMap<std::pair<TString, TString>, TString>& anonymousLabels, TExprContext& ctx) const;
     void SetConstraintsReady();
     bool FillViews(
-        const TString& cluster, const TString& table, TExprContext& ctx,
+        const TString& cluster, const TString& table, const TQContext& qContext, TExprContext& ctx,
         IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
         bool allowViewIsolation, IUdfResolver::TPtr udfResolver);
 };
@@ -113,6 +113,7 @@ struct TYtState : public TThrRefBase {
     std::unordered_set<ui32> HybridInFlightOprations;
     THashMap<ui64, TWalkFoldersImpl> WalkFoldersState;
     ui32 PlanLimits = 10;
+    i32 FlowDependsOnId = 0;
 
 private:
     std::unordered_map<ui64, TYtVersionedConfiguration::TState> ConfigurationEvalStates_;

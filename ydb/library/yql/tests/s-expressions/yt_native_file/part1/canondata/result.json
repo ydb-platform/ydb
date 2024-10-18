@@ -4316,9 +4316,9 @@
     ],
     "test.test[TableContent-FilterTable-Debug]": [
         {
-            "checksum": "689ef19c86eff4566374d5d409ae479b",
-            "size": 1438,
-            "uri": "https://{canondata_backend}/1777230/3ec562adcd87d17cdd220e67d30659d9da9f43fa/resource.tar.gz#test.test_TableContent-FilterTable-Debug_/opt.yql"
+            "checksum": "89f5894ced7cf9bec276f26b984bf684",
+            "size": 1462,
+            "uri": "https://{canondata_backend}/1881367/dffdbb08ce9ea6762d8090a13792055793d9629c/resource.tar.gz#test.test_TableContent-FilterTable-Debug_/opt.yql"
         },
         {
             "checksum": "99a23a80241cdd0057583910f9155f61",

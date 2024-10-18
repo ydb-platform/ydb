@@ -36,9 +36,9 @@ void CollectJoinColumns(const TExprBase& joinSettings, THashMap<TStringBuf, TVec
     for (const auto& option : joinSettings.Ref().Children()) {
         if (option->Head().IsAtom("rename")) {
             TCoAtom fromName{option->Child(1)};
-            YQL_ENSURE(!fromName.Value().Empty());
+            YQL_ENSURE(!fromName.Value().empty());
             TCoAtom toName{option->Child(2)};
-            if (!toName.Value().Empty()) {
+            if (!toName.Value().empty()) {
                 (*columnsToRename)[fromName.Value()].emplace_back(toName.Value());
             } else {
                 columnsToDrop->emplace(fromName.Value());

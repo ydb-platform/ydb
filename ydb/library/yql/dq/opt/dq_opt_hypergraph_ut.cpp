@@ -484,13 +484,13 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
     }
 
     Y_UNIT_TEST(JoinTopologiesBenchmark) {
-    #if defined(_asan_enabled_)
-        enum { CliqueSize = 3, ChainSize = 3, StarSize = 3 };
-    #elif !defined(NDEBUG)
-        enum { CliqueSize = 11, ChainSize = 71, StarSize = 15 };
-    #else
-        enum { CliqueSize = 15, ChainSize = 165, StarSize = 20 };
-    #endif
+        #if defined(_asan_enabled_)
+            enum { CliqueSize = 3, ChainSize = 3, StarSize = 3 };
+        #elif !defined(NDEBUG)
+            enum { CliqueSize = 11, ChainSize = 71, StarSize = 15 };
+        #else
+            enum { CliqueSize = 15, ChainSize = 165, StarSize = 20 };
+        #endif
 
         {
             size_t cliqueSize = CliqueSize;

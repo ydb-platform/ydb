@@ -3702,28 +3702,30 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
 
             auto checkUserAgentCounters = [](
                 auto monPort,
-                const std::set<std::string>& canonicalSensorNames,
+                const TString& sensor,
                 const TString& protocol,
                 const TString& userAgent,
-                const TString& topicPath,
-                const TString& consumerPath
+                const TString& topic,
+                const TString& consumer
             ) {
                 auto counters = SendQuery(monPort, "/counters/counters=pqproxy/subsystem=userAgents/json");
                 const auto sensors = counters["sensors"].GetArray();
-                std::set<std::string> sensorNames;
                 for (const auto& s : sensors) {
-                    sensorNames.insert(s["labels"]["sensor"].GetString());
-                    UNIT_ASSERT_VALUES_EQUAL(s["labels"]["host"].GetString(), "");
-                    UNIT_ASSERT_VALUES_EQUAL(s["labels"]["protocol"].GetString(), protocol);
-                    if (!topicPath.empty()) {
-                        UNIT_ASSERT_VALUES_EQUAL(s["labels"]["topic"].GetString(), topicPath);
-                    } else if (!consumerPath.empty()) {
-                        UNIT_ASSERT_VALUES_EQUAL(s["labels"]["consumer"].GetString(), topicPath);
+                    const auto& labels = s["labels"];
+                    if (labels["sensor"].GetString() != sensor) {
+                        continue;
                     }
-                    UNIT_ASSERT_VALUES_EQUAL(s["labels"]["user-agent"].GetString(), NGRpcProxy::V1::CleanupCounterValueString(userAgent));
+                    UNIT_ASSERT_VALUES_EQUAL(labels["host"].GetString(), "");
+                    UNIT_ASSERT_VALUES_EQUAL(labels["protocol"].GetString(), protocol);
+                    if (!topic.empty()) {
+                        UNIT_ASSERT_VALUES_EQUAL(labels["topic"].GetString(), topic);
+                    } else if (!consumer.empty()) {
+                        UNIT_ASSERT_VALUES_EQUAL(labels["consumer"].GetString(), consumer);
+                    } else {
+                        UNIT_FAIL("Neither topic nor consumer were provided");
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(labels["user-agent"].GetString(), NGRpcProxy::V1::CleanupCounterValueString(userAgent));
                 }
-                auto equal = sensorNames == canonicalSensorNames;
-                UNIT_ASSERT(equal);
             };
 
             auto settings = PQSettings(0, 1, "10");
@@ -3824,12 +3826,13 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
                           "", "cluster", "", ""
                           );
 
-            checkUserAgentCounters(monPort, {"BytesWrittenByUserAgent"}, "pqv1", userAgent, "account/topic1", "");
+            checkUserAgentCounters(monPort, "BytesWrittenByUserAgent", "pqv1", userAgent, "account/topic1", "");
 
             {
                 NYdb::NPersQueue::TReadSessionSettings settings;
                 settings.ConsumerName(originallyProvidedConsumerName)
-                    .AppendTopics(TString("account/topic1")).ReadOriginal({"dc1"});
+                    .AppendTopics(TString("account/topic1")).ReadOriginal({"dc1"})
+                    .Header({{NYdb::YDB_APPLICATION_NAME, userAgent}});
 
                 auto reader = CreateReader(*driver, settings);
 
@@ -3909,6 +3912,8 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
                               },
                               "", "Dc1", consumerName, consumerPath
                               );
+
+                checkUserAgentCounters(monPort, "BytesReadByUserAgent", "pqv1", userAgent, "", consumerPath);
             }
         };
 

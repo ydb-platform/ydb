@@ -7,10 +7,10 @@ namespace NKikimr::NOlap {
 class TVersionCounters {
 public:
     class TSchemaKey {
-    public:
-        ui64 PlanStep;
-        ui64 TxId;
-        ui32 Id;
+    private:
+        YDB_READONLY_DEF(ui64, PlanStep);
+        YDB_READONLY_DEF(ui64, TxId);
+        YDB_READONLY_DEF(ui32, Id);
 
     public:
         TSchemaKey() = default;

@@ -61,18 +61,14 @@ message GlobalIndexSettings {
 }
 
 message VectorIndexSettings {
-    enum Distance {
-        DISTANCE_UNSPECIFIED = 0;
-        DISTANCE_COSINE = 1;
-        DISTANCE_MANHATTAN = 2;
-        DISTANCE_EUCLIDEAN = 3;
+    enum Metric {
+        METRIC_UNSPECIFIED = 0;
+        SIMILARITY_INNER_PRODUCT = 1;
+        SIMILARITY_COSINE = 2;
+        DISTANCE_COSINE = 3;
+        DISTANCE_MANHATTAN = 4;
+        DISTANCE_EUCLIDEAN = 5;
     }
-
-    enum Similarity {
-        SIMILARITY_UNSPECIFIED = 0;
-        SIMILARITY_COSINE = 1;
-        SIMILARITY_INNER_PRODUCT = 2;
-    }   
 
     enum VectorType {
         VECTOR_TYPE_UNSPECIFIED = 0;
@@ -82,13 +78,19 @@ message VectorIndexSettings {
         VECTOR_TYPE_BIT = 4;
     }
 
-    oneof metric {
-        Distance distance = 1;
-        Similarity similarity = 2;
-    }
-    VectorType vector_type = 3;
+    Metric metric = 1;
 
-    uint32 vector_dimension = 4;
+    VectorType vector_type = 2;
+
+    uint32 vector_dimension = 3;
+}
+
+message KMeansTreeSettings {
+    VectorIndexSettings settings = 1;
+    // average count of clusters on each level of tree, 0 -- means auto
+    uint32 clusters = 2;
+    // average count of levels in the tree, 0 -- means auto
+    uint32 levels = 3;
 }
 
 message GlobalIndex {
@@ -106,7 +108,7 @@ message GlobalUniqueIndex {
 message GlobalVectorKMeansTreeIndex {
     GlobalIndexSettings level_table_settings = 1;
     GlobalIndexSettings posting_table_settings = 2;
-    VectorIndexSettings vector_settings = 3;
+    KMeansTreeSettings vector_settings = 3;
 }
 
 // Represent secondary index

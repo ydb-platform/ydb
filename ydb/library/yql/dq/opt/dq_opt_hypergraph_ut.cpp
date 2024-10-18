@@ -538,7 +538,8 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
         }
 
         auto toString = [](const TVector<double>& v) -> TVector<TString> {
-            TVector<TString> res;
+            TVector<TStrin
+            g> res;
             for (auto el: v) { res.push_back(ToString(el)); }
             return res;
         };

@@ -49,7 +49,7 @@ void TestChunkWriteReleaseRun() {
         UNIT_ASSERT(ok);
         pDisk->RouteRequest(log);
     }
-    pDisk->ProcessLogWriteQueue();
+    pDisk->ProcessLogWriteQueueAndCommits();
 
     {
         TString chunkWriteData = PrepareData(1024);

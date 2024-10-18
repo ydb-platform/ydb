@@ -370,24 +370,18 @@ void CheckRegistration(TTestActorRuntime &runtime,
 }
 
 THolder<TEvNodeBroker::TEvGracefulShutdownRequest>
-MakeEventGracefulShutdown (const TString& host,
-                           ui16 port,
-                           const TString& address) 
+MakeEventGracefulShutdown (ui32 nodeId) 
 {
     auto eventGracefulShutdown = MakeHolder<TEvNodeBroker::TEvGracefulShutdownRequest>();
-    eventGracefulShutdown->Record.SetHost(host);
-    eventGracefulShutdown->Record.SetPort(port);
-    eventGracefulShutdown->Record.SetAddress(address);
+    eventGracefulShutdown->Record.SetNodeId(nodeId);
     return eventGracefulShutdown;
 }
 
 void CheckGracefulShutdown(TTestActorRuntime &runtime,
                            TActorId sender,
-                           const TString &host,
-                           ui16 port,
-                           const TString &address)
+                           ui32 nodeId)
 {   
-    auto eventGracefulShutdown = MakeEventGracefulShutdown(host, port, address);
+    auto eventGracefulShutdown = MakeEventGracefulShutdown(nodeId);
     TAutoPtr<IEventHandle> handle;
     runtime.SendToPipe(MakeNodeBrokerID(), sender, eventGracefulShutdown.Release(), 0, GetPipeConfigWithRetries());
     auto replyGracefulShutdown = runtime.GrabEdgeEventRethrow<TEvNodeBroker::TEvGracefulShutdownResponse>(handle);
@@ -1830,22 +1824,17 @@ Y_UNIT_TEST_SUITE(GracefulShutdown) {
         Setup(runtime, 4);
         TActorId sender = runtime.AllocateEdgeActor();
 
-        TString host = "host1";
-        ui16 port = 1001;
-        TString resolveHost = "host1.yandex.net";
-        TString address = "1.2.3.4";
         auto epoch = GetEpoch(runtime, sender);
 
-        CheckRegistration(runtime, sender, host, port, resolveHost, address,
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
                           1, 2, 3, 4, TStatus::OK, NODE1, epoch.GetNextEnd(),
                           false, DOMAIN_NAME, {}, "slot-0");
 
-        CheckGracefulShutdown(runtime, sender, host, port, address);    
+        CheckGracefulShutdown(runtime, sender, NODE1);    
 
-        CheckRegistration(runtime, sender, "host2", port, "host2.yandex.net", "1.2.3.5",
+        CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.5",
                           1, 2, 3, 5, TStatus::OK, NODE2, epoch.GetNextEnd(),
                           false, DOMAIN_NAME, {}, "slot-0");
-        
     }
 }
 

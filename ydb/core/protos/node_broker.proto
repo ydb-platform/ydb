@@ -80,9 +80,7 @@ message TRegistrationResponse {
 }
 
 message TGracefulShutdownRequest {
-  optional string Host = 1;
-  optional uint32 Port = 2;
-  optional string Address = 3;
+  optional uint32 NodeId = 1;
 }
 
 message TGracefulShutdownResponse {

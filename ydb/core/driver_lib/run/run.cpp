@@ -1766,9 +1766,7 @@ void TKikimrRunner::KikimrStop(bool graceful, const TKikimrRunConfig& runConfig)
         TActorId nodeBrokerPipe = ActorSystem->Register(pipe);
 
         THolder<TEvent> event = MakeHolder<TEvent>();
-        event->Record.SetHost(nodeInfo.GetHost());
-        event->Record.SetPort(nodeInfo.GetPort());
-        event->Record.SetAddress(nodeInfo.GetAddress());
+        event->Record.SetNodeId(nodeInfo.GetNodeId());
 
         ActorSystem->Send(new IEventHandle(nodeBrokerPipe, {}, event.Release()));
     }

@@ -21,10 +21,9 @@ public:
                const TActorContext &ctx)
     {
         const auto &rec = Event->Get()->Record;
-        const auto &host = rec.GetHost();
-        const ui16 port = rec.GetPort();
+        const auto nodeId = rec.GetNodeId();
         LOG_ERROR_S(ctx, NKikimrServices::NODE_BROKER,
-                    "Cannot Graceful Shutdown " << host << ":" << port << ": " << code << ": " << reason);
+                    "Cannot Graceful Shutdown " << nodeId << ": " << code << ": " << reason);
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(reason);
@@ -35,28 +34,24 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
         const auto &rec = Event->Get()->Record;
-        const auto &host = rec.GetHost();
-        const ui16 port = (ui16)rec.GetPort();
-        const auto &addr = rec.GetAddress();
+        const auto nodeId = rec.GetNodeId();
 
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxGracefulShutdown Execute");
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                    "Graceful Shutdown request from " << host << ":" << port << " ");
+                    "Graceful Shutdown request from " << nodeId << " ");
 
         Response = MakeHolder<TEvNodeBroker::TEvGracefulShutdownResponse>();
+        const auto& it = Self->Nodes.find(nodeId);
 
-        auto it = Self->Hosts.find(std::make_tuple(host, addr, port));
-        if (it != Self->Hosts.end()) {
-            auto &node = Self->Nodes.find(it->second)->second;
-
+        if (it != Self->Nodes.end()) {
+            const auto &node = it->second;
             Self->SlotIndexesPools[node.ServicedSubDomain].Release(node.SlotIndex.value());
             Self->DbReleaseSlotIndex(node, txc);
-            
             return true;
         }
 
         return Error(TStatus::ERROR,
-                         TStringBuilder() << "Cannot find host " << host << ":" << port << ". Address: " << addr,
+                         TStringBuilder() << "Cannot find node " << nodeId,
                          ctx);
     }
 

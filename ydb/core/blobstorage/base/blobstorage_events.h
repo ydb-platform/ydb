@@ -21,10 +21,14 @@ namespace NKikimr {
         TEvControllerUpdateDiskStatus() = default;
 
         TEvControllerUpdateDiskStatus(const TVDiskID& vDiskId, ui32 nodeId, ui32 pdiskId, ui32 vslotId,
-                ui32 satisfactionRankPercent) {
+                ui32 satisfactionRankPercent, NKikimrWhiteboard::EVDiskState state, bool replicated,
+                NKikimrWhiteboard::EFlag diskSpace) {
             NKikimrBlobStorage::TVDiskMetrics* metric = Record.AddVDisksMetrics();
             VDiskIDFromVDiskID(vDiskId, metric->MutableVDiskId());
             metric->SetSatisfactionRank(satisfactionRankPercent);
+            metric->SetState(state);
+            metric->SetReplicated(replicated);
+            metric->SetDiskSpace(diskSpace);
             auto *p = metric->MutableVSlotId();
             p->SetNodeId(nodeId);
             p->SetPDiskId(pdiskId);

@@ -312,6 +312,7 @@ void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageContro
     }
     info->SetAvailableSize(pDiskInfo->Metrics.GetAvailableSize());
     info->SetTotalSize(pDiskInfo->Metrics.GetTotalSize());
+    info->SetState(NKikimrBlobStorage::TPDiskState::E_Name(pDiskInfo->Metrics.GetState()));
     info->SetStatusV2(NKikimrBlobStorage::EDriveStatus_Name(pDiskInfo->Status));
     if (pDiskInfo->StatusTimestamp != TInstant::Zero()) {
         info->SetStatusChangeTimestamp(pDiskInfo->StatusTimestamp.GetValue());
@@ -340,6 +341,15 @@ void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId,
     }
     if (status) {
         pb->SetStatusV2(NKikimrBlobStorage::EVDiskStatus_Name(*status));
+    }
+    if (m.HasState()) {
+        pb->SetState(NKikimrWhiteboard::EVDiskState_Name(m.GetState()));
+    }
+    if (m.HasReplicated()) {
+        pb->SetReplicated(m.GetReplicated());
+    }
+    if (m.HasDiskSpace()) {
+        pb->SetDiskSpace(NKikimrWhiteboard::EFlag_Name(m.GetDiskSpace()));
     }
     pb->SetKind(NKikimrBlobStorage::TVDiskKind::EVDiskKind_Name(kind));
     if (isBeingDeleted) {
@@ -466,6 +476,7 @@ void TBlobStorageController::UpdateSystemViews() {
                 if (pdisk.PDiskMetrics) {
                     pb->SetAvailableSize(pdisk.PDiskMetrics->GetAvailableSize());
                     pb->SetTotalSize(pdisk.PDiskMetrics->GetTotalSize());
+                    pb->SetState(NKikimrBlobStorage::TPDiskState::E_Name(pdisk.PDiskMetrics->GetState()));
                     if (pdisk.PDiskMetrics->HasEnforcedDynamicSlotSize()) {
                         pb->SetEnforcedDynamicSlotSize(pdisk.PDiskMetrics->GetEnforcedDynamicSlotSize());
                     }

@@ -25,6 +25,12 @@ To run the command to export data to S3 storage, specify the [S3 connection para
 
 `--exclude STRING`: Template ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) to exclude paths from export. Specify this parameter multiple times for different templates.
 
+Please note that export is only available for objects of the following types:
+
+- [directory](../../../../concepts/datamodel/dir.md)
+- [row-oriented table](../../../../concepts/datamodel/table.md#row-oriented-tables)
+- [secondary index](../../../../concepts/secondary_indexes.md)
+
 ### Additional parameters {#aux}
 
 | Parameter | Description |

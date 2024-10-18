@@ -445,9 +445,9 @@
     ],
     "test.test[blocks-combine_all_some_filter--Peephole]": [
         {
-            "checksum": "62b826e64f4550a914d8349ac2b96b78",
-            "size": 2117,
-            "uri": "https://{canondata_backend}/1936997/91a615dae2cbfc922f8d7bc121932025fb7a6a5c/resource.tar.gz#test.test_blocks-combine_all_some_filter--Peephole_/opt.yql"
+            "checksum": "2702db2886eea686ae38080c3d5f159a",
+            "size": 2074,
+            "uri": "https://{canondata_backend}/1917492/fd9135e539e1e6a4514e0c649ede6859f9e8ea21/resource.tar.gz#test.test_blocks-combine_all_some_filter--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_all_some_filter--Plan]": [
@@ -473,9 +473,9 @@
     ],
     "test.test[blocks-combine_all_sum--Peephole]": [
         {
-            "checksum": "f8869bb9a784b0c1d723067c8a87819a",
-            "size": 4239,
-            "uri": "https://{canondata_backend}/1936997/91a615dae2cbfc922f8d7bc121932025fb7a6a5c/resource.tar.gz#test.test_blocks-combine_all_sum--Peephole_/opt.yql"
+            "checksum": "5cbc05a7fdf245c8d831608e494deaee",
+            "size": 4219,
+            "uri": "https://{canondata_backend}/1917492/fd9135e539e1e6a4514e0c649ede6859f9e8ea21/resource.tar.gz#test.test_blocks-combine_all_sum--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_all_sum--Plan]": [
@@ -501,9 +501,9 @@
     ],
     "test.test[blocks-distinct_opt_state_keys--Peephole]": [
         {
-            "checksum": "04dabd7ca925e75eaf8970cab3b17637",
-            "size": 8723,
-            "uri": "https://{canondata_backend}/1936997/91a615dae2cbfc922f8d7bc121932025fb7a6a5c/resource.tar.gz#test.test_blocks-distinct_opt_state_keys--Peephole_/opt.yql"
+            "checksum": "0de886210fcfac5a55766fec65f72c48",
+            "size": 8569,
+            "uri": "https://{canondata_backend}/1917492/fd9135e539e1e6a4514e0c649ede6859f9e8ea21/resource.tar.gz#test.test_blocks-distinct_opt_state_keys--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-distinct_opt_state_keys--Plan]": [

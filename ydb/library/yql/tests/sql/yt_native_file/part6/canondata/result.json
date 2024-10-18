@@ -547,9 +547,9 @@
     ],
     "test.test[blocks-combine_all_avg--Peephole]": [
         {
-            "checksum": "7435188e06885bc80e82b10a6d7b265b",
-            "size": 6621,
-            "uri": "https://{canondata_backend}/1936273/c18e00cf98c9bc32c26d43566fbe78a1b9a29753/resource.tar.gz#test.test_blocks-combine_all_avg--Peephole_/opt.yql"
+            "checksum": "0986c9677cc713010d0e7ac0631fa1ca",
+            "size": 6601,
+            "uri": "https://{canondata_backend}/1942100/1807fd13cf8dcfed7275bcf46267833c1775e224/resource.tar.gz#test.test_blocks-combine_all_avg--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_all_avg--Plan]": [
@@ -575,9 +575,9 @@
     ],
     "test.test[blocks-combine_hashed_count_filter--Peephole]": [
         {
-            "checksum": "c32cb45da524a0cc145e3f104293b28e",
-            "size": 2723,
-            "uri": "https://{canondata_backend}/1936273/c18e00cf98c9bc32c26d43566fbe78a1b9a29753/resource.tar.gz#test.test_blocks-combine_hashed_count_filter--Peephole_/opt.yql"
+            "checksum": "813cd8b84e34a21870792ca3e64300f8",
+            "size": 2696,
+            "uri": "https://{canondata_backend}/1942100/1807fd13cf8dcfed7275bcf46267833c1775e224/resource.tar.gz#test.test_blocks-combine_hashed_count_filter--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_hashed_count_filter--Plan]": [
@@ -659,9 +659,9 @@
     ],
     "test.test[blocks-finalize_hashed_keys--Peephole]": [
         {
-            "checksum": "7431b5bf82ccc313f3eb1603ccab933c",
-            "size": 3988,
-            "uri": "https://{canondata_backend}/1936273/c18e00cf98c9bc32c26d43566fbe78a1b9a29753/resource.tar.gz#test.test_blocks-finalize_hashed_keys--Peephole_/opt.yql"
+            "checksum": "e95d070e94df21e542e8575253f3a84e",
+            "size": 3894,
+            "uri": "https://{canondata_backend}/1942100/1807fd13cf8dcfed7275bcf46267833c1775e224/resource.tar.gz#test.test_blocks-finalize_hashed_keys--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-finalize_hashed_keys--Plan]": [

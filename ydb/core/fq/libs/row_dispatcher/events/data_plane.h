@@ -6,34 +6,9 @@
 
 #include <ydb/core/fq/libs/row_dispatcher/protos/events.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
+#include <ydb/core/fq/libs/row_dispatcher/events/topic_session_stats.h>
 
 namespace NFq {
-
-
-struct TopicSessionClientStatistic {
-    NActors::TActorId ReadActorId;
-    ui32 PartitionId = 0;
-    ui64 UnreadRows = 0;
-    ui64 UnreadBytes = 0;
-    ui64 Offset = 0;
-};
-
-struct TopicSessionCommonStatistic {
-    ui64 UnreadBytes = 0;
-};
-
-struct TopicSessionParams {
-    TString Endpoint;
-    TString Database;
-    TString TopicPath;
-    ui64 PartitionId = 0;
-};
-
-struct TopicSessionStatistic {
-    TopicSessionParams SessionKey; 
-    TVector<TopicSessionClientStatistic> Clients;
-    TopicSessionCommonStatistic Common;
-};
 
 NActors::TActorId RowDispatcherServiceActorId();
 

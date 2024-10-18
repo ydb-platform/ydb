@@ -859,9 +859,8 @@ void TTopicSession::HandleException(const std::exception& e) {
 void TTopicSession::SendStatistic() {
     TopicSessionStatistic stat;
     stat.Common.UnreadBytes = UnreadBytes;
-
     stat.SessionKey = TopicSessionParams{Endpoint, Database, TopicPath, PartitionId};
-
+    stat.Clients.reserve(Clients.size());
     for (auto& [readActorId, info] : Clients) {
         TopicSessionClientStatistic client;
         client.PartitionId = PartitionId;

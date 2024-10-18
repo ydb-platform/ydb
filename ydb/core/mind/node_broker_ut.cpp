@@ -539,8 +539,7 @@ void CheckNodeInfo(TTestActorRuntime &runtime,
                    ui64 room = 0,
                    ui64 rack = 0,
                    ui64 body = 0,
-                   ui64 expire = 0,
-                   const THolder<TString>& name = THolder<TString>())
+                   ui64 expire = 0)
 {
     TAutoPtr<TEvNodeBroker::TEvResolveNode> event = new TEvNodeBroker::TEvResolveNode;
     event->Record.SetNodeId(nodeId);
@@ -562,9 +561,6 @@ void CheckNodeInfo(TTestActorRuntime &runtime,
     UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetRack(), ToString(rack));
     UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetUnit(), ToString(body));
     UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetExpire(), expire);
-    if (name) {
-        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetName(), *name.Get());
-    }
 }
 
 void CheckLeaseExtension(TTestActorRuntime &runtime,

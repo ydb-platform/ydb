@@ -2,7 +2,7 @@
 
 #include <util/charset/utf8.h>
 #include <util/stream/line_split.h>
-#include <util/stream/fixed_string.h>
+#include <util/stream/str.h>
 
 namespace NYdb {
     namespace NConsoleClient {
@@ -14,7 +14,7 @@ namespace NYdb {
         YQLPositionMapping YQLPositionMapping::Build(const TString& queryUtf8) {
             TVector<ui32> symbolsCountBeforeLine = {0, 0};
 
-            TFixedStringStream stream(queryUtf8);
+            TStringStream stream(queryUtf8);
             TLineSplitter lines(stream);
 
             size_t read;

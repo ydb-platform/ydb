@@ -7,7 +7,7 @@
 #include <ydb/library/backup/util.h>
 
 #include <util/stream/format.h>
-#include <util/stream/fixed_string.h>
+#include <util/stream/str.h>
 #include <util/string/split.h>
 
 #include <algorithm>
@@ -413,9 +413,9 @@ int TCommandPgConvert::Run(TConfig& config) {
         fileInput = std::make_unique<TFileInput>(Path);
         parser.WritePgDump(*fileInput);
     } else {
-        TFixedStringStream stream(Cin.ReadAll());
+        TStringStream stream(Cin.ReadAll());
         parser.Prepare(stream);
-        stream.MovePointer();
+        stream.Reset();
         parser.WritePgDump(stream);
     }
     return EXIT_SUCCESS;

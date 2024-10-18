@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/stream/fixed_string.h>
+#include <util/stream/str.h>
 
 using namespace NYdb;
 using namespace NYdb::NConsoleClient;
@@ -22,11 +22,11 @@ Y_UNIT_TEST_SUITE(PgDumpParserTests) {
 
     TString ParseDumpFixedString(const TString& data) {
         TStringStream out;
-        TFixedStringStream in(data);
+        TStringStream in(data);
         TPgDumpParser parser(out, true);
 
         parser.Prepare(in);
-        in.MovePointer();
+        in.Reset();
         parser.WritePgDump(in);
         return out.Str();
     }

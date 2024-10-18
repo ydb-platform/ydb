@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
             return joinArg;
         } else if constexpr (std::is_convertible_v<TJoinArg, std::string>) {
             std::shared_ptr<IBaseOptimizerNode> root = std::make_shared<TRelOptimizerNode>(joinArg, std::make_shared<TOptimizerStatistics>());
-            root->Stats->Nrows = rand() % 50'000 + 1;
+            root->Stats->Nrows = rand() % 100 + 1;
             return root;
         } else {
             static_assert(
@@ -420,6 +420,22 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
         {
             auto optimizedJoin = Enumerate(join, TOptimizerHints::Parse("JoinOrder((A B) C)"));
             UNIT_ASSERT(HaveSameConditions(optimizedJoin, join));
+        }
+    }
+
+    Y_UNIT_TEST(ManyCondsBetweenJoinForTransitiveClosure) {
+        auto join = Join(Join("A", "B", "A.PUDGE=B.PUDGE,A.DOTA=B.DOTA"), "C", "A.PUDGE=C.PUDGE,A.DOTA=C.DOTA");
+
+        auto graph = MakeJoinHypergraph<TNodeSet64>(join);
+        Cout << graph.String() << Endl;
+
+        auto B = graph.GetNodesByRelNames({"B"});
+        auto C = graph.GetNodesByRelNames({"C"});
+        UNIT_ASSERT(graph.FindEdgeBetween(B, C));
+
+        {
+            auto optimizedJoin = Enumerate(join, TOptimizerHints::Parse("Rows(B C # 0)"));
+            UNIT_ASSERT(HaveSameConditionCount(optimizedJoin, join));
         }
     }
 

@@ -33,6 +33,7 @@ public:
         ui64 inputIndex,
         NUdf::TUnboxedValue inputFlow,
         NActors::TActorId computeActorId,
+        ::NMonitoring::TDynamicCounterPtr taskCounters,
         IDqAsyncIoFactory* factory,
         NDqProto::TDqInputTransformLookupSettings&& settings,
         TVector<size_t>&& lookupInputIndexes,
@@ -52,6 +53,7 @@ public:
         , InputIndex(inputIndex)
         , InputFlow(std::move(inputFlow))
         , ComputeActorId(std::move(computeActorId))
+        , TaskCounters(taskCounters)
         , Factory(factory)
         , Settings(std::move(settings))
         , LookupInputIndexes(std::move(lookupInputIndexes))
@@ -76,6 +78,7 @@ public:
             Y_DEBUG_ABORT_UNLESS(OtherInputIndexes[i] < InputRowType->GetElementsCount());
         }
         Y_DEBUG_ABORT_UNLESS(LookupInputIndexes.size() == LookupKeyType->GetMembersCount());
+        InitMonCounters(taskCounters);
     }
 
     void Bootstrap() {
@@ -84,6 +87,7 @@ public:
             .Alloc = Alloc,
             .KeyTypeHelper = KeyTypeHelper,
             .ParentId = SelfId(),
+            .TaskCounters = TaskCounters,
             .LookupSource = Settings.GetRightSource().GetLookupSource(),
             .KeyType = LookupKeyType,
             .PayloadType = LookupPayloadType,
@@ -144,6 +148,7 @@ private: //events
     }
 
     void Handle(IDqAsyncLookupSource::TEvLookupResult::TPtr ev) {
+        auto startCycleCount = GetCycleCountFast();
         if (!KeysForLookup) {
             return;
         }
@@ -163,6 +168,11 @@ private: //events
             LruCache->Update(NUdf::TUnboxedValue(const_cast<NUdf::TUnboxedValue&&>(k)), std::move(v), now + CacheTtl);
         }
         KeysForLookup->clear();
+        auto deltaTime = GetCpuTimeDelta(startCycleCount);
+        CpuTime += deltaTime;
+        if (CpuTimeUs) {
+            CpuTimeUs->Add(deltaTime.MicroSeconds());
+        }
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived{InputIndex});
     }
 
@@ -201,13 +211,15 @@ private: //IDqComputeActorAsyncInput
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
         Y_UNUSED(freeSpace);
+        auto startCycleCount = GetCycleCountFast();
         auto guard = BindAllocator();
 
         DrainReadyQueue(batch);
 
         if (InputFlowFetchStatus != NUdf::EFetchStatus::Finish && KeysForLookup->empty()) {
-             NUdf::TUnboxedValue* inputRowItems;
-             NUdf::TUnboxedValue inputRow = HolderFactory.CreateDirectArrayHolder(InputRowType->GetElementsCount(), inputRowItems);
+            Y_DEBUG_ABORT_UNLESS(AwaitingQueue.empty());
+            NUdf::TUnboxedValue* inputRowItems;
+            NUdf::TUnboxedValue inputRow = HolderFactory.CreateDirectArrayHolder(InputRowType->GetElementsCount(), inputRowItems);
             const auto now = std::chrono::steady_clock::now();
             LruCache->Prune(now);
             size_t rowLimit = std::numeric_limits<size_t>::max();
@@ -220,13 +232,19 @@ private: //IDqComputeActorAsyncInput
                 NUdf::TUnboxedValue key = HolderFactory.CreateDirectArrayHolder(LookupInputIndexes.size(), keyItems);
                 NUdf::TUnboxedValue* otherItems;
                 NUdf::TUnboxedValue other = HolderFactory.CreateDirectArrayHolder(OtherInputIndexes.size(), otherItems);
+                bool nullsInKey = false;
                 for (size_t i = 0; i != LookupInputIndexes.size(); ++i) {
                     keyItems[i] = inputRowItems[LookupInputIndexes[i]];
+                    if (!keyItems[i]) {
+                        nullsInKey = true;
+                    }
                 }
                 for (size_t i = 0; i != OtherInputIndexes.size(); ++i) {
                     otherItems[i] = inputRowItems[OtherInputIndexes[i]];
                 }
-                if (auto lookupPayload = LruCache->Get(key, now)) {
+                if (nullsInKey) {
+                    AddReadyQueue(key, other, nullptr);
+                } else if (auto lookupPayload = LruCache->Get(key, now)) {
                     AddReadyQueue(key, other, &*lookupPayload);
                 } else {
                     if (AwaitingQueue.empty()) {
@@ -238,13 +256,42 @@ private: //IDqComputeActorAsyncInput
                 }
                 ++row;
             }
+            if (Batches && (!KeysForLookup->empty() || !ReadyQueue.RowCount())) {
+                Batches->Inc();
+                LruHits->Add(ReadyQueue.RowCount());
+                LruMiss->Add(AwaitingQueue.size());
+            }
             if (!KeysForLookup->empty()) {
                 Send(LookupSourceId, new IDqAsyncLookupSource::TEvLookupRequest(KeysForLookup));
             }
             DrainReadyQueue(batch);
         }
+        auto deltaTime = GetCpuTimeDelta(startCycleCount);
+        CpuTime += deltaTime;
+        if (CpuTimeUs) {
+            CpuTimeUs->Add(deltaTime.MicroSeconds());
+        }
         finished = IsFinished();
         return AwaitingQueue.size();
+    }
+
+    void InitMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
+        if (!taskCounters) {
+            return;
+        }
+        auto component = taskCounters->GetSubgroup("component", "Lookup");
+        LruHits = component->GetCounter("Hits");
+        LruMiss = component->GetCounter("Miss");
+        CpuTimeUs = component->GetCounter("CpuUs");
+        Batches = component->GetCounter("Batches");
+    }
+
+    static TDuration GetCpuTimeDelta(ui64 startCycleCount) {
+        return TDuration::Seconds(NHPTimer::GetSeconds(GetCycleCountFast() - startCycleCount));
+    }
+
+    TDuration GetCpuTime() override {
+        return CpuTime;
     }
 
     TMaybe<google::protobuf::Any> ExtraData() override {
@@ -278,6 +325,7 @@ protected:
     ui64 InputIndex; // NYql::NDq::IDqComputeActorAsyncInput
     NUdf::TUnboxedValue InputFlow;
     const NActors::TActorId ComputeActorId;
+    ::NMonitoring::TDynamicCounterPtr TaskCounters;
     IDqAsyncIoFactory::TPtr Factory;
     NDqProto::TDqInputTransformLookupSettings Settings;
 protected:
@@ -302,6 +350,12 @@ protected:
     NKikimr::NMiniKQL::TUnboxedValueBatch ReadyQueue;
     NYql::NDq::TDqAsyncStats IngressStats;
     std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> KeysForLookup;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr LruHits;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LruMiss;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CpuTimeUs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Batches;
+    TDuration CpuTime;
 };
 
 class TInputTransformStreamLookupWide: public TInputTransformStreamLookupBase {
@@ -548,6 +602,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             args.InputIndex,
             args.TransformInput,
             args.ComputeActorId,
+            args.TaskCounters,
             factory,
             std::move(settings),
             std::move(lookupKeyInputIndexes),
@@ -568,6 +623,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             args.InputIndex,
             args.TransformInput,
             args.ComputeActorId,
+            args.TaskCounters,
             factory,
             std::move(settings),
             std::move(lookupKeyInputIndexes),

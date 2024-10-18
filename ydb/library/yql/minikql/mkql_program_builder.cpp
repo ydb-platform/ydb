@@ -5730,15 +5730,14 @@ TRuntimeNode TProgramBuilder::BlockBitCast(TRuntimeNode value, TType* targetType
     return TRuntimeNode(builder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::BuildBlockCombineAll(const std::string_view& callableName, TRuntimeNode input, std::optional<ui32> filterColumn,
-        const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
-    const auto inputType = input.GetStaticType();
-    MKQL_ENSURE(inputType->IsStream() || inputType->IsFlow(), "Expected either stream or flow as input type");
-    MKQL_ENSURE(returnType->IsStream() || returnType->IsFlow(), "Expected either stream or flow as return type");
+TRuntimeNode TProgramBuilder::BlockCombineAll(TRuntimeNode flow, std::optional<ui32> filterColumn,
+    const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
+    if constexpr (RuntimeVersion < 31U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
 
-    TCallableBuilder builder(Env, callableName, returnType);
-    builder.Add(input);
-
+    TCallableBuilder builder(Env, __func__, returnType);
+    builder.Add(flow);
     if (!filterColumn) {
         builder.Add(NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id));
     } else {
@@ -5760,32 +5759,14 @@ TRuntimeNode TProgramBuilder::BuildBlockCombineAll(const std::string_view& calla
     return TRuntimeNode(builder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::BlockCombineAll(TRuntimeNode stream, std::optional<ui32> filterColumn,
+TRuntimeNode TProgramBuilder::BlockCombineHashed(TRuntimeNode flow, std::optional<ui32> filterColumn, const TArrayRef<ui32>& keys,
     const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
     if constexpr (RuntimeVersion < 31U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
 
-    MKQL_ENSURE(stream.GetStaticType()->IsStream(), "Expected stream as input type");
-    MKQL_ENSURE(returnType->IsStream(), "Expected stream as return type");
-
-    if constexpr (RuntimeVersion < 52U) {
-        const auto flowReturnType = NewFlowType(AS_TYPE(TStreamType, returnType)->GetItemType());
-        return FromFlow(BuildBlockCombineAll(__func__, ToFlow(stream), filterColumn, aggs, flowReturnType));
-    } else {
-        return BuildBlockCombineAll(__func__, stream, filterColumn, aggs, returnType);
-    }
-}
-
-TRuntimeNode TProgramBuilder::BuildBlockCombineHashed(const std::string_view& callableName, TRuntimeNode input, std::optional<ui32> filterColumn,
-    const TArrayRef<ui32>& keys, const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
-    const auto inputType = input.GetStaticType();
-    MKQL_ENSURE(inputType->IsStream() || inputType->IsFlow(), "Expected either stream or flow as input type");
-    MKQL_ENSURE(returnType->IsStream() || returnType->IsFlow(), "Expected either stream or flow as return type");
-
-    TCallableBuilder builder(Env, callableName, returnType);
-    builder.Add(input);
-
+    TCallableBuilder builder(Env, __func__, returnType);
+    builder.Add(flow);
     if (!filterColumn) {
         builder.Add(NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id));
     } else {
@@ -5813,31 +5794,14 @@ TRuntimeNode TProgramBuilder::BuildBlockCombineHashed(const std::string_view& ca
     return TRuntimeNode(builder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::BlockCombineHashed(TRuntimeNode stream, std::optional<ui32> filterColumn, const TArrayRef<ui32>& keys,
+TRuntimeNode TProgramBuilder::BlockMergeFinalizeHashed(TRuntimeNode flow, const TArrayRef<ui32>& keys,
     const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
     if constexpr (RuntimeVersion < 31U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
 
-    MKQL_ENSURE(stream.GetStaticType()->IsStream(), "Expected stream as input type");
-    MKQL_ENSURE(returnType->IsStream(), "Expected stream as return type");
-
-    if constexpr (RuntimeVersion < 52U) {
-        const auto flowReturnType = NewFlowType(AS_TYPE(TStreamType, returnType)->GetItemType());
-        return FromFlow(BuildBlockCombineHashed(__func__, ToFlow(stream), filterColumn, keys, aggs, flowReturnType));
-    } else {
-        return BuildBlockCombineHashed(__func__, stream, filterColumn, keys, aggs, returnType);
-    }    
-}
-
-TRuntimeNode TProgramBuilder::BuildBlockMergeFinalizeHashed(const std::string_view& callableName, TRuntimeNode input, const TArrayRef<ui32>& keys,
-    const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
-    const auto inputType = input.GetStaticType();
-    MKQL_ENSURE(inputType->IsStream() || inputType->IsFlow(), "Expected either stream or flow as input type");
-    MKQL_ENSURE(returnType->IsStream() || returnType->IsFlow(), "Expected either stream or flow as return type");
-
-    TCallableBuilder builder(Env, callableName, returnType);
-    builder.Add(input);
+    TCallableBuilder builder(Env, __func__, returnType);
+    builder.Add(flow);
 
     TVector<TRuntimeNode> keyNodes;
     for (const auto& key : keys) {
@@ -5860,31 +5824,14 @@ TRuntimeNode TProgramBuilder::BuildBlockMergeFinalizeHashed(const std::string_vi
     return TRuntimeNode(builder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::BlockMergeFinalizeHashed(TRuntimeNode stream, const TArrayRef<ui32>& keys,
-    const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
-    if constexpr (RuntimeVersion < 31U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
-    MKQL_ENSURE(stream.GetStaticType()->IsStream(), "Expected stream as input type");
-    MKQL_ENSURE(returnType->IsStream(), "Expected stream as return type");
-
-    if constexpr (RuntimeVersion < 52U) {
-        const auto flowReturnType = NewFlowType(AS_TYPE(TStreamType, returnType)->GetItemType());
-        return FromFlow(BuildBlockMergeFinalizeHashed(__func__, ToFlow(stream), keys, aggs, flowReturnType));
-    } else {
-        return BuildBlockMergeFinalizeHashed(__func__, stream, keys, aggs, returnType);
-    }
-}
-
-TRuntimeNode TProgramBuilder::BuildBlockMergeManyFinalizeHashed(const std::string_view& callableName, TRuntimeNode input, const TArrayRef<ui32>& keys,
+TRuntimeNode TProgramBuilder::BlockMergeManyFinalizeHashed(TRuntimeNode flow, const TArrayRef<ui32>& keys,
     const TArrayRef<const TAggInfo>& aggs, ui32 streamIndex, const TVector<TVector<ui32>>& streams, TType* returnType) {
-    const auto inputType = input.GetStaticType();
-    MKQL_ENSURE(inputType->IsStream() || inputType->IsFlow(), "Expected either stream or flow as input type");
-    MKQL_ENSURE(returnType->IsStream() || returnType->IsFlow(), "Expected either stream or flow as return type");
+    if constexpr (RuntimeVersion < 31U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
 
-    TCallableBuilder builder(Env, callableName, returnType);
-    builder.Add(input);
+    TCallableBuilder builder(Env, __func__, returnType);
+    builder.Add(flow);
 
     TVector<TRuntimeNode> keyNodes;
     for (const auto& key : keys) {
@@ -5917,23 +5864,6 @@ TRuntimeNode TProgramBuilder::BuildBlockMergeManyFinalizeHashed(const std::strin
 
     builder.Add(NewTuple(streamsNodes));
     return TRuntimeNode(builder.Build(), false);
-}
-
-TRuntimeNode TProgramBuilder::BlockMergeManyFinalizeHashed(TRuntimeNode stream, const TArrayRef<ui32>& keys,
-    const TArrayRef<const TAggInfo>& aggs, ui32 streamIndex, const TVector<TVector<ui32>>& streams, TType* returnType) {
-    if constexpr (RuntimeVersion < 31U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
-    MKQL_ENSURE(stream.GetStaticType()->IsStream(), "Expected stream as input type");
-    MKQL_ENSURE(returnType->IsStream(), "Expected stream as return type");
-
-    if constexpr (RuntimeVersion < 52U) {
-        const auto flowReturnType = NewFlowType(AS_TYPE(TStreamType, returnType)->GetItemType());
-        return FromFlow(BuildBlockMergeManyFinalizeHashed(__func__, ToFlow(stream), keys, aggs, streamIndex, streams, flowReturnType));
-    } else {
-        return BuildBlockMergeManyFinalizeHashed(__func__, stream, keys, aggs, streamIndex, streams, returnType);
-    }
 }
 
 TRuntimeNode TProgramBuilder::ScalarApply(const TArrayRef<const TRuntimeNode>& args, const TArrayLambda& handler) {

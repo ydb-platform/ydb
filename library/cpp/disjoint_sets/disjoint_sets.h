@@ -26,9 +26,14 @@ public:
     }
 
     TElement CanonicSetElement(TElement item) const {
-        if (Parents[item] != item)
-            Parents[item] = CanonicSetElement(Parents[item]);
-        return Parents[item];
+        auto root = item;
+        while (root != Parents[root]) {
+            root = Parents[root];
+        }
+        while (item != root) {
+           item = std::exchange(Parents[item], root);
+        }
+        return root;
     }
 
     size_t SizeOfSet(TElement item) const {

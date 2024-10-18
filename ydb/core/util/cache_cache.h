@@ -139,6 +139,10 @@ public:
         Config.SetLimit(limit);
     }
 
+    ui64 GetSize() const override {
+        return FreshWeight + StagingWeight + WarmWeight;
+    }
+
 private:
     void Unlink(TItem *item, ui64 &weight) {
         item->Unlink();

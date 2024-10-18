@@ -48,7 +48,7 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
 
     explicit TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters> &group);
 
-    TCounterPtr ReplacementPolicy(TReplacementPolicy policy);
+    TCounterPtr ReplacementPolicySize(TReplacementPolicy policy);
 };
 
 // TODO: use protobuf configs

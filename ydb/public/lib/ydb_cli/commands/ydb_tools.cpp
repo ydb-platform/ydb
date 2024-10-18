@@ -7,6 +7,7 @@
 #include <ydb/library/backup/util.h>
 
 #include <util/stream/format.h>
+#include <util/stream/fixed_string.h>
 #include <util/string/split.h>
 
 #include <algorithm>

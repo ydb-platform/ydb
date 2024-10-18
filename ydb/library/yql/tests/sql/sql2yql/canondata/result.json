@@ -8287,6 +8287,20 @@
             "uri": "https://{canondata_backend}/1784117/d56ae82ad9d30397a41490647be1bd2124718f98/resource.tar.gz#test_sql2yql.test_join-bush_in_in_in_/sql.yql"
         }
     ],
+    "test_sql2yql.test[join-cbo_4tables]": [
+        {
+            "checksum": "1259880de97a6753985e841e2e0fca8e",
+            "size": 3360,
+            "uri": "https://{canondata_backend}/1937367/865cf26569bab3fead160e174e7798fb2cbf37bf/resource.tar.gz#test_sql2yql.test_join-cbo_4tables_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[join-cbo_4tables_only_sorted_merge]": [
+        {
+            "checksum": "3d6c4b81801d581fd7df5db4ed71e607",
+            "size": 3452,
+            "uri": "https://{canondata_backend}/1937367/865cf26569bab3fead160e174e7798fb2cbf37bf/resource.tar.gz#test_sql2yql.test_join-cbo_4tables_only_sorted_merge_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[join-commonjoin_unused_keys]": [
         {
             "checksum": "9c07ade76c1e3f31cd5c478dcb4e4300",
@@ -28018,6 +28032,20 @@
             "checksum": "4337dd37969830e7640a5ef1757a8d9b",
             "size": 334,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_join-bush_in_in_in_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[join-cbo_4tables]": [
+        {
+            "checksum": "f98d46ae919b4666a761319656bed043",
+            "size": 498,
+            "uri": "https://{canondata_backend}/1937367/865cf26569bab3fead160e174e7798fb2cbf37bf/resource.tar.gz#test_sql_format.test_join-cbo_4tables_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[join-cbo_4tables_only_sorted_merge]": [
+        {
+            "checksum": "8aaeb2968b47675636ddd81f957e996f",
+            "size": 533,
+            "uri": "https://{canondata_backend}/1937367/865cf26569bab3fead160e174e7798fb2cbf37bf/resource.tar.gz#test_sql_format.test_join-cbo_4tables_only_sorted_merge_/formatted.sql"
         }
     ],
     "test_sql_format.test[join-commonjoin_unused_keys]": [

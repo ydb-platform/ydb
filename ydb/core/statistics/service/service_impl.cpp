@@ -24,6 +24,7 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
+#include <util/datetime/cputimer.h>
 
 namespace NKikimr {
 namespace NStat {

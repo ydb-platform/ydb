@@ -78,7 +78,7 @@ TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Ge
 
     //this block is located before pattern block in grammar,
     // but depends on it, so it is processed after pattern block
-    std::pair<TPosition, TAfterMatchSkipTo> skipTo { pos, TAfterMatchSkipTo{EAfterMatchSkipTo::NextRow, TString()} };
+    std::pair<TPosition, TAfterMatchSkipTo> skipTo { pos, TAfterMatchSkipTo{EAfterMatchSkipTo::PastLastRow, TString()} };
     if (commonSyntax.HasBlock1()){
         skipTo = ParseAfterMatchSkipTo(commonSyntax.GetBlock1().GetRule_row_pattern_skip_to3());
         const auto varRequired =

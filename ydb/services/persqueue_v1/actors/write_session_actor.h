@@ -161,6 +161,7 @@ private:
     void PrepareRequest(THolder<TEvWrite>&& ev, const TActorContext& ctx);
     void SendWriteRequest(typename TWriteRequestInfo::TPtr&& request, const TActorContext& ctx);
 
+    void SetupBytesWrittenByUserAgentCounter();
     void SetupCounters();
     void SetupCounters(const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId);
 

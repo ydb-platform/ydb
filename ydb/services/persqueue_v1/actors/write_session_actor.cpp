@@ -493,6 +493,17 @@ void TWriteSessionActor<UseMigrationProtocol>::InitAfterDiscovery(const TActorCo
 }
 
 template<bool UseMigrationProtocol>
+void TWriteSessionActor<UseMigrationProtocol>::SetupBytesWrittenByUserAgentCounter() {
+    static constexpr auto protocol = UseMigrationProtocol ? "pqv1" : "topic";
+    BytesWrittenByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents")
+        ->GetSubgroup("host", "")
+        ->GetSubgroup("protocol", protocol)
+        ->GetSubgroup("topic", FullConverter->GetFederationPath())
+        ->GetSubgroup("user-agent", CleanupCounterValueString(UserAgent))
+        ->GetExpiringNamedCounter("sensor", "BytesWrittenByUserAgent", true);
+}
+
+template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::SetupCounters()
 {
     if (SessionsCreated) {
@@ -522,13 +533,7 @@ void TWriteSessionActor<UseMigrationProtocol>::SetupCounters()
     SessionsCreated.Inc();
     SessionsActive.Inc();
 
-    constexpr auto protocol = UseMigrationProtocol ? "pqv1" : "topic";
-    BytesWrittenByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents")
-        ->GetSubgroup("host", "")
-        ->GetSubgroup("protocol", protocol)
-        ->GetSubgroup("topic", FullConverter->GetFederationPath())
-        ->GetSubgroup("user-agent", CleanupCounterValueString(UserAgent))
-        ->GetExpiringNamedCounter("sensor", "BytesWrittenByUserAgent", true);
+    SetupBytesWrittenByUserAgentCounter();
 }
 
 template<bool UseMigrationProtocol>
@@ -548,6 +553,8 @@ void TWriteSessionActor<UseMigrationProtocol>::SetupCounters(const TString& clou
 
     SessionsCreated.Inc();
     SessionsActive.Inc();
+
+    SetupBytesWrittenByUserAgentCounter();
 }
 
 template<bool UseMigrationProtocol>

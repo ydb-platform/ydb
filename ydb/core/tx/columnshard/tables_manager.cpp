@@ -137,6 +137,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
         }
     }
 
+    NOlap::TVersionCounters::TVersionToKey& versionToKey = VersionCounters->GetVersionToKey();
     {
         TMemoryProfileGuard g("TTablesManager/InitFromDB::PresetVersions");
         auto rowset = db.Table<Schema::SchemaPresetVersionInfo>().Select();
@@ -153,6 +154,8 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
 
             TSchemaPreset::TSchemaPresetVersionInfo info;
             Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
+            auto& key = versionToKey[info.GetSchema().GetVersion()];
+            key.emplace_back(id, version.GetPlanStep(), version.GetTxId());
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "load_preset")("preset_id", id)("snapshot", version)("version", info.HasSchema() ? info.GetSchema().GetVersion() : -1);
             preset.AddVersion(version, info);
             if (!rowset.Next()) {
@@ -178,7 +181,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
                 "version", schemaInfo.GetSchema().GetVersion());
             if (!PrimaryIndex) {
                 PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(
-                    TabletId, StoragesManager, preset.GetMinVersionForId(schemaInfo.GetSchema().GetVersion()), schemaInfo.GetSchema());
+                    TabletId, StoragesManager, preset.GetMinVersionForId(schemaInfo.GetSchema().GetVersion()), schemaInfo.GetSchema(), VersionCounters);
             } else {
                 PrimaryIndex->RegisterSchemaVersion(preset.GetMinVersionForId(schemaInfo.GetSchema().GetVersion()), schemaInfo.GetSchema());
             }
@@ -284,7 +287,7 @@ void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapsho
     Schema::SaveSchemaPresetVersionInfo(db, presetId, version, versionInfo);
     if (versionInfo.HasSchema()) {
         if (!PrimaryIndex) {
-            PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, StoragesManager, version, schema);
+            PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, StoragesManager, version, schema, VersionCounters);
             for (auto&& i : Tables) {
                 PrimaryIndex->RegisterTable(i.first);
             }
@@ -294,6 +297,8 @@ void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapsho
         } else {
             PrimaryIndex->RegisterSchemaVersion(version, schema);
         }
+        auto& key = VersionCounters->GetVersionToKey()[versionInfo.GetSchema().GetVersion()];
+        key.emplace_back(presetId, version.GetPlanStep(), version.GetTxId());
         for (auto& columnName : Ttl.TtlColumns()) {
             PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetIndexInfo().CheckTtlColumn(columnName);
         }
@@ -338,8 +343,9 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
     table.AddVersion(version);
 }
 
-TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId)
+TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId, const std::shared_ptr<NOlap::TVersionCounters>& versionCounters)
     : StoragesManager(storagesManager)
+    , VersionCounters(versionCounters)
     , TabletId(tabletId) {
 }
 

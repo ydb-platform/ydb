@@ -7,6 +7,8 @@ items:
   href: restart.md
 - name: Обновление конфигурации
   href: update-config.md
+- name: Развертывание коннектора fq-connector-go
+  href: fq-deployment.md
 - name: Наблюдаемость
   include:
     mode: link

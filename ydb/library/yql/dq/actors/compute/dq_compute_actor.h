@@ -331,7 +331,7 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
         return MaxMemorySize;
     };
 
-    TString MemoryConsumptionDetails() const override {
+    TString MemoryConsumptionDetails(bool) const override {
         return TString();
     }
 

@@ -82,7 +82,7 @@ class TDummyMemoryQuotaManager: public IMemoryQuotaManager {
         return std::numeric_limits<ui64>::max();
     }
 
-    TString MemoryConsumptionDetails() const override {
+    TString MemoryConsumptionDetails(bool) const override {
         return TString();
     }
 

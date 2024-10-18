@@ -58,8 +58,8 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
         return Task->IsReasonableToStartSpilling();
     }
 
-    TString MemoryConsumptionDetails() const override {
-        return Tx->ToString();
+    TString MemoryConsumptionDetails(bool verbose) const override {
+        return Tx->ToString(verbose);
     }
 
     void TerminateHandler(bool success, const NYql::TIssues& issues) {

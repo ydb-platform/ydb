@@ -292,7 +292,7 @@ public:
             tx->AckFailedMemoryAlloc(resources.Memory);
             TStringBuilder reason;
             reason << "TxId: " << txId << ", taskId: " << taskId << ". Not enough memory for query, requested: " << resources.Memory
-                << ". " << tx->ToString();
+                << ". " << tx->ToString(false);
             result.SetError(NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY, reason);
             return result;
         }
@@ -326,7 +326,7 @@ public:
         if (!allocated) {
             TStringBuilder reason;
             reason << "TxId: " << txId << ", taskId: " << taskId << ". Not enough memory for query, requested: " << resources.Memory
-                << ". " << tx->ToString();
+                << ". " << tx->ToString(false);
             LOG_AS_N(reason);
             result.SetError(NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY, reason);
             return result;

@@ -181,9 +181,9 @@ void TCommandRestore::Config(TConfig& config) {
         .Hidden(); // Deprecated. Using ImportData should be more effective.
 
     config.Opts->AddLongOption("import-data", "Use ImportData - a more efficient way to upload data."
-        " Although you can use ImportData to restore tables with secondary indexes, ImportData will"
-        " throw an error if you try to upload data into an existing table that has secondary indexes"
-        " or is in the process of building them.")
+        " ImportData will throw an error if you try to upload data into an existing table that has"
+        " secondary indexes or is in the process of building them. If you need to restore a table"
+        " with secondary indexes, make sure it's not already present in the scheme.")
         .StoreTrue(&UseImportData);
 
     config.Opts->MutuallyExclusive("bandwidth", "rps");

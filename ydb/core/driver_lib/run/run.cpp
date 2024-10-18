@@ -1753,9 +1753,11 @@ void TKikimrRunner::KikimrStart() {
 
 void TKikimrRunner::KikimrStop(bool graceful, const TKikimrRunConfig& runConfig) {
 
-    bool enableReleaseNodeNameOnGracefulShutdown = AppData->FeatureFlags.GetEnableReleaseNodeNameOnGracefulShutdown();
+    Y_UNUSED(graceful);
 
-    if (graceful && enableReleaseNodeNameOnGracefulShutdown) {
+    bool enableReleaseNodeNameOnGracefulShutdown = AppData->FeatureFlags.GetEnableReleaseNodeNameOnGracefulShutdown();
+    
+    if (enableReleaseNodeNameOnGracefulShutdown) {
         using namespace NKikimr::NNodeBroker;
         using TEvent = TEvNodeBroker::TEvGracefulShutdownRequest;
         auto& nodeInfo = runConfig.AppConfig.GetDynamicNodeConfig().GetNodeInfo();

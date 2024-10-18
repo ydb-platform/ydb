@@ -336,16 +336,16 @@ public:
         GranuleOptimizerLocked->Add(1);
     }
 
-    void SetPortionLoadingTime(ui64 microSeconds) const {
-        PortionsLoadingTimeCounter->Set(microSeconds);
+    void AddPortionLoadingTime(ui64 microSeconds) const {
+        PortionsLoadingTimeCounter->Add(microSeconds);
     }
 
-    void SetColumnLoadingTime(ui64 microSeconds) const {
-        ColumnsLoadingTimeCounter->Set(microSeconds);
+    void AddColumnLoadingTime(ui64 microSeconds) const {
+        ColumnsLoadingTimeCounter->Add(microSeconds);
     }
 
-    void SetIndexesLoadingTime(ui64 microSeconds) const {
-        IndexesLoadingTimeCounter->Set(microSeconds);
+    void AddIndexesLoadingTime(ui64 microSeconds) const {
+        IndexesLoadingTimeCounter->Add(microSeconds);
     }
 
     void AddLoadPortionsFail() const {
@@ -361,7 +361,7 @@ public:
     }
 
 
-    TEngineLogsCounters(ui64 tabletId);
+    TEngineLogsCounters();
 };
 
 }

@@ -8,7 +8,7 @@
 
 namespace NKikimr::NColumnShard {
 
-TEngineLogsCounters::TEngineLogsCounters(ui64 tabletId)
+TEngineLogsCounters::TEngineLogsCounters()
     : TBase("EngineLogs")
     , GranuleDataAgent("EngineLogs")
 {
@@ -64,13 +64,12 @@ TEngineLogsCounters::TEngineLogsCounters(ui64 tabletId)
 
     GranuleOptimizerLocked = TBase::GetDeriviative("Optimizer/Granules/Locked");
 
-    TString suffix = TString("/") + ToString(tabletId);
-    PortionsLoadingTimeCounter = TBase::GetValue("Startup/PortionsLoadingTime" + suffix);
-    ColumnsLoadingTimeCounter  = TBase::GetValue("Startup/ColumnsLoadingTime" + suffix);
-    IndexesLoadingTimeCounter = TBase::GetValue("Startup/IndexesLoadingTime" + suffix);
-    LoadPortionsFailCounter = TBase::GetDeriviative("Startup/LoadPortionFailCount" + suffix);
-    LoadColumnsFailCounter = TBase::GetDeriviative("Startup/LoadColumnFailCount" + suffix);
-    LoadIndexFailCounter = TBase::GetDeriviative("Startup/LoadIndexFailCount" + suffix);
+    PortionsLoadingTimeCounter = TBase::GetValue("Startup/PortionsLoadingTime");
+    ColumnsLoadingTimeCounter  = TBase::GetValue("Startup/ColumnsLoadingTime");
+    IndexesLoadingTimeCounter = TBase::GetValue("Startup/IndexesLoadingTime");
+    LoadPortionsFailCounter = TBase::GetValue("Startup/LoadPortionFailCount");
+    LoadColumnsFailCounter = TBase::GetValue("Startup/LoadColumnFailCount");
+    LoadIndexFailCounter = TBase::GetValue("Startup/LoadIndexFailCount");
 
     IndexMetadataUsageBytes = TBase::GetValue("IndexMetadata/Usage/Bytes");
 

@@ -28,8 +28,7 @@ namespace NKikimr::NOlap {
 
 TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager,
     const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema)
-    : SignalCounters(tabletId)
-    , GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
+    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
     , StoragesManager(storagesManager)
     , TabletId(tabletId)
     , LastPortion(0)
@@ -41,8 +40,7 @@ TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<
 
 TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager,
     const TSnapshot& snapshot, TIndexInfo&& schema)
-    : SignalCounters(tabletId)
-    , GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
+    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
     , StoragesManager(storagesManager)
     , TabletId(tabletId)
     , LastPortion(0)
@@ -252,9 +250,9 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
 
     TInstant indexesLoaded = TInstant::Now();
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "load_columns")("portions_loading_time", portionsLoaded - start)("columns_loading_time", columnsLoaded - portionsLoaded)("indexes_loading_time", indexesLoaded - columnsLoaded);
-    SignalCounters.SetPortionLoadingTime((portionsLoaded - start).MicroSeconds());
-    SignalCounters.SetColumnLoadingTime((columnsLoaded - portionsLoaded).MicroSeconds());
-    SignalCounters.SetIndexesLoadingTime((indexesLoaded - columnsLoaded).MicroSeconds());
+    SignalCounters.AddPortionLoadingTime((portionsLoaded - start).MicroSeconds());
+    SignalCounters.AddColumnLoadingTime((columnsLoaded - portionsLoaded).MicroSeconds());
+    SignalCounters.AddIndexesLoadingTime((indexesLoaded - columnsLoaded).MicroSeconds());
 
     {
         TMemoryProfileGuard g("TTxInit/LoadColumns/Constructors");

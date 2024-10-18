@@ -135,7 +135,7 @@ bool TInsertTable::Load(NIceDb::TNiceDb& db, IDbWrapper& dbTable, const TInstant
     if (!result) {
         LoadCounters.AddInsertTableLoadFail();
     }
-    LoadCounters.SetInsertTableLoadingTime((finish - start).MicroSeconds());
+    LoadCounters.AddInsertTableLoadingTime((finish - start).MicroSeconds());
     return result;
 }
 

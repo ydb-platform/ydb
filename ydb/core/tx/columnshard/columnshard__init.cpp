@@ -129,7 +129,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     {
         ACFL_DEBUG("step", "TInsertTable::Load_Start");
         TMemoryProfileGuard g("TTxInit/InsertTable");
-        auto localInsertTable = std::make_unique<NOlap::TInsertTable>(Self->TabletID());
+        auto localInsertTable = std::make_unique<NOlap::TInsertTable>();
         for (auto&& i : Self->TablesManager.GetTables()) {
             localInsertTable->RegisterPathInfo(i.first);
         }

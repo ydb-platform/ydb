@@ -187,10 +187,10 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
     TInstant schemaPresetVersionsLoaded = TInstant::Now();
 
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "init_from_db")("tables_loading_time", tablesLoaded - start)("schema_preset_loading_time", schemaPresetLoaded - tablesLoaded)("table_versions_loading_time", tableVersionsLoaded - schemaPresetLoaded)("schema_preset_versions_loading_time", schemaPresetVersionsLoaded - tableVersionsLoaded);
-    LoadTimeCounters->SetTablesLoadingTime((tablesLoaded - start).MicroSeconds());
-    LoadTimeCounters->SetSchemaPresetLoadingTime((schemaPresetLoaded - tablesLoaded).MicroSeconds());
-    LoadTimeCounters->SetTableVersionsLoadingTime((tableVersionsLoaded - schemaPresetLoaded).MicroSeconds());
-    LoadTimeCounters->SetSchemaPresetVersionsLoadingTime((schemaPresetVersionsLoaded - tableVersionsLoaded).MicroSeconds());
+    LoadTimeCounters->AddTablesLoadingTime((tablesLoaded - start).MicroSeconds());
+    LoadTimeCounters->AddSchemaPresetLoadingTime((schemaPresetLoaded - tablesLoaded).MicroSeconds());
+    LoadTimeCounters->AddTableVersionsLoadingTime((tableVersionsLoaded - schemaPresetLoaded).MicroSeconds());
+    LoadTimeCounters->AddSchemaPresetVersionsLoadingTime((schemaPresetVersionsLoaded - tableVersionsLoaded).MicroSeconds());
 
     TMemoryProfileGuard g("TTablesManager/InitFromDB::Other");
     for (auto& [id, preset] : schemaPresets) {
@@ -371,7 +371,7 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
 
 TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId)
     : StoragesManager(storagesManager)
-    , LoadTimeCounters(std::make_unique<TLoadTimeSignals>(tabletId))
+    , LoadTimeCounters(std::make_unique<TLoadTimeSignals>())
     , TabletId(tabletId)
 {
 }

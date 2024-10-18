@@ -76,16 +76,15 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr InsertTableLoadingFailCounter;
 
 public:
-    TInsertTableLoadCounters(ui64 tabletId)
+    TInsertTableLoadCounters()
         : TBase("InsertTableLoad")
     {
-        TString suffix = TString("/") + ToString(tabletId);
-        InsertTableLoadingTimeCounter = TBase::GetValue("Startup/InsertTableLoadingTime" + suffix);
-        InsertTableLoadingFailCounter = TBase::GetDeriviative("Startup/InsertTableLoadFails" + suffix);
+        InsertTableLoadingTimeCounter = TBase::GetValue("Startup/InsertTableLoadingTime");;
+        InsertTableLoadingFailCounter = TBase::GetValue("Startup/InsertTableLoadFails");;
     }
 
-    void SetInsertTableLoadingTime(ui64 microSeconds) {
-        InsertTableLoadingTimeCounter->Set(microSeconds);
+    void AddInsertTableLoadingTime(ui64 microSeconds) {
+        InsertTableLoadingTimeCounter->Add(microSeconds);
     }
 
     void AddInsertTableLoadFail() {

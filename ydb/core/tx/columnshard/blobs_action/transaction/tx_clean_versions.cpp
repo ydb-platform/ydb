@@ -9,7 +9,7 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
     NIceDb::TNiceDb db(txc.DB);
 
     auto table = db.Table<NKikimr::NColumnShard::Schema::SchemaPresetVersionInfo>();
-    ui64 lastVersion = Self->TablesManager.MutablePrimaryIndex().LastSchemaVersion();
+    ui64 lastVersion = Self->TablesManager.MutablePrimaryIndex().GetVersionedIndex().GetLastSchemaVersion();
     Self->VersionCounters->EnumerateVersionsToErase([&](const ui64 version, const NOlap::TVersionCounters::TSchemaKey& key) {
         if (version != lastVersion) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Removing schema version from db")("vesion", version)("tablet_id", Self->TabletID());

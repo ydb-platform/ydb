@@ -74,8 +74,6 @@ SRCS(
     filenamecat-lgpl.c
     filenamecat.c
     fopen-safer.c
-    fpurge.c
-    freading.c
     fstat.c
     getdtablesize.c
     gl_avltree_oset.c
@@ -85,7 +83,6 @@ SRCS(
     gl_xlist.c
     gl_xoset.c
     localcharset.c
-    lseek.c
     malloca.c
     memchr2.c
     mkstemp-safer.c
@@ -100,11 +97,9 @@ SRCS(
     quotearg.c
     raise.c
     regex.c
-    rmdir.c
     secure_getenv.c
     sig-handler.c
     spawn-pipe.c
-    stat.c
     stripslash.c
     tempname.c
     tmpdir.c
@@ -149,7 +144,6 @@ IF (OS_WINDOWS)
         localeconv.c
         msvc-inval.c
         msvc-nothrow.c
-        open.c
         sigaction.c
         sigprocmask.c
         waitpid.c

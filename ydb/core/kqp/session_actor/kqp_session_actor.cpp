@@ -192,10 +192,6 @@ public:
         RequestCounters->TxProxyMon = MakeIntrusive<NTxProxy::TTxProxyMon>(AppData()->Counters);
         CompilationCookie = std::make_shared<std::atomic<bool>>(true);
 
-        FillSettings.AllResultsBytesLimit = Nothing();
-        FillSettings.RowsLimitPerWrite = Config->_ResultRowsLimit.Get();
-        FillSettings.Format = IDataProvider::EResultFormat::Custom;
-        FillSettings.FormatDetails = TString(KikimrMkqlProtoFormat);
         FillGUCSettings();
 
         auto optSessionId = TryDecodeYdbSessionId(SessionId);
@@ -1806,7 +1802,7 @@ public:
                     continue;
                 }
 
-                TMaybe<ui64> effectiveRowsLimit = FillSettings.RowsLimitPerWrite;
+                TMaybe<ui64> effectiveRowsLimit = {};
                 if (QueryState->PreparedQuery->GetResults(i).GetRowsLimit()) {
                     effectiveRowsLimit = QueryState->PreparedQuery->GetResults(i).GetRowsLimit();
                 }
@@ -2564,7 +2560,6 @@ private:
     std::unique_ptr<TKqpCleanupCtx> CleanupCtx;
     ui32 QueryId = 0;
     TKikimrConfiguration::TPtr Config;
-    IDataProvider::TFillSettings FillSettings;
     TTransactionsCache Transactions;
     std::unique_ptr<TEvKqp::TEvQueryResponse> QueryResponse;
     std::optional<TSessionShutdownState> ShutdownState;

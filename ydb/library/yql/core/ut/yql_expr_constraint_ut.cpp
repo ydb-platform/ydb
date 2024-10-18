@@ -1939,7 +1939,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let flow1 (ExpandMap (ToFlow list1) (lambda '(item) (Member item 'key1) (Member item 'subkey1) (Member item 'value1))))
     (let flow2 (ExpandMap (ToFlow list2) (lambda '(item) (Member item 'key2) (Member item 'subkey2) (Member item 'value2))))
 
-    (let join (GraceJoinCore flow1 flow2 'Inner '('0 '1) '('0 '1) '('0 '0 '1 '1 '2 '2) '('0 '3 '1 '4 '2 '5) '() '() '('LeftAny 'RightAny)))
+    (let join (GraceJoinCore flow1 flow2 'Inner '('0 '1) '('0 '1) '('0 '0 '1 '1 '2 '2) '('0 '3 '1 '4 '2 '5) '() '() '('("LeftAny") '('"RightAny"))))
     (let list (Collect (NarrowMap join (lambda '(lk ls lv rk rs rv) (AsStruct '('lk lk) '('ls ls) '('lv lv) '('rk rk) '('rs rs) '('rv rv))))))
 
     (let res_sink (DataSink 'yt (quote plato)))

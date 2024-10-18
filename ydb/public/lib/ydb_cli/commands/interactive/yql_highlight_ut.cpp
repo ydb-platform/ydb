@@ -70,6 +70,12 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         Check(highlight, "", "");
         Check(highlight, " ", " ");
         Check(highlight, "   ", "   ");
+        Check(highlight, "\n", " ");
+        Check(highlight, "\n\n", "  ");
+        Check(highlight, "\r\n", "  ");
+        Check(highlight, "\r", " ");
+        Check(highlight, "\r\n\n", "   ");
+        Check(highlight, "\r\n\r\n", "    ");
     }
 
     Y_UNIT_TEST(Invalid) {
@@ -218,5 +224,31 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         Check(highlight, "select /* select */ select", "kkkkkk cccccccccccc kkkkkk");
         Check(highlight, "/**/ --", "cccc cc");
         Check(highlight, "/*/**/*/", "ccccccoo");
+    }
+
+    Y_UNIT_TEST(Multiline) {
+        YQLHighlight highlight(Coloring);
+        Check(
+            highlight,
+            "SELECT *\n"
+            "FROM test",
+            "kkkkkk o kkkk vvvv");
+        Check(
+            highlight,
+            "SELECT *\n"
+            "\n"
+            "\r\n"
+            "FROM test",
+            "kkkkkk o    kkkk vvvv");
+        Check(
+            highlight,
+            "SELECT *\r\n"
+            "FROM test",
+            "kkkkkk o  kkkk vvvv");
+        Check(
+            highlight,
+            "SELECT *\r\n"
+            "FROM test\n",
+            "kkkkkk o  kkkk vvvv ");
     }
 }

@@ -27,6 +27,7 @@ TPortionMetaConstructor::TPortionMetaConstructor(const TPortionMeta& meta) {
     FirstAndLastPK = meta.ReplaceKeyEdges;
     RecordSnapshotMin = meta.RecordSnapshotMin;
     RecordSnapshotMax = meta.RecordSnapshotMax;
+    CompactionLevel = meta.GetCompactionLevel();
     DeletionsCount = meta.GetDeletionsCount();
     TierName = meta.GetTierNameOptional();
     if (meta.Produced != NPortion::EProduced::UNSPECIFIED) {
@@ -38,10 +39,12 @@ TPortionMeta TPortionMetaConstructor::Build() {
     AFL_VERIFY(FirstAndLastPK);
     AFL_VERIFY(RecordSnapshotMin);
     AFL_VERIFY(RecordSnapshotMax);
+    AFL_VERIFY(CompactionLevel);
     TPortionMeta result(*FirstAndLastPK, *RecordSnapshotMin, *RecordSnapshotMax);
     if (TierName) {
         result.TierName = *TierName;
     }
+    result.CompactionLevel = *CompactionLevel;
     AFL_VERIFY(DeletionsCount);
     result.DeletionsCount = *DeletionsCount;
     AFL_VERIFY(Produced);
@@ -62,6 +65,7 @@ bool TPortionMetaConstructor::LoadMetadata(const NKikimrTxColumnShard::TIndexPor
     } else {
         DeletionsCount = 0;
     }
+    CompactionLevel = portionMeta.GetCompactionLevel();
     if (portionMeta.GetIsInserted()) {
         Produced = TPortionMeta::EProduced::INSERTED;
     } else if (portionMeta.GetIsCompacted()) {

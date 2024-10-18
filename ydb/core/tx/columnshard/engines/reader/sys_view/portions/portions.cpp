@@ -33,6 +33,7 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
     NArrow::Append<arrow::StringType>(*builders[11], arrow::util::string_view(statInfo.data(), statInfo.size()));
 
     NArrow::Append<arrow::UInt8Type>(*builders[12], portion.HasRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized));
+    NArrow::Append<arrow::UInt64Type>(*builders[13], portion.GetMeta().GetCompactionLevel());
 }
 
 ui32 TStatsIterator::PredictRecordsCount(const NAbstract::TGranuleMetaView& granule) const {

@@ -74,6 +74,9 @@ public:
     static std::shared_ptr<IMemoryPredictor> BuildMemoryPredictor();
 
     void AddCheckPoint(const NArrow::NMerger::TSortableBatchPosition& position, const bool include);
+    void SetCheckPoints(NArrow::NMerger::TIntervalPositions&& positions) {
+        CheckPoints = std::move(positions);
+    }
 
     virtual TString TypeString() const override {
         return StaticTypeName();

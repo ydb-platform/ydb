@@ -1,31 +1,13 @@
 #pragma once
 #include <ydb/core/tx/columnshard/counters/common/owner.h>
+#include <ydb/core/tx/columnshard/counters/portions.h>
+
+#include <ydb/library/actors/core/log.h>
+
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/hash.h>
 
 namespace NKikimr::NOlap::NChanges {
-
-class TPortionKindCounters: public NColumnShard::TCommonCountersOwner {
-private:
-    using TBase = NColumnShard::TCommonCountersOwner;
-    NMonitoring::TDynamicCounters::TCounterPtr PortionsCount;
-    NMonitoring::TDynamicCounters::TCounterPtr PortionsRawBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr PortionsBlobBytes;
-
-public:
-    TPortionKindCounters(const TString& kind, NColumnShard::TCommonCountersOwner& baseOwner)
-        : TBase(baseOwner, "kind", kind) {
-        PortionsCount = TBase::GetDeriviative("RepackPortions/Count");
-        PortionsRawBytes = TBase::GetDeriviative("RepackPortions/Raw/Bytes");
-        PortionsBlobBytes = TBase::GetDeriviative("RepackPortions/Blob/Bytes");
-    }
-
-    void OnData(const i64 portionsCount, const i64 portionBlobBytes, const i64 portionRawBytes) {
-        PortionsCount->Add(portionsCount);
-        PortionsRawBytes->Add(portionRawBytes);
-        PortionsBlobBytes->Add(portionBlobBytes);
-    }
-};
 
 class TGeneralCompactionCounters: public NColumnShard::TCommonCountersOwner {
 private:
@@ -35,9 +17,10 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr SplittedBlobsAppendCount;
     NMonitoring::TDynamicCounters::TCounterPtr SplittedBlobsAppendBytes;
 
-    TPortionKindCounters RepackPortions;
-    TPortionKindCounters RepackInsertedPortions;
-    TPortionKindCounters RepackCompactedPortions;
+    TPortionGroupCounters RepackPortions;
+    TPortionGroupCounters RepackInsertedPortions;
+    TPortionGroupCounters RepackCompactedPortions;
+    THashMap<ui32, TPortionGroupCounters> RepackPortionsByLevel;
     NMonitoring::THistogramPtr HistogramRepackPortionsRawBytes;
     NMonitoring::THistogramPtr HistogramRepackPortionsBlobBytes;
     NMonitoring::THistogramPtr HistogramRepackPortionsCount;
@@ -45,32 +28,44 @@ private:
 public:
     TGeneralCompactionCounters()
         : TBase("GeneralCompaction")
-        , RepackPortions("ALL", *this)
-        , RepackInsertedPortions("INSERTED", *this)
-        , RepackCompactedPortions("COMPACTED", *this)
-    {
+        , RepackPortions("ALL", CreateSubGroup("action", "repack"))
+        , RepackInsertedPortions("INSERTED", CreateSubGroup("action", "repack"))
+        , RepackCompactedPortions("COMPACTED", CreateSubGroup("action", "repack")) {
+        for (ui32 i = 0; i < 10; ++i) {
+            RepackPortionsByLevel.emplace(i, TPortionGroupCounters("level=" + ::ToString(i), CreateSubGroup("action", "repack")));
+        }
         FullBlobsAppendCount = TBase::GetDeriviative("FullBlobsAppend/Count");
         FullBlobsAppendBytes = TBase::GetDeriviative("FullBlobsAppend/Bytes");
         SplittedBlobsAppendCount = TBase::GetDeriviative("SplittedBlobsAppend/Count");
         SplittedBlobsAppendBytes = TBase::GetDeriviative("SplittedBlobsAppend/Bytes");
         HistogramRepackPortionsRawBytes = TBase::GetHistogram("RepackPortions/Raw/Bytes", NMonitoring::ExponentialHistogram(18, 2, 256 * 1024));
-        HistogramRepackPortionsBlobBytes = TBase::GetHistogram("RepackPortions/Blob/Bytes", NMonitoring::ExponentialHistogram(18, 2, 256 * 1024));
+        HistogramRepackPortionsBlobBytes =
+            TBase::GetHistogram("RepackPortions/Blob/Bytes", NMonitoring::ExponentialHistogram(18, 2, 256 * 1024));
         HistogramRepackPortionsCount = TBase::GetHistogram("RepackPortions/Count", NMonitoring::LinearHistogram(15, 10, 16));
     }
 
-    static void OnRepackPortions(const i64 portionsCount, const i64 portionBlobBytes, const i64 portionRawBytes) {
-        Singleton<TGeneralCompactionCounters>()->RepackPortions.OnData(portionsCount, portionBlobBytes, portionRawBytes);
-        Singleton<TGeneralCompactionCounters>()->HistogramRepackPortionsCount->Collect(portionsCount);
-        Singleton<TGeneralCompactionCounters>()->HistogramRepackPortionsBlobBytes->Collect(portionBlobBytes);
-        Singleton<TGeneralCompactionCounters>()->HistogramRepackPortionsRawBytes->Collect(portionRawBytes);
+    static void OnRepackPortions(const TSimplePortionsGroupInfo& portions) {
+        Singleton<TGeneralCompactionCounters>()->RepackPortions.OnData(portions);
+        Singleton<TGeneralCompactionCounters>()->HistogramRepackPortionsCount->Collect(portions.GetCount());
+        Singleton<TGeneralCompactionCounters>()->HistogramRepackPortionsBlobBytes->Collect(portions.GetBlobBytes());
+        Singleton<TGeneralCompactionCounters>()->HistogramRepackPortionsRawBytes->Collect(portions.GetRawBytes());
     }
 
-    static void OnRepackInsertedPortions(const i64 portionsCount, const i64 portionBlobBytes, const i64 portionRawBytes) {
-        Singleton<TGeneralCompactionCounters>()->RepackInsertedPortions.OnData(portionsCount, portionBlobBytes, portionRawBytes);
+    static void OnRepackPortionsByLevel(const THashMap<ui32, TSimplePortionsGroupInfo>& portions) {
+        auto& counters = Singleton<TGeneralCompactionCounters>()->RepackPortionsByLevel;
+        for (auto&& i : portions) {
+            auto it = counters.find(i.first);
+            AFL_VERIFY(it != counters.end());
+            it->second.OnData(i.second);
+        }
     }
 
-    static void OnRepackCompactedPortions(const i64 portionsCount, const i64 portionBlobBytes, const i64 portionRawBytes) {
-        Singleton<TGeneralCompactionCounters>()->RepackCompactedPortions.OnData(portionsCount, portionBlobBytes, portionRawBytes);
+    static void OnRepackInsertedPortions(const TSimplePortionsGroupInfo& portions) {
+        Singleton<TGeneralCompactionCounters>()->RepackInsertedPortions.OnData(portions);
+    }
+
+    static void OnRepackCompactedPortions(const TSimplePortionsGroupInfo& portions) {
+        Singleton<TGeneralCompactionCounters>()->RepackCompactedPortions.OnData(portions);
     }
 
     static void OnSplittedBlobAppend(const i64 bytes) {
@@ -84,4 +79,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NChanges

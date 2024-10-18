@@ -91,7 +91,8 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
     sb << "(portion_id:" << Portion << ";" <<
         "path_id:" << PathId << ";records_count:" << NumRows() << ";"
         "min_schema_snapshot:(" << MinSnapshotDeprecated.DebugString() << ");"
-        "schema_version:" << SchemaVersion.value_or(0) << ";";
+        "schema_version:" << SchemaVersion.value_or(0) << ";"
+        "level:" << GetMeta().GetCompactionLevel() << ";";
     if (withDetails) {
         sb <<
             "records_snapshot_min:(" << RecordSnapshotMin().DebugString() << ");" <<

@@ -69,12 +69,11 @@ public:
 
         size_t prevSize = Parents.size();
         Parents.resize(setCount);
-        Sizes.resize(setCount);
+        Sizes.resize(setCount, 1);
         NumberOfSets += setCount - prevSize;
 
         for (size_t i = prevSize; i < setCount; ++i) {
             Parents[i] = i;
-            Sizes[i] = 1;
         }
     }
 };

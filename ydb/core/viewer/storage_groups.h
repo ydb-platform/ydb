@@ -1042,20 +1042,29 @@ public:
                 With = EWith::Everything;
                 GroupsByGroupId.clear();
             }
-            if (!Filter.empty() && FieldsAvailable.test(+EGroupFields::PoolName) && FieldsAvailable.test(+EGroupFields::GroupId)) {
-                TVector<TString> filterWords = SplitString(Filter, " ");
-                TGroupView groupView;
-                for (TGroup* group : GroupView) {
-                    for (const TString& word : filterWords) {
-                        if (group->PoolName.Contains(word) || ::ToString(group->GroupId).Contains(word)) {
-                            groupView.push_back(group);
-                            break;
+            if (!Filter.empty()) {
+                bool allFieldsPresent =
+                    (!FieldsRequired.test(+EGroupFields::GroupId) || FieldsAvailable.test(+EGroupFields::GroupId)) &&
+                    (!FieldsRequired.test(+EGroupFields::PoolName) || FieldsAvailable.test(+EGroupFields::PoolName));
+                if (allFieldsPresent) {
+                    TVector<TString> filterWords = SplitString(Filter, " ");
+                    TGroupView groupView;
+                    for (TGroup* group : GroupView) {
+                        for (const TString& word : filterWords) {
+                            if (FieldsRequired.test(+EGroupFields::GroupId) && ::ToString(group->GroupId).Contains(word)) {
+                                groupView.push_back(group);
+                                break;
+                            }
+                            if (FieldsRequired.test(+EGroupFields::PoolName) && group->PoolName.Contains(word)) {
+                                groupView.push_back(group);
+                                break;
+                            }
                         }
                     }
+                    GroupView.swap(groupView);
+                    Filter.clear();
+                    GroupsByGroupId.clear();
                 }
-                GroupView.swap(groupView);
-                Filter.clear();
-                GroupsByGroupId.clear();
             }
             if (!FilterGroup.empty() && FieldsAvailable.test(+FilterGroupBy)) {
                 TGroupView groupView;

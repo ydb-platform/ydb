@@ -297,17 +297,17 @@ class TestPqRowDispatcher(TestYdsBase):
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
-                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String, event String NOT NULL))
-                WHERE data IS NULL;'''
+                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, `data@data` String, event String NOT NULL))
+                WHERE `data@data` IS NULL;'''
 
         query_id = start_yds_query(kikimr, client, sql)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
 
         data = [
             '{"time": 101, "event": "event1"}',
-            '{"time": 102, "data": null, "event": "event2"}',
-            '{"time": 103, "data": "", "event": "event2"}',
-            '{"time": 104, "data": "null", "event": "event2"}',
+            '{"time": 102, "data@data": null, "event": "event2"}',
+            '{"time": 103, "data@data": "", "event": "event2"}',
+            '{"time": 104, "data@data": "null", "event": "event2"}',
         ]
 
         self.write_stream(data)

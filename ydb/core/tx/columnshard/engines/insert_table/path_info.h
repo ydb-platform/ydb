@@ -43,6 +43,7 @@ private:
     TSet<TCommittedData> Committed;
     YDB_READONLY(i64, CommittedSize, 0);
     YDB_READONLY(i64, InsertedSize, 0);
+    mutable TMonotonic LastIndexation = TMonotonic::Now();
     bool CommittedOverload = false;
     bool InsertedOverload = false;
     TInsertionSummary* Summary = nullptr;
@@ -54,6 +55,14 @@ private:
     void AddCommittedSize(const i64 size, const ui64 overloadLimit);
 
 public:
+    TMonotonic GetLastIndexation() const {
+        return LastIndexation;
+    }
+
+    void SetLastIndexation(const TMonotonic value) const {
+        LastIndexation = value;
+    }
+
     bool IsEmpty() const {
         return Committed.empty() && !InsertedSize;
     }

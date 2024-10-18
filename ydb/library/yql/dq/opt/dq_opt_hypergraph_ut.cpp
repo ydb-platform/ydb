@@ -502,9 +502,9 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
             std::cerr << "test is not running for ASAN!" << std::endl;
             return;
         #elif !defined(NDEBUG)
-            enum : ui64 { CliqueSize = 11, ChainSize = 71, StarSize = 15 };
+            enum { CliqueSize = 11, ChainSize = 71, StarSize = 15 };
         #else
-            enum : ui64 { CliqueSize = 15, ChainSize = 165, StarSize = 20 };
+            enum { CliqueSize = 15, ChainSize = 165, StarSize = 20 };
         #endif
 
         TVector<double> cliqueTime{};

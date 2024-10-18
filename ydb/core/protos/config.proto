@@ -381,7 +381,7 @@ message TLogConfig {
     optional bool UseLocalTimestamps = 9 [default = false];
     optional string BackendFileName = 10;
     optional string SysLogService = 11;
-    optional bool SysLogToStdErr = 12; // writes logs to stderr as well as in syslog
+    optional bool SysLogToStdErr = 12; // writes logs to stderr as well as in syslog/file
     optional TUAClientConfig UAClientConfig = 13;
     optional uint64 TimeThresholdMs = 14 [default = 1000];
     optional bool IgnoreUnknownComponents = 15 [default = true];

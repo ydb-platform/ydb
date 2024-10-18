@@ -35,6 +35,7 @@ enum EEvents {
     EvAlterProblem,
     EvAlterPreparationFinished,
     EvAlterPreparationProblem,
+    EvFetchDatabaseResponse,
     EvEnd
 };
 static_assert(EEvents::EvEnd < EventSpaceEnd(TKikimrEvents::ES_METADATA_MANAGER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_METADATA_MANAGER)");

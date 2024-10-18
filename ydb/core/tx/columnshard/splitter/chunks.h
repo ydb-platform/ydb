@@ -27,8 +27,10 @@ protected:
 
     virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfoConstructor& portionInfo) const override;
 
-    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplitImpl(const TColumnSaver& saver, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const = 0;
-    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplit(const TColumnSaver& saver, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const override;
+    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplitImpl(const TColumnSaver& saver,
+        const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const = 0;
+    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplit(const TColumnSaver& saver,
+        const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const override;
     virtual bool DoIsSplittable() const override {
         return GetRecordsCount() > 1;
     }
@@ -53,7 +55,8 @@ private:
     std::vector<std::shared_ptr<IPortionDataChunk>> Chunks;
     std::shared_ptr<TColumnLoader> Loader;
 
-    std::shared_ptr<arrow::Array> CurrentChunk;
+    std::shared_ptr<NArrow::NAccessor::IChunkedArray> CurrentChunk;
+    std::optional<NArrow::NAccessor::IChunkedArray::TFullDataAddress> CurrentChunkArray;
     ui32 CurrentChunkIndex = 0;
     ui32 CurrentRecordIndex = 0;
 public:
@@ -68,16 +71,29 @@ public:
         CurrentChunkIndex = 0;
         CurrentRecordIndex = 0;
         if (Chunks.size()) {
-            CurrentChunk = Loader->ApplyVerifiedColumn(Chunks.front()->GetData());
+            CurrentChunk = Loader->ApplyVerified(Chunks.front()->GetData(), Chunks.front()->GetRecordsCountVerified());
+            CurrentChunkArray.reset();
         }
     }
 
-    const std::shared_ptr<arrow::Array>& GetCurrentChunk() const {
+    const std::shared_ptr<arrow::Array>& GetCurrentChunk() {
+        if (!CurrentChunkArray || !CurrentChunkArray->GetAddress().Contains(CurrentRecordIndex)) {
+            CurrentChunkArray = CurrentChunk->GetChunk(CurrentChunkArray, CurrentRecordIndex);
+        }
+        AFL_VERIFY(CurrentChunkArray);
+        return CurrentChunkArray->GetArray();
+    }
+
+    const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& GetCurrentAccessor() const {
+        AFL_VERIFY(CurrentChunk);
         return CurrentChunk;
     }
 
-    ui32 GetCurrentRecordIndex() const {
-        return CurrentRecordIndex;
+    ui32 GetCurrentRecordIndex() {
+        if (!CurrentChunkArray || !CurrentChunkArray->GetAddress().Contains(CurrentRecordIndex)) {
+            CurrentChunkArray = CurrentChunk->GetChunk(CurrentChunkArray->GetAddress(), CurrentRecordIndex);
+        }
+        return CurrentChunkArray->GetAddress().GetLocalIndex(CurrentRecordIndex);
     }
 
     bool IsCorrect() const {
@@ -86,19 +102,21 @@ public:
 
     bool ReadNextChunk() {
         while (++CurrentChunkIndex < Chunks.size()) {
-            CurrentChunk = Loader->ApplyVerifiedColumn(Chunks[CurrentChunkIndex]->GetData());
+            CurrentChunk = Loader->ApplyVerified(Chunks[CurrentChunkIndex]->GetData(), Chunks[CurrentChunkIndex]->GetRecordsCountVerified());
+            CurrentChunkArray.reset();
             CurrentRecordIndex = 0;
-            if (CurrentRecordIndex < CurrentChunk->length()) {
+            if (CurrentRecordIndex < CurrentChunk->GetRecordsCount()) {
                 return true;
             }
         }
+        CurrentChunkArray.reset();
         CurrentChunk = nullptr;
         return false;
     }
 
     bool ReadNext() {
         AFL_VERIFY(!!CurrentChunk);
-        if (++CurrentRecordIndex < CurrentChunk->length()) {
+        if (++CurrentRecordIndex < CurrentChunk->GetRecordsCount()) {
             return true;
         }
         return ReadNextChunk();
@@ -154,6 +172,14 @@ public:
     }
 
     std::vector<TChunkedColumnReader>::const_iterator end() const {
+        return Columns.end();
+    }
+
+    std::vector<TChunkedColumnReader>::iterator begin() {
+        return Columns.begin();
+    }
+
+    std::vector<TChunkedColumnReader>::iterator end() {
         return Columns.end();
     }
 };

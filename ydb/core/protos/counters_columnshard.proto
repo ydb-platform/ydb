@@ -65,8 +65,8 @@ enum ECumulativeCounters {
     COUNTER_PLAN_STEP_ACCEPTED = 9                          [(CounterOpts) = {Name: "PlanStepAccepted"}];
     COUNTER_SCANNED_ROWS = 10                               [(CounterOpts) = {Name: "ScannedRows"}];
     COUNTER_SCANNED_BYTES = 11                              [(CounterOpts) = {Name: "ScannedBytes"}];
-    COUNTER_UPSERT_BLOBS_WRITTEN = 12                       [(CounterOpts) = {Name: "UpsertBlobsWritten"}];
-    COUNTER_UPSERT_BYTES_WRITTEN = 13                       [(CounterOpts) = {Name: "UpsertBytesWritten"}];
+    COUNTER_OPERATIONS_BLOBS_WRITTEN = 12                   [(CounterOpts) = {Name: "OperationsBlobsWritten"}];
+    COUNTER_OPERATIONS_BYTES_WRITTEN = 13                   [(CounterOpts) = {Name: "OperationsBytesWritten"}];
     COUNTER_INDEXING_BLOBS_WRITTEN = 14                     [(CounterOpts) = {Name: "IndexingBlobsWritten"}];
     COUNTER_INDEXING_BYTES_WRITTEN = 15                     [(CounterOpts) = {Name: "IndexingBytesWritten"}];
     COUNTER_COMPACTION_BLOBS_WRITTEN = 16                   [(CounterOpts) = {Name: "CompactionBlobsWritten"}];
@@ -135,6 +135,10 @@ enum ECumulativeCounters {
     COUNTER_READING_EXPORTED_BLOBS = 79                     [(CounterOpts) = {Name: "ReadingExportedBlobs"}];
     COUNTER_READING_EXPORTED_BYTES = 80                     [(CounterOpts) = {Name: "ReadingExportedBytes"}];
     COUNTER_READING_EXPORTED_RANGES = 81                    [(CounterOpts) = {Name: "ReadingExportedRanges"}];
+    COUNTER_PLANNED_TX_COMPLETED = 82                       [(CounterOpts) = {Name: "PlannedTxCompleted"}];
+    COUNTER_IMMEDIATE_TX_COMPLETED = 83                     [(CounterOpts) = {Name: "ImmediateTxCompleted"}];
+    COUNTER_ROWS_ERASED = 84                                [(CounterOpts) = {Name: "RowsErased"}];
+    COUNTER_OPERATIONS_ROWS_WRITTEN = 85                    [(CounterOpts) = {Name: "OperationsRowsWritten"}];
 }
 
 enum EPercentileCounters {

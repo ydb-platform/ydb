@@ -11,7 +11,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/formats/arrow
-    ydb/core/formats/arrow/protos
+    ydb/library/formats/arrow/protos
 )
 
 YQL_LAST_ABI_VERSION()

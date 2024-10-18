@@ -1247,6 +1247,7 @@ public:
             cf.FixedNodeID,
             cf.InterconnectPort,
             cf.CreateNodeLocation(),
+            AppConfig.GetAuthConfig().GetNodeRegistrationToken(),
         };
 
         auto result = NodeBrokerClient.RegisterDynamicNode(cf.GrpcSslSettings, addrs, settings, Env, Logger);

@@ -555,6 +555,10 @@ public:
         return Cells;
     }
 
+    explicit operator bool() const {
+        return !Cells.empty();
+    }
+
     static void Serialize(TString& res, TConstArrayRef<TCell> cells);
 
     static TString Serialize(TConstArrayRef<TCell> cells);

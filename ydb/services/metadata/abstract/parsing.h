@@ -74,8 +74,10 @@ public:
                 NNodes::TCoNameValueTuple tuple = maybeTuple.Cast();
                 if (auto maybeAtom = tuple.Value().template Maybe<NNodes::TCoAtom>()) {
                     Features.emplace(tuple.Name().Value(), maybeAtom.Cast().Value());
-                } else if (auto maybeDataCtor = tuple.Value().template Maybe<NNodes::TCoIntegralCtor>()) {
-                    Features.emplace(tuple.Name().Value(), maybeDataCtor.Cast().Literal().Cast<NNodes::TCoAtom>().Value());
+                } else if (auto maybeInt = tuple.Value().template Maybe<NNodes::TCoIntegralCtor>()) {
+                    Features.emplace(tuple.Name().Value(), maybeInt.Cast().Literal().Cast<NNodes::TCoAtom>().Value());
+                } else if (auto maybeBool = tuple.Value().template Maybe<NNodes::TCoBool>()) {
+                    Features.emplace(tuple.Name().Value(), maybeBool.Cast().Literal().Cast<NNodes::TCoAtom>().Value());
                 }
             }
         }

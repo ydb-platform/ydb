@@ -90,6 +90,7 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
             Record.MutableRequest()->SetPoolId(PoolId);
         }
 
+        Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
         Record.MutableRequest()->SetSessionId(SessionId);
         Record.MutableRequest()->SetAction(QueryAction);
         Record.MutableRequest()->SetType(QueryType);

@@ -1,9 +1,8 @@
 #include "result_builder.h"
 
-#include <ydb/core/formats/arrow/common/validation.h>
-
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/formats/arrow/common/validation.h>
 
 #include <util/string/builder.h>
 
@@ -64,7 +63,7 @@ std::shared_ptr<arrow::RecordBatch> TRecordBatchBuilder::Finalize() {
     for (auto&& i : Builders) {
         columns.emplace_back(NArrow::TStatusValidator::GetValid(i->Finish()));
     }
-    auto result = arrow::RecordBatch::Make(schema, columns.front()->length(), columns);
+    auto result = arrow::RecordBatch::Make(schema, columns.front()->length(), std::move(columns));
 #ifndef NDEBUG
     NArrow::TStatusValidator::Validate(result->ValidateFull());
 #endif

@@ -6,6 +6,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/change_exchange/change_sender_common_ops.h>
 #include <ydb/core/change_exchange/change_sender_monitoring.h>
+#include <ydb/core/change_exchange/util.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -435,16 +436,6 @@ class TAsyncIndexChangeSenderMain
         return Check(&TSchemeCacheHelpers::CheckEntryKind<T>, &TThis::LogWarnAndRetry, entry, expected);
     }
 
-    static TVector<ui64> MakePartitionIds(const TVector<TKeyDesc::TPartitionInfo>& partitions) {
-        TVector<ui64> result(Reserve(partitions.size()));
-
-        for (const auto& partition : partitions) {
-            result.push_back(partition.ShardId); // partition = shard
-        }
-
-        return result;
-    }
-
     /// ResolveUserTable
 
     void ResolveUserTable() {
@@ -611,6 +602,11 @@ class TAsyncIndexChangeSenderMain
             return;
         }
 
+        if (IndexTableVersion && IndexTableVersion == entry.Self->Info.GetVersion().GetGeneralVersion()) {
+            CreateSenders();
+            return Become(&TThis::StateMain);
+        }
+
         TagMap.clear();
         TVector<NScheme::TTypeInfo> keyColumnTypes;
 
@@ -692,11 +688,9 @@ class TAsyncIndexChangeSenderMain
             return Retry();
         }
 
-        const bool versionChanged = !IndexTableVersion || IndexTableVersion != entry.GeneralVersion;
         IndexTableVersion = entry.GeneralVersion;
-
         KeyDesc = std::move(entry.KeyDescription);
-        CreateSenders(MakePartitionIds(KeyDesc->GetPartitions()), versionChanged);
+        CreateSenders(NChangeExchange::MakePartitionIds(KeyDesc->GetPartitions()));
 
         Become(&TThis::StateMain);
     }

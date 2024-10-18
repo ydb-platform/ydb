@@ -1,11 +1,10 @@
 #pragma once
-#include "accessor.h"
-
-#include <ydb/core/formats/arrow/modifier/schema.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/conclusion/status.h>
+#include <ydb/library/formats/arrow/modifier/schema.h>
+#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
@@ -73,6 +72,8 @@ public:
     [[nodiscard]] TConclusionStatus AddField(const std::shared_ptr<arrow::Field>& f, const std::shared_ptr<arrow::Array>& data);
 
     [[nodiscard]] TConclusionStatus AddField(const std::shared_ptr<arrow::Field>& f, const std::shared_ptr<arrow::ChunkedArray>& data);
+
+    void DeleteFieldsByIndex(const std::vector<ui32>& idxs);
 
     TGeneralContainer(const std::shared_ptr<arrow::Table>& table);
     TGeneralContainer(const std::shared_ptr<arrow::RecordBatch>& table);

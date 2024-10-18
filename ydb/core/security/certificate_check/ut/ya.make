@@ -13,6 +13,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    cert_check_ut.cpp
     cert_utils_ut.cpp
 )
 

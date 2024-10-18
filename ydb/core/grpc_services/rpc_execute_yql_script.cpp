@@ -101,7 +101,11 @@ public:
         auto queryResult = TEvExecuteYqlScriptRequest::AllocateResult<TResult>(Request_);
 
         try {
-            NKqp::ConvertKqpQueryResultsToDbResult(kqpResponse, queryResult);
+            const auto& results = kqpResponse.GetYdbResults();
+            for (const auto& result : results) {
+                queryResult->add_result_sets()->CopyFrom(result);
+            }
+
         } catch (const std::exception& ex) {
             NYql::TIssues issues;
             issues.AddIssue(NYql::ExceptionToIssue(ex));

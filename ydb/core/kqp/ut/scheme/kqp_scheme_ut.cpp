@@ -1,6 +1,8 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
+#include <ydb/core/kqp/workload_service/ut/common/kqp_workload_service_ut_common.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/public/sdk/cpp/client/draft/ydb_replication.h>
@@ -4863,6 +4865,66 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         session.Close().GetValueSync();
     }
 
+    Y_UNIT_TEST(DisableExternalDataSourcesOnServerless) {
+        auto ydb = NWorkload::TYdbSetupSettings()
+            .CreateSampleTenants(true)
+            .EnableExternalDataSourcesOnServerless(false)
+            .Create();
+
+        auto checkDisabled = [](const auto& result, NYdb::EStatus status) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "External data sources are disabled for serverless domains. Please contact your system administrator to enable it");
+        };
+
+        auto checkNotFound = [](const auto& result, NYdb::EStatus status) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path does not exist");
+        };
+
+        const auto& createSourceSql = R"(
+            CREATE EXTERNAL DATA SOURCE MyExternalDataSource WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="my-bucket",
+                AUTH_METHOD="NONE"
+            );)";
+
+        const auto& createTableSql = R"(
+            CREATE EXTERNAL TABLE MyExternalTable (
+                Key Uint64,
+                Value String
+            ) WITH (
+                DATA_SOURCE="MyExternalDataSource",
+                LOCATION="/"
+            );)";
+
+        const auto& dropSourceSql = "DROP EXTERNAL DATA SOURCE MyExternalDataSource;";
+
+        const auto& dropTableSql = "DROP EXTERNAL TABLE MyExternalTable;";
+
+        auto settings = NWorkload::TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID);
+
+        // Dedicated, enabled
+        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(1);
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSourceSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createTableSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropTableSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSourceSql, settings));
+
+        // Shared, enabled
+        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(2);
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSourceSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createTableSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropTableSql, settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSourceSql, settings));
+
+        // Serverless, disabled
+        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(2);
+        checkDisabled(ydb->ExecuteQuery(createSourceSql, settings), NYdb::EStatus::GENERIC_ERROR);
+        checkDisabled(ydb->ExecuteQuery(createTableSql, settings), NYdb::EStatus::PRECONDITION_FAILED);
+        checkNotFound(ydb->ExecuteQuery(dropTableSql, settings), NYdb::EStatus::SCHEME_ERROR);
+        checkNotFound(ydb->ExecuteQuery(dropSourceSql, settings), NYdb::EStatus::GENERIC_ERROR);
+    }
+
     Y_UNIT_TEST(CreateExternalDataSource) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddHostnamePatterns("my-bucket");
@@ -6482,6 +6544,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         }
         testHelper.DropTable("/Root/ColumnTableTest");
         for (auto tablet: tabletIds) {
+            testHelper.WaitTabletDeletionInHive(tablet, TDuration::Seconds(5));
             UNIT_ASSERT_C(!testHelper.GetKikimr().GetTestClient().TabletExistsInHive(&testHelper.GetRuntime(), tablet), ToString(tablet) + " is alive");
         }
     }
@@ -7188,6 +7251,87 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#;[\"test_res_1\"]]]");
+    }
+
+    void TestDropThenAddColumn(bool enableIndexation, bool enableCompaction) {
+        if (enableCompaction) {
+            Y_ABORT_UNLESS(enableIndexation);
+        }
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Indexation);
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("value").SetType(NScheme::NTypeIds::Utf8),
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add("test_res_1");
+            tableInserter.AddRow().Add(2).Add("test_res_2");
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+
+        if (enableCompaction) {
+            csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
+            csController->EnableBackground(NYDBTest::ICSController::EBackground::Compaction);
+            csController->WaitIndexation(TDuration::Seconds(5));
+            csController->WaitCompactions(TDuration::Seconds(5));
+            csController->DisableBackground(NYDBTest::ICSController::EBackground::Indexation);
+            csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        }
+
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` DROP COLUMN value;";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` ADD COLUMN value Uint64;";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        schema.back().SetType(NScheme::NTypeIds::Uint64);
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(3).Add(42);
+            tableInserter.AddRow().Add(4).Add(43);
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+
+        if (enableIndexation) {
+            csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
+            csController->WaitIndexation(TDuration::Seconds(5));
+        }
+        if (enableCompaction) {
+            csController->EnableBackground(NYDBTest::ICSController::EBackground::Compaction);
+            csController->WaitCompactions(TDuration::Seconds(5));
+        }
+
+        testHelper.ReadData("SELECT value FROM `/Root/ColumnTableTest`", "[[#];[#];[[42u]];[[43u]]]");
+    }
+
+    Y_UNIT_TEST(DropThenAddColumn) {
+        TestDropThenAddColumn(false, false);
+    }
+
+    Y_UNIT_TEST(DropThenAddColumnIndexation) {
+        TestDropThenAddColumn(true, true);
+    }
+
+    Y_UNIT_TEST(DropThenAddColumnCompaction) {
+        TestDropThenAddColumn(true, true);
     }
 
     Y_UNIT_TEST(DropTtlColumn) {

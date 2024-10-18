@@ -1,7 +1,7 @@
 #include "source.h"
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/events/transfer.h>
-#include <ydb/core/formats/arrow/hash/xx_hash.h>
+#include <ydb/library/formats/arrow/hash/xx_hash.h>
 
 namespace NKikimr::NOlap::NDataSharing {
 

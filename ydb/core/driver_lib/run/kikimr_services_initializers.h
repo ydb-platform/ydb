@@ -397,6 +397,12 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
+class TGroupedMemoryLimiterInitializer: public IKikimrServicesInitializer {
+public:
+    TGroupedMemoryLimiterInitializer(const TKikimrRunConfig& runConfig);
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 class TCompConveyorInitializer: public IKikimrServicesInitializer {
 public:
     TCompConveyorInitializer(const TKikimrRunConfig& runConfig);
@@ -611,6 +617,17 @@ public:
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
+
+#ifndef KIKIMR_DISABLE_S3_OPS
+class TAwsApiInitializer : public IServiceInitializer {
+    IGlobalObjectStorage& GlobalObjects;
+
+public:
+    TAwsApiInitializer(IGlobalObjectStorage& globalObjects);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+#endif
 
 } // namespace NKikimrServicesInitializers
 } // namespace NKikimr

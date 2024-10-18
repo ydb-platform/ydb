@@ -91,6 +91,7 @@ struct TStageInfoMeta {
 struct TGraphMeta {
     IKqpGateway::TKqpSnapshot Snapshot;
     TMaybe<ui64> LockTxId;
+    ui32 LockNodeId;
     std::unordered_map<ui64, TActorId> ResultChannelProxies;
     TActorId ExecuterId;
     bool UseFollowers = false;
@@ -116,6 +117,10 @@ struct TGraphMeta {
 
     void SetLockTxId(TMaybe<ui64> lockTxId) {
         LockTxId = lockTxId;
+    }
+
+    void SetLockNodeId(ui32 lockNodeId) {
+        LockNodeId = lockNodeId;
     }
 };
 

@@ -1,5 +1,15 @@
 LIBRARY(run)
 
+IF (OS_WINDOWS)
+    CFLAGS(
+        -DKIKIMR_DISABLE_S3_OPS
+    )
+ELSE()
+    PEERDIR(
+        contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
+    )
+ENDIF()
+
 SRCS(
     auto_config_initializer.cpp
     config.cpp
@@ -111,6 +121,7 @@ PEERDIR(
     ydb/core/tx/coordinator
     ydb/core/tx/conveyor/service
     ydb/core/tx/limiter/service
+    ydb/core/tx/limiter/grouped_memory/usage
     ydb/core/tx/datashard
     ydb/core/tx/long_tx_service
     ydb/core/tx/long_tx_service/public

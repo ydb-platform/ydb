@@ -2,7 +2,7 @@
 #include "common.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/common/validation.h>
+#include <ydb/library/formats/arrow/common/validation.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
@@ -109,7 +109,7 @@ class TTiering {
     using TTiersMap = THashMap<TString, std::shared_ptr<TTierInfo>>;
     TTiersMap TierByName;
     TSet<TTierRef> OrderedTiers;
-    TString TTLColumnName;
+    std::optional<TString> TTLColumnName;
 public:
 
     class TTieringContext {
@@ -174,9 +174,14 @@ public:
     [[nodiscard]] bool Add(const std::shared_ptr<TTierInfo>& tier) {
         AFL_VERIFY(tier);
         if (!TTLColumnName) {
+            if (tier->GetEvictColumnName().Empty()) {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "empty_evict_column_name");
+                return false;
+            }
             TTLColumnName = tier->GetEvictColumnName();
-        } else if (TTLColumnName != tier->GetEvictColumnName()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "incorrect_tiering_metadata")("column_before", TTLColumnName)("column_new", tier->GetEvictColumnName());
+        } else if (*TTLColumnName != tier->GetEvictColumnName()) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "incorrect_tiering_metadata")("column_before", *TTLColumnName)
+                ("column_new", tier->GetEvictColumnName());
             return false;
         }
 
@@ -194,13 +199,9 @@ public:
         return {};
     }
 
-    const TString& GetTtlColumn() const {
-        AFL_VERIFY(TTLColumnName);
-        return TTLColumnName;
-    }
-
     const TString& GetEvictColumnName() const {
-        return TTLColumnName;
+        AFL_VERIFY(TTLColumnName);
+        return *TTLColumnName;
     }
 
     TString GetDebugString() const {

@@ -582,10 +582,18 @@ public:
             LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << QueryState->CompileResult->Status);
 
             if (QueryState->CompileResult->NeedToSplit) {
-                YQL_ENSURE(!QueryState->HasTxControl() && QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE);
-                auto ev = QueryState->BuildSplitRequest(CompilationCookie, GUCSettings);
-                Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
-                    QueryState->KqpSessionSpan.GetTraceId());
+                if (!QueryState->HasTxControl()) {
+                    YQL_ENSURE(QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE);
+                    auto ev = QueryState->BuildSplitRequest(CompilationCookie, GUCSettings);
+                    Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
+                        QueryState->KqpSessionSpan.GetTraceId());
+                } else {
+                    NYql::TIssues issues;
+                    ReplyQueryError(
+                        ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST,
+                        "CTAS statement can be executed only in NoTx mode.",
+                        MessageFromIssues(issues));
+                }
             } else {
                 ReplyQueryCompileError();
             }
@@ -893,8 +901,8 @@ public:
         try {
             const auto& parameters = QueryState->GetYdbParameters();
             QueryState->QueryData->ParseParameters(parameters);
-            if (QueryState->CompileResult && QueryState->CompileResult->Ast && QueryState->CompileResult->Ast->PgAutoParamValues) {
-                for(const auto& [name, param] : *QueryState->CompileResult->Ast->PgAutoParamValues) {
+            if (QueryState->CompileResult && QueryState->CompileResult->GetAst() && QueryState->CompileResult->GetAst()->PgAutoParamValues) {
+                for(const auto& [name, param] : *QueryState->CompileResult->GetAst()->PgAutoParamValues) {
                     if (!parameters.contains(name)) {
                         QueryState->QueryData->AddTypedValueParam(name, param);
                     }
@@ -1284,8 +1292,11 @@ public:
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
 
         const bool useEvWrite = ((HasOlapTable && Settings.TableService.GetEnableOlapSink()) || (!HasOlapTable && Settings.TableService.GetEnableOltpSink()))
-            && (request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_QUERY
-                || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY);
+            && (request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_UNDEFINED
+                || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_QUERY
+                || request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY
+                || (!HasOlapTable && request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_DML)
+                || (!HasOlapTable && request.QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_PREPARED_DML));
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             RequestCounters, Settings.TableService.GetAggregationConfig(), Settings.TableService.GetExecuterRetriesConfig(),
@@ -1763,7 +1774,6 @@ public:
         // Result for scan query is sent directly to target actor.
         Y_ABORT_UNLESS(response->GetArena());
         if (QueryState->PreparedQuery) {
-            bool useYdbResponseFormat = QueryState->GetUsePublicResponseDataFormat();
             auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
             size_t trailingResultsCount = 0;
             for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
@@ -1780,28 +1790,12 @@ public:
                     continue;
                 }
 
-                if (useYdbResponseFormat) {
-                    TMaybe<ui64> effectiveRowsLimit = FillSettings.RowsLimitPerWrite;
-                    if (QueryState->PreparedQuery->GetResults(i).GetRowsLimit()) {
-                        effectiveRowsLimit = QueryState->PreparedQuery->GetResults(i).GetRowsLimit();
-                    }
-                    auto* ydbResult = QueryState->QueryData->GetYdbTxResult(phyQuery.GetResultBindings(i), response->GetArena(), effectiveRowsLimit);
-                    response->AddYdbResults()->Swap(ydbResult);
-                } else {
-                    auto* protoRes = QueryState->QueryData->GetMkqlTxResult(phyQuery.GetResultBindings(i), response->GetArena());
-                    std::optional<IDataProvider::TFillSettings> fillSettings;
-                    if (QueryState->PreparedQuery->ResultsSize()) {
-                        YQL_ENSURE(phyQuery.ResultBindingsSize() == QueryState->PreparedQuery->ResultsSize(), ""
-                                << phyQuery.ResultBindingsSize() << " != " << QueryState->PreparedQuery->ResultsSize());
-                        const auto& result = QueryState->PreparedQuery->GetResults(i);
-                        if (result.GetRowsLimit()) {
-                            fillSettings = FillSettings;
-                            fillSettings->RowsLimitPerWrite = result.GetRowsLimit();
-                        }
-                    }
-                    auto* finalResult = KikimrResultToProto(*protoRes, {}, fillSettings.value_or(FillSettings), response->GetArena());
-                    response->AddResults()->Swap(finalResult);
+                TMaybe<ui64> effectiveRowsLimit = FillSettings.RowsLimitPerWrite;
+                if (QueryState->PreparedQuery->GetResults(i).GetRowsLimit()) {
+                    effectiveRowsLimit = QueryState->PreparedQuery->GetResults(i).GetRowsLimit();
                 }
+                auto* ydbResult = QueryState->QueryData->GetYdbTxResult(phyQuery.GetResultBindings(i), response->GetArena(), effectiveRowsLimit);
+                response->AddYdbResults()->Swap(ydbResult);
             }
         }
 

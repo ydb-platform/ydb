@@ -8,10 +8,7 @@
 #include <openssl/pem.h>
 #include <openssl/rand.h>
 
-#include <util/generic/singleton.h>
 #include <util/string/builder.h>
-#include <util/string/cast.h>
-#include <util/string/hex.h>
 
 #include <deque>
 
@@ -339,7 +336,8 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
             .set_issued_at(now)
             .set_expires_at(expires_at);
     if (!Audience.empty()) {
-        token.set_audience(Audience);
+        // jwt.h require audience claim to be a set
+        token.set_audience(std::set<std::string>{Audience});
     }
 
     if (request.ExternalAuth) {
@@ -381,7 +379,7 @@ TLoginProvider::TValidateTokenResponse TLoginProvider::ValidateToken(const TVali
     try {
         jwt::decoded_jwt decoded_token = jwt::decode(request.Token);
         if (Audience) {
-            // we check audience manually because we wan't this error instead of wrong key id in case of databases mismatch
+            // we check audience manually because we want an explicit error instead of wrong key id in case of databases mismatch
             auto audience = decoded_token.get_audience();
             if (audience.empty() || TString(*audience.begin()) != Audience) {
                 response.Error = "Wrong audience";
@@ -394,7 +392,8 @@ TLoginProvider::TValidateTokenResponse TLoginProvider::ValidateToken(const TVali
             auto verifier = jwt::verify()
                 .allow_algorithm(jwt::algorithm::ps256(key->PublicKey));
             if (Audience) {
-                verifier.with_audience(std::set<std::string>({Audience}));
+                // jwt.h require audience claim to be a set
+                verifier.with_audience(std::set<std::string>{Audience});
             }
             verifier.verify(decoded_token);
             response.User = decoded_token.get_subject();
@@ -435,8 +434,10 @@ TLoginProvider::TValidateTokenResponse TLoginProvider::ValidateToken(const TVali
                 response.Error = "Key not found";
             }
         }
-    } catch (const jwt::token_verification_exception& e) {
+    } catch (const jwt::signature_verification_exception& e) {
         response.Error = e.what(); // invalid token signature
+    } catch (const jwt::token_verification_exception& e) {
+        response.Error = e.what(); // invalid token
     } catch (const std::invalid_argument& e) {
         response.Error = "Token is not in correct format";
         response.TokenUnrecognized = true;

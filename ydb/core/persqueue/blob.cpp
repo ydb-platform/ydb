@@ -422,7 +422,7 @@ void TBatch::Unpack() {
     PackedData.Clear();
 }
 
-void TBatch::UnpackTo(TVector<TClientBlob> *blobs)
+void TBatch::UnpackTo(TVector<TClientBlob> *blobs) const
 {
     Y_ABORT_UNLESS(PackedData.size());
     auto type = Header.GetFormat();
@@ -446,7 +446,7 @@ NScheme::TDataRef GetChunk(const char*& data, const char *end)
     return NScheme::TDataRef(data - size, size);
 }
 
-void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) {
+void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) const {
     Y_ABORT_UNLESS(Header.GetFormat() == NKikimrPQ::TBatchHeader::ECompressed);
     Y_ABORT_UNLESS(PackedData.size());
     ui32 totalBlobs = Header.GetCount() + Header.GetInternalPartsCount();
@@ -606,7 +606,7 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) {
     }
 }
 
-void TBatch::UnpackToType0(TVector<TClientBlob> *blobs) {
+void TBatch::UnpackToType0(TVector<TClientBlob> *blobs) const {
     Y_ABORT_UNLESS(Header.GetFormat() == NKikimrPQ::TBatchHeader::EUncompressed);
     Y_ABORT_UNLESS(PackedData.size());
     ui32 shift = 0;
@@ -640,7 +640,7 @@ ui32 TBatch::FindPos(const ui64 offset, const ui16 partNo) const {
 void THead::Clear()
 {
     Offset = PartNo = PackedSize = 0;
-    Batches.clear();
+    ClearBatches();
 }
 
 ui64 THead::GetNextOffset() const
@@ -650,11 +650,7 @@ ui64 THead::GetNextOffset() const
 
 ui16 THead::GetInternalPartsCount() const
 {
-    ui16 res = 0;
-    for (auto& b : Batches) {
-        res += b.GetInternalPartsCount();
-    }
-    return res;
+    return InternalPartsCount;
 }
 
 ui32 THead::GetCount() const
@@ -675,15 +671,73 @@ IOutputStream& operator <<(IOutputStream& out, const THead& value)
 }
 
 ui32 THead::FindPos(const ui64 offset, const ui16 partNo) const {
-    ui32 i = 0;
-    for (; i < Batches.size(); ++i) {
-        //this batch contains blobs with position bigger than requested
-        if (Batches[i].GetOffset() > offset || Batches[i].GetOffset() == offset && Batches[i].GetPartNo() > partNo)
-             break;
-    }
-    if (i == 0)
+    if (Batches.empty()) {
         return Max<ui32>();
-    return i - 1;
+    }
+
+    ui32 i = Batches.size() - 1;
+    while (i > 0 && Batches[i].IsGreaterThan(offset, partNo)) {
+        --i;
+    }
+
+    if (i == 0) {
+        if (Batches[i].IsGreaterThan(offset, partNo)) {
+            return Max<ui32>();
+        } else {
+            return 0;
+        }
+    }
+
+    return i;
+}
+
+void THead::AddBatch(const TBatch& batch) {
+    auto& b = Batches.emplace_back(batch);
+    InternalPartsCount += b.GetInternalPartsCount();
+}
+
+void THead::ClearBatches() {
+    Batches.clear();
+    InternalPartsCount = 0;
+}
+
+const std::deque<TBatch>& THead::GetBatches() const {
+    return Batches;
+}
+
+const TBatch& THead::GetBatch(ui32 idx) const {
+    return Batches.at(idx);
+}
+
+const TBatch& THead::GetLastBatch() const {
+    Y_ABORT_UNLESS(!Batches.empty());
+    return Batches.back();
+}
+
+TBatch THead::ExtractFirstBatch() {
+    Y_ABORT_UNLESS(!Batches.empty());
+    auto batch = std::move(Batches.front());
+    InternalPartsCount -= batch.GetInternalPartsCount();
+    Batches.pop_front();
+    return batch;
+}
+
+THead::TBatchAccessor THead::MutableBatch(ui32 idx) {
+    Y_ABORT_UNLESS(idx < Batches.size());
+    return TBatchAccessor(Batches[idx]);
+}
+
+THead::TBatchAccessor THead::MutableLastBatch() {
+    Y_ABORT_UNLESS(!Batches.empty());
+    return TBatchAccessor(Batches.back());
+}
+
+void THead::AddBlob(const TClientBlob& blob) {
+    Y_ABORT_UNLESS(!Batches.empty());
+    auto& batch = Batches.back();
+    InternalPartsCount -= batch.GetInternalPartsCount();
+    batch.AddBlob(blob);
+    InternalPartsCount += batch.GetInternalPartsCount();
 }
 
 TPartitionedBlob::TRenameFormedBlobInfo::TRenameFormedBlobInfo(const TKey& oldKey, const TKey& newKey, ui32 size) :
@@ -832,7 +886,7 @@ auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optio
 
     GlueHead = GlueNewHead = false;
     if (!Blobs.empty()) {
-        TBatch batch{Offset, Blobs.front().GetPartNo(), std::move(Blobs)};
+        auto batch = TBatch::FromBlobs(Offset, std::move(Blobs));
         Blobs.clear();
         batch.Pack();
         Y_ABORT_UNLESS(batch.Packed);

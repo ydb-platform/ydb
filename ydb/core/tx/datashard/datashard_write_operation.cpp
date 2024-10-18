@@ -416,8 +416,9 @@ TValidatedWriteTx::TPtr TWriteOperation::BuildWriteTx(TDataShard* self)
 void TWriteOperation::ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase& provider) {
     ReleasedTxDataSize = provider.GetMemoryLimit() + provider.GetRequestedMemory();
 
-    if (!WriteTx || IsTxDataReleased())
+    if (!WriteTx || WriteTx->GetIsReleased()) {
         return;
+    }
 
     WriteTx->ReleaseTxData();
     // Immediate transactions have no body stored.

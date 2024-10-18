@@ -634,7 +634,7 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                 Y_ABORT_UNLESS(size == read.GetValue().size());
 
                 for (TBlobIterator it(key, read.GetValue()); it.IsValid(); it.Next()) {
-                    head.Batches.emplace_back(it.GetBatch());
+                    head.AddBatch(it.GetBatch());
                 }
                 head.PackedSize += size;
 

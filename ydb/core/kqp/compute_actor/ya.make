@@ -22,7 +22,8 @@ PEERDIR(
     ydb/core/kqp/runtime
     ydb/core/tx/datashard
     ydb/core/tx/scheme_cache
-    ydb/core/formats/arrow/protos
+    ydb/library/formats/arrow/protos
+    ydb/library/formats/arrow/common
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/providers/generic/actors
     ydb/library/yql/providers/s3/actors_factory

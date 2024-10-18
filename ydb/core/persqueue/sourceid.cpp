@@ -530,55 +530,60 @@ void THeartbeatEmitter::Process(const TString& sourceId, THeartbeat&& heartbeat)
 
 TMaybe<THeartbeat> THeartbeatEmitter::CanEmit() const {
     if (Storage.ExplicitSourceIds.size() != (Storage.SourceIdsWithHeartbeat.size() + NewSourceIdsWithHeartbeat.size())) {
+        // there is no quorum
         return Nothing();
     }
 
     if (SourceIdsByHeartbeat.empty()) {
+        // there is no new heartbeats, nothing to emit
         return Nothing();
     }
 
-    if (!NewSourceIdsWithHeartbeat.empty()) { // just got quorum
-        if (!Storage.SourceIdsByHeartbeat.empty() && Storage.SourceIdsByHeartbeat.begin()->first < SourceIdsByHeartbeat.begin()->first) {
+    if (Storage.SourceIdsByHeartbeat.empty()) {
+        // got quorum, memory state
+        return GetFromDiff(SourceIdsByHeartbeat.begin());
+    }
+
+    if (!NewSourceIdsWithHeartbeat.empty()) {
+        // got quorum, mixed state
+        if (Storage.SourceIdsByHeartbeat.begin()->first < SourceIdsByHeartbeat.begin()->first) {
             return GetFromStorage(Storage.SourceIdsByHeartbeat.begin());
         } else {
             return GetFromDiff(SourceIdsByHeartbeat.begin());
         }
-    } else if (SourceIdsByHeartbeat.begin()->first > Storage.SourceIdsByHeartbeat.begin()->first) {
-        auto storage = Storage.SourceIdsByHeartbeat.begin();
-        auto diff = SourceIdsByHeartbeat.begin();
+    }
 
-        TMaybe<TRowVersion> newVersion;
-        while (storage != Storage.SourceIdsByHeartbeat.end()) {
-            const auto& [version, sourceIds] = *storage;
+    TMaybe<TRowVersion> emitVersion;
 
-            auto rest = sourceIds.size();
-            for (const auto& sourceId : sourceIds) {
-                auto it = Heartbeats.find(sourceId);
-                if (it != Heartbeats.end() && it->second.Version > version && version <= diff->first) {
-                    --rest;
-                } else {
-                    break;
-                }
-            }
+    for (auto it = Storage.SourceIdsByHeartbeat.begin(), end = Storage.SourceIdsByHeartbeat.end(); it != end; ++it) {
+        const auto& [version, sourceIds] = *it;
+        auto rest = sourceIds.size();
 
-            if (!rest) {
-                if (++storage != Storage.SourceIdsByHeartbeat.end()) {
-                    newVersion = storage->first;
-                } else {
-                    newVersion = diff->first;
-                }
+        for (const auto& sourceId : sourceIds) {
+            if (Heartbeats.contains(sourceId) && Heartbeats.at(sourceId).Version > version) {
+                --rest;
             } else {
                 break;
             }
         }
 
-        if (newVersion) {
-            storage = Storage.SourceIdsByHeartbeat.find(*newVersion);
-            if (storage != Storage.SourceIdsByHeartbeat.end()) {
-                return GetFromStorage(storage);
-            } else {
-                return GetFromDiff(diff);
-            }
+        if (rest) {
+            break;
+        }
+
+        if (auto next = std::next(it); next != end && next->first < SourceIdsByHeartbeat.begin()->first) {
+            emitVersion = next->first;
+        } else {
+            emitVersion = SourceIdsByHeartbeat.begin()->first;
+            break;
+        }
+    }
+
+    if (emitVersion) {
+        if (auto it = Storage.SourceIdsByHeartbeat.find(*emitVersion); it != Storage.SourceIdsByHeartbeat.end()) {
+            return GetFromStorage(it);
+        } else {
+            return GetFromDiff(SourceIdsByHeartbeat.begin());
         }
     }
 

@@ -485,6 +485,10 @@ public:
         Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, dataColumns));
     }
 
+    void AddSecondaryIndex(const TIndexDescription& indexDescription) {
+        Indexes_.emplace_back(indexDescription);
+    }
+
     void AddChangefeed(const TString& name, EChangefeedMode mode, EChangefeedFormat format) {
         Changefeeds_.emplace_back(name, mode, format);
     }
@@ -755,6 +759,10 @@ void TTableDescription::AddSecondaryIndex(const TString& indexName, EIndexType t
 
 void TTableDescription::AddSecondaryIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns) {
     Impl_->AddSecondaryIndex(indexName, type, indexColumns, dataColumns);
+}
+
+void TTableDescription::AddSecondaryIndex(const TIndexDescription& indexDescription) {
+    Impl_->AddSecondaryIndex(indexDescription);
 }
 
 void TTableDescription::AddSyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns) {
@@ -1188,6 +1196,11 @@ TTableBuilder& TTableBuilder::SetPrimaryKeyColumns(const TVector<TString>& prima
 
 TTableBuilder& TTableBuilder::SetPrimaryKeyColumn(const TString& primaryKeyColumn) {
     TableDescription_.SetPrimaryKeyColumns(TVector<TString>{primaryKeyColumn});
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::AddSecondaryIndex(const TIndexDescription& indexDescription) {
+    TableDescription_.AddSecondaryIndex(indexDescription);
     return *this;
 }
 

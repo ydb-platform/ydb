@@ -50,7 +50,7 @@ namespace {
         {}
 
         NKqp::TEvKqp::TEvDataQueryStreamPart::TPtr Handle;
-        google::protobuf::RepeatedPtrField<NKikimrMiniKQL::TResult>::const_iterator ResultIterator;
+        google::protobuf::RepeatedPtrField<Ydb::ResultSet>::const_iterator ResultIterator;
     };
 
     enum EStreamRpcWakeupTag : ui64 {
@@ -220,7 +220,7 @@ private:
         auto result = response.mutable_result();
 
         try {
-            NKqp::ConvertKqpQueryResultToDbResult(kqpResult, result->mutable_result_set());
+            result->mutable_result_set()->CopyFrom(kqpResult);
         } catch (std::exception ex) {
             ReplyFinishStream(ex.what());
         }

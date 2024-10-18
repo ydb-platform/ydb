@@ -3,6 +3,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 namespace NKikimr::NKqp {
@@ -11,13 +12,9 @@ namespace {
 
 using TYqlConclusionStatus = TViewManager::TYqlConclusionStatus;
 using TInternalModificationContext = TViewManager::TInternalModificationContext;
+using TExternalModificationContext = TViewManager::TExternalModificationContext;
 
-TString GetByKeyOrDefault(const NYql::TCreateObjectSettings& container, const TString& key) {
-    const auto value = container.GetFeaturesExtractor().Extract(key);
-    return value ? *value : TString{};
-}
-
-TYqlConclusionStatus CheckFeatureFlag(TInternalModificationContext& context) {
+TYqlConclusionStatus CheckFeatureFlag(const TInternalModificationContext& context) {
     auto* const actorSystem = context.GetExternalData().GetActorSystem();
     if (!actorSystem) {
         ythrow yexception() << "This place needs an actor system. Please contact internal support";
@@ -46,21 +43,32 @@ std::pair<TString, TString> SplitPathByObjectId(const TString& objectId) {
     return pathPair;
 }
 
+void ValidateOptions(NYql::TFeaturesExtractor& features) {
+    // Current implementation does not persist the security_invoker option value.
+    if (features.Extract("security_invoker") != "true") {
+        ythrow TBadArgumentException() << "security_invoker option must be explicitly enabled";
+    }
+    if (!features.IsFinished()) {
+        ythrow TBadArgumentException() << "Unknown property: " << features.GetRemainedParamsString();
+    }
+}
+
 void FillCreateViewProposal(NKikimrSchemeOp::TModifyScheme& modifyScheme,
                             const NYql::TCreateObjectSettings& settings,
-                            const TString& database) {
+                            const TExternalModificationContext& context) {
 
-    const auto pathPair = SplitPathByDb(settings.GetObjectId(), database);
+    const auto pathPair = SplitPathByDb(settings.GetObjectId(), context.GetDatabase());
     modifyScheme.SetWorkingDir(pathPair.first);
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateView);
 
     auto& viewDesc = *modifyScheme.MutableCreateView();
     viewDesc.SetName(pathPair.second);
-    viewDesc.SetQueryText(GetByKeyOrDefault(settings, "query_text"));
 
-    if (!settings.GetFeaturesExtractor().IsFinished()) {
-        ythrow TBadArgumentException() << "Unknown property: " << settings.GetFeaturesExtractor().GetRemainedParamsString();
-    }
+    auto& features = settings.GetFeaturesExtractor();
+    viewDesc.SetQueryText(features.Extract("query_text").value_or(""));
+    ValidateOptions(features);
+
+    NSQLTranslation::Serialize(context.GetTranslationSettings(), *viewDesc.MutableCapturedContext());
 }
 
 void FillDropViewProposal(NKikimrSchemeOp::TModifyScheme& modifyScheme,
@@ -92,20 +100,20 @@ NThreading::TFuture<TYqlConclusionStatus> SendSchemeRequest(TEvTxUserProxy::TEvP
 }
 
 NThreading::TFuture<TYqlConclusionStatus> CreateView(const NYql::TCreateObjectSettings& settings,
-                                                     TInternalModificationContext& context) {
+                                                     const TInternalModificationContext& context) {
     auto proposal = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
     proposal->Record.SetDatabaseName(context.GetExternalData().GetDatabase());
     if (context.GetExternalData().GetUserToken()) {
         proposal->Record.SetUserToken(context.GetExternalData().GetUserToken()->GetSerializedToken());
     }
     auto& schemeTx = *proposal->Record.MutableTransaction()->MutableModifyScheme();
-    FillCreateViewProposal(schemeTx, settings, context.GetExternalData().GetDatabase());
+    FillCreateViewProposal(schemeTx, settings, context.GetExternalData());
 
     return SendSchemeRequest(proposal.Release(), context.GetExternalData().GetActorSystem(), true);
 }
 
 NThreading::TFuture<TYqlConclusionStatus> DropView(const NYql::TDropObjectSettings& settings,
-                                                   TInternalModificationContext& context) {
+                                                   const TInternalModificationContext& context) {
     auto proposal = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
     proposal->Record.SetDatabaseName(context.GetExternalData().GetDatabase());
     if (context.GetExternalData().GetUserToken()) {
@@ -119,8 +127,8 @@ NThreading::TFuture<TYqlConclusionStatus> DropView(const NYql::TDropObjectSettin
 
 void PrepareCreateView(NKqpProto::TKqpSchemeOperation& schemeOperation,
                        const NYql::TObjectSettingsImpl& settings,
-                       TInternalModificationContext& context) {
-    FillCreateViewProposal(*schemeOperation.MutableCreateView(), settings, context.GetExternalData().GetDatabase());
+                       const TInternalModificationContext& context) {
+    FillCreateViewProposal(*schemeOperation.MutableCreateView(), settings, context.GetExternalData());
 }
 
 void PrepareDropView(NKqpProto::TKqpSchemeOperation& schemeOperation,

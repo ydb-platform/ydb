@@ -11,7 +11,7 @@ TString TColumnsSet::DebugString() const {
         << ");";
 }
 
-NKikimr::NOlap::NReader::NPlain::TColumnsSet TColumnsSet::operator-(const TColumnsSet& external) const {
+TColumnsSet TColumnsSet::operator-(const TColumnsSet& external) const {
     if (external.IsEmpty() || IsEmpty()) {
         return *this;
     }
@@ -30,7 +30,7 @@ NKikimr::NOlap::NReader::NPlain::TColumnsSet TColumnsSet::operator-(const TColum
     return result;
 }
 
-NKikimr::NOlap::NReader::NPlain::TColumnsSet TColumnsSet::operator+(const TColumnsSet& external) const {
+TColumnsSet TColumnsSet::operator+(const TColumnsSet& external) const {
     if (external.IsEmpty()) {
         return *this;
     }

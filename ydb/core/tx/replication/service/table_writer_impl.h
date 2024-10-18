@@ -6,6 +6,7 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/change_exchange/change_sender_common_ops.h>
+#include <ydb/core/change_exchange/util.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -278,16 +279,6 @@ class TLocalTableWriter
         return Check(&TSchemeCacheHelpers::CheckEntryKind<T>, &TThis::LogCritAndLeave, entry, expected);
     }
 
-    static TVector<ui64> MakePartitionIds(const TVector<TKeyDesc::TPartitionInfo>& partitions) {
-        TVector<ui64> result(::Reserve(partitions.size()));
-
-        for (const auto& partition : partitions) {
-            result.push_back(partition.ShardId);
-        }
-
-        return result;
-    }
-
     void Registered(TActorSystem*, const TActorId&) override {
         this->ChangeServer = this->SelfId();
     }
@@ -346,6 +337,12 @@ class TLocalTableWriter
 
         if (!this->CheckEntryKind(entry, TNavigate::KindTable)) {
             return;
+        }
+
+        if (TableVersion && TableVersion == entry.Self->Info.GetVersion().GetGeneralVersion()) {
+            Y_ABORT_UNLESS(Initialized);
+            Resolving = false;
+            return this->CreateSenders();
         }
 
         auto schema = MakeIntrusive<TLightweightSchema>();
@@ -415,11 +412,9 @@ class TLocalTableWriter
             return LogWarnAndRetry("Empty partitions");
         }
 
-        const bool versionChanged = !TableVersion || TableVersion != entry.GeneralVersion;
         TableVersion = entry.GeneralVersion;
-
         KeyDesc = std::move(entry.KeyDescription);
-        this->CreateSenders(MakePartitionIds(KeyDesc->GetPartitions()), versionChanged);
+        this->CreateSenders(NChangeExchange::MakePartitionIds(KeyDesc->GetPartitions()));
 
         if (!Initialized) {
             this->Send(Worker, new TEvWorker::TEvHandshake());

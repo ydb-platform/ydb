@@ -140,13 +140,8 @@ bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
     if (!db.LoadLastGcBarrier(LastCollectedGenStep)) {
         return false;
     }
-    //https://github.com/ydb-platform/ydb/issues/7468
-    TGenStep storedGCBarrierPreparation;
-    if (!db.LoadGCBarrierPreparation(storedGCBarrierPreparation)) {
+    if (!db.LoadGCBarrierPreparation(GCBarrierPreparation)) {
         return false;
-    }
-    if (storedGCBarrierPreparation < LastCollectedGenStep) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("mem_genstep", GCBarrierPreparation)("last_genstep", LastCollectedGenStep)("db_genstep", storedGCBarrierPreparation);
     }
     AFL_VERIFY(!GCBarrierPreparation.Generation() || LastCollectedGenStep <= GCBarrierPreparation)("prepared", GCBarrierPreparation)("last", LastCollectedGenStep);
 
@@ -314,7 +309,7 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
         return nullptr;
     }
 
-    if (AppData()->TimeProvider->Now() - PreviousGCTime < NYDBTest::TControllers::GetColumnShardController()->GetOverridenGCPeriod(TDuration::Seconds(GC_INTERVAL_SECONDS))) {
+    if (AppData()->TimeProvider->Now() - PreviousGCTime < NYDBTest::TControllers::GetColumnShardController()->GetOverridenGCPeriod()) {
         ACFL_DEBUG("event", "TBlobManager::BuildGCTask skip")("current_gen", CurrentGen)("current_step", CurrentStep)("reason", "too_often");
         BlobsManagerCounters.GCCounters.SkipCollectionThrottling->Add(1);
         return nullptr;

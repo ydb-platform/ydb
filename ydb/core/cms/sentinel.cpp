@@ -168,6 +168,10 @@ void TPDiskStatusComputer::SetForcedStatus(EPDiskStatus status) {
     ForcedStatus = status;
 }
 
+bool TPDiskStatusComputer::HasForcedStatus() const {
+    return ForcedStatus.Defined();
+}
+
 void TPDiskStatusComputer::ResetForcedStatus() {
     ForcedStatus.Clear();
 }
@@ -949,15 +953,15 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                 continue;
             }
 
-            if (it->second.HasFaultyMarker()) {
-                info.SetForcedStatus(EPDiskStatus::FAULTY);
+            if (it->second.HasFaultyMarker() && Config.EvictVDisksStatus.Defined()) {
+                info.SetForcedStatus(*Config.EvictVDisksStatus);
             } else {
                 info.ResetForcedStatus();
             }
 
             all.AddPDisk(id);
             if (info.IsChanged()) {
-                if (info.IsNewStatusGood()) {
+                if (info.IsNewStatusGood() || info.HasForcedStatus()) {
                     alwaysAllowed.insert(id);
                 } else {
                     changed.AddPDisk(id);

@@ -39,38 +39,38 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     THead head;
     head.Offset = 100;
     TString value(100_KB, 'a');
-    head.Batches.push_back(TBatch(head.Offset, 0, TVector<TClientBlob>()));
+    head.AddBatch(TBatch(head.Offset, 0));
     for (ui32 i = 0; i < 50; ++i) {
-        head.Batches.back().AddBlob(TClientBlob(
+        head.AddBlob(TClientBlob(
             "sourceId" + TString(1,'a' + rand() % 26), i + 1, value, TMaybe<TPartData>(),
             TInstant::MilliSeconds(i + 1),  TInstant::MilliSeconds(i + 1), 1, "", ""
         ));
         if (!headCompacted)
-            all.push_back(head.Batches.back().Blobs.back());
+            all.push_back(head.GetLastBatch().Blobs.back());
     }
-    head.Batches.back().Pack();
-    UNIT_ASSERT(head.Batches.back().Header.GetFormat() == NKikimrPQ::TBatchHeader::ECompressed);
-    head.Batches.back().Unpack();
-    head.Batches.back().Pack();
+    head.MutableLastBatch().Pack();
+    UNIT_ASSERT(head.GetLastBatch().Header.GetFormat() == NKikimrPQ::TBatchHeader::ECompressed);
+    head.MutableLastBatch().Unpack();
+    head.MutableLastBatch().Pack();
     TString str;
-    head.Batches.back().SerializeTo(str);
+    head.GetLastBatch().SerializeTo(str);
     auto header = ExtractHeader(str.c_str(), str.size());
     TBatch batch(header, str.c_str() + header.ByteSize() + sizeof(ui16));
     batch.Unpack();
 
-    head.PackedSize = head.Batches.back().GetPackedSize();
-    UNIT_ASSERT(head.Batches.back().GetUnpackedSize() + GetMaxHeaderSize() >= head.Batches.back().GetPackedSize());
+    head.PackedSize = head.GetLastBatch().GetPackedSize();
+    UNIT_ASSERT(head.GetLastBatch().GetUnpackedSize() + GetMaxHeaderSize() >= head.GetLastBatch().GetPackedSize());
     THead newHead;
     newHead.Offset = head.GetNextOffset();
-    newHead.Batches.push_back(TBatch(newHead.Offset, 0, TVector<TClientBlob>()));
+    newHead.AddBatch(TBatch(newHead.Offset, 0));
     for (ui32 i = 0; i < 10; ++i) {
-        newHead.Batches.back().AddBlob(TClientBlob(
+        newHead.AddBlob(TClientBlob(
             "sourceId2", i + 1, value, TMaybe<TPartData>(),
             TInstant::MilliSeconds(i + 1000), TInstant::MilliSeconds(i + 1000), 1, "", ""
         ));
-        all.push_back(newHead.Batches.back().Blobs.back()); //newHead always glued
+        all.push_back(newHead.GetLastBatch().Blobs.back()); //newHead always glued
     }
-    newHead.PackedSize = newHead.Batches.back().GetUnpackedSize();
+    newHead.PackedSize = newHead.GetLastBatch().GetUnpackedSize();
     TString value2(partSize, 'b');
     ui32 maxBlobSize = 8 << 20;
     TPartitionedBlob blob(TPartitionId(0), newHead.GetNextOffset(), "sourceId3", 1, parts, parts * value2.size(), head, newHead, headCompacted, false, maxBlobSize);
@@ -125,16 +125,16 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     if (formed.empty()) { //nothing compacted - newHead must be here
 
         if (!headCompacted) {
-            for (auto& p : head.Batches) {
-                p.Unpack();
-                for (const auto& b : p.Blobs)
+            for (ui32 pp = 0; pp < head.GetBatches().size(); ++pp) {
+                head.MutableBatch(pp).Unpack();
+                for (const auto& b : head.GetBatch(pp).Blobs)
                     real.push_back(b);
             }
         }
 
-        for (auto& p : newHead.Batches) {
-            p.Unpack();
-            for (const auto& b : p.Blobs)
+        for (ui32 pp = 0; pp < newHead.GetBatches().size(); ++pp) {
+            newHead.MutableBatch(pp).Unpack();
+            for (const auto& b : newHead.GetBatch(pp).Blobs)
                 real.push_back(b);
         }
     }

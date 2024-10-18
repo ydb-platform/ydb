@@ -54,6 +54,10 @@ public:
         return TSnapshot(-1ll, -1ll);
     }
 
+    static TSnapshot MaxForPlanInstant(const TInstant planInstant) noexcept;
+
+    static TSnapshot MaxForPlanStep(const ui64 planStep) noexcept;
+
     constexpr bool operator==(const TSnapshot&) const noexcept = default;
 
     constexpr auto operator<=>(const TSnapshot&) const noexcept = default;

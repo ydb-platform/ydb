@@ -5,13 +5,13 @@ PEERDIR(
     ydb/core/formats/arrow/switch
     ydb/library/actors/core
     ydb/library/conclusion
+    ydb/library/formats/arrow
+    ydb/core/formats/arrow/splitter
 )
 
 SRCS(
     container.cpp
-    validation.cpp
     adapter.cpp
-    accessor.cpp
 )
 
 END()

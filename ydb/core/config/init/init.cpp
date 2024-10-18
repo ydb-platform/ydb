@@ -228,6 +228,7 @@ class TDefaultNodeBrokerClient
             const TGrpcSslSettings& grpcSettings,
             const TString addr,
             const NYdb::NDiscovery::TNodeRegistrationSettings& settings,
+            const TString& nodeRegistrationToken,
             const IEnv& env)
     {
         TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
@@ -242,7 +243,9 @@ class TDefaultNodeBrokerClient
                 config.UseClientCertificate(certificate.c_str(), privateKey.c_str());
             }
         }
-        config.SetAuthToken(BUILTIN_ACL_ROOT);
+        if (nodeRegistrationToken) {
+            config.SetAuthToken(nodeRegistrationToken);
+        }
         config.SetEndpoint(endpoint.Address);
         auto connection = NYdb::TDriver(config);
 
@@ -313,6 +316,7 @@ class TDefaultNodeBrokerClient
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const NYdb::NDiscovery::TNodeRegistrationSettings& settings,
+        const TString& nodeRegistrationToken,
         const IEnv& env,
         IInitLogger& logger)
     {
@@ -326,6 +330,7 @@ class TDefaultNodeBrokerClient
                     grpcSettings,
                     addr,
                     settings,
+                    nodeRegistrationToken,
                     env);
                 if (result.IsSuccess()) {
                     logger.Out() << "Success. Registered via discovery service as " << result.GetNodeId() << Endl;
@@ -387,6 +392,7 @@ public:
                 grpcSettings,
                 addrs,
                 newRegSettings,
+                regSettings.NodeRegistrationToken,
                 env,
                 logger);
 

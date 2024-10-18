@@ -15,17 +15,21 @@
 namespace NSQLTranslation {
 
     NYql::TAstParseResult SqlToYql(const TString& query, const TTranslationSettings& settings,
-        NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo)
+        NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo, TTranslationSettings* effectiveSettings)
     {
         NYql::TAstParseResult result;
         TTranslationSettings parsedSettings(settings);
-        google::protobuf::Arena arena;
-        if (!parsedSettings.Arena) {
-            parsedSettings.Arena = &arena;
-        }
 
         if (!ParseTranslationSettings(query, parsedSettings, result.Issues)) {
             return result;
+        }
+        if (effectiveSettings) {
+            *effectiveSettings = parsedSettings;
+        }
+
+        google::protobuf::Arena arena;
+        if (!parsedSettings.Arena) {
+            parsedSettings.Arena = &arena;
         }
 
         if (!parsedSettings.DeclaredNamedExprs.empty() && !parsedSettings.PgParser && parsedSettings.SyntaxVersion != 1) {

@@ -1,9 +1,9 @@
 #pragma once
+#include <google/protobuf/message.h>
+#include <library/cpp/yaml/as/tstring.h>
 #include <unordered_map>
 #include <unordered_set>
-#include <google/protobuf/message.h>
 #include <util/stream/output.h>
-#include <library/cpp/yaml/as/tstring.h>
 
 struct TEnumSettings {
     bool ConvertToLowerCase = false;

@@ -451,7 +451,12 @@ TStatus AnnotateReadTableRanges(const TExprNode::TPtr& node, TExprContext& ctx, 
 TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
-    if (!EnsureArgsCount(*node, TKqlLookupIndexBase::Match(node.Get()) || TKqlStreamLookupTable::Match(node.Get()) ? 4 : 3, ctx)) {
+    const bool isStreamLookup = TKqlStreamLookupTable::Match(node.Get()) || TKqlStreamLookupIndex::Match(node.Get());
+    if (isStreamLookup && !EnsureArgsCount(*node, TKqlStreamLookupIndex::Match(node.Get()) ? 5 : 4, ctx)) {
+        return TStatus::Error;
+    }
+    
+    if (!isStreamLookup && !EnsureArgsCount(*node, TKqlLookupIndexBase::Match(node.Get()) ? 4 : 3, ctx)) {
         return TStatus::Error;
     }
 
@@ -495,14 +500,16 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
     YQL_ENSURE(lookupType);
 
     const TStructExprType* structType = nullptr;
-    bool isStreamLookup = TKqlStreamLookupTable::Match(node.Get());
     if (isStreamLookup) {
-        auto lookupStrategy = node->Child(TKqlStreamLookupTable::idx_LookupStrategy);
+        auto lookupStrategy = node->Child(TKqlStreamLookupTable::Match(node.Get()) ?
+            TKqlStreamLookupTable::idx_LookupStrategy : TKqlStreamLookupIndex::idx_LookupStrategy);
         if (!EnsureAtom(*lookupStrategy, ctx)) {
             return TStatus::Error;
         }
 
-        if (lookupStrategy->Content() == TKqpStreamLookupJoinStrategyName) {
+        if (lookupStrategy->Content() == TKqpStreamLookupJoinStrategyName 
+            || lookupStrategy->Content() == TKqpStreamLookupSemiJoinStrategyName) {
+
             if (!EnsureTupleType(node->Pos(), *lookupType, ctx)) {
                 return TStatus::Error;
             }
@@ -1682,7 +1689,9 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
 
         node->SetTypeAnn(ctx.MakeType<TStreamExprType>(rowType));
 
-    } else if (lookupStrategy.Value() == TKqpStreamLookupJoinStrategyName) {
+    } else if (lookupStrategy.Value() == TKqpStreamLookupJoinStrategyName 
+        || lookupStrategy.Value() == TKqpStreamLookupSemiJoinStrategyName) {
+        
         if (!EnsureTupleType(node->Pos(), *inputItemType, ctx)) {
             return TStatus::Error;
         }

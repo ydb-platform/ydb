@@ -226,7 +226,7 @@ public:
     void HandleResponse(typename TResponse::TPtr &ev, const TActorContext &ctx) {
         auto& response = *ev->Get()->Record.GetRef().MutableResponse();
 
-        NKikimr::ConvertYdbResultToKqpResult(ResultSet,*response.AddResults());
+        response.AddYdbResults()->CopyFrom(ResultSet);
         for (auto& execStats : Executions) {
             response.MutableQueryStats()->AddExecutions()->Swap(&execStats);
         }
@@ -285,20 +285,18 @@ public:
     virtual void HandleResponse(typename TResponse::TPtr &ev, const TActorContext &ctx) {
         auto& record = ev->Get()->Record.GetRef();
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-            if (record.MutableResponse()->GetResults().size()) {
+            if (record.MutableResponse()->GetYdbResults().size()) {
                 // Send result sets to RPC actor TStreamExecuteYqlScriptRPC
                 auto evStreamPart = MakeHolder<NKqp::TEvKqp::TEvDataQueryStreamPart>();
                 ActorIdToProto(this->SelfId(), evStreamPart->Record.MutableGatewayActorId());
 
-                for (int i = 0; i < record.MutableResponse()->MutableResults()->size(); ++i) {
+                for (int i = 0; i < record.MutableResponse()->MutableYdbResults()->size(); ++i) {
                     // Workaround to avoid errors on Pull execution stage which would expect some results
-                    Ydb::ResultSet resultSet;
-                    NKikimr::ConvertYdbResultToKqpResult(resultSet, *evStreamPart->Record.AddResults());
+                    evStreamPart->Record.AddResults();
                 }
 
-                evStreamPart->Record.MutableResults()->Swap(record.MutableResponse()->MutableResults());
+                evStreamPart->Record.MutableResults()->Swap(record.MutableResponse()->MutableYdbResults());
                 this->Send(TargetActorId, evStreamPart.Release());
-
                 // Save response without data to send it later
                 ResponseHandle = ev.Release();
             } else {
@@ -404,7 +402,7 @@ public:
         auto& response = *ev->Get()->Record.GetRef().MutableResponse();
 
         Ydb::ResultSet resultSet;
-        NKikimr::ConvertYdbResultToKqpResult(resultSet, *response.AddResults());
+        response.AddYdbResults()->CopyFrom(resultSet);
         for (auto& execStats : Executions) {
             response.MutableQueryStats()->AddExecutions()->Swap(&execStats);
         }
@@ -510,7 +508,7 @@ public:
         auto& response = *ev->Get()->Record.GetRef().MutableResponse();
 
         for (auto& resultSet : ResultSets) {
-            ConvertYdbResultToKqpResult(std::move(resultSet.ResultSet), *response.AddResults());
+            response.AddYdbResults()->Swap(&resultSet.ResultSet);
         }
 
         TBase::HandleResponse(ev, ctx);
@@ -671,8 +669,8 @@ void KqpResponseToQueryResult(const NKikimrKqp::TEvQueryResponse& response, IKqp
         queryResult.AddIssue(NYql::IssueFromMessage(issue));
     }
 
-    for (auto& result : queryResponse.GetResults()) {
-        auto arenaResult = google::protobuf::Arena::CreateMessage<NKikimrMiniKQL::TResult>(
+    for (auto& result : queryResponse.GetYdbResults()) {
+        auto arenaResult = google::protobuf::Arena::CreateMessage<Ydb::ResultSet>(
             queryResult.ProtobufArenaPtr.get());
 
         arenaResult->CopyFrom(result);

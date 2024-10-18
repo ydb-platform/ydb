@@ -9,7 +9,7 @@ namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {
 void TPortionsBucket::RebuildOptimizedFeature(const TInstant currentInstant) const {
     for (auto&& [_, p] : Portions) {
         p.MutablePortionInfo().InitRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized, Portions.size() == 1 && currentInstant > p->RecordSnapshotMax().GetPlanInstant() +
-            NYDBTest::TControllers::GetColumnShardController()->GetLagForCompactionBeforeTierings(TDuration::Minutes(60))
+            NYDBTest::TControllers::GetColumnShardController()->GetLagForCompactionBeforeTierings()
         );
     }
 }

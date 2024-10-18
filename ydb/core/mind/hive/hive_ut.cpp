@@ -1111,7 +1111,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         createTablets();
 
-        ui32 nodeId = runtime.GetNodeId(2);
+        ui32 nodeIdx = 0;
+        ui32 nodeId = runtime.GetNodeId(nodeIdx);
         {
             Ctest << "1. Drain a node\n";
 
@@ -1119,11 +1120,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
             Ctest << "2. Kill it & wait for hive to delete it\n";
 
-            SendKillLocal(runtime, 0);
+            SendKillLocal(runtime, nodeIdx);
             {
                 TDispatchOptions options;
                 options.FinalEvents.emplace_back(NHive::TEvPrivate::EvDeleteNode);
-                runtime.DispatchEvents(options, TDuration::Seconds(6));
+                runtime.DispatchEvents(options);
+                runtime.AdvanceCurrentTime(TDuration::Seconds(2));
+                runtime.DispatchEvents(options);
             }
         }
 
@@ -1144,7 +1147,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         };
 
         Ctest << "3. Start the node again\n";
-        CreateLocal(runtime, 0);
+        CreateLocal(runtime, nodeIdx);
 
         {
             TDispatchOptions options;
@@ -1157,8 +1160,19 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         runtime.Register(CreateTabletKiller(hiveTablet));
         {
             TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvLocal::EvStatus, NUM_NODES);
-            runtime.DispatchEvents(options);
+            std::unordered_set<ui32> nodesConnected;
+            auto observer = runtime.AddObserver<TEvLocal::TEvStatus>([&](auto&& ev) { nodesConnected.insert(ev->Sender.NodeId()); });
+            auto waitFor = [&](const auto& condition, const TString& description) {
+                while (!condition()) {
+                    Ctest << "waiting for " << description << Endl;
+                    TDispatchOptions options;
+                    options.CustomFinalCondition = [&]() {
+                        return condition();
+                    };
+                    runtime.DispatchEvents(options);
+                }
+            };
+            waitFor([&](){return nodesConnected.size() == NUM_NODES; }, "nodes to connect");
         }
 
         Ctest << "5. Ensure node is not down (by creating tablets)\n";

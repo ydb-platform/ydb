@@ -103,7 +103,6 @@ namespace NProtoAST {
                     last.Content = token->getText();
                     last.Line = token->getLine();
                     last.LinePos = token->getCharPositionInLine();
-                    last.RawPos = token->getStartIndex();
                     onNextToken(std::move(last));
                     if (isEOF) {
                         break;

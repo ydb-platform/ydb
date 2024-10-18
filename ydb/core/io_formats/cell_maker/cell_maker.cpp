@@ -88,7 +88,7 @@ namespace {
         }
 
         result = NBinaryJson::SerializeToBinaryJson(unescaped);
-        return result.Defined();
+        return result.IsSuccess();
     }
 
     template <>
@@ -396,7 +396,7 @@ bool MakeCell(TCell& cell, const NJson::TJsonValue& value, const NScheme::TTypeI
             return TCellMaker<TString, TStringBuf>::MakeDirect(cell, NFormats::WriteJson(value), pool, err);
         case NScheme::NTypeIds::JsonDocument:
             if (const auto& result = NBinaryJson::SerializeToBinaryJson(NFormats::WriteJson(value))) {
-                return TCellMaker<TMaybe<NBinaryJson::TBinaryJson>, TStringBuf>::MakeDirect(cell, result, pool, err, &BinaryJsonToStringBuf);
+                return TCellMaker<TMaybe<NBinaryJson::TBinaryJson>, TStringBuf>::MakeDirect(cell, result.GetResult(), pool, err, &BinaryJsonToStringBuf);
             } else {
                 return false;
             }

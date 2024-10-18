@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import logging
-import csv
 import hashlib
 import pytest
 import json
@@ -24,7 +23,7 @@ def ydb_bin():
 
 
 class TpcGeneratorBase(object):
-    tables: dict[str, tuple[list[str], dict[int, int]]]
+    tables: dict[str, dict[int, int]]
     workload: str
 
     @classmethod
@@ -50,29 +49,27 @@ class TpcGeneratorBase(object):
         return yatest_common.canonical_file(tmp_path, local=True, universal_lines=True)
 
     @staticmethod
-    def calc_hashes(files: str | list[str], keys: list[str]):
+    def calc_hashes(files: str | list[str]):
         if not isinstance(files, list):
             files = [files]
-        rows: dict[str, str] = {}
+        rows: set[str] = set()
         for file_path in files:
             if not os.path.exists(file_path):
                 continue
+            first_line = True
             with open(file_path, 'r') as f:
-                reader = csv.DictReader(f, delimiter='|', quotechar=None, quoting=csv.QUOTE_NONE)
-                fields = sorted([name for name in reader.fieldnames])
-                for row in reader:
-
-                    def _str(field_names):
-                        return '|'.join([row[field] for field in field_names])
-
-                    rows[_str(keys)] = _str(fields)
+                for line in f:
+                    if first_line:
+                        first_line = False
+                    else:
+                        rows.add(line)
         m = hashlib.md5()
-        for _, row in sorted(rows.items()):
+        for row in sorted(rows):
             m.update(row.encode())
         return len(rows), m.hexdigest()
 
     @classmethod
-    def scale_hash(cls, paths: str | list[str], scale=1):
+    def scale_hash(cls, paths: str | list[str]):
         if not isinstance(paths, list):
             paths = [paths]
         tables = list(sorted(cls.tables.items()))
@@ -80,8 +77,8 @@ class TpcGeneratorBase(object):
         threads = []
 
         def _calc_hash(result: list[str], index: int):
-            fname, table = tables[index]
-            count, md5 = cls.calc_hashes([os.path.join(path, fname) for path in paths], table[0])
+            fname, _ = tables[index]
+            count, md5 = cls.calc_hashes([os.path.join(path, fname) for path in paths])
             result[index * 2] = f'{fname} count: {count}'
             result[index * 2 + 1] = f'{fname} md5: {md5}'
 
@@ -134,7 +131,7 @@ class TpcGeneratorBase(object):
         with open(state_path, 'w') as f:
             json.dump({
                 'sources': {
-                    k: {'position': int(v[1][1] * random.uniform(0.25, 0.75))}
+                    k: {'position': int(v[1] * random.uniform(0.25, 0.75))}
                     for k, v in self.tables.items()
                 }
             }, f)
@@ -152,42 +149,42 @@ class TpcGeneratorBase(object):
 class TestTpchGenerator(TpcGeneratorBase):
     workload = 'tpch'
     tables = {
-        'customer': (['c_custkey'], {1: 150000}),
-        'lineitem': (['l_linenumber', 'l_orderkey'], {1: 6001215}),
-        'nation': (['n_nationkey'], {1: 25}),
-        'orders': (['o_orderkey'], {1: 1500000}),
-        'part': (['p_partkey'], {1: 200000}),
-        'partsupp': (['ps_partkey', 'ps_suppkey'], {1: 800000}),
-        'region': (['r_regionkey'], {1: 5}),
-        'supplier': (['s_suppkey'], {1: 10000})
+        'customer': {1: 150000},
+        'lineitem': {1: 6001215},
+        'nation': {1: 25},
+        'orders': {1: 1500000},
+        'part': {1: 200000},
+        'partsupp': {1: 800000},
+        'region': {1: 5},
+        'supplier': {1: 10000}
     }
 
 
 class TestTpcdsGenerator(TpcGeneratorBase):
     workload = 'tpcds'
     tables = {
-        'call_center': (['cc_call_center_sk'], {1: 6}),
-        'catalog_page': (['cp_catalog_page_sk'], {1: 11718}),
-        'catalog_returns': (['cr_item_sk', 'cr_order_number'], {1: 144067}),
-        'catalog_sales': (['cs_item_sk', 'cs_order_number'], {1: 1441548}),
-        'customer': (['c_customer_sk'], {1: 100000}),
-        'customer_address': (['ca_address_sk'], {1: 50000}),
-        'customer_demographics': (['cd_demo_sk'], {1: 1920800}),
-        'date_dim': (['d_date_sk'], {1: 73049}),
-        'household_demographics': (['hd_demo_sk'], {1: 7200}),
-        'income_band': (['ib_income_band_sk'], {1: 20}),
-        'inventory': (['inv_date_sk', 'inv_item_sk', 'inv_warehouse_sk'], {1: 11745000}),
-        'item': (['i_item_sk'], {1: 18000}),
-        'promotion': (['p_promo_sk'], {1: 300}),
-        'reason': (['r_reason_sk'], {1: 35}),
-        'ship_mode': (['sm_ship_mode_sk'], {1: 20}),
-        'store': (['s_store_sk'], {1: 12}),
-        'store_returns': (['sr_item_sk', 'sr_ticket_number'], {1: 287514}),
-        'store_sales': (['ss_item_sk', 'ss_ticket_number'], {1: 2880404}),
-        'time_dim': (['t_time_sk'], {1: 86400}),
-        'warehouse': (['w_warehouse_sk'], {1: 5}),
-        'web_page': (['wp_web_page_sk'], {1: 60}),
-        'web_returns': (['wr_item_sk', 'wr_order_number'], {1: 71763}),
-        'web_sales': (['ws_item_sk', 'ws_order_number'], {1: 719384}),
-        'web_site': (['web_site_sk'], {1: 30}),
+        'call_center': {1: 6},
+        'catalog_page': {1: 11718},
+        'catalog_returns': {1: 144067},
+        'catalog_sales': {1: 1441548},
+        'customer': {1: 100000},
+        'customer_address': {1: 50000},
+        'customer_demographics': {1: 1920800},
+        'date_dim': {1: 73049},
+        'household_demographics': {1: 7200},
+        'income_band': {1: 20},
+        'inventory': {1: 11745000},
+        'item': {1: 18000},
+        'promotion': {1: 300},
+        'reason': {1: 35},
+        'ship_mode': {1: 20},
+        'store':  {1: 12},
+        'store_returns': {1: 287514},
+        'store_sales': {1: 2880404},
+        'time_dim': {1: 86400},
+        'warehouse': {1: 5},
+        'web_page': {1: 60},
+        'web_returns': {1: 71763},
+        'web_sales': {1: 719384},
+        'web_site':  {1: 30}
     }

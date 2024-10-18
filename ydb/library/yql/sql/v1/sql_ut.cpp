@@ -7051,11 +7051,10 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
     Y_UNIT_TEST(CreateBackupCollectionWithDatabase) {
         NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
-                CREATE BACKUP COLLECTION TestCollection WITH (
+                CREATE BACKUP COLLECTION TestCollection DATABASE WITH (
                     STORAGE="local",
                     TAG="test" -- for testing purposes, not a real thing
-                )
-                    DATABASE;
+                );
             )sql");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
 
@@ -7077,12 +7076,13 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
     Y_UNIT_TEST(CreateBackupCollectionWithTables) {
         NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
-                CREATE BACKUP COLLECTION TestCollection WITH (
+                CREATE BACKUP COLLECTION TestCollection (
+                    TABLE someTable,
+                    TABLE `prefix/anotherTable`
+                ) WITH (
                     STORAGE="local",
                     TAG="test" -- for testing purposes, not a real thing
-                )
-                    TABLE someTable,
-                    TABLE `prefix/anotherTable`;
+                );
             )sql");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
 
@@ -7110,18 +7110,13 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
 
         ExpectFailWithError(R"sql(
                 USE plato;
-                CREATE BACKUP COLLECTION TestCollection TABLE;
-            )sql" , "<main>:3:56: Error: Unexpected token 'TABLE' : syntax error...\n\n");
+                CREATE BACKUP COLLECTION TABLE TestCollection;
+            )sql" , "<main>:3:47: Error: Unexpected token 'TestCollection' : syntax error...\n\n");
 
         ExpectFailWithError(R"sql(
                 USE plato;
-                CREATE BACKUP COLLECTION TestCollection DATABASE `test`;
-            )sql" , "<main>:3:56: Error: Unexpected token 'DATABASE' : syntax error...\n\n");
-
-        ExpectFailWithError(R"sql(
-                USE plato;
-                CREATE BACKUP COLLECTION TestCollection DATABASE, TABLE `test`;
-            )sql" , "<main>:3:56: Error: Unexpected token 'DATABASE' : syntax error...\n\n");
+                CREATE BACKUP COLLECTION DATABASE `test` TestCollection;
+            )sql" , "<main>:3:50: Error: Unexpected token '`test`' : syntax error...\n\n");
 
         ExpectFailWithError(R"sql(
                 USE plato;

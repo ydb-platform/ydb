@@ -15,5 +15,5 @@ ALTER TABLE table_name action1, action2, ..., actionN;
 * Работа со [вторичным индексом](secondary_index.md).
 * Работа с [группами колонок](family.md) строковой таблицы.
 {% if backend_name == "YDB" and oss == true %}
-* Изменение [дополнительных параметров таблиц](set.md).
+* Изменение123 [дополнительных параметров таблиц](set.md).
 {% endif %}

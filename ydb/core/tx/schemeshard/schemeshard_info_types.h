@@ -2997,7 +2997,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             Sample = 0,
             // Recompute,
             Reshuffle,
-            // Local,
+            Local,
         };
         ui32 Level = 0;
 

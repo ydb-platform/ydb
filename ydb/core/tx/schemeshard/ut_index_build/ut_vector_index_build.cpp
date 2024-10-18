@@ -96,8 +96,8 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             UNIT_ASSERT_VALUES_EQUAL(err, "");
             UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
         };
-        for (ui32 key = 0; key < 200; ++key) {
-            fnWriteRow(TTestTxConfig::FakeHiveTablets + 6, key, std::to_string(key), "Table");
+        for (ui32 key = 0; key < 128; ++key) {
+            fnWriteRow(TTestTxConfig::FakeHiveTablets + 6, key, std::to_string(key) + "\3", "Table");
         }
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);

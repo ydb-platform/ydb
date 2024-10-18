@@ -2,6 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/stream/fixed_string.h>
+
 using namespace NYdb;
 using namespace NYdb::NConsoleClient;
 

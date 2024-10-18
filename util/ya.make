@@ -197,6 +197,7 @@ JOIN_SRCS(
     stream/debug.cpp
     stream/direct_io.cpp
     stream/file.cpp
+    stream/fixed_string.cpp
     stream/format.cpp
     stream/fwd.cpp
     stream/hex.cpp
@@ -204,6 +205,7 @@ JOIN_SRCS(
     stream/input.cpp
     stream/labeled.cpp
     stream/length.cpp
+    stream/line_split.cpp
     stream/mem.cpp
     stream/multi.cpp
     stream/null.cpp

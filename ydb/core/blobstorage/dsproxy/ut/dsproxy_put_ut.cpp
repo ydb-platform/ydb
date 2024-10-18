@@ -1,15 +1,27 @@
 #include "defs.h"
-#include "dsproxy_vdisk_mock_ut.h"
 #include "dsproxy_env_mock_ut.h"
+#include "dsproxy_vdisk_mock_ut.h"
+#include "dsproxy_test_state_ut.h"
 
-#include <ydb/core/blobstorage/dsproxy/dsproxy_put_impl.h>
+#include <ydb/core/blobstorage/dsproxy/dsproxy.h>
+#include <ydb/core/blobstorage/dsproxy/dsproxy_nodemon.h>
+
+#include <ydb/core/blobstorage/base/utility.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/blobstorage/vdisk/query/query_spacetracker.h>
 
 #include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/testlib/basics/appdata.h>
+
+#include <library/cpp/testing/unittest/registar.h>
+
+#include <ydb/core/blobstorage/dsproxy/dsproxy_put_impl.h>
+
 #include <ydb/core/testlib/actor_helpers.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-#include <library/cpp/testing/unittest/registar.h>
+
 
 namespace NKikimr {
 namespace NDSProxyPutTest {
@@ -384,6 +396,113 @@ Y_UNIT_TEST(TestMirror3dcWith3x3MinLatencyMod) {
         auto it = vDiskIds.find(vDiskId.ConvertToTuple());
         UNIT_ASSERT(it != vDiskIds.end());
     }
+}
+
+void TestPutResultWithVDiskResults(TBlobStorageGroupType type, int errorsCount, NKikimrProto::EReplyStatus resultStatus) {
+    TTestBasicRuntime runtime(1, false);
+    runtime.SetLogPriority(NKikimrServices::BS_PROXY_PUT, NLog::PRI_DEBUG);
+    SetupRuntime(runtime);
+    TDSProxyEnv env;
+    env.Configure(runtime, type, 0, 0);
+    TTestState testState(runtime, type, env.Info);
+
+    TLogoBlobID blobId(72075186224047637, 1, 863, 1, 786, 24576);
+    TStringBuilder dataBuilder;
+    for (size_t i = 0; i < blobId.BlobSize(); ++i) {
+        dataBuilder << 'a';
+    }
+    TBlobTestSet::TBlob blob(blobId, dataBuilder);
+
+
+    TEvBlobStorage::TEvPut::ETactic tactic = TEvBlobStorage::TEvPut::TacticDefault;
+    NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog;
+
+
+    TEvBlobStorage::TEvPut::TPtr ev = testState.CreatePutRequest(blob, tactic, handleClass);
+    std::unique_ptr<IActor> putActor = env.CreatePutRequestActor(ev);
+
+    TGroupMock &groupMock = testState.GetGroupMock();
+    for (auto i = 0; i < errorsCount; ++i) {
+        groupMock.SetError(i, NKikimrProto::ERROR);
+    }
+
+    runtime.Register(putActor.release());
+
+    for (ui64 idx = 0; idx < 8; ++idx) {
+        TEvBlobStorage::TEvVPut::TPtr ev = testState.GrabEventPtr<TEvBlobStorage::TEvVPut>();
+        TVDiskID vDiskId = VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskID());
+        NKikimrProto::EReplyStatus status = groupMock.OnVPut(*ev->Get());
+        TEvBlobStorage::TEvVPutResult::TPtr result = testState.CreateEventResultPtr(ev, status, vDiskId);
+        runtime.Send(result.Release());
+    }
+
+    TMap<TLogoBlobID, NKikimrProto::EReplyStatus> expectedStatus {
+        {blobId, resultStatus}
+    };
+    testState.ReceivePutResults(1, expectedStatus);
+}
+
+Y_UNIT_TEST(TestBlock42PutStatusOkWith2ErrorsFromVdisk) {
+    TestPutResultWithVDiskResults({TErasureType::Erasure4Plus2Block}, 2, NKikimrProto::OK);
+}
+
+Y_UNIT_TEST(TestBlock42PutStatusErrorWith3ErrorsFromVdisk) {
+    TestPutResultWithVDiskResults({TErasureType::Erasure4Plus2Block}, 3, NKikimrProto::ERROR);
+}
+
+Y_UNIT_TEST(TestMirror3dcPutStatusOkWith2ErrorsFromVdisk) {
+    //TestPutResultWithVDiskResults({TErasureType::ErasureMirror3dc}, 2, NKikimrProto::OK);
+
+    TDSProxyEnv env;
+    TTestBasicRuntime runtime(1, false);
+    runtime.SetLogPriority(NKikimrServices::BS_PROXY_PUT, NLog::PRI_DEBUG);
+    SetupRuntime(runtime);
+    TBlobStorageGroupType type = {TErasureType::ErasureMirror3dc};
+    env.Configure(runtime, type, 0, 0);
+    TTestState testState(runtime, type, env.Info);
+
+    TLogoBlobID blobId(72075186224047637, 1, 863, 1, 786, 24576);
+    TStringBuilder dataBuilder;
+    for (size_t i = 0; i < blobId.BlobSize(); ++i) {
+        dataBuilder << 'a';
+    }
+    TBlobTestSet::TBlob blob(blobId, dataBuilder);
+
+
+    TEvBlobStorage::TEvPut::ETactic tactic = TEvBlobStorage::TEvPut::TacticDefault;
+    NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog;
+
+
+    TEvBlobStorage::TEvPut::TPtr ev = testState.CreatePutRequest(blob, tactic, handleClass);
+    std::unique_ptr<IActor> putActor = env.CreatePutRequestActor(ev);
+
+    TGroupMock &groupMock = testState.GetGroupMock();
+    //for (auto i = 0; i < errorsCount; ++i) {
+    //    groupMock.SetError(i, NKikimrProto::ERROR);
+    //}
+    //groupMock.SetError(1, NKikimrProto::ERROR);
+    //groupMock.SetError(5, NKikimrProto::ERROR);
+
+    runtime.Register(putActor.release());
+
+    for (ui64 idx = 0; idx < 4; ++idx) {
+        std::cerr << "AAA " << idx << "\n";
+        TEvBlobStorage::TEvVPut::TPtr ev = testState.GrabEventPtr<TEvBlobStorage::TEvVPut>();
+        // TLogoBlobID part = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetBlobID());
+        TVDiskID vDiskId = VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskID());
+        NKikimrProto::EReplyStatus status = groupMock.OnVPut(*ev->Get());
+        if (status == NKikimrProto::RACE) {
+            std::cerr << "BBBBBBB";
+        }
+        TEvBlobStorage::TEvVPutResult::TPtr result = testState.CreateEventResultPtr(ev, status, vDiskId);
+        runtime.Send(result.Release());
+    }
+
+    TMap<TLogoBlobID, NKikimrProto::EReplyStatus> expectedStatus {
+        {blobId, NKikimrProto::OK}
+    };
+    testState.ReceivePutResults(1, expectedStatus);
+    UNIT_ASSERT(false);
 }
 
 } // Y_UNIT_TEST_SUITE TDSProxyPutTest

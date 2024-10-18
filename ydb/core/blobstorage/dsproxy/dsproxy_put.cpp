@@ -446,8 +446,12 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
     }
 
     bool ReplyAndDieWithLastResponse(TPutImpl::TPutResultVec& putResults) {
+        bool hasPutResultsWithErrors = false;
         for (auto& [blobIdx, result] : putResults) {
             Y_ABORT_UNLESS(ResponsesSent != PutImpl.Blobs.size());
+            if (result->Status == NKikimrProto::ERROR || result->Status == NKikimrProto::NODATA) {
+                hasPutResultsWithErrors = true;
+            }
             SendReply(std::move(result), blobIdx);
         }
 
@@ -465,6 +469,17 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         }
 
         if (ResponsesSent == PutImpl.Blobs.size()) {
+            if (hasPutResultsWithErrors) {
+                bool allowToReport = AllowToReport(HandleClass);
+                if (allowToReport) {
+                    STLOG(PRI_NOTICE, BS_PROXY_PUT, BPP72, "Some TEvPutResult are not success",     \
+                            (GroupId, Info->GroupID),                                               \
+                            (HandleClass, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)),   \
+                            (Tactic, TEvBlobStorage::TEvPut::TacticName(Tactic)),                   \
+                            (RestartCounter, RestartCounter),                                       \
+                            (History, PutImpl.PrintHistory()));
+                }
+            }
             PassAway();
             Done = true;
             return true;

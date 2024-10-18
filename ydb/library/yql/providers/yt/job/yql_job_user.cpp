@@ -79,10 +79,16 @@ namespace {
 
 
 std::pair<NYT::TFormat, NYT::TFormat> TYqlUserJob::GetIOFormats(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry) const {
-    if (!UseSkiff) {
-        return std::make_pair(YamrInput ? MakeTableYaMRFormat(InputSpec) : NYT::TFormat::YsonBinary(), NYT::TFormat::YsonBinary());
-    }
     TScopedAlloc alloc(__LOCATION__);
+    TMkqlIOSpecs specs;
+    if (UseBlockInput) {
+        specs.SetUseBlockInput();
+    }
+
+    if (!UseSkiff) {
+        return std::make_pair(YamrInput ? MakeTableYaMRFormat(InputSpec) : specs.MakeInputFormat(AuxColumns), specs.MakeOutputFormat());
+    }
+    
     TTypeEnvironment env(alloc);
     NCommon::TCodecContext codecCtx(env, *functionRegistry);
 
@@ -94,7 +100,6 @@ std::pair<NYT::TFormat, NYT::TFormat> TYqlUserJob::GetIOFormats(const NKikimr::N
         YQL_ENSURE(itemType, << err.Str());
     }
 
-    TMkqlIOSpecs specs;
     specs.SetUseSkiff(OptLLVM, SkiffSysFields);
     specs.Init(codecCtx, InputSpec, InputGroups, TableNames, itemType, AuxColumns, OutSpec);
 
@@ -105,6 +110,7 @@ void TYqlUserJob::Save(IOutputStream& s) const {
     TYqlJobBase::Save(s);
     ::SaveMany(&s,
         UseSkiff,
+        UseBlockInput,
         SkiffSysFields,
         YamrInput,
         LambdaCode,
@@ -121,6 +127,7 @@ void TYqlUserJob::Load(IInputStream& s) {
     TYqlJobBase::Load(s);
     ::LoadMany(&s,
         UseSkiff,
+        UseBlockInput,
         SkiffSysFields,
         YamrInput,
         LambdaCode,
@@ -155,6 +162,9 @@ void TYqlUserJob::DoImpl(const TFile& inHandle, const TVector<TFile>& outHandles
     MkqlIOSpecs.Reset(new TMkqlIOSpecs());
     if (UseSkiff) {
         MkqlIOSpecs->SetUseSkiff(OptLLVM, SkiffSysFields);
+    }
+    if (UseBlockInput) {
+        MkqlIOSpecs->SetUseBlockInput();
     }
     MkqlIOSpecs->Init(*CodecCtx, InputSpec, InputGroups, TableNames, itemType, AuxColumns, OutSpec, JobStats.Get());
     if (!RowOffsets.empty()) {

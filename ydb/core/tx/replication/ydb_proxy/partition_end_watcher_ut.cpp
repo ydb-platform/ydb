@@ -71,7 +71,8 @@ Y_UNIT_TEST_SUITE(PartitionEndWatcher) {
     TReadSessionEvent::TDataReceivedEvent MakeTDataReceivedEvent() {
         TPartitionSession::TPtr partitionSession = MakeIntrusive<MockPartitionSession>();
         TReadSessionEvent::TDataReceivedEvent::TMessage msg("data", nullptr,
-            TReadSessionEvent::TDataReceivedEvent::TMessageInformation(31, "producer-id", 29, TInstant::Now(), TInstant::Now(), nullptr, nullptr, 99, "message-group-id" ),
+            TReadSessionEvent::TDataReceivedEvent::TMessageInformation(31, "producer-id", 29, TInstant::Now(),
+                TInstant::Now(), nullptr, nullptr, 99, "message-group-id" ),
             partitionSession);
         return TReadSessionEvent::TDataReceivedEvent({ msg }, {}, partitionSession);
     }

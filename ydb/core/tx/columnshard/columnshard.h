@@ -81,6 +81,8 @@ struct TEvColumnShard {
         EvDataSharingStartToSource,
         EvDataSharingSendDataFromSource,
         EvDataSharingAckDataToSource,
+        EvDataSharingTransferSchemeHistory,
+        EvDataSharingAckTransferSchemeHistory,
         EvDataSharingFinishedFromSource,
         EvDataSharingAckFinishToSource,
         EvDataSharingCheckStatusFromInitiator,

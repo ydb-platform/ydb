@@ -1102,6 +1102,33 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModificatio
     }
 }
 
+void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvTransferSchemeHistory::TPtr& ev, const TActorContext& /*ctx*/) {
+    auto currentSession = SharingSessionsManager->GetDestinationSession(ev->Get()->Record.GetSessionId());
+    if (!currentSession) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "ignore_inactual_sharing_session")("sesion_id", ev->Get()->Record.GetSessionId());
+        return;
+    }
+
+    currentSession->TransferSchema(this, {}, (NOlap::TTabletId)ev->Get()->Record.GetSourceTabletId());
+
+    // if (!txConclusion) {
+    //     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_initiator_ack_finished_data");
+    // } else {
+    //     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "on_initiator_ack_finished_data");
+    //     Execute(txConclusion->release(), ctx);
+    // }
+}
+
+void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvAckTransferSchemeHistory::TPtr& ev, const TActorContext& /*ctx*/) {
+    auto currentSession = SharingSessionsManager->GetSourceSession(ev->Get()->Record.GetSessionId());
+    if (!currentSession) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "ignore_inactual_sharing_session")("sesion_id", ev->Get()->Record.GetSessionId());
+        return;
+    }
+
+    currentSession->AckTransferSchemeHistory(this);
+}
+
 void TColumnShard::Handle(TAutoPtr<TEventHandle<NOlap::NBackground::TEvExecuteGeneralLocalTransaction>>& ev, const TActorContext& ctx) {
     Execute(ev->Get()->ExtractTransaction().release(), ctx);
 }

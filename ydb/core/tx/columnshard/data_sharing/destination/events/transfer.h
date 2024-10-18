@@ -104,4 +104,27 @@ struct TEvFinishedFromSource: public NActors::TEventPB<TEvFinishedFromSource, NK
     }
 };
 
+struct TEvTransferSchemeHistory: public NActors::TEventPB<TEvTransferSchemeHistory, NKikimrColumnShardDataSharingProto::TEvTransferSchemeHistory,
+                                     TEvColumnShard::EvDataSharingTransferSchemeHistory> {
+    TEvTransferSchemeHistory() = default;
+
+    TEvTransferSchemeHistory(const TString& sessionId, const std::vector<NKikimrSchemeOp::TColumnTableSchema>& schemeHistory, TTabletId sourceTabletId) {
+        Record.SetSessionId(sessionId);
+        Record.SetSourceTabletId((ui64)sourceTabletId);
+
+        for (auto&& i : schemeHistory) {
+            *Record.AddSchemeHistory() = i;
+        }
+    }
+};
+
+struct TEvAckTransferSchemeHistory
+    : public NActors::TEventPB<TEvAckTransferSchemeHistory, NKikimrColumnShardDataSharingProto::TEvAckTransferSchemeHistory,
+          TEvColumnShard::EvDataSharingAckTransferSchemeHistory> {
+    TEvAckTransferSchemeHistory() = default;
+
+    TEvAckTransferSchemeHistory(const TString& sessionId) {
+        Record.SetSessionId(sessionId);
+    }
+};
 }

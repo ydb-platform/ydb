@@ -50,6 +50,8 @@ Any command can be run from the command line with the `--help` option to get hel
 | scheme permissions remove | Removing a permission |
 | scheme permissions revoke | Revoking a permission |
 | scheme permissions set | Setting permissions |
+| scheme permissions clear-inheritance | Disabling permissions inheritance |
+| scheme permissions set-inheritance | Enabling permissions inheritance |
 | [scheme rmdir](../commands/dir.md#rmdir) | Deleting a directory |
 | [scripting yql](../scripting-yql.md) | Executing a YQL script |
 | table attribute add | Adding a table attribute |

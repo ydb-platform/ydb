@@ -253,6 +253,9 @@ public:
         if (settings.ClearAcl_) {
             request.set_clear_permissions(true);
         }
+        if (settings.SetInterruptInheritance_) {
+            request.set_interrupt_inheritance(settings.InterruptInheritanceValue_);
+        }
 
         for (const auto& action : settings.Actions_) {
             auto protoAction = request.add_actions();

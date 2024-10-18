@@ -73,27 +73,30 @@ private:
     ui64 MemoryUsage = 0;
     THashSet<ui64> UsedPortionIds;
 
+    TSimplePortionsGroupInfo CurrentLevelPortionsInfo;
+    TSimplePortionsGroupInfo TargetLevelPortionsInfo;
+
     std::set<TChainAddress> NextLevelChainIds;
     THashSet<ui64> NextLevelPortionIds;
     std::vector<TPortionsChain> Chains;
-    TSimplePortionsGroupInfo NextLevelPortionsInfo;
 
 public:
     ui64 GetRepackPortionsVolume() const {
-        return NextLevelPortionsInfo.GetRawBytes();
+        return TargetLevelPortionsInfo.GetRawBytes();
     }
 
     TString DebugString() const {
         TStringBuilder sb;
-        sb << "ids:[";
+        sb << "target_level_chains:[";
         for (auto&& i : NextLevelChainIds) {
             sb << i.DebugString() << ",";
         }
-        sb << "];portion_ids:[";
+        sb << "];target_level_portions:[";
         for (auto&& i : NextLevelPortionIds) {
             sb << i << ",";
         }
-        sb << "]";
+        sb << "];current_level_portions_info:{" << CurrentLevelPortionsInfo.DebugString() << "};target_level_portions_info:{"
+           << TargetLevelPortionsInfo.DebugString() << "}";
         return sb;
 
     }
@@ -118,6 +121,7 @@ public:
     void AddCurrentLevelPortion(const std::shared_ptr<TPortionInfo>& portion) {
         AFL_VERIFY(UsedPortionIds.emplace(portion->GetPortionId()).second);
         Portions.emplace_back(portion);
+        CurrentLevelPortionsInfo.AddPortion(portion);
         MemoryUsage = Predictor->AddPortion(*portion);
     }
 
@@ -130,7 +134,7 @@ public:
                 AFL_VERIFY(NextLevelPortionIds.contains(i->GetPortionId()));
                 continue;
             }
-            NextLevelPortionsInfo.AddPortion(i);
+            TargetLevelPortionsInfo.AddPortion(i);
             Portions.emplace_back(i);
             MemoryUsage = Predictor->AddPortion(*i);
             AFL_VERIFY(NextLevelPortionIds.emplace(i->GetPortionId()).second);

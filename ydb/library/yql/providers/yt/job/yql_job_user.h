@@ -43,6 +43,10 @@ public:
         SkiffSysFields = sysFields;
     }
 
+    void SetUseBlockInput(bool useBlockInput) {
+        UseBlockInput = useBlockInput;
+    }
+
     void SetYamrInput(bool yamrInput) {
         YamrInput = yamrInput;
     }
@@ -86,6 +90,7 @@ protected:
 protected:
     // Serializable part (don't forget to add new members to Save/Load)
     bool UseSkiff = false;
+    bool UseBlockInput = false;
     TMkqlIOSpecs::TSystemFields SkiffSysFields;
     bool YamrInput = false;
     TString LambdaCode;

@@ -1,8 +1,11 @@
 #include "yt_codec_io.h"
 
 #include <ydb/library/yql/public/result_format/yql_restricted_yson.h>
+#include <ydb/library/yql/public/udf/arrow/args_dechunker.h>
+#include <ydb/library/yql/providers/common/codec/arrow/yql_codec_buf_input_stream.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec.h>
+#include <ydb/library/yql/providers/yt/codec/yt_arrow_converter.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <exception>
 #ifndef MKQL_DISABLE_CODEGEN
@@ -17,6 +20,7 @@
 #include <ydb/library/yql/utils/swap_bytes.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
+#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/yson/detail.h>
@@ -33,6 +37,8 @@
 #include <util/system/mutex.h>
 #include <util/system/thread.h>
 #include <util/stream/file.h>
+
+#include <arrow/util/key_value_metadata.h>
 
 #include <functional>
 
@@ -1436,6 +1442,121 @@ protected:
 
 #endif
 
+class TArrowDecoder : public TMkqlReaderImpl::TDecoder {
+public:
+    TArrowDecoder(
+        TInputBuf& buf,
+        const TMkqlIOSpecs& specs,
+        const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+        arrow::MemoryPool* pool
+    )
+        : TMkqlReaderImpl::TDecoder(buf, specs, holderFactory)
+        , Specs_(specs)
+        , Pool_(pool)
+    {
+        InputStream_ = std::make_unique<TInputBufArrowInputStream>(buf, pool);
+        ResetColumnConverters();
+    }
+
+    bool DecodeNext(NKikimr::NUdf::TUnboxedValue*& items, TMaybe<NKikimr::NMiniKQL::TValuesDictHashMap>&) override {
+        AtStart_ = false;
+        
+        if (Chunks_.empty()) {
+            bool read = ReadNext();
+            if (!read) {
+                EndStream();
+                return false;
+            }
+
+            YQL_ENSURE(!Chunks_.empty());
+        }
+
+        auto& inputFields = SpecsCache_.GetSpecs().Inputs[TableIndex_]->FieldsVec;
+        Row_ = SpecsCache_.NewRow(TableIndex_, items, true);
+
+        auto& [chunkLen, chunk] = Chunks_.front();
+        for (size_t i = 0; i < inputFields.size(); i++) {
+            items[inputFields[i].StructIndex] = SpecsCache_.GetHolderFactory().CreateArrowBlock(std::move(chunk[i]));
+        }
+        items[inputFields.size()] = SpecsCache_.GetHolderFactory().CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(chunkLen)));
+
+        Chunks_.pop_front();
+        return true;
+    }
+
+    bool ReadNext() {
+        if (!StreamReader_) {
+            StreamReader_ = ARROW_RESULT(arrow::ipc::RecordBatchStreamReader::Open(InputStream_.get()));
+
+            auto oldTableIndex = TableIndex_;     
+            if (!IgnoreStreamTableIndex) {
+                auto tableIdKey = StreamReader_->schema()->metadata()->Get("TableId");
+                if (tableIdKey.ok()) {
+                    TableIndex_ = std::stoi(tableIdKey.ValueOrDie());
+                    YQL_ENSURE(TableIndex_ < Specs_.Inputs.size());
+                }
+            }
+
+            if (TableIndex_ != oldTableIndex) {
+                ResetColumnConverters();
+            }
+        }
+
+        std::shared_ptr<arrow::RecordBatch> batch;
+        ARROW_OK(StreamReader_->ReadNext(&batch));
+        if (!batch) {
+            if (InputStream_->EOSReached()) {
+                return false;
+            }
+
+            // InputStream EOS hasn't reached yet - next Arrow IPC stream must be present
+            StreamReader_.reset();
+            return ReadNext();
+        }
+
+        auto& inputFields = Specs_.Inputs[TableIndex_]->FieldsVec;
+        YQL_ENSURE(inputFields.size() == ColumnConverters_.size());
+
+        std::vector<arrow::Datum> convertedBatch;
+        for (size_t i = 0; i < inputFields.size(); i++) {
+            auto batchColumn = batch->GetColumnByName(inputFields[i].Name);
+            YQL_ENSURE(batchColumn);
+            
+            convertedBatch.emplace_back(ColumnConverters_[i]->Convert(batchColumn->data()));
+        }
+
+        NUdf::TArgsDechunker dechunker(std::move(convertedBatch));
+        std::vector<arrow::Datum> chunk;
+        ui64 chunkLen = 0;
+        while (dechunker.Next(chunk, chunkLen)) {
+            Chunks_.emplace_back(chunkLen, std::move(chunk));
+        }
+
+        return true;
+    }
+
+    void ResetColumnConverters() {
+        auto& fields = Specs_.Inputs[TableIndex_]->FieldsVec;
+        ColumnConverters_.clear();
+        ColumnConverters_.reserve(fields.size());
+        for (auto& field: fields) {
+            YQL_ENSURE(!field.Type->IsPg());
+            bool native = Specs_.Inputs[TableIndex_]->NativeYtTypeFlags && !field.ExplicitYson;
+            ColumnConverters_.emplace_back(MakeYtColumnConverter(field.Type, nullptr, *Pool_, native));
+        }
+    }
+
+protected:
+    std::unique_ptr<TInputBufArrowInputStream> InputStream_;
+    std::shared_ptr<arrow::ipc::RecordBatchStreamReader> StreamReader_;
+    std::vector<std::unique_ptr<IYtColumnConverter>> ColumnConverters_;
+
+    TDeque<std::pair<ui64, std::vector<arrow::Datum>>> Chunks_;
+
+    const TMkqlIOSpecs& Specs_;
+    arrow::MemoryPool* Pool_;
+};
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TMkqlReaderImpl::TMkqlReaderImpl(NYT::TRawTableReader& source, size_t blockCount, size_t blockSize, ui32 tableIndex, bool ignoreStreamTableIndex)
@@ -1476,7 +1597,9 @@ void TMkqlReaderImpl::SetSpecs(const TMkqlIOSpecs& specs, const NKikimr::NMiniKQ
     HolderFactoryPtr = &holderFactory;
     JobStats_ = specs.JobStats_;
     Buf_.SetStats(JobStats_);
-    if (Specs_->UseSkiff_) {
+    if (Specs_->UseBlockInput_) {
+        Decoder_.Reset(new TArrowDecoder(Buf_, *Specs_, holderFactory, NUdf::GetYqlMemoryPool()));
+    } else if (Specs_->UseSkiff_) {
 #ifndef MKQL_DISABLE_CODEGEN
         if (Specs_->OptLLVM_ != "OFF" && NCodegen::ICodegen::IsCodegenAvailable()) {
             Decoder_.Reset(new TSkiffLLVMDecoder(Buf_, *Specs_, holderFactory));

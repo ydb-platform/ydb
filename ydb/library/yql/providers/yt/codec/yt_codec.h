@@ -125,6 +125,10 @@ public:
         SystemFields_ = sysFields;
     }
 
+    void SetUseBlockInput() {
+        UseBlockInput_ = true;
+    }
+
     void SetTableOffsets(const TVector<ui64>& offsets);
 
     void Clear();
@@ -138,6 +142,7 @@ public:
 
 public:
     bool UseSkiff_ = false;
+    bool UseBlockInput_ = false;
     TString OptLLVM_;
     TSystemFields SystemFields_;
 
@@ -184,9 +189,13 @@ class TMkqlIOCache {
 public:
     TMkqlIOCache(const TMkqlIOSpecs& specs, const NKikimr::NMiniKQL::THolderFactory& holderFactory);
 
-    NKikimr::NUdf::TUnboxedValue NewRow(size_t tableIndex, NKikimr::NUdf::TUnboxedValue*& items) {
+    NKikimr::NUdf::TUnboxedValue NewRow(size_t tableIndex, NKikimr::NUdf::TUnboxedValue*& items, bool wideBlock = false) {
         const auto group = Specs_.InputGroups.empty() ? 0 : Specs_.InputGroups[tableIndex];
-        return RowCache_[group]->NewArray(HolderFactory, Specs_.Inputs[tableIndex]->StructSize, items);
+        auto structSize = Specs_.Inputs[tableIndex]->StructSize;
+        if (wideBlock) {
+            structSize++;
+        }
+        return RowCache_[group]->NewArray(HolderFactory, structSize, items);
     }
 
     const TMkqlIOSpecs& GetSpecs() const {

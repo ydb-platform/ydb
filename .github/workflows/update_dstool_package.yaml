@@ -12,9 +12,6 @@ jobs:
     name: Update dstool package
     runs-on: ubuntu-latest
 
-    env:
-      name: robot-ydb
-      url: https://pypi.org/p/ydb-dstool
     permissions:
       id-token: write
 

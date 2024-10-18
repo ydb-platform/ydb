@@ -444,7 +444,8 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
         }
     }
 
-    if (!EnsureAtom(*input->Child(TDqJoin::idx_JoinType), ctx)) {
+    const auto& joinType = *input->Child(TDqJoin::idx_JoinType);
+    if (!EnsureAtom(joinType, ctx)) {
         return nullptr;
     }
 
@@ -503,11 +504,17 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
         : TStringBuf("");
 
     if (input->ChildrenSize() > 9U) {
-        for (auto i = 0U; i < input->Tail().ChildrenSize(); ++i) {
-            if (const auto& flag = *input->Tail().Child(i); !flag.IsAtom({"LeftAny", "RightAny"})) {
-                ctx.AddError(TIssue(ctx.GetPosition(flag.Pos()), TStringBuilder() << "Unsupported DQ join option: " << flag.Content()));
+        auto&& flags = *input->Child(TDqJoin::idx_Flags);
+        for (ui32 i = 0; i < flags.ChildrenSize(); ++i) {
+            auto&& flag = *input->Tail().Child(i);
+            if ( !EnsureTupleOfAtoms(flag, ctx) || !EnsureTupleMinSize(flag, 1, ctx))
                 return nullptr;
+            auto&& name = *flag.Child(TCoNameValueTuple::idx_Name);
+            if (name.IsAtom({"LeftAny", "RightAny"})) {
+                continue;
             }
+            ctx.AddError(TIssue(ctx.GetPosition(flag.Pos()), TStringBuilder() << "DqJoin: Unsupported DQ join option: " << name.Content()));
+            return nullptr;
         }
     }
 

@@ -237,11 +237,20 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
             .Done();
         return TJoinInputDesc(Nothing(), dqJoin, std::move(resultKeys));
     } else {
-        TExprNode::TListType flags;
-        if (leftAny)
-            flags.emplace_back(ctx.NewAtom(joinTuple.Pos(), "LeftAny", TNodeFlags::Default));
-        if (rightAny)
-            flags.emplace_back(ctx.NewAtom(joinTuple.Pos(), "RightAny", TNodeFlags::Default));
+        TVector<TCoNameValueTuple> flags;
+
+        if (leftAny) {
+            flags.push_back(
+                    Build<TCoNameValueTuple>(ctx, joinTuple.Pos())
+                        .Name().Build("LeftAny"sv)
+                        .Done());
+        }
+        if (rightAny) {
+            flags.push_back(
+                    Build<TCoNameValueTuple>(ctx, joinTuple.Pos())
+                        .Name().Build("RightAny"sv)
+                        .Done());
+        }
 
         auto dqJoin = Build<TDqJoin>(ctx, joinTuple.Pos())
             .LeftInput(BuildDqJoinInput(ctx, joinTuple.Pos(), left->Input, leftJoinKeys, false))
@@ -522,20 +531,26 @@ TExprBase DqRewriteRightJoinToLeft(const TExprBase node, TExprContext& ctx) {
         return node;
     }
 
-    TMaybeNode<TCoAtomList> newFlags;
-    if (TMaybeNode<TCoAtomList> flags = dqJoin.Flags()) {
-        auto flagsBuilder = Build<TCoAtomList>(ctx, flags.Cast().Pos());
+    TMaybeNode<TCoNameValueTupleList> newFlags;
+    if (TMaybeNode<TCoNameValueTupleList> flags = dqJoin.Flags()) {
+        TVector<TCoNameValueTuple> list;
         for (auto flag: flags.Cast()) {
             TStringBuf tail;
-            if( flag.Value().AfterPrefix("Left", tail)) {
-                flagsBuilder.Add().Value("Right" + TString(tail)).Build();
-            } else if ( flag.Value().AfterPrefix("Right", tail)) {
-                flagsBuilder.Add().Value("Left" + TString(tail)).Build();
+            if( flag.Name().Value().AfterPrefix("Left", tail)) {
+                list.push_back(Build<TCoNameValueTuple>(ctx, flag.Pos())
+                        .Name().Build("Right" + TString(tail))
+                    .Done());
+            } else if ( flag.Name().Value().AfterPrefix("Right", tail)) {
+                list.push_back(Build<TCoNameValueTuple>(ctx, flag.Pos())
+                        .Name().Build("Left" + TString(tail))
+                    .Done());
             } else {
-                flagsBuilder.Add(flag);
+                list.push_back(flag);
             }
         }
-        newFlags = flagsBuilder.Done();
+        newFlags = Build<TCoNameValueTupleList>(ctx, flags.Cast().Pos())
+            .Add(list)
+            .Done();
     }
 
     auto joinKeysBuilder = Build<TDqJoinKeyTupleList>(ctx, dqJoin.Pos());
@@ -640,15 +655,13 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
         return join;
     }
 
-    TExprNode::TListType flags;
     if (const auto maybeFlags = join.Flags()) {
-        flags = maybeFlags.Cast().Ref().ChildrenList();
-    }
-
-    for (auto& flag : flags) {
-        if (flag->IsAtom("LeftAny") || flag->IsAtom("RightAny")) {
-            ctx.AddError(TIssue(ctx.GetPosition(join.Ptr()->Pos()), "ANY join kind is not currently supported"));
-            return join;
+        for (const auto& flag : maybeFlags.Cast()) {
+            auto name = flag.Name().Value();
+            if (name == "LeftAny"sv || name == "RightAny"sv) {
+                ctx.AddError(TIssue(ctx.GetPosition(join.Ptr()->Pos()), "ANY join kind is not currently supported"));
+                return join;
+            }
         }
     }
 
@@ -1514,13 +1527,15 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
             [[fallthrough]];
         case EHashJoinMode::Dict: {
             bool leftAny = false, rightAny = false;
-            for (auto& flag : flags) {
-                if (flag->IsAtom("LeftAny")) {
+            TExprNode::TListType dictFlags;
+            for (const auto& flag : flags) {
+                const auto name = flag->Child(0)->Content();
+                if (name == "LeftAny"sv) {
                     leftAny = true;
-                    flag = ctx.NewAtom(flag->Pos(), "LeftUnique", TNodeFlags::Default);
-                } else if (flag->IsAtom("RightAny")) {
+                    dictFlags.push_back(ctx.NewAtom(flag->Pos(), "LeftUnique", TNodeFlags::Default));
+                } else if (name == "RightAny"sv) {
                     rightAny = true;
-                    flag = ctx.NewAtom(flag->Pos(), "RightUnique", TNodeFlags::Default);
+                    dictFlags.push_back(ctx.NewAtom(flag->Pos(), "RightUnique", TNodeFlags::Default));
                 }
             }
 
@@ -1538,7 +1553,7 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
                                         .Arg(0, "left")
                                         .Arg(1, "right")
                                         .Add(2, join.JoinType().Ptr())
-                                        .List(3).Add(std::move(flags)).Seal()
+                                        .List(3).Add(std::move(dictFlags)).Seal()
                                     .Seal()
                                 .Seal()
                             .Seal()

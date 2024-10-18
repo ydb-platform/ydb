@@ -1626,7 +1626,7 @@
                 {"Index": 6, "Name": "RightRenames", "Type": "TCoAtomList"},
                 {"Index": 7, "Name": "LeftKeysColumnNames", "Type": "TCoAtomList"},
                 {"Index": 8, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"},
-                {"Index": 9, "Name": "Flags", "Type": "TCoAtomList"}
+                {"Index": 9, "Name": "Flags", "Type": "TCoNameValueTupleList"}
             ]
         },
         {
@@ -1642,7 +1642,7 @@
                 {"Index": 5, "Name": "RightRenames", "Type": "TCoAtomList"},
                 {"Index": 6, "Name": "LeftKeysColumnNames", "Type": "TCoAtomList"},
                 {"Index": 7, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"},
-                {"Index": 8, "Name": "Flags", "Type": "TCoAtomList"}
+                {"Index": 8, "Name": "Flags", "Type": "TCoNameValueTupleList"}
             ]
         },
         {

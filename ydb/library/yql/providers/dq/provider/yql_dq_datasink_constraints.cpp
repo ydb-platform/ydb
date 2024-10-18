@@ -144,12 +144,13 @@ public:
         bool leftAny = false, rightAny = false;
         if (const auto maybeJoin = join.Maybe<TDqJoin>()) {
             if (const auto maybeFlags = maybeJoin.Cast().Flags()) {
-                maybeFlags.Cast().Ref().ForEachChild([&](const TExprNode& flag) {
-                    if (flag.IsAtom("LeftAny"))
+                for (const auto &flag: maybeFlags.Cast()) {
+                    const auto name = flag.Name().Value();
+                    if (name == "LeftAny"sv)
                         leftAny = true;
-                    else if (flag.IsAtom("RightAny"))
+                    else if (name == "RightAny"sv)
                         rightAny = true;
-                });
+                }
             }
         }
 

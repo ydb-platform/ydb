@@ -146,7 +146,7 @@ private:
     void HandleWhileWorking(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "HandleWhileWorking TEvQueryResponse");
 
-        const auto& record = ev->Get()->Record.GetRef();
+        const auto& record = ev->Get()->Record;
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
             if (parser.RowsCount()) {

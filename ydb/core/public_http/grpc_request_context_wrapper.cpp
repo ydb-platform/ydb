@@ -10,6 +10,7 @@ namespace NKikimr::NPublicHttp {
       , Request(std::move(request))
       , ReplySender(std::move(replySender))
       , AuthState(true)
+      , Arena(MakeIntrusive<NActors::TProtoArenaHolder>())
       , DeadlineAt(TInstant::Max())
     {
         JsonSettings.EnumAsNumbers = false;
@@ -73,7 +74,11 @@ namespace NKikimr::NPublicHttp {
     }
 
     google::protobuf::Arena* TGrpcRequestContextWrapper::GetArena() {
-        return &Arena;
+        return Arena->Get();
+    }
+
+    TIntrusivePtr<NActors::TProtoArenaHolder> TGrpcRequestContextWrapper::GetArenaPtr() {
+        return Arena;
     }
 
     TString TGrpcRequestContextWrapper::GetPeer() const {

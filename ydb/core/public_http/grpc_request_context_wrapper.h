@@ -17,7 +17,7 @@ private:
     std::unique_ptr<NProtoBuf::Message> Request;
     TReplySender ReplySender;
     NYdbGrpc::TAuthState AuthState;
-    google::protobuf::Arena Arena;
+    TIntrusivePtr<NActors::TProtoArenaHolder> Arena;
     TJsonSettings JsonSettings;
     TInstant DeadlineAt;
 
@@ -37,6 +37,7 @@ public:
     virtual TString GetEndpointId() const;
 
     virtual google::protobuf::Arena* GetArena();
+    virtual TIntrusivePtr<NActors::TProtoArenaHolder> GetArenaPtr();
 
     virtual void AddTrailingMetadata(const TString&, const TString&) {}
 

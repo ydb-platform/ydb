@@ -1226,6 +1226,10 @@ public:
         return Ctx_->GetArena();
     }
 
+    TIntrusivePtr<NActors::TProtoArenaHolder> GetArenaPtr() override {
+        return Ctx_->GetArenaPtr();
+    }
+
     //! Allocate Result message using protobuf arena allocator
     //! The memory will be freed automaticaly after destroying
     //! corresponding request.

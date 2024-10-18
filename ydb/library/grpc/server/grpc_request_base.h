@@ -9,6 +9,10 @@ namespace grpc {
 class ByteBuffer;
 }
 
+namespace NActors {
+struct TProtoArenaHolder;
+}
+
 namespace NYdbGrpc {
 
 extern const char* GRPC_USER_AGENT_HEADER;
@@ -94,6 +98,8 @@ public:
     //! Returns protobuf arena allocator associated with current request
     //! Lifetime of the arena is lifetime of the context
     virtual google::protobuf::Arena* GetArena() = 0;
+
+    virtual TIntrusivePtr<NActors::TProtoArenaHolder> GetArenaPtr() = 0;
 
     //! Add trailing metadata in to grpc context
     //! The metadata will be send at the time of rpc finish

@@ -279,7 +279,7 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
-        auto& record = ev->Get()->Record.GetRef();
+        auto& record = ev->Get()->Record;
 
         NYql::TIssues issues;
         const auto& issueMessage = record.GetResponse().GetQueryIssues();

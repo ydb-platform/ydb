@@ -2019,7 +2019,7 @@ void ExecSQL(Tests::TServer::TPtr server,
     auto request = MakeSQLRequest(sql, dml);
     runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release(), 0, 0, nullptr));
     auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
-    auto& response = ev->Get()->Record.GetRef();
+    auto& response = ev->Get()->Record;
     auto& issues = response.GetResponse().GetQueryIssues();
     UNIT_ASSERT_VALUES_EQUAL_C(response.GetYdbStatus(),
                                code,

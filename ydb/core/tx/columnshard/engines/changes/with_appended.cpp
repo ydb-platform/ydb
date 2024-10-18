@@ -88,6 +88,9 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
 void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
     for (auto&& i : AppendedPortions) {
         i.GetPortionConstructor().SetPortionId(context.NextPortionId());
+        if (TargetCompactionLevel) {
+            i.GetPortionConstructor().MutableMeta().SetCompactionLevel(*TargetCompactionLevel);
+        }
     }
     for (auto& [_, portionInfo] : PortionsToRemove) {
         portionInfo.SetRemoveSnapshot(context.GetSnapshot());

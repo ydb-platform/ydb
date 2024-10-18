@@ -15,6 +15,7 @@ private:
     std::optional<TSnapshot> RecordSnapshotMin;
     std::optional<TSnapshot> RecordSnapshotMax;
     std::optional<NPortion::EProduced> Produced;
+    std::optional<ui64> CompactionLevel;
     std::optional<ui32> DeletionsCount;
     friend class TPortionInfoConstructor;
     void FillMetaInfo(const NArrow::TFirstLastSpecialKeys& primaryKeys, const ui32 deletionsCount, const NArrow::TMinMaxSpecialKeys& snapshotKeys, const TIndexInfo& indexInfo);
@@ -22,6 +23,10 @@ private:
 public:
     TPortionMetaConstructor() = default;
     TPortionMetaConstructor(const TPortionMeta& meta);
+
+    void SetCompactionLevel(const ui64 level) {
+        CompactionLevel = level;
+    }
 
     void SetTierName(const TString& tierName);
     void ResetTierName(const TString& tierName) {

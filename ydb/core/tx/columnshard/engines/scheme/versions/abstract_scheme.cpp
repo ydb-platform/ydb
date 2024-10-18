@@ -335,6 +335,7 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
     const ui32 deletionsCount = (mType == NEvWrite::EModificationType::Delete) ? incomingBatch->num_rows() : 0;
     constructor.GetPortionConstructor().AddMetadata(*this, deletionsCount, primaryKeys, snapshotKeys);
     constructor.GetPortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
+    constructor.GetPortionConstructor().MutableMeta().SetCompactionLevel(0);
     constructor.GetPortionConstructor().MutableMeta().UpdateRecordsMeta(NPortion::EProduced::INSERTED);
     return TWritePortionInfoWithBlobsResult(std::move(constructor));
 }

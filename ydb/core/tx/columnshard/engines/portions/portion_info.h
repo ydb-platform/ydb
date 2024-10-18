@@ -127,6 +127,10 @@ private:
         }
     }
 public:
+    ui32 GetCompactionLevel() const {
+        return GetMeta().GetCompactionLevel();
+    }
+
     ui64 GetMinMemoryForReadColumns(const std::optional<std::set<ui32>>& columnIds) const;
 
     bool NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) const;

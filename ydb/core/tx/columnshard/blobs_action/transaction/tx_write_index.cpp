@@ -48,9 +48,10 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
 }
 
 void TTxWriteIndex::Complete(const TActorContext& ctx) {
-    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID()));
     CompleteReady = true;
     auto changes = Ev->Get()->IndexChanges;
+    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())(
+        "task_id", changes->GetTaskIdentifier()));
     TMemoryProfileGuard mpg("TTxWriteIndex::Complete::" + changes->TypeString());
     ACFL_DEBUG("event", "TTxWriteIndex::Complete")("change_type", changes->TypeString())("details", changes->DebugString());
 

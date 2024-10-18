@@ -10,6 +10,8 @@ class TChangesWithAppend: public TColumnEngineChanges {
 private:
     using TBase = TColumnEngineChanges;
     THashMap<TPortionAddress, TPortionInfo> PortionsToRemove;
+    std::optional<ui64> TargetCompactionLevel;
+
 protected:
     TSaverContext SaverContext;
     virtual void DoCompile(TFinalizationContext& context) override;
@@ -54,6 +56,10 @@ public:
         return PortionsToRemove.size();
     }
 
+    void SetTargetCompactionLevel(const ui64 level) {
+        TargetCompactionLevel = level;
+    }
+
     void AddPortionToRemove(const TPortionInfo& info) {
         AFL_VERIFY(!info.HasRemoveSnapshot());
         AFL_VERIFY(PortionsToRemove.emplace(info.GetAddress(), info).second);
@@ -72,4 +78,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap

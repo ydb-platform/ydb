@@ -6,8 +6,9 @@
 #include <ydb/library/yql/minikql/mkql_terminator.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 
-#include <ydb/core/fq/libs/row_dispatcher/json_filter.h>
 #include <ydb/core/fq/libs/actors/logging/log.h>
+#include <ydb/core/fq/libs/common/util.h>
+#include <ydb/core/fq/libs/row_dispatcher/json_filter.h>
 
 
 namespace {
@@ -274,6 +275,7 @@ private:
         str << OffsetFieldName << ", ";
         for (size_t i = 0; i < columnNames.size(); ++i) {
             TString columnType = columnTypes[i];
+            TString columnName = NFq::EncloseAndEscapeString(columnNames[i], '`');
             if (columnType == "Json") {
                 columnType = "String";
             } else if (columnType == "Optional<Json>") {
@@ -281,11 +283,11 @@ private:
             }
 
             if (columnType.StartsWith("Optional")) {
-                str << "IF(" << columnNames[i] << " IS NOT NULL, Unwrap(CAST(" << columnNames[i] << " as " << columnType << ")), NULL)";
+                str << "IF(" << columnName << " IS NOT NULL, Unwrap(CAST(" << columnName << " as " << columnType << ")), NULL)";
             } else {
-                str << "Unwrap(CAST(" << columnNames[i] << " as " << columnType << "))";
+                str << "Unwrap(CAST(" << columnName << " as " << columnType << "))";
             }
-            str << " as " << columnNames[i] << ((i != columnNames.size() - 1) ? "," : "");
+            str << " as " << columnName << ((i != columnNames.size() - 1) ? "," : "");
         }
         str << " FROM Input;\n";
         str << "$filtered = SELECT * FROM $fields " << whereFilter << ";\n";

@@ -109,6 +109,7 @@ m4 = NixProject(
         "cat",
         "sed",
     ],
+    # fmt: off
     copy_sources=[
         # these are included from regex.c and should not be added into SRCS
         "lib/regcomp.c",
@@ -116,6 +117,7 @@ m4 = NixProject(
         "lib/regex_internal.h",
         "lib/regexec.c",
     ] + [f"lib/{src}" for src in itertools.chain(WINDOWS_SRCS, DARWIN_SRCS)],
+    # fmt: on
     use_full_libnames=True,
     install_targets=[
         "libm4",
@@ -166,4 +168,3 @@ m4.copy_top_sources_except |= {
     "ChangeLog",
     "ChangeLog-2014",
 }
-

@@ -20,6 +20,14 @@
 
     ![](../_assets/partitions-by-cpu.png)
 
+    {% note info %}
+
+    You can also use system tables to get information about overloaded shards. For more information, see [History of overloaded partitions](../../../../system-views.md#top-overload-partitions).
+
+    {% endnote %}
+
+
+
 1. To pinpoint the schema issue, follow these steps:
 
     1. Retrieve information about the problematic table using the [{{ ydb-short-name }} CLI](../../../../../reference/ydb-cli/index.md). Run the following command:

@@ -205,7 +205,6 @@ CONFIGURE_FILE(
 
 SRCS(
     ${YT_SRCS}
-    yt/yt/client/api/rpc_proxy/protocol_version_variables.h.in
 )
 
 PEERDIR(

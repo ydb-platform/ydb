@@ -1,30 +1,3 @@
-====================BSD-3-Clause====================
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
-//
-//   1. Redistributions of source code must retain the above copyright notice,
-//      this list of conditions and the following disclaimer.
-//
-//   2. Redistributions in binary form must reproduce the above copyright
-//      notice, this list of conditions and the following disclaimer in the
-//      documentation and/or other materials provided with the distribution.
-//
-//   3. Neither the name of the product nor the names of its contributors may
-//      be used to endorse or promote products derived from this software
-//      without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
-// WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
-// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
-// EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
-// OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
-// WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
-// OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
-// ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-
 ====================COPYRIGHT====================
     Copyright (C) 1998, 2001, 2003-2006, 2009-2013 Free Software Foundation,
     Inc.
@@ -46,11 +19,6 @@
    Copyright (C) 1987-1996, 1998-2004, 2006, 2008-2013 Free Software
    Foundation, Inc.
    This file is part of the GNU C Library.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 1988, 1990, 1999, 2003-2006, 2009-2013 Free Software
-   Foundation, Inc.
 
 
 ====================COPYRIGHT====================
@@ -77,16 +45,6 @@
 
 ====================COPYRIGHT====================
    Copyright (C) 1990, 1998, 2000-2001, 2003-2006, 2009-2013 Free Software
-   Foundation, Inc.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 1990, 1998-1999, 2001-2002, 2004-2005, 2009-2013 Free Software
-   Foundation, Inc.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 1990, 1998-1999, 2001-2007, 2009-2013 Free Software
    Foundation, Inc.
 
 
@@ -118,17 +76,7 @@
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 1991-1992, 1994-1999, 2003, 2005-2007, 2009-2013 Free Software
-   Foundation, Inc.
-
-
-====================COPYRIGHT====================
    Copyright (C) 1991-2003, 2005-2007, 2009-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 1992, 1995, 1997-1998, 2006, 2009-2013 Free Software
-   Foundation, Inc.
 
 
 ====================COPYRIGHT====================
@@ -163,11 +111,6 @@
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 1996-1998, 2001-2003, 2005-2007, 2009-2013 Free Software
-   Foundation, Inc.
-
-
-====================COPYRIGHT====================
    Copyright (C) 1996-1999, 2008-2013 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
@@ -177,44 +120,13 @@
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 1996-2013 Free Software Foundation, Inc.
-   This file is part of the GNU C Library.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 1997, 2000, 2002, 2004, 2006, 2009-2013 Free Software
-   Foundation, Inc.
-   This file is part of the GNU C Library.
-   Contributed by Jean-François Bignolles <bignolle@ecoledoc.ibp.fr>, 1997.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 1997, 2003-2004, 2006-2007, 2009-2013 Free Software
-   Foundation, Inc.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 1997-1998, 2006-2007, 2009-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
    Copyright (C) 1997-2000, 2002-2004, 2006, 2009-2013 Free Software
    Foundation, Inc.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 1997-2006, 2008-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
    Copyright (C) 1998, 2000, 2003-2004, 2006, 2008-2013 Free Software
    Foundation, Inc.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 1998-1999, 2001, 2003, 2009-2013 Free Software Foundation,
-   Inc.
-   Written by Jim Meyering <meyering@ascend.com>, 1998.
 
 
 ====================COPYRIGHT====================
@@ -236,10 +148,6 @@
 
 ====================COPYRIGHT====================
    Copyright (C) 1998-2002, 2004-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 1998-2004, 2006-2007, 2009-2013 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
@@ -291,18 +199,7 @@
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 1999-2002, 2005-2013 Free Software Foundation, Inc.
-   Written by Bruno Haible <bruno@clisp.org>, 2008.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 2000, 2002, 2004, 2006, 2009-2013 Free Software
-   Foundation, Inc.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 2000, 2002, 2004, 2009-2013 Free Software Foundation,
-   Inc.
+   Copyright (C) 1999-2013 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
@@ -316,12 +213,8 @@
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2000, 2004, 2006-2007, 2009-2013 Free Software Foundation,
+   Copyright (C) 2000, 2004, 2006-2007, 2009-2021 Free Software Foundation,
    Inc.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 2000, 2009-2013 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
@@ -338,19 +231,7 @@
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2000-2004, 2007, 2009-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
    Copyright (C) 2000-2006, 2008-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 2000-2007, 2009-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 2000-2013 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
@@ -381,31 +262,6 @@
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2001-2002, 2004, 2006, 2009-2013 Free Software
-   Foundation, Inc.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 2001-2002, 2004-2006, 2009-2013 Free Software
-   Foundation, Inc.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 2001-2002, 2005, 2007, 2009-2013 Free Software Foundation,
-   Inc.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 2001-2002, 2005-2007, 2009-2013 Free Software Foundation, Inc.
-   Written by Bruno Haible <bruno@clisp.org>, 2002.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 2001-2002, 2006-2013 Free Software Foundation, Inc.
-   Written by Bruno Haible <bruno@clisp.org>, 2002.
-
-
-====================COPYRIGHT====================
    Copyright (C) 2001-2002, 2007, 2009-2013 Free Software Foundation, Inc.
 
 
@@ -414,24 +270,17 @@
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2001-2003, 2005-2006, 2009-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
    Copyright (C) 2001-2003, 2005-2007, 2009-2013 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
    Copyright (C) 2001-2003, 2005-2013 Free Software Foundation, Inc.
+   Written by Bruno Haible <bruno@clisp.org>, 2001.
 
 
 ====================COPYRIGHT====================
    Copyright (C) 2001-2003, 2006, 2008-2013 Free Software Foundation, Inc.
    Written by Bruno Haible <haible@clisp.cons.org>, 2001.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 2001-2003, 2006-2013 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
@@ -446,18 +295,11 @@
 
 ====================COPYRIGHT====================
    Copyright (C) 2001-2004, 2006-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 2001-2004, 2007-2013 Free Software Foundation, Inc.
+   Written by Bruno Haible <haible@clisp.cons.org>, 2001.
 
 
 ====================COPYRIGHT====================
    Copyright (C) 2001-2004, 2009-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 2001-2005, 2009-2013 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
@@ -466,22 +308,6 @@
 
 ====================COPYRIGHT====================
    Copyright (C) 2002, 2004, 2008-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 2002, 2004, 2009-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 2002, 2005-2006, 2009-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 2002, 2006, 2009-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 2002, 2007, 2009-2013 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
@@ -497,20 +323,6 @@
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2002-2003, 2006, 2009-2013 Free Software Foundation,
-   Inc.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 2002-2003, 2007-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 2002-2004, 2006, 2009-2013 Free Software Foundation,
-   Inc.
-
-
-====================COPYRIGHT====================
    Copyright (C) 2002-2004, 2006-2013 Free Software Foundation, Inc.
 
 
@@ -519,11 +331,9 @@
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2002-2004, 2009-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 2002-2006, 2009-2013 Free Software Foundation, Inc.
+   Copyright (C) 2002-2013 Free Software Foundation, Inc.
+   This file is part of the GNU C Library.
+   Contributed by Isamu Hasegawa <isamu@yamato.ibm.com>.
 
 
 ====================COPYRIGHT====================
@@ -534,10 +344,6 @@
 ====================COPYRIGHT====================
    Copyright (C) 2003, 2006-2007, 2009-2013 Free Software Foundation, Inc.
    Written by Bruno Haible <bruno@clisp.org>, 2003.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 2003, 2007-2013 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
@@ -568,15 +374,7 @@
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2004, 2006-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
    Copyright (C) 2004, 2009-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 2004-2007, 2009-2013 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
@@ -600,16 +398,8 @@
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2006, 2009-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
    Copyright (C) 2006, 2011-2013 Free Software Foundation, Inc.
    Written by Bruno Haible <bruno@clisp.org>, 2006.
-
-
-====================COPYRIGHT====================
-   Copyright (C) 2006-2007, 2010-2013 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
@@ -617,16 +407,24 @@
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2007, 2010-2013 Free Software Foundation, Inc.
+   Copyright (C) 2007, 2009-2013 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2007-2008, 2010-2013 Free Software Foundation, Inc.
+   Copyright (C) 2007-2008, 2010-2021 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
-   Copyright (C) 2008, 2010-2013 Free Software Foundation, Inc.
-   Written by Bruno Haible <bruno@clisp.org>, 2008.
+   Copyright (C) 2007-2013 Free Software Foundation, Inc.
+   Written by Bruno Haible <bruno@clisp.org>, 2007.
+
+
+====================COPYRIGHT====================
+   Copyright (C) 2007-2021 Free Software Foundation, Inc.
+
+
+====================COPYRIGHT====================
+   Copyright (C) 2008-2013 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
@@ -635,7 +433,10 @@
 
 ====================COPYRIGHT====================
    Copyright (C) 2011-2013 Free Software Foundation, Inc.
-   Written by Bruno Haible <bruno@clisp.org>, 2011.
+
+
+====================COPYRIGHT====================
+   Copyright (C) 2012-2013 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
@@ -643,39 +444,7 @@
 
 
 ====================COPYRIGHT====================
-   Copyright 2002-2003, 2007-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
    Copyright 2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
-# Copyright (C) 1999-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
-# Copyright (C) 2002-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
-# Copyright (C) 2006-2007, 2009-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
-# Copyright (C) 2007, 2009-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
-# Copyright (C) 2007-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
-# Copyright (C) 2008-2013 Free Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
-# Copyright (C) 2012-2013 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
@@ -687,33 +456,6 @@
 /* Copyright (C) 1991, 1994-2002, 2005, 2008-2013 Free Software Foundation,
    Inc.
    This file is part of the GNU C Library.
-
-
-====================COPYRIGHT====================
-/* Copyright (C) 1991, 1996-1998, 2002-2004, 2006-2007, 2009-2013 Free Software
-   Foundation, Inc.
-
-
-====================COPYRIGHT====================
-/* Copyright (C) 1991, 1997, 2009-2013 Free Software Foundation, Inc.
-   This file is part of the GNU C Library.
-
-
-====================COPYRIGHT====================
-/* Copyright (C) 1991-1994, 1996-1998, 2000, 2004, 2007-2013 Free Software
-   Foundation, Inc.
-   This file is part of the GNU C Library.
-
-
-====================COPYRIGHT====================
-/* Copyright (C) 1992, 1995-2002, 2005-2013 Free Software Foundation, Inc.
-   This file is part of the GNU C Library.
-
-
-====================COPYRIGHT====================
-/* Copyright (C) 1998-1999, 2001, 2005-2007, 2009-2013 Free Software
-   Foundation, Inc.
-   This file is derived from the one in the GNU C Library.
 
 
 ====================COPYRIGHT====================
@@ -729,13 +471,9 @@
 
 
 ====================COPYRIGHT====================
-/* Copyright (C) 2000, 2004, 2009-2013 Free Software Foundation, Inc.
-   This file is part of the GNU C Library.
-
-
-====================COPYRIGHT====================
-/* Copyright (C) 2000, 2008-2013 Free Software Foundation, Inc.
-   This file is part of the GNU C Library.
+/* Ordered set data type implemented by a binary tree.
+   Copyright (C) 2006-2007, 2009-2013 Free Software Foundation, Inc.
+   Written by Bruno Haible <bruno@clisp.org>, 2006.
 
 
 ====================COPYRIGHT====================
@@ -745,18 +483,20 @@
 
 
 ====================COPYRIGHT====================
+/* Sequential list data type implemented by a hash table with another list.
+   Copyright (C) 2006, 2009-2013 Free Software Foundation, Inc.
+   Written by Bruno Haible <bruno@clisp.org>, 2006.
+
+
+====================COPYRIGHT====================
 /* Variable with FSF copyright information, for version-etc.
    Copyright (C) 1999-2006, 2009-2013 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
-//  Copyright (c) 2006-2013 Alexander Chemeris
-
-
-====================COPYRIGHT====================
 Copyright d Free Software Foundation, Inc.
 
-====================File: gnulib/src/filenamecat-lgpl.c====================
+====================File: lib/filenamecat-lgpl.c====================
 /* Concatenate two arbitrary file names.
 
    Copyright (C) 1996-2007, 2009-2013 Free Software Foundation, Inc.
@@ -881,21 +621,6 @@ mfile_name_concat (char const *dir, char const *abase, char **base_in_result)
 ====================GPL-3.0-or-later====================
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation, either version 3 of the License, or
-   (at your option) any later version.
-
-   This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
-
-   You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
-
-
-====================GPL-3.0-or-later====================
-   This program is free software: you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
    the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
@@ -924,6 +649,21 @@ mfile_name_concat (char const *dir, char const *abase, char **base_in_result)
 
 
 ====================GPL-3.0-or-later====================
+   This program is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
+
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
+
+
+====================GPL-3.0-or-later====================
    This program is free software: you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published
    by the Free Software Foundation; either version 3 of the License, or
@@ -933,21 +673,6 @@ mfile_name_concat (char const *dir, char const *abase, char **base_in_result)
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
    General Public License for more details.
-
-   You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
-
-
-====================GPL-3.0-or-later====================
-   This program is free software: you can redistribute it and/or modify it
-   under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3 of the License, or any
-   later version.
-
-   This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
@@ -984,6 +709,21 @@ mfile_name_concat (char const *dir, char const *abase, char **base_in_result)
 
 
 ====================GPL-3.0-or-later====================
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3, or (at your option)
+   any later version.
+
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License along
+   with this program; if not, see <https://www.gnu.org/licenses/>.  */
+
+
+====================GPL-3.0-or-later====================
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published
    by the Free Software Foundation; either version 3, or (at your option)
@@ -997,21 +737,6 @@ mfile_name_concat (char const *dir, char const *abase, char **base_in_result)
    You should have received a copy of the GNU General Public
    License along with this program; if not, see
    <http://www.gnu.org/licenses/>.
-
-
-====================GPL-3.0-or-later====================
-   This program is free software; you can redistribute it and/or modify it
-   under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 3, or (at your option) any
-   later version.
-
-   This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
-
-   You should have received a copy of the GNU General Public License
-   along with this program; if not, see <http://www.gnu.org/licenses/>.  */
 
 
 ====================GPL-3.0-or-later====================

@@ -1,0 +1,26 @@
+--- a/lib/spawn-pipe.c	(index)
++++ b/lib/spawn-pipe.c	(working tree)
+@@ -48,6 +48,10 @@
+ 
+ #endif
+ 
++#if defined(__FreeBSD__) || defined(__MACH__)
++    extern char** environ;
++#endif
++
+ /* The results of open() in this file are not used with fchdir,
+    therefore save some unnecessary work in fchdir.c.  */
+ #undef open
+--- a/lib/execute.c	(index)
++++ b/lib/execute.c	(working tree)
+@@ -48,6 +48,10 @@
+ 
+ #endif
+ 
++#if defined(__FreeBSD__) || defined(__MACH__)
++    extern char** environ;
++#endif
++
+ /* The results of open() in this file are not used with fchdir,
+    therefore save some unnecessary work in fchdir.c.  */
+ #undef open

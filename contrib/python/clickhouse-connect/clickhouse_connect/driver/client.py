@@ -59,9 +59,15 @@ class Client(ABC):
         """
         self.query_limit = coerce_int(query_limit)
         self.query_retries = coerce_int(query_retries)
+        if database and not database == '__default__':
+            self.database = database
         if show_clickhouse_errors is not None:
             self.show_clickhouse_errors = coerce_bool(show_clickhouse_errors)
         self.server_host_name = server_host_name
+        self.uri = uri
+        self._init_common_settings(apply_server_timezone)
+
+    def _init_common_settings(self, apply_server_timezone:Optional[Union[str, bool]] ):
         self.server_tz, dst_safe = pytz.UTC, True
         self.server_version, server_tz = \
             tuple(self.command('SELECT version(), timezone()', use_database=False))
@@ -83,8 +89,7 @@ class Client(ABC):
             readonly = common.get_setting('readonly')
         server_settings = self.query(f'SELECT name, value, {readonly} as readonly FROM system.settings LIMIT 10000')
         self.server_settings = {row['name']: SettingDef(**row) for row in server_settings.named_results()}
-        if database and not database == '__default__':
-            self.database = database
+
         if self.min_version(CH_VERSION_WITH_PROTOCOL):
             #  Unfortunately we have to validate that the client protocol version is actually used by ClickHouse
             #  since the query parameter could be stripped off (in particular, by CHProxy)
@@ -95,7 +100,9 @@ class Client(ABC):
                 self.protocol_version = PROTOCOL_VERSION_WITH_LOW_CARD
         if self._setting_status('date_time_input_format').is_writable:
             self.set_client_setting('date_time_input_format', 'best_effort')
-        self.uri = uri
+        if self._setting_status('allow_experimental_json_type').is_set:
+            self.set_client_setting('cast_string_to_dynamic_use_inference', '1')
+
 
     def _validate_settings(self, settings: Optional[Dict[str, Any]]) -> Dict[str, str]:
         """
@@ -655,7 +662,8 @@ class Client(ABC):
                            settings=settings, context=context)
 
     def insert_arrow(self, table: str,
-                     arrow_table, database: str = None,
+                     arrow_table,
+                     database: str = None,
                      settings: Optional[Dict] = None) -> QuerySummary:
         """
         Insert a PyArrow table DataFrame into ClickHouse using raw Arrow format
@@ -666,7 +674,8 @@ class Client(ABC):
         :return: QuerySummary with summary information, throws exception if insert fails
         """
         full_table = table if '.' in table or not database else f'{database}.{table}'
-        column_names, insert_block = arrow_buffer(arrow_table)
+        compression = self.write_compression if self.write_compression in ('zstd', 'lz4') else None
+        column_names, insert_block = arrow_buffer(arrow_table, compression)
         return self.raw_insert(full_table, column_names, insert_block, settings, 'Arrow')
 
     def create_insert_context(self,

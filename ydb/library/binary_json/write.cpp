@@ -89,7 +89,7 @@ struct TJsonIndex {
     }
 
     ui32 InternString(const TStringBuf value) {
-        const auto [it, emplaced] = Keys.emplace(value, LastFreeStringIndex);
+        const auto [it, emplaced] = Strings.emplace(value, LastFreeStringIndex);
         if (emplaced) {
             ++LastFreeStringIndex;
             TotalStringLength += value.length() + 1;
@@ -551,9 +551,9 @@ void DomToJsonIndex(const NUdf::TUnboxedValue& value, TBinaryJsonCallbacks& call
 template <typename TOnDemandValue>
     requires std::is_same_v<TOnDemandValue, simdjson::ondemand::value> || std::is_same_v<TOnDemandValue, simdjson::ondemand::document>
 [[nodiscard]] simdjson::error_code SimdJsonToJsonIndex(TOnDemandValue& value, TBinaryJsonCallbacks& callbacks) {
-#define RETURN_IF_NOT_SUCCESS(error)              \
-    if (Y_UNLIKELY(error != simdjson::SUCCESS)) { \
-        return error;                             \
+#define RETURN_IF_NOT_SUCCESS(expr)                                           \
+    if (const auto& status = expr; Y_UNLIKELY(status != simdjson::SUCCESS)) { \
+        return status;                                                        \
     }
 
     switch (value.type()) {
@@ -597,9 +597,13 @@ template <typename TOnDemandValue>
             }
             break;
         }
-        case simdjson::ondemand::json_type::null:
+        case simdjson::ondemand::json_type::null: {
+            auto is_null = value.is_null();
+            RETURN_IF_NOT_SUCCESS(is_null.error());
+            Y_ABORT_UNLESS(is_null.value_unsafe());
             callbacks.OnNull();
             break;
+        }
         case simdjson::ondemand::json_type::array: {
             callbacks.OnOpenArray();
 

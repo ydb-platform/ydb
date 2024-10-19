@@ -244,7 +244,8 @@ class ResponseSource:
                 else:
                     chunk = chunks.popleft()
                     current_size -= len(chunk)
-                yield chunk
+                if chunk:
+                    yield chunk
 
         self.gen = buffered()
 

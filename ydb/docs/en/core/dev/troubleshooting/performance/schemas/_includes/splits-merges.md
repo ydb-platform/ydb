@@ -1,10 +1,17 @@
 # Diagnostics of a suboptimal ratio between minimum and maximum partitions
 
-1. Analyze the **Split / Merge partitions** chart in the **DB status** Grafana dashboard.
+1. See if the **Split / Merge partitions** chart in the **DB status** Grafana dashboard shows any spikes.
 
     ![](../_assets/splits-merges.png)
 
+        This chart displays the time-series data for the following values:
+
+        - Number of split table partitions per second (blue)
+        - Number of merged table partitions per second (green)
+
 1. Check whether the user load increased when the tablet splits and merges spiked.
+
+    <!-- TODO: Add user load charts -->
 
     - Analyze diagrams on the **DataShard** dashboard in Grafana to see any changes in the volume of data read or written by queries.
 

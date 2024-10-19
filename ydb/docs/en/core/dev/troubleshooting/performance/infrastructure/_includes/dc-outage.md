@@ -4,7 +4,7 @@ To determine if one of the data centers of the {{ ydb-short-name }} cluster is n
 
 1. Open [Embedded UI](../../../../../reference/embedded-ui/index.md).
 
-1. On the **Nodes** tab, analyze the [health indicators](../../../../../reference/embedded-ui/ydb-monitoring.md#colored_indicator) in the **Host** columns and **DC** column values.
+1. On the **Nodes** tab, analyze the [health indicators](../../../../../reference/embedded-ui/ydb-monitoring.md#colored_indicator) in the **Host** and **DC** columns.
 
     ![](../_assets/cluster-nodes.png)
 

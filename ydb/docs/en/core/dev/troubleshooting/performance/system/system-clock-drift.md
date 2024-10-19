@@ -10,11 +10,34 @@ Moreover, if the system clock drift exceeds 30 seconds, {{ ydb-short-name }} mig
 
 ## Diagnostics
 
-To diagnose the system clock drift, use one of the following methods:
+To diagnose the system clock drift, use [Embedded UI](../../../../reference/embedded-ui/index.md):
+
+
+1. In the [Embedded UI](../../../../reference/embedded-ui/index.md), go to the **Databases** tab and click on the database.
+
+1. On the **Navigation** tab, ensure the required database is selected.
+
+1. Open the **Diagnostics** tab.
+
+1. On the **Info** tab, click the **Healthcheck** button.
+
+    If the **Healthcheck** button has the `MAINTENANCE REQUIRED` status, the {{ ydb-short-name }} cluster might have some problems, including the system clock drift. The diagnosed problems will be listed in the **DATABASE** section under the **Healthcheck** button.
+
+1. To see the diagnosed problems, expand the **DATABASE** section.
+
+    ![](_assets/healthcheck-clock-drift.png)
+
+    The system clock drift problems will be listed under `NODES_TIME_DIFFERENCE`.
+
+{% note info %}
+
+You can also use the following methods to diagnose system clock drift:
 
 - Open the [Interconnect overview](../../../../reference/embedded-ui/interconnect-overview.md) page of the [Embedded UI](../../../../reference/embedded-ui/index.md).
 
 - Use such tools as `pssh` or `ansible` to run the command on all {{ ydb-short-name }} nodes to display the system clock value.
+
+{% endnote %}
 
 ## Recommendations
 

@@ -701,7 +701,7 @@ private:
     void SendAuthRequest(const TActorContext& ctx);
     void CreateInitAndAuthActor(const TActorContext& ctx);
 
-    void SetupBytesWrittenByUserAgentCounter();
+    void SetupBytesReadByUserAgentCounter();
     void SetupCounters();
     void SetupTopicCounters(const NPersQueue::TTopicConverterPtr& topic);
     void SetupTopicCounters(const NPersQueue::TTopicConverterPtr& topic, const TString& cloudId, const TString& dbId,
@@ -749,6 +749,7 @@ private:
     TString Session;
     TString PeerName;
     TString Database;
+    TString UserAgent;
 
     bool ClientsideLocksAllowed;
     bool BalanceRightNow;
@@ -932,6 +933,7 @@ private:
     NKikimr::NPQ::TPercentileCounter InitLatency;
     NKikimr::NPQ::TPercentileCounter CommitLatency;
     NKikimr::NPQ::TMultiCounter SLIBigLatency;
+    NYdb::NPersQueue::TCounterPtr BytesReadByUserAgent;
 
     NKikimr::NPQ::TPercentileCounter ReadLatency;
     NKikimr::NPQ::TPercentileCounter ReadLatencyFromDisk;

@@ -2,15 +2,16 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
-NKikimr::NArrow::NMerger::TIntervalPositions TCompactionTaskData::GetCheckPositions(const std::shared_ptr<arrow::Schema>& pkSchema) {
+NKikimr::NArrow::NMerger::TIntervalPositions TCompactionTaskData::GetCheckPositions(
+    const std::shared_ptr<arrow::Schema>& pkSchema, const bool withMoved) {
     NArrow::NMerger::TIntervalPositions result;
-    for (auto&& i : GetFinishPoints()) {
+    for (auto&& i : GetFinishPoints(withMoved)) {
         result.AddPosition(NArrow::NMerger::TSortableBatchPosition(i.ToBatch(pkSchema), 0, pkSchema->field_names(), {}, false), false);
     }
     return result;
 }
 
-std::vector<NArrow::TReplaceKey> TCompactionTaskData::GetFinishPoints() {
+std::vector<NArrow::TReplaceKey> TCompactionTaskData::GetFinishPoints(const bool withMoved) {
     THashSet<ui64> middlePortions;
     for (auto&& i : Chains) {
         for (auto&& p : i.GetPortions()) {
@@ -30,6 +31,11 @@ std::vector<NArrow::TReplaceKey> TCompactionTaskData::GetFinishPoints() {
             continue;
         }
         points.emplace_back(i.GetNotIncludedNextPortion()->IndexKeyStart());
+    }
+    if (withMoved) {
+        for (auto&& i : GetMovePortions()) {
+            points.emplace_back(i->IndexKeyStart());
+        }
     }
     std::sort(points.begin(), points.end());
     return points;

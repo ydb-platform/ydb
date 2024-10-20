@@ -8,6 +8,43 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
+class TOrderedPortion {
+private:
+    std::shared_ptr<TPortionInfo> Portion;
+    NArrow::TReplaceKey Start;
+    ui64 PortionId;
+
+public:
+    const std::shared_ptr<TPortionInfo>& GetPortion() const {
+        AFL_VERIFY(Portion);
+        return Portion;
+    }
+
+    const NArrow::TReplaceKey& GetStart() const {
+        return Start;
+    }
+
+    TOrderedPortion(const std::shared_ptr<TPortionInfo>& portion)
+        : Portion(portion)
+        , Start(portion->IndexKeyStart())
+        , PortionId(portion->GetPortionId()) {
+    }
+
+    TOrderedPortion(const NArrow::TReplaceKey& start)
+        : Start(start)
+        , PortionId(Max<ui64>()) {
+    }
+
+    bool operator<(const TOrderedPortion& item) const {
+        auto cmp = Start.CompareNotNull(item.Start);
+        if (cmp == std::partial_ordering::equivalent) {
+            return PortionId < item.PortionId;
+        } else {
+            return cmp == std::partial_ordering::less;
+        }
+    }
+};
+
 class TChainAddress {
 private:
     YDB_READONLY(ui64, FromPortionId, 0);
@@ -18,8 +55,7 @@ public:
     TChainAddress(const ui64 from, const ui64 to, const bool lastIsSeparator)
         : FromPortionId(from)
         , ToPortionId(to)
-        , LastIsSeparator(lastIsSeparator)
-    {
+        , LastIsSeparator(lastIsSeparator) {
     }
 
     bool operator<(const TChainAddress& item) const {
@@ -58,8 +94,7 @@ public:
 
     TPortionsChain(const std::vector<std::shared_ptr<TPortionInfo>>& portions, const std::shared_ptr<TPortionInfo>& notIncludedNextPortion)
         : Portions(portions)
-        , NotIncludedNextPortion(notIncludedNextPortion)
-    {
+        , NotIncludedNextPortion(notIncludedNextPortion) {
         AFL_VERIFY(Portions.size() || !!NotIncludedNextPortion);
     }
 };
@@ -72,17 +107,49 @@ private:
         NCompaction::TGeneralCompactColumnEngineChanges::BuildMemoryPredictor();
     ui64 MemoryUsage = 0;
     THashSet<ui64> UsedPortionIds;
+    THashSet<ui64> RepackPortionIds;
 
     TSimplePortionsGroupInfo CurrentLevelPortionsInfo;
     TSimplePortionsGroupInfo TargetLevelPortionsInfo;
 
     std::set<TChainAddress> NextLevelChainIds;
     THashSet<ui64> NextLevelPortionIds;
+    THashSet<ui64> CurrentLevelPortionIds;
     std::vector<TPortionsChain> Chains;
 
 public:
+    std::vector<std::shared_ptr<TPortionInfo>> GetRepackPortions() const {
+        auto moveIds = GetMovePortionIds();
+        std::vector<std::shared_ptr<TPortionInfo>> result;
+        for (auto&& i : Portions) {
+            if (!moveIds.contains(i->GetPortionId())) {
+                result.emplace_back(i);
+            }
+        }
+        return result;
+    }
+
+    std::vector<std::shared_ptr<TPortionInfo>> GetMovePortions() const {
+        auto moveIds = GetMovePortionIds();
+        std::vector<std::shared_ptr<TPortionInfo>> result;
+        for (auto&& i : Portions) {
+            if (moveIds.contains(i->GetPortionId())) {
+                result.emplace_back(i);
+            }
+        }
+        return result;
+    }
+
     ui64 GetRepackPortionsVolume() const {
         return TargetLevelPortionsInfo.GetRawBytes();
+    }
+
+    THashSet<ui64> GetMovePortionIds() const {
+        auto movePortionIds = CurrentLevelPortionIds;
+        for (auto&& i : RepackPortionIds) {
+            movePortionIds.erase(i);
+        }
+        return movePortionIds;
     }
 
     TString DebugString() const {
@@ -91,14 +158,10 @@ public:
         for (auto&& i : NextLevelChainIds) {
             sb << i.DebugString() << ",";
         }
-        sb << "];target_level_portions:[";
-        for (auto&& i : NextLevelPortionIds) {
-            sb << i << ",";
-        }
-        sb << "];current_level_portions_info:{" << CurrentLevelPortionsInfo.DebugString() << "};target_level_portions_info:{"
-           << TargetLevelPortionsInfo.DebugString() << "}";
+        sb << "];target_level_portions:[" << JoinSeq(",", NextLevelPortionIds) << "];current_level_portions_info:{"
+           << CurrentLevelPortionsInfo.DebugString() << "};target_level_portions_info:{" << TargetLevelPortionsInfo.DebugString() << "};";
+        sb << "move_portion_ids:[" << JoinSeq(",", GetMovePortionIds()) << "]";
         return sb;
-
     }
 
     TCompactionTaskData() = default;
@@ -115,29 +178,35 @@ public:
         return !Portions.size();
     }
 
-    NArrow::NMerger::TIntervalPositions GetCheckPositions(const std::shared_ptr<arrow::Schema>& pkSchema);
-    std::vector<NArrow::TReplaceKey> GetFinishPoints();
+    NArrow::NMerger::TIntervalPositions GetCheckPositions(const std::shared_ptr<arrow::Schema>& pkSchema, const bool withMoved);
+    std::vector<NArrow::TReplaceKey> GetFinishPoints(const bool withMoved);
 
-    void AddCurrentLevelPortion(const std::shared_ptr<TPortionInfo>& portion) {
+    void AddCurrentLevelPortion(const std::shared_ptr<TPortionInfo>& portion, std::optional<TPortionsChain>&& chain, const bool repackMoved) {
         AFL_VERIFY(UsedPortionIds.emplace(portion->GetPortionId()).second);
+        AFL_VERIFY(CurrentLevelPortionIds.emplace(portion->GetPortionId()).second);
         Portions.emplace_back(portion);
         CurrentLevelPortionsInfo.AddPortion(portion);
-        MemoryUsage = Predictor->AddPortion(*portion);
-    }
-
-    void AddNextLevelPortionsSequence(TPortionsChain&& chain) {
-        if (NextLevelChainIds.emplace(chain.GetAddress()).second) {
-            Chains.emplace_back(std::move(chain));
+        if (repackMoved || (chain && chain->GetPortions().size())) {
+            MemoryUsage = Predictor->AddPortion(*portion);
         }
-        for (auto&& i : Chains.back().GetPortions()) {
-            if (!UsedPortionIds.emplace(i->GetPortionId()).second) {
-                AFL_VERIFY(NextLevelPortionIds.contains(i->GetPortionId()));
-                continue;
+
+        if (chain) {
+            if (chain->GetPortions().size()) {
+                RepackPortionIds.emplace(portion->GetPortionId());
             }
-            TargetLevelPortionsInfo.AddPortion(i);
-            Portions.emplace_back(i);
-            MemoryUsage = Predictor->AddPortion(*i);
-            AFL_VERIFY(NextLevelPortionIds.emplace(i->GetPortionId()).second);
+            if (NextLevelChainIds.emplace(chain->GetAddress()).second) {
+                Chains.emplace_back(std::move(*chain));
+                for (auto&& i : Chains.back().GetPortions()) {
+                    if (!UsedPortionIds.emplace(i->GetPortionId()).second) {
+                        AFL_VERIFY(NextLevelPortionIds.contains(i->GetPortionId()));
+                        continue;
+                    }
+                    TargetLevelPortionsInfo.AddPortion(i);
+                    Portions.emplace_back(i);
+                    MemoryUsage = Predictor->AddPortion(*i);
+                    AFL_VERIFY(NextLevelPortionIds.emplace(i->GetPortionId()).second);
+                }
+            }
         }
     }
 
@@ -170,11 +239,9 @@ private:
     YDB_READONLY(ui64, LevelId, 0);
 
 protected:
-    const ui64 RawBytesLimit;
-    const ui64 BlobBytesLimit;
     std::shared_ptr<IPortionsLevel> NextLevel;
     TSimplePortionsGroupInfo PortionsInfo;
-    mutable TInstant PredOptimization = TInstant::Now();
+    mutable std::optional<TInstant> PredOptimization;
 
 public:
     bool HasData() const {
@@ -195,19 +262,13 @@ public:
         return PortionsInfo;
     }
 
-    ui64 GetBlobBytesLimit() const {
-        return BlobBytesLimit;
-    }
-
     const std::shared_ptr<IPortionsLevel>& GetNextLevel() const {
         return NextLevel;
     }
 
     virtual ~IPortionsLevel() = default;
-    IPortionsLevel(const ui64 levelId, const ui64 blobBytesLimit, const ui64 rawBytesLimit, const std::shared_ptr<IPortionsLevel>& nextLevel)
+    IPortionsLevel(const ui64 levelId, const std::shared_ptr<IPortionsLevel>& nextLevel)
         : LevelId(levelId)
-        , RawBytesLimit(rawBytesLimit)
-        , BlobBytesLimit(blobBytesLimit)
         , NextLevel(nextLevel) {
     }
 
@@ -216,7 +277,7 @@ public:
         if (chain && chain->GetPortions().size()) {
             return false;
         }
-        return PortionsInfo.GetBlobBytes() + portion->GetTotalBlobBytes() < BlobBytesLimit * 0.5 || !NextLevel;
+        return true;
     }
 
     virtual bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& locksManager) const = 0;
@@ -232,8 +293,7 @@ public:
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("level", LevelId);
         result.InsertValue("weight", GetWeight());
-        result.InsertValue("raw_bytes_limit", RawBytesLimit);
-        result.InsertValue("blob_bytes_limit", BlobBytesLimit);
+        result.InsertValue("portions", PortionsInfo.SerializeToJson());
         result.InsertValue("details", DoSerializeToJson());
         return result;
     }

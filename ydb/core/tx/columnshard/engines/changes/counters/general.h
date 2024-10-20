@@ -20,7 +20,10 @@ private:
     TPortionGroupCounters RepackPortions;
     TPortionGroupCounters RepackInsertedPortions;
     TPortionGroupCounters RepackCompactedPortions;
-    THashMap<ui32, TPortionGroupCounters> RepackPortionsByLevel;
+    THashMap<ui32, TPortionGroupCounters> RepackPortionsFromLevel;
+    THashMap<ui32, TPortionGroupCounters> RepackPortionsToLevel;
+    THashMap<ui32, TPortionGroupCounters> MovePortionsFromLevel;
+    THashMap<ui32, TPortionGroupCounters> MovePortionsToLevel;
     NMonitoring::THistogramPtr HistogramRepackPortionsRawBytes;
     NMonitoring::THistogramPtr HistogramRepackPortionsBlobBytes;
     NMonitoring::THistogramPtr HistogramRepackPortionsCount;
@@ -32,7 +35,14 @@ public:
         , RepackInsertedPortions("INSERTED", CreateSubGroup("action", "repack"))
         , RepackCompactedPortions("COMPACTED", CreateSubGroup("action", "repack")) {
         for (ui32 i = 0; i < 10; ++i) {
-            RepackPortionsByLevel.emplace(i, TPortionGroupCounters("level=" + ::ToString(i), CreateSubGroup("action", "repack")));
+            RepackPortionsFromLevel.emplace(
+                i, TPortionGroupCounters("level=" + ::ToString(i), CreateSubGroup("action", "repack").CreateSubGroup("direction", "from")));
+            RepackPortionsToLevel.emplace(
+                i, TPortionGroupCounters("level=" + ::ToString(i), CreateSubGroup("action", "repack").CreateSubGroup("direction", "to")));
+            MovePortionsFromLevel.emplace(
+                i, TPortionGroupCounters("level=" + ::ToString(i), CreateSubGroup("action", "move").CreateSubGroup("direction", "from")));
+            MovePortionsToLevel.emplace(
+                i, TPortionGroupCounters("level=" + ::ToString(i), CreateSubGroup("action", "move").CreateSubGroup("direction", "to")));
         }
         FullBlobsAppendCount = TBase::GetDeriviative("FullBlobsAppend/Count");
         FullBlobsAppendBytes = TBase::GetDeriviative("FullBlobsAppend/Bytes");
@@ -51,9 +61,20 @@ public:
         Singleton<TGeneralCompactionCounters>()->HistogramRepackPortionsRawBytes->Collect(portions.GetRawBytes());
     }
 
-    static void OnRepackPortionsByLevel(const THashMap<ui32, TSimplePortionsGroupInfo>& portions) {
-        auto& counters = Singleton<TGeneralCompactionCounters>()->RepackPortionsByLevel;
+    static void OnRepackPortionsByLevel(const THashMap<ui32, TSimplePortionsGroupInfo>& portions, const ui32 targetLevelIdx) {
         for (auto&& i : portions) {
+            auto& counters = (i.first == targetLevelIdx) ? Singleton<TGeneralCompactionCounters>()->RepackPortionsToLevel
+                                                         : Singleton<TGeneralCompactionCounters>()->RepackPortionsFromLevel;
+            auto it = counters.find(i.first);
+            AFL_VERIFY(it != counters.end());
+            it->second.OnData(i.second);
+        }
+    }
+
+    static void OnMovePortionsByLevel(const THashMap<ui32, TSimplePortionsGroupInfo>& portions, const ui32 targetLevelIdx) {
+        for (auto&& i : portions) {
+            auto& counters = (i.first == targetLevelIdx) ? Singleton<TGeneralCompactionCounters>()->MovePortionsToLevel
+                                                         : Singleton<TGeneralCompactionCounters>()->MovePortionsFromLevel;
             auto it = counters.find(i.first);
             AFL_VERIFY(it != counters.end());
             it->second.OnData(i.second);

@@ -4,8 +4,6 @@
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/engines/changes/actualization/construction/context.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/lbuckets/planner/optimizer.h>
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/sbuckets/optimizer/optimizer.h>
 
 #include <ydb/library/actors/core/log.h>
 
@@ -51,7 +49,7 @@ void TGranuleMeta::OnAfterChangePortion(
     if (portionAfter) {
         PortionInfoGuard.OnNewPortion(portionAfter);
         if (!portionAfter->HasRemoveSnapshot()) {
-            PortionsIndex.AddPortion(portionAfter);
+//            PortionsIndex.AddPortion(portionAfter);
             if (modificationGuard) {
                 modificationGuard->AddPortion(portionAfter);
             } else {
@@ -77,7 +75,7 @@ void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> por
     if (portionBefore) {
         PortionInfoGuard.OnDropPortion(portionBefore);
         if (!portionBefore->HasRemoveSnapshot()) {
-            PortionsIndex.RemovePortion(portionBefore);
+//            PortionsIndex.RemovePortion(portionBefore);
             OptimizerPlanner->StartModificationGuard().RemovePortion(portionBefore);
             ActualizationIndex->RemovePortion(portionBefore);
         }

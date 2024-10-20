@@ -63,6 +63,14 @@ public:
             Granules.emplace(address.GetPathId());
         }
     }
+
+    TListPortionsLock(const TString& lockName, const THashSet<TPortionAddress>& portions, const bool readOnly = false)
+        : TBase(lockName, readOnly) {
+        for (auto&& address : portions) {
+            Portions.emplace(address);
+            Granules.emplace(address.GetPathId());
+        }
+    }
 };
 
 class TListTablesLock: public ILock {

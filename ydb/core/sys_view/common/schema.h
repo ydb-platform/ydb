@@ -535,6 +535,7 @@ struct Schema : NIceDb::Schema {
         struct Stats: Column<12, NScheme::NTypeIds::Utf8> {};
         struct Optimized: Column<13, NScheme::NTypeIds::Uint8> {};
         struct CompactionLevel: Column<14, NScheme::NTypeIds::Uint64> {};
+        struct Details: Column<15, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<PathId, TabletId, PortionId>;
         using TColumns = TableColumns<
@@ -551,7 +552,8 @@ struct Schema : NIceDb::Schema {
             TierName,
             Stats,
             Optimized,
-            CompactionLevel
+            CompactionLevel,
+            Details
         >;
     };
 

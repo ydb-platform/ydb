@@ -9,6 +9,7 @@ namespace NKikimr::NOlap::NCompaction {
 
 class TGeneralCompactColumnEngineChanges: public TCompactColumnEngineChanges {
 private:
+    YDB_ACCESSOR(ui64, PortionExpectedSize, 1.5 * (1 << 20));
     using TBase = TCompactColumnEngineChanges;
     std::shared_ptr<NPrioritiesQueue::TAllocationGuard> PrioritiesAllocationGuard;
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;

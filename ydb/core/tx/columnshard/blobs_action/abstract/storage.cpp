@@ -7,16 +7,12 @@ bool TCommonBlobsTracker::IsBlobInUsage(const NOlap::TUnifiedBlobId& blobId) con
 }
 
 bool TCommonBlobsTracker::DoUseBlob(const TUnifiedBlobId& blobId) {
-    auto it = BlobsUseCount.find(blobId);
-    if (it == BlobsUseCount.end()) {
-        BlobsUseCount.emplace(blobId, 1);
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_BLOBS)("method", "DoUseBlob")("blob_id", blobId)("count", 1);
-        return true;
-    } else {
+    const auto& [it, isNew] = BlobsUseCount.emplace(blobId, 1);
+    if (!isNew) {
         ++it->second;
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_BLOBS)("method", "DoUseBlob")("blob_id", blobId)("count", it->second);
-        return false;
     }
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_BLOBS)("method", "DoUseBlob")("blob_id", blobId)("count", it->second);
+    return isNew;
 }
 
 bool TCommonBlobsTracker::DoFreeBlob(const TUnifiedBlobId& blobId) {

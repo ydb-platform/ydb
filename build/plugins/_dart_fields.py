@@ -863,14 +863,6 @@ class TestClasspathDeps:
             return {cls.KEY: '${DART_CLASSPATH_DEPS}'}
 
 
-class TestClasspathOrigins:
-    KEY = 'TEST_CLASSPATH_ORIGINS'
-
-    @classmethod
-    def value(cls, unit, flat_args, spec_args):
-        return None
-
-
 class TestCwd:
     KEY = 'TEST-CWD'
 

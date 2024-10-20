@@ -50,9 +50,6 @@ class NpmPackageManager(BasePackageManager):
         if errors:
             raise PackageManagerError("Unable to process some lockfiles:\n{}".format("\n".join(errors)))
 
-    def calc_prepare_deps_inouts(self, store_path: str, has_deps: bool) -> tuple[list[str], list[str]]:
-        raise NotImplementedError("NPM does not support contrib/typescript flow.")
-
     def calc_prepare_deps_inouts_and_resources(
         self, store_path: str, has_deps: bool
     ) -> tuple[list[str], list[str], list[str]]:
@@ -147,7 +144,6 @@ class NpmPackageManager(BasePackageManager):
                 sources_path=dep_source_path,
                 nodejs_bin_path=self.nodejs_bin_path,
                 script_path=self.script_path,
-                contribs_path=self.contribs_path,
                 module_path=module_path,
                 sources_root=self.sources_root,
             )

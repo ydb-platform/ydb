@@ -29,7 +29,12 @@ bool HasMessages(const Topic::StreamReadMessage::ReadResponse& data) {
 
 
 TString CleanupCounterValueString(const TString& value) {
+    // Internal Monitoring system requires metrics values to no longer than 200 characters
+    // and prohibits some ASCII characters.
+
     TString clean;
+    constexpr auto valueLenghtLimit = 200;
+
     for (auto c : value) {
         switch (c) {
         case '|':
@@ -42,7 +47,7 @@ TString CleanupCounterValueString(const TString& value) {
             continue;
         default:
             clean.push_back(c);
-            if (clean.size() == 200) {
+            if (clean.size() == valueLenghtLimit) {
                 break;
             }
         }

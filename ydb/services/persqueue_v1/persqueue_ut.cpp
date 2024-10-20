@@ -3913,7 +3913,8 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
                               "", "Dc1", consumerName, consumerPath
                               );
 
-                checkUserAgentCounters(monPort, "BytesReadByUserAgent", "pqv1", userAgent, "", consumerPath);
+                checkUserAgentCounters(server.CleverServer->GetRuntime()->GetMonPort(),
+                                       "BytesReadByUserAgent", "pqv1", userAgent, "", consumerPath);
             }
         };
 

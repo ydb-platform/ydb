@@ -6,13 +6,13 @@
 
 namespace NKikimr {
 
-class TConclusinStatusImplBase {
+class TConclusionStatusImplBase {
 protected:
     void AbortOnValidationProblem(const TString& errorMessage, const TString& processInfo) const;
 };
 
 template <class TStatus, TStatus StatusOk, TStatus DefaultError>
-class TConclusionStatusImpl : TConclusinStatusImplBase {
+class TConclusionStatusImpl : TConclusionStatusImplBase {
 private:
     std::optional<TString> ErrorMessage;
     TStatus Status = StatusOk;

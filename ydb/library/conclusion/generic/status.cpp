@@ -4,7 +4,7 @@
 
 namespace NKikimr {
 
-void TConclusinStatusImplBase::AbortOnValidationProblem(const TString& errorMessage, const TString& processInfo) const {
+void TConclusionStatusImplBase::AbortOnValidationProblem(const TString& errorMessage, const TString& processInfo) const {
     if (processInfo) {
         AFL_VERIFY(false)("problem", errorMessage)("process_info", processInfo);
     } else {

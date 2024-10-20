@@ -63,12 +63,12 @@ public:
     }
 
     [[nodiscard]] static TConclusionStatusImpl Fail(const TStatus& status, const char* errorMessage) {
-        Y_ABORT_UNLESS(status != StatusOk);
+        Y_ABORT_UNLESS(DefaultError == StatusOk || status != StatusOk);
         return TConclusionStatusImpl(errorMessage, status);
     }
 
     [[nodiscard]] static TConclusionStatusImpl Fail(const TStatus& status, const TString& errorMessage) {
-        Y_ABORT_UNLESS(status != StatusOk);
+        Y_ABORT_UNLESS(DefaultError == StatusOk || status != StatusOk);
         return TConclusionStatusImpl(errorMessage, status);
     }
 

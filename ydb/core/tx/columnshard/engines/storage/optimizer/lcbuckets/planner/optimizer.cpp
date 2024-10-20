@@ -13,15 +13,21 @@ TOptimizerPlanner::TOptimizerPlanner(
     , Counters(std::make_shared<TCounters>())
     , StoragesManager(storagesManager)
     , PrimaryKeysSchema(primaryKeysSchema) {
-    std::vector<ui64> levelLimits = { (ui64)1 << 13, (ui64)1 << 16, (ui64)1 << 19, (ui64)1 << 22, (ui64)1 << 25, (ui64)1 << 28, (ui64)1 << 31,
-        (ui64)1 << 34, (ui64)1 << 40 };
     std::shared_ptr<IPortionsLevel> nextLevel;
-    for (i32 i = levelLimits.size() - 1; i >= 2; --i) {
-        nextLevel = std::make_shared<TLevelPortions>(i, levelLimits[i], 0, nextLevel, Counters->Levels[i]);
-        Levels.insert(Levels.begin(), nextLevel);
-    }
-    Levels.insert(Levels.begin(), std::make_shared<TAccumulationLevelPortions>(1, 0, 0, Levels.front(), Counters->Levels[1]));
-    Levels.insert(Levels.begin(), std::make_shared<TZeroLevelPortions>(0, 0, Levels.front(), Counters->Levels[0]));
+    const ui64 maxPortionBlobBytes = (ui64)1 << 20;
+//    Levels.emplace_back(
+//        std::make_shared<TLevelPortions>(6, 0.7, maxPortionBlobBytes, nullptr, PortionsInfo, Counters->GetLevelCounters(6)));
+//    Levels.emplace_back(
+//        std::make_shared<TLevelPortions>(5, 0.2, maxPortionBlobBytes, Levels.back(), PortionsInfo, Counters->GetLevelCounters(5)));
+//    Levels.emplace_back(
+//        std::make_shared<TLevelPortions>(4, 0.06, maxPortionBlobBytes, Levels.back(), PortionsInfo, Counters->GetLevelCounters(4)));
+    Levels.emplace_back(
+        std::make_shared<TLevelPortions>(3, 0.9, maxPortionBlobBytes, nullptr, PortionsInfo, Counters->GetLevelCounters(3)));
+    Levels.emplace_back(
+        std::make_shared<TLevelPortions>(2, 0.1, maxPortionBlobBytes, Levels.back(), PortionsInfo, Counters->GetLevelCounters(2)));
+    Levels.emplace_back(std::make_shared<TAccumulationLevelPortions>(1, Levels.back(), Counters->GetLevelCounters(1)));
+    Levels.emplace_back(std::make_shared<TZeroLevelPortions>(Levels.back(), Counters->GetLevelCounters(0)));
+    std::reverse(Levels.begin(), Levels.end());
     RefreshWeights();
 }
 
@@ -31,12 +37,21 @@ std::shared_ptr<NKikimr::NOlap::TColumnEngineChanges> TOptimizerPlanner::DoGetOp
     auto level = LevelsByWeight.begin()->second;
     auto data = level->GetOptimizationTask();
     TSaverContext saverContext(StoragesManager);
-    auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, data.GetPortions(), saverContext);
+    std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges> result;
+    if (level->GetLevelId() <= 1) {
+        result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, data.GetPortions(), saverContext);
+    } else {
+        result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, data.GetRepackPortions(), saverContext);
+        result->AddMovePortions(data.GetMovePortions());
+    }
     result->SetTargetCompactionLevel(data.GetTargetCompactionLevel());
-    auto positions = data.GetCheckPositions(PrimaryKeysSchema);
+    auto levelPortions = std::dynamic_pointer_cast<TLevelPortions>(Levels[data.GetTargetCompactionLevel()]);
+    if (levelPortions) {
+        result->SetPortionExpectedSize(levelPortions->GetExpectedPortionSize());
+    }
+    auto positions = data.GetCheckPositions(PrimaryKeysSchema, level->GetLevelId() > 1);
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("task_id", result->GetTaskIdentifier())("positions", positions.DebugString())(
-        "level", level->GetLevelId())("portions", JoinSeq(",", data.GetPortionIds()))("target", data.GetTargetCompactionLevel())(
-        "data", data.DebugString());
+        "level", level->GetLevelId())("target", data.GetTargetCompactionLevel())("data", data.DebugString());
     result->SetCheckPoints(std::move(positions));
     for (auto&& i : result->SwitchedPortions) {
         AFL_VERIFY(!locksManager->IsLocked(i));

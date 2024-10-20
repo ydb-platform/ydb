@@ -8,6 +8,7 @@ class TOptimizerPlanner: public IOptimizerPlanner {
 private:
     using TBase = IOptimizerPlanner;
     std::shared_ptr<TCounters> Counters;
+    std::shared_ptr<TSimplePortionsGroupInfo> PortionsInfo = std::make_shared<TSimplePortionsGroupInfo>();
 
     std::vector<std::shared_ptr<IPortionsLevel>> Levels;
     class TReverseSorting {
@@ -52,6 +53,7 @@ protected:
             if (i->GetMeta().GetTierName() != IStoragesManager::DefaultStorageId && i->GetMeta().GetTierName() != "") {
                 continue;
             }
+            PortionsInfo->RemovePortion(i);
             AFL_VERIFY(i->GetCompactionLevel() < Levels.size());
             removePortionsByLevel[i->GetCompactionLevel()].emplace_back(i);
         }
@@ -61,6 +63,10 @@ protected:
         for (auto&& [_, i] : add) {
             if (i->GetMeta().GetTierName() != IStoragesManager::DefaultStorageId && i->GetMeta().GetTierName() != "") {
                 continue;
+            }
+            PortionsInfo->AddPortion(i);
+            if (i->GetCompactionLevel() && (i->GetCompactionLevel() >= Levels.size() || !Levels[i->GetCompactionLevel()]->CanTakePortion(i))) {
+                i->MutableMeta().ResetCompactionLevel(0);
             }
             AFL_VERIFY(i->GetCompactionLevel() < Levels.size());
             if (i->GetMeta().GetCompactionLevel()) {
@@ -78,7 +84,7 @@ protected:
             }
             if (i->GetTotalBlobBytes() > 512 * 1024 && i->GetMeta().GetProduced() != NPortion::EProduced::INSERTED) {
                 bool found = false;
-                for (ui32 levelIdx = 1; levelIdx < Levels.size(); ++levelIdx) {
+                for (ui32 levelIdx = 2; levelIdx < Levels.size(); ++levelIdx) {
                     if (Levels[levelIdx]->CanTakePortion(i)) {
                         Levels[levelIdx]->ModifyPortions({i}, {});
                         i->MutableMeta().ResetCompactionLevel(levelIdx);
@@ -99,7 +105,7 @@ protected:
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override;
 
     virtual void DoActualize(const TInstant /*currentInstant*/) override {
-        RefreshWeights();
+//        RefreshWeights();
     }
 
     virtual TOptimizationPriority DoGetUsefulMetric() const override {
@@ -132,7 +138,9 @@ protected:
 
 public:
     virtual NArrow::NMerger::TIntervalPositions GetBucketPositions() const override {
-        return NArrow::NMerger::TIntervalPositions();
+//        return NArrow::NMerger::TIntervalPositions();
+        NArrow::NMerger::TIntervalPositions result = Levels.back()->GetBucketPositions(PrimaryKeysSchema);
+        return result;
     }
 
     TOptimizerPlanner(

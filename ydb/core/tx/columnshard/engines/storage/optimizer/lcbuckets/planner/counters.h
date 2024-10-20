@@ -59,6 +59,11 @@ public:
         }
     }
 
+    const TLevelCounters& GetLevelCounters(const ui32 levelIdx) const {
+        AFL_VERIFY(levelIdx < Levels.size())("idx", levelIdx)("count", Levels.size());
+        return Levels[levelIdx];
+    }
+
     void AddPortion(const ui32 levelId, const std::shared_ptr<TPortionInfo>& portion) {
         AFL_VERIFY(levelId < Levels.size());
         Levels[levelId].Portions->AddPortion(portion);

@@ -18,14 +18,24 @@ private:
         }
 
         bool operator<(const TOrderedPortion& item) const {
-            if (Portion->RecordSnapshotMax() == item.Portion->RecordSnapshotMax()) {
+            auto cmp = Portion->IndexKeyStart().CompareNotNull(item.Portion->IndexKeyStart());
+            if (cmp == std::partial_ordering::equivalent) {
                 return Portion->GetPortionId() < item.Portion->GetPortionId();
             } else {
-                return Portion->RecordSnapshotMax() < item.Portion->RecordSnapshotMax();
+                return cmp == std::partial_ordering::less;
             }
         }
     };
     std::set<TOrderedPortion> Portions;
+
+    std::shared_ptr<IPortionsLevel> GetTargetLevelVerified() const {
+        auto targetLevel = NextLevel;
+        if (PortionsInfo.PredictPackedBlobBytes(GetPackKff()) > (1 << 20) && PortionsInfo.GetRawBytes() < (512 << 20)) {
+            targetLevel = targetLevel->GetNextLevel();
+        }
+        AFL_VERIFY(targetLevel);
+        return targetLevel;
+    }
 
     virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& /*pkSchema*/) const override {
         AFL_VERIFY(false);
@@ -51,9 +61,6 @@ private:
             LevelCounters.Portions->RemovePortion(i);
             PortionsInfo.RemovePortion(i);
         }
-        if (remove.size()) {
-            PredOptimization = TInstant::Now();
-        }
     }
 
     virtual bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
@@ -65,69 +72,14 @@ private:
         return false;
     }
 
-    virtual ui64 DoGetWeight() const override {
-        if (PortionsInfo.GetBlobBytes() > (10 << 20) || PortionsInfo.GetRawBytes() > (512 << 20) || PortionsInfo.GetCount() > 1000 || 
-            (TInstant::Now() - PredOptimization > TDuration::Seconds(180) && PortionsInfo.GetCount() > 5)) {
-            return PortionsInfo.GetCount();
-        } else {
-            return 0;
-        }
-    }
+    virtual ui64 DoGetWeight() const override;
 
-    virtual TCompactionTaskData DoGetOptimizationTask() const override {
-        AFL_VERIFY(Portions.size());
-        std::optional<TCompactionTaskData> result;
-        std::shared_ptr<IPortionsLevel> targetLevel = GetNextLevel();
-        AFL_VERIFY(targetLevel);
-        bool onceLevel = false;
-        ui64 packedSize = PortionsInfo.GetBlobBytes();
-        auto kff = targetLevel->GetPackKff();
-        if (kff) {
-            packedSize = PortionsInfo.GetRawBytes() * *kff;
-        }
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "zero_opt")("packed_size", packedSize)("kff", kff)("info", PortionsInfo.DebugString());
-        if (packedSize < (1 << 20) && PortionsInfo.GetRawBytes() < (512 << 20)) {
-            onceLevel = true;
-        } else {
-            targetLevel = targetLevel->GetNextLevel();
-        }
-        AFL_VERIFY(targetLevel);
-        while (targetLevel) {
-            TCompactionTaskData resultLocal(targetLevel->GetLevelId());
-            for (auto&& i : Portions) {
-                resultLocal.AddCurrentLevelPortion(i.GetPortion());
-                auto nextLevelPortions = targetLevel->GetAffectedPortions(i.GetPortion()->IndexKeyStart(), i.GetPortion()->IndexKeyEnd());
-                if (nextLevelPortions) {
-                    resultLocal.AddNextLevelPortionsSequence(std::move(*nextLevelPortions));
-                }
-                if (!resultLocal.CanTakeMore()) {
-                    break;
-                }
-            }
-            targetLevel = targetLevel->GetNextLevel();
-            if (!result || resultLocal.GetRepackPortionsVolume() < result->GetRepackPortionsVolume()) {
-                result = resultLocal;
-            }
-            if (onceLevel || !result->GetRepackPortionsVolume()) {
-                break;
-            }
-        }
-        AFL_VERIFY(result);
-        return *result;
-    }
-
-    virtual NJson::TJsonValue DoSerializeToJson() const override {
-        NJson::TJsonValue result = NJson::JSON_MAP;
-        result.InsertValue("portions", PortionsInfo.SerializeToJson());
-        return result;
-    }
+    virtual TCompactionTaskData DoGetOptimizationTask() const override;
 
 public:
-    TZeroLevelPortions(const ui64 blobBytesLimit, const ui64 rawBytesLimit, const std::shared_ptr<IPortionsLevel>& nextLevel,
-        const TLevelCounters& levelCounters)
-        : TBase(0, blobBytesLimit, rawBytesLimit, nextLevel)
-        , LevelCounters(levelCounters)
-    {
+    TZeroLevelPortions(const std::shared_ptr<IPortionsLevel>& nextLevel, const TLevelCounters& levelCounters)
+        : TBase(0, nextLevel)
+        , LevelCounters(levelCounters) {
         AFL_VERIFY(nextLevel);
     }
 };

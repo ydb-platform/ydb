@@ -26,6 +26,14 @@ public:
         return result;
     }
 
+    ui64 PredictPackedBlobBytes(const std::optional<double> kff) const {
+        if (kff) {
+            return RawBytes * *kff;
+        } else {
+            return BlobBytes;
+        }
+    }
+
     TString DebugString() const {
         return TStringBuilder() << "{blob_bytes=" << BlobBytes << ";raw_bytes=" << RawBytes << ";count=" << Count << ";records=" << RecordsCount
                                 << "}";

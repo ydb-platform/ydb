@@ -6,6 +6,7 @@
 
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/priorities/usage/service.h>
 
 namespace NKikimr::NOlap::NCompaction {
@@ -86,10 +87,13 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
     TConstructionContext& context, std::vector<TReadPortionInfoWithBlobs>&& portions) noexcept {
     auto resultSchema = context.SchemaVersions.GetLastSchema();
     auto shardingActual = context.SchemaVersions.GetShardingInfoActual(GranuleMeta->GetPathId());
-
+    if (portions.empty()) {
+        return;
+    }
     std::shared_ptr<NArrow::NSplitter::TSerializationStats> stats = std::make_shared<NArrow::NSplitter::TSerializationStats>();
     std::shared_ptr<TFilteredSnapshotSchema> resultFiltered;
     NCompaction::TMerger merger(context, SaverContext);
+    merger.SetPortionExpectedSize(PortionExpectedSize);
     {
         std::set<ui32> pkColumnIds;
         {
@@ -174,7 +178,9 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
     NChanges::TGeneralCompactionCounters::OnRepackPortions(insertedPortions + compactedPortions);
     NChanges::TGeneralCompactionCounters::OnRepackInsertedPortions(insertedPortions);
     NChanges::TGeneralCompactionCounters::OnRepackCompactedPortions(compactedPortions);
-    NChanges::TGeneralCompactionCounters::OnRepackPortionsByLevel(portionGroups);
+    if (TargetCompactionLevel) {
+        NChanges::TGeneralCompactionCounters::OnRepackPortionsByLevel(portionGroups, *TargetCompactionLevel);
+    }
 
     {
         std::vector<TReadPortionInfoWithBlobs> portions =

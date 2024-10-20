@@ -30,7 +30,7 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
 void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
 
-    Y_ABORT_UNLESS(SwitchedPortions.size());
+//    Y_ABORT_UNLESS(SwitchedPortions.size());
     THashMap<TString, THashSet<TBlobRange>> blobRanges;
     auto& index = self.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
     for (const auto& p : SwitchedPortions) {
@@ -79,7 +79,7 @@ TCompactColumnEngineChanges::TCompactColumnEngineChanges(std::shared_ptr<TGranul
         AddPortionToRemove(*portionInfo);
         Y_ABORT_UNLESS(portionInfo->GetPathId() == GranuleMeta->GetPathId());
     }
-    Y_ABORT_UNLESS(SwitchedPortions.size());
+//    Y_ABORT_UNLESS(SwitchedPortions.size());
 }
 
 TCompactColumnEngineChanges::~TCompactColumnEngineChanges() {

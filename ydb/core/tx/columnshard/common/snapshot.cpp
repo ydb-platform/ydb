@@ -43,4 +43,8 @@ NKikimr::NOlap::TSnapshot TSnapshot::MaxForPlanInstant(const TInstant planInstan
     return TSnapshot(planInstant.MilliSeconds(), ::Max<ui64>());
 }
 
+NJson::TJsonValue TSnapshot::SerializeToJson() const {
+    return DebugJson();
+}
+
 };

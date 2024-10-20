@@ -34,6 +34,15 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
 
     NArrow::Append<arrow::UInt8Type>(*builders[12], portion.HasRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized));
     NArrow::Append<arrow::UInt64Type>(*builders[13], portion.GetMeta().GetCompactionLevel());
+    {
+        NJson::TJsonValue details = NJson::JSON_MAP;
+        details.InsertValue("snapshot_min", portion.RecordSnapshotMin().SerializeToJson());
+        details.InsertValue("snapshot_max", portion.RecordSnapshotMax().SerializeToJson());
+        details.InsertValue("primary_key_min", portion.IndexKeyStart().DebugString());
+        details.InsertValue("primary_key_max", portion.IndexKeyEnd().DebugString());
+        const auto detailsInfo = details.GetStringRobust();
+        NArrow::Append<arrow::StringType>(*builders[14], arrow::util::string_view(detailsInfo.data(), detailsInfo.size()));
+    }
 }
 
 ui32 TStatsIterator::PredictRecordsCount(const NAbstract::TGranuleMetaView& granule) const {

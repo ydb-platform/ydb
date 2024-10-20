@@ -32,8 +32,8 @@ protected:
         return result;
     }
 
-    virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
-        return nullptr;
+    virtual std::unique_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
+        return {};
     }
 
 public:

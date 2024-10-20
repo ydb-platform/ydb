@@ -31,13 +31,22 @@ ui64 TZeroLevelPortions::DoGetWeight() const {
     TSimplePortionsGroupInfo portionsInfo;
     auto targetLevel = GetTargetLevelVerified();
 
-    for (auto&& i : Portions) {
-        auto chain = targetLevel->GetAffectedPortions(i.GetPortion()->IndexKeyStart(), i.GetPortion()->IndexKeyEnd());
-        if (chain) {
-            for (auto&& p : chain->GetPortions()) {
-                if (portionIds.emplace(p->GetPortionId()).second) {
-                    portionsInfo.AddPortion(p);
+    auto chain =
+        targetLevel->GetAffectedPortions(Portions.begin()->GetPortion()->IndexKeyStart(), Portions.rbegin()->GetPortion()->IndexKeyEnd());
+    if (chain) {
+        auto it = Portions.begin();
+        auto itNext = chain->GetPortions().begin();
+        while (it != Portions.end() && itNext != chain->GetPortions().end()) {
+            const auto& nextLevelPortion = *itNext;
+            if (nextLevelPortion->IndexKeyEnd() < it->GetPortion()->IndexKeyStart()) {
+                ++itNext;
+            } else if (it->GetPortion()->IndexKeyEnd() < nextLevelPortion->IndexKeyStart()) {
+                ++it;
+            } else {
+                if (portionIds.emplace(nextLevelPortion->GetPortionId()).second) {
+                    portionsInfo.AddPortion(nextLevelPortion);
                 }
+                ++itNext;
             }
         }
     }
@@ -46,4 +55,4 @@ ui64 TZeroLevelPortions::DoGetWeight() const {
     return 1000000000.0 * PortionsInfo.GetCount() * PortionsInfo.GetCount() / mb;
 }
 
-}
+}   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

@@ -7,8 +7,9 @@ YQL_ABI_VERSION(
 )
 
 PEERDIR(
+    library/cpp/containers/absl_flat_hash
     library/cpp/json
-ydb/library/conclusion
+    ydb/library/conclusion
     ydb/library/yql/minikql/dom
     contrib/libs/simdjson
 )

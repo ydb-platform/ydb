@@ -6,13 +6,13 @@
 #include <contrib/libs/simdjson/include/simdjson/dom/object-inl.h>
 #include <contrib/libs/simdjson/include/simdjson/dom/parser-inl.h>
 #include <contrib/libs/simdjson/include/simdjson/ondemand.h>
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 #include <library/cpp/json/json_reader.h>
-
-#include <util/generic/vector.h>
-#include <util/generic/stack.h>
-#include <util/generic/set.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/map.h>
+#include <util/generic/set.h>
+#include <util/generic/stack.h>
+#include <util/generic/vector.h>
 
 #include <cmath>
 
@@ -77,7 +77,7 @@ struct TContainer {
  * container index instead. This is exactly how containers are stored in serialized BinaryJson (but with offsets instead of indices)
  */
 struct TJsonIndex {
-    ui32 InternKey(const TStringBuf value) {
+    ui32 InternKey(const TStringBuf& value) {
         TotalKeysCount++;
 
         const auto [it, emplaced] = Keys.emplace(value, LastFreeStringIndex);
@@ -88,7 +88,7 @@ struct TJsonIndex {
         return it->second;
     }
 
-    ui32 InternString(const TStringBuf value) {
+    ui32 InternString(const TStringBuf& value) {
         const auto [it, emplaced] = Strings.emplace(value, LastFreeStringIndex);
         if (emplaced) {
             ++LastFreeStringIndex;
@@ -130,15 +130,15 @@ struct TJsonIndex {
     TStack<ui32> ContainerIndex;
     TVector<TContainer> Containers;
 
-    TMap<TString, ui32> Keys;
+    TMap<std::string, ui32> Keys;
     ui32 TotalKeyLength = 0;
     ui32 TotalKeysCount = 0;
 
-    THashMap<TString, ui32> Strings;
+    absl::flat_hash_map<std::string, ui32> Strings;
     ui32 LastFreeStringIndex = 0;
     ui32 TotalStringLength = 0;
 
-    THashMap<double, ui32> Numbers;
+    absl::flat_hash_map<double, ui32> Numbers;
     ui32 LastFreeNumberIndex = 0;
 
     ui32 TotalEntriesCount = 0;

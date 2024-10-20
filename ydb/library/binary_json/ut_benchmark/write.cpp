@@ -32,7 +32,7 @@ NJson::TJsonValue GetTestJson(ui64 depth = 10, ui64 nChildren = 2) {
 
 TString GetTestJsonString() {
     seed = 42;
-    return NJson::WriteJson(GetTestJson(2, 100));
+    return NJson::WriteJson(GetTestJson(3, 50));
 }
 
 static void BenchWriteSimdJson(benchmark::State& state) {
@@ -47,4 +47,4 @@ static void BenchWriteSimdJson(benchmark::State& state) {
 
 }
 
-BENCHMARK(BenchWriteSimdJson);
+BENCHMARK(BenchWriteSimdJson)->MinTime(1);

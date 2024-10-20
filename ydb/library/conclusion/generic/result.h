@@ -1,52 +1,54 @@
 #pragma once
-#include "status.h"
+#include <util/generic/singleton.h>
 #include <util/system/yassert.h>
+
 #include <optional>
+#include <variant>
 
 namespace NKikimr {
 
-template <class TResult>
-class TConclusion {
+template <class TStatus, class TResult>
+class TConclusionImpl {
 private:
-    std::variant<TConclusionStatus, TResult> Result;
-public:
+    std::variant<TStatus, TResult> Result;
 
-    TConclusion(TConclusionStatus&& status)
+public:
+    TConclusionImpl(TStatus&& status)
         : Result(std::move(status)) {
-        auto* resStatus = std::get_if<TConclusionStatus>(&Result);
+        auto* resStatus = std::get_if<TStatus>(&Result);
         Y_ABORT_UNLESS(resStatus->IsFail());
     }
 
     bool IsFail() const {
-        return std::get_if<TConclusionStatus>(&Result);
+        return std::holds_alternative<TStatus>(Result);
     }
 
     bool IsSuccess() const {
-        return std::get_if<TResult>(&Result);
+        return std::holds_alternative<TResult>(Result);
     }
 
-    TConclusion(const TConclusionStatus& status)
+    TConclusionImpl(const TStatus& status)
         : Result(status) {
         Y_ABORT_UNLESS(IsFail());
     }
 
     template <class TResultArg>
-    TConclusion(TResultArg&& result)
+    TConclusionImpl(TResultArg&& result)
         : Result(std::move(result)) {
     }
 
     template <class TResultArg>
-    TConclusion(const TResultArg& result)
+    TConclusionImpl(const TResultArg& result)
         : Result(result) {
     }
 
     template <class TResultArg>
-    TConclusion(TResultArg& result)
+    TConclusionImpl(TResultArg& result)
         : Result(result) {
     }
 
-    const TConclusionStatus& GetError() const {
-        auto result = std::get_if<TConclusionStatus>(&Result);
+    const TStatus& GetError() const {
+        auto result = std::get_if<TStatus>(&Result);
         Y_ABORT_UNLESS(result, "incorrect object for error request");
         return *result;
     }
@@ -85,12 +87,12 @@ public:
         return IsFail();
     }
 
-    operator TConclusionStatus() const {
+    operator TStatus() const {
         return GetError();
     }
 
     const TString& GetErrorMessage() const {
-        auto* status = std::get_if<TConclusionStatus>(&Result);
+        auto* status = std::get_if<TStatus>(&Result);
         if (!status) {
             return Default<TString>();
         } else {
@@ -98,14 +100,13 @@ public:
         }
     }
 
-    Ydb::StatusIds::StatusCode GetStatus() const {
-        auto* status = std::get_if<TConclusionStatus>(&Result);
+    auto GetStatus() const {
+        auto* status = std::get_if<TStatus>(&Result);
         if (!status) {
-            return Ydb::StatusIds::SUCCESS;
+            return TStatus::Success().GetStatus();
         } else {
             return status->GetStatus();
         }
     }
 };
-
 }

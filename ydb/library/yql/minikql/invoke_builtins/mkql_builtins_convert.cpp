@@ -573,7 +573,7 @@ struct TStringConvert {
 
 NUdf::TUnboxedValuePod JsonToJsonDocument(const NUdf::TUnboxedValuePod value) {
     auto binaryJson = NKikimr::NBinaryJson::SerializeToBinaryJson(value.AsStringRef());
-    if (!binaryJson.Defined()) {
+    if (!binaryJson.IsSuccess()) {
         // JSON parse error happened, return NULL
         return NUdf::TUnboxedValuePod();
     }

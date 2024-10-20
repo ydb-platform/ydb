@@ -3724,7 +3724,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
                     } else {
                         UNIT_FAIL("Neither topic nor consumer were provided");
                     }
-                    UNIT_ASSERT_VALUES_EQUAL(labels["user-agent"].GetString(), NGRpcProxy::V1::CleanupCounterValueString(userAgent));
+                    UNIT_ASSERT_VALUES_EQUAL(labels["user_agent"].GetString(), NGRpcProxy::V1::CleanupCounterValueString(userAgent));
                 }
             };
 

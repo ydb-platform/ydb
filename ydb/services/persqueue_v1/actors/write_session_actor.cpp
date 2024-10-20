@@ -499,7 +499,7 @@ void TWriteSessionActor<UseMigrationProtocol>::SetupBytesWrittenByUserAgentCount
         ->GetSubgroup("host", "")
         ->GetSubgroup("protocol", protocol)
         ->GetSubgroup("topic", FullConverter->GetFederationPath())
-        ->GetSubgroup("user-agent", CleanupCounterValueString(UserAgent))
+        ->GetSubgroup("user_agent", CleanupCounterValueString(UserAgent))
         ->GetExpiringNamedCounter("sensor", "BytesWrittenByUserAgent", true);
 }
 

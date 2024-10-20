@@ -55,6 +55,7 @@ EXCESSIVE_SRCS = [
     "fseek.c",
     "freading.c",
     "langinfo.h",
+    "limits.h",
     "locale.h",
     "math.h",
     "signal.h",
@@ -112,6 +113,7 @@ m4 = NixProject(
     # fmt: off
     copy_sources=[
         # these are included from regex.c and should not be added into SRCS
+        "lib/intprops.h",
         "lib/regcomp.c",
         "lib/regex_internal.c",
         "lib/regex_internal.h",
@@ -141,6 +143,7 @@ m4 = NixProject(
         "bits/libc-lock.h",
         "gettextP.h",
         "lc-charset-dispatch.h",
+        "libc-lock.h",
         "localename-table.h",
         "../locale/localeinfo.h",
         "OS.h",

@@ -9,7 +9,7 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.4.17)
+VERSION(1.4.18)
 
 PEERDIR(
     contrib/libs/libc_compat
@@ -54,6 +54,7 @@ SRCS(
     fopen-safer.c
     freadahead.c
     fseeko.c
+    getprogname.c
     gl_avltree_oset.c
     gl_linkedhash_list.c
     gl_list.c
@@ -63,10 +64,11 @@ SRCS(
     glthread/lock.c
     glthread/threadlib.c
     glthread/tls.c
-    isnanl.c
+    hard-locale.c
     localcharset.c
     malloca.c
     math.c
+    mbrtowc.c
     memchr2.c
     mkstemp-safer.c
     pipe-safer.c

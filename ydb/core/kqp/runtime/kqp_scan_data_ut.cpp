@@ -454,6 +454,32 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         }
         UNIT_ASSERT(scanData.IsEmpty());
     }
+
+    Y_UNIT_TEST(FailOnUnsupportedPgType) {
+        NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+        TMemoryUsageInfo memInfo("");
+        THolderFactory factory(alloc.Ref(), memInfo);
+
+        TSmallVec<TKqpComputeContextBase::TColumn> cols{{
+            .Type = TTypeInfo(NPg::TypeDescFromPgTypeName("pgtext"))
+        }};
+        TKqpScanComputeContext::TScanData scanData({}, TTableRange({}), cols, {}, cols);
+
+        std::unique_ptr<arrow::RecordBatchBuilder> batchBuilder = nullptr;
+        auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{arrow::field("pgtext", arrow::utf8())});
+        auto batchBuilderResult = arrow::RecordBatchBuilder::Make(schema, arrow::default_memory_pool(), &batchBuilder);
+        UNIT_ASSERT(batchBuilderResult.ok());
+
+        TString textData{"some data"};
+        auto appendResult = batchBuilder->GetFieldAs<arrow::StringBuilder>(0)->Append(textData.data(), textData.size());
+        UNIT_ASSERT(appendResult.ok());
+
+        std::shared_ptr<arrow::RecordBatch> batch;
+        auto flushResult = batchBuilder->Flush(&batch);
+        UNIT_ASSERT(flushResult.ok());
+
+        UNIT_ASSERT_EXCEPTION(scanData.AddData(batch, {}, factory), NYql::TYqlPanic);
+    }
 }
 
 } // namespace NKikimr::NMiniKQL

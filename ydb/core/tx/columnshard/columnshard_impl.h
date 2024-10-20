@@ -109,7 +109,7 @@ struct TSettings {
     static constexpr TDuration GuaranteeIndexationInterval = TDuration::Seconds(10);
     static constexpr TDuration DefaultPeriodicWakeupActivationPeriod = TDuration::Seconds(60);
     static constexpr TDuration DefaultStatsReportInterval = TDuration::Seconds(10);
-    static constexpr i64 GuaranteeIndexationStartBytesLimit = (i64)5 * 1024 * 1024 * 1024;
+    static constexpr i64 GuaranteeIndexationStartBytesLimit = (i64)512 * 1024 * 1024;
 
     TControlWrapper BlobWriteGrouppingEnabled;
     TControlWrapper CacheDataAfterIndexing;

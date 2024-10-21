@@ -7,6 +7,7 @@ PEERDIR(
     ydb/library/formats/arrow/accessor/abstract
     ydb/library/formats/arrow/accessor/common
     ydb/library/formats/arrow/protos
+    ydb/library/actors/core
 )
 
 SRCS(

@@ -3,6 +3,7 @@
 #include "actorsystem.h"
 #include "event.h"
 #include "executor_thread.h"
+#include "mailbox.h"
 #include "monotonic.h"
 #include "thread_context.h"
 
@@ -130,6 +131,8 @@ namespace NActors {
 
         static i64 GetCurrentEventTicks();
         static double GetCurrentEventTicksAsSeconds();
+
+        static void EnableMailboxStats();
     };
 
     struct TActorContext: public TActivationContext {

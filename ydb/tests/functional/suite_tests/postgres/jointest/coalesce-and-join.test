@@ -69,6 +69,7 @@ select xx.pkxx as xx_pkxx from
   xx left join
   (select yy.pkxx as yt from yy) as Q
   on coalesce(Q.yt, 3) = xx.pkxx
+  order by xx_pkxx
 
 statement skipped query YQL-2986
 select yy.pkyy as yy_pkyy, yy.pkxx as yy_pkxx, yya.pkyy as yya_pkyy,

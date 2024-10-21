@@ -13,6 +13,7 @@ namespace NKikimr::NKqp {
 struct TKqpQueryId {
     TString Cluster;
     TString Database;
+    TString DatabaseId;
     TString UserSid;
     TString Text;
     TKqpQuerySettings Settings;
@@ -21,7 +22,7 @@ struct TKqpQueryId {
     TGUCSettings GUCSettings;
 
 public:
-    TKqpQueryId(const TString& cluster, const TString& database, const TString& text,
+    TKqpQueryId(const TString& cluster, const TString& database, const TString& databaseId, const TString& text,
         const TKqpQuerySettings& settings, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameterTypes,
         const TGUCSettings& gUCSettings);
 

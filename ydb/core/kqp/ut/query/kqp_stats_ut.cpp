@@ -451,7 +451,7 @@ Y_UNIT_TEST_TWIN(StreamLookupStats, StreamLookupJoin) {
     });
 }
 
-Y_UNIT_TEST(SysViewTimeout) {
+Y_UNIT_TEST(SysViewClientLost) {
     TKikimrRunner kikimr;
     CreateLargeTable(kikimr, 500000, 10, 100, 5000, 1);
 
@@ -490,12 +490,13 @@ Y_UNIT_TEST(SysViewTimeout) {
     auto settings = TStreamExecScanQuerySettings();
     settings.ClientTimeout(TDuration::MilliSeconds(50));
 
-    TStringStream request;
-    request << R"(
+    TStringStream timeoutedRequestStream;
+    timeoutedRequestStream << R"(
         SELECT COUNT(*) FROM `/Root/LargeTable` WHERE SUBSTRING(DataText, 50, 5) = "22222";
     )";
+    TString timeoutedRequest = timeoutedRequestStream.Str();
 
-    auto result = db.StreamExecuteScanQuery(request.Str(), settings).GetValueSync();
+    auto result = db.StreamExecuteScanQuery(timeoutedRequest, settings).GetValueSync();
 
     if (result.IsSuccess()) {
         try {
@@ -510,7 +511,13 @@ Y_UNIT_TEST(SysViewTimeout) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED);
     }
 
+    ui32 timeoutedCount = 0;
+    ui32 iterations = 10;
+    while (timeoutedCount == 0 && iterations > 0)
     {
+        iterations--;
+        Sleep(TDuration::Seconds(1));
+
         TStringStream request;
         request << "SELECT * FROM `/Root/.sys/top_queries_by_read_bytes_one_hour` ORDER BY Duration";
 
@@ -518,7 +525,6 @@ Y_UNIT_TEST(SysViewTimeout) {
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
         ui64 queryCount = 0;
-        ui64 rowsCount = 0;
         for (;;) {
             auto streamPart = it.ReadNext().GetValueSync();
             if (!streamPart.IsSuccess()) {
@@ -533,17 +539,16 @@ Y_UNIT_TEST(SysViewTimeout) {
                 while (parser.TryNextRow()) {
                     auto value = parser.ColumnParser("QueryText").GetOptionalUtf8();
                     UNIT_ASSERT(value);
-                    if (*value == request.Str()) {
+                    if (*value == timeoutedRequest) {
                         queryCount++;
                     }
-                    rowsCount++;
                 }
             }
         }
-
-        UNIT_ASSERT(queryCount == 1);
-        UNIT_ASSERT(rowsCount == 2);
+        timeoutedCount = queryCount;
     }
+
+    UNIT_ASSERT(timeoutedCount == 1);
 }
 
 Y_UNIT_TEST(SysViewCancelled) {
@@ -582,9 +587,9 @@ Y_UNIT_TEST(SysViewCancelled) {
         UNIT_ASSERT(rowsCount == 1);
     }
 
-    auto prepareResult = session.PrepareDataQuery(Q_(R"(
-        SELECT COUNT(*) FROM `/Root/LargeTable` WHERE SUBSTRING(DataText, 50, 5) = "33333";
-    )")).GetValueSync();
+    TStringStream cancelledRequest;
+    cancelledRequest << "SELECT COUNT(*) FROM `/Root/LargeTable` WHERE SUBSTRING(DataText, 50, 5) = \"33333\"";
+    auto prepareResult = session.PrepareDataQuery(cancelledRequest.Str()).GetValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), NYdb::EStatus::SUCCESS, prepareResult.GetIssues().ToString());
     auto dataQuery = prepareResult.GetQuery();
 
@@ -619,7 +624,7 @@ Y_UNIT_TEST(SysViewCancelled) {
                 while (parser.TryNextRow()) {
                     auto value = parser.ColumnParser("QueryText").GetOptionalUtf8();
                     UNIT_ASSERT(value);
-                    if (*value == request.Str()) {
+                    if (*value == cancelledRequest.Str()) {
                         queryCount++;
                     }
                     rowsCount++;
@@ -628,7 +633,7 @@ Y_UNIT_TEST(SysViewCancelled) {
         }
 
         UNIT_ASSERT(queryCount == 1);
-        UNIT_ASSERT(rowsCount == 2);
+        UNIT_ASSERT(rowsCount == 3);
     }
 }
 

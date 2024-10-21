@@ -9,8 +9,10 @@ class TIndexByColumns: public IIndexMeta {
 private:
     using TBase = IIndexMeta;
     std::shared_ptr<NArrow::NSerialization::ISerializer> Serializer;
+
 protected:
     std::set<ui32> ColumnIds;
+
     virtual TString DoBuildIndexImpl(TChunkedBatchReader& reader) const = 0;
 
     virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const override final;

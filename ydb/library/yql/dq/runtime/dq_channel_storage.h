@@ -15,8 +15,6 @@ class IDqChannelStorage : public TSimpleRefCount<IDqChannelStorage> {
 public:
     using TPtr = TIntrusivePtr<IDqChannelStorage>;
 
-    using TWakeUpCallback = std::function<void()>;
-
 public:
     virtual ~IDqChannelStorage() = default;
 

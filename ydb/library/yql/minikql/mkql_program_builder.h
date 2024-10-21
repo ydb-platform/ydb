@@ -86,6 +86,10 @@ inline void AddAnyJoinSide(EAnyJoinSettings& combined, EAnyJoinSettings value) {
     combined = (EAnyJoinSettings)combinedVal;
 }
 
+inline bool HasSpillingFlag(const TCallable& callable) {
+    return TStringBuf(callable.GetType()->GetName()).EndsWith("WithSpilling"_sb);
+}
+
 #define MKQL_SCRIPT_TYPES(xx) \
     xx(Unknown, 0, unknown, false) \
     xx(Python, 1, python, false) \

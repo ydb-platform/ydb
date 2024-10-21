@@ -24,12 +24,12 @@
                         "PlanNodeId": 17,
                         "Plans": [
                             {
-                                "Node Type": "UnionAll",
+                                "Node Type": "Merge",
                                 "PlanNodeId": 16,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-Filter-LeftJoin (MapJoin)",
+                                        "Node Type": "TopSort-Filter-LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -47,7 +47,8 @@
                                                     }
                                                 ],
                                                 "Limit": "1001",
-                                                "Name": "Limit"
+                                                "Name": "TopSort",
+                                                "TopSortBy": ""
                                             },
                                             {
                                                 "Inputs": [
@@ -59,7 +60,7 @@
                                                 "Predicate": "Exist(item.y.y2)"
                                             },
                                             {
-                                                "Condition": "x1 = y1",
+                                                "Condition": "x.x1 = y.y1",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 14
@@ -84,8 +85,8 @@
                                                         "Operators": [
                                                             {
                                                                 "Inputs": [],
-                                                                "Iterator": "precompute_0_0",
-                                                                "Name": "Iterator"
+                                                                "Name": "ToFlow",
+                                                                "ToFlow": "precompute_0_0"
                                                             }
                                                         ],
                                                         "PlanNodeId": 13
@@ -98,7 +99,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 11,
                                                         "Plans": [
                                                             {
@@ -151,6 +152,12 @@
                                             }
                                         ]
                                     }
+                                ],
+                                "SortColumns": [
+                                    "x1 (Asc)",
+                                    "x2 (Asc)",
+                                    "y1 (Asc)",
+                                    "y2 (Asc)"
                                 ]
                             }
                         ]

@@ -42,14 +42,13 @@ typename TJoinHypergraph<TNodeSet>::TEdge MakeHyperedge(
 
     TNodeSet TES = ConvertConflictRulesIntoTES(conditionUsedRels, conflictRules);
 
-
-    /* For CROSS Join and degenerate predicates (if subtree tables and joinCondition tables do not intersect) */
-    if (!Overlaps(TES, subtreeNodes[joinNode->LeftArg])) {
+    /* For CROSS, Non-Reorderable, ANY Joins and degenerate predicates (if subtree tables and joinCondition tables do not intersect) */
+    if (!Overlaps(TES, subtreeNodes[joinNode->LeftArg]) || !joinNode->IsReorderable || joinNode->LeftAny) {
         TES |= subtreeNodes[joinNode->LeftArg];
         TES = ConvertConflictRulesIntoTES(TES, conflictRules);
     }
 
-    if (!Overlaps(TES, subtreeNodes[joinNode->RightArg])) {
+    if (!Overlaps(TES, subtreeNodes[joinNode->RightArg]) || !joinNode->IsReorderable || joinNode->RightAny) {
         TES |= subtreeNodes[joinNode->RightArg];
         TES = ConvertConflictRulesIntoTES(TES, conflictRules);
     }
@@ -57,7 +56,8 @@ typename TJoinHypergraph<TNodeSet>::TEdge MakeHyperedge(
     TNodeSet left = TES & subtreeNodes[joinNode->LeftArg];
     TNodeSet right = TES & subtreeNodes[joinNode->RightArg];
     
-    return typename TJoinHypergraph<TNodeSet>::TEdge(left, right, joinNode->JoinType, OperatorIsCommutative(joinNode->JoinType) && joinNode->IsReorderable, joinNode->JoinConditions);
+    bool isCommutative = OperatorIsCommutative(joinNode->JoinType) && (joinNode->IsReorderable);
+    return typename TJoinHypergraph<TNodeSet>::TEdge(left, right, joinNode->JoinType, joinNode->LeftAny, joinNode->RightAny, isCommutative, joinNode->JoinConditions);
 }
 
 template<typename TNodeSet>
@@ -88,7 +88,8 @@ void MakeJoinHypergraphRec(
 
 template <typename TNodeSet>
 TJoinHypergraph<TNodeSet> MakeJoinHypergraph(
-    const std::shared_ptr<IBaseOptimizerNode>& joinTree
+    const std::shared_ptr<IBaseOptimizerNode>& joinTree,
+    const TOptimizerHints& hints = {}
 ) {
     TJoinHypergraph<TNodeSet> graph{};
     std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet> subtreeNodes{};
@@ -97,6 +98,15 @@ TJoinHypergraph<TNodeSet> MakeJoinHypergraph(
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
         YQL_CLOG(TRACE, CoreDq) << "Hypergraph build: ";
         YQL_CLOG(TRACE, CoreDq) << graph.String();
+    }
+
+    if (!hints.JoinOrderHints->Hints.empty()) { 
+        TJoinOrderHintsApplier joinHints(graph);
+        joinHints.Apply(*hints.JoinOrderHints);
+        if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
+            YQL_CLOG(TRACE, CoreDq) << "Hypergraph after hints: ";
+            YQL_CLOG(TRACE, CoreDq) << graph.String();
+        }
     }
 
     TTransitiveClosureConstructor transitveClosure(graph);

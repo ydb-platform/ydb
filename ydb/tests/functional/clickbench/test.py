@@ -74,6 +74,27 @@ def execute_scan_query(driver, yql_text, table_path):
                 break
 
 
+def remove_optimizer_estimates(query_plan):
+    if 'Plans' in query_plan:
+        for p in query_plan['Plans']:
+            remove_optimizer_estimates(p)
+    if 'Operators' in query_plan:
+        for op in query_plan['Operators']:
+            for key in ['A-Cpu', 'A-Rows', 'E-Cost', 'E-Rows', 'E-Size']:
+                if key in op:
+                    del op[key]
+
+
+def sanitize_plan(query_plan):
+    if 'queries' not in query_plan:
+        return
+    for q in query_plan['queries']:
+        if 'SimplifiedPlan' in q:
+            del q['SimplifiedPlan']
+        if 'Plan' in q:
+            remove_optimizer_estimates(q['Plan'])
+
+
 def explain_scan_query(driver, yql_text, table_path):
     yql_text = yql_text.replace("$data", table_path)
     client = ydb.ScriptingClient(driver)
@@ -81,7 +102,10 @@ def explain_scan_query(driver, yql_text, table_path):
         yql_text,
         ydb.ExplainYqlScriptSettings().with_mode(ydb.ExplainYqlScriptSettings.MODE_EXPLAIN)
     )
-    return json.loads(result.plan)
+    res = json.loads(result.plan)
+    sanitize_plan(res)
+    print(json.dumps(res))
+    return res
 
 
 def save_canonical_data(data, fname):

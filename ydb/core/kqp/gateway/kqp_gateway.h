@@ -188,6 +188,7 @@ public:
 
 public:
     virtual TString GetDatabase() = 0;
+    virtual TString GetDatabaseId() = 0;
     virtual bool GetDomainLoginOnly() = 0;
     virtual TMaybe<TString> GetDomainName() = 0;
 
@@ -231,7 +232,7 @@ public:
         const Ydb::Table::TransactionSettings& txSettings, const NActors::TActorId& target) = 0;
 };
 
-TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, NKikimrKqp::EQueryType queryType, const TString& database,
+TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, NKikimrKqp::EQueryType queryType, const TString& database, const TString& databaseId,
     std::shared_ptr<IKqpGateway::IKqpTableMetadataLoader>&& metadataLoader, NActors::TActorSystem* actorSystem,
     ui32 nodeId, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig = NKikimrConfig::TQueryServiceConfig());
 

@@ -64,6 +64,7 @@ public:
     FEATURE_FLAG_SETTER(EnableChangefeedsOnIndexTables)
     FEATURE_FLAG_SETTER(EnablePgSyntax)
     FEATURE_FLAG_SETTER(EnableTieringInColumnShard)
+    FEATURE_FLAG_SETTER(EnableMetadataObjectsOnServerless)
     FEATURE_FLAG_SETTER(EnableOlapCompression)
 
 #undef FEATURE_FLAG_SETTER

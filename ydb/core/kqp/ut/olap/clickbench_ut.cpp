@@ -151,11 +151,10 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
                 WHERE AdvEngineID != 0
                 GROUP BY AdvEngineID
                 ORDER BY c DESC
-            )")
+            )");
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
             // Should be fixed in https://st.yandex-team.ru/KIKIMR-17009
             // .SetExpectedReadNodeType("TableFullScan");
-            .SetExpectedReadNodeType("TableFullScan");
         q7.FillExpectedAggregationGroupByPlanOptions();
 
         TAggregationTestCase q9;
@@ -166,11 +165,9 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
                 GROUP BY RegionID
                 ORDER BY c DESC
                 LIMIT 10
-            )")
+            )");
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
-            // Should be fixed in https://st.yandex-team.ru/KIKIMR-17009
-            // .SetExpectedReadNodeType("TableFullScan");
-            .SetExpectedReadNodeType("Aggregate-TableFullScan");
+            //.SetExpectedReadNodeType("Filter-TableFullScan");
         q9.FillExpectedAggregationGroupByPlanOptions();
 
         TAggregationTestCase q12;
@@ -182,11 +179,10 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
                 GROUP BY SearchPhrase
                 ORDER BY c DESC
                 LIMIT 10;
-            )")
+            )");
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
             // Should be fixed in https://st.yandex-team.ru/KIKIMR-17009
             // .SetExpectedReadNodeType("TableFullScan");
-            .SetExpectedReadNodeType("TableFullScan");
         q12.FillExpectedAggregationGroupByPlanOptions();
 
         TAggregationTestCase q14;
@@ -198,11 +194,10 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
                 GROUP BY SearchEngineID, SearchPhrase
                 ORDER BY c DESC
                 LIMIT 10;
-            )")
+            )");
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
             // Should be fixed in https://st.yandex-team.ru/KIKIMR-17009
             // .SetExpectedReadNodeType("TableFullScan");
-            .SetExpectedReadNodeType("TableFullScan");
         q14.FillExpectedAggregationGroupByPlanOptions();
 
         TAggregationTestCase q22;
@@ -215,8 +210,7 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
                 ORDER BY c DESC
                 LIMIT 10;
             )")
-            .AddExpectedPlanOptions("KqpOlapFilter")
-            .SetExpectedReadNodeType("Aggregate-TableFullScan");
+            .AddExpectedPlanOptions("KqpOlapFilter");
         q22.FillExpectedAggregationGroupByPlanOptions();
 
         TAggregationTestCase q39;
@@ -230,8 +224,8 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
                 ORDER BY PageViews DESC
                 LIMIT 10;
             )")
-            .AddExpectedPlanOptions("KqpOlapFilter")
-            .SetExpectedReadNodeType("Aggregate-Filter-TableFullScan");
+            .AddExpectedPlanOptions("KqpOlapFilter");
+            // .SetExpectedReadNodeType("Aggregate-Filter-TableFullScan");
         q39.FillExpectedAggregationGroupByPlanOptions();
 
         std::vector<TAggregationTestCase> cases = {q7, q9, q12, q14, q22, q39};

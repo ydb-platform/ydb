@@ -1190,50 +1190,6 @@ TExprBase DqBuildShuffleStage(TExprBase node, TExprContext& ctx, IOptimizationCo
         .Done();
 }
 
-NNodes::TExprBase DqBuildHashShuffleByKeyStage(NNodes::TExprBase node, TExprContext& ctx, const TParentsMap& /*parentsMap*/) {
-    if (!node.Maybe<TDqCnHashShuffle>()) {
-        return node;
-    }
-    auto cnHash = node.Cast<TDqCnHashShuffle>();
-    auto stage = cnHash.Output().Stage();
-    if (!stage.Program().Body().Maybe<TCoExtend>()) {
-        return node;
-    }
-    auto extend = stage.Program().Body().Cast<TCoExtend>();
-    TNodeSet nodes;
-    for (auto&& i : stage.Program().Args()) {
-        nodes.emplace(i.Raw());
-    }
-    for (auto&& i : extend) {
-        if (nodes.erase(i.Raw()) != 1) {
-            return node;
-        }
-    }
-    if (!nodes.empty()) {
-        return node;
-    }
-    TExprNode::TListType nodesTuple;
-    for (auto&& i : stage.Inputs()) {
-        if (!i.Maybe<TDqCnUnionAll>()) {
-            return node;
-        }
-        auto uAll = i.Cast<TDqCnUnionAll>();
-        nodesTuple.emplace_back(ctx.ChangeChild(node.Ref(), 0, uAll.Output().Ptr()));
-    }
-    auto stageCopy = ctx.ChangeChild(stage.Ref(), 0, ctx.NewList(node.Pos(), std::move(nodesTuple)));
-    auto output =
-        Build<TDqOutput>(ctx, node.Pos())
-            .Stage(stageCopy)
-            .Index().Build("0")
-        .Done();
-    auto outputCnMap =
-        Build<TDqCnMap>(ctx, node.Pos())
-            .Output(output)
-        .Done();
-
-    return TExprBase(outputCnMap);
-}
-
 TExprBase DqBuildFinalizeByKeyStage(TExprBase node, TExprContext& ctx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
@@ -2654,7 +2610,7 @@ TMaybeNode<TDqJoin> DqFlipJoin(const TDqJoin& join, TExprContext& ctx) {
 
 
 TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationContext& optCtx,
-                      const TParentsMap& parentsMap, bool allowStageMultiUsage, bool pushLeftStage, EHashJoinMode hashJoin)
+                      const TParentsMap& parentsMap, bool allowStageMultiUsage, bool pushLeftStage, EHashJoinMode hashJoin, bool shuffleMapJoin)
 {
     if (!node.Maybe<TDqJoin>()) {
         return node;
@@ -2670,7 +2626,7 @@ TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationCon
     if (joinAlgo == EJoinAlgoType::MapJoin && mapJoinCanBeApplied) {
         hashJoin = EHashJoinMode::Map;
     } else if (joinAlgo == EJoinAlgoType::GraceJoin) {
-        hashJoin = EHashJoinMode::GraceAndSelf;
+        hashJoin = EHashJoinMode::Grace;
     }
 
     bool useHashJoin = EHashJoinMode::Off != hashJoin
@@ -2692,7 +2648,7 @@ TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationCon
         return node;
     }
 
-    if (useHashJoin) {
+    if (useHashJoin && (hashJoin == EHashJoinMode::GraceAndSelf || hashJoin == EHashJoinMode::Grace || shuffleMapJoin)) {
         return DqBuildHashJoin(join, hashJoin, ctx, optCtx);
     }
 

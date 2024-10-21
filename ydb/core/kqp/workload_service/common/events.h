@@ -22,14 +22,15 @@ struct TEvPrivate {
         EvRefreshPoolState = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvResolvePoolResponse,
         EvFetchPoolResponse,
-        EvFetchDatabaseResponse,
         EvCreatePoolResponse,
         EvPrepareTablesRequest,
         EvPlaceRequestIntoPoolResponse,
         EvFinishRequestInPool,
         EvResignPoolHandler,
         EvStopPoolHandler,
+        EvStopPoolHandlerResponse,
         EvCancelRequest,
+        EvUpdatePoolSubscription,
 
         EvCpuQuotaRequest,
         EvCpuQuotaResponse,
@@ -73,30 +74,20 @@ struct TEvPrivate {
     };
 
     struct TEvFetchPoolResponse : public NActors::TEventLocal<TEvFetchPoolResponse, EvFetchPoolResponse> {
-        TEvFetchPoolResponse(Ydb::StatusIds::StatusCode status, const NResourcePool::TPoolSettings& poolConfig, TPathId pathId, NYql::TIssues issues)
+        TEvFetchPoolResponse(Ydb::StatusIds::StatusCode status, const TString& databaseId, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, TPathId pathId, NYql::TIssues issues)
             : Status(status)
+            , DatabaseId(databaseId)
+            , PoolId(poolId)
             , PoolConfig(poolConfig)
             , PathId(pathId)
             , Issues(std::move(issues))
         {}
 
         const Ydb::StatusIds::StatusCode Status;
+        const TString DatabaseId;
+        const TString PoolId;
         const NResourcePool::TPoolSettings PoolConfig;
         const TPathId PathId;
-        const NYql::TIssues Issues;
-    };
-
-    struct TEvFetchDatabaseResponse : public NActors::TEventLocal<TEvFetchDatabaseResponse, EvFetchDatabaseResponse> {
-        TEvFetchDatabaseResponse(Ydb::StatusIds::StatusCode status, const TString& database, bool serverless, NYql::TIssues issues)
-            : Status(status)
-            , Database(database)
-            , Serverless(serverless)
-            , Issues(std::move(issues))
-        {}
-
-        const Ydb::StatusIds::StatusCode Status;
-        const TString Database;
-        const bool Serverless;
         const NYql::TIssues Issues;
     };
 
@@ -111,35 +102,37 @@ struct TEvPrivate {
     };
 
     struct TEvPrepareTablesRequest : public NActors::TEventLocal<TEvPrepareTablesRequest, EvPrepareTablesRequest> {
-        TEvPrepareTablesRequest(const TString& database, const TString& poolId)
-            : Database(database)
+        TEvPrepareTablesRequest(const TString& databaseId, const TString& poolId)
+            : DatabaseId(databaseId)
             , PoolId(poolId)
         {}
 
-        const TString Database;
+        const TString DatabaseId;
         const TString PoolId;
     };
 
     struct TEvPlaceRequestIntoPoolResponse : public NActors::TEventLocal<TEvPlaceRequestIntoPoolResponse, EvPlaceRequestIntoPoolResponse> {
-        TEvPlaceRequestIntoPoolResponse(const TString& database, const TString& poolId)
-            : Database(database)
+        TEvPlaceRequestIntoPoolResponse(const TString& databaseId, const TString& poolId, const TString& sessionId)
+            : DatabaseId(databaseId)
             , PoolId(poolId)
+            , SessionId(sessionId)
         {}
 
-        const TString Database;
+        const TString DatabaseId;
         const TString PoolId;
+        const TString SessionId;
     };
 
     struct TEvFinishRequestInPool : public NActors::TEventLocal<TEvFinishRequestInPool, EvFinishRequestInPool> {
-        TEvFinishRequestInPool(const TString& database, const TString& poolId, TDuration duration, TDuration cpuConsumed, bool adjustCpuQuota)
-            : Database(database)
+        TEvFinishRequestInPool(const TString& databaseId, const TString& poolId, TDuration duration, TDuration cpuConsumed, bool adjustCpuQuota)
+            : DatabaseId(databaseId)
             , PoolId(poolId)
             , Duration(duration)
             , CpuConsumed(cpuConsumed)
             , AdjustCpuQuota(adjustCpuQuota)
         {}
 
-        const TString Database;
+        const TString DatabaseId;
         const TString PoolId;
         const TDuration Duration;
         const TDuration CpuConsumed;
@@ -147,18 +140,33 @@ struct TEvPrivate {
     };
 
     struct TEvResignPoolHandler : public NActors::TEventLocal<TEvResignPoolHandler, EvResignPoolHandler> {
-        TEvResignPoolHandler(const TString& database, const TString& poolId, const TActorId& newHandler)
-            : Database(database)
+        TEvResignPoolHandler(const TString& databaseId, const TString& poolId, const TActorId& newHandler)
+            : DatabaseId(databaseId)
             , PoolId(poolId)
             , NewHandler(newHandler)
         {}
 
-        const TString Database;
+        const TString DatabaseId;
         const TString PoolId;
         const TActorId NewHandler;
     };
 
     struct TEvStopPoolHandler : public NActors::TEventLocal<TEvStopPoolHandler, EvStopPoolHandler> {
+        explicit TEvStopPoolHandler(bool resetCounters)
+            : ResetCounters(resetCounters)
+        {}
+
+        const bool ResetCounters;
+    };
+
+    struct TEvStopPoolHandlerResponse : public NActors::TEventLocal<TEvStopPoolHandlerResponse, EvStopPoolHandlerResponse> {
+        TEvStopPoolHandlerResponse(const TString& databaseId, const TString& poolId)
+            : DatabaseId(databaseId)
+            , PoolId(poolId)
+        {}
+
+        const TString DatabaseId;
+        const TString PoolId;
     };
 
     struct TEvCancelRequest : public NActors::TEventLocal<TEvCancelRequest, EvCancelRequest> {
@@ -167,6 +175,16 @@ struct TEvPrivate {
         {}
 
         const TString SessionId;
+    };
+
+    struct TEvUpdatePoolSubscription : public NActors::TEventLocal<TEvUpdatePoolSubscription, EvUpdatePoolSubscription> {
+        explicit TEvUpdatePoolSubscription(TPathId pathId, const std::unordered_set<TActorId>& subscribers)
+            : PathId(pathId)
+            , Subscribers(subscribers)
+        {}
+
+        const TPathId PathId;
+        const std::unordered_set<TActorId> Subscribers;
     };
 
     // Cpu load requests
@@ -179,11 +197,15 @@ struct TEvPrivate {
     };
 
     struct TEvCpuQuotaResponse : public NActors::TEventLocal<TEvCpuQuotaResponse, EvCpuQuotaResponse> {
-        explicit TEvCpuQuotaResponse(bool quotaAccepted)
+        explicit TEvCpuQuotaResponse(bool quotaAccepted, double maxClusterLoad, NYql::TIssues issues)
             : QuotaAccepted(quotaAccepted)
+            , MaxClusterLoad(maxClusterLoad)
+            , Issues(std::move(issues))
         {}
 
         const bool QuotaAccepted;
+        const double MaxClusterLoad;
+        const NYql::TIssues Issues;
     };
 
     struct TEvCpuLoadResponse : public NActors::TEventLocal<TEvCpuLoadResponse, EvCpuLoadResponse> {

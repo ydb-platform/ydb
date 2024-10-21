@@ -1409,7 +1409,7 @@ TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, 
             return FuseFlatMapOverByKey<false>(*node, ctx);
         }
 
-        if (node->Head().IsCallable({"PartitionByKey", "PartitionsByKeys"})) {
+        if (node->Head().IsCallable({"PartitionByKey", "PartitionsByKeys", "ShuffleByKeys"})) {
             return FuseFlatMapOverByKey<true>(*node, ctx);
         }
     }
@@ -1477,7 +1477,7 @@ TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, 
     {
         auto canPush = [&](const auto& child) {
             // we push FlatMap over Extend only if it can later be fused with child
-            return child->IsCallable({Ordered ? "OrderedFlatMap" : "FlatMap", "GroupByKey", "CombineByKey", "PartitionByKey", "PartitionsByKeys",
+            return child->IsCallable({Ordered ? "OrderedFlatMap" : "FlatMap", "GroupByKey", "CombineByKey", "PartitionByKey", "PartitionsByKeys", "ShuffleByKeys",
                                       "ListIf", "FlatListIf", "AsList", "ToList"}) && optCtx.IsSingleUsage(*child);
         };
         if (AllOf(node->Head().ChildrenList(), canPush)) {

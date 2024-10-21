@@ -132,6 +132,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     Y_UNIT_TEST_TWIN(ReadOnlyTxWithIndexCommitsOnConcurrentWrite, withSink) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(withSink);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
         TKikimrRunner kikimr(
             TKikimrSettings()
                 .SetAppConfig(appConfig)

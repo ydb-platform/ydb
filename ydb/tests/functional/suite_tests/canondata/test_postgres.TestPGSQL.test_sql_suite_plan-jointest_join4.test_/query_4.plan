@@ -78,7 +78,7 @@
                                                 "TopSortBy": "row.name"
                                             },
                                             {
-                                                "Condition": "a = a.code",
+                                                "Condition": "c.a = ss.a.code",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 14
@@ -98,7 +98,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 11,
                                                         "Plans": [
                                                             {
@@ -110,7 +110,7 @@
                                                                         "Node Type": "LeftJoin (MapJoin)",
                                                                         "Operators": [
                                                                             {
-                                                                                "Condition": "code = a",
+                                                                                "Condition": "a.code = b_grp.a",
                                                                                 "Inputs": [
                                                                                     {
                                                                                         "ExternalPlanNodeId": 8
@@ -130,7 +130,7 @@
                                                                                 "PlanNodeType": "Connection",
                                                                                 "Plans": [
                                                                                     {
-                                                                                        "Node Type": "Collect",
+                                                                                        "Node Type": "Stage",
                                                                                         "PlanNodeId": 5,
                                                                                         "Plans": [
                                                                                             {

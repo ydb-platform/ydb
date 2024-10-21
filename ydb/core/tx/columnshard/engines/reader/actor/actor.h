@@ -102,6 +102,10 @@ private:
 
     void ReportStats();
 
+    void ScheduleWakeup(const TMonotonic deadline);
+
+    TMonotonic GetDeadline() const;
+
 private:
     const TActorId ColumnShardActorId;
     const TActorId ReadBlobsActorId;
@@ -122,7 +126,7 @@ private:
     std::vector<std::pair<TString, NScheme::TTypeInfo>> KeyYqlSchema;
     const TSerializedTableRange TableRange;
     const TSmallVec<bool> SkipNullKeys;
-    const TInstant Deadline;
+    const TDuration Timeout;
     NColumnShard::TConcreteScanCounters ScanCountersPool;
 
     TMaybe<TString> AbortReason;
@@ -132,6 +136,7 @@ private:
     std::shared_ptr<arrow::RecordBatch> CurrentLastReadKey;
     i64 InFlightReads = 0;
     bool Finished = false;
+    std::optional<TMonotonic> LastResultInstant;
 
     class TBlobStats {
     private:

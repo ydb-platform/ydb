@@ -654,7 +654,9 @@ struct TPgOptimizerImpl
                 left, right,
                 joinConditions,
                 joinKind,
-                EJoinAlgoType::MapJoin
+                EJoinAlgoType::MapJoin,
+                false,
+                false
                 );
         } else {
             YQL_ENSURE(false, "Wrong CBO node");
@@ -690,8 +692,11 @@ public:
         , Log(log)
     { }
 
-    std::shared_ptr<TJoinOptimizerNode> JoinSearch(const std::shared_ptr<TJoinOptimizerNode>& joinTree) override
+    std::shared_ptr<TJoinOptimizerNode> JoinSearch(
+        const std::shared_ptr<TJoinOptimizerNode>& joinTree, 
+        const TOptimizerHints& hints = {}) override
     {
+        Y_UNUSED(hints);
         return TPgOptimizerImpl(joinTree, Ctx, Log).Do();
     }
 

@@ -5,6 +5,8 @@ SRCS(
     block_events.h
     test_runtime.cpp
     test_runtime.h
+    wait_events.cpp
+    wait_events.h
 )
 
 PEERDIR(

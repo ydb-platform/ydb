@@ -83,6 +83,10 @@ TCoAtomList BuildColumnsList(const THashSet<TStringBuf>& columns, TPositionHandl
     return BuildColumnsListImpl(columns, pos, ctx);
 }
 
+TCoAtomList BuildColumnsList(const TVector<TStringBuf>& columns, NYql::TPositionHandle pos,NYql::TExprContext& ctx) {
+    return BuildColumnsListImpl(columns, pos, ctx);
+}
+
 TCoAtomList BuildColumnsList(const TVector<TString>& columns, TPositionHandle pos, TExprContext& ctx) {
     return BuildColumnsListImpl(columns, pos, ctx);
 }

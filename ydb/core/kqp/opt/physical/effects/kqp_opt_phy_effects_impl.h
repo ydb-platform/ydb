@@ -62,11 +62,11 @@ NYql::NNodes::TCoLambda MakeRowsPayloadSelector(const NYql::NNodes::TCoAtomList&
     const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
 NYql::NNodes::TExprBase MakeRowsFromDict(const NYql::NNodes::TDqPhyPrecompute& dict, const TVector<TString>& dictKeys,
-    const THashSet<TStringBuf>& columns, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+    const TVector<TStringBuf>& columns, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
 // Same as MakeRowsFromDict but skip rows which marked as non changed (true in second tuple)
 NYql::NNodes::TExprBase MakeRowsFromTupleDict(const NYql::NNodes::TDqPhyPrecompute& dict, const TVector<TString>& dictKeys,
-    const THashSet<TStringBuf>& columns, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+    const TVector<TStringBuf>& columns, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
 NYql::NNodes::TMaybeNode<NYql::NNodes::TDqCnUnionAll> MakeConditionalInsertRows(const NYql::NNodes::TExprBase& input,
     const NYql::TKikimrTableDescription& table, const TMaybe<THashSet<TStringBuf>>& inputColumn, bool abortOnError,

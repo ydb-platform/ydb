@@ -60,7 +60,7 @@
                                                 "Predicate": "item.tt5.f1 == item.tt5.f2 - item.tt6.f2"
                                             },
                                             {
-                                                "Condition": "f1 = f1",
+                                                "Condition": "tt6.f1 = tt5.f1",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 4

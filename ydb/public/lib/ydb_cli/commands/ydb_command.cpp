@@ -18,6 +18,7 @@ TDriverConfig TYdbCommand::CreateDriverConfig(const TConfig& config) {
         driverConfig.UseSecureConnection(config.CaCerts);
     if (config.IsNetworkIntensive)
         driverConfig.SetNetworkThreadsNum(16);
+    driverConfig.UseClientCertificate(config.ClientCert, config.ClientCertPrivateKey);
 
     return driverConfig;
 }

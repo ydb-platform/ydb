@@ -115,7 +115,6 @@ namespace NKikimr {
                         {NYql::NMatchRecognize::TRowPatternFactor{"A", 3, 3, false, false, false}}
                     },
                     getDefines,
-                    false,
                     streamingMode);
 
                 auto graph = setup.BuildGraph(pgmReturn);

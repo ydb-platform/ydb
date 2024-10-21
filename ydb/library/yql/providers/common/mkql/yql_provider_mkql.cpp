@@ -934,8 +934,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
                 getMeasures,
                 NYql::NMatchRecognize::ConvertPattern(pattern, ctx.ExprCtx),
                 getDefines,
-                afterMatchSkipPastLastRow,
-                streamingMode
+                streamingMode,
+                afterMatchSkipPastLastRow
                 );
     });
 

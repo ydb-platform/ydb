@@ -438,24 +438,36 @@ bool CompareValueImpl(const T& valResult, TStringBuf vExpected) {
 }
 
 template <class T>
-bool CompareValueImplFloat(const T& valResult, TStringBuf vExpected, double relativeFloatPrecession, TMaybe<double> absoluteFloatPrecession) {
+bool CompareValueImplFloat(const T& valResult, TStringBuf vExpected) {
+    constexpr T relativeFloatPrecession = 0.0001;
+    TStringBuf precesionStr;
+    vExpected.Split("+-", vExpected, precesionStr);
     T valExpected;
     if (!TryFromString<T>(vExpected, valExpected)) {
         Cerr << "cannot parse expected as " << typeid(valResult).name() << "(" << vExpected << ")" << Endl;
         return false;
     }
-    if (absoluteFloatPrecession) {
-        return valResult >= valExpected - *absoluteFloatPrecession && valResult <= valExpected + *absoluteFloatPrecession;
+    if (precesionStr) {
+        T absolutePrecesion;
+        if (!TryFromString<T>(precesionStr, absolutePrecesion)) {
+            Cerr << "cannot parse precession expected as " << typeid(valResult).name() << "(" << precesionStr << ")" << Endl;
+            return false;
+        }
+        return valResult >= valExpected - absolutePrecesion && valResult <= valExpected + absolutePrecesion;
     }
+
     return valResult > (1 - relativeFloatPrecession) * valExpected && valResult < (1 + relativeFloatPrecession) * valExpected;
 }
 
-bool CompareValueImplDecimal(const NYdb::TDecimalValue& valResult, TStringBuf vExpected, double relativeFloatPrecession, TMaybe<double> absoluteFloatPrecession) {
+bool CompareValueImplDecimal(const NYdb::TDecimalValue& valResult, TStringBuf vExpected) {
+    constexpr double relativeFloatPrecession = 0.0001;
     auto resInt = NYql::NDecimal::FromHalfs(valResult.Low_, valResult.Hi_);
+    TStringBuf precesionStr;
+    vExpected.Split("+-", vExpected, precesionStr);
     auto expectedInt = NYql::NDecimal::FromString(vExpected, 22, 9);
 
-    if (absoluteFloatPrecession) {
-        auto precInt = NYql::NDecimal::FromString(ToString(*absoluteFloatPrecession), 22, 9);
+    if (precesionStr) {
+        auto precInt = NYql::NDecimal::FromString(precesionStr, 22, 9);
         return resInt >= expectedInt - precInt && resInt <= expectedInt + precInt;
     }
     return resInt > (1 - relativeFloatPrecession) * expectedInt && resInt < (1 + relativeFloatPrecession) * expectedInt;
@@ -488,7 +500,7 @@ bool CompareValueImplDatetime64(const T& valResult, TStringBuf vExpected, TDurat
     return valResult == valExpected;
 }
 
-bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected, double relativeFloatPrecession, TMaybe<double> absoluteFloatPrecession) {
+bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected) {
     TValueParser vp(v);
     TTypeParser tp(v.GetType());
     if (tp.GetKind() == TTypeParser::ETypeKind::Optional) {
@@ -499,7 +511,7 @@ bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected, double relativeFl
         tp.OpenOptional();
     }
     if (tp.GetKind() == TTypeParser::ETypeKind::Decimal) {
-        return  CompareValueImplDecimal(vp.GetDecimal(), vExpected, relativeFloatPrecession, absoluteFloatPrecession);
+        return  CompareValueImplDecimal(vp.GetDecimal(), vExpected);
     }
     switch (tp.GetPrimitive()) {
     case EPrimitiveType::Bool:
@@ -521,9 +533,9 @@ bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected, double relativeFl
     case EPrimitiveType::Uint64:
         return CompareValueImpl(vp.GetUint64(), vExpected);
     case EPrimitiveType::Float:
-        return CompareValueImplFloat(vp.GetFloat(), vExpected, relativeFloatPrecession, absoluteFloatPrecession);
+        return CompareValueImplFloat(vp.GetFloat(), vExpected);
     case EPrimitiveType::Double:
-        return CompareValueImplFloat(vp.GetDouble(), vExpected, relativeFloatPrecession, absoluteFloatPrecession);
+        return CompareValueImplFloat(vp.GetDouble(), vExpected);
     case EPrimitiveType::Date:
         return CompareValueImplDatetime(vp.GetDate(), vExpected, TDuration::Days(1));
     case EPrimitiveType::Datetime:
@@ -552,7 +564,6 @@ bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected, double relativeFl
 
 
 bool TQueryResultInfo::IsExpected(std::string_view expected) const {
-    constexpr double floatPrecesion = 0.0001;
     if (expected.empty()) {
         return true;
     }
@@ -606,13 +617,7 @@ bool TQueryResultInfo::IsExpected(std::string_view expected) const {
                 return false;
             }
             TStringBuf cItem = splitter.Consume();
-            TMaybe<double> absolutePrecesion;
-            TStringBuf expected, precesionStr;
-            cItem.Split("+-", expected, precesionStr);
-            if (precesionStr) {
-                absolutePrecesion = FromString<double>(precesionStr);
-            }
-            if (!CompareValue(resultValue, expected, floatPrecesion, absolutePrecesion)) {
+            if (!CompareValue(resultValue, cItem)) {
                 Cerr << "Line " << i << ", column " << Columns[cIdx].Name << " has diff: " <<  TStringBuf(resultValue.GetProto().DebugString()).Before('\n') << "; EXPECTED:" << cItem << Endl;
                 hasDiff = true;
             }

@@ -154,7 +154,7 @@ ALTER TOPIC `my_topic` SET (
 );
 ```
 
-Next command set [autopartitioning](../../../../concepts/topic#autopartitioning) into the mode PAUSED:
+The following command pauses the topic [autopartitioning](../../../../concepts/topic.md#autopartitioning):
 
 ```yql
 ALTER TOPIC `my_topic` SET (

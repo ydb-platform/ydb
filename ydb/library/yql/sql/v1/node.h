@@ -1157,6 +1157,7 @@ namespace NSQLTranslationV1 {
         TIdentifier Name;
         TNodePtr Data;
         TNodePtr Compression;
+        TNodePtr CompressionLevel;
     };
 
     struct TVectorIndexSettings {

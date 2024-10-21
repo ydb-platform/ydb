@@ -6,6 +6,8 @@
 
 #include <util/generic/size_literals.h>
 
+class TLog;
+
 namespace NYdb {
 namespace NDump {
 
@@ -91,7 +93,7 @@ private:
     class TImpl;
 
 public:
-    explicit TClient(const TDriver& driver);
+    explicit TClient(const TDriver& driver, std::shared_ptr<TLog>&& log);
 
     TDumpResult Dump(const TString& dbPath, const TString& fsPath, const TDumpSettings& settings = {});
     TRestoreResult Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings = {});

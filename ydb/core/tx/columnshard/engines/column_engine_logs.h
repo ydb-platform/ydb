@@ -202,7 +202,7 @@ public:
     }
 
     bool HasUnusedSchemaVersions() const override {
-        return VersionCounters->HasUnusedSchemaVersionsExcept(GetVersionedIndex().GetLastSchemaVersion());
+        return VersionCounters->HasUnusedSchemaVersions();
     }
 
 private:

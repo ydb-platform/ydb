@@ -56,8 +56,8 @@ public:
         return count;
     }
 
-    bool HasUnusedSchemaVersionsExcept(const ui64 lastVersion) const {
-        return !VersionsToErase.empty() && ((VersionsToErase.size() > 1) || (*VersionsToErase.begin() != lastVersion));
+    bool HasUnusedSchemaVersions() const {
+        return !VersionsToErase.empty();
     }
 
     template<class Processor>

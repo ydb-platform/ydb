@@ -212,3 +212,4 @@ ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexO
 ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.block42
 ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.mirror3dc
 ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.mirror3of4
+ydb/core/blobstorage/ut_mirror3of4 Mirror3of4.ReplicationSmall

@@ -322,7 +322,7 @@ namespace {
                 if (option.IsAtom("forceStreamLookup")) {
                     if (child->ChildrenSize() % 2 == 0) {
                         ctx.AddError(TIssue(ctx.GetPosition(option.Pos()), TStringBuilder() <<
-                                    "Odd number of options, streamlookup() supports only KEY VALUE... pairs"));
+                                    "streamlookup() expects KEY VALUE... pairs"));
                         return IGraphTransformer::TStatus::Error;
                     }
                 } else {

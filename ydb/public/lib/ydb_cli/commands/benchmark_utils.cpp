@@ -437,13 +437,16 @@ bool CompareValueImpl(const T& valResult, TStringBuf vExpected) {
 }
 
 template <class T>
-bool CompareValueImplFloat(const T& valResult, TStringBuf vExpected, const double floatPrecesion) {
+bool CompareValueImplFloat(const T& valResult, TStringBuf vExpected, double relativeFloatPrecession, TMaybe<double> absoluteFloatPrecession) {
     T valExpected;
     if (!TryFromString<T>(vExpected, valExpected)) {
         Cerr << "cannot parse expected as " << typeid(valResult).name() << "(" << vExpected << ")" << Endl;
         return false;
     }
-    return valResult > (1 - floatPrecesion) * valExpected && valResult < (1 + floatPrecesion) * valExpected;
+    if (absoluteFloatPrecession) {
+        return valResult >= valExpected - *absoluteFloatPrecession && valResult <= valExpected + *absoluteFloatPrecession;
+    }
+    return valResult > (1 - relativeFloatPrecession) * valExpected && valResult < (1 + relativeFloatPrecession) * valExpected;
 }
 
 bool CompareValueImplDatetime(const TInstant& valResult, TStringBuf vExpected, TDuration unit) {
@@ -473,7 +476,7 @@ bool CompareValueImplDatetime64(const T& valResult, TStringBuf vExpected, TDurat
     return valResult == valExpected;
 }
 
-bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected, double floatPrecession) {
+bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected, double relativeFloatPrecession, TMaybe<double> absoluteFloatPrecession) {
     TValueParser vp(v);
     TTypeParser tp(v.GetType());
     if (tp.GetKind() == TTypeParser::ETypeKind::Optional) {
@@ -503,9 +506,9 @@ bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected, double floatPrece
     case EPrimitiveType::Uint64:
         return CompareValueImpl(vp.GetUint64(), vExpected);
     case EPrimitiveType::Float:
-        return CompareValueImplFloat(vp.GetFloat(), vExpected, floatPrecession);
+        return CompareValueImplFloat(vp.GetFloat(), vExpected, relativeFloatPrecession, absoluteFloatPrecession);
     case EPrimitiveType::Double:
-        return CompareValueImplFloat(vp.GetDouble(), vExpected, floatPrecession);
+        return CompareValueImplFloat(vp.GetDouble(), vExpected, relativeFloatPrecession, absoluteFloatPrecession);
     case EPrimitiveType::Date:
         return CompareValueImplDatetime(vp.GetDate(), vExpected, TDuration::Days(1));
     case EPrimitiveType::Datetime:
@@ -538,8 +541,14 @@ bool TQueryResultInfo::IsExpected(std::string_view expected) const {
     if (expected.empty()) {
         return true;
     }
-    const auto expectedLines = StringSplitter(expected).Split('\n').SkipEmpty().ToList<TString>();
-    if (Result.size() + 1 != expectedLines.size()) {
+    auto expectedLines = StringSplitter(expected).Split('\n').SkipEmpty().ToList<TString>();
+    if (!expectedLines.empty() && expectedLines.back() == "...") {
+        expectedLines.pop_back();
+        if (Result.size() + 1 < expectedLines.size()) {
+            Cerr << "has diff: too samll lines count (" << Result.size() << " in result, but " << expectedLines.size() << "+ expected with header)" << Endl;
+            return false;
+        }
+    } else if (Result.size() + 1 != expectedLines.size()) {
         Cerr << "has diff: incorrect lines count (" << Result.size() << " in result, but " << expectedLines.size() << " expected with header)" << Endl;
         return false;
     }
@@ -570,8 +579,8 @@ bool TQueryResultInfo::IsExpected(std::string_view expected) const {
             return false;
         }
     }
-
-    for (ui32 i = 0; i < Result.size(); ++i) {
+    bool hasDiff = false;
+    for (ui32 i = 0; i < expectedLines.size() - 1; ++i) {
         TString copy = expectedLines[i + 1];
         NCsvFormat::CsvSplitter splitter(copy);
         bool isCorrectCurrent = true;
@@ -582,18 +591,24 @@ bool TQueryResultInfo::IsExpected(std::string_view expected) const {
                 return false;
             }
             TStringBuf cItem = splitter.Consume();
-            if (!CompareValue(resultValue, cItem, floatPrecesion)) {
-                Cerr << "has diff: " << resultValue.GetProto().DebugString() << ";EXPECTED:" << cItem << Endl;
-                return false;
+            TMaybe<double> absolutePrecesion;
+            TStringBuf expected, precesionStr;
+            cItem.Split("+-", expected, precesionStr);
+            if (precesionStr) {
+                absolutePrecesion = FromString<double>(precesionStr);
+            }
+            if (!CompareValue(resultValue, expected, floatPrecesion, absolutePrecesion)) {
+                Cerr << "Line " << i << ", column " << Columns[cIdx].Name << " has diff: " <<  TStringBuf(resultValue.GetProto().DebugString()).Before('\n') << "; EXPECTED:" << cItem << Endl;
+                hasDiff = true;
             }
             isCorrectCurrent = splitter.Step();
         }
         if (isCorrectCurrent) {
-            Cerr << "expected more items than have in result" << Endl;
+            Cerr << "expected more columns than have in result" << Endl;
             return false;
         }
     }
-    return true;
+    return !hasDiff;
 }
 
 } // NYdb::NConsoleClient::BenchmarkUtils

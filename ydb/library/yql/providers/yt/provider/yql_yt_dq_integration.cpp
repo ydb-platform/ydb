@@ -428,17 +428,9 @@ public:
             auto section = sectionList.Item(i);
             auto paths = section.Paths();
             for (const auto& path : section.Paths()) {
-                auto meta = TYtTableBaseInfo::GetMeta(path.Table());
-                if (meta->InferredScheme) {
-                    BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "can't use block reader on tables with inferred schema");
-                    return false;
-                }
-                if (auto table = path.Table().Maybe<TYtTable>(); table && NYql::HasAnySetting(table.Cast().Settings().Ref(), EYtSettingType::UserColumns | EYtSettingType::UserSchema)) {
-                    BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "can't use block reader on tables with overridden schema/columns");
-                    return false;
-                }
-                if (meta->Attrs.contains("schema_mode") && meta->Attrs["schema_mode"] == "weak") {
-                    BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "can't use block reader on tables with weak schema");
+                if (!IsYtTableSuitableForArrowInput(path.Table(), [&ctx, &node](const TString& msg) {
+                    BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), msg);
+                })) {
                     return false;
                 }
             }

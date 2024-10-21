@@ -3,6 +3,7 @@
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
+#include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 namespace NYql {
@@ -76,14 +77,7 @@ private:
         }
 
         for (auto path : map.Input().Item(0).Paths()) {
-            auto meta = TYtTableBaseInfo::GetMeta(path.Table());
-            if (meta->InferredScheme) {
-                return false;
-            }
-            if (auto table = path.Table().Maybe<TYtTable>(); table && NYql::HasAnySetting(table.Cast().Settings().Ref(), EYtSettingType::UserColumns | EYtSettingType::UserSchema)) {
-                return false;
-            }
-            if (meta->Attrs.contains(SCHEMA_MODE_ATTR_NAME) && meta->Attrs[SCHEMA_MODE_ATTR_NAME] == "weak") {
+            if (!IsYtTableSuitableForArrowInput(path.Table(), [](const TString&) {})) {
                 return false;
             }
         }

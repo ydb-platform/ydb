@@ -33,7 +33,7 @@ public:
         return EOSReached_;
     }
     
-protected:
+private:
     TInputBuf& Buffer_;
     int64_t BytesRead_ = 0;
     bool EOSReached_ = false;

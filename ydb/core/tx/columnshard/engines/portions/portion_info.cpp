@@ -91,7 +91,8 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
     sb << "(portion_id:" << Portion << ";" <<
         "path_id:" << PathId << ";records_count:" << NumRows() << ";"
         "min_schema_snapshot:(" << MinSnapshotDeprecated.DebugString() << ");"
-        "schema_version:" << SchemaVersion.value_or(0) << ";";
+        "schema_version:" << SchemaVersion.value_or(0) << ";"
+        "level:" << GetMeta().GetCompactionLevel() << ";";
     if (withDetails) {
         sb <<
             "records_snapshot_min:(" << RecordSnapshotMin().DebugString() << ");" <<
@@ -734,13 +735,16 @@ NKikimr::NOlap::NSplitter::TEntityGroups TPortionInfo::GetEntityGroupsByStorageI
     }
 }
 
-std::shared_ptr<NArrow::NAccessor::IChunkedArray> TPortionInfo::TPreparedColumn::AssembleAccessor() const {
+TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> TPortionInfo::TPreparedColumn::AssembleAccessor() const {
     Y_ABORT_UNLESS(!Blobs.empty());
 
     NArrow::NAccessor::TCompositeChunkedArray::TBuilder builder(GetField()->type());
     for (auto& blob : Blobs) {
         auto chunkedArray = blob.BuildRecordBatch(*Loader);
-        builder.AddChunk(chunkedArray);
+        if (chunkedArray.IsFail()) {
+            return chunkedArray;
+        }
+        builder.AddChunk(chunkedArray.DetachResult());
     }
     return builder.Finish();
 }
@@ -776,7 +780,7 @@ NArrow::NAccessor::TDeserializeChunkedArray::TChunk TPortionInfo::TAssembleBlobI
     }
 }
 
-std::shared_ptr<NArrow::NAccessor::IChunkedArray> TPortionInfo::TAssembleBlobInfo::BuildRecordBatch(const TColumnLoader& loader) const {
+TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> TPortionInfo::TAssembleBlobInfo::BuildRecordBatch(const TColumnLoader& loader) const {
     if (DefaultRowsCount) {
         Y_ABORT_UNLESS(!Data);
         if (NeedCache) {
@@ -788,11 +792,11 @@ std::shared_ptr<NArrow::NAccessor::IChunkedArray> TPortionInfo::TAssembleBlobInf
         }
     } else {
         AFL_VERIFY(ExpectedRowsCount);
-        return loader.ApplyVerified(Data, *ExpectedRowsCount);
+        return loader.ApplyConclusion(Data, *ExpectedRowsCount);
     }
 }
 
-std::shared_ptr<NArrow::TGeneralContainer> TPortionInfo::TPreparedBatchData::AssembleToGeneralContainer(
+TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> TPortionInfo::TPreparedBatchData::AssembleToGeneralContainer(
     const std::set<ui32>& sequentialColumnIds) const {
     std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> columns;
     std::vector<std::shared_ptr<arrow::Field>> fields;
@@ -801,7 +805,11 @@ std::shared_ptr<NArrow::TGeneralContainer> TPortionInfo::TPreparedBatchData::Ass
         if (sequentialColumnIds.contains(i.GetColumnId())) {
             columns.emplace_back(i.AssembleForSeqAccess());
         } else {
-            columns.emplace_back(i.AssembleAccessor());
+            auto conclusion = i.AssembleAccessor();
+            if (conclusion.IsFail()) {
+                return conclusion;
+            }
+            columns.emplace_back(conclusion.DetachResult());
         }
         fields.emplace_back(i.GetField());
     }

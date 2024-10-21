@@ -8,6 +8,7 @@ SRCS(
     portion.cpp
     tablet_id.cpp
     blob.cpp
+    volume.cpp
 )
 
 PEERDIR(

@@ -140,7 +140,9 @@ message TConfigItem {
         BackgroundCleaningConfigItem = 77;
         MetadataCacheConfigItem = 80;
         MemoryControllerConfigItem = 81;
+        GroupedMemoryLimiterConfig = 82;
         ReplicationConfigItem = 83;
+        CompPrioritiesConfig = 85;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;

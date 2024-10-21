@@ -11,6 +11,7 @@
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
 #include <ydb/core/tx/data_events/write_data.h>
+#include <ydb/core/tx/priorities/usage/abstract.h>
 
 namespace NKikimr::NOlap::NReader {
 class IApplyAction;
@@ -55,11 +56,22 @@ struct TEvPrivate {
         EvTaskProcessedResult,
         EvPingSnapshotsUsage,
         EvWritePortionResult,
+        EvStartCompaction,
 
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+    class TEvStartCompaction: public NActors::TEventLocal<TEvStartCompaction, EvStartCompaction> {
+    private:
+        YDB_READONLY_DEF(std::shared_ptr<NPrioritiesQueue::TAllocationGuard>, Guard);
+
+    public:
+        TEvStartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& g)
+            : Guard(g) {
+        }
+    };
 
     class TEvTaskProcessedResult: public NActors::TEventLocal<TEvTaskProcessedResult, EvTaskProcessedResult> {
     private:

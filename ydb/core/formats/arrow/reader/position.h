@@ -496,19 +496,17 @@ public:
 
     void AddPosition(TIntervalPosition&& intervalPosition) {
         if (Positions.size()) {
-            AFL_VERIFY(Positions.back() < intervalPosition)("back", Positions.back().DebugJson())("pos", intervalPosition.DebugJson());
+            AFL_VERIFY_DEBUG(Positions.back() < intervalPosition)("back", Positions.back().DebugJson())("pos", intervalPosition.DebugJson());
         }
         Positions.emplace_back(std::move(intervalPosition));
     }
 
     void AddPosition(TSortableBatchPosition&& position, const bool includePositionToLeftInterval) {
-        TIntervalPosition intervalPosition(std::move(position), includePositionToLeftInterval);
-        AddPosition(std::move(intervalPosition));
+        AddPosition(TIntervalPosition(std::move(position), includePositionToLeftInterval));
     }
 
     void AddPosition(const TSortableBatchPosition& position, const bool includePositionToLeftInterval) {
-        TIntervalPosition intervalPosition(position, includePositionToLeftInterval);
-        AddPosition(std::move(intervalPosition));
+        AddPosition(TIntervalPosition(position, includePositionToLeftInterval));
     }
 };
 
@@ -579,6 +577,9 @@ public:
             }
             result.emplace_back(nullptr);
             return result;
+        }
+        if (!it.IsValid()) {
+            return { batch };
         }
         TRWSortableBatchPosition pos(batch, 0, columnNames, {}, false);
         bool batchFinished = false;

@@ -103,8 +103,8 @@ struct TSimd8 {
         return Load(values);
     }
 
-    static Y_FORCE_INLINE TSimd8<T> LoadAligned(const T values[16]) {
-        return _mm_load_si128(reinterpret_cast<const __m128i *>(values));
+    static Y_FORCE_INLINE TSimd8<T> LoadStream(const T dst[16]) {
+        return _mm_stream_load_si128(reinterpret_cast<const __m128i *>(dst));
     }
 
     static Y_FORCE_INLINE TSimd8<T> LoadStream(T dst[16]) {

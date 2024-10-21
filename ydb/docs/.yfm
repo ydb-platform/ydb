@@ -1,5 +1,6 @@
 allowHTML: true
 langs: ['en','ru']
+included: true
 apply-presets: true
 allowCustomResources: true
 resources:

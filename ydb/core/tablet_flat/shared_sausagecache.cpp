@@ -1268,7 +1268,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 public:
     TSharedPageCache(THolder<TSharedPageCacheConfig> config)
         : Config(std::move(config))
-        , Cache(CreateCache(), Config->Counters->ReplacementPolicySize(Config->ReplacementPolicy))
+        , Cache(1, CreateCache(), Config->Counters->ReplacementPolicySize(Config->ReplacementPolicy))
     {
         AsyncRequests.Limit = Config->TotalAsyncQueueInFlyLimit;
         ScanRequests.Limit = Config->TotalScanQueueInFlyLimit;

@@ -48,13 +48,13 @@ Total topic throughput is determined by the number of partitions in the topic an
 
 ### Autopartitioning modes {#autopartitioning_modes}
 
-The following autopartition modes are possible for any topic.
+The following autopartitioning modes are available for any topic:
 
 #### DISABLED
 
-Autopartitioning is disabled for this topic. In this case count of partitions is a constant, and there is no automatic scaling.
+Autopartitioning is disabled for this topic. In this mode, the number of partitions remains constant, and there is no automatic scaling.
 
-Initial count of partitions is defined during topic creation. In this mode in case of manual change of partitions count new partitions are added. All previously existed partitions remain active as well as new partitions.
+The initial number of partitions is set during topic creation. If the partition count is manually adjusted in this mode, new partitions are added. Both previously existing and new partitions are active.
 
 #### UP
 

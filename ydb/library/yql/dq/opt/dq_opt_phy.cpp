@@ -2734,12 +2734,10 @@ TExprBase DqPropagatePrecomuteTake(TExprBase node, TExprContext& ctx, IOptimizat
     }
 
     auto* typeAnn = precompute.Connection().Raw()->GetTypeAnn();
-    if (!typeAnn || typeAnn->GetKind() != ETypeAnnotationKind::Stream) {
-        return node;
-    }
 
-    typeAnn = typeAnn->Cast<TStreamExprType>()->GetItemType();
-    if (typeAnn->GetKind() != ETypeAnnotationKind::List && typeAnn->GetKind() != ETypeAnnotationKind::Optional) {
+    YQL_ENSURE(typeAnn && typeAnn->GetKind() == ETypeAnnotationKind::List);
+    typeAnn = typeAnn->Cast<TListExprType>()->GetItemType();
+    if (typeAnn->GetKind() == ETypeAnnotationKind::Struct) {
         return node;
     }
 

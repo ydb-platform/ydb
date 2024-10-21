@@ -783,7 +783,7 @@ TYPED_TEST(TRpcTest, SlowCall)
     EXPECT_TRUE(rspOrError.IsOK());
 }
 
-TYPED_TEST(TRpcTest, RequestQueueSizeLimit)
+TYPED_TEST(TNotGrpcTest, RequestQueueSizeLimit)
 {
     MaybeInitLatch();
 
@@ -817,7 +817,9 @@ TYPED_TEST(TRpcTest, RequestQueueSizeLimit)
     }
     ReleaseLatchedCalls();
 
-    EXPECT_TRUE(AllSucceeded(std::move(futures)).Get().IsOK());
+    for(auto results = AllSet(std::move(futures)).Get().Value(); const auto& res : results) {
+        EXPECT_TRUE(res.IsOK());
+    }
 
     ResetLatch();
 

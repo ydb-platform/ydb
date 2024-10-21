@@ -1,6 +1,6 @@
 #include "rope_over_buffer.h"
 
-#include "yql_panic.h"
+#include <ydb/library/yql/utils/yql_panic.h>
 
 namespace NYql {
 

@@ -94,6 +94,10 @@ public:
         return HPMilliSecondsFloat(now - CreationTime);
     }
 
+    double GetCostMs() const {
+        return Cost / 1.0e6; // since cost is in nanoseconds
+    }
+
     ui64 GetCost() const {
         return Cost;
     }
@@ -294,6 +298,8 @@ public:
     THolder<NPDisk::TEvLogResult> Result;
     std::function<void()> OnDestroy;
 
+    bool Replied = false;
+
     TLogWrite(NPDisk::TEvLog &ev, const TActorId &sender, ui32 estimatedChunkIdx, TReqId reqId, NWilson::TSpan span)
         : TRequestBase(sender, reqId, ev.Owner, ev.OwnerRound, NPriInternal::LogWrite, std::move(span))
         , Signature(ev.Signature)
@@ -310,6 +316,7 @@ public:
     }
 
     virtual ~TLogWrite() {
+        Y_DEBUG_ABORT_UNLESS(Replied);
         if (OnDestroy) {
             OnDestroy();
         }
@@ -342,6 +349,14 @@ public:
         OnDestroy = std::move(onDestroy);
     }
 
+    void Abort(TActorSystem* actorSystem) override {
+        actorSystem->Send(Sender, new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, "TLogWrite is being aborted"));
+        Replied = true;
+        if (NextInBatch) {
+            NextInBatch->Abort(actorSystem);
+        }
+    }
+
     TString ToString() const {
         TStringStream str;
         str << "TLogWrite {";
@@ -361,7 +376,6 @@ class TCompletionChunkRead;
 //
 class TChunkRead : public TRequestBase {
 protected:
-    static TAtomic LastIndex;
     static constexpr ui64 ReferenceCanary = 890461871990457885ull;
 public:
     ui32 ChunkIdx;
@@ -372,7 +386,6 @@ public:
     ui64 CurrentSector = 0;
     ui64 RemainingSize;
     TCompletionChunkRead *FinalCompletion = nullptr;
-    TAtomicBase Index;
     bool IsReplied = false;
 
     ui64 SlackSize;
@@ -398,7 +411,6 @@ public:
         , SlackSize(Max<ui32>())
         , DoubleFreeCanary(ReferenceCanary)
     {
-        Index = AtomicIncrement(LastIndex);
     }
 
     virtual ~TChunkRead() {
@@ -478,8 +490,6 @@ public:
 // TChunkWrite
 //
 class TChunkWrite : public TRequestBase {
-protected:
-    static TAtomic LastIndex;
 public:
     ui32 ChunkIdx;
     ui32 Offset;
@@ -493,11 +503,12 @@ public:
     ui32 CurrentPart = 0;
     ui32 CurrentPartOffset = 0;
     ui32 RemainingSize = 0;
-    ui32 UnenqueuedSize;
-    TAtomicBase Index;
 
     ui32 SlackSize;
     ui32 BytesWritten = 0;
+
+    TAtomic Pieces = 0;
+    TAtomic Aborted = 0;
 
     THolder<NPDisk::TCompletionAction> Completion;
 
@@ -510,15 +521,23 @@ public:
         , DoFlush(ev.DoFlush)
         , IsSeqWrite(ev.IsSeqWrite)
     {
-        Index = AtomicIncrement(LastIndex);
         if (PartsPtr) {
             for (size_t i = 0; i < PartsPtr->Size(); ++i) {
                 RemainingSize += (*PartsPtr)[i].second;
             }
         }
         TotalSize = RemainingSize;
-        UnenqueuedSize = RemainingSize;
         SlackSize = Max<ui32>();
+    }
+
+    void RegisterPiece() {
+        AtomicIncrement(Pieces);
+    }
+
+    void AbortPiece(TActorSystem *actorSystem) {
+        if (AtomicDecrement(Pieces) == 0) {
+            this->Abort(actorSystem);
+        }
     }
 
     ERequestType GetType() const override {
@@ -526,15 +545,7 @@ public:
     }
 
     void EstimateCost(const TDriveModel &drive) override {
-        Cost = drive.SeekTimeNs() + drive.TimeForSizeNs((ui64)UnenqueuedSize, ChunkIdx, TDriveModel::OP_TYPE_WRITE);
-    }
-
-    bool IsFinalIteration() {
-        return UnenqueuedSize <= SlackSize;
-    }
-
-    bool IsTotallyEnqueued() {
-        return UnenqueuedSize == 0;
+        Cost = drive.SeekTimeNs() + drive.TimeForSizeNs((ui64)TotalSize, ChunkIdx, TDriveModel::OP_TYPE_WRITE);
     }
 
     bool TryStealSlack(ui64& slackNs, const TDriveModel &drive, ui64 appendBlockSize, bool adhesion) override {
@@ -546,12 +557,18 @@ public:
         if (SlackSize >= appendBlockSize) {
             SlackSize = Min(
                 SlackSize / appendBlockSize * appendBlockSize,
-                (UnenqueuedSize + appendBlockSize - 1) / appendBlockSize * appendBlockSize);
+                (TotalSize + appendBlockSize - 1) / appendBlockSize * appendBlockSize);
             ui64 costNs = (adhesion? 0: drive.SeekTimeNs()) + drive.TimeForSizeNs((ui64)SlackSize, ChunkIdx, TDriveModel::OP_TYPE_WRITE);
             slackNs -= costNs;
             return true;
         } else {
             return false;
+        }
+    }
+
+    void Abort(TActorSystem* actorSystem) override {
+        if (!AtomicSwap(&Aborted, true)) {
+            actorSystem->Send(Sender, new NPDisk::TEvChunkWriteResult(NKikimrProto::CORRUPTED, ChunkIdx, Cookie, 0, "TChunkWrite is being aborted"));
         }
     }
 };
@@ -570,7 +587,9 @@ public:
         , ChunkWrite(write)
         , PieceShift(pieceShift)
         , PieceSize(pieceSize)
-    {}
+    {
+        ChunkWrite->RegisterPiece();
+    }
 
     ERequestType GetType() const override {
         return ERequestType::RequestChunkWritePiece;
@@ -579,6 +598,12 @@ public:
     void EstimateCost(const TDriveModel &drive) override {
         Cost = drive.SeekTimeNs() +
             drive.TimeForSizeNs((ui64)PieceSize, ChunkWrite->ChunkIdx, TDriveModel::OP_TYPE_WRITE);
+    }
+
+    void Abort(TActorSystem* actorSystem) override {
+        if (ChunkWrite) {
+            ChunkWrite->AbortPiece(actorSystem);
+        }
     }
 };
 

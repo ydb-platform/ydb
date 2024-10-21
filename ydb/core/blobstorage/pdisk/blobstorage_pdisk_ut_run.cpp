@@ -7,6 +7,7 @@
 #include <ydb/core/mon/sync_http_mon.h>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/library/pdisk_io/aio.h>
+#include <ydb/core/util/random.h>
 
 #include <util/folder/tempdir.h>
 
@@ -62,13 +63,14 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
 
         TString dataPath;
         if (!runCfg.TestContext->IsFormatedDiskExpected()) {
-            if (runCfg.TestContext->Dir) {
-                TString databaseDirectory = MakeDatabasePath(runCfg.TestContext->Dir);
-                dataPath = MakePDiskPath(runCfg.TestContext->Dir);
+            auto dir = runCfg.TestContext->GetDir();
+            if (dir) {
+                TString databaseDirectory = MakeDatabasePath(dir);
+                dataPath = MakePDiskPath(dir);
                 MakeDirIfNotExist(databaseDirectory.c_str());
             }
 
-            EntropyPool().Read(&runCfg.TestContext->PDiskGuid, sizeof(runCfg.TestContext->PDiskGuid));
+            SafeEntropyPoolRead(&runCfg.TestContext->PDiskGuid, sizeof(runCfg.TestContext->PDiskGuid));
             if (!runCfg.IsBad) {
                 FormatPDiskForTest(dataPath, runCfg.TestContext->PDiskGuid, runCfg.ChunkSize,
                         runCfg.IsErasureEncodeUserLog, runCfg.TestContext->SectorMap);

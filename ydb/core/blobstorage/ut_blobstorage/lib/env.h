@@ -149,7 +149,6 @@ struct TEnvironmentSetup {
     }
 
     static void SetupEnv() {
-        TAppData::TimeProvider = TTestActorSystem::CreateTimeProvider();
         ui64 seed = RandomNumber<ui64>();
         if (const TString& s = GetEnv("SEED", "")) {
             seed = FromString<ui64>(s);
@@ -198,6 +197,7 @@ struct TEnvironmentSetup {
 
     void Initialize() {
         Runtime = MakeRuntime();
+        TAppData::TimeProvider = TTestActorSystem::CreateTimeProvider();
         if (Settings.PrepareRuntime) {
             Settings.PrepareRuntime(*Runtime);
         }

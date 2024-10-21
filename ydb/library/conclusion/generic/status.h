@@ -34,9 +34,9 @@ private:
 public:
     void Validate(const TString& processInfo = Default<TString>()) const {
         if (processInfo) {
-            Y_ABORT_UNLESS(Ok(), "error=%s, processInfo=%s", GetErrorMessage(), processInfo);
+            Y_ABORT_UNLESS(Ok(), "error=%s, processInfo=%s", GetErrorMessage().c_str(), processInfo.c_str());
         } else {
-            Y_ABORT_UNLESS(Ok(), "error=%s", GetErrorMessage());
+            Y_ABORT_UNLESS(Ok(), "error=%s", GetErrorMessage().c_str());
         }
     }
 

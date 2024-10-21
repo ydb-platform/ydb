@@ -67,7 +67,7 @@ class OneTimeWaiter:
 
         while (datetime.now() - start).total_seconds() < timeout:
             try:
-                actual_tables = set(self.docker_compose_helper.list_oracle_tables())
+                actual_tables = set(self.docker_compose_helper._list_oracle_tables())
             except Exception as e:
                 LOGGER.error(f"list oracle tables error: {e}")
                 time.sleep(5)

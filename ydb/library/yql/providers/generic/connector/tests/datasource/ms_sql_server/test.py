@@ -61,7 +61,7 @@ class OneTimeWaiter:
 
         while (datetime.now() - start).total_seconds() < timeout:
             try:
-                actual_tables = set(self.docker_compose_helper.list_ms_sql_server_tables())
+                actual_tables = set(self.docker_compose_helper._list_ms_sql_server_tables())
             except Exception as e:
                 LOGGER.error(f"list ms_sql_server tables error: {e}")
                 time.sleep(5)

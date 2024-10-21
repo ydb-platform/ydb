@@ -1,7 +1,9 @@
+from typing import Sequence
+from datetime import datetime
+
 import pytest
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
-from ydb.library.yql.providers.generic.connector.tests.utils.clients.clickhouse import Client
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
 from ydb.library.yql.providers.generic.connector.tests.utils.run.runners import runner_types, configure_runner
 import ydb.library.yql.providers.generic.connector.tests.utils.scenario.clickhouse as scenario
@@ -13,6 +15,11 @@ import ydb.library.yql.providers.generic.connector.tests.common_test_cases.selec
 import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_table as select_missing_table
 import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_positive_common as select_positive_common
 
+one_time_waiter = scenario.OneTimeWaiter(
+    expected_tables=[
+        "primitive_types_nullable",
+    ]
+)
 
 # Global collection of test cases dependent on environment
 tc_collection = Collection(
@@ -23,17 +30,15 @@ tc_collection = Collection(
 @pytest.mark.parametrize("runner_type", runner_types)
 @pytest.mark.parametrize("test_case", tc_collection.get('select_positive'), ids=tc_collection.ids('select_positive'))
 @pytest.mark.usefixtures("settings")
-@pytest.mark.usefixtures("clickhouse_client")
 def test_select_positive(
     request: pytest.FixtureRequest,
     settings: Settings,
     runner_type: str,
-    clickhouse_client: Client,
     test_case: select_positive_common.TestCase,
 ):
     runner = configure_runner(runner_type=runner_type, settings=settings)
     scenario.select_positive(
-        test_name=request.node.name, settings=settings, runner=runner, client=clickhouse_client, test_case=test_case
+        test_name=request.node.name, settings=settings, runner=runner, test_case=test_case
     )
 
 
@@ -49,7 +54,7 @@ def test_select_missing_database(
     test_case: select_missing_database.TestCase,
 ):
     runner = configure_runner(runner_type=runner_type, settings=settings)
-    scenario.select_missing_database(
+    scenario.select_missing_table(
         settings=settings,
         runner=runner,
         test_case=test_case,
@@ -62,12 +67,10 @@ def test_select_missing_database(
     "test_case", tc_collection.get('select_missing_table'), ids=tc_collection.ids('select_missing_table')
 )
 @pytest.mark.usefixtures("settings")
-@pytest.mark.usefixtures("clickhouse_client")
 def test_select_missing_table(
     request: pytest.FixtureRequest,
     settings: Settings,
     runner_type: str,
-    clickhouse_client: Client,
     test_case: select_missing_table.TestCase,
 ):
     runner = configure_runner(runner_type=runner_type, settings=settings)
@@ -75,7 +78,6 @@ def test_select_missing_table(
         test_name=request.node.name,
         settings=settings,
         runner=runner,
-        client=clickhouse_client,
         test_case=test_case,
     )
 
@@ -83,12 +85,10 @@ def test_select_missing_table(
 @pytest.mark.parametrize("runner_type", runner_types)
 @pytest.mark.parametrize("test_case", tc_collection.get('select_datetime'), ids=tc_collection.ids('select_datetime'))
 @pytest.mark.usefixtures("settings")
-@pytest.mark.usefixtures("clickhouse_client")
 def test_select_datetime(
     request: pytest.FixtureRequest,
     settings: Settings,
     runner_type: str,
-    clickhouse_client: Client,
     test_case: select_positive_common.TestCase,
 ):
     runner = configure_runner(runner_type=runner_type, settings=settings)
@@ -97,5 +97,4 @@ def test_select_datetime(
         test_case=test_case,
         settings=settings,
         runner=runner,
-        client=clickhouse_client,
     )

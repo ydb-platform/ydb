@@ -15,6 +15,7 @@ import ydb.library.yql.providers.generic.connector.tests.common_test_cases.selec
 
 # import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_database as tc_select_missing_database
 
+
 LOGGER = make_logger(__name__)
 
 
@@ -35,7 +36,7 @@ class OneTimeWaiter:
 
         timeout = 600
         while (datetime.now() - start).total_seconds() < timeout:
-            self.actual_tables = set(self.docker_compose_helper.list_ydb_tables())
+            self.actual_tables = set(self.docker_compose_helper._list_ydb_tables())
 
             # check if all the required tables have been created
             if self.expected_tables <= self.actual_tables:

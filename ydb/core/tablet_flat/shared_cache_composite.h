@@ -6,70 +6,207 @@
 
 namespace NKikimr::NCache {
 
-template <typename TPage>
+template <typename TPage, typename TPageTraits>
 class TCompositeCache : public ICacheCache<TPage> {
     using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
 
-    struct TCacheHolder {
-        THolder<ICacheCache<TPage>> Cache;
-        TCounterPtr SizeCounter; // TODO: update
+    static const ui32 MaxCachesCount = 3;
+    static const ui32 RotatePagesPerCallCount = 10;
+    static_assert(MaxCachesCount < (1 << 4));
+
+    class TCacheHolder {
+    public:
+        TCacheHolder(ui32 id, THolder<ICacheCache<TPage>>&& cache, TCounterPtr& sizeCounter)
+            : Id(id)
+            , Cache(std::move(cache))
+            , SizeCounter(sizeCounter)
+        {
+            Y_ABORT_UNLESS(GetSize() == 0);
+        }
+
+        TIntrusiveList<TPage> EvictNext() {
+            return ProcessEvictedList(Cache->EvictNext());
+        }
+
+        TIntrusiveList<TPage> Touch(TPage* page) {
+            ui32 cacheId = TPageTraits::GetCacheId(page);
+            if (cacheId == 0) {
+                TPageTraits::SetCacheId(page, Id);
+                SizeCounter->Add(TPageTraits::GetSize(page));
+            } else {
+                Y_ABORT_UNLESS(cacheId == Id);
+            }
+
+            return ProcessEvictedList(Cache->Touch(page));
+        }
+
+        void Erase(TPage* page) {            
+            ui32 cacheId = TPageTraits::GetCacheId(page);
+            if (cacheId != 0) {
+                Y_ABORT_UNLESS(cacheId == Id);
+                SizeCounter->Sub(TPageTraits::GetSize(page));
+                TPageTraits::SetCacheId(page, 0);
+            }
+
+            Cache->Erase(page);
+        }
+
+        void UpdateLimit(ui64 limit) {
+            Cache->UpdateLimit(limit);
+        }
+
+        ui64 GetSize() const {
+            return Cache->GetSize();
+        }
+
+    private:
+        TIntrusiveList<TPage> ProcessEvictedList(TIntrusiveList<TPage>&& evictedList) {
+            ui64 evictedSize = 0;
+
+            for (auto& page_ : evictedList) {
+                TPage* page = &page_;
+                Y_ABORT_UNLESS(TPageTraits::GetCacheId(page) == Id);
+                TPageTraits::SetCacheId(page, 0);
+                evictedSize += TPageTraits::GetSize(page);
+            }
+
+            SizeCounter->Sub(evictedSize);
+
+            return evictedList;
+        }
+
+    public:
+        const ui32 Id; // in [1 .. MaxCachesCount] range
+    private:
+        const THolder<ICacheCache<TPage>> Cache;
+        const TCounterPtr SizeCounter;
     };
 
 public:
     TCompositeCache(THolder<ICacheCache<TPage>>&& cache, TCounterPtr sizeCounter) {
-        Caches.emplace_back(std::move(cache), sizeCounter);
+        Caches.emplace_back(1, std::move(cache), sizeCounter);
     }
 
-    void Switch(THolder<ICacheCache<TPage>>&& cache, TCounterPtr sizeCounter) {
-        while (!Caches.empty() && Caches.front().Cache->GetSize() == 0) {
-            Caches.pop_front();
+    TIntrusiveList<TPage> Switch(THolder<ICacheCache<TPage>>&& cache, TCounterPtr sizeCounter) Y_WARN_UNUSED_RESULT {
+        ui32 cacheId = Caches.back().Id + 1;
+        if (cacheId > MaxCachesCount) {
+            cacheId -= MaxCachesCount;
         }
 
-        cache->UpdateLimit(Limit);
-        Caches.emplace_back(std::move(cache), sizeCounter);
+        Caches.emplace_back(cacheId, std::move(cache), sizeCounter)
+            .UpdateLimit(Limit);
+
+        TIntrusiveList<TPage> evictedList;
+
+        while (Caches.size() > 1 && Caches.front().Id == cacheId) { // MaxCachesCount is exceeded
+            RotatePages(evictedList);
+        }
+
+        return evictedList;
     }
 
     TIntrusiveList<TPage> EvictNext() override {
         while (Y_UNLIKELY(Caches.size() > 1)) {
-            auto result = Caches.front().Cache->EvictNext();
+            auto result = Caches.front().EvictNext();
             if (!result) {
-                Y_ABORT_UNLESS(Caches.front().Cache->GetSize() == 0);
+                Y_ABORT_UNLESS(Caches.front().GetSize() == 0);
                 Caches.pop_front();
+            } else {
+                return result;
             }
         }
 
-        return Caches.front().Cache->EvictNext();;
+        return Caches.back().EvictNext();
     }
 
     TIntrusiveList<TPage> Touch(TPage* page) override {
         if (Y_LIKELY(Caches.size() == 1)) {
-            return Caches.front().Cache->Touch(page);
+            return Caches.back().Touch(page);
         }
 
-        Y_ABORT("TODO");
+        TIntrusiveList<TPage> evictedList = GetCache(TPageTraits::GetCacheId(page)).Touch(page);
+
+        RotatePages(evictedList);
+
+        while (GetSize() > Limit && Caches.size() > 1) {
+            evictedList = Concatenate(std::move(evictedList), EvictNext());
+        }
+
+        return evictedList;
     }
 
     void Erase(TPage* page) override {
         if (Y_LIKELY(Caches.size() == 1)) {
-            return Caches.front().Cache->Erase(page);
+            Caches.back().Erase(page);
+            return;
         }
 
-        Y_ABORT("TODO");
+        GetCache(TPageTraits::GetCacheId(page))
+            .Erase(page);
     }
 
     void UpdateLimit(ui64 limit) override {
         Limit = limit;
         for (auto& cache : Caches) {
-            cache.Cache->UpdateLimit(limit);
+            cache.UpdateLimit(limit);
         }
     }
 
     ui64 GetSize() const override {
         ui64 result = 0;
         for (const auto& cache : Caches) {
-            result += cache.Cache->GetSize();
+            result += cache.GetSize();
         }
         return result;
+    }
+
+private:
+    TCacheHolder& GetCache(ui32 cacheId) {
+        if (cacheId == 0) {
+            // use the most-recent cache by default
+            return Caches.back();
+        } else {
+            // Note: this loop might be replaced with formula
+            // but it seems useless and error-prone
+            for (auto& cache : Caches) {
+                if (cache.Id == cacheId) {
+                    return cache;
+                }
+            }
+            Y_ABORT("Failed to locate page cache");
+        }
+    }
+
+    void RotatePages(TIntrusiveList<TPage>& evictedList) {
+        ui32 rotatedPagesCount = 0;
+        while (Caches.size() > 1 && rotatedPagesCount < RotatePagesPerCallCount) {
+            auto rotatedList = Caches.front().EvictNext();
+            if (!rotatedList) {
+                Y_ABORT_UNLESS(Caches.front().GetSize() == 0);
+                Caches.pop_front();
+                continue;
+            }
+
+            while (!rotatedList.Empty()) {
+                TPage* page = rotatedList.PopFront();
+                
+                // touch each page multiple times to make it warm
+                for (ui32 touchTimes = 0; touchTimes < 3; touchTimes++) {
+                    evictedList = Concatenate(std::move(evictedList),
+                        Caches.back().Touch(page));
+                }
+                
+                rotatedPagesCount++;
+            }
+        }
+    }
+
+    TIntrusiveList<TPage> Concatenate(TIntrusiveList<TPage>&& left, TIntrusiveList<TPage>&& right) {
+        while (!right.Empty()) {
+            TPage* page = right.PopFront();
+            left.PushBack(page);
+        }
+        return left;
     }
 
 private:

@@ -144,7 +144,7 @@ ALTER TOPIC `my_topic` RESET (
 
 ### Change autopartitioning modes for the topic {#autopartitioning}
 
-Next command set [autopartitioning](../../../../concepts/topic#autopartitioning) into the mode UP:
+The following command sets the [autopartitioning](../../../../concepts/topic.md#autopartitioning) mode to `UP`:
 
 ```yql
 ALTER TOPIC `my_topic` SET (

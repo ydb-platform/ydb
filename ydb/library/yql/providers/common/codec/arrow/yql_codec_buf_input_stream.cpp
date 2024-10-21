@@ -23,10 +23,10 @@ arrow::Result<int64_t> TInputBufArrowInputStream::Read(int64_t bytesToRead, void
 }
 
 arrow::Result<std::shared_ptr<arrow::Buffer>> TInputBufArrowInputStream::Read(int64_t nbytes) {
-    auto outBuffer = ARROW_RESULT(arrow::AllocateBuffer(nbytes, Pool_));
+    auto outBuffer = ARROW_RESULT(AllocateResizableBuffer(nbytes, Pool_));
     auto bytesRead = ARROW_RESULT(Read(nbytes, outBuffer->mutable_data()));
     if (bytesRead == 0) {
-        return arrow::AllocateBuffer(0);
+        return std::make_shared<arrow::Buffer>(nullptr, 0);
     }
 
     YQL_ENSURE(bytesRead == nbytes);

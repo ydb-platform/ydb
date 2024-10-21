@@ -1546,7 +1546,7 @@ public:
         }
     }
 
-protected:
+private:
     std::unique_ptr<TInputBufArrowInputStream> InputStream_;
     std::shared_ptr<arrow::ipc::RecordBatchStreamReader> StreamReader_;
     std::vector<std::unique_ptr<IYtColumnConverter>> ColumnConverters_;

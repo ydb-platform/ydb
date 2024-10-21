@@ -14,7 +14,8 @@ namespace NKafka {
 class TTopicOffsetsActor : public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<TTopicOffsetsActor,
                                                                TEvKafka::TGetOffsetsRequest,
                                                                TEvKafka::TEvTopicOffsetsResponse>
-                               , public NKikimr::NGRpcProxy::V1::TDescribeTopicActorImpl {
+                               , public NKikimr::NGRpcProxy::V1::TDescribeTopicActorImpl
+                               , public NKikimr::NGRpcProxy::V1::TCdcStreamCompatible {
 
 using TBase = TPQInternalSchemaActor<TTopicOffsetsActor,
                                                                TEvKafka::TGetOffsetsRequest,
@@ -30,17 +31,18 @@ public:
     void StateWork(TAutoPtr<IEventHandle>& ev);
 
     void HandleCacheNavigateResponse(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) override;
-    
+
     virtual void ApplyResponse(TTabletInfo&, NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr&,
                                const TActorContext&) override {
         Y_ABORT();
     }
+
     bool ApplyResponse(NKikimr::TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr&, const TActorContext&) override {
         Y_ABORT();
     }
 
     void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) override;
-    
+
     void Reply(const TActorContext&) override;
 
     void RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext&) override;

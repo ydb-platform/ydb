@@ -28,7 +28,8 @@ struct PartitionOffsets {
 class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<TTopicOffsetActor,
                                                        NKikimr::NGRpcProxy::V1::TLocalRequestBase,
                                                        NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvPartitionLocationResponse>,
-                         public NKikimr::NGRpcProxy::V1::TDescribeTopicActorImpl {
+                         public NKikimr::NGRpcProxy::V1::TDescribeTopicActorImpl,
+                         public NKikimr::NGRpcProxy::V1::TCdcStreamCompatible {
     using TBase = NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<TTopicOffsetActor,
         NKikimr::NGRpcProxy::V1::TLocalRequestBase,
         NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvPartitionLocationResponse>;
@@ -36,7 +37,7 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
     public:
     TTopicOffsetActor(std::shared_ptr<TSet<TString>> consumers,
             const NKikimr::NGRpcProxy::V1::TLocalRequestBase& request,
-            const TActorId& requester, 
+            const TActorId& requester,
             std::shared_ptr<TSet<ui32>> partitions,
             const TString& originalTopicName,
             const TString& userSID)

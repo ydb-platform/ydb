@@ -418,7 +418,8 @@ private:
 class TPartitionsLocationActor : public TPQInternalSchemaActor<TPartitionsLocationActor,
                                                                TGetPartitionsLocationRequest,
                                                                TEvPQProxy::TEvPartitionLocationResponse>
-                               , public TDescribeTopicActorImpl {
+                               , public TDescribeTopicActorImpl
+                               , public TCdcStreamCompatible {
 
 using TBase = TPQInternalSchemaActor<TPartitionsLocationActor, TGetPartitionsLocationRequest,
                                      TEvPQProxy::TEvPartitionLocationResponse>;

@@ -58,15 +58,15 @@ The initial number of partitions is set during topic creation. If the partition 
 
 #### UP
 
-Autopartitioning up is switched on on this topic. It means that in case of increasing of writing speed into the topic partitions count will be increased automatically. In case of decreasing of writing speed into the topic partitions count remaines unchanged.
+Upwards autopartitioning is enabled for this topic. This means that if the write speed to the topic increases, the number of partitions will automatically increase. However, if the write speed decreases, the number of partitions remains unchanged.
 
-Algorithm of partitions count increasing is following. If during defined period of time write speed into the some partitions increases defined threshold (in % of maximum write speed into the partition), this partition is splitted into the two child partitions. Original partition becomes inactive. Only reading is possible from such partition. When retention period expires, and all messages from this partition will be deleted, this partition also will be deleted. Two new child partitions become active, and reading and writing are both possible for these partitions.
+The partition count increase algorithm works as follows: if the write speed for a partition exceeds a defined threshold (as a percentage of the maximum write speed for that partition) during a specified period, the partition is split into two child partitions. The original partition becomes inactive, allowing only read operations. When the retention period expires, and all messages in the original partition are deleted, the partition itself is also deleted. The two new child partitions become active, allowing both read and write operations.
 
 #### PAUSED
 
-Autopartitioning is paused for this topic. There is no automatic increasing of partitions count. If necessary, you can switch on autopartitioning up again for this topic.
+Autopartitioning is paused for this topic, meaning that the number of partitions does not increase automatically. If needed, you can re-enable autopartitioning for this topic.
 
-Examples of YQL-queries for switching between different modes of autopartitioning you can see [here](../yql/reference/syntax/alter-topic.md#autopartitioning).
+Examples of YQL queries for switching between different autopartitioning modes can be found [here](../yql/reference/syntax/alter-topic.md#autopartitioning).
 
 ### Autopartitioning constraints {#autopartitioning_constraints}
 

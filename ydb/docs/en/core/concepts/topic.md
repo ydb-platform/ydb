@@ -38,7 +38,7 @@ All messages within a partition have a unique sequence number called an `offset`
 
 ## Autopartitioning {#autopartitioning}
 
-Total topic throughput is determined by the number of partitions in the topic and the throughput of each partition. The number of partitions and the throughput of each partition are set at the time of topic creation. If the maximum required write speed for a topic is unknown at the creation time, autopartitioning allows the topic to be scaled automatically. If autopartitioning is enabled for a topic, the number of partitions will increase automatically as the write speed increases (see [Autopartitioning modes](#autopartitioning_modes)).
+Total topic throughput is determined by the number of partitions in the topic and the throughput of each partition. The number of partitions and the throughput of each partition are set at the time of topic creation. If the maximum required write speed for a topic is unknown at the creation time, autopartitioning allows the topic to be scaled automatically. If autopartitioning is enabled for a topic, the number of partitions will increase automatically as the write speed increases (see [Autopartitioning strategies](#autopartitioning_strategies)).
 
 ### Guarantees {#autopartitioning_guarantee}
 
@@ -46,15 +46,15 @@ Total topic throughput is determined by the number of partitions in the topic an
 2. The SDK and server maintain the reading order. Data is read from the parent partition first, followed by the child partitions.
 3. As a result, the exactly-once writing guarantee and the reading order guarantee are preserved for a specific [producer identifier](#producer-id).
 
-### Autopartitioning modes {#autopartitioning_modes}
+### Autopartitioning strategies {#autopartitioning_strategies}
 
-The following autopartitioning modes are available for any topic:
+The following autopartitioning strategies are available for any topic:
 
 #### DISABLED
 
-Autopartitioning is disabled for this topic. In this mode, the number of partitions remains constant, and there is no automatic scaling.
+Autopartitioning is disabled for this topic. The number of partitions remains constant, and there is no automatic scaling.
 
-The initial number of partitions is set during topic creation. If the partition count is manually adjusted in this mode, new partitions are added. Both previously existing and new partitions are active.
+The initial number of partitions is set during topic creation. If the partition count is manually adjusted, new partitions are added. Both previously existing and new partitions are active.
 
 #### UP
 
@@ -66,7 +66,7 @@ The partition count increase algorithm works as follows: if the write speed for 
 
 Autopartitioning is paused for this topic, meaning that the number of partitions does not increase automatically. If needed, you can re-enable autopartitioning for this topic.
 
-Examples of YQL queries for switching between different autopartitioning modes can be found [here](../yql/reference/syntax/alter-topic.md#autopartitioning).
+Examples of YQL queries for switching between different autopartitioning strategies can be found [here](../yql/reference/syntax/alter-topic.md#autopartitioning).
 
 ### Autopartitioning constraints {#autopartitioning_constraints}
 

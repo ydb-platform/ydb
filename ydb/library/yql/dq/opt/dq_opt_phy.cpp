@@ -2735,8 +2735,8 @@ TExprBase DqPropagatePrecomuteTake(TExprBase node, TExprContext& ctx, IOptimizat
 
     auto* typeAnn = precompute.Connection().Raw()->GetTypeAnn();
 
-    YQL_ENSURE(typeAnn && typeAnn->GetKind() == ETypeAnnotationKind::List);
-    typeAnn = typeAnn->Cast<TListExprType>()->GetItemType();
+    YQL_ENSURE(typeAnn);
+    typeAnn = GetSeqItemType(typeAnn);
     if (typeAnn->GetKind() == ETypeAnnotationKind::Struct) {
         return node;
     }

@@ -6,8 +6,8 @@
 
 $p = select p_partkey from {{part}}
 where
-    p_brand = 'Brand#35'
-    and p_container = 'LG DRUM'
+    p_brand = 'Brand#23'
+    and p_container = 'MED BOX'
 ;
 
 $threshold = (

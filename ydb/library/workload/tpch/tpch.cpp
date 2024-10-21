@@ -99,6 +99,12 @@ TQueryInfoList TTpchWorkloadGenerator::GetWorkload(int type) {
         substTable("supplier");
         result.emplace_back();
         result.back().Query = query;
+        if (Params.IsCheckCanonical()) {
+            const auto key = "tpch/s1_canonical/q" + ToString(&query - queries.data()) + ".result";
+            if (NResource::Has(key)) {
+                result.back().ExpectedResult = NResource::Find(key);
+            }
+        }
     }
     return result;
 }
@@ -113,6 +119,8 @@ void TTpchWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommand
     case TWorkloadParams::ECommandType::Run:
         opts.AddLongOption("ext-queries-dir", "Directory with external queries. Naming have to be q[0-N].sql")
             .StoreResult(&ExternalQueriesDir);
+        opts.AddLongOption('c', "check-canonical", "Use deterministic queries and check results with canonical ones.")
+            .NoArgument().StoreTrue(&CheckCanonicalFlag);
         break;
     default:
         break;

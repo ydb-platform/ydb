@@ -14,7 +14,7 @@ join
 on
     n.n_nationkey = s.s_nationkey
 where
-    n.n_name = 'CANADA'
+    n.n_name = 'GERMANY'
 );
 
 $j2 = (

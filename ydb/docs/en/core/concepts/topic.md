@@ -42,9 +42,9 @@ Total topic throughput is determined by the number of partitions in the topic an
 
 ### Guarantees {#autopartitioning_guarantee}
 
-1. SDK and server provide exactly-once guarantee of writing in case of partition split. It means that any message will be written once into the parent partition or into the one of the child partitions. Message can not be written into the parent partition and into the child partition at the same time. Moreover, a message can not be written into the one partition several times.
-2. SDK and server provide reading order. First, the data will be read from the parent partition, and after that the data will be read from the child partitions.
-3. So, exactly-once guarantee of writing and reading order guarantee continue to be fulfilled for the specific [(producer-id)](#producer-id).
+1. The SDK and server provide an exactly-once guarantee in the case of writing during a partition split. This means that any message will be written either to the parent partition or to one of the child partitions but never to both simultaneously. Additionally, a message cannot be written to the same partition multiple times.
+2. The SDK and server maintain the reading order. Data is read from the parent partition first, followed by the child partitions.
+3. As a result, the exactly-once writing guarantee and the reading order guarantee are preserved for a specific [producer identifier](#producer-id).
 
 ### Autopartitioning modes {#autopartitioning_modes}
 

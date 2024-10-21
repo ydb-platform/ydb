@@ -68,7 +68,7 @@ private:
                 ConflictRules_.emplace_back(
                     SubtreeNodes_[child->LeftArg],
                     SubtreeNodes_[child->RightArg]
-                );     
+                );
             }
         };
 

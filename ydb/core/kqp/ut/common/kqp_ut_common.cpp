@@ -1463,6 +1463,24 @@ NJson::TJsonValue GetJoinOrder(const TString& deserializedPlan) {
     return GetJoinOrderImpl(optRoot);
 }
 
+NJson::TJsonValue GetJoinOrderFromDetailedJoinOrderImpl(const NJson::TJsonValue& opt) {
+    if (!opt.GetMapSafe().contains("table")) {
+        NJson::TJsonValue res;
+        auto args = opt.GetMapSafe().at("args").GetArraySafe();
+        for (size_t i = 0; i < args.size(); ++i) {
+            res.AppendValue(GetJoinOrderFromDetailedJoinOrderImpl(args[i]));
+        }
+        return res;
+    }
+
+    return opt.GetMapSafe().at("table");
+}
+
+NJson::TJsonValue GetJoinOrderFromDetailedJoinOrder(const TString& deserializedDetailedJoinOrder) {
+    NJson::TJsonValue optRoot;
+    NJson::ReadJsonTree(deserializedDetailedJoinOrder, &optRoot, true);
+    return GetJoinOrderFromDetailedJoinOrderImpl(optRoot);
+}
 
 } // namspace NKqp
 } // namespace NKikimr

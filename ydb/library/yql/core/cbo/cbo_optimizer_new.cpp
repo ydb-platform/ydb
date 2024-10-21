@@ -77,7 +77,8 @@ void TRelOptimizerNode::Print(std::stringstream& stream, int ntabs) {
 TJoinOptimizerNode::TJoinOptimizerNode(
     const std::shared_ptr<IBaseOptimizerNode>& left, 
     const std::shared_ptr<IBaseOptimizerNode>& right,
-    const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions, 
+    TVector<TJoinColumn> leftKeys,
+    TVector<TJoinColumn> rightKeys,
     const EJoinKind joinType, 
     const EJoinAlgoType joinAlgo, 
     bool leftAny,
@@ -86,18 +87,14 @@ TJoinOptimizerNode::TJoinOptimizerNode(
 )   : IBaseOptimizerNode(JoinNodeType)
     , LeftArg(left)
     , RightArg(right)
-    , JoinConditions(joinConditions)
+    , LeftJoinKeys(leftKeys)
+    , RightJoinKeys(rightKeys)
     , JoinType(joinType)
     , JoinAlgo(joinAlgo)
     , LeftAny(leftAny)
     , RightAny(rightAny)
     , IsReorderable(!nonReorderable)
-{
-    for (const auto& [l,r] : joinConditions ) {
-        LeftJoinKeys.push_back(l.AttributeName);
-        RightJoinKeys.push_back(r.AttributeName);
-    }
-}
+{}
 
 TVector<TString> TJoinOptimizerNode::Labels() {
     auto res = LeftArg->Labels();
@@ -120,10 +117,10 @@ void TJoinOptimizerNode::Print(std::stringstream& stream, int ntabs) {
     }
     stream << ") ";
 
-    for (auto c : JoinConditions){
-        stream << c.first.RelName << "." << c.first.AttributeName
-            << "=" << c.second.RelName << "."
-            << c.second.AttributeName << ",";
+    for (size_t i=0; i<LeftJoinKeys.size(); i++){
+        stream << LeftJoinKeys[i].RelName << "." << LeftJoinKeys[i].AttributeName
+            << "=" << RightJoinKeys[i].RelName << "."
+            << RightJoinKeys[i].AttributeName << ",";
     }
     stream << "\n";
 
@@ -139,13 +136,14 @@ void TJoinOptimizerNode::Print(std::stringstream& stream, int ntabs) {
     RightArg->Print(stream, ntabs+1);
 }
 
-bool IsPKJoin(const TOptimizerStatistics& stats, const TVector<TString>& joinKeys) {
+bool IsPKJoin(const TOptimizerStatistics& stats, const TVector<TJoinColumn>& joinKeys) {
     if (!stats.KeyColumns) {
         return false;
     }
 
     for(size_t i = 0; i < stats.KeyColumns->Data.size(); i++){
-        if (std::find(joinKeys.begin(), joinKeys.end(), stats.KeyColumns->Data[i]) == joinKeys.end()) {
+        if (std::find_if(joinKeys.begin(), joinKeys.end(), 
+        [&] (const TJoinColumn& c) { return c.AttributeName == stats.KeyColumns->Data[i];}) == joinKeys.end()) {
             return false;
         }
     }
@@ -154,15 +152,13 @@ bool IsPKJoin(const TOptimizerStatistics& stats, const TVector<TString>& joinKey
 
 bool TBaseProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left,
     const std::shared_ptr<IBaseOptimizerNode>& right,
-    const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
-    const TVector<TString>& leftJoinKeys,
-    const TVector<TString>& rightJoinKeys,
+    const TVector<TJoinColumn>& leftJoinKeys,
+    const TVector<TJoinColumn>& rightJoinKeys,
     EJoinAlgoType joinAlgo,
     EJoinKind joinKind) {
 
     Y_UNUSED(left);
     Y_UNUSED(right);
-    Y_UNUSED(joinConditions);
     Y_UNUSED(leftJoinKeys);
     Y_UNUSED(rightJoinKeys);
     Y_UNUSED(joinKind);
@@ -183,30 +179,12 @@ double TBaseProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftSta
  *
  * The build is on the right side, so we make the build side a bit more expensive than the probe
 */
-TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
-    const TOptimizerStatistics& leftStats,
-    const TOptimizerStatistics& rightStats,
-    const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
-    EJoinAlgoType joinAlgo,
-    EJoinKind joinKind,
-    TCardinalityHints::TCardinalityHint* maybeHint) const
-{
-    TVector<TString> leftJoinKeys;
-    TVector<TString> rightJoinKeys;
-
-    for (auto c : joinConditions) {
-        leftJoinKeys.emplace_back(c.first.AttributeName);
-        rightJoinKeys.emplace_back(c.second.AttributeName);
-    }
-
-    return ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeHint);
-}
 
 TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     const TOptimizerStatistics& leftStats,
     const TOptimizerStatistics& rightStats,
-    const TVector<TString>& leftJoinKeys,
-    const TVector<TString>& rightJoinKeys,
+    const TVector<TJoinColumn>& leftJoinKeys,
+    const TVector<TJoinColumn>& rightJoinKeys,
     EJoinAlgoType joinAlgo,
     EJoinKind joinKind,
     TCardinalityHints::TCardinalityHint* maybeHint) const
@@ -266,9 +244,9 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         std::optional<double> lhsUniqueVals;
         std::optional<double> rhsUniqueVals;
         if (leftStats.ColumnStatistics && rightStats.ColumnStatistics && !leftJoinKeys.empty() && !rightJoinKeys.empty()) {
-            auto lhs = leftJoinKeys[0];
+            auto lhs = leftJoinKeys[0].AttributeName;
             lhsUniqueVals = leftStats.ColumnStatistics->Data[lhs].NumUniqueVals;
-            auto rhs = rightJoinKeys[0];
+            auto rhs = rightJoinKeys[0].AttributeName;
             rightStats.ColumnStatistics->Data[rhs];
             rhsUniqueVals = leftStats.ColumnStatistics->Data[lhs].NumUniqueVals;
         }

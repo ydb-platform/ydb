@@ -1182,7 +1182,7 @@ value {
         const TString string = "test string";
         const TString json = R"({"key": "value"})";
         auto binaryJson = NBinaryJson::SerializeToBinaryJson(json);
-        Y_ABORT_UNLESS(binaryJson.Defined());
+        Y_ABORT_UNLESS(binaryJson.IsSuccess());
 
         const std::pair<ui64, ui64> decimal = NYql::NDecimal::MakePair(NYql::NDecimal::FromString("16.17", NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE));
         const TString dynumber = *NDyNumber::ParseDyNumberString("18");

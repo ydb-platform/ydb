@@ -51,6 +51,7 @@ ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
 ydb/core/tx/datashard/ut_change_exchange Cdc.InitialScanDebezium
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
 ydb/core/tx/schemeshard/ut_split_merge TSchemeShardSplitBySizeTest.Merge1KShards
+ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
 ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst*
 ydb/core/tx/tx_proxy/ut_storage_tenant TStorageTenantTest.RemoveStoragePoolBeforeDroppingTablet
 ydb/core/util/ut TCircularOperationQueueTest.ShouldShuffle

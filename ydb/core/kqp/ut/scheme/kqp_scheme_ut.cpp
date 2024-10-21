@@ -8416,7 +8416,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         testHelper.CreateTable(testTable);
         std::string jsonString = R"({"col1": "val1", "obj": {"obj_col2_int": 16}})";
         auto maybeJsonDoc = NBinaryJson::SerializeToBinaryJson(jsonString);
-        Y_ABORT_UNLESS(maybeJsonDoc.Defined());
+        Y_ABORT_UNLESS(maybeJsonDoc.IsSuccess());
         const std::string jsonBin(maybeJsonDoc->Data(), maybeJsonDoc->Size());
         {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));

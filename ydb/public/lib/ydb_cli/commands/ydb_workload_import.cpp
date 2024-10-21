@@ -24,7 +24,7 @@ void TWorkloadCommandImport::Config(TConfig& config) {
         .DefaultValue(WorkloadParams.BulkSize).StoreResult(&WorkloadParams.BulkSize);
     config.Opts->AddLongOption("max-in-flight", "Maximum number if data portions that can be simultaneously in process.")
         .DefaultValue(UploadParams.MaxInFlight).StoreResult(&UploadParams.MaxInFlight);
-    config.Opts->AddLongOption('f', "file-output-path", "Path to directory to save tables instead upload it to db.")
+    config.Opts->AddLongOption('f', "file-output-path", "Path to a directory to save tables into as files instead of uploading it to db.")
         .StoreResult(&UploadParams.FileOutputPath);
 }
 

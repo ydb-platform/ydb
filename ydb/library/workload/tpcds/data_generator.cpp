@@ -66,13 +66,13 @@ TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TPositions TTpcdsWor
         result.Position = owner.StateProcessor->GetState().at(tdef->name).Position;
         result.Count -= std::min<i64>(result.Count, result.Position);
 
-        //this magic needs to correct work SCD. See setSCDKeys in ydb/library/benchmarks/gen/tpcds-dbgen/scd.c
+        //this magic is needed for SCD to work correctly. See setSCDKeys in ydb/library/benchmarks/gen/tpcds-dbgen/scd.c
         while (result.Position && !allowedModules.contains((result.FirstRow + result.Position) % 6)) {
             --result.Position;
             ++result.Count;
         }
     }
-    //this magic needs to correct work SCD. See setSCDKeys in ydb/library/benchmarks/gen/tpcds-dbgen/scd.c
+    //this magic is needed for SCD to work correctly. See setSCDKeys in ydb/library/benchmarks/gen/tpcds-dbgen/scd.c
     while (result.FirstRow > 1 && !allowedModules.contains((result.FirstRow + result.Position) % 6)) {
         --result.FirstRow;
         ++result.Count;

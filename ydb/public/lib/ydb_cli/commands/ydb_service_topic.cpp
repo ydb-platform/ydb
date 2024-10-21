@@ -904,6 +904,7 @@ namespace {
         TString description = PrepareAllowedCodecsDescription("Client-side compression algorithm. When read, data will be uncompressed transparently with a codec used on write", allowedCodecs);
         config.Opts->AddLongOption("codec", description)
             .Optional()
+            .DefaultValue("RAW")
             .StoreResult(&CodecStr_);
         AllowedCodecs_ = allowedCodecs;
     }

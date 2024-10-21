@@ -51,9 +51,9 @@ void THelper::WaitForSchemeOperation(TActorId sender, ui64 txId) {
     runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(sender);
 }
 
-void THelper::StartScanRequest(const TString& request, const bool expectSuccess, TVector<THashMap<TString, NYdb::TValue>>* result) const {
-    NYdb::NTable::TTableClient tClient(Server.GetDriver(),
-        NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken("root@builtin"));
+void THelper::StartScanRequest(
+    const TString& request, const bool expectSuccess, TVector<THashMap<TString, NYdb::TValue>>* result, const TString& authToken) const {
+    NYdb::NTable::TTableClient tClient(Server.GetDriver(), NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken(authToken));
     auto expectation = expectSuccess;
     bool resultReady = false;
     TVector<THashMap<TString, NYdb::TValue>> rows;
@@ -107,9 +107,8 @@ void THelper::StartScanRequest(const TString& request, const bool expectSuccess,
     }
 }
 
-void THelper::StartDataRequest(const TString& request, const bool expectSuccess, TString* result) const {
-    NYdb::NTable::TTableClient tClient(Server.GetDriver(),
-        NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken("root@builtin"));
+void THelper::StartDataRequest(const TString& request, const bool expectSuccess, TString* result, const TString& authToken) const {
+    NYdb::NTable::TTableClient tClient(Server.GetDriver(), NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken(authToken));
     auto expectation = expectSuccess;
     bool resultReady = false;
     bool* rrPtr = &resultReady;
@@ -142,9 +141,9 @@ void THelper::StartDataRequest(const TString& request, const bool expectSuccess,
     UNIT_ASSERT(resultReady);
 }
 
-void THelper::StartSchemaRequestTableServiceImpl(const TString& request, const bool expectation, const bool waiting) const {
-    NYdb::NTable::TTableClient tClient(Server.GetDriver(),
-        NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken("root@builtin"));
+void THelper::StartSchemaRequestTableServiceImpl(
+    const TString& request, const bool expectation, const bool waiting, const TString& authToken) const {
+    NYdb::NTable::TTableClient tClient(Server.GetDriver(), NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken(authToken));
 
     std::shared_ptr<bool> rrPtr = std::make_shared<bool>(false);
     tClient.CreateSession().Subscribe([rrPtr, request, expectation](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
@@ -169,9 +168,9 @@ void THelper::StartSchemaRequestTableServiceImpl(const TString& request, const b
     }
 }
 
-void THelper::StartSchemaRequestQueryServiceImpl(const TString& request, const bool expectation, const bool waiting) const {
-    NYdb::NQuery::TQueryClient qClient(Server.GetDriver(),
-        NYdb::NQuery::TClientSettings().AuthToken("root@builtin"));
+void THelper::StartSchemaRequestQueryServiceImpl(
+    const TString& request, const bool expectation, const bool waiting, const TString& authToken) const {
+    NYdb::NQuery::TQueryClient qClient(Server.GetDriver(), NYdb::NQuery::TClientSettings().AuthToken(authToken));
 
     std::shared_ptr<bool> rrPtr = std::make_shared<bool>(false);
     auto future = qClient.ExecuteQuery(request, NYdb::NQuery::TTxControl::NoTx());
@@ -194,11 +193,11 @@ void THelper::StartSchemaRequestQueryServiceImpl(const TString& request, const b
     }
 }
 
-void THelper::StartSchemaRequest(const TString& request, const bool expectSuccess, const bool waiting) const {
+void THelper::StartSchemaRequest(const TString& request, const bool expectSuccess, const bool waiting, const TString& authToken) const {
     if (UseQueryService) {
-        StartSchemaRequestQueryServiceImpl(request, expectSuccess, waiting);
+        StartSchemaRequestQueryServiceImpl(request, expectSuccess, waiting, authToken);
     } else {
-        StartSchemaRequestTableServiceImpl(request, expectSuccess, waiting);
+        StartSchemaRequestTableServiceImpl(request, expectSuccess, waiting, authToken);
     }
 }
 

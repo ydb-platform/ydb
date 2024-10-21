@@ -6,16 +6,16 @@
 namespace NKikimr::NColumnShard::NTiers {
 
 NKikimr::NOlap::TTiering TTieringRule::BuildOlapTiers() const {
-    AFL_VERIFY(!Intervals.empty());
+    AFL_VERIFY(!GetIntervals().empty());
     NOlap::TTiering result;
-    for (auto&& r : Intervals) {
+    for (auto&& r : GetIntervals()) {
         AFL_VERIFY(result.Add(std::make_shared<NOlap::TTierInfo>(r.GetTierName(), r.GetDurationForEvict(), GetDefaultColumn())));
     }
     return result;
 }
 
 bool TTieringRule::ContainsTier(const TString& tierName) const {
-    for (auto&& i : Intervals) {
+    for (auto&& i : GetIntervals()) {
         if (i.GetTierName() == tierName) {
             return true;
         }

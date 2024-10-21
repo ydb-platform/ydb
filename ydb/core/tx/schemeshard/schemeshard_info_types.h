@@ -3535,6 +3535,35 @@ struct TBackupCollectionInfo : TSimpleRefCount<TBackupCollectionInfo> {
     NKikimrSchemeOp::TBackupCollectionDescription Description;
 };
 
+class TMetadataObjectInfo: TSimpleRefCount<TMetadataObjectInfo> {
+public:
+    using TPtr = TIntrusivePtr<TMetadataObjectInfo>;
+
+    struct TTieringInterval {
+        TString TierName;
+        TDuration EvictionDelay;
+
+        TTieringInterval(TString tierName, TDuration evictionDelay)
+            : TierName(std::move(tierName))
+            , EvictionDelay(evictionDelay) {
+        }
+    };
+
+    ui64 AlterVersion = 0;
+    TString DefaultColumn;
+    std::vector<TTieringInterval> Intervals;
+
+    TTieringRuleInfo() {
+    }
+    TTieringRuleInfo(const ui64 alterVersion, TString defaultColumn, std::vector<TTieringInterval> intervals)
+        : AlterVersion(alterVersion)
+        , DefaultColumn(std::move(defaultColumn))
+        , Intervals(std::move(intervals)) {
+    }
+
+    virtual ~TMetadataObjectInfo() = default;
+};
+
 struct TTieringRuleInfo: TSimpleRefCount<TTieringRuleInfo> {
     using TPtr = TIntrusivePtr<TTieringRuleInfo>;
 

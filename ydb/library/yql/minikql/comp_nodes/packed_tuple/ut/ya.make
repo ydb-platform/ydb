@@ -16,6 +16,7 @@ SRCS(
     packed_tuple_ut.cpp
     hash_table_ut.cpp
     neumann_hash_table_ut.cpp
+    accumulator_ut.cpp
 )
 
 PEERDIR(

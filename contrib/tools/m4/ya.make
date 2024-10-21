@@ -30,7 +30,6 @@ SRCS(
     src/output.c
     src/path.c
     src/symtab.c
-    src/cpp.cpp
 )
 
 PEERDIR(

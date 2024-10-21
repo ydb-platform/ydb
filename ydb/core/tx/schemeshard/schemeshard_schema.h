@@ -1325,6 +1325,9 @@ struct Schema : NIceDb::Schema {
         struct AlterMainTableTxStatus : Column<32, NScheme::NTypeIds::Uint32> { using Type = NKikimrScheme::EStatus; };
         struct AlterMainTableTxDone : Column<33, NScheme::NTypeIds::Bool> {};
 
+        // Serialized as string NKikimrSchemeOp::TIndexCreationConfig protobuf.
+        struct CreationConfig : Column<34, NScheme::NTypeIds::String> { using Type = TString; };
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -1359,7 +1362,8 @@ struct Schema : NIceDb::Schema {
             BuildKind,
             AlterMainTableTxId,
             AlterMainTableTxStatus,
-            AlterMainTableTxDone
+            AlterMainTableTxDone,
+            CreationConfig
         >;
     };
 

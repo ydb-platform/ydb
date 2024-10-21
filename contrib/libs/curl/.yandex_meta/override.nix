@@ -1,10 +1,10 @@
 pkgs: attrs: with pkgs; rec {
-  version = "8.10.1";
+  version = "8.5.0";
   versionWithUnderscores = "${lib.replaceStrings ["."] ["_"] version}";
 
   src = fetchurl {
     url = "https://github.com/curl/curl/releases/download/curl-${versionWithUnderscores}/curl-${version}.tar.bz2";
-    hash = "sha256-N2PNl6rkHc9BlQ0j6HriOy7bLOOlsM9nivBYw5G2rjE=";
+    hash = "sha256-zktqZlVDEUdiSq9YJjKjb+Gt4mLV+rOFxg94lC3Y2Hs=";
   };
 
   patches = [];
@@ -26,7 +26,6 @@ pkgs: attrs: with pkgs; rec {
     "--with-brotli=${brotli.dev}"
     "--without-gnutls"
     "--without-libidn2"
-    "--without-libpsl"
     "--without-librtmp"
     "--without-nghttp3"
     "--without-ngtcp2"

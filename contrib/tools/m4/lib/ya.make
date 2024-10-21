@@ -46,7 +46,6 @@ SRCS(
     basename-lgpl.c
     basename.c
     binary-io.c
-    bitrotate.c
     c-ctype.c
     c-stack.c
     c-strcasecmp.c
@@ -57,7 +56,6 @@ SRCS(
     close.c
     closein.c
     closeout.c
-    concat-filename.c
     dirname-lgpl.c
     dirname.c
     dup-safer-flag.c
@@ -76,8 +74,6 @@ SRCS(
     filenamecat-lgpl.c
     filenamecat.c
     fopen-safer.c
-    fpurge.c
-    freading.c
     fstat.c
     getdtablesize.c
     gl_avltree_oset.c
@@ -86,14 +82,8 @@ SRCS(
     gl_oset.c
     gl_xlist.c
     gl_xoset.c
-    hash.c
-    isnand.c
-    isnanl.c
-    isnanf.c
     localcharset.c
-    lseek.c
     malloca.c
-    mbrtowc.c
     memchr2.c
     mkstemp-safer.c
     nl_langinfo.c
@@ -106,19 +96,14 @@ SRCS(
     progname.c
     quotearg.c
     raise.c
-    realloc.c
     regex.c
-    rmdir.c
     secure_getenv.c
     sig-handler.c
     spawn-pipe.c
-    stat.c
-    stpcpy.c
     stripslash.c
     tempname.c
     tmpdir.c
     unistd.c
-    unsetenv.c
     vasnprintf.c
     verror.c
     version-etc-fsf.c
@@ -159,18 +144,15 @@ IF (OS_WINDOWS)
         localeconv.c
         msvc-inval.c
         msvc-nothrow.c
-        open.c
         sigaction.c
         sigprocmask.c
         waitpid.c
-        uniwidth/width.c
     )
 ENDIF()
 
 IF (NOT OS_LINUX OR MUSL)
     SRCS(
         obstack.c
-        obstack_printf.c
     )
 ENDIF()
 

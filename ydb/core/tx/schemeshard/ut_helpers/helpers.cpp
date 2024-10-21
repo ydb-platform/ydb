@@ -1699,11 +1699,23 @@ namespace NSchemeShardUT_Private {
         } break;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
             auto& settings = *index.mutable_global_vector_kmeans_tree_index();
-            settings = Ydb::Table::GlobalVectorKMeansTreeIndex();
-            // some random valid settings
-            settings.mutable_vector_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
-            settings.mutable_vector_settings()->set_vector_dimension(42);
-            settings.mutable_vector_settings()->set_distance(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+
+            auto& vectorIndexSettings = *settings.mutable_vector_settings()->mutable_settings();
+            if (cfg.VectorIndexSettings) {
+                cfg.VectorIndexSettings->SerializeTo(vectorIndexSettings);
+            } else {
+                // some random valid settings
+                vectorIndexSettings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+                vectorIndexSettings.set_vector_dimension(42);
+                vectorIndexSettings.set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+            }
+
+            if (cfg.GlobalIndexSettings) {
+                cfg.GlobalIndexSettings[0].SerializeTo(*settings.mutable_level_table_settings());
+                if (cfg.GlobalIndexSettings.size() > 1) {
+                    cfg.GlobalIndexSettings[1].SerializeTo(*settings.mutable_posting_table_settings());
+                }
+            }
         } break;
         default:
             UNIT_ASSERT_C(false, "Unknown index type: " << static_cast<ui32>(cfg.IndexType));

@@ -30,10 +30,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>		// for memset, memcmp
+#include <assert.h>
 #include "erasure_code.h"
-// #include "types.h"
+#include "test.h"
 
-#define TEST_LEN 512
+#define TEST_LEN 8192
 #define TEST_SIZE (TEST_LEN/2)
 
 #ifndef TEST_SOURCES
@@ -264,8 +265,7 @@ int main(int argc, char *argv[])
 	// Pick a first test
 	m = 9;
 	k = 5;
-	if (m > MMAX || k > KMAX)
-		return -1;
+	assert((m <= MMAX) && (k <= KMAX));
 
 	// Make random data
 	for (i = 0; i < k; i++)
@@ -278,7 +278,7 @@ int main(int argc, char *argv[])
 	gf_gen_rs_matrix(encode_matrix, m, k);
 
 	// Generate g_tbls from encode matrix encode_matrix
-	ec_init_tables(k, m - k, &encode_matrix[k * k], g_tbls);
+	ec_init_tables_base(k, m - k, &encode_matrix[k * k], g_tbls);
 
 	// Perform matrix dot_prod for EC encoding
 	// using g_tbls from encode matrix encode_matrix
@@ -304,7 +304,7 @@ int main(int argc, char *argv[])
 	}
 
 	// Recover data
-	ec_init_tables(k, nerrs, decode_matrix, g_tbls);
+	ec_init_tables_base(k, nerrs, decode_matrix, g_tbls);
 	ec_encode_data_base(TEST_LEN, k, nerrs, g_tbls, recov, &temp_buffs[k]);
 	for (i = 0; i < nerrs; i++) {
 
@@ -346,7 +346,7 @@ int main(int argc, char *argv[])
 	gf_gen_cauchy1_matrix(encode_matrix, m, k);
 
 	// Generate g_tbls from encode matrix encode_matrix
-	ec_init_tables(k, m - k, &encode_matrix[k * k], g_tbls);
+	ec_init_tables_base(k, m - k, &encode_matrix[k * k], g_tbls);
 
 	// Perform matrix dot_prod for EC encoding
 	// using g_tbls from encode matrix encode_matrix
@@ -372,7 +372,7 @@ int main(int argc, char *argv[])
 	}
 
 	// Recover data
-	ec_init_tables(k, nerrs, decode_matrix, g_tbls);
+	ec_init_tables_base(k, nerrs, decode_matrix, g_tbls);
 	ec_encode_data_base(TEST_LEN, k, nerrs, g_tbls, recov, &temp_buffs[k]);
 	for (i = 0; i < nerrs; i++) {
 
@@ -417,7 +417,7 @@ int main(int argc, char *argv[])
 
 		// Make parity vects
 		// Generate g_tbls from encode matrix a
-		ec_init_tables(k, m - k, &encode_matrix[k * k], g_tbls);
+		ec_init_tables_base(k, m - k, &encode_matrix[k * k], g_tbls);
 		// Perform matrix dot_prod for EC encoding
 		// using g_tbls from encode matrix a
 		ec_encode_data_base(TEST_LEN, k, m - k, g_tbls, buffs, &buffs[k]);
@@ -442,7 +442,7 @@ int main(int argc, char *argv[])
 		}
 
 		// Recover data
-		ec_init_tables(k, nerrs, decode_matrix, g_tbls);
+		ec_init_tables_base(k, nerrs, decode_matrix, g_tbls);
 		ec_encode_data_base(TEST_LEN, k, nerrs, g_tbls, recov, &temp_buffs[k]);
 
 		for (i = 0; i < nerrs; i++) {
@@ -470,7 +470,9 @@ int main(int argc, char *argv[])
 				return -1;
 			}
 		}
+#ifdef TEST_VERBOSE
 		putchar('.');
+#endif
 	}
 
 	// Run tests at end of buffer for Electric Fence
@@ -500,7 +502,7 @@ int main(int argc, char *argv[])
 
 			// Make parity vects
 			// Generate g_tbls from encode matrix a
-			ec_init_tables(k, m - k, &encode_matrix[k * k], g_tbls);
+			ec_init_tables_base(k, m - k, &encode_matrix[k * k], g_tbls);
 			// Perform matrix dot_prod for EC encoding
 			// using g_tbls from encode matrix a
 			ec_encode_data_base(size, k, m - k, g_tbls, efence_buffs,
@@ -526,7 +528,7 @@ int main(int argc, char *argv[])
 			}
 
 			// Recover data
-			ec_init_tables(k, nerrs, decode_matrix, g_tbls);
+			ec_init_tables_base(k, nerrs, decode_matrix, g_tbls);
 			ec_encode_data_base(size, k, nerrs, g_tbls, recov, &temp_buffs[k]);
 
 			for (i = 0; i < nerrs; i++) {
@@ -593,7 +595,7 @@ int main(int argc, char *argv[])
 
 		// Make parity vects
 		// Generate g_tbls from encode matrix a
-		ec_init_tables(k, m - k, &encode_matrix[k * k], g_tbls);
+		ec_init_tables_base(k, m - k, &encode_matrix[k * k], g_tbls);
 		// Perform matrix dot_prod for EC encoding
 		// using g_tbls from encode matrix a
 		ec_encode_data_base(size, k, m - k, g_tbls, ubuffs, &ubuffs[k]);
@@ -618,7 +620,7 @@ int main(int argc, char *argv[])
 		}
 
 		// Recover data
-		ec_init_tables(k, nerrs, decode_matrix, g_tbls);
+		ec_init_tables_base(k, nerrs, decode_matrix, g_tbls);
 		ec_encode_data_base(size, k, nerrs, g_tbls, recov, &temp_ubuffs[k]);
 
 		for (i = 0; i < nerrs; i++) {
@@ -681,7 +683,9 @@ int main(int argc, char *argv[])
 			}
 		}
 
+#ifdef TEST_VERBOSE
 		putchar('.');
+#endif
 	}
 
 	// Test size alignment
@@ -705,7 +709,7 @@ int main(int argc, char *argv[])
 
 		// Make parity vects
 		// Generate g_tbls from encode matrix a
-		ec_init_tables(k, m - k, &encode_matrix[k * k], g_tbls);
+		ec_init_tables_base(k, m - k, &encode_matrix[k * k], g_tbls);
 		// Perform matrix dot_prod for EC encoding
 		// using g_tbls from encode matrix a
 		ec_encode_data_base(size, k, m - k, g_tbls, buffs, &buffs[k]);
@@ -729,7 +733,7 @@ int main(int argc, char *argv[])
 		}
 
 		// Recover data
-		ec_init_tables(k, nerrs, decode_matrix, g_tbls);
+		ec_init_tables_base(k, nerrs, decode_matrix, g_tbls);
 		ec_encode_data_base(size, k, nerrs, g_tbls, recov, &temp_buffs[k]);
 
 		for (i = 0; i < nerrs; i++) {

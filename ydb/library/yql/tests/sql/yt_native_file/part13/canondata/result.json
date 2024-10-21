@@ -458,7 +458,7 @@
         {
             "checksum": "dbc8ca6736ac4714dc117111d527fe5d",
             "size": 1659,
-            "uri": "https://{canondata_backend}/1917492/19d1b695b978e57459ffca87cfa978c4699748f0/resource.tar.gz#test.test_blocks-add_uint64_opt--Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/1889210/f6d4fce33a7954fceb1bb1becdfb2b1ded6f8bcc/resource.tar.gz#test.test_blocks-add_uint64_opt--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-add_uint64_opt--Plan]": [
@@ -514,7 +514,7 @@
         {
             "checksum": "750681f1dc79bdabb0abaa9a43dc175f",
             "size": 8813,
-            "uri": "https://{canondata_backend}/1917492/725a0563f15772eb714ad2485caa459695fd1021/resource.tar.gz#test.test_blocks-distinct_opt_state_all--Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/1889210/f6d4fce33a7954fceb1bb1becdfb2b1ded6f8bcc/resource.tar.gz#test.test_blocks-distinct_opt_state_all--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-distinct_opt_state_all--Plan]": [
@@ -542,7 +542,7 @@
         {
             "checksum": "4cafac19c73b865ed153a99882495945",
             "size": 1819,
-            "uri": "https://{canondata_backend}/1917492/19d1b695b978e57459ffca87cfa978c4699748f0/resource.tar.gz#test.test_blocks-sort_one_desc--Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/1889210/f6d4fce33a7954fceb1bb1becdfb2b1ded6f8bcc/resource.tar.gz#test.test_blocks-sort_one_desc--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-sort_one_desc--Plan]": [
@@ -570,7 +570,7 @@
         {
             "checksum": "1c30bc36b10621dd032c8a00e2d6d422",
             "size": 2208,
-            "uri": "https://{canondata_backend}/1931696/e91b48ada779278b015d9aeeb407f91eb0774a90/resource.tar.gz#test.test_blocks-top_sort_one_desc--Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/1889210/f6d4fce33a7954fceb1bb1becdfb2b1ded6f8bcc/resource.tar.gz#test.test_blocks-top_sort_one_desc--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-top_sort_one_desc--Plan]": [

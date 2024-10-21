@@ -438,7 +438,7 @@
         {
             "checksum": "47c94f45da8e84adf698754a87f43317",
             "size": 2254,
-            "uri": "https://{canondata_backend}/1942173/666009ab7c54969c3bbdc2c4e1f6631ccbf4ea37/resource.tar.gz#test.test_blocks-combine_all_count_filter--Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/1936842/666009ab7c54969c3bbdc2c4e1f6631ccbf4ea37/resource.tar.gz#test.test_blocks-combine_all_count_filter--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_all_count_filter--Plan]": [
@@ -466,7 +466,7 @@
         {
             "checksum": "a619c6b793f0d03280f0515d4840392d",
             "size": 4193,
-            "uri": "https://{canondata_backend}/1942173/666009ab7c54969c3bbdc2c4e1f6631ccbf4ea37/resource.tar.gz#test.test_blocks-combine_hashed_minmax_nested--Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/1936842/666009ab7c54969c3bbdc2c4e1f6631ccbf4ea37/resource.tar.gz#test.test_blocks-combine_hashed_minmax_nested--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_hashed_minmax_nested--Plan]": [
@@ -522,7 +522,7 @@
         {
             "checksum": "8a12815f094780419d695314e126e1c3",
             "size": 7968,
-            "uri": "https://{canondata_backend}/1784826/4cb1a454056973c3e8aef419e0a1001e44484f22/resource.tar.gz#test.test_blocks-date_sub_interval_scalar--Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/1917492/459458b44c8265b2f7214664f39b5a3ff6ed29d1/resource.tar.gz#test.test_blocks-date_sub_interval_scalar--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-date_sub_interval_scalar--Plan]": [
@@ -550,7 +550,7 @@
         {
             "checksum": "b5e004bc82ab1eaa68ca168f6d7d3b7e",
             "size": 1635,
-            "uri": "https://{canondata_backend}/1784826/4cb1a454056973c3e8aef419e0a1001e44484f22/resource.tar.gz#test.test_blocks-decimal_unary--Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/1937424/c545560a57a71f4626711573be536163931d255d/resource.tar.gz#test.test_blocks-decimal_unary--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-decimal_unary--Plan]": [

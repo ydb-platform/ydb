@@ -242,6 +242,12 @@ private:
         // For each row in values
         TMemoryPool valueDataPool(256);
         const auto& rows = GetProtoRequest(Request.get())->Getrows().Getvalue().Getitems();
+
+        if (rows.empty()) {
+            errorMessage = "No rows to upload";
+            return false;
+        }
+
         for (const auto& r : rows) {
             valueDataPool.Clear();
 

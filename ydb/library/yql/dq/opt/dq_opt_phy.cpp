@@ -2737,7 +2737,10 @@ TExprBase DqPropagatePrecomuteTake(TExprBase node, TExprContext& ctx, IOptimizat
 
     YQL_ENSURE(typeAnn);
     typeAnn = GetSeqItemType(typeAnn);
-    if (typeAnn->GetKind() == ETypeAnnotationKind::Struct) {
+    if (typeAnn->GetKind() != ETypeAnnotationKind::List &&
+        typeAnn->GetKind() != ETypeAnnotationKind::Flow &&
+        typeAnn->GetKind() != ETypeAnnotationKind::Stream)
+    {
         return node;
     }
 

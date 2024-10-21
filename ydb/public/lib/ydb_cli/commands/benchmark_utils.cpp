@@ -13,6 +13,7 @@
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
 #include <ydb/public/api/protos/ydb_query.pb.h>
+#include <ydb/library/yql/public/decimal/yql_decimal.h>
 
 #include <vector>
 #include <algorithm>
@@ -449,6 +450,17 @@ bool CompareValueImplFloat(const T& valResult, TStringBuf vExpected, double rela
     return valResult > (1 - relativeFloatPrecession) * valExpected && valResult < (1 + relativeFloatPrecession) * valExpected;
 }
 
+bool CompareValueImplDecimal(const NYdb::TDecimalValue& valResult, TStringBuf vExpected, double relativeFloatPrecession, TMaybe<double> absoluteFloatPrecession) {
+    auto resInt = NYql::NDecimal::FromHalfs(valResult.Low_, valResult.Hi_);
+    auto expectedInt = NYql::NDecimal::FromString(vExpected, 22, 9);
+
+    if (absoluteFloatPrecession) {
+        auto precInt = NYql::NDecimal::FromString(ToString(*absoluteFloatPrecession), 22, 9);
+        return resInt >= expectedInt - precInt && resInt <= expectedInt + precInt;
+    }
+    return resInt > (1 - relativeFloatPrecession) * expectedInt && resInt < (1 + relativeFloatPrecession) * expectedInt;
+}
+
 bool CompareValueImplDatetime(const TInstant& valResult, TStringBuf vExpected, TDuration unit) {
     TInstant expected;
     if (!TInstant::TryParseIso8601(vExpected, expected)) {
@@ -485,6 +497,9 @@ bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected, double relativeFl
         }
         vp.OpenOptional();
         tp.OpenOptional();
+    }
+    if (tp.GetKind() == TTypeParser::ETypeKind::Decimal) {
+        return  CompareValueImplDecimal(vp.GetDecimal(), vExpected, relativeFloatPrecession, absoluteFloatPrecession);
     }
     switch (tp.GetPrimitive()) {
     case EPrimitiveType::Bool:

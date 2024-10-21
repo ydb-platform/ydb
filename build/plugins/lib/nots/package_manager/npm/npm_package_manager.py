@@ -64,38 +64,28 @@ class NpmPackageManager(BasePackageManager):
         resources = []
 
         if has_deps:
-            for dep_path in self.get_local_peers_from_package_json():
-                ins.append(b_rooted(build_ws_config_path(dep_path)))
-
             for pkg in self.extract_packages_meta_from_lockfiles([build_lockfile_path(self.sources_path)]):
                 resources.append(pkg.to_uri())
                 outs.append(b_rooted(self._tarballs_store_path(pkg, store_path)))
 
         return ins, outs, resources
 
-    def calc_node_modules_inouts(self, local_cli=False) -> tuple[list[str], list[str]]:
+    def calc_node_modules_inouts(self, local_cli: bool, has_deps: bool) -> tuple[list[str], list[str]]:
         """
         Returns input and output paths for command that creates `node_modules` bundle.
         It relies on .PEERDIRSELF=TS_PREPARE_DEPS
         Inputs:
             - source package.json
-            - merged pre-lockfiles and workspace configs of TS_PREPARE_DEPS
         Outputs:
             - created node_modules bundle
         """
         ins = [
             s_rooted(build_pj_path(self.module_path)),
-            b_rooted(build_ws_config_path(self.module_path)),
         ]
         outs = []
 
-        pj = self.load_package_json_from_dir(self.sources_path)
-        if pj.has_dependencies():
-            ins.append(b_rooted(build_pre_lockfile_path(self.module_path)))
-            if not local_cli:
-                outs.append(b_rooted(build_nm_bundle_path(self.module_path)))
-            for dep_path in self.get_local_peers_from_package_json():
-                ins.append(b_rooted(build_pj_path(dep_path)))
+        if not local_cli and has_deps:
+            outs.append(b_rooted(build_nm_bundle_path(self.module_path)))
 
         return ins, outs
 

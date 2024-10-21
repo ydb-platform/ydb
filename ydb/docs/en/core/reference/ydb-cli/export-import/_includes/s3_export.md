@@ -6,6 +6,16 @@ The `export s3` command starts exporting data and information on the server side
 {{ ydb-cli }} [connection options] export s3 [options]
 ```
 
+{% note warning %}
+
+The export feature is available only for objects of the following types:
+
+- [Directory](../../../../concepts/datamodel/dir.md)
+- [Row-oriented table](../../../../concepts/datamodel/table.md#row-oriented-tables)
+- [Secondary index](../../../../concepts/secondary_indexes.md)
+
+{% endnote %}
+
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
 ## Command line parameters {#pars}
@@ -24,12 +34,6 @@ To run the command to export data to S3 storage, specify the [S3 connection para
 - `destination`, `dst`, or `d`: Path (key prefix) in S3 storage to store exported items.
 
 `--exclude STRING`: Template ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) to exclude paths from export. Specify this parameter multiple times for different templates.
-
-Please note that export is only available for objects of the following types:
-
-- [directory](../../../../concepts/datamodel/dir.md)
-- [row-oriented table](../../../../concepts/datamodel/table.md#row-oriented-tables)
-- [secondary index](../../../../concepts/secondary_indexes.md)
 
 ### Additional parameters {#aux}
 

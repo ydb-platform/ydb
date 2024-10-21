@@ -44,11 +44,6 @@ namespace {
 
     class TSimpleCache : public ICacheCache<TPage> {
     public:
-        TSimpleCache(ui64 limit)
-            : Limit(limit)
-        {
-        }
-
         TIntrusiveList<TPage> EvictNext() override {
             TIntrusiveList<TPage> result;
             
@@ -71,7 +66,7 @@ namespace {
 
             TIntrusiveList<TPage> evictedList;
 
-            while (Size > Limit) {
+            while (GetSize() > Limit) {
                 TPage* page = List.front();
                 List.pop_front();
                 Map.erase(page->Id);
@@ -84,7 +79,6 @@ namespace {
         void Erase(TPage* page) override {
             if (Map.contains(page->Id)) {
                 List.erase(Map[page->Id]);
-                Size -= page->Size;
                 Map.erase(page->Id);
             }
         }
@@ -94,29 +88,29 @@ namespace {
         }
 
         ui64 GetSize() const override {
-            return Size;
+            ui64 size = 0;
+            for (auto page : List) {
+                size += page->Size;
+            }
+            return size;
         }
 
         TString Dump() const override {
             TStringBuilder result;
             size_t count = 0;
-            ui64 size = 0;
             for (auto it = List.begin(); it != List.end(); it++) {
                 TPage* page = *it;
                 if (count != 0) result << ", ";
-                result << page->Id;
+                result << "{" << page->Id << " " << page->Size << "b}";
                 count++;
-                size += page->Size;
                 Y_ABORT_UNLESS(*Map.FindPtr(page->Id) == it);
             }
-            Y_ABORT_UNLESS(Size == size);
             Y_ABORT_UNLESS(Map.size() == count);
             return result;
         }
     
     private:
-        ui64 Limit;
-        ui64 Size = 0;
+        ui64 Limit = 0;
         TList<TPage*> List;
         THashMap<ui32, TList<TPage*>::iterator> Map;
     };
@@ -135,6 +129,11 @@ Y_UNIT_TEST_SUITE(TCompositeCache) {
         return result;
     }
 
+    void Erase(auto& cache, TPage& page) {
+        cache.Erase(&page);
+        UNIT_ASSERT_VALUES_EQUAL(page.CacheId, 0);
+    }
+
     TVector<ui32> EvictNext(auto& cache) {
         auto evicted = cache.EvictNext();
         TVector<ui32> result;
@@ -145,69 +144,270 @@ Y_UNIT_TEST_SUITE(TCompositeCache) {
         return result;
     }
 
+    TVector<ui32> Switch(auto& cache, auto&& cache2, auto& counter) {
+        auto evicted = cache.Switch(std::move(cache2), counter);
+        TVector<ui32> result;
+        for (auto& p : evicted) {
+            UNIT_ASSERT_VALUES_EQUAL(p.CacheId, 0);
+            result.push_back(p.Id);
+        }
+        return result;
+    }
+
     Y_UNIT_TEST(One_Touch) {
         TCounterPtr counter = new NMonitoring::TCounterForPtr;
-        TCompositeCache<TPage, TPageTraits> cache(MakeHolder<TSimpleCache>(100), counter);
+        TCompositeCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter);
 
-        // TPage page1{1, 2};
-        // UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
-        // UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-        //     << "SmallQueue: {1 0f 2b}" << Endl
-        //     << "MainQueue: " << Endl
-        //     << "GhostQueue: "));
+        TPage page1{1, 2};
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{1 2b}");
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), cache.GetSize());
         
-        // TPage page2{2, 3};
-        // UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
-        // UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-        //     << "SmallQueue: {1 0f 2b}, {2 0f 3b}" << Endl
-        //     << "MainQueue: " << Endl
-        //     << "GhostQueue: "));
-        
-        // TPage page3{3, 4};
-        // UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
-        // UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-        //     << "SmallQueue: {1 0f 2b}, {2 0f 3b}, {3 0f 4b}" << Endl
-        //     << "MainQueue: " << Endl
-        //     << "GhostQueue: "));
+        TPage page2{2, 3};
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{1 2b}, {2 3b}");
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), cache.GetSize());
 
-        // TPage page4{4, 1};
-        // UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), TVector<ui32>{});
-        // UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-        //     << "SmallQueue: {1 0f 2b}, {2 0f 3b}, {3 0f 4b}, {4 0f 1b}" << Endl
-        //     << "MainQueue: " << Endl
-        //     << "GhostQueue: "));
-        
-        // UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
-        // UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
-        // UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
-        // UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
-        // UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
-        // UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-        //     << "SmallQueue: {1 2f 2b}, {2 1f 3b}, {3 2f 4b}, {4 0f 1b}" << Endl
-        //     << "MainQueue: " << Endl
-        //     << "GhostQueue: "));
+        TPage page3{3, 4};
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{1 2b}, {2 3b}, {3 4b}");
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), cache.GetSize());
 
-        // TPage page5{5, 8};
-        // UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page5), TVector<ui32>{2});
-        // UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-        //     << "SmallQueue: {4 0f 1b}, {5 0f 8b}" << Endl
-        //     << "MainQueue: {1 2f 2b}, {3 2f 4b}" << Endl
-        //     << "GhostQueue: {2 3b}"));
+        TPage page4{4, 1};
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{1 2b}, {2 3b}, {3 4b}, {4 1b}");
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), cache.GetSize());
 
-        // UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
-        // UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
-        // UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
-        // UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
-        // UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-        //     << "SmallQueue: {4 0f 1b}, {5 0f 8b}" << Endl
-        //     << "MainQueue: {1 2f 2b}, {3 3f 4b}" << Endl
-        //     << "GhostQueue: {2 3b}"));
+        TPage page5{5, 4};
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page5), (TVector<ui32>{1, 2}));
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{3 4b}, {4 1b}, {5 4b}");
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), cache.GetSize());
+
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), (TVector<ui32>{3}));
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{4 1b}, {5 4b}, {2 3b}");
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), cache.GetSize());
+
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page5), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{4 1b}, {2 3b}, {5 4b}");
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), cache.GetSize());
+    }
+
+    Y_UNIT_TEST(One_Erase) {
+        TCounterPtr counter = new NMonitoring::TCounterForPtr;
+        TCompositeCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter);
+
+        TPage page1{1, 2};
+        TPage page2{2, 3};
+        TPage page3{3, 4};
+        TPage page4{4, 1};
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{1 2b}, {2 3b}, {3 4b}, {4 1b}");
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), cache.GetSize());
         
-        // UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
-        // UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
-        //     << "SmallQueue: {4 0f 1b}, {5 0f 8b}" << Endl
-        //     << "MainQueue: {1 2f 2b}, {3 3f 4b}, {2 0f 3b}" << Endl
-        //     << "GhostQueue: "));
+        Erase(cache, page2);
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{1 2b}, {3 4b}, {4 1b}");
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), cache.GetSize());
+
+        TPage page5{5, 4};
+        Erase(cache, page5);
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{1 2b}, {3 4b}, {4 1b}");
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), cache.GetSize());
+    }
+
+    Y_UNIT_TEST(One_EvictNext) {
+        TCounterPtr counter = new NMonitoring::TCounterForPtr;
+        TCompositeCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter);
+
+        TPage page1{1, 2};
+        TPage page2{2, 3};
+        TPage page3{3, 4};
+        TPage page4{4, 1};
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{1 2b}, {2 3b}, {3 4b}, {4 1b}");
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), cache.GetSize());
+        
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), (TVector<ui32>{1}));
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{2 3b}, {3 4b}, {4 1b}");
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), cache.GetSize());
+
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), (TVector<ui32>{2}));
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{3 4b}, {4 1b}");
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), cache.GetSize());
+
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), (TVector<ui32>{3}));
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{4 1b}");
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), cache.GetSize());
+
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), (TVector<ui32>{4}));
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "");
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), cache.GetSize());
+
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), (TVector<ui32>{}));
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "");
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), cache.GetSize());
+    }
+
+    Y_UNIT_TEST(One_UpdateLimit) {
+        TCounterPtr counter = new NMonitoring::TCounterForPtr;
+        TCompositeCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter);
+
+        TPage page1{1, 2};
+        TPage page2{2, 3};
+        TPage page3{3, 4};
+        TPage page4{4, 1};
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{1 2b}, {2 3b}, {3 4b}, {4 1b}");
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), cache.GetSize());
+        
+        cache.UpdateLimit(6);
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), (TVector<ui32>{1, 3}));
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{4 1b}, {2 3b}");
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), cache.GetSize());
+    }
+
+    Y_UNIT_TEST(Switch_Touch_RotatePages_All) {
+        TCounterPtr counter1 = new NMonitoring::TCounterForPtr;
+        TCounterPtr counter2 = new NMonitoring::TCounterForPtr;
+        TCompositeCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter1);
+
+        TPage page1{1, 2};
+        TPage page2{2, 3};
+        TPage page3{3, 4};
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{1 2b}, {2 3b}, {3 4b}");
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 9);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 9);
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 0);
+
+        UNIT_ASSERT_VALUES_EQUAL(Switch(cache, MakeHolder<TSimpleCache>(), counter2), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{1 2b}, {2 3b}, {3 4b}; ");
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 9);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 9);
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 0);
+
+        TPage page4{4, 1};
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{4 1b}, {1 2b}, {2 3b}, {3 4b}");
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 10);
+    }
+
+    Y_UNIT_TEST(Switch_Touch_RotatePages_Parts) {
+        TCounterPtr counter1 = new NMonitoring::TCounterForPtr;
+        TCounterPtr counter2 = new NMonitoring::TCounterForPtr;
+        TCompositeCache<TPage, TPageTraits> cache(50, MakeHolder<TSimpleCache>(), counter1);
+
+        TVector<THolder<TPage>> pages;
+        for (ui32 pageId : xrange(50)) {
+            pages.push_back(MakeHolder<TPage>(pageId, 1));
+            UNIT_ASSERT_VALUES_EQUAL(Touch(cache, *pages.back()), TVector<ui32>{});
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 50);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 50);
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 0);
+
+        UNIT_ASSERT_VALUES_EQUAL(Switch(cache, MakeHolder<TSimpleCache>(), counter2), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 50);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 50);
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 0);
+
+        pages.push_back(MakeHolder<TPage>(pages.size(), 1));
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, *pages.back()), TVector<ui32>{10});
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 50);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 39);
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 11);
+
+        pages.push_back(MakeHolder<TPage>(pages.size(), 1));
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, *pages.back()), TVector<ui32>{21});
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 50);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 28);
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 22);
+
+        pages.push_back(MakeHolder<TPage>(pages.size(), 1));
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, *pages.back()), TVector<ui32>{32});
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 50);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 17);
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 33);
+
+        pages.push_back(MakeHolder<TPage>(pages.size(), 1));
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, *pages.back()), TVector<ui32>{43});
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 50);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 44);
+
+        pages.push_back(MakeHolder<TPage>(pages.size(), 1));
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, *pages.back()), TVector<ui32>{50});
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 50);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 50);
+    }
+
+    Y_UNIT_TEST(Switch_RotatePages_Force) {
+        TCounterPtr counter = new NMonitoring::TCounterForPtr;
+        TCompositeCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter);
+
+        TPage page1{1, 2};
+        TPage page2{2, 3};
+        TPage page3{3, 4};
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{1 2b}, {2 3b}, {3 4b}");
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 9);
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 9);
+
+        UNIT_ASSERT_VALUES_EQUAL(Switch(cache, MakeHolder<TSimpleCache>(), counter), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{1 2b}, {2 3b}, {3 4b}; ");
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 9);
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 9);
+
+        UNIT_ASSERT_VALUES_EQUAL(Switch(cache, MakeHolder<TSimpleCache>(), counter), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{1 2b}, {2 3b}, {3 4b}; ; ");
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 9);
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 9);
+
+        UNIT_ASSERT_VALUES_EQUAL(Switch(cache, MakeHolder<TSimpleCache>(), counter), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{1 2b}, {2 3b}, {3 4b}");
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 9);
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 9);
+    }
+
+    Y_UNIT_TEST(Switch_RotatePages_Evicts) {
+        TCounterPtr counter = new NMonitoring::TCounterForPtr;
+        TCompositeCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter);
+
+        TPage page1{1, 2};
+        TPage page2{2, 3};
+        TPage page3{3, 4};
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
+
+        UNIT_ASSERT_VALUES_EQUAL(Switch(cache, MakeHolder<TSimpleCache>(), counter), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Switch(cache, MakeHolder<TSimpleCache>(), counter), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{1 2b}, {2 3b}, {3 4b}; ; ");
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 9);
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 9);
+
+        cache.UpdateLimit(5);
+
+        UNIT_ASSERT_VALUES_EQUAL(Switch(cache, MakeHolder<TSimpleCache>(), counter), (TVector<ui32>{1, 2}));
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "{3 4b}");
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 4);
     }
 }
 

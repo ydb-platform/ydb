@@ -87,8 +87,9 @@ class TCompositeCache : public ICacheCache<TPage> {
     };
 
 public:
-    TCompositeCache(THolder<ICacheCache<TPage>>&& cache, TCounterPtr sizeCounter) {
+    TCompositeCache(ui64 limit, THolder<ICacheCache<TPage>>&& cache, TCounterPtr sizeCounter) {
         Caches.emplace_back(1, std::move(cache), sizeCounter);
+        UpdateLimit(limit);
     }
 
     TIntrusiveList<TPage> Switch(THolder<ICacheCache<TPage>>&& cache, TCounterPtr sizeCounter) Y_WARN_UNUSED_RESULT {
@@ -169,7 +170,7 @@ public:
         size_t count = 0;
 
         for (const auto& cache : Caches) {
-            if (count) result << "; " << Endl;
+            if (count) result << "; ";
             result << cache.Dump();
             count++;
         }
@@ -227,7 +228,7 @@ private:
     }
 
 private:
-    ui64 Limit = 0;
+    ui64 Limit;
     TDeque<TCacheHolder> Caches;
 };
 

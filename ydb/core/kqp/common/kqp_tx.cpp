@@ -206,7 +206,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         }
     }
 
-    if (txCtx.HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
+    if (txCtx.NeedUncommittedChangesFlush || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
         return true;
     }
 
@@ -372,12 +372,25 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
             }
 
             for (const auto& input : stage.GetInputs()) {
-                if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup) {
+                switch (input.GetTypeCase()) {
+                case NKqpProto::TKqpPhyConnection::kStreamLookup:
                     if (modifiedTables.contains(getTable(input.GetStreamLookup().GetTable()))) {
                         return true;
                     }
-                } else {
+                    break;
+                case NKqpProto::TKqpPhyConnection::kSequencer:
                     return true;
+                case NKqpProto::TKqpPhyConnection::kUnionAll:
+                case NKqpProto::TKqpPhyConnection::kMap:
+                case NKqpProto::TKqpPhyConnection::kHashShuffle:
+                case NKqpProto::TKqpPhyConnection::kBroadcast:
+                case NKqpProto::TKqpPhyConnection::kMapShard:
+                case NKqpProto::TKqpPhyConnection::kShuffleShard:
+                case NKqpProto::TKqpPhyConnection::kResult:
+                case NKqpProto::TKqpPhyConnection::kValue:
+                case NKqpProto::TKqpPhyConnection::kMerge:
+                case NKqpProto::TKqpPhyConnection::TYPE_NOT_SET:
+                    break;
                 }
             }
 

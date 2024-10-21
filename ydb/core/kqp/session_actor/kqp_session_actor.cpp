@@ -865,12 +865,9 @@ public:
                             "Write transactions between column and row tables are disabled at current time.");
             return false;
         }
-        QueryState->TxCtx->HasUncommittedChangesRead = ::NKikimr::NKqp::HasUncommittedChangesRead(QueryState->TxCtx->ModifiedTables, phyQuery);
-        if (QueryState->TxCtx->HasUncommittedChangesRead) {
-            QueryState->TxCtx->ModifiedTables.clear();   
-        }
 
         QueryState->TxCtx->SetTempTables(QueryState->TempTablesState);
+        QueryState->TxCtx->ApplyPhysicalQuery(phyQuery);
         auto [success, issues] = QueryState->TxCtx->ApplyTableOperations(phyQuery.GetTableOps(), phyQuery.GetTableInfos(),
             EKikimrQueryType::Dml);
         if (!success) {

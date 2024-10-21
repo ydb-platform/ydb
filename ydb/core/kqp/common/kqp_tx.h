@@ -165,6 +165,8 @@ private:
 };
 using TShardIdToTableInfoPtr = std::shared_ptr<TShardIdToTableInfo>;
 
+bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, const NKqpProto::TKqpPhyQuery& physicalQuery);
+
 class TKqpTransactionContext : public NYql::TKikimrTransactionContextBase  {
 public:
     explicit TKqpTransactionContext(bool implicit, const NMiniKQL::IFunctionRegistry* funcRegistry,
@@ -236,7 +238,7 @@ public:
         HasOlapTable = false;
         HasOltpTable = false;
         HasTableWrite = false;
-        HasUncommittedChangesRead = false;
+        NeedUncommittedChangesFlush = false;
     }
 
     TKqpTransactionInfo GetInfo() const;
@@ -273,7 +275,7 @@ public:
     }
 
     bool ShouldExecuteDeferredEffects() const {
-        if (HasUncommittedChangesRead || HasOlapTable) {
+        if (NeedUncommittedChangesFlush || HasOlapTable) {
             return !DeferredEffects.Empty();
         }
 
@@ -302,11 +304,18 @@ public:
     }
 
     bool CanDeferEffects() const {
-        if (HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution() || HasOlapTable) {
+        if (NeedUncommittedChangesFlush || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution() || HasOlapTable) {
             return false;
         }
 
         return true;
+    }
+
+    void ApplyPhysicalQuery(const NKqpProto::TKqpPhyQuery& phyQuery) {
+        NeedUncommittedChangesFlush = HasUncommittedChangesRead(ModifiedTablesSinceLastFlush, phyQuery);
+        if (NeedUncommittedChangesFlush) {
+            ModifiedTablesSinceLastFlush.clear();   
+        }
     }
 
 public:
@@ -338,8 +347,9 @@ public:
     bool HasOlapTable = false;
     bool HasOltpTable = false;
     bool HasTableWrite = false;
-    bool HasUncommittedChangesRead = false;
-    THashSet<NKikimr::TTableId> ModifiedTables;
+
+    bool NeedUncommittedChangesFlush = false;
+    THashSet<NKikimr::TTableId> ModifiedTablesSinceLastFlush;
 
     TShardIdToTableInfoPtr ShardIdToTableInfo = std::make_shared<TShardIdToTableInfo>();
 };
@@ -504,7 +514,5 @@ bool HasOlapTableWriteInStage(
 bool HasOlapTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
-
-bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, const NKqpProto::TKqpPhyQuery& physicalQuery);
 
 }  // namespace NKikimr::NKqp

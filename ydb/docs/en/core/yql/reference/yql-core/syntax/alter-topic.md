@@ -144,7 +144,7 @@ ALTER TOPIC `my_topic` RESET (
 
 ### Change autopartitioning strategies for the topic {#autopartitioning}
 
-The following command sets the [autopartitioning](../../../../concepts/topic#autopartitioning-autopartitioning) strategy to `UP`:
+The following command sets the [autopartitioning](../../../../concepts/topic#autopartitioning) strategy to `UP`:
 
 ```yql
 ALTER TOPIC `my_topic` SET (
@@ -154,7 +154,7 @@ ALTER TOPIC `my_topic` SET (
 );
 ```
 
-The following command pauses the topic [autopartitioning](../../../../concepts/topic.md#autopartitioning-autopartitioning):
+The following command pauses the topic [autopartitioning](../../../../concepts/topic.md#group-id):
 
 ```yql
 ALTER TOPIC `my_topic` SET (

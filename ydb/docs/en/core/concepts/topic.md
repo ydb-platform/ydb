@@ -70,11 +70,11 @@ Examples of YQL queries for switching between different autopartitioning modes c
 
 ### Autopartitioning constraints {#autopartitioning_constraints}
 
-There are following constraints during using autopartitioning:
+The following constraints apply when using autopartitioning:
 
-1. If you switch on autopartitioning up on some topic, you can not stop autopartitioning, just pause it.
-2. If you switch on autopartitioning up on some topic, it's impossible to read and write into this topic through [Kafka API](../reference/kafka-api/index.md).
-3. Autopartitioning can be switched on only on topics with reserved capacity mode.
+1. Once autopartitioning is enabled for a topic, it cannot be stopped, only paused.
+2. When autopartitioning is enabled for a topic, it is impossible to read from or write to it using the [Kafka API](../reference/kafka-api/index.md).
+3. Autopartitioning can only be enabled on topics that use the reserved capacity mode.
 
 ## Message sources and groups {#producer-id}
 

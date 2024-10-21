@@ -78,6 +78,14 @@ namespace NKikimr {
         return HugeHeapDefragmentationRequired(hugeCanBeFreedChunks, hugeTotalChunks, defragThreshold);
     }
 
+    ui32 MaxInflyghtDefragChunks(const TOutOfSpaceState& oos, ui32 maxChunksToDefrag) {
+        if (oos.GetLocalColor() > TSpaceColor::GREEN) {
+            return maxChunksToDefrag;
+        } else {
+            return 1;
+        }
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // TDefragLocalScheduler
     // We use statistics about free space share and numbe of used/canBeFreed chunks
@@ -131,7 +139,7 @@ namespace NKikimr {
                     double hugeDefragFreeSpaceBorder = DCtx->VCfg->HugeDefragFreeSpaceBorderPerMille / 1000.0;
                     DCtx->DefragMonGroup.DefragThreshold() = DefragThreshold(oos, defaultPercent, hugeDefragFreeSpaceBorder);
                     if (HugeHeapDefragmentationRequired(oos, canBeFreedChunks, totalChunks, defaultPercent, hugeDefragFreeSpaceBorder)) {
-                        TChunksToDefrag chunksToDefrag = calcStat.GetChunksToDefrag(DCtx->MaxChunksToDefrag);
+                        TChunksToDefrag chunksToDefrag = calcStat.GetChunksToDefrag(MaxInflyghtDefragChunks(oos, DCtx->MaxChunksToDefrag));
                         Y_ABORT_UNLESS(chunksToDefrag);
                         STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD03, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
                             (TotalChunks, totalChunks), (UsefulChunks, usefulChunks),

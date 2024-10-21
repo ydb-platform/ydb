@@ -177,4 +177,6 @@ enum ETxTypes {
     TXTYPE_MON_SUBACTORS = 64                             [(TxTypeOpts) = {Name: "TxMonSubactors"}];
     TXTYPE_MON_TABLET_AVAILABILITY = 65                   [(TxTypeOpts) = {Name: "TxMonTabletAvailability"}];
     TXTYPE_UPDATE_DC_FOLLOWERS = 66                       [(TxTypeOpts) = {Name: "TxUpdateDcFollowers"}];
+    TXTYPE_COMMIT_CUT_TABLET_HISTORY = 67                 [(TxTypeOpts) = {Name: "TxCommitCutTabletHistory"}];
+    TXTYPE_REVERT_CUT_TABLET_HISTORY = 68                 [(TxTypeOpts) = {Name: "TxRevertCutTabletHistory"}];
 }

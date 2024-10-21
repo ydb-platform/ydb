@@ -229,7 +229,7 @@ public:
         return SmallQueue.Size + MainQueue.Size;
     }
 
-    TString Dump() const {
+    TString Dump() const override {
         TStringBuilder result;
 
         auto dump = [&](const TQueue& queue) {

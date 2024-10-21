@@ -59,6 +59,10 @@ class TCompositeCache : public ICacheCache<TPage> {
             return Cache->GetSize();
         }
 
+        TString Dump() const {
+            return Cache->Dump();
+        }
+
     private:
         TIntrusiveList<TPage> ProcessEvictedList(TIntrusiveList<TPage>&& evictedList) {
             ui64 evictedSize = 0;
@@ -157,6 +161,19 @@ public:
         for (const auto& cache : Caches) {
             result += cache.GetSize();
         }
+        return result;
+    }
+
+    TString Dump() const override {
+        TStringBuilder result;
+        size_t count = 0;
+
+        for (const auto& cache : Caches) {
+            if (count) result << "; " << Endl;
+            result << cache.Dump();
+            count++;
+        }
+    
         return result;
     }
 

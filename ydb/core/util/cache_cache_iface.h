@@ -19,6 +19,10 @@ struct ICacheCache {
 
     virtual ui64 GetSize() const = 0;
 
+    virtual TString Dump() const {
+        return {};
+    }
+
     virtual ~ICacheCache() = default;
 };
 

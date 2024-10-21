@@ -22,6 +22,7 @@
 #include <ydb/core/protos/mon.pb.h>
 
 #include "mon_impl.h"
+#include "dynamic_counters_page.h"
 
 namespace NActors {
 
@@ -916,7 +917,7 @@ NMonitoring::IMonPage* TAsyncHttpMon::RegisterActorPage(TRegisterActorPageFields
 }
 
 NMonitoring::IMonPage* TAsyncHttpMon::RegisterCountersPage(const TString& path, const TString& title, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
-    TDynamicCountersPage* page = new TDynamicCountersPage(path, title, counters);
+    TDynamicCountersPage* page = new TFilteredDynamicCountersPage(Config, path, title, counters);
         page->SetUnknownGroupPolicy(EUnknownGroupPolicy::Ignore);
         Register(page);
         return page;

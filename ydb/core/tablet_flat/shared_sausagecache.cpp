@@ -77,6 +77,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         , public TIntrusiveListItem<TPage>
     {
         ui32 State : 4 = PageStateNo;
+        ui32 CacheId : 4 = 0;
         ui32 CacheFlags1 : 4 = 0;
         ui32 CacheFlags2 : 4 = 0;
 
@@ -111,10 +112,13 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
 
         void EnsureNoCacheFlags() {
+            Y_VERIFY_S(CacheId == 0, "Unexpected page " << CacheId << " cache id");
             Y_VERIFY_S(CacheFlags1 == 0, "Unexpected page " << CacheFlags1 << " cache flags 1");
             Y_VERIFY_S(CacheFlags2 == 0, "Unexpected page " << CacheFlags2 << " cache flags 2");
         }
     };
+
+    static_assert(sizeof(TPage) == 104);
 
     struct TCacheCachePageTraits {
         static ui64 GetWeight(const TPage* page) {
@@ -231,6 +235,21 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
     };
 
+    struct TCompositeCachePageTraits {
+        static ui64 GetSize(const TPage* page) {
+            return sizeof(TPage) + page->Size;
+        }
+
+        static ui32 GetCacheId(const TPage* page) {
+            return page->CacheId;
+        }
+
+        static void SetCacheId(TPage* page, ui32 id) {
+            Y_ABORT_UNLESS(id < (1 << 4));
+            page->CacheId = id;
+        }
+    };
+
     struct TRequest : public TSimpleRefCount<TRequest> {
         TRequest(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, NWilson::TTraceId &&traceId)
             : Label(pageCollection->Label())
@@ -299,7 +318,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     TRequestQueue ScanRequests;
 
     THolder<TSharedPageCacheConfig> Config;
-    TCompositeCache<TPage> Cache;
+    TCompositeCache<TPage, TCompositeCachePageTraits> Cache;
 
     ui64 StatBioReqs = 0;
     ui64 StatHitPages = 0;
@@ -1183,7 +1202,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 logl << "Replacement policy switch from " << Config->ReplacementPolicy << " to " << msg->Record.GetReplacementPolicy();
             }
             Config->ReplacementPolicy = msg->Record.GetReplacementPolicy();
-            Cache.Switch(CreateCache(), Config->Counters->ReplacementPolicySize(Config->ReplacementPolicy));
+            Evict(Cache.Switch(CreateCache(), Config->Counters->ReplacementPolicySize(Config->ReplacementPolicy)));
+            DoGC();
+            if (auto logl = Logger->Log(ELnLev::Info)) {
+                logl << "Replacement policy switch from " << Config->ReplacementPolicy << " to " << msg->Record.GetReplacementPolicy() << " finished";
+            }
         }
     }
 

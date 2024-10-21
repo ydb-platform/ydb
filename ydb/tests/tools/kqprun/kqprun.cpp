@@ -348,7 +348,7 @@ protected:
             .StoreMappedResultT<TString>(&RunnerOptions.ResultOutput, &GetDefaultOutput);
         options.AddLongOption('L', "result-rows-limit", "Rows limit for script execution results")
             .RequiredArgument("uint")
-            .DefaultValue(ResultsRowsLimit)
+            .DefaultValue(0)
             .StoreResult(&ResultsRowsLimit);
         TChoices<NKqpRun::TRunnerOptions::EResultOutputFormat> resultFormat({
             {"rows", NKqpRun::TRunnerOptions::EResultOutputFormat::RowsJson},

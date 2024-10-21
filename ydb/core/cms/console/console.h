@@ -12,7 +12,7 @@
 
 namespace NKikimr::NConsole {
 
-struct TEvConsole {
+namespace TEvConsole {
     enum EEv {
         // requests
         EvCreateTenantRequest = EventSpaceBegin(TKikimrEvents::ES_CONSOLE),

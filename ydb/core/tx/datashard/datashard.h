@@ -192,7 +192,7 @@ namespace NTxDataShard {
     using NDataShard::TTxFlags;
 }
 
-struct TEvDataShard {
+namespace TEvDataShard {
     enum EEv {
         EvProposeTransaction = EventSpaceBegin(TKikimrEvents::ES_TX_DATASHARD),
         EvCancelTransactionProposal,

@@ -1,5 +1,9 @@
 #include "ydb_tools.h"
 
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
+#undef INCLUDE_YDB_INTERNAL_H
+
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/pg_dump_parser.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
@@ -234,7 +238,10 @@ int TCommandRestore::Run(TConfig& config) {
         settings.Mode(NDump::TRestoreSettings::EMode::ImportData);
     }
 
-    NDump::TClient client(CreateDriver(config));
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
+    log->SetFormatter(GetPrefixLogFormatter(""));
+
+    NDump::TClient client(CreateDriver(config), std::move(log));
     ThrowOnError(client.Restore(FilePath, Path, settings));
 
     return EXIT_SUCCESS;

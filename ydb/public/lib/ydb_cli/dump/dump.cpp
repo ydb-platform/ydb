@@ -7,6 +7,8 @@
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
+#include <library/cpp/logger/log.h>
+
 #include <util/string/printf.h>
 
 namespace NYdb {
@@ -23,8 +25,9 @@ TString DataFileName(ui32 id) {
 
 class TClient::TImpl {
 public:
-    explicit TImpl(const TDriver& driver)
-        : ImportClient(driver)
+    explicit TImpl(const TDriver& driver, std::shared_ptr<TLog>&& log)
+        : Log(log)
+        , ImportClient(driver)
         , OperationClient(driver)
         , SchemeClient(driver)
         , TableClient(driver)
@@ -37,11 +40,12 @@ public:
     }
 
     TRestoreResult Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings) {
-        auto client = TRestoreClient(ImportClient, OperationClient, SchemeClient, TableClient);
+        auto client = TRestoreClient(*Log, ImportClient, OperationClient, SchemeClient, TableClient);
         return client.Restore(fsPath, dbPath, settings);
     }
 
 private:
+    std::shared_ptr<TLog> Log;
     NImport::TImportClient ImportClient;
     NOperation::TOperationClient OperationClient;
     NScheme::TSchemeClient SchemeClient;
@@ -59,8 +63,8 @@ TRestoreResult::TRestoreResult(TStatus&& status)
 {
 }
 
-TClient::TClient(const TDriver& driver)
-    : Impl_(new TImpl(driver))
+TClient::TClient(const TDriver& driver, std::shared_ptr<TLog>&& log)
+    : Impl_(new TImpl(driver, std::move(log)))
 {
 }
 

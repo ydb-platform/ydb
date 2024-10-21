@@ -13,5 +13,5 @@ from
 where
     l_shipdate >= $border 
     and l_shipdate < ($border + Interval("P365D"))
-    and l_discount between $z0_06_12 - $z0_01_12 and $z0_06_12 + $z0_01_12
+    and l_discount between $z0_06_12 - $z0_0100001_12 and $z0_06_12 + $z0_0100001_12
     and l_quantity < 24;

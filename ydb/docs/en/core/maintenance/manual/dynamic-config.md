@@ -80,7 +80,7 @@ allowed_labels: {}
 selector_config: []
 ```
 
-Detailed configuration parameters are described on the [{#T}](../../deploy/configuration/config.md) page.
+Detailed configuration parameters are described on the [{#T}](../../reference/configuration/index.md) page.
 
 By default, the cluster configuration is empty and has version 1. When applying a new configuration, the uploaded configuration's version is compared and automatically incremented by one.
 

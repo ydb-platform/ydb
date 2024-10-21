@@ -1320,7 +1320,7 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryP
         auto stat = Processor->GetQueryStat(plan, CpuUsage, ShowQueryTimeline ? &timeline : nullptr);
 
         if (MaxQueryTimelineSize && timeline.size() > MaxQueryTimelineSize) {
-            Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Timeline size  " << timeline.size() << " exceedes limit of " << MaxQueryTimelineSize));
+            Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Timeline size  " << timeline.size() << " exceeds limit of " << MaxQueryTimelineSize));
             timeline = "";
         }
 

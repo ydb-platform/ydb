@@ -253,3 +253,29 @@ class DockerComposeHelper:
         else:
             lines = [x.strip() for x in out.splitlines()]
             return lines[3:]
+
+    def _list_clickhouse_server_tables(self) -> Sequence[str]:
+        params = self.docker_compose_yml_data["services"]["clickhouse"]
+        db = 'db'
+        cmd = [
+            self.docker_bin_path,
+            'exec',
+            params["container_name"],
+            'clickhouse-client',
+            '--database',
+            db,
+            '--query',
+            "SHOW TABLES;",
+        ]
+
+        LOGGER.debug("calling command: " + " ".join(cmd))
+
+        out = None
+
+        try:
+            out = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8')
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"docker cmd failed: {e.output} (code {e.returncode})")
+        else:
+            lines = [x.strip() for x in out.splitlines()]
+            return lines

@@ -7,6 +7,8 @@ from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 impo
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
 from ydb.library.yql.providers.generic.connector.tests.utils.run.runners import runner_types, configure_runner
 import ydb.library.yql.providers.generic.connector.tests.utils.scenario.clickhouse as scenario
+from ydb.library.yql.providers.generic.connector.tests.utils.one_time_waiter import OneTimeWaiter 
+
 
 from conftest import docker_compose_dir
 from collection import Collection
@@ -15,7 +17,9 @@ import ydb.library.yql.providers.generic.connector.tests.common_test_cases.selec
 import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_table as select_missing_table
 import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_positive_common as select_positive_common
 
-one_time_waiter = scenario.OneTimeWaiter(
+one_time_waiter = OneTimeWaiter(
+    data_source_kind=EDataSourceKind.CLICKHOUSE,
+    docker_compose_file_path=str(docker_compose_dir / 'docker-compose.yml'),
     expected_tables=[
         "primitive_types_nullable",
     ]

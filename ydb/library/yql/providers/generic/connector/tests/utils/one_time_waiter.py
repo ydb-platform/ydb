@@ -16,13 +16,13 @@ class OneTimeWaiter:
     def __init__(
             self,
             docker_compose_file_path: str,
-            dataSourceKind: EDataSourceKind,
+            data_source_kind: EDataSourceKind,
             expected_tables: Sequence[str],
             ):
         docker_compose_file_abs_path = yatest.common.source_path(docker_compose_file_path)
         self.docker_compose_helper = DockerComposeHelper(docker_compose_yml_path=docker_compose_file_abs_path)
         self.expected_tables = set(expected_tables)
-        self.dataSourceKind = dataSourceKind
+        self.dataSourceKind = data_source_kind
 
     def wait(self):
         if self.__launched:

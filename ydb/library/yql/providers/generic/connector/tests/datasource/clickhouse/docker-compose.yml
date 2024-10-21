@@ -8,6 +8,8 @@ services:
       CLICKHOUSE_USER: user
       CLICKHOUSE_ALWAYS_RUN_INITDB_SCRIPTS: 1
     image: mirror.gcr.io/clickhouse/clickhouse-server:24.3.12-alpine@sha256:65e5846a0d9672714f2625502b27846563f6d01ec226304cf851aa49004ffde8
+    volumes:
+      - ./init:/docker-entrypoint-initdb.d
     ports:
     - 9000
     - 8123

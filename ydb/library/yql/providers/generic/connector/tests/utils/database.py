@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-
+from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
 
 @dataclass
 class Database:

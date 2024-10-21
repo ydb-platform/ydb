@@ -54,48 +54,67 @@ TString CollectTokens(const TRule_select_stmt& selectStatement) {
     return tokenCollector.Tokens;
 }
 
-bool RestoreContext(
-    TContext& ctx, const NSQLTranslation::TTranslationSettings& settings, const TString& contextRestorationQuery
+bool RecreateContext(
+    TContext& ctx, const NSQLTranslation::TTranslationSettings& settings, const TString& recreationQuery
 ) {
-    const TString queryName = "context restoration query";
+    if (!recreationQuery) {
+        return true;
+    }
+    const TString queryName = "context recreation query";
 
     const auto* ast = NSQLTranslationV1::SqlAST(
-        contextRestorationQuery, queryName, ctx.Issues,
+        recreationQuery, queryName, ctx.Issues,
         settings.MaxErrors, settings.AnsiLexer, settings.Arena
     );
     if (!ast) {
         return false;
     }
 
-    TSqlQuery query(ctx, ctx.Settings.Mode, true);
-    auto node = query.Build(static_cast<const TSQLv1ParserAST&>(*ast));
+    TSqlQuery queryTranslator(ctx, ctx.Settings.Mode, true);
+    auto node = queryTranslator.Build(static_cast<const TSQLv1ParserAST&>(*ast));
 
     return node && node->Init(ctx, nullptr) && node->Translate(ctx);
 }
 
 TNodePtr BuildViewSelect(
-    const TRule_select_stmt& selectQuery,
+    const TRule_select_stmt& selectStatement,
     TContext& parentContext,
-    const TString& contextRestorationQuery
+    const TString& contextRecreationQuery
 ) {
-    TContext context(parentContext.Settings, {}, parentContext.Issues);
-    RestoreContext(context, context.Settings, contextRestorationQuery);
+    TIssues issues;
+    TContext context(parentContext.Settings, {}, issues);
+    if (!RecreateContext(context, context.Settings, contextRecreationQuery)) {
+        parentContext.Issues.AddIssues(issues);
+        return nullptr;
+    }
+    issues.Clear();
+
+    // Holds (among other things) subquery references.
+    // These references need to be passed to the parent context
+    // to be able to compile view queries with subqueries.
+    context.PushCurrentBlocks(&parentContext.GetCurrentBlocks());
 
     context.Settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
 
-    TSqlSelect select(context, context.Settings.Mode);
-    TPosition pos;
-    auto source = select.Build(selectQuery, pos);
+    TSqlSelect selectTranslator(context, context.Settings.Mode);
+    TPosition pos = parentContext.Pos();
+    auto source = selectTranslator.Build(selectStatement, pos);
     if (!source) {
+        parentContext.Issues.AddIssues(issues);
         return nullptr;
     }
-    return BuildSelectResult(
+    auto node = BuildSelectResult(
         pos,
         std::move(source),
         false,
         false,
         context.Scoped
     );
+    if (!node) {
+        parentContext.Issues.AddIssues(issues);
+        return nullptr;
+    }
+    return node;
 }
 
 }
@@ -4589,7 +4608,7 @@ bool TSqlTranslation::ParseViewQuery(
     const TRule_select_stmt& query
 ) {
     TString queryText = CollectTokens(query);
-    TString contextRestorationQuery;
+    TString contextRecreationQuery;
     {
         const auto& service = Ctx.Scoped->CurrService;
         const auto& cluster = Ctx.Scoped->CurrCluster;
@@ -4597,19 +4616,19 @@ bool TSqlTranslation::ParseViewQuery(
 
         // TO DO: capture all runtime pragmas in a similar fashion.
         if (effectivePathPrefix != Ctx.Settings.PathPrefix) {
-            contextRestorationQuery = TStringBuilder() << "PRAGMA TablePathPrefix = \"" << effectivePathPrefix << "\";\n";
+            contextRecreationQuery = TStringBuilder() << "PRAGMA TablePathPrefix = \"" << effectivePathPrefix << "\";\n";
         }
 
         // TO DO: capture other compilation-affecting statements except USE.
         if (cluster.GetLiteral() && *cluster.GetLiteral() != Ctx.Settings.DefaultCluster) {
-            contextRestorationQuery = TStringBuilder() << "USE " << *cluster.GetLiteral() << ";\n";
+            contextRecreationQuery = TStringBuilder() << "USE " << *cluster.GetLiteral() << ";\n";
         }
     }
-    features["query_text"] = { Ctx.Pos(), contextRestorationQuery + queryText };
+    features["query_text"] = { Ctx.Pos(), contextRecreationQuery + queryText };
 
     // AST is needed for ready-made validation of CREATE VIEW statement.
     // Query is stored as plain text, not AST.
-    const auto viewSelect = BuildViewSelect(query, Ctx, contextRestorationQuery);
+    const auto viewSelect = BuildViewSelect(query, Ctx, contextRecreationQuery);
     if (!viewSelect) {
         return false;
     }

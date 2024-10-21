@@ -843,9 +843,7 @@ void TPersQueue::MoveTopTxToCalculating(TDistributedTransaction& tx,
         Y_ABORT_UNLESS(false);
     }
 
-    tx.State = NKikimrPQ::TTransaction::CALCULATING;
-    PQ_LOG_D("TxId " << tx.TxId <<
-             ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
+    TryChangeTxState(tx, NKikimrPQ::TTransaction::CALCULATING);
 }
 
 void TPersQueue::AddSupportivePartition(const TPartitionId& partitionId)
@@ -3621,7 +3619,7 @@ void TPersQueue::ProcessPlanStepQueue(const TActorContext& ctx)
                         tx.OnPlanStep(step);
                         CheckTxState(ctx, tx);
 
-                        TxQueue.emplace(step, txId);
+                        TxQueue.emplace_back(step, txId);
                     } else {
                         PQ_LOG_W("Transaction already planned for step " << tx.Step <<
                                  ", Step: " << step <<
@@ -4023,11 +4021,87 @@ TDistributedTransaction* TPersQueue::GetTransaction(const TActorContext& ctx,
     return &p->second;
 }
 
+bool TPersQueue::TryChangeTxState(TDistributedTransaction& tx,
+                                  TDistributedTransaction::EState newState)
+{
+    auto oldState = tx.State;
+
+    Y_ABORT_UNLESS((oldState == NKikimrPQ::TTransaction::PLANNING) ||
+                   (oldState == NKikimrPQ::TTransaction::PLANNED) ||
+                   (oldState == NKikimrPQ::TTransaction::CALCULATING) ||
+                   (oldState == NKikimrPQ::TTransaction::CALCULATED) ||
+                   (oldState == NKikimrPQ::TTransaction::WAIT_RS) ||
+                   (oldState == NKikimrPQ::TTransaction::EXECUTING) ||
+                   (oldState == NKikimrPQ::TTransaction::EXECUTED));
+    if (oldState != NKikimrPQ::TTransaction::PLANNING) {
+        Y_ABORT_UNLESS(TxsOrder.contains(oldState),
+                       "State %s",
+                       NKikimrPQ::TTransaction_EState_Name(oldState).data());
+        Y_ABORT_UNLESS(TxsOrder[oldState].front() == tx.TxId,
+                       "State %s, TxId %" PRIu64 ", Front %" PRIu64,
+                       NKikimrPQ::TTransaction_EState_Name(oldState).data(),
+                       tx.TxId, TxsOrder[oldState].front());
+    }
+
+    tx.State = newState;
+    PQ_LOG_D("TxId " << tx.TxId <<
+             ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
+
+    if (oldState >= NKikimrPQ::TTransaction::PLANNED) {
+        TxsOrder[oldState].pop_front();
+    }
+
+    if (newState <= NKikimrPQ::TTransaction::EXECUTED) {
+        TxsOrder[newState].push_back(tx.TxId);
+    }
+
+    PQ_LOG_D("TxsOrder: " <<
+             NKikimrPQ::TTransaction_EState_Name(oldState) << " " << TxsOrder[oldState].size() <<
+             " " <<
+             NKikimrPQ::TTransaction_EState_Name(newState) << " " << TxsOrder[newState].size());
+
+    return true;
+}
+
+bool TPersQueue::CanExecute(const TDistributedTransaction& tx)
+{
+    if (tx.Pending) {
+        return false;
+    }
+
+    if (tx.State < NKikimrPQ::TTransaction::PLANNED) {
+        return true;
+    }
+    if (tx.State > NKikimrPQ::TTransaction::EXECUTED) {
+        return true;
+    }
+
+    auto& txQueue = TxsOrder[tx.State];
+    Y_ABORT_UNLESS(!txQueue.empty(),
+                   "TxId %" PRIu64 " State %s",
+                   tx.TxId, NKikimrPQ::TTransaction_EState_Name(tx.State).data());
+
+    PQ_LOG_D("TxId " << tx.TxId <<
+             " State " << NKikimrPQ::TTransaction_EState_Name(tx.State) <<
+             " Front " << txQueue.front());
+
+    return txQueue.front() == tx.TxId;
+}
+
 void TPersQueue::CheckTxState(const TActorContext& ctx,
                               TDistributedTransaction& tx)
 {
     PQ_LOG_D("TxId " << tx.TxId <<
              ", State " << NKikimrPQ::TTransaction_EState_Name(tx.State));
+
+    if (!CanExecute(tx)) {
+        Y_ABORT_UNLESS(!tx.Pending,
+                       "TxId %" PRIu64,
+                       tx.TxId);
+        tx.Pending = true;
+        PQ_LOG_D("TxId " << tx.TxId << " wait");
+        return;
+    }
 
     switch (tx.State) {
     case NKikimrPQ::TTransaction::UNKNOWN:
@@ -4081,15 +4155,14 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
         // scheduled events will be sent to EndWriteTxs
 
-        tx.State = NKikimrPQ::TTransaction::PLANNED;
-        PQ_LOG_D("TxId " << tx.TxId <<
-                 ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
+        TryChangeTxState(tx, NKikimrPQ::TTransaction::PLANNED);
 
         [[fallthrough]];
 
     case NKikimrPQ::TTransaction::PLANNED:
         PQ_LOG_D("TxQueue.size " << TxQueue.size());
 
+        // TODO(abcdef): перенести всё из TxQueue в TxsOrder[CALCULATING]
         if (!TxQueue.empty() && (TxQueue.front().second == tx.TxId)) {
             MoveTopTxToCalculating(tx, ctx);
         }
@@ -4111,9 +4184,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
             case NKikimrPQ::TTransaction::KIND_CONFIG:
                 WriteTx(tx, NKikimrPQ::TTransaction::CALCULATED);
 
-                tx.State = NKikimrPQ::TTransaction::CALCULATED;
-                PQ_LOG_D("TxId " << tx.TxId <<
-                         ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
+                TryChangeTxState(tx, NKikimrPQ::TTransaction::CALCULATED);
 
                 break;
 
@@ -4125,9 +4196,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         break;
 
     case NKikimrPQ::TTransaction::CALCULATED:
-        tx.State = NKikimrPQ::TTransaction::WAIT_RS;
-        PQ_LOG_D("TxId " << tx.TxId <<
-                 ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
+        TryChangeTxState(tx, NKikimrPQ::TTransaction::WAIT_RS);
 
         //
         // the number of TEvReadSetAck sent should not be greater than the number of senders
@@ -4152,9 +4221,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
                 SendEvTxRollbackToPartitions(ctx, tx);
             }
 
-            tx.State = NKikimrPQ::TTransaction::EXECUTING;
-            PQ_LOG_D("TxId " << tx.TxId <<
-                     ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
+            TryChangeTxState(tx, NKikimrPQ::TTransaction::EXECUTING);
         } else {
             break;
         }
@@ -4199,9 +4266,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
             PQ_LOG_D("delete partitions for TxId " << tx.TxId);
             BeginDeletePartitions(tx);
 
-            tx.State = NKikimrPQ::TTransaction::EXECUTED;
-            PQ_LOG_D("TxId " << tx.TxId <<
-                     ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
+            TryChangeTxState(tx, NKikimrPQ::TTransaction::EXECUTED);
         }
 
         break;
@@ -4209,9 +4274,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
     case NKikimrPQ::TTransaction::EXECUTED:
         SendEvReadSetAckToSenders(ctx, tx);
 
-        tx.State = NKikimrPQ::TTransaction::WAIT_RS_ACKS;
-        PQ_LOG_D("TxId " << tx.TxId <<
-                 ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
+        TryChangeTxState(tx, NKikimrPQ::TTransaction::WAIT_RS_ACKS);
 
         [[fallthrough]];
 
@@ -4228,7 +4291,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
     case NKikimrPQ::TTransaction::DELETING:
         // The PQ tablet has persisted its state. Now she can delete the transaction and take the next one.
         if (!TxQueue.empty() && (TxQueue.front().second == tx.TxId)) {
-            TxQueue.pop();
+            TxQueue.pop_front();
             TryStartTransaction(ctx);
         }
 
@@ -4478,6 +4541,8 @@ void TPersQueue::BeginInitTransactions()
     Txs.clear();
     TxQueue.clear();
 
+    TxsOrder.clear();
+
     PlannedTxs.clear();
 }
 
@@ -4487,11 +4552,34 @@ void TPersQueue::EndInitTransactions()
 
     std::sort(PlannedTxs.begin(), PlannedTxs.end());
     for (auto& item : PlannedTxs) {
-        TxQueue.push(item);
+        TxQueue.push_back(item);
     }
 
     if (!TxQueue.empty()) {
         PQ_LOG_D("top tx queue (" << TxQueue.front().first << ", " << TxQueue.front().second << ")");
+    }
+
+    for (const auto& [_, txId] : TxQueue) {
+        Y_ABORT_UNLESS(Txs.contains(txId),
+                       "unknown TxId %" PRIu64,
+                       txId);
+        const auto& tx = Txs.at(txId);
+
+        Y_ABORT_UNLESS(txId == tx.TxId);
+
+        if ((tx.State < NKikimrPQ::TTransaction::PLANNED) ||
+            (tx.State > NKikimrPQ::TTransaction::EXECUTED)) {
+            PQ_LOG_D("TxsOrder: skip " <<
+                     NKikimrPQ::TTransaction_EState_Name(tx.State) << " " <<
+                     txId);
+            continue;
+        }
+
+        TxsOrder[tx.State].push_back(txId);
+
+        PQ_LOG_D("TxsOrder: " <<
+                 NKikimrPQ::TTransaction_EState_Name(tx.State) << " " <<
+                 txId);
     }
 }
 

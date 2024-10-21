@@ -274,7 +274,7 @@ private:
     // транзакции
     //
     THashMap<ui64, TDistributedTransaction> Txs;
-    TQueue<std::pair<ui64, ui64>> TxQueue;
+    TDeque<std::pair<ui64, ui64>> TxQueue;
     ui64 PlanStep = 0;
     ui64 PlanTxId = 0;
     ui64 ExecStep = 0;
@@ -288,6 +288,12 @@ private:
     TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfigTx;
     TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfigTx;
     TMaybe<NKikimrPQ::TPartitions> PartitionsDataConfigTx;
+
+    // PLANNED -> CALCULATING -> CALCULATED -> WAIT_RS -> EXECUTING -> EXECUTED
+    THashMap<TDistributedTransaction::EState, TDeque<ui64>> TxsOrder;
+
+    bool TryChangeTxState(TDistributedTransaction& tx, TDistributedTransaction::EState newState);
+    bool CanExecute(const TDistributedTransaction& tx);
 
     bool WriteTxsInProgress = false;
 

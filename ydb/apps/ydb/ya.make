@@ -1,5 +1,7 @@
 PROGRAM(ydb)
 
+SPLIT_DWARF()
+
 IF(BUILD_TYPE == RELEASE)
     STRIP()
 ENDIF()

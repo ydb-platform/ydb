@@ -53,4 +53,66 @@ public:
 
 };
 
+class TLoadTimeSignals: public TCommonCountersOwner {
+private:
+    using TBase = TCommonCountersOwner;
+    NMonitoring::TDynamicCounters::TCounterPtr TablesLoadingTimeCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr SchemaPresetLoadingTimeCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr TableVersionsLoadingTimeCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr SchemaPresetVersionsLoadingTimeCounter;
+
+    NMonitoring::TDynamicCounters::TCounterPtr TablesLoadingFailCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr SchemaPresetLoadingFailCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr TableVersionsLoadingFailCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr SchemaPresetVersionsLoadingFailCounter;
+
+
+public:
+    TLoadTimeSignals()
+        : TBase("Startup")
+    {
+        TablesLoadingTimeCounter = TBase::GetValue("Startup/TablesLoadingTime");;
+        SchemaPresetLoadingTimeCounter = TBase::GetValue("Startup/SchemaPresetLoadingTime");;
+        TableVersionsLoadingTimeCounter = TBase::GetValue("Startup/TableVersionsLoadingTime");;
+        SchemaPresetVersionsLoadingTimeCounter = TBase::GetValue("Startup/SchemaPreseVersionstLoadingTime");;
+
+        TablesLoadingFailCounter = TBase::GetValue("Startup/TablesLoadingFailCount");;
+        SchemaPresetLoadingFailCounter = TBase::GetValue("Startup/SchemaPresetLoadingFailCount");;
+        TableVersionsLoadingFailCounter = TBase::GetValue("Startup/TableVersionsLoadingFailCount");;
+        SchemaPresetVersionsLoadingFailCounter = TBase::GetValue("Startup/SchemaPreseVersionstLoadingFailCount");;
+    }
+
+    void AddTablesLoadingTime(ui64 microSeconds) {
+        TablesLoadingTimeCounter->Add(microSeconds);
+    }
+
+    void AddSchemaPresetLoadingTime(ui64 microSeconds) {
+        SchemaPresetLoadingTimeCounter->Add(microSeconds);
+    }
+
+    void AddTableVersionsLoadingTime(ui64 microSeconds) {
+        TableVersionsLoadingTimeCounter->Add(microSeconds);
+    }
+
+    void AddSchemaPresetVersionsLoadingTime(ui64 microSeconds) {
+        SchemaPresetVersionsLoadingTimeCounter->Add(microSeconds);
+    }
+
+    void AddLoadingTablesFail() {
+        TablesLoadingFailCounter->Add(1);
+    }
+
+    void AddLoadingSchemaPresetFail() {
+        SchemaPresetLoadingFailCounter->Add(1);
+    }
+
+    void AddLoadingTableVersionsFail() {
+        TableVersionsLoadingFailCounter->Add(1);
+    }
+
+    void AddLoadingSchemaPresetVersionsFail() {
+        SchemaPresetVersionsLoadingFailCounter->Add(1);
+    }
+};
+
 }

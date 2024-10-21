@@ -6,6 +6,7 @@ namespace NKikimr::NColumnShard {
 bool Schema::InsertTable_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsGroupSelector, NOlap::TInsertTableAccessor& insertTable, const TInstant& /*loadTime*/) {
     auto rowset = db.Table<InsertTable>().Select();
     if (!rowset.IsReady()) {
+        LOG_S_CRIT("Load: insert table rowset is not ready");
         return false;
     }
 
@@ -25,6 +26,7 @@ bool Schema::InsertTable_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsG
                 break;
         }
         if (!rowset.Next()) {
+            LOG_S_CRIT("Load: insert table next failed");
             return false;
         }
     }

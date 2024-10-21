@@ -473,7 +473,7 @@ TYPED_TEST(TNotGrpcTest, DisableAcceptsBaggage)
 
 TYPED_TEST(TRpcTest, ManyAsyncRequests)
 {
-    const int RequestCount = 1000;
+    const int RequestCount = this->GetMaxSimultaneousRequestCount();
 
     std::vector<TFuture<void>> asyncResults;
 
@@ -622,8 +622,6 @@ TYPED_TEST(TNotGrpcTest, Compression)
 
 TYPED_TEST(TRpcTest, ResponseMemoryTag)
 {
-    // FIXME: YT-23048
-    return;
     static TMemoryTag testMemoryTag = 12345;
     testMemoryTag++;
     auto initialMemoryUsage = GetMemoryUsageForTag(testMemoryTag);

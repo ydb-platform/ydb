@@ -106,6 +106,14 @@ void TPqIoTestFixture::InitAsyncOutput(
 {
     const THashMap<TString, TString> secureParams;
 
+    TPqGatewayServices pqServices(
+            Driver,
+            nullptr,
+            nullptr,
+            std::make_shared<TPqGatewayConfig>(),
+            nullptr
+        );
+
     CaSetup->Execute([&](TFakeActor& actor) {
         auto [dqAsyncOutput, dqAsyncOutputAsActor] = CreateDqPqWriteActor(
             std::move(settings),
@@ -118,6 +126,7 @@ void TPqIoTestFixture::InitAsyncOutput(
             nullptr,
             &actor.GetAsyncOutputCallbacks(),
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
+            CreatePqNativeGateway(std::move(pqServices)),
             freeSpace);
 
         actor.InitAsyncOutput(dqAsyncOutput, dqAsyncOutputAsActor);

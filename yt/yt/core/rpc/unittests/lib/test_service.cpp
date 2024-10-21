@@ -109,6 +109,9 @@ public:
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, AllocationCall)
     {
         context->SetRequestInfo();
+        if (request->wait_on_latch()) {
+            Latch_()->Wait();
+        }
         response->set_allocated_string(TString("r", request->size()));
         context->Reply();
     }

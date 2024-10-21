@@ -668,8 +668,8 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
     for (size_t i = 0; i != AS_VALUE(TListLiteral, varNames)->GetItemsCount(); ++i) {
         defines.push_back(callable.GetInput(inputIndex++));
     }
-    const auto& afterMatchSkipPastLastRow = callable.GetInput(inputIndex++);
     const auto& streamingMode = callable.GetInput(inputIndex++);
+    const auto& afterMatchSkipPastLastRow = callable.GetInput(inputIndex++);
     MKQL_ENSURE(callable.GetInputsCount() == inputIndex, "Wrong input count");
 
     const auto& [vars, varsLookup] = ConvertListOfStrings(varNames);

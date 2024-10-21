@@ -27,4 +27,32 @@ bool HasMessages(const Topic::StreamReadMessage::ReadResponse& data) {
     return false;
 }
 
+
+TString CleanupCounterValueString(const TString& value) {
+    // Internal Monitoring system requires metrics values to no longer than 200 characters
+    // and prohibits some ASCII characters.
+
+    TString clean;
+    constexpr auto valueLenghtLimit = 200;
+
+    for (auto c : value) {
+        switch (c) {
+        case '|':
+        case '*':
+        case '?':
+        case '"':
+        case '\'':
+        case '`':
+        case '\\':
+            continue;
+        default:
+            clean.push_back(c);
+            if (clean.size() == valueLenghtLimit) {
+                break;
+            }
+        }
+    }
+    return clean;
+}
+
 }

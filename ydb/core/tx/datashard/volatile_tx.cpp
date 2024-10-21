@@ -271,9 +271,6 @@ namespace NKikimr::NDataShard {
 
     void TVolatileTxManager::Start(const TActorContext& ctx) {
         for (auto& pr : VolatileTxs) {
-            if (!pr.second->Dependencies.empty()) {
-                continue;
-            }
             switch (pr.second->State) {
                 case EVolatileTxState::Waiting:
                     for (ui64 target : pr.second->Participants) {
@@ -875,7 +872,7 @@ namespace NKikimr::NDataShard {
             if (info->AddCommitted) {
                 RunCommitCallbacks(info);
             }
-            if (info->Dependencies.empty() && ReadyToDbCommit(info)) {
+            if (ReadyToDbCommit(info)) {
                 AddPendingCommit(txId);
             }
         }
@@ -926,7 +923,9 @@ namespace NKikimr::NDataShard {
                     case EVolatileTxState::Waiting:
                         break;
                     case EVolatileTxState::Committed:
-                        AddPendingCommit(dependentTxId);
+                        if (ReadyToDbCommit(dependent)) {
+                            AddPendingCommit(dependentTxId);
+                        }
                         break;
                     case EVolatileTxState::Aborting:
                         Y_ABORT("FIXME: unexpected dependency removed from aborting tx");

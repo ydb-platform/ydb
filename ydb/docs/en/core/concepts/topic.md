@@ -38,7 +38,7 @@ All messages within a partition have a unique sequence number called an `offset`
 
 ## Autopartitioning {#autopartitioning}
 
-Total topic throughput is defined by count of partitions in this topic and throughput of each partition. Count of partitions and throughput of every partition are defined at the moment of the topic creation. If maximum required write speed to a topic is unknown when it is created, you can use autopartitioning to scale this topic automatically. If you switch on autopartitioning up on any topic then count of partitions in this topic will be increased automatically if write speed increases (see [Autopartitioning modes](#autopartitioning_modes)).
+Total topic throughput is determined by the number of partitions in the topic and the throughput of each partition. The number of partitions and the throughput of each partition are set at the time of topic creation. If the maximum required write speed for a topic is unknown at the creation time, autopartitioning allows the topic to be scaled automatically. If autopartitioning is enabled for a topic, the number of partitions will increase automatically as the write speed increases (see [Autopartitioning modes](#autopartitioning_modes)).
 
 ### Guarantees {#autopartitioning_guarantee}
 

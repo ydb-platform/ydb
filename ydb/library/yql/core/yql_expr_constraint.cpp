@@ -2266,12 +2266,13 @@ private:
         }
 
         bool leftAny = false, rigthAny = false;
-        core.Flags().Ref().ForEachChild([&](const TExprNode& flag) {
-            if (flag.IsAtom("LeftAny"))
+        for (const auto &flag: core.Flags()) {
+            auto&& name = flag.Name().Value();
+            if (name == "LeftAny"sv)
                leftAny = true;
-            else if (flag.IsAtom("RightAny"))
+            else if (name == "RightAny"sv)
                 rigthAny = true;
-        });
+        }
 
         const TUniqueConstraintNode* lUnique = leftInput->GetConstraint<TUniqueConstraintNode>();
         const TUniqueConstraintNode* rUnique = rightInput->GetConstraint<TUniqueConstraintNode>();

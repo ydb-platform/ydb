@@ -147,6 +147,7 @@ struct TEquiJoinLinkSettings {
     EJoinAlgoType JoinAlgo = EJoinAlgoType::Undefined;
     // JOIN implementation may ignore this flags if SortedMerge strategy is not supported
     bool ForceSortedMerge = false;
+    TVector<TString> Options;
     bool Compact = false;
 };
 

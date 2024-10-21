@@ -5,6 +5,7 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/yson/json2yson.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
 
 namespace NFq {
 
@@ -431,7 +432,7 @@ void EnumeratePlans(NYson::TYsonWriter& writer, NJson::TJsonValue& value, ui32& 
     }
 }
 
-TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* timeline, ui64 maxTimelineSize) {
+TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* timeline) {
     TStringStream out;
     NYson::TYsonWriter writer(&out);
     writer.OnBeginMap();
@@ -475,20 +476,7 @@ TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* time
     if (timeline) {
         TPlanVisualizer planViz;
         planViz.LoadPlans(plan);
-        *timeline = planViz.PrintSvgSafe();
-        if (maxTimelineSize && timeline->size() > maxTimelineSize) {
-            TStringBuilder builder;
-            builder
-                << "<svg width='600' height='200' xmlns='http://www.w3.org/2000/svg'>" << Endl
-                << "  <text font-size='16px' x='20' y='40'>There is nothing wrong with the request.</text>" << Endl
-                << "  <text font-size='16px' x='20' y='80'>Unfortunately, image size " << timeline->size() << " is too large.</text>" << Endl
-                << "  <text font-size='16px' x='20' y='120'>It exceeds limit of " << maxTimelineSize << " and was discarded</text>" << Endl
-                << "</svg>" << Endl;
-            *timeline = builder;
-        }
-        // remove json "timeline" field after migration
-        writer.OnKeyedItem("timeline");
-        writer.OnStringScalar(*timeline);
+        *timeline = planViz.PrintSvg();
     }
     writer.OnEndMap();
     return NJson2Yson::ConvertYson2Json(out.Str());
@@ -1164,7 +1152,7 @@ struct TNoneStatProcessor : IPlanStatProcessor {
         return plan;
     }
 
-    TString GetQueryStat(const TString&, double& cpuUsage, TString*, ui64) override {
+    TString GetQueryStat(const TString&, double& cpuUsage, TString*) override {
         cpuUsage = 0.0;
         return "";
     }
@@ -1197,8 +1185,8 @@ struct TPlanStatProcessor : IPlanStatProcessor {
         return plan;
     }
 
-    TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline, ui64 maxtimelineSize) override {
-        return GetV1StatFromV2Plan(plan, &cpuUsage, timeline, maxtimelineSize);
+    TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline) override {
+        return GetV1StatFromV2Plan(plan, &cpuUsage, timeline);
     }
 
     TPublicStat GetPublicStat(const TString& stat) override {
@@ -1229,8 +1217,8 @@ struct TProfileStatProcessor : TPlanStatProcessor {
 };
 
 struct TProdStatProcessor : TFullStatProcessor {
-    TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline, ui64 maxtimelineSize) override {
-        return GetPrettyStatistics(GetV1StatFromV2Plan(plan, &cpuUsage, timeline, maxtimelineSize));
+    TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline) override {
+        return GetPrettyStatistics(GetV1StatFromV2Plan(plan, &cpuUsage, timeline));
     }
 };
 
@@ -1263,8 +1251,16 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(
 ) {
     Fq::Private::PingTaskRequest pingTaskRequest = Build(queryStats);
 
+    // Application-level issues, pass as is
     if (issues) {
         NYql::IssuesToMessage(issues, pingTaskRequest.mutable_issues());
+    }
+
+    // Builder own (internal) issues will be logged later, just warn the user
+    if (Issues) {
+        auto* issue = pingTaskRequest.add_issues();
+        issue->set_message("There are minor issues with query statistics processing. You can supply query ID and ask support for the information.");
+        issue->set_severity(NYql::TSeverityIds::S_WARNING);
     }
 
     if (computeStatus) {
@@ -1318,7 +1314,13 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryP
     CpuUsage = 0.0;
     try {
         TString timeline;
-        auto stat = Processor->GetQueryStat(plan, CpuUsage, ShowQueryTimeline ? &timeline : nullptr, MaxQueryTimelineSize);
+        auto stat = Processor->GetQueryStat(plan, CpuUsage, ShowQueryTimeline ? &timeline : nullptr);
+
+        if (MaxQueryTimelineSize && timeline.size() > MaxQueryTimelineSize) {
+            Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Timeline size  " << timeline.size() << " exceeds limit of " << MaxQueryTimelineSize));
+            timeline = "";
+        }
+
         pingTaskRequest.set_statistics(stat);
         pingTaskRequest.set_dump_raw_statistics(true);
         if (timeline) {
@@ -1329,8 +1331,8 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryP
         flatStat["ComputeTimeUs"] = computeTimeUs;
         SerializeStats(*pingTaskRequest.mutable_flat_stats(), flatStat);
         PublicStat = Processor->GetPublicStat(stat);
-    } catch(const NJson::TJsonException& ex) {
-        Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Error stat conversion: " << ex.what()));
+    } catch (const std::exception& e) {
+        Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Error stat processing: " << e.what()));
     }
 
     return pingTaskRequest;

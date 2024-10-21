@@ -29,6 +29,7 @@ PEERDIR(
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/library/yql/public/udf
     ydb/library/yql/utils
+    ydb/library/yql/utils/rope
     library/cpp/threading/future
 )
 

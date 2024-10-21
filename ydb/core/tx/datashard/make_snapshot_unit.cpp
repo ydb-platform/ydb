@@ -47,16 +47,19 @@ EExecutionStatus TMakeSnapshotUnit::Execute(TOperation::TPtr op,
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
     auto &schemeTx = tx->GetSchemeTx();
-    if (!schemeTx.HasSendSnapshot())
+    if (!schemeTx.HasSendSnapshot() && !schemeTx.HasCreateIncrementalBackupSrc())
         return EExecutionStatus::Executed;
 
     if (!op->IsWaitingForSnapshot()) {
-        ui64 tableId = schemeTx.GetSendSnapshot().GetTableId_Deprecated();
-        if (schemeTx.GetSendSnapshot().HasTableId()) {
-            Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == schemeTx.GetSendSnapshot().GetTableId().GetOwnerId());
-            tableId = schemeTx.GetSendSnapshot().GetTableId().GetTableId();
+        auto& snapshot =
+            schemeTx.HasSendSnapshot() ?
+            schemeTx.GetSendSnapshot() :
+            schemeTx.GetCreateIncrementalBackupSrc().GetSendSnapshot();
+        ui64 tableId = snapshot.GetTableId_Deprecated();
+        if (snapshot.HasTableId()) {
+            Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == snapshot.GetTableId().GetOwnerId());
+            tableId = snapshot.GetTableId().GetTableId();
         }
-
         Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
         ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
         const auto& openTxs = txc.DB.GetOpenTxs(localTableId);

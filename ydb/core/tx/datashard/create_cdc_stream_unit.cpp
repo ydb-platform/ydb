@@ -25,11 +25,14 @@ public:
         Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
         auto& schemeTx = tx->GetSchemeTx();
-        if (!schemeTx.HasCreateCdcStreamNotice()) {
+        if (!schemeTx.HasCreateCdcStreamNotice() && !schemeTx.HasCreateIncrementalBackupSrc()) {
             return EExecutionStatus::Executed;
         }
 
-        const auto& params = schemeTx.GetCreateCdcStreamNotice();
+        const auto& params =
+            schemeTx.HasCreateCdcStreamNotice() ?
+            schemeTx.GetCreateCdcStreamNotice() :
+            schemeTx.GetCreateIncrementalBackupSrc().GetCreateCdcStreamNotice();
         const auto& streamDesc = params.GetStreamDescription();
         const auto streamPathId = PathIdFromPathId(streamDesc.GetPathId());
 

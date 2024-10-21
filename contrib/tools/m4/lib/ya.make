@@ -52,8 +52,6 @@ SRCS(
     filenamecat-lgpl.c
     filenamecat.c
     fopen-safer.c
-    freadahead.c
-    fseeko.c
     getprogname.c
     gl_avltree_oset.c
     gl_linkedhash_list.c
@@ -103,7 +101,13 @@ SRCS(
     xvasprintf.c
 )
 
-IF (OS_DARWIN)
+IF (MUSL)
+    SRCS(
+        error.c
+        obstack.c
+        regex.c
+    )
+ELSEIF (OS_DARWIN)
     SRCS(
         error.c
         fpending.c
@@ -120,6 +124,7 @@ ELSEIF (OS_WINDOWS)
         dup2.c
         error.c
         fpending.c
+        fseeko.c
         getdtablesize.c
         getopt.c
         getopt1.c
@@ -136,6 +141,12 @@ ELSEIF (OS_WINDOWS)
         sigprocmask.c
         strsignal.c
         waitpid.c
+    )
+ENDIF()
+
+IF (NOT MUSL)
+    SRCS(
+        freadahead.c
     )
 ENDIF()
 

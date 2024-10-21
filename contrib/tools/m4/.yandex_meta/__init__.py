@@ -12,6 +12,7 @@ WINDOWS_SRCS = [
     "error.c",
     "float+.h",
     "fpending.c",
+    "fseeko.c",
     "getdtablesize.c",
     "getopt.c",
     "getopt1.c",
@@ -73,15 +74,28 @@ EXCESSIVE_SRCS = [
     "wctype.h",
 ]
 
+MUSL_SRCS = [
+    "error.c",
+    "obstack.c",
+    "regex.c",
+]
+
 
 def post_install(self):
+
     with self.yamakes["lib"] as gnulib:
+        gnulib.SRCS.remove("freadahead.c")
+        gnulib.SRCS.remove("fseeko.c")
+
         # Provide sys/random.h implementations which is used disregarding HAVE_SYS_RANDOM configuration value
         gnulib.PEERDIR.add("contrib/libs/libc_compat")
 
         gnulib.after(
             "SRCS",
             Switch(
+                MUSL=Linkable(
+                    SRCS=[src for src in MUSL_SRCS if pathutil.is_source(src)],
+                ),
                 OS_WINDOWS=Linkable(
                     SRCS=[src for src in WINDOWS_SRCS if pathutil.is_source(src)],
                     ADDINCL=[GLOBAL(f"{self.arcdir}/lib/platform/win64")],
@@ -91,6 +105,18 @@ def post_install(self):
                 ),
             ),
         )
+
+        gnulib.after(
+            "SRCS",
+            """
+            IF (NOT MUSL)
+                SRCS(
+                    freadahead.c
+                )
+            ENDIF()
+            """,
+        )
+
         for src in WINDOWS_SRCS:
             if pathutil.is_source(src) and src in gnulib.SRCS:
                 gnulib.SRCS.remove(src)

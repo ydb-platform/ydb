@@ -76,7 +76,6 @@ static NKikimrSchemeOp::TPathDescription GetTableDescription(TSchemeShard* ss, c
     opts.SetReturnPartitioningInfo(false);
     opts.SetReturnPartitionConfig(true);
     opts.SetReturnBoundaries(true);
-    opts.SetReturnIndexTableBoundaries(true);
 
     auto desc = DescribePath(ss, TlsActivationContext->AsActorContext(), pathId, opts);
     auto record = desc->GetRecord();

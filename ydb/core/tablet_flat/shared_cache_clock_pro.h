@@ -122,7 +122,7 @@ public:
         return SizeHot + SizeCold;
     }
 
-    TString Dump() const {
+    TString Dump() const override {
         TStringBuilder result;
 
         size_t count = 0;

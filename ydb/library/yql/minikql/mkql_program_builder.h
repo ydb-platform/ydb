@@ -713,7 +713,8 @@ public:
         const TArrayRef<std::pair<TStringBuf, TBinaryLambda>>& getMeasures,
         const NYql::NMatchRecognize::TRowPattern& pattern,
         const TArrayRef<std::pair<TStringBuf, TTernaryLambda>>& getDefines,
-        bool streamingMode
+        bool streamingMode,
+        bool afterMatchSkipPastLastRow = false
     );
 
     TRuntimeNode TimeOrderRecover(

@@ -184,9 +184,7 @@ struct TExplicitPartitions {
 
     FLUENT_SETTING_VECTOR(TValue, SplitPoints);
 
-    template <typename TProto>
-    static TExplicitPartitions FromProto(const TProto& proto);
-
+    static TExplicitPartitions FromProto(const Ydb::Table::ExplicitPartitions& proto);
     void SerializeTo(Ydb::Table::ExplicitPartitions& proto) const;
 };
 
@@ -196,9 +194,7 @@ struct TGlobalIndexSettings {
     TPartitioningSettings PartitioningSettings;
     TUniformOrExplicitPartitions Partitions;
 
-    template <typename TProto>
-    static TGlobalIndexSettings FromProto(const TProto& proto);
-
+    static TGlobalIndexSettings FromProto(const Ydb::Table::GlobalIndexSettings& proto);
     void SerializeTo(Ydb::Table::GlobalIndexSettings& proto) const;
 };
 

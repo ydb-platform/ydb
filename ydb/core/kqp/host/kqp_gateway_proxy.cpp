@@ -1531,10 +1531,9 @@ public:
 
             NKikimrSchemeOp::TModifyScheme schemeTx;
 
-            const TPathId invalidPathId;
             Ydb::StatusIds::StatusCode code;
             TString error;
-            if (!BuildAlterColumnTableModifyScheme(&req, &schemeTx, invalidPathId, code, error)) {
+            if (!BuildAlterColumnTableModifyScheme(&req, &schemeTx, code, error)) {
                 IKqpGateway::TGenericResult errResult;
                 errResult.AddIssue(NYql::TIssue(error));
                 errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));

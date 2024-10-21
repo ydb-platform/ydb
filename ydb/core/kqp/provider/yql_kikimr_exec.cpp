@@ -1989,7 +1989,7 @@ public:
                 future = Gateway->AlterTableStore(cluster, ParseAlterTableStoreSettings(maybeAlter.Cast()));
             } else if (isColumn) {
                 // future = Gateway->AlterColumnTable(cluster, ParseAlterColumnTableSettings(maybeAlter.Cast()));
-                future = Gateway->AlterColumnTable(cluster, std::move(alterTableRequest), alterTableFlags, std::move(indexBuildSettings));
+                future = Gateway->AlterColumnTable(cluster, std::move(alterTableRequest));
             } else {
                 TMaybe<TString> requestType;
                 if (!SessionCtx->Query().DocumentApiRestricted) {

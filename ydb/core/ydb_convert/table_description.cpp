@@ -859,9 +859,9 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
     return true;
 }
 
-bool BuildAlterColumnTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme,
-    const TPathId& resolvedPathId, Ydb::StatusIds::StatusCode& code, TString& error) {
-    return BuildAlterColumnTableModifyScheme(req->path(), req, modifyScheme, resolvedPathId, code, error);
+bool BuildAlterColumnTableModifyScheme(
+    const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme, Ydb::StatusIds::StatusCode& code, TString& error) {
+    return BuildAlterColumnTableModifyScheme(req->path(), req, modifyScheme, code, error);
 }
 
 template <typename TYdbProto>

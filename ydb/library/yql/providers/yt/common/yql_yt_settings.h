@@ -204,6 +204,8 @@ struct TYtSettings {
     NCommon::TConfSetting<TDuration, true> DQRPCReaderTimeout;
     NCommon::TConfSetting<TSet<TString>, true> BlockReaderSupportedTypes;
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, true> BlockReaderSupportedDataTypes;
+    NCommon::TConfSetting<TSet<TString>, true> JobBlockInputSupportedTypes;
+    NCommon::TConfSetting<TSet<NUdf::EDataSlot>, true> JobBlockInputSupportedDataTypes;
 
     // Optimizers
     NCommon::TConfSetting<bool, true> _EnableDq;
@@ -283,6 +285,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui16, false> MinColumnGroupSize;
     NCommon::TConfSetting<ui16, false> MaxColumnGroups;
     NCommon::TConfSetting<ui64, false> ExtendedStatsMaxChunkCount;
+    NCommon::TConfSetting<bool, false> JobBlockInput;
     NCommon::TConfSetting<bool, false> _EnableYtDqProcessWriteConstraints;
 };
 

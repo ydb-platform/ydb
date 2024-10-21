@@ -1,4 +1,4 @@
-#include "arrow_converter.h"
+#include "yt_arrow_converter.h"
 
 #include <ydb/library/yql/public/udf/arrow/defs.h>
 #include <ydb/library/yql/public/udf/arrow/block_builder.h>
@@ -18,7 +18,7 @@
 #include <arrow/type_traits.h>
 #include <arrow/compute/cast.h>
 
-namespace NYql::NDqs {
+namespace NYql {
 
 template<typename T>
 struct TypeHelper {
@@ -43,6 +43,12 @@ arrow::Datum NumericConverterImpl(NUdf::IArrayBuilder* builder, std::shared_ptr<
             } else {
                 if constexpr (std::is_same_v<decltype(val.Value(data[i])), bool>) {
                     builder->Add(NUdf::TBlockItem((ui8)val.Value(data[i])));
+#if defined(_darwin_) && defined(_64_)
+                } else if constexpr (std::is_same_v<decltype(val.Value(data[i])), unsigned long long>) {
+                    builder->Add(NUdf::TBlockItem((ui64)val.Value(data[i])));
+                } else if constexpr (std::is_same_v<decltype(val.Value(data[i])), long long>) {
+                    builder->Add(NUdf::TBlockItem((i64)val.Value(data[i])));
+#endif
                 } else {
                     builder->Add(NUdf::TBlockItem(val.Value(data[i])));
                 }
@@ -52,6 +58,12 @@ arrow::Datum NumericConverterImpl(NUdf::IArrayBuilder* builder, std::shared_ptr<
         for (i64 i = 0; i < block->length; ++i) {
             if constexpr (std::is_same_v<decltype(val.Value(data[i])), bool>) {
                 builder->Add(NUdf::TBlockItem((ui8)val.Value(data[i])));
+#if defined(_darwin_) && defined(_64_)
+            } else if constexpr (std::is_same_v<decltype(val.Value(data[i])), unsigned long long>) {
+                builder->Add(NUdf::TBlockItem((ui64)val.Value(data[i])));
+            } else if constexpr (std::is_same_v<decltype(val.Value(data[i])), long long>) {
+                builder->Add(NUdf::TBlockItem((i64)val.Value(data[i])));
+#endif
             } else {
                 builder->Add(NUdf::TBlockItem(val.Value(data[i])));
             }
@@ -455,7 +467,7 @@ public:
         return result.MakeOptional();
     }
 
-    NUdf::TBlockItem GetNotNull(TYsonReaderDetails& buf) override final {
+    NUdf::TBlockItem GetNotNull(TYsonReaderDetails&) override final {
         YQL_ENSURE(false, "Can't be called");
     }
 private:

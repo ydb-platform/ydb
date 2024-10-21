@@ -2472,6 +2472,7 @@ private:
                     const auto newPair = ProcessedFuseWithOuterMaps.insert(std::make_pair(x.first->UniqueId(), reader->UniqueId())).second;
                     if (newPair && TYtMap::Match(reader)) {
                         const auto outerMap = TYtMap(reader);
+                        auto blockInputSetting = NYql::GetSetting(outerMap.Settings().Ref(), EYtSettingType::BlockInput);
                         if ((outerMap.World().Ref().IsWorld() || outerMap.World().Raw() == op.World().Raw())
                             && outerMap.Input().Size() == 1
                             && outerMap.Output().Size() + item.first.size() <= maxOutTables // fast check for too many operations
@@ -2479,6 +2480,7 @@ private:
                             && NYql::HasSetting(op.Settings().Ref(), EYtSettingType::Flow) == NYql::HasSetting(outerMap.Settings().Ref(), EYtSettingType::Flow)
                             && !NYql::HasSetting(op.Settings().Ref(), EYtSettingType::JobCount)
                             && !NYql::HasSetting(outerMap.Settings().Ref(), EYtSettingType::JobCount)
+                            && (!blockInputSetting || blockInputSetting->ChildrenSize() < 2)
                             && !HasYtRowNumber(outerMap.Mapper().Body().Ref())
                             && IsYieldTransparent(outerMap.Mapper().Ptr(), *State_->Types)
                             && (!op.Maybe<TYtMapReduce>() || AllOf(outerMap.Output(), [](const auto& out) { return !TYtTableBaseInfo::GetRowSpec(out)->IsSorted(); }))) {

@@ -2163,5 +2163,22 @@ bool HasYtRowNumber(const TExprNode& node) {
     return hasRowNumber;
 }
 
+bool IsYtTableSuitableForArrowInput(NNodes::TExprBase tableNode, std::function<void(const TString&)> unsupportedHandler) {
+    auto meta = TYtTableBaseInfo::GetMeta(tableNode);
+    if (meta->InferredScheme) {
+        unsupportedHandler("can't use arrow input on tables with inferred schema");
+        return false;
+    }
+    if (auto table = tableNode.Maybe<TYtTable>(); table && NYql::HasAnySetting(table.Cast().Settings().Ref(), EYtSettingType::UserColumns | EYtSettingType::UserSchema)) {
+        unsupportedHandler("can't use arrow input on tables with overridden schema/columns");
+        return false;
+    }
+    if (meta->Attrs.contains(SCHEMA_MODE_ATTR_NAME) && meta->Attrs[SCHEMA_MODE_ATTR_NAME] == "weak") {
+        unsupportedHandler("can't use arrow input on tables with weak schema");
+        return false;
+    }
+
+    return true;
+}
 
 } // NYql

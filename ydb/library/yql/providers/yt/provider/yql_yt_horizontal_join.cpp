@@ -58,6 +58,10 @@ bool THorizontalJoinBase::IsGoodForHorizontalJoin(TYtMap map) const {
         return false;
     }
 
+    if (auto blockInputSetting = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::BlockInput); blockInputSetting && blockInputSetting->ChildrenSize() == 2) {
+        return false;
+    }
+
     if (!IsYieldTransparent(map.Mapper().Ptr(), *State_->Types)) {
         return false;
     }

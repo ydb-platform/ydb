@@ -292,11 +292,11 @@ namespace {
         };
     }
 
-    TAlterColumnTableSettings ParseAlterColumnTableSettings(TKiAlterTable alter) {
-        return TAlterColumnTableSettings{
-            .Table = TString(alter.Table())
-        };
-    }
+    // TAlterColumnTableSettings ParseAlterColumnTableSettings(TKiAlterTable alter) {
+    //     return TAlterColumnTableSettings{
+    //         .Table = TString(alter.Table())
+    //     };
+    // }
 
     TSequenceSettings ParseSequenceSettings(const TCoNameValueTupleList& sequenceSettings) {
         TSequenceSettings result;
@@ -1978,6 +1978,7 @@ public:
             NThreading::TFuture<IKikimrGateway::TGenericResult> future;
             bool isTableStore = (table.Metadata->TableType == ETableType::TableStore);
             bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
+            Cerr << "isColumn: " << isColumn << Endl;
 
             if (isTableStore) {
                 if (!isColumn) {
@@ -1987,12 +1988,14 @@ public:
                 }
                 future = Gateway->AlterTableStore(cluster, ParseAlterTableStoreSettings(maybeAlter.Cast()));
             } else if (isColumn) {
-                future = Gateway->AlterColumnTable(cluster, ParseAlterColumnTableSettings(maybeAlter.Cast()));
+                // future = Gateway->AlterColumnTable(cluster, ParseAlterColumnTableSettings(maybeAlter.Cast()));
+                future = Gateway->AlterColumnTable(cluster, std::move(alterTableRequest), alterTableFlags, std::move(indexBuildSettings));
             } else {
                 TMaybe<TString> requestType;
                 if (!SessionCtx->Query().DocumentApiRestricted) {
                     requestType = NKikimr::NDocApi::RequestType;
                 }
+                Cerr << "Gateway->AlterTable\n";
                 future = Gateway->AlterTable(cluster, std::move(alterTableRequest), requestType, alterTableFlags, std::move(indexBuildSettings));
             }
 

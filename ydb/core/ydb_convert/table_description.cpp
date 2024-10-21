@@ -763,6 +763,107 @@ bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out,
     return true;
 }
 
+bool FillColumnDescription(NKikimrSchemeOp::TAlterColumnTable& out, const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in,
+    Ydb::StatusIds::StatusCode& status, TString& error) {
+    auto* schema = out.MutableAlterSchema();
+
+    for (const auto& column : in) {
+        if (column.type().has_pg_type()) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = "Unsupported column type for column: " + column.name();
+            return false;
+        }
+
+        auto* columnDesc = schema->AddAddColumns();
+        columnDesc->SetName(column.name());
+
+        NScheme::TTypeInfo typeInfo;
+        TString typeMod;
+        if (!ExtractColumnTypeInfo(typeInfo, typeMod, column.type(), status, error)) {
+            return false;
+        }
+        columnDesc->SetType(NScheme::TypeName(typeInfo, typeMod));
+        columnDesc->SetNotNull(column.not_null());
+
+        if (NScheme::NTypeIds::IsParametrizedType(typeInfo.GetTypeId())) {
+            NScheme::ProtoFromTypeInfo(typeInfo, typeMod, *columnDesc->MutableTypeInfo());
+        }
+    }
+
+    return true;
+}
+
+bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme, Ydb::StatusIds::StatusCode& status, TString& error) {
+    const auto ops = GetAlterOperationKinds(req);
+    if (ops.empty()) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "Empty alter";
+        return false;
+    }
+
+    if (ops.size() > 1) {
+        status = Ydb::StatusIds::UNSUPPORTED;
+        error = "Mixed alter is unsupported";
+        return false;
+    }
+
+    const auto OpType = *ops.begin();
+
+    std::pair<TString, TString> pathPair;
+    try {
+        pathPair = SplitPathIntoWorkingDirAndName(path);
+    } catch (const std::exception&) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        return false;
+    }
+
+    const auto& workingDir = pathPair.first;
+    const auto& name = pathPair.second;
+    modifyScheme->SetWorkingDir(workingDir);
+
+    if (OpType == EAlterOperationKind::Common) {
+        auto alterColumnTable = modifyScheme->MutableAlterColumnTable();
+        alterColumnTable->SetName(name);
+        auto alterSchema = alterColumnTable->MutableAlterSchema();
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
+
+        for (const auto& drop : req->drop_columns()) {
+            alterSchema->AddDropColumns()->SetName(drop);
+        }
+
+        if (!FillColumnDescription(*alterColumnTable, req->add_columns(), status, error)) {
+            return false;
+        }
+
+        for (const auto& alter : req->alter_columns()) {
+            auto alterColumn = alterSchema->AddAlterColumns();
+            alterColumn->SetName(alter.Getname());
+        }
+
+        if (req->has_set_ttl_settings()) {
+            if (!FillTtlSettings(*alterColumnTable->MutableAlterTtlSettings()->MutableEnabled(), req->Getset_ttl_settings(), status, error)) {
+                return false;
+            }
+        } else if (req->has_drop_ttl_settings()) {
+            alterColumnTable->MutableAlterTtlSettings()->MutableDisabled();
+        }
+
+        if (req->has_set_tiering()) {
+            alterColumnTable->MutableAlterTtlSettings()->SetUseTiering(req->set_tiering());
+        } else if (req->has_drop_tiering()) {
+            alterColumnTable->MutableAlterTtlSettings()->SetUseTiering("");
+        }
+    }
+
+    return true;
+}
+
+bool BuildAlterColumnTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    const TPathId& resolvedPathId, Ydb::StatusIds::StatusCode& code, TString& error) {
+    return BuildAlterColumnTableModifyScheme(req->path(), req, modifyScheme, resolvedPathId, code, error);
+}
+
 template <typename TYdbProto>
 void FillTableBoundaryImpl(TYdbProto& out,
         const NKikimrSchemeOp::TTableDescription& in, const NKikimrMiniKQL::TType& splitKeyType) {

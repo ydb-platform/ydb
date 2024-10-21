@@ -414,7 +414,7 @@ private:
     }
 
     void HandleReply(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
-        Handle(ev->Get()->Record.GetRef());
+        Handle(ev->Get()->Record);
     }
 
     void HandleReply(TEvViewer::TEvViewerResponse::TPtr& ev) {

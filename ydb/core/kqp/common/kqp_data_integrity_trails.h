@@ -15,7 +15,7 @@ inline bool ShouldBeLogged(NKikimrKqp::EQueryAction action, NKikimrKqp::EQueryTy
         case NKikimrKqp::QUERY_TYPE_AST_SCAN:
             return false;
         default:
-            break;    
+            break;
     }
 
     switch (action) {
@@ -35,7 +35,7 @@ inline void LogIntegrityTrails(const NKqp::TEvKqp::TEvQueryRequest::TPtr& reques
     if (!ShouldBeLogged(request->Get()->GetAction(), request->Get()->GetType())) {
         return;
     }
-    
+
     auto log = [](const auto& request) {
         TStringStream ss;
         LogKeyValue("Component", "SessionActor", ss);
@@ -61,7 +61,7 @@ inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction 
     }
 
     auto log = [](const auto& traceId, const auto& response) {
-        auto& record = response->Record.GetRef();
+        auto& record = response->Record;
 
         TStringStream ss;
         LogKeyValue("Component", "SessionActor", ss);

@@ -1315,7 +1315,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 case NKqp::TEvKqp::TEvQueryResponse::EventType: {
                     auto* msg = ev->Get<NKqp::TEvKqp::TEvQueryResponse>();
                     Cerr << "... observed query result" << Endl;
-                    observedStatus = msg->Record.GetRef().GetYdbStatus();
+                    observedStatus = msg->Record.GetYdbStatus();
                     break;
                 }
                 default: {

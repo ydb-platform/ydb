@@ -154,7 +154,7 @@ ALTER TOPIC `my_topic` SET (
 );
 ```
 
-The following command pauses the topic [autopartitioning](../../../../concepts/topic.md#group-id):
+The following command pauses the topic [autopartitioning](../../../../concepts/topic#autopartitioning):
 
 ```yql
 ALTER TOPIC `my_topic` SET (
@@ -162,7 +162,7 @@ ALTER TOPIC `my_topic` SET (
 );
 ```
 
-The following command unpauses the topic [autopartitioning](../../../../concepts/topic#consumer):
+The following command unpauses the topic [autopartitioning](../../../../concepts/topic#autopartitioning):
 
 ```yql
 ALTER TOPIC `my_topic` SET (

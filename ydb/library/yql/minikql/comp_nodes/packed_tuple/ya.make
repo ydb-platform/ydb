@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     tuple.cpp
+    accumulator.cpp
 )
 
 PEERDIR(

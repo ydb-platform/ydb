@@ -1,18 +1,14 @@
 #pragma once
 
 #include <util/generic/string.h>
+#include <util/system/yassert.h>
 
 #include <optional>
 
 namespace NKikimr {
 
-class TConclusionStatusImplBase {
-protected:
-    void AbortOnValidationProblem(const TString& errorMessage, const TString& processInfo) const;
-};
-
 template <class TStatus, TStatus StatusOk, TStatus DefaultError>
-class TConclusionStatusImpl : TConclusionStatusImplBase {
+class TConclusionStatusImpl {
 private:
     std::optional<TString> ErrorMessage;
     TStatus Status = StatusOk;
@@ -37,8 +33,10 @@ private:
 
 public:
     void Validate(const TString& processInfo = Default<TString>()) const {
-        if (Y_UNLIKELY(!Ok())) {
-            AbortOnValidationProblem(GetErrorMessage(), processInfo);
+        if (processInfo) {
+            Y_ABORT_UNLESS(Ok(), "error=%s, processInfo=%s", GetErrorMessage(), processInfo);
+        } else {
+            Y_ABORT_UNLESS(Ok(), "error=%s", GetErrorMessage());
         }
     }
 

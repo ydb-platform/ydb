@@ -1,11 +1,9 @@
 LIBRARY()
 
-SRCS(
-    status.cpp
-)
+SRCS()
 
 PEERDIR(
-    ydb/library/actors/core
+    util
 )
 
 END()

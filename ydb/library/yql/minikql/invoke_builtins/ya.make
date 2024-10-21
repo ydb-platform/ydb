@@ -3,9 +3,7 @@ LIBRARY()
 SRCS(
 )
 
-PEERDIR(
-    ydb/library/conclusion
-)
+PEERDIR()
 
 YQL_LAST_ABI_VERSION()
 

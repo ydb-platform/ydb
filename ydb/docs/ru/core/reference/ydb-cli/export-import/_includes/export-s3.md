@@ -6,6 +6,16 @@
 {{ ydb-cli }} [connection options] export s3 [options]
 ```
 
+{% note warning %}
+
+Выгрузка доступна только для объектов следующих типов:
+
+- [директория](../../../../concepts/datamodel/dir.md);
+- [строковая таблица](../../../../concepts/datamodel/table.md#row-oriented-tables);
+- [вторичный индекс](../../../../concepts/secondary_indexes.md).
+
+{% endnote %}
+
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
 ## Параметры командной строки {#pars}
@@ -24,12 +34,6 @@
 - `destination`, `dst`, или `d` —  путь (префикс ключа) в S3 для размещения выгружаемых объектов
 
 `--exclude STRING`: Шаблон ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) для исключения путей из выгрузки. Данный параметр может быть указан несколько раз, для разных шаблонов.
-
-Обратите внимание, что на данный момент выгрузка доступна только для объектов следующих типов:
-
-- [директория](../../../../concepts/datamodel/dir.md)
-- [строковая таблица](../../../../concepts/datamodel/table.md#row-oriented-tables)
-- [вторичный индекс](../../../../concepts/secondary_indexes.md)
 
 ### Дополнительные параметры {#aux}
 

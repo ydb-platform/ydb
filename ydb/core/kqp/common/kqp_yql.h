@@ -48,6 +48,7 @@ constexpr TStringBuf KqpTableSinkName = "KqpTableSinkName";
 
 static constexpr std::string_view TKqpStreamLookupStrategyName = "LookupRows"sv;
 static constexpr std::string_view TKqpStreamLookupJoinStrategyName = "LookupJoinRows"sv;
+static constexpr std::string_view TKqpStreamLookupSemiJoinStrategyName = "LookupSemiJoinRows"sv;
 
 struct TKqpReadTableSettings {
     static constexpr TStringBuf SkipNullKeysSettingName = "SkipNullKeys";

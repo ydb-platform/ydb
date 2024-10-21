@@ -1516,6 +1516,7 @@ private:
     bool AllowMultipleRealmsOccupation = true;
     bool StorageConfigObtained = false;
     bool Loaded = false;
+    std::shared_ptr<TControlWrapper> EnableSelfHealWithDegraded;
 
     std::set<std::tuple<TGroupId, TNodeId>> GroupToNode;
 

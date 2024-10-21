@@ -1481,7 +1481,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         TGuard<TMutex> guard(StateMutex);
         const ui64 totalSize = Format.DiskSize;
         const ui64 availableSize = (ui64)Format.ChunkSize * Keeper.GetFreeChunkCount();
-        
+
         if (*Mon.PDiskBriefState != TPDiskMon::TPDisk::Error) {
             *Mon.FreeSpaceBytes = availableSize;
             *Mon.UsedSpaceBytes = totalSize - availableSize;
@@ -1491,7 +1491,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
             *Mon.UsedSpaceBytes = 32_KB;
             *Mon.TotalSpaceBytes = 32_KB;
         }
-        
+
         NKikimrWhiteboard::TPDiskStateInfo& pdiskState = reportResult->PDiskState->Record;
         pdiskState.SetPDiskId(PDiskId);
         pdiskState.SetPath(Cfg->GetDevicePath());
@@ -1503,6 +1503,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pdiskState.SetSystemSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerSystemLog) + Keeper.GetOwnerHardLimit(OwnerSystemReserve)));
         pdiskState.SetLogUsedSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerCommonStaticLog) - Keeper.GetOwnerFree(OwnerCommonStaticLog)));
         pdiskState.SetLogTotalSize(Format.ChunkSize * Keeper.GetOwnerHardLimit(OwnerCommonStaticLog));
+        pdiskState.SetNumActiveSlots(TotalOwners);
         if (ExpectedSlotCount) {
             pdiskState.SetExpectedSlotCount(ExpectedSlotCount);
         }

@@ -1,4 +1,4 @@
-import "ydb/core/formats/arrow/protos/ssa.proto";
+import "ydb/library/formats/arrow/protos/ssa.proto";
 
 package NKikimrTxColumnShard;
 

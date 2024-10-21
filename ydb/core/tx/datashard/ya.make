@@ -244,7 +244,6 @@ PEERDIR(
     ydb/core/formats
     ydb/core/io_formats/ydb_dump
     ydb/core/kqp/runtime
-    ydb/core/persqueue/partition_key_range
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/tablet

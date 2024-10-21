@@ -35,6 +35,7 @@
 #include <ydb/core/protos/filestore_config.pb.h>
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/core/protos/yql_translation_settings.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
@@ -320,14 +321,18 @@ private:
     ui64 CPU = 0;
 };
 
-struct TAggregatedStats {
+struct TTableAggregatedStats {
     TPartitionStats Aggregated;
     THashMap<TShardIdx, TPartitionStats> PartitionStats;
-    THashMap<TPathId, TPartitionStats> TableStats;
     size_t PartitionStatsUpdated = 0;
 
     void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats);
-    void UpdateTableStats(const TPathId& pathId, const TPartitionStats& newStats);
+};
+
+struct TAggregatedStats : public TTableAggregatedStats {
+    THashMap<TPathId, TTableAggregatedStats> TableStats;
+
+    void UpdateTableStats(TShardIdx datashardIdx, const TPathId& pathId, const TPartitionStats& newStats);
 };
 
 struct TSubDomainInfo;
@@ -3276,6 +3281,7 @@ struct TViewInfo : TSimpleRefCount<TViewInfo> {
 
     ui64 AlterVersion = 0;
     TString QueryText;
+    NYql::NProto::TTranslationSettings CapturedContext;
 };
 
 struct TResourcePoolInfo : TSimpleRefCount<TResourcePoolInfo> {

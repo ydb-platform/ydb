@@ -213,6 +213,13 @@ public:
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(ssId));
 
+        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
+            if (!context.SS->EnableExternalDataSourcesOnServerless) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "External data sources are disabled for serverless domains. Please contact your system administrator to enable it");
+                return result;
+            }
+        }
+
         const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
         RETURN_RESULT_UNLESS(NExternalDataSource::IsParentPathValid(
             result, parentPath, Transaction, /* isCreate */ false));

@@ -106,6 +106,8 @@ public:
     struct TCreateArgs {
         const NActors::TActorId& ExecuterId;
         const ui64 TxId;
+        const TMaybe<ui64> LockTxId;
+        const ui32 LockNodeId;
         NYql::NDqProto::TDqTask* Task;
         TIntrusivePtr<NRm::TTxState> TxInfo;
         const NYql::NDq::TComputeRuntimeSettings& RuntimeSettings;

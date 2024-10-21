@@ -374,9 +374,12 @@ def to_arrow_batches(buffer: IOBase) -> StreamContext:
     return StreamContext(buffer, reader)
 
 
-def arrow_buffer(table) -> Tuple[Sequence[str], bytes]:
+def arrow_buffer(table, compression: Optional[str] = None) -> Tuple[Sequence[str], bytes]:
     pyarrow = check_arrow()
+    options = None
+    if compression in ('zstd', 'lz4'):
+        options = pyarrow.ipc.IpcWriteOptions(compression=pyarrow.Codec(compression=compression))
     sink = pyarrow.BufferOutputStream()
-    with pyarrow.RecordBatchFileWriter(sink, table.schema) as writer:
+    with pyarrow.RecordBatchFileWriter(sink, table.schema, options=options) as writer:
         writer.write(table)
     return table.schema.names, sink.getvalue()

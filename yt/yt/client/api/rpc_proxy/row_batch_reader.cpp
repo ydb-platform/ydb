@@ -139,8 +139,7 @@ TFuture<TSharedRange<TUnversionedRow>> TRowBatchReader::GetRows()
 }
 
 void TRowBatchReader::ApplyStatistics(const NProto::TRowsetStatistics& /*statistics*/)
-{
-}
+{ }
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -129,6 +129,9 @@ public:
                 columns = ctx.NewList(pos, std::move(cols));
             }
 
+            auto row = Build<TCoArgument>(ctx, read->Pos())
+                .Name("row")
+                .Done();
             auto emptyPredicate = Build<TCoLambda>(ctx, read->Pos())
                 .Args({row})
                 .Body<TCoBool>()

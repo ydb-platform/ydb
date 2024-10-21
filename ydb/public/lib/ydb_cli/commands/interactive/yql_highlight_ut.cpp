@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         Check(highlight, "!", "u");
         Check(highlight, "й", "u");
         Check(highlight, "编", "u");
-        Check(highlight, "🥲", "u");
+        Check(highlight, "\xF0\x9F\x98\x8A", "u");
         Check(highlight, "!select", "uuvvvvv");
         Check(highlight, "!sselect", "uukkkkkk");
     }
@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         Check(highlight, "`/cluster/database`", "qqqqqqqqqqqqqqqqqqq");
         Check(highlight, "`test`select", "qqqqqqkkkkkk");
         Check(highlight, "`/cluster", "uuuuuuuuu");
-        Check(highlight, "`🥲`", "qqq");
+        Check(highlight, "`\xF0\x9F\x98\x8A`", "qqq");
     }
 
     Y_UNIT_TEST(String) {
@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         Check(highlight, "\"\\\"\"", "ssss");
         Check(highlight, "\"select\"select", "sssssssssvvvvv");
         Check(highlight, "\"select\"group", "sssssssskkkkk");
-        Check(highlight, "SELECT \\\"😁\\\" FROM test", "kkkkkk uuuuu uuuu uuuu");
+        Check(highlight, "SELECT \\\"\xF0\x9F\x98\x8A\\\" FROM test", "kkkkkk uuuuu uuuu uuuu");
     }
 
     Y_UNIT_TEST(Number) {
@@ -180,10 +180,10 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         Check(highlight, "☺", "u");
         Check(highlight, "\"☺\"", "sss");
         Check(highlight, "`☺`", "qqq");
-        Check(highlight, "SELECT \"😁\" FROM test", "kkkkkk sss kkkk vvvv");
+        Check(highlight, "SELECT \"\xF0\x9F\x98\x8A\" FROM test", "kkkkkk sss kkkk vvvv");
         Check(highlight, "SELECT \"编码\" FROM test", "kkkkkk ssss kkkk vvvv");
         Check(highlight, "SELECT \"ай\" FROM test", "kkkkkk ssss kkkk vvvv");
-        Check(highlight, "🤗🤗🤗🤗🤗🤗 select", "uuuuuu kkkkkk");
+        Check(highlight, "\xF0\x9F\x98\x8A\xF0\x9F\x98\x8A\xF0\x9F\x98\x8A\xF0\x9F\x98\x8A\xF0\x9F\x98\x8A\xF0\x9F\x98\x8A select", "uuuuuu kkkkkk");
     }
 
     Y_UNIT_TEST(Typing) {

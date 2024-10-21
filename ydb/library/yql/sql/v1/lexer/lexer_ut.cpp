@@ -64,9 +64,9 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
             "SELECT FROM test",
             "SELECT * FROM",
             "   SELECT * FROM ",
-            "SELECT \"😊\" FROM ydb",
+            "SELECT \"\xF0\x9F\x98\x8A\" FROM ydb",
             (
-                "SELECT \"😊 Hello, друзья\", count, name\n"
+                "SELECT \"\xF0\x9F\x98\x8A Hello, друзья\", count, name\n"
                 "FROM ydb -- главная таблица 数据库 \n"
                 "WHERE count < 6\n"
                 "  AND name = \"可靠性\"\n"
@@ -101,15 +101,15 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
 
     TVector<TString> InvalidQueries() {
         return {
-            /* 0: */ "😊",
+            /* 0: */ "\xF0\x9F\x98\x8A",
             /* 1: */ "select \"aaaa",
             /* 2: */ "\"\\\"",
-            /* 3: */ "😊 SELECT * FR",
+            /* 3: */ "\xF0\x9F\x98\x8A SELECT * FR",
             /* 4: */ "! SELECT *  from",
-            /* 5: */ "😊select ! from",
+            /* 5: */ "\xF0\x9F\x98\x8Aselect ! from",
             /* 6: */ "\"",
             /* 7: */ "!select",
-            /* 8: */ "SELECT \\\"😁\\\" FROM test",
+            /* 8: */ "SELECT \\\"\xF0\x9F\x98\x8A\\\" FROM test",
         };
     }
 
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
     Y_UNIT_TEST(IssueMessagesAntlr3) {
         auto lexer3 = MakeLexer(/* ansi = */ false, /* antlr4 = */ false);
 
-        auto actual = GetIssueMessages(lexer3, "😊 SELECT * FR");
+        auto actual = GetIssueMessages(lexer3, "\xF0\x9F\x98\x8A SELECT * FR");
 
         TVector<TString> expected = {
             "<main>:1:0: Error: Unexpected character '\xF0\x9F\x98\x8A' (Unicode character <128522>) : cannot match to any predicted input...",
@@ -174,7 +174,7 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
     Y_UNIT_TEST(IssueMessagesAntlr4) {
         auto lexer4 = MakeLexer(/* ansi = */ false, /* antlr4 = */ true);
 
-        auto actual = GetIssueMessages(lexer4, "😊 SELECT * FR");
+        auto actual = GetIssueMessages(lexer4, "\xF0\x9F\x98\x8A SELECT * FR");
 
         TVector<TString> expected = {
             "<main>:1:0: Error: token recognition error at: '\xF0\x9F\x98\x8A'",

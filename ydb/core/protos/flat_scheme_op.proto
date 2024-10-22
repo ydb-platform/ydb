@@ -126,6 +126,7 @@ message TFamilyDescription {
     optional EColumnCache ColumnCache = 7;
     optional EColumnStorage Storage = 8; // DEPRECATED: use StorageConfig
     optional TStorageConfig StorageConfig = 9;
+    optional int32 ColumnCodecLevel = 10;
 }
 
 enum ECompactionStrategy {

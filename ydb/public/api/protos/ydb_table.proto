@@ -487,6 +487,10 @@ message ColumnFamily {
     // When enabled table data will be kept in memory
     // WARNING: DO NOT USE
     Ydb.FeatureFlag.Status keep_in_memory = 4;
+
+    // Not all compression algorithms support
+    // Set if want to change default value
+    optional int32 compression_level = 5;
 }
 
 message PartitioningSettings {

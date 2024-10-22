@@ -170,6 +170,7 @@ struct TColumnFamily {
     TString Name;
     TMaybe<TString> Data;
     TMaybe<TString> Compression;
+    TMaybe<i32> CompressionLevel;
 };
 
 struct TTtlSettings {

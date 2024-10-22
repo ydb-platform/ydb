@@ -201,10 +201,6 @@ public:
         VersionedIndex.RemoveVersion(version);
     }
 
-    bool HasUnusedSchemaVersions() const override {
-        return VersionCounters->HasUnusedSchemaVersions();
-    }
-
 private:
     TVersionedIndex VersionedIndex;
     ui64 TabletId;

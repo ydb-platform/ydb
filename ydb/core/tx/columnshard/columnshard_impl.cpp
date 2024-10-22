@@ -896,7 +896,7 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCompaction::TPtr& ev, const TActor
 }
 
 void TColumnShard::SetupCleanupUnusedSchemaVersions() {
-    if (!TablesManager.GetPrimaryIndexSafe().HasUnusedSchemaVersions()) {
+    if (!VersionCounters->HasUnusedSchemaVersions()) {
         return;
     }
     if (BackgroundController.IsActiveCleanupUnusedSchemaVersions()) {

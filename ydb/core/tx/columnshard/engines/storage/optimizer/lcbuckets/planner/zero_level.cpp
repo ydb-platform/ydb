@@ -9,7 +9,7 @@ TCompactionTaskData TZeroLevelPortions::DoGetOptimizationTask() const {
         result.AddCurrentLevelPortion(
             i.GetPortion(), NextLevel->GetAffectedPortions(i.GetPortion()->IndexKeyStart(), i.GetPortion()->IndexKeyEnd()), true);
         if (!result.CanTakeMore()) {
-            result.SetStopSeparation(i.GetPortion()->IndexKeyStart());
+//            result.SetStopSeparation(i.GetPortion()->IndexKeyStart());
             break;
         }
     }

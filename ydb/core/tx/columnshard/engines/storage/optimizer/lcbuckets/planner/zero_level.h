@@ -64,7 +64,7 @@ private:
             }
             PortionsInfo.AddPortion(i);
             LevelCounters.Portions->AddPortion(i);
-            i->RemoveRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized);
+            i->InitRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized, !NextLevel);
         }
         for (auto&& i : remove) {
             AFL_VERIFY(Portions.erase(i));

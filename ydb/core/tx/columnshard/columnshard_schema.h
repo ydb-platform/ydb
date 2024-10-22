@@ -882,9 +882,8 @@ struct Schema : NIceDb::Schema {
 
     static bool IndexCounters_Load(NIceDb::TNiceDb& db, const std::function<void(ui32 id, ui64 value)>& callback) {
         auto rowset = db.Table<IndexCounters>().Prefix(0).Select();
-        if (!rowset.IsReady()) {
+        if (!rowset.IsReady())
             return false;
-        }
 
         while (!rowset.EndOfSet()) {
             ui32 id = rowset.GetValue<IndexCounters::Counter>();
@@ -892,9 +891,8 @@ struct Schema : NIceDb::Schema {
 
             callback(id, value);
 
-            if (!rowset.Next()) {
+            if (!rowset.Next())
                 return false;
-            }
         }
         return true;
     }

@@ -5,7 +5,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
-namespace NKikimr::NSchemeShard::NCdc {
+namespace NKikimr::NSchemeShard::NCdcStreamAtTable {
 
 void FillNotice(const TPathId& pathId, TOperationContext& context, NKikimrTxDataShard::TCreateCdcStreamNotice& notice) {
     Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
@@ -43,6 +43,48 @@ void FillNotice(const TPathId& pathId, TOperationContext& context, NKikimrTxData
 
         if (stream->AlterData->State == TCdcStreamInfo::EState::ECdcStreamStateScan) {
             notice.SetSnapshotName("ChangefeedInitialScan");
+        }
+    }
+}
+
+void CheckWorkingDirOnPropose(const TPath::TChecker& checks, bool isTableIndex) {
+    checks
+        .NotUnderDomainUpgrade()
+        .IsAtLocalSchemeShard()
+        .IsResolved()
+        .NotDeleted()
+        .IsLikeDirectory()
+        .NotUnderDeleting();
+
+    if (checks && !isTableIndex) {
+        checks.IsCommonSensePath();
+    }
+}
+
+void CheckSrcDirOnPropose(
+    const TPath::TChecker& checks,
+    bool isInsideTableIndexPath,
+    TTxId op)
+{
+    checks
+        .NotEmpty()
+        .NotUnderDomainUpgrade()
+        .IsAtLocalSchemeShard()
+        .IsResolved()
+        .NotDeleted()
+        .IsTable()
+        .NotAsyncReplicaTable()
+        .NotUnderDeleting();
+
+    if (checks) {
+        if (!isInsideTableIndexPath) {
+            checks.IsCommonSensePath();
+        }
+
+        if (op != InvalidTxId) {
+            checks.IsUnderTheSameOperation(op); // lock op
+        } else {
+            checks.NotUnderOperation();
         }
     }
 }

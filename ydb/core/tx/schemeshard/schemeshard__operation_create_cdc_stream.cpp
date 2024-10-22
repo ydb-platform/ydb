@@ -348,7 +348,7 @@ class TConfigurePartsAtTable: public NCdcStreamState::TConfigurePartsAtTable {
 protected:
     void FillNotice(const TPathId& pathId, NKikimrTxDataShard::TFlatSchemeTransaction& tx, TOperationContext& context) const override {
         auto& notice = *tx.MutableCreateCdcStreamNotice();
-        NCdc::FillNotice(pathId, context, notice);
+        NCdcStreamAtTable::FillNotice(pathId, context, notice);
     }
 
 public:
@@ -496,47 +496,18 @@ public:
         const auto workingDirPath = TPath::Resolve(workingDir, context.SS);
         {
             const auto checks = workingDirPath.Check();
-            checks
-                .NotUnderDomainUpgrade()
-                .IsAtLocalSchemeShard()
-                .IsResolved()
-                .NotDeleted()
-                .IsLikeDirectory()
-                .NotUnderDeleting();
-
-            if (checks && !workingDirPath.IsTableIndex()) {
-                checks.IsCommonSensePath();
-            }
-
-            if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
-                return result;
-            }
+            NCdcStreamAtTable::CheckWorkingDirOnPropose(
+                checks,
+                workingDirPath.IsTableIndex(Nothing(), false));
         }
 
         const auto tablePath = workingDirPath.Child(tableName);
         {
             const auto checks = tablePath.Check();
-            checks
-                .NotEmpty()
-                .NotUnderDomainUpgrade()
-                .IsAtLocalSchemeShard()
-                .IsResolved()
-                .NotDeleted()
-                .IsTable()
-                .NotAsyncReplicaTable()
-                .NotUnderDeleting();
-
-            if (checks) {
-                if (!tablePath.IsInsideTableIndexPath()) {
-                    checks.IsCommonSensePath();
-                }
-                if (InitialScan) {
-                    checks.IsUnderTheSameOperation(OperationId.GetTxId()); // lock op
-                } else {
-                    checks.NotUnderOperation();
-                }
-            }
+            NCdcStreamAtTable::CheckSrcDirOnPropose(
+                checks,
+                tablePath.IsInsideTableIndexPath(false),
+                InitialScan ? OperationId.GetTxId() : InvalidTxId);
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());

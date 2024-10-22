@@ -119,7 +119,7 @@ public:
             if (txState->CdcPathId != InvalidPathId) {
                 auto& combined = *oldShardTx.MutableCreateIncrementalBackupSrc();
                 FillSrcSnapshot(txState, ui64(dstDatashardId), *combined.MutableSendSnapshot());
-                NCdc::FillNotice(txState->CdcPathId, context, *combined.MutableCreateCdcStreamNotice());
+                NCdcStreamAtTable::FillNotice(txState->CdcPathId, context, *combined.MutableCreateCdcStreamNotice());
             } else {
                 FillSrcSnapshot(txState, ui64(dstDatashardId), *oldShardTx.MutableSendSnapshot());
                 oldShardTx.SetReadOnly(true);
@@ -222,7 +222,7 @@ public:
 
             context.SS->PersistTableAlterVersion(db, srcPathId, table);
 
-            context.SS->ClearDescribePathCaches(path);
+            context.SS->ClearDescribePathCaches(srcPath);
             context.OnComplete.PublishToSchemeBoard(OperationId, srcPathId);
         }
 
@@ -407,6 +407,12 @@ public:
                 }
             }
 
+            if (checks && Transaction.HasCreateCdcStream()) {
+                NCdcStreamAtTable::CheckWorkingDirOnPropose(
+                    checks,
+                    parent.IsTableIndex(Nothing(), false));
+            }
+
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
@@ -433,6 +439,12 @@ public:
                 } else {
                     checks.IsCommonSensePath();
                 }
+            }
+
+            if (checks && Transaction.HasCreateCdcStream()) {
+                NCdcStreamAtTable::CheckSrcDirOnPropose(
+                    checks,
+                    srcPath.IsInsideTableIndexPath(false));
             }
 
             if (!checks) {
@@ -485,6 +497,8 @@ public:
                 return result;
             }
         }
+
+        // TODO: cdc checks
 
         auto domainInfo = parent.DomainInfo();
         bool transactionSupport = domainInfo->IsSupportTransactions();

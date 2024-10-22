@@ -370,8 +370,8 @@ class TestAlloc(TestYdsBase):
                 assert issues[0].message.startswith(
                     "Mkql memory limit exceeded, limit: 1048576"
                 ), "Incorrect message text"
-                assert issues[0].message.endswith("canAllocateExtraMemory: 1"), "Incorrect settings"
-                assert issues[0].issue_code == 2029, "Incorrect issue code" + issues[0].message
+                assert "canAllocateExtraMemory: 1" in issues[0].message, "Incorrect settings"
+                assert issues[0].issue_code == 0, "Incorrect issue code" + issues[0].message
                 break
         else:
             assert False, "Memory limit was not reached"

@@ -180,8 +180,10 @@ void TCommandRestore::Config(TConfig& config) {
         .StoreTrue(&UseBulkUpsert)
         .Hidden(); // Deprecated. Using ImportData should be more effective.
 
-    config.Opts->AddLongOption("import-data", "Use ImportData - a more efficient way to upload data with lower consistency level."
-        " Global secondary indexes are not supported in this mode.")
+    config.Opts->AddLongOption("import-data", "Use ImportData - a more efficient way to upload data."
+        " ImportData will throw an error if you try to upload data into an existing table that has"
+        " secondary indexes or is in the process of building them. If you need to restore a table"
+        " with secondary indexes, make sure it's not already present in the scheme.")
         .StoreTrue(&UseImportData);
 
     config.Opts->MutuallyExclusive("bandwidth", "rps");

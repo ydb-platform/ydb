@@ -50,6 +50,16 @@ SELECT * FROM postgresql_datasource.<table_name>
 1. {% include [!](_includes/datetime_limits.md) %}
 1. {% include [!](_includes/predicate_pushdown.md) %}
 
+    |Тип данных {{ ydb-short-name }}|
+    |----|
+    |`Bool`|
+    |`Int8`|
+    |`Int16`|
+    |`Int32`|
+    |`Int64`|
+    |`Float`|
+    |`Double`|
+
 ## Поддерживаемые типы данных
 
 В базе данных PostgreSQL признак опциональности значений колонки (разрешено или запрещено колонке содержать значения `NULL`) не является частью системы типов данных. Ограничение (constraint) `NOT NULL` для каждой колонки реализуется в виде атрибута `attnotnull` в системном каталоге [pg_attribute](https://www.postgresql.org/docs/current/catalog-pg-attribute.html), то есть на уровне метаданных таблицы. Следовательно, все базовые типы PostgreSQL по умолчанию могут содержать значения `NULL`, и в системе типов {{ ydb-full-name }} они должны отображаться в [опциональные](../../yql/reference/types/optional.md) типы.

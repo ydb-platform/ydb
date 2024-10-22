@@ -7,6 +7,7 @@
 #include <util/generic/vector.h>
 
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/executor_thread.h>
 
 #define AUDIT_LOG_S(sys, expr)                                                                                                  \
     do {                                                                                                                        \

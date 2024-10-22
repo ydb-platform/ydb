@@ -397,28 +397,26 @@ void TPipeline::AddActiveOp(TOperation::TPtr op)
         AddImmediateOp(op);
     } else {
         // Restore possibly missing flags based on current mvcc edges
-        if (Self->IsMvccEnabled()) {
-            TStepOrder stepOrder = op->GetStepOrder();
-            TRowVersion version(stepOrder.Step, stepOrder.TxId);
-            if (version <= Self->SnapshotManager.GetCompleteEdge() ||
-                version < Self->SnapshotManager.GetImmediateWriteEdge() ||
-                version < Self->SnapshotManager.GetUnprotectedReadEdge())
-            {
-                // This transaction would have been marked as logically complete
-                if (!op->HasFlag(TTxFlags::BlockingImmediateOps)) {
-                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                        "Adding BlockingImmediateOps for op " << *op << " at " << Self->TabletID());
-                    op->SetFlag(TTxFlags::BlockingImmediateOps);
-                }
-            } else if (version <= Self->SnapshotManager.GetIncompleteEdge() ||
-                       version <= Self->SnapshotManager.GetUnprotectedReadEdge())
-            {
-                // This transaction would have been marked as logically incomplete
-                if (!op->HasFlag(TTxFlags::BlockingImmediateWrites)) {
-                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                        "Adding BlockingImmediateWrites for op " << *op << " at " << Self->TabletID());
-                    op->SetFlag(TTxFlags::BlockingImmediateWrites);
-                }
+        TStepOrder stepOrder = op->GetStepOrder();
+        TRowVersion version(stepOrder.Step, stepOrder.TxId);
+        if (version <= Self->SnapshotManager.GetCompleteEdge() ||
+            version < Self->SnapshotManager.GetImmediateWriteEdge() ||
+            version < Self->SnapshotManager.GetUnprotectedReadEdge())
+        {
+            // This transaction would have been marked as logically complete
+            if (!op->HasFlag(TTxFlags::BlockingImmediateOps)) {
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                    "Adding BlockingImmediateOps for op " << *op << " at " << Self->TabletID());
+                op->SetFlag(TTxFlags::BlockingImmediateOps);
+            }
+        } else if (version <= Self->SnapshotManager.GetIncompleteEdge() ||
+                    version <= Self->SnapshotManager.GetUnprotectedReadEdge())
+        {
+            // This transaction would have been marked as logically incomplete
+            if (!op->HasFlag(TTxFlags::BlockingImmediateWrites)) {
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                    "Adding BlockingImmediateWrites for op " << *op << " at " << Self->TabletID());
+                op->SetFlag(TTxFlags::BlockingImmediateWrites);
             }
         }
         auto pr = ActivePlannedOps.emplace(op->GetStepOrder(), op);
@@ -1075,10 +1073,8 @@ void TPipeline::CompleteTx(const TOperation::TPtr op, TTransactionContext& txc, 
     if (UtmostCompleteTx < op->GetStepOrder())
         UtmostCompleteTx = op->GetStepOrder();
 
-    if (Self->IsMvccEnabled()) {
-        MarkPlannedLogicallyCompleteUpTo(TRowVersion(op->GetStep(), op->GetTxId()), txc);
-        Self->PromoteCompleteEdge(op.Get(), txc);
-    }
+    MarkPlannedLogicallyCompleteUpTo(TRowVersion(op->GetStep(), op->GetTxId()), txc);
+    Self->PromoteCompleteEdge(op.Get(), txc);
 
     Y_ABORT_UNLESS(ActivePlannedOps);
     if (ActivePlannedOps.begin()->first == op->GetStepOrder()) {
@@ -1095,9 +1091,7 @@ void TPipeline::CompleteTx(const TOperation::TPtr op, TTransactionContext& txc, 
     Self->TransQueue.RemoveTx(db, *op);
     RemoveInReadSets(op, db);
 
-    if (Self->IsMvccEnabled()) {
-        Self->PromoteFollowerReadEdge(txc);
-    }
+    Self->PromoteFollowerReadEdge(txc);
 
     while (!DelayedAcks.empty()
            && DelayedAcks.begin()->first.Step <= OutdatedReadSetStep())
@@ -1645,7 +1639,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
             return tx;
         }
 
-        if (!tx->IsImmediate() || !Self->IsMvccEnabled()) {
+        if (!tx->IsImmediate()) {
             // No op
         } else if (tx->IsKqpScanTransaction() && dataTx->HasKqpSnapshot()) {
             // to be consistent while dependencies calculation
@@ -2033,17 +2027,13 @@ bool TPipeline::AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, co
     if (!CheckInflightLimit())
         return false;
 
-    if (Self->MvccSwitchState == TSwitchState::SWITCHING) {
-        WaitingDataTxOps.emplace(TRowVersion::Min(), IEventHandle::Upcast<TEvDataShard::TEvProposeTransaction>(std::move(ev)));  // postpone tx processing till mvcc state switch is finished
-    } else {
-        Y_DEBUG_ABORT_UNLESS(ev->Get()->Record.HasMvccSnapshot());
-        TRowVersion snapshot(ev->Get()->Record.GetMvccSnapshot().GetStep(), ev->Get()->Record.GetMvccSnapshot().GetTxId());
-        WaitingDataTxOps.emplace(snapshot, IEventHandle::Upcast<TEvDataShard::TEvProposeTransaction>(std::move(ev)));
-        const ui64 waitStep = snapshot.Step;
-        TRowVersion unreadableEdge;
-        if (!Self->WaitPlanStep(waitStep) && snapshot < (unreadableEdge = GetUnreadableEdge())) {
-            ActivateWaitingTxOps(unreadableEdge, ctx);  // Async MediatorTimeCastEntry update, need to reschedule the op
-        }
+    Y_DEBUG_ABORT_UNLESS(ev->Get()->Record.HasMvccSnapshot());
+    TRowVersion snapshot(ev->Get()->Record.GetMvccSnapshot().GetStep(), ev->Get()->Record.GetMvccSnapshot().GetTxId());
+    WaitingDataTxOps.emplace(snapshot, IEventHandle::Upcast<TEvDataShard::TEvProposeTransaction>(std::move(ev)));
+    const ui64 waitStep = snapshot.Step;
+    TRowVersion unreadableEdge;
+    if (!Self->WaitPlanStep(waitStep) && snapshot < (unreadableEdge = GetUnreadableEdge())) {
+        ActivateWaitingTxOps(unreadableEdge, ctx);  // Async MediatorTimeCastEntry update, need to reschedule the op
     }
 
     return true;
@@ -2053,17 +2043,13 @@ bool TPipeline::AddWaitingTxOp(NEvents::TDataEvents::TEvWrite::TPtr& ev, const T
     if (!CheckInflightLimit())
         return false;
 
-    if (Self->MvccSwitchState == TSwitchState::SWITCHING) {
-        WaitingDataTxOps.emplace(TRowVersion::Min(), IEventHandle::Upcast<NEvents::TDataEvents::TEvWrite>(std::move(ev)));  // postpone tx processing till mvcc state switch is finished
-    } else {
-        Y_DEBUG_ABORT_UNLESS(ev->Get()->Record.HasMvccSnapshot());
-        TRowVersion snapshot(ev->Get()->Record.GetMvccSnapshot().GetStep(), ev->Get()->Record.GetMvccSnapshot().GetTxId());
-        WaitingDataTxOps.emplace(snapshot, IEventHandle::Upcast<NEvents::TDataEvents::TEvWrite>(std::move(ev)));
-        const ui64 waitStep = snapshot.Step;
-        TRowVersion unreadableEdge;
-        if (!Self->WaitPlanStep(waitStep) && snapshot < (unreadableEdge = GetUnreadableEdge())) {
-            ActivateWaitingTxOps(unreadableEdge, ctx);  // Async MediatorTimeCastEntry update, need to reschedule the op
-        }
+    Y_DEBUG_ABORT_UNLESS(ev->Get()->Record.HasMvccSnapshot());
+    TRowVersion snapshot(ev->Get()->Record.GetMvccSnapshot().GetStep(), ev->Get()->Record.GetMvccSnapshot().GetTxId());
+    WaitingDataTxOps.emplace(snapshot, IEventHandle::Upcast<NEvents::TDataEvents::TEvWrite>(std::move(ev)));
+    const ui64 waitStep = snapshot.Step;
+    TRowVersion unreadableEdge;
+    if (!Self->WaitPlanStep(waitStep) && snapshot < (unreadableEdge = GetUnreadableEdge())) {
+        ActivateWaitingTxOps(unreadableEdge, ctx);  // Async MediatorTimeCastEntry update, need to reschedule the op
     }
 
     return true;
@@ -2076,7 +2062,7 @@ void TPipeline::ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx)
         << (WaitingDataReadIterators.empty() ? "empty" : ToString(WaitingDataReadIterators.begin()->first.Step)));
 
     bool isEmpty = WaitingDataTxOps.empty() && WaitingDataReadIterators.empty();
-    if (isEmpty || Self->MvccSwitchState == TSwitchState::SWITCHING)
+    if (isEmpty)
         return;
 
     bool activated = false;
@@ -2122,7 +2108,7 @@ void TPipeline::ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx)
 
 void TPipeline::ActivateWaitingTxOps(const TActorContext& ctx) {
     bool isEmpty = WaitingDataTxOps.empty() && WaitingDataReadIterators.empty();
-    if (isEmpty || Self->MvccSwitchState == TSwitchState::SWITCHING)
+    if (isEmpty)
         return;
 
     ActivateWaitingTxOps(GetUnreadableEdge(), ctx);
@@ -2144,12 +2130,6 @@ void TPipeline::AddWaitingReadIterator(
 {
     // Combined with registration for convenience
     RegisterWaitingReadIterator(TReadIteratorId(ev->Sender, ev->Get()->Record.GetReadId()), ev->Get());
-
-    if (Y_UNLIKELY(Self->MvccSwitchState == TSwitchState::SWITCHING)) {
-        // postpone tx processing till mvcc state switch is finished
-        WaitingDataReadIterators.emplace(TRowVersion::Min(), std::move(ev));
-        return;
-    }
 
     auto readId = ev->Get()->Record.GetReadId();
     WaitingDataReadIterators.emplace(version, std::move(ev));
@@ -2265,13 +2245,11 @@ TOperation::TPtr TPipeline::FindCompletingOp(ui64 txId) const {
 }
 
 void TPipeline::AddCommittingOp(const TRowVersion& version) {
-    if (!Self->IsMvccEnabled())
-        return;
     CommittingOps.Add(version);
 }
 
 void TPipeline::AddCommittingOp(const TOperation::TPtr& op) {
-    if (!Self->IsMvccEnabled() || op->IsReadOnly())
+    if (op->IsReadOnly())
         return;
 
     Y_VERIFY_S(!op->GetCommittingOpsVersion(),
@@ -2286,8 +2264,6 @@ void TPipeline::AddCommittingOp(const TOperation::TPtr& op) {
 }
 
 void TPipeline::RemoveCommittingOp(const TRowVersion& version) {
-    if (!Self->IsMvccEnabled())
-        return;
     CommittingOps.Remove(version);
 }
 
@@ -2302,7 +2278,7 @@ void TPipeline::RemoveCommittingOp(const TOperation::TPtr& op) {
 }
 
 bool TPipeline::WaitCompletion(const TOperation::TPtr& op) const {
-    if (Self->IsFollower() || !Self->IsMvccEnabled() || !op->IsMvccSnapshotRead() || op->HasWaitCompletionFlag())
+    if (Self->IsFollower() || !op->IsMvccSnapshotRead() || op->HasWaitCompletionFlag())
         return true;
 
     // don't send errors early
@@ -2317,14 +2293,12 @@ bool TPipeline::HasCommittingOpsBelow(TRowVersion upperBound) const {
 }
 
 bool TPipeline::PromoteCompleteEdgeUpTo(const TRowVersion& version, TTransactionContext& txc) {
-    if (Self->IsMvccEnabled()) {
-        auto it = Self->TransQueue.PlannedTxs.lower_bound(TStepOrder(version.Step, version.TxId));
-        if (it != Self->TransQueue.PlannedTxs.begin()) {
-            // Promote complete edge to the last distributed transaction that is
-            // less than the specified version
-            --it;
-            return Self->PromoteCompleteEdge(TRowVersion(it->Step, it->TxId), txc);
-        }
+    auto it = Self->TransQueue.PlannedTxs.lower_bound(TStepOrder(version.Step, version.TxId));
+    if (it != Self->TransQueue.PlannedTxs.begin()) {
+        // Promote complete edge to the last distributed transaction that is
+        // less than the specified version
+        --it;
+        return Self->PromoteCompleteEdge(TRowVersion(it->Step, it->TxId), txc);
     }
     return false;
 }

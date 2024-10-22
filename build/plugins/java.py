@@ -68,7 +68,7 @@ def onjava_module(unit, *args):
         'MANAGED_PEERS': '${MANAGED_PEERS}',
         'MANAGED_PEERS_CLOSURE': '${MANAGED_PEERS_CLOSURE}',
         'NON_NAMAGEABLE_PEERS': '${NON_NAMAGEABLE_PEERS}',
-        'TEST_CLASSPATH_MANAGED': '${TEST_CLASSPATH_MANAGED}',
+        'TEST_CLASSPATH_MANAGED': '',
         'EXCLUDE': extract_macro_calls(unit, 'EXCLUDE_VALUE', args_delim),
         'JAVA_SRCS': extract_macro_calls(unit, 'JAVA_SRCS_VALUE', args_delim),
         'JAVAC_FLAGS': extract_macro_calls(unit, 'JAVAC_FLAGS_VALUE', args_delim),
@@ -102,6 +102,7 @@ def onjava_module(unit, *args):
         '20',
         '21',
         '22',
+        '23',
     ):
         data['ENABLE_PREVIEW'] = extract_macro_calls(unit, 'ENABLE_PREVIEW_VALUE', args_delim)
 
@@ -229,6 +230,11 @@ def on_add_classpath_clash_check(unit, *args):
         ymake.report_configure_error('CHECK_JAVA_DEPS: "yes", "no" or "strict" required')
     if jdeps_val and jdeps_val != 'no':
         unit.onjava_test_deps(jdeps_val)
+
+
+def on_add_detekt_report_check(unit, *args):
+    if unit.get('WITH_KOTLIN_VALUE') == 'yes' and unit.get('WITH_KOTLINC_PLUGIN_DETEKT') == 'yes':
+        unit.onadd_check(['detekt.report'] + list(args))
 
 
 # Ymake java modules related macroses
@@ -373,6 +379,7 @@ def on_jdk_version_macro_check(unit, *args):
         '20',
         '21',
         '22',
+        '23',
     )
     if jdk_version not in available_versions:
         ymake.report_configure_error(

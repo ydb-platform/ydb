@@ -41,7 +41,7 @@ public:
         size_t cnt;
         try {
             auto value = StringToArithmetic<T>(token, cnt);
-            if (cnt != token.Size() || value < std::numeric_limits<T>::lowest() || value > std::numeric_limits<T>::max()) {
+            if (cnt != token.size() || value < std::numeric_limits<T>::lowest() || value > std::numeric_limits<T>::max()) {
                 throw yexception();
             }
             return static_cast<T>(value);
@@ -184,7 +184,7 @@ public:
             break;
         }
         case TTypeParser::ETypeKind::Decimal: {
-            Builder.Decimal(TString(token));
+            Builder.Decimal(TDecimalValue(TString(token), Parser.GetDecimal().Precision, Parser.GetDecimal().Scale));
             break;
         }
         case TTypeParser::ETypeKind::Optional: {

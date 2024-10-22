@@ -5,6 +5,8 @@
 #include "query_autocomplete_helper.h"
 #include "viewer_request.h"
 
+#include <library/cpp/json/json_reader.h>
+
 namespace NKikimr::NViewer {
 
 using namespace NActors;
@@ -138,7 +140,6 @@ public:
     TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate() {
         auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         for (const TString& path : Paths) {
-            Cerr << "Looking into " << path << Endl;
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
             entry.SyncVersion = false;
@@ -270,7 +271,9 @@ public:
     }
 
     void ReplyAndPassAway() override {
-        Result.SetVersion(Viewer->GetCapabilityVersion("/viewer/autocomplete"));
+        if (Viewer) {
+            Result.SetVersion(Viewer->GetCapabilityVersion("/viewer/autocomplete"));
+        }
 
         if (CacheResult) {
             if (CacheResult->IsOk()) {

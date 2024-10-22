@@ -20,10 +20,6 @@ Y_UNIT_TEST_SUITE(TFlatDatabaseDecimal) {
 
         NTest::TDbExec db;
 
-        auto makeDecimalTypeInfo = [] (ui32 precision, ui32 scale) {
-            return NScheme::TTypeInfo(NScheme::TDecimalType(precision, scale));
-        };
-
         auto makeDecimalTypeInfoProto = [] (ui32 precision, ui32 scale) {
             NKikimrProto::TTypeInfo typeInfo;
             typeInfo.SetDecimalPrecision(precision);
@@ -58,15 +54,15 @@ Y_UNIT_TEST_SUITE(TFlatDatabaseDecimal) {
             db.Begin();
 
             TVector<TRawTypeValue> key;
-            key.emplace_back(&decimalKey229, sizeof(TDecimalPair), makeDecimalTypeInfo(22, 9));
-            key.emplace_back(&decimalKey356, sizeof(TDecimalPair), makeDecimalTypeInfo(35, 6));
+            key.emplace_back(&decimalKey229, sizeof(TDecimalPair), NScheme::NTypeIds::Decimal);
+            key.emplace_back(&decimalKey356, sizeof(TDecimalPair), NScheme::NTypeIds::Decimal);
             key.emplace_back(&intKey, sizeof(i32), NScheme::NTypeIds::Int32);
 
             TVector<NTable::TUpdateOp> ops;
             ops.emplace_back(IdValueDecimal229, NTable::ECellOp::Set,
-                TRawTypeValue(&decimalVal229, sizeof(TDecimalPair), makeDecimalTypeInfo(22, 9)));
+                TRawTypeValue(&decimalVal229, sizeof(TDecimalPair), NScheme::NTypeIds::Decimal));
             ops.emplace_back(IdValueDecimal356, NTable::ECellOp::Set,
-                TRawTypeValue(&decimalVal356, sizeof(TDecimalPair), makeDecimalTypeInfo(35, 6)));
+                TRawTypeValue(&decimalVal356, sizeof(TDecimalPair), NScheme::NTypeIds::Decimal));
             ops.emplace_back(IdValueInt, NTable::ECellOp::Set,
                 TRawTypeValue(&intVal, sizeof(i32), NScheme::NTypeIds::Int32));
 
@@ -85,8 +81,8 @@ Y_UNIT_TEST_SUITE(TFlatDatabaseDecimal) {
             db.Begin();
 
             TVector<TRawTypeValue> key;
-            key.emplace_back(&decimalKey229, sizeof(TDecimalPair), makeDecimalTypeInfo(22, 9));
-            key.emplace_back(&decimalKey356, sizeof(TDecimalPair), makeDecimalTypeInfo(35, 6));
+            key.emplace_back(&decimalKey229, sizeof(TDecimalPair), NScheme::NTypeIds::Decimal);
+            key.emplace_back(&decimalKey356, sizeof(TDecimalPair), NScheme::NTypeIds::Decimal);
             key.emplace_back(&intKey, sizeof(i32), NScheme::NTypeIds::Int32);
 
             auto it = db->Iterate(tableId, key, tags, ELookup::GreaterOrEqualThan);
@@ -113,6 +109,9 @@ Y_UNIT_TEST_SUITE(TFlatDatabaseDecimal) {
         db.Snap(tableId).Compact(tableId, false);
 
         readDatabase();
+
+        db.Replay(NTest::EPlay::Boot);
+        db.Replay(NTest::EPlay::Redo);
     }
 }
 

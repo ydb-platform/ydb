@@ -1,0 +1,188 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Apache-2.0           2b42edef8fa55315f34f2370b4715ca9
+BELONGS flatc/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE [2:202]
+    Belongs difference:
+        + flatc/ya.make
+
+KEEP     Apache-2.0           3b0ea1fb66390711cb1f160e05b0e2a4
+BELONGS flatc/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        grpc/src/compiler/java_generator.cc [4:14]
+        grpc/src/compiler/java_generator.h [4:14]
+        grpc/src/compiler/python_generator.cc [5:15]
+        grpc/src/compiler/python_generator.h [5:15]
+        grpc/src/compiler/schema_interface.h [5:15]
+        grpc/src/compiler/swift_generator.cc [4:14]
+        grpc/src/compiler/swift_generator.h [4:14]
+        grpc/src/compiler/ts_generator.cc [4:14]
+        include/flatbuffers/allocator.h [4:14]
+        include/flatbuffers/array.h [4:14]
+        include/flatbuffers/buffer.h [4:14]
+        include/flatbuffers/buffer_ref.h [4:14]
+        include/flatbuffers/code_generator.h [4:14]
+        include/flatbuffers/code_generators.h [4:14]
+        include/flatbuffers/default_allocator.h [4:14]
+        include/flatbuffers/detached_buffer.h [4:14]
+        include/flatbuffers/file_manager.h [4:14]
+        include/flatbuffers/flatbuffer_builder.h [4:14]
+        include/flatbuffers/flatbuffers.h [4:14]
+        include/flatbuffers/flatbuffers_iter.h [4:14]
+        include/flatbuffers/flatc.h [4:14]
+        include/flatbuffers/flex_flat_util.h [4:14]
+        include/flatbuffers/flexbuffers.h [4:14]
+        include/flatbuffers/grpc.h [4:14]
+        include/flatbuffers/hash.h [4:14]
+        include/flatbuffers/idl.h [4:14]
+        include/flatbuffers/minireflect.h [4:14]
+        include/flatbuffers/reflection.h [4:14]
+        include/flatbuffers/registry.h [4:14]
+        include/flatbuffers/stl_emulation.h [4:14]
+        include/flatbuffers/string.h [4:14]
+        include/flatbuffers/struct.h [4:14]
+        include/flatbuffers/table.h [4:14]
+        include/flatbuffers/util.h [4:14]
+        include/flatbuffers/vector.h [4:14]
+        include/flatbuffers/vector_downward.h [4:14]
+        include/flatbuffers/verifier.h [4:14]
+        src/annotated_binary_text_gen.h [4:14]
+        src/bfbs_gen.h [4:14]
+        src/bfbs_gen_lua.cpp [4:14]
+        src/bfbs_gen_lua.h [4:14]
+        src/bfbs_gen_nim.cpp [4:14]
+        src/bfbs_gen_nim.h [4:14]
+        src/binary_annotator.h [4:14]
+        src/code_generators.cpp [4:14]
+        src/file_binary_writer.cpp [4:14]
+        src/file_name_saving_file_manager.cpp [4:14]
+        src/file_writer.cpp [4:14]
+        src/flatc.cpp [4:14]
+        src/flatc_main.cpp [4:14]
+        src/idl_gen_binary.cpp [4:14]
+        src/idl_gen_binary.h [4:14]
+        src/idl_gen_cpp.cpp [4:14]
+        src/idl_gen_cpp.h [4:14]
+        src/idl_gen_cpp_yandex_maps_iter.cpp [4:14]
+        src/idl_gen_csharp.cpp [4:14]
+        src/idl_gen_csharp.h [4:14]
+        src/idl_gen_dart.cpp [4:14]
+        src/idl_gen_dart.h [4:14]
+        src/idl_gen_fbs.cpp [4:14]
+        src/idl_gen_fbs.h [4:14]
+        src/idl_gen_go.cpp [4:14]
+        src/idl_gen_go.h [4:14]
+        src/idl_gen_grpc.cpp [4:14]
+        src/idl_gen_java.cpp [4:14]
+        src/idl_gen_java.h [4:14]
+        src/idl_gen_json_schema.cpp [4:14]
+        src/idl_gen_json_schema.h [4:14]
+        src/idl_gen_kotlin.cpp [4:14]
+        src/idl_gen_kotlin.h [4:14]
+        src/idl_gen_kotlin_kmp.cpp [4:14]
+        src/idl_gen_lobster.cpp [4:14]
+        src/idl_gen_lobster.h [4:14]
+        src/idl_gen_php.cpp [4:14]
+        src/idl_gen_php.h [4:14]
+        src/idl_gen_python.cpp [4:14]
+        src/idl_gen_python.h [4:14]
+        src/idl_gen_rust.cpp [4:14]
+        src/idl_gen_rust.h [4:14]
+        src/idl_gen_swift.cpp [4:14]
+        src/idl_gen_swift.h [4:14]
+        src/idl_gen_text.cpp [4:14]
+        src/idl_gen_text.h [4:14]
+        src/idl_gen_ts.cpp [4:14]
+        src/idl_gen_ts.h [4:14]
+        src/idl_parser.cpp [4:14]
+        src/reflection.cpp [4:14]
+        src/util.cpp [4:14]
+    Belongs difference:
+        + flatc/ya.make
+
+SKIP     LicenseRef-scancode-generic-cla d3efd6355dc5b05199e183a158a72cd0
+BELONGS flatc/ya.make ya.make
+    # contributing license agreement
+    License text:
+        the one above, the Software Grant and Corporate Contributor License Agreement.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 16.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [42:42]
+    Belongs difference:
+        + flatc/ya.make
+
+SKIP     LicenseRef-scancode-generic-cla f42aededd6a662a7a66101cb0e9f0899
+BELONGS flatc/ya.make ya.make
+    # contributing license agreement
+    License text:
+        [Google Individual Contributor License Agreement](https://developers.google.com/open-source/cla/individual?csw=1)
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 22.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [9:9]
+    Belongs difference:
+        + flatc/ya.make
+
+KEEP     Apache-2.0           f7d05862c392a6d4a3e35e4501b7d9f9
+BELONGS flatc/ya.make ya.make
+    License text:
+        \## Licensing
+        *Flatbuffers* is licensed under the Apache License, Version 2.0. See [LICENSE][] for the full license text.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 94.44
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [107:108]
+    Belongs difference:
+        + flatc/ya.make

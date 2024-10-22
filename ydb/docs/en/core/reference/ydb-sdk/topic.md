@@ -485,7 +485,7 @@ Only connections with matching [producer and message group](../../concepts/topic
      topicwriter.Message{Data: bytes.NewReader([]byte{1,2,3})},
      topicwriter.Message{Data: strings.NewReader("3")},
    )
-   if err == nil {
+   if err != nil {
      return err
    }
    ```
@@ -621,7 +621,7 @@ Only connections with matching [producer and message group](../../concepts/topic
     topicwriter.Message{Data: bytes.NewReader([]byte{1,2,3})},
     topicwriter.Message{Data: strings.NewReader("3")},
   )
-  if err == nil {
+  if err != nil {
     return err
   }
   ```
@@ -1644,11 +1644,11 @@ Reading progress is usually saved on a server for each Consumer. However, such p
   auto commitResult = Transaction.Commit(commitSettings).GetValueSync();
   ```
 
-{% note warning %}
+  {% note warning %}
 
   When processing `events`, you do not need to confirm processing for `TDataReceivedEvent` events explicitly.
 
-{% endnote %}
+  {% endnote %}
 
   Confirmation of the `TStopPartitionSessionEvent` event processing must be done after calling `Commit`.
 

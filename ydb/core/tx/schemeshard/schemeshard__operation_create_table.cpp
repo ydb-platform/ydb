@@ -446,11 +446,14 @@ public:
                 .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
             if (checks) {
+                if (parentPathStr.StartsWith(JoinPath({parentPath.GetDomainPathString(), ".backups/collections"}))) {
+                    schema.SetSystemColumnNamesAllowed(true);
+                }
                 if (parentPath.Base()->IsTableIndex()) {
                     checks.IsInsideTableIndexPath();
-                    // Not tmp index impl tables can be created only as part of create index
-                    // tmp index impl tables created multiple times during index construction
-                    if (!NTableIndex::IsTmpImplTable(name)) {
+                    // Not build index impl tables can be created only as part of create index
+                    // build index impl tables created multiple times during index construction
+                    if (!NTableIndex::IsBuildImplTable(name)) {
                         checks
                             .IsUnderCreating(NKikimrScheme::StatusNameConflict)
                             .IsUnderTheSameOperation(OperationId.GetTxId());

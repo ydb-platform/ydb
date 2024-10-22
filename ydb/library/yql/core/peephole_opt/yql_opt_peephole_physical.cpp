@@ -1974,13 +1974,12 @@ TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {
     auto collection = input->HeadPtr();
     auto lookup = input->ChildPtr(1);
     auto options = input->ChildPtr(2);
+    const bool nullableCollectionItems = IsSqlInCollectionItemsNullable(NNodes::TCoSqlIn(input));
 
     const bool ansiIn = HasSetting(*options, "ansi");
     const bool tableSource = HasSetting(*options, "tableSource");
     static const size_t MaxCollectionItemsToExpandAsOrChain = 5;
-    const bool hasOptionals = collection->GetTypeAnn()->HasOptionalOrNull() ||
-                              lookup->GetTypeAnn()->HasOptionalOrNull();
-    if (ansiIn || !hasOptionals) {
+    if (ansiIn || !nullableCollectionItems) {
         const size_t collectionSize = collection->ChildrenSize();
         if ((collection->IsCallable("AsList") || collection->IsList()) &&
             collectionSize <= MaxCollectionItemsToExpandAsOrChain &&
@@ -2068,7 +2067,6 @@ TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {
             .Build();
     }
 
-    const bool nullableCollectionItems = IsSqlInCollectionItemsNullable(NNodes::TCoSqlIn(input));
     if (ansiIn && (nullableCollectionItems || lookupType->HasOptionalOrNull())) {
         YQL_CLOG(DEBUG, CorePeepHole) << "ANSI IN: with nullable items in collection or lookup";
         YQL_ENSURE(dict);
@@ -5708,7 +5706,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         std::visit([&types](const auto& value) { types.IncNoBlockType(value); }, typeKindOrSlot);
     };
 
-    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(lambda->Pos()), allInputTypes, ctx, false, onUnsupportedType);
+    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(lambda->Pos()), allInputTypes, ctx, onUnsupportedType);
     YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
     if (resolveStatus != IArrowResolver::OK) {
         return false;
@@ -5848,7 +5846,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
                 allTypes.push_back(node->Child(i)->GetTypeAnn());
             }
 
-            auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(node->Pos()), allTypes, ctx, false, onUnsupportedType);
+            auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(node->Pos()), allTypes, ctx, onUnsupportedType);
             YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
             if (resolveStatus != IArrowResolver::OK) {
                 return true;

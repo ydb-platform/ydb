@@ -91,9 +91,11 @@ public:
 public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
         auto status = TOptimizeTransformerBase::DoTransform(input, output, ctx);
-
-        for (const auto& hint: KqpCtx.GetOptimizerHints().GetUnappliedHintStrings()) {
-            YQL_CLOG(WARN, ProviderYdb) << "Unapplied hint: " + hint;
+        
+        if (status == TStatus::Ok) {
+            for (const auto& hint: KqpCtx.GetOptimizerHints().GetUnappliedString()) {
+                ctx.AddWarning(YqlIssue({}, TIssuesIds::YQL_UNUSED_HINT, "Unapplied hint: " + hint));
+            }
         }
 
         return status;
@@ -164,7 +166,7 @@ protected:
         auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, maxDPccpDPTableSize));
         TExprBase output = DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, optLevel,
             *opt, [](auto& rels, auto label, auto node, auto stat) {
-                rels.emplace_back(std::make_shared<TKqpRelOptimizerNode>(TString(label), stat, node));
+                rels.emplace_back(std::make_shared<TKqpRelOptimizerNode>(TString(label), *stat, node));
             },
             KqpCtx.EquiJoinsCount,
             KqpCtx.GetOptimizerHints()

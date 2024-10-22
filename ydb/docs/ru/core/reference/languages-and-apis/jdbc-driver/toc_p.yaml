@@ -1,0 +1,12 @@
+items:
+- name: Быстрый старт
+  href: quickstart.md
+- name: Использование с Maven
+  href: maven.md
+- name: Режимы аутентификации
+  href: authentication.md
+- name: Свойства
+  href: properties.md
+- name: Сборка
+  href: building.md
+

@@ -49,8 +49,7 @@ struct TDqCBOProviderContext : public NYql::TBaseProviderContext {
 
     virtual bool IsJoinApplicable(const std::shared_ptr<NYql::IBaseOptimizerNode>& left,
         const std::shared_ptr<NYql::IBaseOptimizerNode>& right,
-        const std::set<std::pair<NYql::NDq::TJoinColumn, NYql::NDq::TJoinColumn>>& joinConditions,
-        const TVector<TString>& leftJoinKeys, const TVector<TString>& rightJoinKeys,
+        const TVector<TJoinColumn>& leftJoinKeys, const TVector<TJoinColumn>& rightJoinKeys,
         NYql::EJoinAlgoType joinAlgo,  NYql::EJoinKind joinKind) override;
 
     virtual double ComputeJoinCost(const NYql::TOptimizerStatistics& leftStats, const NYql::TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, NYql::EJoinAlgoType joinAlgo) const override;
@@ -62,12 +61,10 @@ struct TDqCBOProviderContext : public NYql::TBaseProviderContext {
 
 bool TDqCBOProviderContext::IsJoinApplicable(const std::shared_ptr<NYql::IBaseOptimizerNode>& left,
         const std::shared_ptr<NYql::IBaseOptimizerNode>& right,
-        const std::set<std::pair<NYql::NDq::TJoinColumn, NYql::NDq::TJoinColumn>>& joinConditions,
-        const TVector<TString>& leftJoinKeys, const TVector<TString>& rightJoinKeys,
+        const TVector<TJoinColumn>& leftJoinKeys, const TVector<TJoinColumn>& rightJoinKeys,
         NYql::EJoinAlgoType joinAlgo,  NYql::EJoinKind joinKind) {
     Y_UNUSED(left);
     Y_UNUSED(right);
-    Y_UNUSED(joinConditions);
     Y_UNUSED(leftJoinKeys);
     Y_UNUSED(rightJoinKeys);
 
@@ -280,7 +277,7 @@ protected:
             }
             std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)> providerCollect = [](auto& rels, auto label, auto node, auto stats) {
                 Y_UNUSED(node);
-                auto rel = std::make_shared<TRelOptimizerNode>(TString(label), stats);
+                auto rel = std::make_shared<TRelOptimizerNode>(TString(label), *stats);
                 rels.push_back(rel);
             };
 

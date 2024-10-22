@@ -3,6 +3,7 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
+#include <ydb/core/mind/hive/hive_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -68,7 +69,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     struct TTestVSlotInfo {
         std::optional<NKikimrBlobStorage::EVDiskStatus> Status;
-        ui32 Generation;
+        ui32 Generation = DEFAULT_GROUP_GENERATION;
+        NKikimrBlobStorage::EDriveStatus PDiskStatus = NKikimrBlobStorage::ACTIVE;
 
         TTestVSlotInfo(std::optional<NKikimrBlobStorage::EVDiskStatus> status = NKikimrBlobStorage::READY,
                        ui32 generation = DEFAULT_GROUP_GENERATION)
@@ -77,7 +79,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         {
         }
 
-        TTestVSlotInfo(NKikimrBlobStorage::EVDiskStatus status) : Status(status), Generation(DEFAULT_GROUP_GENERATION) {}
+        TTestVSlotInfo(NKikimrBlobStorage::EVDiskStatus status, NKikimrBlobStorage::EDriveStatus pDiskStatus = NKikimrBlobStorage::ACTIVE)
+            : Status(status)
+            , PDiskStatus(pDiskStatus)
+        {
+        }
     };
 
     using TVDisks = TVector<TTestVSlotInfo>;
@@ -222,18 +228,20 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         entry->mutable_info()->set_name(STORAGE_POOL_NAME);
     }
 
-    void AddPDisksToSysViewResponse(NSysView::TEvSysView::TEvGetPDisksResponse::TPtr* ev, size_t count, double occupancy) {
+    void AddPDisksToSysViewResponse(NSysView::TEvSysView::TEvGetPDisksResponse::TPtr* ev, const TVDisks& vslots, double occupancy) {
         auto& record = (*ev)->Get()->Record;
         auto entrySample = record.entries(0);
         record.clear_entries();
         auto pdiskId = PDISK_START_ID;
         const size_t totalSize = 3'200'000'000'000ull;
-        for (size_t i = 0; i < count; ++i) {
+        const auto *descriptor = NKikimrBlobStorage::EDriveStatus_descriptor();
+        for (const auto& vslot : vslots) {
             auto* entry = record.add_entries();
             entry->CopyFrom(entrySample);
             entry->mutable_key()->set_pdiskid(pdiskId);
             entry->mutable_info()->set_totalsize(totalSize);
             entry->mutable_info()->set_availablesize((1 - occupancy) * totalSize);
+            entry->mutable_info()->set_statusv2(descriptor->FindValueByNumber(vslot.PDiskStatus)->name());
             ++pdiskId;
         }
     }
@@ -482,7 +490,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 }
                 case NSysView::TEvSysView::EvGetPDisksResponse: {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetPDisksResponse::TPtr*>(&ev);
-                    AddPDisksToSysViewResponse(x, vdisks.size(), occupancy);
+                    AddPDisksToSysViewResponse(x, vdisks, occupancy);
                     break;
                 }
                 case NSysView::TEvSysView::EvGetGroupsResponse: {
@@ -708,6 +716,14 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, NKikimrBlobStorage::READY}, false, 0.95);
         Cerr << result.ShortDebugString() << Endl;
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1);
+    }
+
+    Y_UNIT_TEST(YellowIssueReadyVDisksOnFaultyPDisks) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, {NKikimrBlobStorage::READY, NKikimrBlobStorage::FAULTY}});
+        Cerr << result.ShortDebugString() << Endl;
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0);
     }
 
     /* HC currently infers group status on its own, so it's never unknown
@@ -1836,6 +1852,110 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     Y_UNIT_TEST(ShardsNoLimit) {
         ShardsQuotaTest(105, 0, 0, Ydb::Monitoring::StatusFlag::GREEN);
+    }
+
+    bool HasDeadTabletIssue(const Ydb::Monitoring::SelfCheckResult& result) {
+       for (const auto& issue_log : result.issue_log()) {
+            if (issue_log.level() == 4 && issue_log.type() == "TABLET") {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    Y_UNIT_TEST(TestTabletIsDead) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(2)
+                .SetDynamicNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+
+        TClient client(settings);
+
+        TTestActorRuntime* runtime = server.GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+
+        server.SetupDynamicLocalService(2, "Root");
+        server.StartPQTablets(1);
+        server.DestroyDynamicLocalService(2);
+        runtime->AdvanceCurrentTime(TDuration::Minutes(5));
+
+        TAutoPtr<IEventHandle> handle;
+        runtime->Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, new NHealthCheck::TEvSelfCheckRequest(), 0));
+        auto result = runtime->GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+        Cerr << result.ShortDebugString();
+
+        UNIT_ASSERT(HasDeadTabletIssue(result));
+    }
+
+    Y_UNIT_TEST(TestBootingTabletIsNotDead) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(2)
+                .SetDynamicNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+
+        TClient client(settings);
+
+        TTestActorRuntime* runtime = server.GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+
+        auto blockBoot = runtime->AddObserver<NHive::TEvPrivate::TEvProcessBootQueue>([](auto&& ev) { ev.Reset(); });
+
+        server.SetupDynamicLocalService(2, "Root");
+        server.StartPQTablets(1, false);
+        runtime->AdvanceCurrentTime(TDuration::Minutes(5));
+
+        TAutoPtr<IEventHandle> handle;
+        runtime->Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, new NHealthCheck::TEvSelfCheckRequest(), 0));
+        auto result = runtime->GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+        Cerr << result.ShortDebugString();
+
+        UNIT_ASSERT(!HasDeadTabletIssue(result));
+    }
+
+    Y_UNIT_TEST(TestReBootingTabletIsDead) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(2)
+                .SetDynamicNodeCount(2)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+
+        TClient client(settings);
+
+        TTestActorRuntime* runtime = server.GetRuntime();
+        runtime->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_TRACE);
+        TActorId sender = runtime->AllocateEdgeActor();
+
+
+        server.SetupDynamicLocalService(2, "Root");
+        server.StartPQTablets(1, true);
+        server.SetupDynamicLocalService(3, "Root");
+        auto blockBoot = runtime->AddObserver<NHive::TEvPrivate::TEvProcessBootQueue>([](auto&& ev) { ev.Reset(); });
+        server.DestroyDynamicLocalService(2);
+        runtime->AdvanceCurrentTime(TDuration::Minutes(5));
+
+        TAutoPtr<IEventHandle> handle;
+        runtime->Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, new NHealthCheck::TEvSelfCheckRequest(), 0));
+        auto result = runtime->GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+        Cerr << result.ShortDebugString();
+
+        UNIT_ASSERT(HasDeadTabletIssue(result));
     }
 }
 }

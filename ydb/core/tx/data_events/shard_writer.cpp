@@ -1,4 +1,5 @@
 #include "shard_writer.h"
+#include "common/error_codes.h"
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -41,7 +42,9 @@ namespace NKikimr::NEvWrite {
     }
 
     TShardWriter::TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& dedupId, const IShardInfo::TPtr& data,
-        const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx, const EModificationType mType, const bool immediateWrite)
+        const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx, const EModificationType mType, const bool immediateWrite,
+        const std::optional<TDuration> timeout
+    )
         : ShardId(shardId)
         , WritePartIdx(writePartIdx)
         , TableId(tableId)
@@ -53,6 +56,7 @@ namespace NKikimr::NEvWrite {
         , ActorSpan(parentSpan.BuildChildrenSpan("ShardWriter"))
         , ModificationType(mType)
         , ImmediateWrite(immediateWrite)
+        , Timeout(timeout)
     {
     }
 
@@ -70,6 +74,9 @@ namespace NKikimr::NEvWrite {
 
     void TShardWriter::Bootstrap() {
         SendWriteRequest();
+        if (Timeout) {
+            Schedule(*Timeout, new TEvents::TEvWakeup(1));
+        }
         Become(&TShardWriter::StateMain);
     }
 
@@ -86,8 +93,9 @@ namespace NKikimr::NEvWrite {
 
         auto gPassAway = PassAwayGuard();
         if (ydbStatus != NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
-            ExternalController->OnFail(Ydb::StatusIds::GENERIC_ERROR,
-                TStringBuilder() << "Cannot write data into shard " << ShardId << " in longTx " <<
+            auto statusInfo = NEvWrite::NErrorCodes::TOperator::GetStatusInfo(ydbStatus).DetachResult();
+            ExternalController->OnFail(statusInfo.GetYdbStatusCode(),
+                TStringBuilder() << "Cannot write data into shard(" << statusInfo.GetIssueGeneralText() << ") " << ShardId << " in longTx " <<
                 ExternalController->GetLongTxId().ToString());
             return;
         }
@@ -136,8 +144,17 @@ namespace NKikimr::NEvWrite {
         }
     }
     
-    void TShardWriter::HandleTimeout(const TActorContext& /*ctx*/) {
-        RetryWriteRequest(false);
+    void TShardWriter::Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag) {
+            auto gPassAway = PassAwayGuard();
+            ExternalController->OnFail(Ydb::StatusIds::TIMEOUT, TStringBuilder()
+                                                                    << "Cannot write data (TIMEOUT) into shard " << ShardId << " in longTx "
+                                                                    << ExternalController->GetLongTxId().ToString());
+            ExternalController->GetCounters()->OnGlobalTimeout();
+        } else {
+            ExternalController->GetCounters()->OnRetryTimeout();
+            RetryWriteRequest(false);
+        }
     }
 
     bool TShardWriter::RetryWriteRequest(const bool delayed) {
@@ -145,7 +162,7 @@ namespace NKikimr::NEvWrite {
             return false;
         }
         if (delayed) {
-            Schedule(OverloadTimeout(), new TEvents::TEvWakeup());
+            Schedule(OverloadTimeout(), new TEvents::TEvWakeup(0));
         } else {
             ++NumRetries;
             SendWriteRequest();

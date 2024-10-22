@@ -151,7 +151,6 @@ public:
     std::unordered_set<TGroupId> FilterGroupIds;
     std::unordered_set<TNodeId> FilterNodeIds;
     std::unordered_set<ui32> FilterPDiskIds;
-    std::vector<TNodeId> SubscriptionNodeIds;
 
     enum class EWith {
         Everything,
@@ -173,6 +172,8 @@ public:
     std::optional<std::size_t> Offset;
     std::optional<std::size_t> Limit;
     ui32 SpaceUsageProblem = 90; // %
+
+    using TGroupSortKey = std::variant<TString, ui64, float, bool>;
 
     struct TPDisk {
         ui32 PDiskId = 0;
@@ -265,6 +266,7 @@ public:
         TString Erasure;
         TErasureType::EErasureSpecies ErasureSpecies = TErasureType::ErasureNone;
         TString State;
+        ui32 StateSortKey = 0;
         ui32 EncryptionMode = 0;
         ui64 AllocationUnits = 0;
         float Usage = 0;
@@ -273,7 +275,7 @@ public:
         ui64 Available = 0;
         ui64 Read = 0;
         ui64 Write = 0;
-        ui32 MissingDisks = 0;
+        ui64 MissingDisks = 0;
         ui64 PutTabletLogLatency = 0;
         ui64 PutUserDataLatency = 0;
         ui64 GetFastLatency = 0;
@@ -288,11 +290,13 @@ public:
             TString result;
             result += ::ToString(failedDomains.size());
             result += '(';
+            bool was_domains = false;
             for (ui8 domains : failedDomains) {
-                if (!result.empty()) {
+                if (was_domains) {
                     result += ',';
                 }
                 result += ::ToString(domains);
+                was_domains = true;
             }
             result += ')';
             return result;
@@ -375,14 +379,17 @@ public:
             if (MissingDisks == 0) {
                 Overall = NKikimrViewer::EFlag::Green;
                 State = "ok";
+                StateSortKey = 0;
             } else {
                 if (ErasureSpecies == TErasureType::ErasureNone) {
                     TString state;
                     Overall = NKikimrViewer::EFlag::Red;
                     if (MissingDisks == startingDisks) {
                         state = "starting";
+                        StateSortKey = 10;
                     } else {
                         state = "dead";
+                        StateSortKey = 100;
                     }
                     State = TStringBuilder() << state << ':' << MissingDisks;
                 } else if (ErasureSpecies == TErasureType::Erasure4Plus2Block) {
@@ -390,20 +397,25 @@ public:
                     if (MissingDisks > 2) {
                         Overall = NKikimrViewer::EFlag::Red;
                         state = "dead";
+                        StateSortKey = 100;
                     } else if (MissingDisks == 2) {
                         Overall = NKikimrViewer::EFlag::Orange;
                         state = "degraded";
+                        StateSortKey = 50 + MissingDisks;
                     } else if (MissingDisks == 1) {
                         if (MissingDisks == replicatingDisks + startingDisks) {
                             Overall = NKikimrViewer::EFlag::Blue;
                             if (replicatingDisks) {
                                 state = "replicating";
+                                StateSortKey = 20;
                             } else {
                                 state = "starting";
+                                StateSortKey = 10;
                             }
                         } else {
                             Overall = NKikimrViewer::EFlag::Yellow;
                             state = "degraded";
+                            StateSortKey = 50 + MissingDisks;
                         }
                     }
                     State = TStringBuilder() << state << ':' << MissingDisks;
@@ -416,20 +428,25 @@ public:
                     if (failedDomainsPerRealm.size() > 2 || (failedDomainsPerRealm.size() == 2 && failedDomainsPerRealm[1] > 1)) {
                         Overall = NKikimrViewer::EFlag::Red;
                         state = "dead";
+                        StateSortKey = 100;
                     } else if (failedDomainsPerRealm.size() == 2) {
                         Overall = NKikimrViewer::EFlag::Orange;
                         state = "degraded";
+                        StateSortKey = 50 + failedDomainsPerRealm.size() * 10 + MissingDisks;
                     } else if (failedDomainsPerRealm.size()) {
                         if (MissingDisks == replicatingDisks + startingDisks) {
                             Overall = NKikimrViewer::EFlag::Blue;
                             if (replicatingDisks > startingDisks) {
                                 state = "replicating";
+                                StateSortKey = 20;
                             } else {
                                 state = "starting";
+                                StateSortKey = 10;
                             }
                         } else {
                             Overall = NKikimrViewer::EFlag::Yellow;
                             state = "degraded";
+                            StateSortKey = 50 + failedDomainsPerRealm.size() * 10 + MissingDisks;
                         }
                     }
                     State = TStringBuilder() << state << ':' << PrintDomains(failedDomainsPerRealm);
@@ -479,32 +496,73 @@ public:
             return PutTabletLogLatency;
         }
 
-        TString GetGroupName(EGroupFields groupBy) {
+        TString GetGroupName(EGroupFields groupBy) const {
+            TString groupName;
             switch (groupBy) {
                 case EGroupFields::GroupId:
-                    return ToString(GroupId);
+                    groupName = ToString(GroupId);
+                    break;
                 case EGroupFields::Erasure:
-                    return Erasure;
+                    groupName = Erasure;
+                    break;
                 case EGroupFields::Usage:
-                    return GetUsageForGroup();
+                    groupName = GetUsageForGroup();
+                    break;
                 case EGroupFields::DiskSpaceUsage:
-                    return GetDiskUsageForGroup();
+                    groupName = GetDiskUsageForGroup();
+                    break;
                 case EGroupFields::PoolName:
-                    return PoolName;
+                    groupName = PoolName;
+                    break;
                 case EGroupFields::Kind:
-                    return Kind;
+                    groupName = Kind;
+                    break;
                 case EGroupFields::Encryption:
-                    return GetEncryptionForGroup();
+                    groupName = GetEncryptionForGroup();
+                    break;
                 case EGroupFields::MediaType:
-                    return MediaType;
+                    groupName = MediaType;
+                    break;
                 case EGroupFields::MissingDisks:
-                    return GetMissingDisksForGroup();
+                    groupName = GetMissingDisksForGroup();
+                    break;
                 case EGroupFields::State:
-                    return State;
+                    groupName = State;
+                    break;
                 case EGroupFields::Latency:
-                    return GetLatencyForGroup();
+                    groupName = GetLatencyForGroup();
+                    break;
                 default:
-                    return {};
+                    break;
+            }
+            if (groupName.empty()) {
+                groupName = "unknown";
+            }
+            return groupName;
+        }
+
+        TGroupSortKey GetSortKey(EGroupFields groupBy) const {
+            switch (groupBy) {
+                case EGroupFields::GroupId:
+                case EGroupFields::Erasure:
+                case EGroupFields::PoolName:
+                case EGroupFields::Kind:
+                case EGroupFields::MediaType:
+                    return GetGroupName(groupBy);
+                case EGroupFields::State:
+                    return StateSortKey;
+                case EGroupFields::Usage:
+                    return Usage;
+                case EGroupFields::DiskSpaceUsage:
+                    return DiskSpaceUsage;
+                case EGroupFields::Encryption:
+                    return EncryptionMode;
+                case EGroupFields::MissingDisks:
+                    return MissingDisks;
+                case EGroupFields::Latency:
+                    return PutTabletLogLatency;
+                default:
+                    return TString();
             }
         }
     };
@@ -514,7 +572,42 @@ public:
 
     struct TGroupGroup {
         TString Name;
+        TGroupSortKey SortKey;
         TGroupView Groups;
+
+        // stats
+        float Usage = 0; // avg
+        ui64 Used = 0; // sum
+        ui64 Limit = 0; // sum
+        ui64 Available = 0; // sum
+        ui64 Read = 0; // sum
+        ui64 Write = 0; // sum
+        ui64 PutTabletLogLatency = 0; // max
+        ui64 PutUserDataLatency = 0; // max
+        ui64 GetFastLatency = 0; // max
+        float DiskSpaceUsage = 0; // max
+
+        void CalcStats() {
+            for (TGroup* group : Groups) {
+                Usage += group->Usage;
+                Used += group->Used;
+                Limit += group->Limit;
+                Read += group->Read;
+                Write += group->Write;
+                if (Available) {
+                    Available = std::min(Available, group->Available);
+                } else {
+                    Available = group->Available;
+                }
+                PutTabletLogLatency = std::max(PutTabletLogLatency, group->PutTabletLogLatency);
+                PutUserDataLatency = std::max(PutUserDataLatency, group->PutUserDataLatency);
+                GetFastLatency = std::max(GetFastLatency, group->GetFastLatency);
+                DiskSpaceUsage = std::max(DiskSpaceUsage, group->DiskSpaceUsage);
+            }
+            if (!Groups.empty()) {
+                Usage /= Groups.size();
+            }
+        }
     };
 
     TGroupData GroupData;
@@ -531,9 +624,6 @@ public:
     const TFieldsType FieldsAll = TFieldsType().set();
     const TFieldsType FieldsBsGroups = TFieldsType().set(+EGroupFields::GroupId)
                                                     .set(+EGroupFields::Erasure)
-                                                    .set(+EGroupFields::Usage)
-                                                    .set(+EGroupFields::Used)
-                                                    .set(+EGroupFields::Limit)
                                                     .set(+EGroupFields::Latency);
     const TFieldsType FieldsBsPools = TFieldsType().set(+EGroupFields::PoolName)
                                                    .set(+EGroupFields::Kind)
@@ -640,6 +730,8 @@ public:
             result = EGroupFields::PDiskId;
         } else if (field == "Latency") {
             result = EGroupFields::Latency;
+        } else if (field == "Available") {
+            result = EGroupFields::Available;
         }
         return result;
     }
@@ -801,22 +893,6 @@ public:
         Schedule(TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup(TimeoutFinal)); // timeout for the rest
     }
 
-    void PassAway() override {
-        std::vector<bool> passedNodes;
-        for (const TNodeId nodeId : SubscriptionNodeIds) {
-            if (passedNodes.size() <= nodeId) {
-                passedNodes.resize(nodeId + 1);
-            } else {
-                if (passedNodes[nodeId]) {
-                    continue;
-                }
-            }
-            Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe());
-            passedNodes[nodeId] = true;
-        }
-        TBase::PassAway();
-    }
-
     void ApplyFilter() {
         // database pre-filter, affects TotalGroups count
         if (!DatabaseStoragePools.empty()) {
@@ -949,27 +1025,29 @@ public:
                 With = EWith::Everything;
                 GroupsByGroupId.clear();
             }
-            if (!Filter.empty() && FieldsAvailable.test(+EGroupFields::PoolName) && FieldsAvailable.test(+EGroupFields::GroupId)) {
-                TVector<TString> filterWords = SplitString(Filter, " ");
-                TGroupView groupView;
-                for (TGroup* group : GroupView) {
-                    bool match = false;
-                    for (const TString& word : filterWords) {
-                        if (group->PoolName.Contains(word)) {
-                            match = true;
-                            break;
-                        } else if (::ToString(group->GroupId).Contains(word)) {
-                            match = true;
-                            break;
+            if (!Filter.empty()) {
+                bool allFieldsPresent =
+                    (!FieldsRequired.test(+EGroupFields::GroupId) || FieldsAvailable.test(+EGroupFields::GroupId)) &&
+                    (!FieldsRequired.test(+EGroupFields::PoolName) || FieldsAvailable.test(+EGroupFields::PoolName));
+                if (allFieldsPresent) {
+                    TVector<TString> filterWords = SplitString(Filter, " ");
+                    TGroupView groupView;
+                    for (TGroup* group : GroupView) {
+                        for (const TString& word : filterWords) {
+                            if (FieldsRequired.test(+EGroupFields::GroupId) && ::ToString(group->GroupId).Contains(word)) {
+                                groupView.push_back(group);
+                                break;
+                            }
+                            if (FieldsRequired.test(+EGroupFields::PoolName) && group->PoolName.Contains(word)) {
+                                groupView.push_back(group);
+                                break;
+                            }
                         }
                     }
-                    if (match) {
-                        groupView.push_back(group);
-                    }
+                    GroupView.swap(groupView);
+                    Filter.clear();
+                    GroupsByGroupId.clear();
                 }
-                GroupView.swap(groupView);
-                Filter.clear();
-                GroupsByGroupId.clear();
             }
             if (!FilterGroup.empty() && FieldsAvailable.test(+FilterGroupBy)) {
                 TGroupView groupView;
@@ -998,6 +1076,7 @@ public:
                 groupGroups.emplace(gb, GroupGroups.size());
                 groupGroup = &GroupGroups.emplace_back();
                 groupGroup->Name = gb;
+                groupGroup->SortKey = group->GetSortKey(GroupBy);
             } else {
                 groupGroup = &GroupGroups[it->second];
             }
@@ -1014,17 +1093,17 @@ public:
                 case EGroupFields::Kind:
                 case EGroupFields::Encryption:
                 case EGroupFields::MediaType:
-                case EGroupFields::State:
                     GroupCollection();
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; });
+                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.SortKey; });
                     NeedGroup = false;
                     break;
+                case EGroupFields::State:
                 case EGroupFields::Usage:
                 case EGroupFields::DiskSpaceUsage:
                 case EGroupFields::MissingDisks:
                 case EGroupFields::Latency:
                     GroupCollection();
-                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.Name; }, true);
+                    SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.SortKey; }, true);
                     NeedGroup = false;
                     break;
                 case EGroupFields::Read:
@@ -1092,7 +1171,7 @@ public:
                     SortCollection(GroupView, [](const TGroup* group) { return group->Write; }, ReverseSort);
                     break;
                 case EGroupFields::State:
-                    SortCollection(GroupView, [](const TGroup* group) { return group->State; }, ReverseSort);
+                    SortCollection(GroupView, [](const TGroup* group) { return group->StateSortKey; }, ReverseSort);
                     break;
                 case EGroupFields::Latency:
                     SortCollection(GroupView, [](const TGroup* group) { return group->GetLatencyForSort(); }, ReverseSort);
@@ -1130,8 +1209,11 @@ public:
         ApplyLimit();
     }
 
+    bool CollectedHiveData = false;
+
     void CollectHiveData() {
-        if (FieldsNeeded(FieldsHive)) {
+        static TPathId badPathId(0, 0);
+        if (!CollectedHiveData) {
             if (!GroupView.empty()) {
                 ui64 hiveId = AppData()->DomainsInfo->GetHive();
                 if (hiveId != TDomainsInfo::BadTabletId) {
@@ -1143,12 +1225,16 @@ public:
             }
             for (const TGroup* group : GroupView) {
                 TPathId pathId(group->SchemeShardId, group->PathId);
+                if (pathId == badPathId) {
+                    pathId = {AppData()->DomainsInfo->Domain->SchemeRoot, 1};
+                }
                 if (NavigateKeySetResult.count(pathId) == 0) {
                     ui64 cookie = NavigateKeySetResult.size();
                     NavigateKeySetResult.emplace(pathId, MakeRequestSchemeCacheNavigate(pathId, cookie));
                     ++NavigateKeySetInFlight;
                 }
             }
+            CollectedHiveData = true;
         }
     }
 
@@ -1264,7 +1350,6 @@ public:
                 }
                 FieldsAvailable |= FieldsBsPools;
                 ApplyEverything();
-                CollectHiveData();
             } else {
                 AddProblem("bsc-storage-pools-no-data");
             }
@@ -1350,6 +1435,9 @@ public:
             }
         }
         if (AreBSControllerRequestsDone()) {
+            if (FieldsNeeded(FieldsHive) && !CollectedHiveData) {
+                CollectHiveData();
+            }
             if (FieldsAvailable.test(+EGroupFields::GroupId) && FieldsNeeded(FieldsHive) && NavigateKeySetInFlight == 0 && HiveStorageStatsInFlight == 0) {
                 if (GroupsByGroupId.empty()) {
                     RebuildGroupsByGroupId();
@@ -1748,12 +1836,7 @@ public:
             return;
         }
         if (BSGroupStateResponse.count(nodeId) == 0) {
-            TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
-            BSGroupStateResponse.emplace(nodeId, MakeRequest<TEvWhiteboard::TEvBSGroupStateResponse>(whiteboardServiceId,
-                new TEvWhiteboard::TEvBSGroupStateRequest(),
-                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-                nodeId));
-            SubscriptionNodeIds.push_back(nodeId);
+            BSGroupStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, new TEvWhiteboard::TEvBSGroupStateRequest()));
             ++BSGroupStateRequestsInFlight;
         }
     }
@@ -1762,22 +1845,13 @@ public:
         if (nodeId == 0) {
             return;
         }
-        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
         if (VDiskStateResponse.count(nodeId) == 0) {
-            VDiskStateResponse.emplace(nodeId, MakeRequest<TEvWhiteboard::TEvVDiskStateResponse>(whiteboardServiceId,
-                new TEvWhiteboard::TEvVDiskStateRequest(),
-                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-                nodeId));
+            VDiskStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, new TEvWhiteboard::TEvVDiskStateRequest()));
             ++VDiskStateRequestsInFlight;
-            SubscriptionNodeIds.push_back(nodeId);
         }
         if (PDiskStateResponse.count(nodeId) == 0) {
-            PDiskStateResponse.emplace(nodeId, MakeRequest<TEvWhiteboard::TEvPDiskStateResponse>(whiteboardServiceId,
-                new TEvWhiteboard::TEvPDiskStateRequest(),
-                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-                nodeId));
+            PDiskStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, new TEvWhiteboard::TEvPDiskStateRequest()));
             ++PDiskStateRequestsInFlight;
-            SubscriptionNodeIds.push_back(nodeId);
         }
     }
 
@@ -1999,8 +2073,16 @@ public:
                 if (FieldsAvailable.test(+EGroupFields::PoolName)) {
                     jsonGroup.SetPoolName(group->PoolName);
                 }
-                for (const TVDisk& vdisk : group->VDisks) {
-                    RenderVDisk(*jsonGroup.AddVDisks(), vdisk);
+                std::vector<const TVDisk*> vdisks;
+                vdisks.resize(group->VDisks.size());
+                for (size_t idx = 0; idx < group->VDisks.size(); ++idx) {
+                    vdisks[idx] = &group->VDisks[idx];
+                }
+                std::sort(vdisks.begin(), vdisks.end(), [](const TVDisk* a, const TVDisk* b) {
+                    return a->VDiskId < b->VDiskId;
+                });
+                for (const TVDisk* vdisk : vdisks) {
+                    RenderVDisk(*jsonGroup.AddVDisks(), *vdisk);
                 }
                 if (FieldsAvailable.test(+EGroupFields::Encryption)) {
                     jsonGroup.SetEncryption(group->EncryptionMode);
@@ -2057,10 +2139,37 @@ public:
                 }
             }
         } else {
-            for (const TGroupGroup& groupGroup : GroupGroups) {
+            for (TGroupGroup& groupGroup : GroupGroups) {
                 NKikimrViewer::TStorageGroupGroup& jsonGroupGroup = *json.AddStorageGroupGroups();
                 jsonGroupGroup.SetGroupName(groupGroup.Name);
                 jsonGroupGroup.SetGroupCount(groupGroup.Groups.size());
+                groupGroup.CalcStats();
+                if (FieldsAvailable.test(+EGroupFields::Used)) {
+                    jsonGroupGroup.SetUsed(groupGroup.Used);
+                }
+                if (FieldsAvailable.test(+EGroupFields::Limit)) {
+                    jsonGroupGroup.SetLimit(groupGroup.Limit);
+                }
+                if (FieldsAvailable.test(+EGroupFields::Read)) {
+                    jsonGroupGroup.SetRead(groupGroup.Read);
+                }
+                if (FieldsAvailable.test(+EGroupFields::Write)) {
+                    jsonGroupGroup.SetWrite(groupGroup.Write);
+                }
+                if (FieldsAvailable.test(+EGroupFields::Usage)) {
+                    jsonGroupGroup.SetUsage(groupGroup.Usage);
+                }
+                if (FieldsAvailable.test(+EGroupFields::Available)) {
+                    jsonGroupGroup.SetAvailable(groupGroup.Available);
+                }
+                if (FieldsAvailable.test(+EGroupFields::DiskSpaceUsage)) {
+                    jsonGroupGroup.SetDiskSpaceUsage(groupGroup.DiskSpaceUsage);
+                }
+                if (FieldsAvailable.test(+EGroupFields::Latency)) {
+                    jsonGroupGroup.SetLatencyPutTabletLog(groupGroup.PutTabletLogLatency);
+                    jsonGroupGroup.SetLatencyPutUserData(groupGroup.PutUserDataLatency);
+                    jsonGroupGroup.SetLatencyGetFast(groupGroup.GetFastLatency);
+                }
             }
         }
         AddEvent("RenderingResult");

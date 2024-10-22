@@ -4,7 +4,7 @@
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/public/udf/arrow/block_reader.h>
 #include <ydb/library/yql/public/udf/arrow/memory_pool.h>
-#include <ydb/library/yql/utils/rope_over_buffer.h>
+#include <ydb/library/yql/utils/rope/rope_over_buffer.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
 namespace NKikimr::NMiniKQL {
@@ -630,11 +630,6 @@ struct TSerializerTraits {
         return std::make_unique<TStrings<arrow::BinaryType, true>>();
     }
 
-    static std::unique_ptr<TResult> MakeList(bool isOptional, std::unique_ptr<IBlockSerializer>&& inner) {
-        Y_UNUSED(isOptional, inner);
-        ythrow yexception() << "Serializer not implemented for list";
-    }
-
     static std::unique_ptr<TResult> MakeResource(bool isOptional) {
         Y_UNUSED(isOptional);
         ythrow yexception() << "Serializer not implemented for block resources";
@@ -669,11 +664,6 @@ struct TDeserializerTraits {
             return std::make_unique<TFixedSize<ui64, true>>();
         }
         return std::make_unique<TStrings<arrow::BinaryType, true>>();
-    }
-
-    static std::unique_ptr<TResult> MakeList(bool isOptional, std::unique_ptr<TBlockDeserializerBase>&& inner) {
-        Y_UNUSED(isOptional, inner);
-        ythrow yexception() << "Deserializer not implemented for list";
     }
 
     static std::unique_ptr<TResult> MakeResource(bool isOptional) {

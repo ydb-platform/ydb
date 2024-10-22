@@ -78,8 +78,9 @@ struct Schema : NIceDb::Schema {
         struct LastTtlRunTime       : Column<24, NScheme::NTypeIds::Timestamp> {};
         struct LastTtlRowsProcessed : Column<25, NScheme::NTypeIds::Uint64> {};
         struct LastTtlRowsErased    : Column<26, NScheme::NTypeIds::Uint64> {};
+        struct FollowerId           : Column<27, NScheme::NTypeIds::Uint32> {};
 
-        using TKey = TableKey<OwnerId, PathId, PartIdx>;
+        using TKey = TableKey<OwnerId, PathId, PartIdx, FollowerId>;
         using TColumns = TableColumns<
             OwnerId,
             PathId,
@@ -106,7 +107,8 @@ struct Schema : NIceDb::Schema {
             TxRejectedByOutOfStorage,
             LastTtlRunTime,
             LastTtlRowsProcessed,
-            LastTtlRowsErased>;
+            LastTtlRowsErased,
+            FollowerId>;
     };
 
     struct Nodes : Table<2> {

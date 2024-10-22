@@ -208,7 +208,7 @@ private:
             }
             if (share > 0) {
                 Scheduler->UpdateGroupShare(schedulerGroup, share, schedulerNow);
-                Send(SchedulerActorId, new TEvSchedulerNewPool(msg.GetDatabase(), schedulerGroup));
+                Send(SchedulerActorId, new TEvSchedulerNewPool(msg.GetDatabaseId(), schedulerGroup));
             } else {
                 schedulerGroup = "";
             }

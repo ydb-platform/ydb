@@ -269,9 +269,11 @@ class TBlockSomeFactory : public IBlockAggregatorFactory {
         TTupleType* tupleType,
         const std::vector<ui32>& argsColumns,
         const TTypeEnvironment& env,
-        TType* returnType) const override {
+        TType* returnType,
+        ui32 hint) const override {
         Y_UNUSED(env);
         Y_UNUSED(returnType);
+        Y_UNUSED(hint);
         return PrepareSome<TFinalizeKeysTag>(tupleType, std::optional<ui32>(), argsColumns[0]);
     }
 };

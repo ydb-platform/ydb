@@ -2,15 +2,15 @@ PRAGMA TablePathPrefix='/Root';
 
 PRAGMA ydb.OptimizerHints = 
 '
-    Card(Unused # 10e8)
+    Rows(Unused # 10e8)
     JoinOrder( (Unused1 Unused2) (Unused3 Unused4) )
 
-    Card(R # 10e8)
-    Card(T # 1)
-    Card(R T # 1)
-    Card(R S # 10e8)
-    Card(T U # 10e8)
-    Card(V # 1)
+    Rows(R # 10e8)
+    Rows(T # 1)
+    Rows(R T # 1)
+    Rows(R S # 10e8)
+    Rows(T U # 10e8)
+    Rows(V # 1)
     JoinOrder( (R S) (T U) )
 ';
 

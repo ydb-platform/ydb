@@ -133,6 +133,7 @@ class TTransaction;
 class TSession {
     friend class TQueryClient;
     friend class TTransaction;
+    friend class TExecuteQueryIterator;
 public:
     const TString& GetId() const;
 

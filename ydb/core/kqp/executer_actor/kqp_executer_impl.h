@@ -9,6 +9,7 @@
 
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
+#include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/kqp/runtime/kqp_transport.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -81,6 +82,10 @@ struct TShardRangesWithShardId {
     const TShardKeyRanges* Ranges;
 };
 
+struct TStageScheduleInfo {
+    double StageCost = 0.0;
+    ui32 TaskCount = 0;
+};
 
 TActorId ReportToRl(ui64 ru, const TString& database, const TString& userToken,
     const NKikimrKqp::TRlPath& path);
@@ -819,6 +824,40 @@ protected:
         }
     }
 
+    std::map<ui32, TStageScheduleInfo> ScheduleByCost(const IKqpGateway::TPhysicalTxData& tx, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot) {
+        std::map<ui32, TStageScheduleInfo> result;
+        if (!resourceSnapshot.empty()) // can't schedule w/o node count
+        {
+            // collect costs and schedule stages with external sources only 
+            double totalCost = 0.0;
+            for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
+                auto& stage = tx.Body->GetStages(stageIdx);
+                if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
+                    if (stage.GetStageCost() > 0.0 && stage.GetTaskCount() == 0) {
+                        totalCost += stage.GetStageCost();
+                        result.emplace(stageIdx, TStageScheduleInfo{.StageCost = stage.GetStageCost()});
+                    }
+                }
+            }
+            // assign task counts
+            if (!result.empty()) {
+                // allow use 2/3 of threads in single stage
+                ui32 maxStageTaskCount = (TStagePredictor::GetUsableThreads() * 2 + 2) / 3;
+                // total limit per mode is x2 
+                ui32 maxTotalTaskCount = maxStageTaskCount * 2;
+                for (auto& [_, stageInfo] : result) {
+                    // schedule tasks evenly between nodes
+                    stageInfo.TaskCount = 
+                        std::max<ui32>(
+                            std::min(static_cast<ui32>(maxTotalTaskCount * stageInfo.StageCost / totalCost), maxStageTaskCount)
+                            , 1
+                        ) * resourceSnapshot.size();
+                }
+            }
+        }
+        return result;
+    }
+
     void BuildSysViewScanTasks(TStageInfo& stageInfo) {
         Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.IsSysView());
 
@@ -924,7 +963,7 @@ protected:
         }
     }
 
-    void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot) {
+    void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui32 scheduledTaskCount) {
         const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         YQL_ENSURE(stage.GetSources(0).HasExternalSource());
@@ -936,6 +975,10 @@ protected:
         ui32 taskCount = externalSource.GetPartitionedTaskParams().size();
 
         auto taskCountHint = stage.GetTaskCount();
+        if (taskCountHint == 0) {
+            taskCountHint = scheduledTaskCount;
+        }
+
         if (taskCountHint) {
             if (taskCount > taskCountHint) {
                 taskCount = taskCountHint;
@@ -1086,11 +1129,9 @@ protected:
 
             for (auto& keyColumn : keyTypes) {
                 auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(keyColumn, "");
-                if (columnType.TypeInfo) {
-                    *settings->AddKeyColumnTypeInfos() = *columnType.TypeInfo;
-                } else {
-                    *settings->AddKeyColumnTypeInfos() = NKikimrProto::TTypeInfo();
-                }
+                *settings->AddKeyColumnTypeInfos() = columnType.TypeInfo ?
+                    *columnType.TypeInfo :
+                    NKikimrProto::TTypeInfo();
                 settings->AddKeyColumnTypes(static_cast<ui32>(keyColumn.GetTypeId()));
             }
 
@@ -1399,18 +1440,8 @@ protected:
             for (ui32 i = 0; i < resultColsCount; ++i) {
                 taskMeta.ReadInfo.ResultColumnsTypes.emplace_back();
                 auto memberType = resultStructType->GetMemberType(i);
-                if (memberType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Pg) {
-                    const auto memberPgType = static_cast<NKikimr::NMiniKQL::TPgType*>(memberType);
-                    taskMeta.ReadInfo.ResultColumnsTypes.back() = NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(memberPgType->GetTypeId()));
-                } else {
-                    if (memberType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Optional) {
-                        memberType = static_cast<NKikimr::NMiniKQL::TOptionalType*>(memberType)->GetItemType();
-                    }
-                    YQL_ENSURE(memberType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Data,
-                        "Expected simple data types to be read from column shard");
-                    const auto memberDataType = static_cast<NKikimr::NMiniKQL::TDataType*>(memberType);
-                    taskMeta.ReadInfo.ResultColumnsTypes.back() = NScheme::TTypeInfo(memberDataType->GetSchemeType());
-                }
+                NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromMiniKQLType(memberType);
+                taskMeta.ReadInfo.ResultColumnsTypes.back() = typeInfo;
             }
         }
         if (!readOlapRange || readOlapRange->GetOlapProgram().empty()) {

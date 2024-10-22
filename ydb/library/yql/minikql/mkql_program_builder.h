@@ -210,7 +210,7 @@ public:
     TRuntimeNode FromString(TRuntimeNode data, TType* type);
     TRuntimeNode StrictFromString(TRuntimeNode data, TType* type);
     TRuntimeNode ToBytes(TRuntimeNode data);
-    TRuntimeNode FromBytes(TRuntimeNode data, NUdf::TDataTypeId schemeType);
+    TRuntimeNode FromBytes(TRuntimeNode data, TType* type);
     TRuntimeNode InversePresortString(TRuntimeNode data);
     TRuntimeNode InverseString(TRuntimeNode data);
     TRuntimeNode Random(const TArrayRef<const TRuntimeNode>& dependentNodes);
@@ -257,7 +257,7 @@ public:
         const TArrayRef<const TRuntimeNode>& args, TType* returnType);
     TRuntimeNode BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode dict,
         EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns,
-        const TArrayRef<const ui32>& leftKeyDrops = {});
+        const TArrayRef<const ui32>& leftKeyDrops, TType* returnType);
 
     //-- logical functions
     TRuntimeNode BlockNot(TRuntimeNode data);

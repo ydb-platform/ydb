@@ -3,7 +3,7 @@
 **v24.2**
 v.24.2.7  | 20.08.24 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.2.7`
 **v24.1**
-v.24.1.18 | 31.07.24 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.1.18`
+v.24.1.18 | 31.07.24 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.1.18` | [См. список](../../../changelog-server.md#24-1)
 **v23.4**
 v.23.4.11 | 14.05.24 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.4.11` | [См. список](../../../changelog-server.md#23-4)
 **v23.3**

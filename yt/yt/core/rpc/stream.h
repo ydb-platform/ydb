@@ -265,6 +265,13 @@ TFuture<NConcurrency::IAsyncZeroCopyOutputStreamPtr> CreateRpcClientOutputStream
     TIntrusivePtr<TTypedClientRequest<TRequestMessage, TResponse>> request,
     TCallback<void(TSharedRef)> metaHandler);
 
+//! This variant additionally allows non-trivial response of streaming request to be handled.
+template <class TRequestMessage, class TResponse>
+TFuture<NConcurrency::IAsyncZeroCopyOutputStreamPtr> CreateRpcClientOutputStream(
+    TIntrusivePtr<TTypedClientRequest<TRequestMessage, TResponse>> request,
+    TCallback<void(TSharedRef)> metaHandler,
+    TCallback<void(TIntrusivePtr<TResponse>&&)> rspHandler);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Handles an incoming streaming request that uses the #CreateRpcClientInputStream

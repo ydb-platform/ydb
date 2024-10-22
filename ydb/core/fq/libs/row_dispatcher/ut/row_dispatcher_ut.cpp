@@ -7,6 +7,7 @@
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/actor_helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 
 namespace {
 
@@ -32,7 +33,8 @@ struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
         ui32 /*partitionId*/,
         NYdb::TDriver /*driver*/,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> /*credentialsProviderFactory*/,
-        const ::NMonitoring::TDynamicCounterPtr& /*counters*/) const override {
+        const ::NMonitoring::TDynamicCounterPtr& /*counters*/,
+        const NYql::IPqGateway::TPtr& /*pqGateway*/) const override {
         auto actorId  = Runtime.AllocateEdgeActor();
         ActorIds.push(actorId);
         return actorId;
@@ -61,7 +63,6 @@ public:
         database.SetDatabase("YDB_DATABASE");
         database.SetToken("");
 
-        NConfig::TCommonConfig commonConfig;
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
    
@@ -71,16 +72,23 @@ public:
         ReadActorId1 = Runtime.AllocateEdgeActor();
         ReadActorId2 = Runtime.AllocateEdgeActor();
         TestActorFactory = MakeIntrusive<TTestActorFactory>(Runtime);
+        
+        NYql::TPqGatewayServices pqServices(
+            yqSharedResources->UserSpaceYdbDriver,
+            nullptr,
+            nullptr,
+            std::make_shared<NYql::TPqGatewayConfig>(),
+            nullptr);
 
         RowDispatcher = Runtime.Register(NewRowDispatcher(
             config,
-            commonConfig,
             NKikimr::CreateYdbCredentialsProviderFactory,
             yqSharedResources,
             credentialsFactory,
             "Tenant",
             TestActorFactory,
-            MakeIntrusive<NMonitoring::TDynamicCounters>()
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
+            CreatePqNativeGateway(pqServices)
             ).release());
 
         Runtime.EnableScheduleForActor(RowDispatcher);

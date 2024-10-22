@@ -443,6 +443,8 @@ Y_UNIT_TEST(AlterTable) {
             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (resolved_timestamps = Interval(\"PT1S\"));\n"},
         {"alter table user add changefeed user with (topic_min_active_partitions = 1)",
             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (topic_min_active_partitions = 1);\n"},
+        {"alter table user add changefeed user with (topic_auto_partitioning = 'ENABLED', topic_min_active_partitions = 1, topic_max_active_partitions = 7)",
+            "ALTER TABLE user\n\tADD CHANGEFEED user WITH (topic_auto_partitioning = 'ENABLED', topic_min_active_partitions = 1, topic_max_active_partitions = 7);\n"},
     };
 
     TSetup setup;
@@ -1577,10 +1579,10 @@ Y_UNIT_TEST(BackupCollectionOperations) {
     TCases cases = {
         {"creAte  BackuP colLection `-naMe` wIth (a = \"b\")",
             "CREATE BACKUP COLLECTION `-naMe` WITH (a = \"b\");\n"},
-        {"creAte  BackuP colLection `-naMe` wIth (a = \"b\")    DATabase",
-            "CREATE BACKUP COLLECTION `-naMe` WITH (a = \"b\") DATABASE;\n"},
-        {"creAte  BackuP colLection `-naMe` wIth (a = \"b\")    tabLe      `tbl1`      , TablE `tbl2`",
-            "CREATE BACKUP COLLECTION `-naMe` WITH (a = \"b\") TABLE `tbl1`, TABLE `tbl2`;\n"},
+        {"creAte  BackuP colLection `-naMe`     DATabase wIth (a = \"b\")",
+            "CREATE BACKUP COLLECTION `-naMe` DATABASE WITH (a = \"b\");\n"},
+        {"creAte  BackuP colLection    `-naMe`   (   tabLe      `tbl1`      , TablE `tbl2`) wIth (a = \"b\")",
+            "CREATE BACKUP COLLECTION `-naMe` (TABLE `tbl1`, TABLE `tbl2`) WITH (a = \"b\");\n"},
         {"alTer bACKuP coLLECTION naMe resEt (b, c), seT (x=y, z=false)",
             "ALTER BACKUP COLLECTION naMe\n\tRESET (b, c),\n\tSET (x = y, z = FALSE);\n"},
         {"alTer bACKuP coLLECTION naMe aDD         DATAbase",

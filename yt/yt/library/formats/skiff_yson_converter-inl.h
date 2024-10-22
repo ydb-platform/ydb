@@ -70,8 +70,18 @@ Y_FORCE_INLINE TStringBuf TDecimalSkiffParser<SkiffWireType>::operator() (NSkiff
             TDecimal::TValue128{skiffValue.Low, skiffValue.High},
             Buffer_,
             sizeof(Buffer_));
+    } else if constexpr (SkiffWireType == EWireType::Int256) {
+        const auto skiffValue = parser->ParseInt256();
+        TDecimal::TValue256 decimalValue;
+        static_assert(sizeof(decimalValue) == sizeof(skiffValue));
+        std::memcpy(&decimalValue, &skiffValue, sizeof(decimalValue));
+        return TDecimal::WriteBinary256(
+            Precision_,
+            std::move(decimalValue),
+            Buffer_,
+            sizeof(Buffer_));
     } else {
-        static_assert(SkiffWireType == EWireType::Int128);
+        static_assert(SkiffWireType == EWireType::Int256);
     }
 }
 
@@ -99,9 +109,15 @@ void TDecimalSkiffWriter<SkiffWireType>::operator()(TStringBuf value, NSkiff::TC
     } else if constexpr (SkiffWireType == EWireType::Int128) {
         auto intValue = TDecimal::ParseBinary128(Precision_, value);
         writer->WriteInt128(TInt128{intValue.Low, intValue.High});
+    } else if constexpr (SkiffWireType == EWireType::Int256) {
+        auto intValue = TDecimal::ParseBinary256(Precision_, value);
+        TInt256 skiffValue;
+        static_assert(sizeof(skiffValue) == sizeof(intValue));
+        std::memcpy(&skiffValue, &intValue, sizeof(skiffValue));
+        writer->WriteInt256(std::move(skiffValue));
     } else {
         // poor man's static_assert(false)
-        static_assert(SkiffWireType == EWireType::Int128);
+        static_assert(SkiffWireType == EWireType::Int256);
     }
 }
 
@@ -127,7 +143,7 @@ void TUuidWriter::operator()(TStringBuf value, NSkiff::TCheckedInDebugSkiffWrite
             ExpectedSize,
             value.size());
     }
-    const ui64* array = reinterpret_cast<const ui64*>(value.Data());
+    const ui64* array = reinterpret_cast<const ui64*>(value.data());
     writer->WriteUint128(NSkiff::TUint128{InetToHost(array[1]), InetToHost(array[0])});
 }
 

@@ -211,6 +211,7 @@ bool IsChunkOwnerType(EObjectType type)
 bool IsCellType(EObjectType type)
 {
     return
+        type == EObjectType::MasterCell ||
         type == EObjectType::TabletCell ||
         type == EObjectType::ChaosCell;
 }
@@ -328,6 +329,11 @@ bool HasSchema(EObjectType type)
 bool IsSchemaType(EObjectType type)
 {
     return (static_cast<ui32>(type) & SchemaObjectTypeMask) != 0;
+}
+
+TString FormatObjectType(EObjectType type)
+{
+    return IsSchemaType(type) ? Format("schema:%v", TypeFromSchemaType(type)) : FormatEnum(type);
 }
 
 bool IsGlobalCellId(TCellId cellId)

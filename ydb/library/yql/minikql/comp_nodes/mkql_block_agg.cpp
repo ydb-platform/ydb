@@ -427,6 +427,7 @@ struct TAggParams {
     ui32 Column_ = 0;
     TType* StateType_ = nullptr;
     TType* ReturnType_ = nullptr;
+    ui32 Hint_ = 0;
 };
 
 struct TKeyParams {
@@ -520,7 +521,7 @@ protected:
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
 
-        BranchInst::Create(main, make, HasValue(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -927,7 +928,7 @@ protected:
         const auto fill = BasicBlock::Create(context, "fill", ctx.Func);
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
 
-        BranchInst::Create(main, make, HasValue(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -1723,7 +1724,8 @@ std::unique_ptr<IPreparedBlockAggregator<TAggregator>> PrepareBlockAggregator(co
     std::optional<ui32> filterColumn,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType);
+    TType* returnType,
+    ui32 hint);
 
 template <>
 std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorCombineAll>> PrepareBlockAggregator<IBlockAggregatorCombineAll>(const IBlockAggregatorFactory& factory,
@@ -1731,7 +1733,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorCombineAll>> PrepareBlo
     std::optional<ui32> filterColumn,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) {
+    TType* returnType,
+    ui32 hint) {
+    Y_UNUSED(hint);
     MKQL_ENSURE(!returnType, "Unexpected return type");
     return factory.PrepareCombineAll(tupleType, filterColumn, argsColumns, env);
 }
@@ -1742,7 +1746,9 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorCombineKeys>> PrepareBl
     std::optional<ui32> filterColumn,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) {
+    TType* returnType,
+    ui32 hint) {
+    Y_UNUSED(hint);
     MKQL_ENSURE(!filterColumn, "Unexpected filter column");
     MKQL_ENSURE(!returnType, "Unexpected return type");
     return factory.PrepareCombineKeys(tupleType, argsColumns, env);
@@ -1754,10 +1760,11 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareB
     std::optional<ui32> filterColumn,
     const std::vector<ui32>& argsColumns,
     const TTypeEnvironment& env,
-    TType* returnType) {
+    TType* returnType,
+    ui32 hint) {
     MKQL_ENSURE(!filterColumn, "Unexpected filter column");
     MKQL_ENSURE(returnType, "Missing return type");
-    return factory.PrepareFinalizeKeys(tupleType, argsColumns, env, returnType);
+    return factory.PrepareFinalizeKeys(tupleType, argsColumns, env, returnType, hint);
 }
 
 template <typename TAggregator>
@@ -1802,9 +1809,13 @@ ui32 FillAggParams(TTupleLiteral* aggsVal, TTupleType* tupleType, std::optional<
             p.Column_ = argColumns[0];
             p.StateType_ = AS_TYPE(TBlockType, tupleType->GetElementType(p.Column_))->GetItemType();
             p.ReturnType_ = returnTypes[i + keysCount];
+            TStringBuf left, right;
+            if (TStringBuf(name).TrySplit('#', left, right)) {
+                p.Hint_ = FromString<ui32>(right);
+            }
         }
 
-        p.Prepared_ = PrepareBlockAggregator<TAggregator>(GetBlockAggregatorFactory(name), unwrappedTupleType, filterColumn, argColumns, env, p.ReturnType_);
+        p.Prepared_ = PrepareBlockAggregator<TAggregator>(GetBlockAggregatorFactory(name), unwrappedTupleType, filterColumn, argColumns, env, p.ReturnType_, p.Hint_);
 
         totalStateSize += p.Prepared_->StateSize;
         aggsParams.emplace_back(std::move(p));

@@ -144,6 +144,9 @@ namespace {
         void SendPartsOnMain(const TActorId& selfId, TVector<TPart>& parts) {
             THashMap<TVDiskID, std::unique_ptr<TEvBlobStorage::TEvVMultiPut>> vDiskToEv;
             for (auto& part: parts) {
+                if (part.PartsData.empty()) {
+                    continue;
+                }
                 auto localParts = part.PartsMask;
                 for (ui8 partIdx = localParts.FirstPosition(), i = 0; partIdx < localParts.GetSize(); partIdx = localParts.NextPosition(partIdx), ++i) {
                     auto key = TLogoBlobID(part.Key, partIdx + 1);
@@ -249,7 +252,7 @@ namespace {
                 return;
             }
 
-            Schedule(TDuration::Seconds(15), new NActors::TEvents::TEvWakeup(READ_TIMEOUT_TAG)); // read timeout
+            Schedule(Ctx->Cfg.ReadBatchTimeout, new NActors::TEvents::TEvWakeup(READ_TIMEOUT_TAG)); // read timeout
         }
 
         void Handle(NPDisk::TEvChunkReadResult::TPtr ev) {
@@ -293,7 +296,7 @@ namespace {
 
             Sender.SendPartsOnMain(SelfId(), Reader.GetResult());
 
-            Schedule(TDuration::Seconds(15), new NActors::TEvents::TEvWakeup(SEND_TIMEOUT_TAG)); // send timeout
+            Schedule(Ctx->Cfg.SendBatchTimeout, new NActors::TEvents::TEvWakeup(SEND_TIMEOUT_TAG)); // send timeout
         }
 
         template<class TEvPutResult>
@@ -314,7 +317,7 @@ namespace {
         }
 
         void PassAway() override {
-            Send(NotifyId, new NActors::TEvents::TEvCompleted(SENDER_ID));
+            Send(NotifyId, new NActors::TEvents::TEvCompleted());
             STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB28, VDISKP(Ctx->VCtx, "TSender::PassAway"));
             TActorBootstrapped::PassAway();
         }
@@ -323,6 +326,8 @@ namespace {
             hFunc(NActors::TEvents::TEvWakeup, TimeoutSend)
             hFunc(TEvBlobStorage::TEvVPutResult, HandlePutResult)
             hFunc(TEvBlobStorage::TEvVMultiPutResult, HandlePutResult)
+
+            cFunc(NPDisk::TEvChunkReadResult::EventType, [](){})  // read results received after timeout
 
             hFunc(TEvVGenerationChange, Handle)
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)

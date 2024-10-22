@@ -25,19 +25,29 @@ public:
     void Invoke(TClosure callback) override
     {
         YT_ASSERT(callback);
+        auto guard = NDetail::MakeCancelableContextCurrentTokenGuard(Context_);
 
         if (Context_->Canceled_) {
+            callback.Reset();
             return;
         }
 
-        return UnderlyingInvoker_->Invoke(BIND_NO_PROPAGATE([this, this_ = MakeStrong(this), callback = std::move(callback)] {
-            if (Context_->Canceled_) {
-                return;
-            }
+        return UnderlyingInvoker_->Invoke(BIND_NO_PROPAGATE(
+            [
+                this,
+                this_ = MakeStrong(this),
+                callback = std::move(callback)
+            ] () mutable {
+                auto currentTokenGuard = NDetail::MakeCancelableContextCurrentTokenGuard(Context_);
 
-            TCurrentInvokerGuard guard(this);
-            callback();
-        }));
+                if (Context_->Canceled_) {
+                    callback.Reset();
+                    return;
+                }
+
+                TCurrentInvokerGuard guard(this);
+                callback();
+            }));
     }
 
 private:
@@ -50,6 +60,11 @@ private:
 bool TCancelableContext::IsCanceled() const
 {
     return Canceled_;
+}
+
+const TError& TCancelableContext::GetCancelationError() const
+{
+    return CancelationError_;
 }
 
 void TCancelableContext::Cancel(const TError& error)
@@ -70,8 +85,7 @@ void TCancelableContext::Cancel(const TError& error)
     Handlers_.FireAndClear(error);
 
     for (const auto& weakContext : propagateToContexts) {
-        auto context = weakContext.Lock();
-        if (context) {
+        if (auto context = weakContext.Lock()) {
             context->Cancel(error);
         }
     }

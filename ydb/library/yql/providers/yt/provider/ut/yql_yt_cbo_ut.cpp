@@ -74,14 +74,14 @@ Y_UNIT_TEST(OrderJoinsDoesNothingWhenCBODisabled) {
 }
 
 Y_UNIT_TEST(NonReordable) {
-    auto stat = std::make_shared<TOptimizerStatistics>();
-    auto left = std::make_shared<TRelOptimizerNode>("a", stat);
-    auto right = std::make_shared<TRelOptimizerNode>("a", stat);
+    auto left = std::make_shared<TRelOptimizerNode>("a", TOptimizerStatistics());
+    auto right = std::make_shared<TRelOptimizerNode>("a", TOptimizerStatistics());
 
-    std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>> joinConditions;
-    joinConditions.insert({NDq::TJoinColumn{"a", "b"}, NDq::TJoinColumn{"a","c"}});
+    TVector<NDq::TJoinColumn> leftKeys = {NDq::TJoinColumn{"a", "b"}};
+    TVector<NDq::TJoinColumn> rightKeys = {NDq::TJoinColumn{"a","c"}};
+
     auto root = std::make_shared<TJoinOptimizerNode>(
-        left, right, joinConditions, EJoinKind::InnerJoin, EJoinAlgoType::GraceJoin, false, false, true);
+        left, right, leftKeys, rightKeys, EJoinKind::InnerJoin, EJoinAlgoType::GraceJoin, false, false, true);
     TBaseProviderContext optCtx;
     std::unique_ptr<IOptimizerNew> opt = std::unique_ptr<IOptimizerNew>(NDq::MakeNativeOptimizerNew(optCtx, 1024));
     auto result = opt->JoinSearch(root);
@@ -89,12 +89,12 @@ Y_UNIT_TEST(NonReordable) {
     // Join tree is built from scratch with DPhyp, check the structure by comapring with Stats 
     UNIT_ASSERT(root->LeftArg->Kind == RelNodeType);
     UNIT_ASSERT(
-        std::static_pointer_cast<TRelOptimizerNode>(root->LeftArg)->Stats == left->Stats
+        &std::static_pointer_cast<TRelOptimizerNode>(root->LeftArg)->Stats == &left->Stats
     );
 
     UNIT_ASSERT(root->RightArg->Kind == RelNodeType);
     UNIT_ASSERT(
-        std::static_pointer_cast<TRelOptimizerNode>(root->RightArg)->Stats == right->Stats
+        &std::static_pointer_cast<TRelOptimizerNode>(root->RightArg)->Stats == &right->Stats
     );
 }
 
@@ -108,7 +108,8 @@ Y_UNIT_TEST(BuildOptimizerTree2Tables) {
 
     std::shared_ptr<IBaseOptimizerNode> resultTree;
     std::shared_ptr<IProviderContext> resultCtx;
-    BuildOptimizerJoinTree(state, cluster, resultTree, resultCtx, tree, exprCtx);
+    TOptimizerLinkSettings linkSettings;
+    BuildOptimizerJoinTree(state, cluster, resultTree, resultCtx, linkSettings, tree, exprCtx);
 
     UNIT_ASSERT(resultTree->Kind == JoinNodeType);
     auto root = std::static_pointer_cast<TJoinOptimizerNode>(resultTree);
@@ -120,8 +121,8 @@ Y_UNIT_TEST(BuildOptimizerTree2Tables) {
 
     UNIT_ASSERT_VALUES_EQUAL(left->Label, "c");
     UNIT_ASSERT_VALUES_EQUAL(right->Label, "n");
-    UNIT_ASSERT_VALUES_EQUAL(left->Stats->Nrows, 100000);
-    UNIT_ASSERT_VALUES_EQUAL(right->Stats->Nrows, 1000);
+    UNIT_ASSERT_VALUES_EQUAL(left->Stats.Nrows, 100000);
+    UNIT_ASSERT_VALUES_EQUAL(right->Stats.Nrows, 1000);
 }
 
 Y_UNIT_TEST(BuildOptimizerTree2TablesComplexLabel) {
@@ -134,7 +135,8 @@ Y_UNIT_TEST(BuildOptimizerTree2TablesComplexLabel) {
 
     std::shared_ptr<IBaseOptimizerNode> resultTree;
     std::shared_ptr<IProviderContext> resultCtx;
-    BuildOptimizerJoinTree(state, cluster, resultTree, resultCtx, tree, exprCtx);
+    TOptimizerLinkSettings linkSettings;
+    BuildOptimizerJoinTree(state, cluster, resultTree, resultCtx, linkSettings, tree, exprCtx);
 
     UNIT_ASSERT(resultTree->Kind == JoinNodeType);
     auto root = std::static_pointer_cast<TJoinOptimizerNode>(resultTree);
@@ -146,8 +148,8 @@ Y_UNIT_TEST(BuildOptimizerTree2TablesComplexLabel) {
 
     UNIT_ASSERT_VALUES_EQUAL(left->Label, "c");
     UNIT_ASSERT_VALUES_EQUAL(right->Label, "n");
-    UNIT_ASSERT_VALUES_EQUAL(left->Stats->Nrows, 1000000);
-    UNIT_ASSERT_VALUES_EQUAL(right->Stats->Nrows, 10000);
+    UNIT_ASSERT_VALUES_EQUAL(left->Stats.Nrows, 1000000);
+    UNIT_ASSERT_VALUES_EQUAL(right->Stats.Nrows, 10000);
 }
 
 Y_UNIT_TEST(BuildYtJoinTree2Tables) {
@@ -160,7 +162,8 @@ Y_UNIT_TEST(BuildYtJoinTree2Tables) {
 
     std::shared_ptr<IBaseOptimizerNode> resultTree;
     std::shared_ptr<IProviderContext> resultCtx;
-    BuildOptimizerJoinTree(state, cluster, resultTree, resultCtx, tree, exprCtx);
+    TOptimizerLinkSettings linkSettings;
+    BuildOptimizerJoinTree(state, cluster, resultTree, resultCtx, linkSettings, tree, exprCtx);
 
     auto joinTree = BuildYtJoinTree(resultTree, exprCtx, {});
 
@@ -178,7 +181,8 @@ Y_UNIT_TEST(BuildYtJoinTree2TablesForceMergeJoib) {
 
     std::shared_ptr<IBaseOptimizerNode> resultTree;
     std::shared_ptr<IProviderContext> resultCtx;
-    BuildOptimizerJoinTree(state, cluster, resultTree, resultCtx, tree, exprCtx);
+    TOptimizerLinkSettings linkSettings;
+    BuildOptimizerJoinTree(state, cluster, resultTree, resultCtx, linkSettings, tree, exprCtx);
 
     auto joinTree = BuildYtJoinTree(resultTree, exprCtx, {});
 
@@ -195,7 +199,8 @@ Y_UNIT_TEST(BuildYtJoinTree2TablesComplexLabel) {
 
     std::shared_ptr<IBaseOptimizerNode> resultTree;
     std::shared_ptr<IProviderContext> resultCtx;
-    BuildOptimizerJoinTree(state, cluster, resultTree, resultCtx, tree, exprCtx);
+    TOptimizerLinkSettings linkSettings;
+    BuildOptimizerJoinTree(state, cluster, resultTree, resultCtx, linkSettings, tree, exprCtx);
     auto joinTree = BuildYtJoinTree(resultTree, exprCtx, {});
 
     UNIT_ASSERT(AreSimilarTrees(joinTree, tree));
@@ -212,7 +217,8 @@ Y_UNIT_TEST(BuildYtJoinTree2TablesTableIn2Rels)
 
     std::shared_ptr<IBaseOptimizerNode> resultTree;
     std::shared_ptr<IProviderContext> resultCtx;
-    BuildOptimizerJoinTree(state, cluster, resultTree, resultCtx, tree, exprCtx);
+    TOptimizerLinkSettings linkSettings;
+    BuildOptimizerJoinTree(state, cluster, resultTree, resultCtx, linkSettings, tree, exprCtx);
     auto joinTree = BuildYtJoinTree(resultTree, exprCtx, {});
 
     UNIT_ASSERT(AreSimilarTrees(joinTree, tree));

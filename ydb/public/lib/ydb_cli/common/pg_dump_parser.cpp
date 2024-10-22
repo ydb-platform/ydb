@@ -4,6 +4,33 @@
 
 namespace NYdb::NConsoleClient {
 
+size_t TFixedStringStream::DoRead(void* buf, size_t len) {
+    len = std::min(len, Data.size() - Position);
+    memcpy(buf, Data.data() + Position, len);
+    Position += len;
+    return len;
+}
+
+size_t TFixedStringStream::DoSkip(size_t len) {
+    len = std::min(len, Data.size() - Position);
+    Position += len;
+    return len;
+}
+
+size_t TFixedStringStream::DoReadTo(TString& st, char ch) {
+    size_t len = std::min(Data.find_first_of(ch, Position), Data.size()) - Position;
+    st += Data.substr(Position, len);
+    Position += len;
+    return len;
+}
+
+ui64 TFixedStringStream::DoReadAll(IOutputStream& out) {
+    out << Data.substr(Position);
+    size_t len = Data.size() - Position;
+    Position = Data.size();
+    return len;
+}
+
 TPgDumpParser::TSQLCommandNode* TPgDumpParser::TSQLCommandNode::AddCommand(const TString& commandName,
         TSelfPtr node, const std::function<void()>& callback) {
     ChildNodes.insert({commandName, TEdge{std::move(node), callback}});

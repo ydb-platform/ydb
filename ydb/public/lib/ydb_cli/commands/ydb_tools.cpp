@@ -7,11 +7,7 @@
 #include <ydb/library/backup/util.h>
 
 #include <util/stream/format.h>
-#include <util/stream/str.h>
 #include <util/string/split.h>
-
-#include <algorithm>
-#include <queue>
 
 namespace NYdb::NConsoleClient {
 
@@ -415,9 +411,9 @@ int TCommandPgConvert::Run(TConfig& config) {
         fileInput = std::make_unique<TFileInput>(Path);
         parser.WritePgDump(*fileInput);
     } else {
-        TStringStream stream(Cin.ReadAll());
+        TFixedStringStream stream(Cin.ReadAll());
         parser.Prepare(stream);
-        stream.Reset();
+        stream.MovePointer();
         parser.WritePgDump(stream);
     }
     return EXIT_SUCCESS;

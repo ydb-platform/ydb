@@ -530,6 +530,9 @@ Y_UNIT_TEST(ReplacementPolicySwitch) {
     }
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{3, 3, 1, 1}));
 
+    UNIT_ASSERT_GT(counters->ReplacementPolicySize(NKikimrSharedCache::ThreeLeveledLRU)->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ReplacementPolicySize(NKikimrSharedCache::S3FIFO)->Val(), 0);
+
     SwitchPolicy(env, NKikimrSharedCache::S3FIFO);
 
     retried = {};
@@ -542,7 +545,10 @@ Y_UNIT_TEST(ReplacementPolicySwitch) {
     for (i64 key = 90; key < 93; ++key) {
         env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
     }
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{3}));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{3, 3, 2, 1}));
+
+    UNIT_ASSERT_GT(counters->ReplacementPolicySize(NKikimrSharedCache::S3FIFO)->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ReplacementPolicySize(NKikimrSharedCache::ThreeLeveledLRU)->Val(), 0);
 }
 
 } // Y_UNIT_TEST_SUITE(TSharedPageCache)

@@ -134,7 +134,7 @@ public:
         RotatePages(evictedList);
 
         while (GetSize() > Limit && Caches.size() > 1) {
-            evictedList = Concatenate(std::move(evictedList), EvictNext());
+            Append(evictedList, EvictNext());
         }
 
         return evictedList;
@@ -210,8 +210,7 @@ private:
                 
                 // touch each page multiple times to make it warm
                 for (ui32 touchTimes = 0; touchTimes < 3; touchTimes++) {
-                    evictedList = Concatenate(std::move(evictedList),
-                        Caches.back().Touch(page));
+                    Append(evictedList, Caches.back().Touch(page));
                 }
                 
                 rotatedPagesCount++;
@@ -219,12 +218,11 @@ private:
         }
     }
 
-    TIntrusiveList<TPage> Concatenate(TIntrusiveList<TPage>&& left, TIntrusiveList<TPage>&& right) {
+    void Append(TIntrusiveList<TPage>& left, TIntrusiveList<TPage>&& right) {
         while (!right.Empty()) {
             TPage* page = right.PopFront();
             left.PushBack(page);
         }
-        return left;
     }
 
 private:

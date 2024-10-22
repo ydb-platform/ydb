@@ -154,7 +154,7 @@ Y_UNIT_TEST_SUITE(TCompositeCache) {
         return result;
     }
 
-    Y_UNIT_TEST(One_Touch) {
+    Y_UNIT_TEST(Touch) {
         TCounterPtr counter = new NMonitoring::TCounterForPtr;
         TCompositeCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter);
 
@@ -192,7 +192,7 @@ Y_UNIT_TEST_SUITE(TCompositeCache) {
         UNIT_ASSERT_VALUES_EQUAL(counter->Val(), cache.GetSize());
     }
 
-    Y_UNIT_TEST(One_Erase) {
+    Y_UNIT_TEST(Erase) {
         TCounterPtr counter = new NMonitoring::TCounterForPtr;
         TCompositeCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter);
 
@@ -217,7 +217,7 @@ Y_UNIT_TEST_SUITE(TCompositeCache) {
         UNIT_ASSERT_VALUES_EQUAL(counter->Val(), cache.GetSize());
     }
 
-    Y_UNIT_TEST(One_EvictNext) {
+    Y_UNIT_TEST(EvictNext) {
         TCounterPtr counter = new NMonitoring::TCounterForPtr;
         TCompositeCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter);
 
@@ -253,7 +253,7 @@ Y_UNIT_TEST_SUITE(TCompositeCache) {
         UNIT_ASSERT_VALUES_EQUAL(counter->Val(), cache.GetSize());
     }
 
-    Y_UNIT_TEST(One_UpdateLimit) {
+    Y_UNIT_TEST(UpdateLimit) {
         TCounterPtr counter = new NMonitoring::TCounterForPtr;
         TCompositeCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter);
 
@@ -327,8 +327,8 @@ Y_UNIT_TEST_SUITE(TCompositeCache) {
         pages.push_back(MakeHolder<TPage>(pages.size(), 1));
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, *pages.back()), TVector<ui32>{10});
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 50);
-        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 39);
-        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 39); // [11 .. 49]
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 11); // [50, 0 .. 9]
 
         pages.push_back(MakeHolder<TPage>(pages.size(), 1));
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, *pages.back()), TVector<ui32>{21});
@@ -409,6 +409,134 @@ Y_UNIT_TEST_SUITE(TCompositeCache) {
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 4);
         UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 4);
     }
+
+    Y_UNIT_TEST(Switch_Touch) {
+        TCounterPtr counter1 = new NMonitoring::TCounterForPtr;
+        TCounterPtr counter2 = new NMonitoring::TCounterForPtr;
+        TCompositeCache<TPage, TPageTraits> cache(50, MakeHolder<TSimpleCache>(), counter1);
+
+        TVector<THolder<TPage>> pages;
+        for (ui32 pageId : xrange(50)) {
+            pages.push_back(MakeHolder<TPage>(pageId, 1));
+            UNIT_ASSERT_VALUES_EQUAL(Touch(cache, *pages.back()), TVector<ui32>{});
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(Switch(cache, MakeHolder<TSimpleCache>(), counter2), TVector<ui32>{});
+
+        pages.push_back(MakeHolder<TPage>(pages.size(), 1));
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, *pages.back()), TVector<ui32>{10});
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 50);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 39); // [11 .. 49]
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 11); // [50, 0 .. 9]
+
+        Touch(cache, *pages[23]);
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 50);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 29);
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 21);
+
+        Touch(cache, *pages[7]);
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 50);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 19);
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 31);
+    }
+
+    Y_UNIT_TEST(Switch_Erase) {
+        TCounterPtr counter1 = new NMonitoring::TCounterForPtr;
+        TCounterPtr counter2 = new NMonitoring::TCounterForPtr;
+        TCompositeCache<TPage, TPageTraits> cache(50, MakeHolder<TSimpleCache>(), counter1);
+
+        TVector<THolder<TPage>> pages;
+        for (ui32 pageId : xrange(50)) {
+            pages.push_back(MakeHolder<TPage>(pageId, 1));
+            UNIT_ASSERT_VALUES_EQUAL(Touch(cache, *pages.back()), TVector<ui32>{});
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(Switch(cache, MakeHolder<TSimpleCache>(), counter2), TVector<ui32>{});
+
+        pages.push_back(MakeHolder<TPage>(pages.size(), 1));
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, *pages.back()), TVector<ui32>{10});
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 50);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 39); // [11 .. 49]
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 11); // [50, 0 .. 9]
+
+        Erase(cache, *pages[23]);
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 49);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 38);
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 11);
+
+        Erase(cache, *pages[7]);
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 48);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 38);
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 10);
+    }
+
+    Y_UNIT_TEST(Switch_EvictNext) {
+        TCounterPtr counter1 = new NMonitoring::TCounterForPtr;
+        TCounterPtr counter2 = new NMonitoring::TCounterForPtr;
+        TCompositeCache<TPage, TPageTraits> cache(50, MakeHolder<TSimpleCache>(), counter1);
+
+        TVector<THolder<TPage>> pages;
+        for (ui32 pageId : xrange(50)) {
+            pages.push_back(MakeHolder<TPage>(pageId, 1));
+            UNIT_ASSERT_VALUES_EQUAL(Touch(cache, *pages.back()), TVector<ui32>{});
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(Switch(cache, MakeHolder<TSimpleCache>(), counter2), TVector<ui32>{});
+
+        pages.push_back(MakeHolder<TPage>(pages.size(), 1));
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, *pages.back()), TVector<ui32>{10});
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 50);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 39); // [11 .. 49]
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 11); // [50, 0 .. 9]
+
+        for (ui32 i : xrange(39)) {
+            UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{i + 11});
+        }
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 11);
+
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{50});
+        for (ui32 i : xrange(10)) {
+            UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{i});
+        }
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 0);
+    }
+
+    Y_UNIT_TEST(Switch_UpdateLimit) {
+        TCounterPtr counter1 = new NMonitoring::TCounterForPtr;
+        TCounterPtr counter2 = new NMonitoring::TCounterForPtr;
+        TCompositeCache<TPage, TPageTraits> cache(50, MakeHolder<TSimpleCache>(), counter1);
+
+        TVector<THolder<TPage>> pages;
+        for (ui32 pageId : xrange(50)) {
+            pages.push_back(MakeHolder<TPage>(pageId, 1));
+            UNIT_ASSERT_VALUES_EQUAL(Touch(cache, *pages.back()), TVector<ui32>{});
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(Switch(cache, MakeHolder<TSimpleCache>(), counter2), TVector<ui32>{});
+
+        pages.push_back(MakeHolder<TPage>(pages.size(), 1));
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, *pages.back()), TVector<ui32>{10});
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 50);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 39); // [11 .. 49]
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 11); // [50, 0 .. 9]
+
+        cache.UpdateLimit(40);
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, *pages[23]), (TVector<ui32>{21, 22, 24, 25, 26, 27, 28, 29, 30, 31}));
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 40);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 19); // [32 .. 39, 23]
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 21); // [50, 0 .. 20]
+
+        cache.UpdateLimit(10);
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, *pages[7]).size(), 30);
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 10);
+    }
+
 }
 
 }

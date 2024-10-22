@@ -2,19 +2,8 @@
 set -ex
 
 clickhouse-client -n <<-EOSQL
-    DROP TABLE IF EXISTS db.simple;
-    CREATE TABLE db.simple (id Int32, col1 String, col2 Int32) ENGINE = MergeTree ORDER BY id;
-    INSERT INTO db.simple (*) VALUES
-        (1, 'ch_a', 10) \
-        (2, 'ch_b', 20) \
-        (3, 'ch_c', 30) \
-        (4, 'ch_d', 40) \
-        (5, 'ch_e', 50);
-EOSQL
-
-clickhouse-client -n <<-EOSQL
-    DROP TABLE IF EXISTS db.primitives;
-    CREATE TABLE db.primitives (
+    DROP TABLE IF EXISTS db.primitive_types;
+    CREATE TABLE db.primitive_types (
         col_00_id Int32,
         col_01_boolean Boolean,
         col_02_int8 Int8,
@@ -28,13 +17,13 @@ clickhouse-client -n <<-EOSQL
         col_10_float32 Float32,
         col_11_float64 Float64,
         col_12_string String,
-        col_13_string FixedString(13),
+        col_13_fixed_string FixedString(13),
         col_14_date Date,
         col_15_date32 Date32,
         col_16_datetime DateTime,
         col_17_datetime64 DateTime64(3)
     ) ENGINE = MergeTree ORDER BY col_00_id;
-    INSERT INTO db.primitives (*) VALUES
+    INSERT INTO db.primitive_types (*) VALUES
         (1, False, 2, 3, 4, 5, 6, 7, 8, 9, 10.10, 11.11, 'az', 'az', '1988-11-20', '1988-11-20', '1988-11-20 12:55:28', '1988-11-20 12:55:28.123') \
         (2, True, -2, 3, -4, 5, -6, 7, -8, 9, -10.10, -11.11, 'буки', 'буки', '2023-03-21', '2023-03-21', '2023-03-21 11:21:31', '2023-03-21 11:21:31.456');
 EOSQL

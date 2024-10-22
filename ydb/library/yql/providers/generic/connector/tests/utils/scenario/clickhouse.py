@@ -8,7 +8,7 @@ import yatest.common
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
 from ydb.library.yql.providers.generic.connector.tests.utils.docker_compose import DockerComposeHelper
 
-from ydb.library.yql.providers.generic.connector.tests.utils.comparator import assert_data_outs_equal
+from ydb.library.yql.providers.generic.connector.tests.utils.comparator import assert_data_outs_equal, assert_schemas_equal
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
 from ydb.library.yql.providers.generic.connector.tests.utils.run.parent import Runner
 
@@ -59,7 +59,7 @@ def select_positive(
         result.data_out_with_types,
     )
     if test_case.check_output_schema:
-        assert test_case.schema == result.schema, (test_case.schema, result.schema)
+        assert_schemas_equal(test_case.schema, result.schema)
 
 
 def select_missing_database(

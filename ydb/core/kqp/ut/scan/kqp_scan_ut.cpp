@@ -282,7 +282,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         CompareYson(R"([
             [["155555555555555"];["155555555555555.123456789"]];
             [["255555555555555"];["255555555555555.987654321"]]
-        ])", StreamResultToYson(it35));        
+        ])", StreamResultToYson(it35));
     }
 
     Y_UNIT_TEST(TaggedScalar) {
@@ -2422,7 +2422,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
             runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
             auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         };
 
         auto sendQuery = [&](const TString& queryText) {
@@ -2435,7 +2435,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
             runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
             auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         };
 
         createTable(createSession(), R"(

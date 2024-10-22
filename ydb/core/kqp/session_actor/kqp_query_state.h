@@ -579,11 +579,6 @@ public:
         return CpuTime;
     }
 
-    // Returns nullptr in case of no local event
-    google::protobuf::Arena* GetArena() {
-        return RequestEv->GetArena();
-    }
-
     bool GetCollectDiagnostics() {
         return RequestEv->GetCollectDiagnostics();
     }

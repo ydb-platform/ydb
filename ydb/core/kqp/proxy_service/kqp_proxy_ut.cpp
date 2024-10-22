@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
             runtime->Send(new IEventHandle(kqpProxy, sender, ev.Release()));
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::BAD_REQUEST);
         };
 
         SendBadRequestToSession("ydb://session/1?id=ZjY5NWRlM2EtYWMyYjA5YWEtNzQ0MTVlYTMtM2Q4ZDgzOWQ=&node_id=1234&node_id=12345");
@@ -238,8 +238,8 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
         runtime->Send(new IEventHandle(kqpProxy, sender, ev.Release()));
         TAutoPtr<IEventHandle> handle;
         auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::BAD_REQUEST);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetResponse().GetQueryIssues().at(0).message(), "<main>: Error: SomeUniqTextForUt\n");
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetResponse().GetQueryIssues().at(0).message(), "<main>: Error: SomeUniqTextForUt\n");
     }
 
     Y_UNIT_TEST(LoadedMetadataAfterCompilationTimeout) {
@@ -299,7 +299,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
             runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         };
 
         auto SendQuery = [&](const TString& sessionId, const TString& queryText) {
@@ -314,7 +314,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
             runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::TIMEOUT);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::TIMEOUT);
         };
 
         TString sessionId = CreateSession(runtime, kqpProxy, sender);
@@ -374,7 +374,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
 
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         }
     }
 
@@ -448,7 +448,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
 
                 TAutoPtr<IEventHandle> handle;
                 auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(handle);
-                auto status = reply->Record.GetRef().GetYdbStatus();
+                auto status = reply->Record.GetYdbStatus();
                 UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS || status == Ydb::StatusIds::TIMEOUT);
 
                 if (status == Ydb::StatusIds::SUCCESS) {

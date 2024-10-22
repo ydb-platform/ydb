@@ -40,10 +40,14 @@ Y_UNIT_TEST(JoinSearch2Rels) {
     TBaseProviderContext pctx;
     std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000));
 
-    auto rel1 = std::make_shared<TRelOptimizerNode>("a",
-        std::make_shared<TOptimizerStatistics>(BaseTable, 100000, 1, 0, 1000000));
-    auto rel2 = std::make_shared<TRelOptimizerNode>("b",
-        std::make_shared<TOptimizerStatistics>(BaseTable, 1000000, 1, 0, 9000009));
+    auto rel1 = std::make_shared<TRelOptimizerNode>(
+        "a",
+        TOptimizerStatistics(BaseTable, 100000, 1, 0, 1000000)
+    );
+    auto rel2 = std::make_shared<TRelOptimizerNode>(
+        "b",
+        TOptimizerStatistics(BaseTable, 1000000, 1, 0, 9000009)
+    );
 
     TVector<NDq::TJoinColumn> leftKeys = {NDq::TJoinColumn("a", "1")};
     TVector<NDq::TJoinColumn> rightKeys ={NDq::TJoinColumn("b", "1")};
@@ -79,11 +83,11 @@ Y_UNIT_TEST(JoinSearch3Rels) {
     std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000));
 
     auto rel1 = std::make_shared<TRelOptimizerNode>("a",
-        std::make_shared<TOptimizerStatistics>(BaseTable, 100000, 1, 0, 1000000));
+        TOptimizerStatistics(BaseTable, 100000, 1, 0, 1000000));
     auto rel2 = std::make_shared<TRelOptimizerNode>("b",
-        std::make_shared<TOptimizerStatistics>(BaseTable, 1000000, 1, 0, 9000009));
+        TOptimizerStatistics(BaseTable, 1000000, 1, 0, 9000009));
     auto rel3 = std::make_shared<TRelOptimizerNode>("c",
-        std::make_shared<TOptimizerStatistics>(BaseTable, 10000, 1, 0, 9009));
+        TOptimizerStatistics(BaseTable, 10000, 1, 0, 9009));
 
     TVector<NDq::TJoinColumn> leftKeys = {NDq::TJoinColumn("a", "1")};
     TVector<NDq::TJoinColumn> rightKeys ={NDq::TJoinColumn("b", "1")};
@@ -219,7 +223,7 @@ void _DqOptimizeEquiJoinWithCosts(const std::function<IOptimizerNew*()>& optFact
     auto opt = std::unique_ptr<IOptimizerNew>(optFactory());
     std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)> providerCollect = [](auto& rels, auto label, auto node, auto stats) {
         Y_UNUSED(node);
-        auto rel = std::make_shared<TRelOptimizerNode>(TString(label), stats);
+        auto rel = std::make_shared<TRelOptimizerNode>(TString(label), *stats);
         rels.push_back(rel);
     };
     auto res = DqOptimizeEquiJoinWithCosts(equiJoin, ctx, typeCtx, 2, *opt, providerCollect);

@@ -504,11 +504,6 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
         : TStringBuf("");
     if (input->ChildrenSize() > TDqJoin::idx_JoinAlgo) {
     const auto& joinAlgo = *input->Child(TDqJoin::idx_JoinAlgo);
-    if (joinAlgo.IsAtom("StreamLooup") && !joinType.IsAtom("Left")) {
-        ctx.AddError(TIssue(ctx.GetPosition(joinType.Pos()), TStringBuilder() << "DqJoin: Unsupported DQ join type " << joinType.Content() << " for join algorithm " << joinAlgo.Content()));
-        return nullptr;
-    }
-
     if (input->ChildrenSize() > TDqJoin::idx_Flags) {
         auto&& flags = input->Tail();
         for (ui32 i = 0; i < flags.ChildrenSize(); ++i) {
@@ -523,6 +518,8 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
                    continue;
                 }
             } else if (name.IsAtom({"LeftAny", "RightAny"})) {
+                if (!EnsureTupleSize(flag, 1, ctx))
+                    return nullptr;
                 continue;
             }
             ctx.AddError(TIssue(ctx.GetPosition(flag.Pos()), TStringBuilder() << "DqJoin: Unsupported DQ join option: " << name.Content()));
@@ -601,6 +598,10 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
     if (!leftInputType) {
         return TStatus::Error;
     }
+    if (auto joinType = cnStreamLookup.JoinType(); joinType != TStringBuf("Left")) {
+        ctx.AddError(TIssue(ctx.GetPosition(joinType.Pos()), "Streamlookup supports only LEFT JOIN ... ANY"));
+        return TStatus::Error;
+    }
     const auto leftRowType = GetSeqItemType(leftInputType);
     const auto rightRowType = GetSeqItemType(cnStreamLookup.RightInput().Raw()->GetTypeAnn());
     const auto outputRowType = GetDqJoinResultType<true>(
@@ -613,7 +614,21 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
         cnStreamLookup.JoinKeys(),
         ctx
     );
-    //TODO (YQ-2068) verify lookup parameters
+    auto validateIntParam = [&ctx=ctx](auto&& value) {
+        size_t val;
+        Y_UNUSED(val);
+        if (!TryIntFromString<10>(value.StringValue(), val)) {
+            ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), TStringBuilder() << "Expected integer, but got: " << value.StringValue()));
+            return false;
+        }
+        return true;
+    };
+    if (!validateIntParam(cnStreamLookup.MaxCachedRows()))
+        return TStatus::Error;
+    if (!validateIntParam(cnStreamLookup.TTL()))
+        return TStatus::Error;
+    if (!validateIntParam(cnStreamLookup.MaxDelayedRows()))
+        return TStatus::Error;
     input->SetTypeAnn(ctx.MakeType<TStreamExprType>(outputRowType));
     return TStatus::Ok;
 }

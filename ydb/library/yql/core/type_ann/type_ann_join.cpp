@@ -617,7 +617,13 @@ namespace NTypeAnnImpl {
         }
 
         for (auto& child: input->Tail().Children()) {
+            if (!EnsureTupleSize(*child, 1, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
             const auto& flag = child->Head();
+            if (!EnsureAtom(flag, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
             if (!flag.IsAtom({"LeftAny","RightAny"})) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(flag.Pos()), TStringBuilder() << "Unsupported grace join option: " << flag.Content()));
                 return IGraphTransformer::TStatus::Error;

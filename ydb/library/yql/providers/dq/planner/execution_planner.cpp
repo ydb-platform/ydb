@@ -613,10 +613,10 @@ namespace NYql::NDqs {
         const auto narrowOutputRowType = GetSeqItemType(streamLookup.Ptr()->GetTypeAnn());
         Y_ABORT_UNLESS(narrowOutputRowType->GetKind() == ETypeAnnotationKind::Struct);
         settings.SetNarrowOutputRowType(NYql::NCommon::GetSerializedTypeAnnotation(narrowOutputRowType));
-        // FIXME RESOLVE BEFORE MERGE
-        settings.SetCacheLimit(atoll(streamLookup.MaxCachedRows().StringValue().c_str()));
-        settings.SetCacheTtlSeconds(atoll(streamLookup.TTL().StringValue().c_str()));
-        settings.SetMaxDelayedRows(atoll(streamLookup.MaxDelayedRows().StringValue().c_str()));
+
+        settings.SetCacheLimit(IntFromString<ui64, 10>(streamLookup.MaxCachedRows().StringValue()));
+        settings.SetCacheTtlSeconds(IntFromString<ui64, 10>(streamLookup.TTL().StringValue()));
+        settings.SetMaxDelayedRows(IntFromString<ui64, 10>(streamLookup.MaxDelayedRows().StringValue()));
 
         const auto inputRowType = GetSeqItemType(streamLookup.Output().Stage().Program().Ref().GetTypeAnn());
         const auto outputRowType = GetSeqItemType(stage.Program().Args().Arg(inputIndex).Ref().GetTypeAnn());

@@ -156,12 +156,6 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
 
     TStringBuf joinType = joinTuple.Type().Value();
 
-    if (linkSettings.JoinAlgo == EJoinAlgoType::StreamLookupJoin) {
-        YQL_ENSURE(joinType == TStringBuf("Left"), "Streamlookup supports only LEFT JOIN ... ANY");
-        YQL_ENSURE(!leftAny, "Streamlookup ANY LEFT join is not implemented");
-        YQL_ENSURE(rightAny, "Streamlookup supports only LEFT JOIN ... ANY");
-    }
-
     TSet<std::pair<TStringBuf, TStringBuf>> resultKeys;
     if (joinType != TStringBuf("RightOnly") && joinType != TStringBuf("RightSemi")) {
         resultKeys.insert(left->Keys.begin(), left->Keys.end());
@@ -226,7 +220,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
         rightJoinKeyNames.emplace_back(rightColumnName);
     }
 
-    if (EHashJoinMode::Off == mode || EHashJoinMode::Map == mode || !(leftAny || rightAny || !linkSettings.Options.empty())) {
+    if ((linkSettings.JoinAlgo != EJoinAlgoType::StreamLookupJoin && (EHashJoinMode::Off == mode || EHashJoinMode::Map == mode)) || !(leftAny || rightAny || !linkSettings.Options.empty())) {
         auto dqJoin = Build<TDqJoin>(ctx, joinTuple.Pos())
             .LeftInput(BuildDqJoinInput(ctx, joinTuple.Pos(), left->Input, leftJoinKeys, leftAny))
             .LeftLabel(leftTableLabel)
@@ -249,13 +243,13 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
         if (leftAny) {
             flags.push_back(
                     Build<TCoNameValueTuple>(ctx, joinTuple.Pos())
-                        .Name().Build("LeftAny"sv)
+                        .Name().Build("LeftAny"sv, TNodeFlags::Default)
                         .Done());
         }
         if (rightAny) {
             flags.push_back(
                     Build<TCoNameValueTuple>(ctx, joinTuple.Pos())
-                        .Name().Build("RightAny"sv)
+                        .Name().Build("RightAny"sv, TNodeFlags::Default)
                         .Done());
         }
         for (ui32 i = 0; i + 1 < linkSettings.Options.size(); i += 2)

@@ -255,26 +255,35 @@ protected:
         TExprNode::TPtr ttl = nullptr;
         TExprNode::TPtr maxCachedRows = nullptr;
         TExprNode::TPtr maxDelayedRows = nullptr;
+        bool leftAny = false;
+        bool rightAny = false;
         if (const auto maybeFlags = join.Flags()) {
             for (auto&& flag: maybeFlags.Cast()) {
                 auto&& name = flag.Name().Value();
                 if (name == "TTL"sv) {
-                    YQL_ENSURE(flag.Ref().ChildrenSize() == 2);
                     ttl = flag.Ref().Child(1);
                 } else if (name == "MaxCachedRows"sv) {
-                    YQL_ENSURE(flag.Ref().ChildrenSize() == 2);
                     maxCachedRows = flag.Ref().Child(1);
                 } else if (name == "MaxDelayedRows"sv) {
-                    YQL_ENSURE(flag.Ref().ChildrenSize() == 2);
                     maxDelayedRows = flag.Ref().Child(1);
-                } else if (name == "RightAny"sv) {
-                    YQL_ENSURE(flag.Ref().ChildrenSize() == 1);
+                } else if (name == "LeftAny"sv) {
+                    leftAny = true;
                     continue;
-                } else {
-                    Y_DEBUG_ABORT("Impossible flag"); // should have been checked by dq_type_ann
+                } else if (name == "RightAny"sv) {
+                    rightAny = true;
+                    continue;
                 }
             }
+            if (leftAny) {
+                ctx.AddError(TIssue(ctx.GetPosition(maybeFlags.Cast().Pos()), "Streamlookup ANY LEFT join is not implemented"));
+                return {};
+            }
         }
+        if (!rightAny) {
+            ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Streamlookup: must be LEFT JOIN ANY"));
+            return {};
+        }
+
         if (!ttl) {
             ttl = ctx.NewAtom(pos, 300);
         }

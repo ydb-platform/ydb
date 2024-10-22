@@ -926,7 +926,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         auto var = skipTo->Child(1)->Content();
         MKQL_ENSURE(stringTo.SkipPrefix("AfterMatchSkip_"), R"(MATCH_RECOGNIZE: <row pattern skip to> should start with "AfterMatchSkip_")");
         NYql::NMatchRecognize::EAfterMatchSkipTo to;
-        MKQL_ENSURE(TryFromString<NYql::NMatchRecognize::EAfterMatchSkipTo>(stringTo, to), "MATCH_RECOGNIZE: <row pattern skip to> cannot conver to enum");
+        MKQL_ENSURE(TryFromString<NYql::NMatchRecognize::EAfterMatchSkipTo>(stringTo, to), "MATCH_RECOGNIZE: <row pattern skip to> cannot parse AfterMatchSkipTo mode");
 
         const auto streamingMode = FromString<bool>(settings->Child(0)->Child(1)->Content());
 

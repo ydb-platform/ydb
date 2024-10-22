@@ -714,7 +714,7 @@ public:
         const NYql::NMatchRecognize::TRowPattern& pattern,
         const TArrayRef<std::pair<TStringBuf, TTernaryLambda>>& getDefines,
         bool streamingMode,
-        NYql::NMatchRecognize::TAfterMatchSkipTo skipTo = {NYql::NMatchRecognize::EAfterMatchSkipTo::NextRow, ""}
+        const NYql::NMatchRecognize::TAfterMatchSkipTo& skipTo
     );
 
     TRuntimeNode TimeOrderRecover(

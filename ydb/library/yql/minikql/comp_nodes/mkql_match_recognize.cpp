@@ -651,7 +651,7 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
     }
     const auto& streamingMode = callable.GetInput(inputIndex++);
     NYql::NMatchRecognize::TAfterMatchSkipTo skipTo = {NYql::NMatchRecognize::EAfterMatchSkipTo::NextRow, ""};
-    if (callable.GetInputsCount() - inputIndex >= 2) {
+    if (inputIndex + 2 <= callable.GetInputsCount()) {
         skipTo.To = static_cast<EAfterMatchSkipTo>(AS_VALUE(TDataLiteral, callable.GetInput(inputIndex++))->AsValue().Get<i32>());
         skipTo.Var = AS_VALUE(TDataLiteral, callable.GetInput(inputIndex++))->AsValue().AsStringRef();
     }

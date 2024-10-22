@@ -8,8 +8,8 @@ namespace NFq {
 struct TopicSessionClientStatistic {
     NActors::TActorId ReadActorId;
     ui32 PartitionId = 0;
-    ui64 UnreadRows = 0;
-    ui64 UnreadBytes = 0;
+    i64 UnreadRows = 0;
+    i64 UnreadBytes = 0;
     ui64 Offset = 0;
 };
 

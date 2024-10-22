@@ -870,7 +870,7 @@ void TTopicSession::SendStatistic() {
         client.Offset = info.NextMessageOffset.GetOrElse(0);
         stat.Clients.emplace_back(std::move(client));
     }
-    auto event = std::make_unique<TEvRowDispatcher::TEvSessionStatistic>(std::move(stat));
+    auto event = std::make_unique<TEvRowDispatcher::TEvSessionStatistic>(stat);
     Send(RowDispatcherActorId, event.release());
 }
 

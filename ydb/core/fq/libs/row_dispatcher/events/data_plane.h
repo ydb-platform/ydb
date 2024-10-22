@@ -124,7 +124,7 @@ struct TEvRowDispatcher {
     };
 
     struct TEvSessionStatistic : public NActors::TEventLocal<TEvSessionStatistic, EEv::EvSessionStatistic> {
-        TEvSessionStatistic(TopicSessionStatistic&& stat)
+        TEvSessionStatistic(const TopicSessionStatistic& stat)
         : Stat(stat) {}
         TopicSessionStatistic Stat;
     };

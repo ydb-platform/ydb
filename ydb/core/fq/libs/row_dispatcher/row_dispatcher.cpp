@@ -6,6 +6,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
+#include <ydb/library/yql/providers/dq/counters/counters.h>
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/events/events.h>
@@ -73,15 +74,8 @@ struct TQueryStat {
     };
 
     const TString QueryId;
-    TItem UnreadRows;
-    TItem UnreadBytes;
-
-    void AddRows(ui64 value) {
-        UnreadRows.Add(value);
-    }
-    void AddBytes(ui64 value) {
-        UnreadBytes.Add(value);
-    }
+    NYql::TCounters::TEntry UnreadRows;
+    NYql::TCounters::TEntry UnreadBytes;
 };
 
 ui64 UpdateMetricsPeriodSec = 60;
@@ -181,12 +175,12 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         TActorId TopicSessionId;
         const TString QueryId;
         ConsumerCounters Counters;
-        TopicSessionClientStatistic Stats;
+        TopicSessionClientStatistic Stat;
     };
 
     struct SessionInfo {
         TMap<TActorId, TAtomicSharedPtr<ConsumerInfo>> Consumers;     // key - ReadActor actor id
-        TopicSessionCommonStatistic Stats;
+        TopicSessionCommonStatistic Stat;
     };
 
     struct TopicSessionInfo {
@@ -363,13 +357,13 @@ void TRowDispatcher::UpdateMetrics() {
         str << "  " << key.Endpoint << " / " << key.Database << " / " << key.TopicPath << " / " << key.PartitionId;
         for (auto& [actorId, sessionInfo] : sessionsInfo.Sessions) {
             str << " / " << actorId << "\n";
-            str << "    unread bytes " << sessionInfo.Stats.UnreadBytes << "\n";
+            str << "    unread bytes " << sessionInfo.Stat.UnreadBytes << "\n";
             for (auto& [readActorId, consumer] : sessionInfo.Consumers) {
                 auto& stat = queryStats[consumer->QueryId];
-                stat.AddRows(consumer->Stats.UnreadRows);
-                stat.AddBytes(consumer->Stats.UnreadBytes);
+                stat.UnreadRows.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadRows));
+                stat.UnreadBytes.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadBytes));
                 str << "    " << consumer->QueryId << " " << readActorId << " unread rows "
-                    << consumer->Stats.UnreadRows << " unread bytes " << consumer->Stats.UnreadBytes << " offset " << consumer->Stats.Offset
+                    << consumer->Stat.UnreadRows << " unread bytes " << consumer->Stat.UnreadBytes << " offset " << consumer->Stat.Offset
                     << " get " << consumer->Counters.GetNextBatch
                     << " arrived " << consumer->Counters.NewDataArrived << " batch " << consumer->Counters.MessageBatch << " ";
                 str << " retry queue: ";
@@ -383,9 +377,9 @@ void TRowDispatcher::UpdateMetrics() {
         LOG_ROW_DISPATCHER_DEBUG("UnreadBytes " <<  queryId << " " <<  stat.UnreadBytes.Max);
         auto queryGroup = Metrics.Counters->GetSubgroup("queryId", queryId);
         queryGroup->GetCounter("MaxUnreadRows")->Set(stat.UnreadRows.Max);
-        queryGroup->GetCounter("AvgUnreadRows")->Set(stat.UnreadRows.GetAvg());
+        queryGroup->GetCounter("AvgUnreadRows")->Set(stat.UnreadRows.Avg);
         queryGroup->GetCounter("MaxUnreadBytes")->Set(stat.UnreadBytes.Max);
-        queryGroup->GetCounter("AvgUnreadBytes")->Set(stat.UnreadBytes.GetAvg());
+        queryGroup->GetCounter("AvgUnreadBytes")->Set(stat.UnreadBytes.Avg);
     }
 }
 
@@ -642,7 +636,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev
     }
 
     auto& sessionInfo = sessionIt->second;
-    sessionInfo.Stats = ev->Get()->Stat.Common;
+    sessionInfo.Stat = ev->Get()->Stat.Common;
 
     for (const auto& clientStat : ev->Get()->Stat.Clients) {
         auto it = sessionInfo.Consumers.find(clientStat.ReadActorId);
@@ -650,7 +644,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev
             continue;
         }
         auto consumerInfoPtr = it->second; 
-        consumerInfoPtr->Stats = clientStat;
+        consumerInfoPtr->Stat = clientStat;
     }
 }
 

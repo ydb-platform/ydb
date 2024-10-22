@@ -226,7 +226,11 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
         case NScheme::NTypeIds::Decimal:
         {
             if (v.HasLow128() && v.HasHi128()) {
-                c = TCell::Make<std::pair<ui64, ui64>>({v.GetLow128(), v.GetHi128()});
+                NYql::NDecimal::TInt128 int128 = NYql::NDecimal::FromProto(v);
+                auto &data = memoryOwner.emplace_back();
+                data.resize(sizeof(NYql::NDecimal::TInt128));
+                std::memcpy(data.Detach(), &int128, sizeof(NYql::NDecimal::TInt128));
+                c = TCell(data);                
             } else {
                 CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type Decimal in tuple at position %" PRIu32, i));
             }

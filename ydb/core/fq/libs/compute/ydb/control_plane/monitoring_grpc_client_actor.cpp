@@ -54,9 +54,7 @@ public:
         , TGrpcServiceClient(settings)
         , Settings(settings)
         , CredentialsProvider(credentialsProvider)
-    {
-        SetTimeout(TDuration::Seconds(20));
-    }
+    {}
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvYdbCompute::TEvCpuLoadRequest, Handle);

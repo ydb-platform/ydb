@@ -1810,7 +1810,7 @@ bool TSqlQuery::AlterTableAlterFamily(const TRule_alter_table_alter_column_famil
                 << "' in one alter";
             return false;
         }
-        const TString stringValue(Ctx.Token(value.GetToken1()));
+        const TString stringValue(Ctx.Token(value.GetAlt_family_setting_value1().GetToken1()));
         entry->Data = BuildLiteralSmartString(Ctx, stringValue);
     } else if (to_lower(settingName.Name) == "compression") {
         if (entry->Compression) {
@@ -1818,8 +1818,14 @@ bool TSqlQuery::AlterTableAlterFamily(const TRule_alter_table_alter_column_famil
                 << "' in one alter";
             return false;
         }
-        const TString stringValue(Ctx.Token(value.GetToken1()));
+        const TString stringValue(Ctx.Token(value.GetAlt_family_setting_value1().GetToken1()));
         entry->Compression = BuildLiteralSmartString(Ctx, stringValue);
+    } else if (to_lower(settingName.Name) == "compression_level") {
+        if (entry->CompressionLevel) {
+            Ctx.Error() << "Redefinition of 'compression_level' setting for column family '" << name.Name << "' in one alter";
+            return false;
+        }
+        entry->CompressionLevel = LiteralNumber(Ctx, value.GetAlt_family_setting_value2().GetRule_integer1());
     } else {
         Ctx.Error() << "Unknown table setting: " << settingName.Name;
         return false;

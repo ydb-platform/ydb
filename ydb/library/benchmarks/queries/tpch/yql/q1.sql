@@ -18,7 +18,7 @@ select
 from
     {{lineitem}}
 where
-    l_shipdate <= Date('1998-12-01') - Interval("P100D")
+    l_shipdate <= Date('1998-12-01') - Interval("P90D")
 group by
     l_returnflag,
     l_linestatus

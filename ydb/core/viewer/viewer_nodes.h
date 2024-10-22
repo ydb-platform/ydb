@@ -1635,7 +1635,7 @@ public:
             }
             GroupsResponse.reset();
         }
-        if (FilterStorageStage == EFilterStorageStage::VSlots && VSlotsResponse && VSlotsResponse->IsDone()) {
+        if ((FilterStorageStage == EFilterStorageStage::VSlots || FilterStorageStage == EFilterStorageStage::None) && VSlotsResponse && VSlotsResponse->IsDone()) {
             if (VSlotsResponse->IsOk()) {
                 std::unordered_set<TNodeId> prevFilterNodeIds = std::move(FilterNodeIds);
                 std::unordered_map<std::pair<TNodeId, ui32>, std::size_t> slotsPerDisk;

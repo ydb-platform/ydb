@@ -381,10 +381,11 @@ message TLogConfig {
     optional bool UseLocalTimestamps = 9 [default = false];
     optional string BackendFileName = 10;
     optional string SysLogService = 11;
-    optional bool SysLogToStdErr = 12; // writes logs to stderr as well as in syslog
+    optional bool SysLogToStdErr = 12; // writes logs to stderr as well as in syslog/file
     optional TUAClientConfig UAClientConfig = 13;
     optional uint64 TimeThresholdMs = 14 [default = 1000];
     optional bool IgnoreUnknownComponents = 15 [default = true];
+    optional string TenantName = 16;
 }
 
 message TInterconnectConfig {
@@ -1194,6 +1195,17 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 134217728,
             DefaultValue: 0 }];
+
+        optional uint64 CdcInitialScanReadAheadLo = 19 [(ControlOptions) = {
+            Description: "Override for CDC initial scan readahead (low watermark)",
+            MinValue: 0,
+            MaxValue: 67108864,
+            DefaultValue: 0 }];
+        optional uint64 CdcInitialScanReadAheadHi = 20 [(ControlOptions) = {
+            Description: "Override for CDC initial scan readahead (high watermark)",
+            MinValue: 0,
+            MaxValue: 134217728,
+            DefaultValue: 0 }];
     }
 
     message TTxLimitControls {
@@ -1658,7 +1670,7 @@ message TSchemeShardConfig {
     repeated TInFlightCounterConfig InFlightCounterConfig = 4;
 
     // number of shards per table
-    optional uint32 MaxCdcInitialScanShardsInFlight = 5 [default = 10];
+    optional uint32 MaxCdcInitialScanShardsInFlight = 5 [default = 32];
 }
 
 message TCompactionConfig {

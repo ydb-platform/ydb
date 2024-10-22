@@ -60,7 +60,7 @@ class YdbCliHelper:
                      timeout: float,
                      check_canonical: bool):
             def _get_output_path(ext: str) -> str:
-                return yatest.common.work_path(f'q{query_num}.{ext}')
+                return yatest.common.test_output_path(f'q{query_num}.{ext}')
 
             self.result = YdbCliHelper.WorkloadRunResult()
             self.workload_type = workload_type

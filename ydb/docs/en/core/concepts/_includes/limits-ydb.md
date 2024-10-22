@@ -23,6 +23,8 @@ The "Error type" column shows the status that the query ends with if an error oc
 | Table | Maximum number of followers | 3 | Maximum number of read-only replicas that can be specified when creating a table with followers. | MaxFollowersCount | GENERIC_ERROR |
 | Table | Maximum number of tables to copy | 10,000 | Limit on the size of the table list for persistent table copy operations | MaxConsistentCopyTargets | GENERIC_ERROR |
 
+{wide-content}
+
 ## Size limits for stored data {#data-size}
 
 | Parameter | Value | Error type |

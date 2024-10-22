@@ -4,7 +4,7 @@
 #include "flat_bio_actor.h"
 #include "util_fmt_logger.h"
 #include <ydb/core/tablet_flat/shared_cache_clock_pro.h>
-#include <ydb/core/tablet_flat/shared_cache_composite.h>
+#include <ydb/core/tablet_flat/shared_cache_switchable.h>
 #include <ydb/core/tablet_flat/shared_cache_s3fifo.h>
 #include <ydb/core/util/cache_cache.h>
 #include <ydb/core/util/page_map.h>
@@ -318,7 +318,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     TRequestQueue ScanRequests;
 
     THolder<TSharedPageCacheConfig> Config;
-    TCompositeCache<TPage, TCompositeCachePageTraits> Cache;
+    TSwitchableCache<TPage, TCompositeCachePageTraits> Cache;
 
     ui64 StatBioReqs = 0;
     ui64 StatHitPages = 0;
@@ -1205,7 +1205,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             Evict(Cache.Switch(CreateCache(), Config->Counters->ReplacementPolicySize(Config->ReplacementPolicy)));
             DoGC();
             if (auto logl = Logger->Log(ELnLev::Info)) {
-                logl << "Replacement policy switch from " << Config->ReplacementPolicy << " to " << msg->Record.GetReplacementPolicy() << " finished";
+                logl << "Replacement policy switch to " << Config->ReplacementPolicy << " finished";
             }
         }
     }

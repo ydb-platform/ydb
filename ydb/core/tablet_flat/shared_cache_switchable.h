@@ -7,7 +7,7 @@
 namespace NKikimr::NCache {
 
 template <typename TPage, typename TPageTraits>
-class TCompositeCache : public ICacheCache<TPage> {
+class TSwitchableCache : public ICacheCache<TPage> {
     using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
 
     static const ui32 MaxCachesCount = 3;
@@ -87,7 +87,7 @@ class TCompositeCache : public ICacheCache<TPage> {
     };
 
 public:
-    TCompositeCache(ui64 limit, THolder<ICacheCache<TPage>>&& cache, TCounterPtr sizeCounter) {
+    TSwitchableCache(ui64 limit, THolder<ICacheCache<TPage>>&& cache, TCounterPtr sizeCounter) {
         Caches.emplace_back(1, std::move(cache), sizeCounter);
         UpdateLimit(limit);
     }

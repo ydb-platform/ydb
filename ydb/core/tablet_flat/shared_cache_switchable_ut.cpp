@@ -1,5 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/tablet_flat/shared_cache_composite.h>
+#include <ydb/core/tablet_flat/shared_cache_switchable.h>
 #include <ydb/core/util/cache_cache_iface.h>
 
 namespace NKikimr::NCache {
@@ -117,7 +117,7 @@ namespace {
 
 }
 
-Y_UNIT_TEST_SUITE(TCompositeCache) {
+Y_UNIT_TEST_SUITE(TSwitchableCache) {
 
     TVector<ui32> Touch(auto& cache, TPage& page) {
         auto evicted = cache.Touch(&page);
@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(TCompositeCache) {
 
     Y_UNIT_TEST(Touch) {
         TCounterPtr counter = new NMonitoring::TCounterForPtr;
-        TCompositeCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter);
+        TSwitchableCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter);
 
         TPage page1{1, 2};
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
@@ -194,7 +194,7 @@ Y_UNIT_TEST_SUITE(TCompositeCache) {
 
     Y_UNIT_TEST(Erase) {
         TCounterPtr counter = new NMonitoring::TCounterForPtr;
-        TCompositeCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter);
+        TSwitchableCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter);
 
         TPage page1{1, 2};
         TPage page2{2, 3};
@@ -219,7 +219,7 @@ Y_UNIT_TEST_SUITE(TCompositeCache) {
 
     Y_UNIT_TEST(EvictNext) {
         TCounterPtr counter = new NMonitoring::TCounterForPtr;
-        TCompositeCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter);
+        TSwitchableCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter);
 
         TPage page1{1, 2};
         TPage page2{2, 3};
@@ -255,7 +255,7 @@ Y_UNIT_TEST_SUITE(TCompositeCache) {
 
     Y_UNIT_TEST(UpdateLimit) {
         TCounterPtr counter = new NMonitoring::TCounterForPtr;
-        TCompositeCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter);
+        TSwitchableCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter);
 
         TPage page1{1, 2};
         TPage page2{2, 3};
@@ -277,7 +277,7 @@ Y_UNIT_TEST_SUITE(TCompositeCache) {
     Y_UNIT_TEST(Switch_Touch_RotatePages_All) {
         TCounterPtr counter1 = new NMonitoring::TCounterForPtr;
         TCounterPtr counter2 = new NMonitoring::TCounterForPtr;
-        TCompositeCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter1);
+        TSwitchableCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter1);
 
         TPage page1{1, 2};
         TPage page2{2, 3};
@@ -307,7 +307,7 @@ Y_UNIT_TEST_SUITE(TCompositeCache) {
     Y_UNIT_TEST(Switch_Touch_RotatePages_Parts) {
         TCounterPtr counter1 = new NMonitoring::TCounterForPtr;
         TCounterPtr counter2 = new NMonitoring::TCounterForPtr;
-        TCompositeCache<TPage, TPageTraits> cache(50, MakeHolder<TSimpleCache>(), counter1);
+        TSwitchableCache<TPage, TPageTraits> cache(50, MakeHolder<TSimpleCache>(), counter1);
 
         TVector<THolder<TPage>> pages;
         for (ui32 pageId : xrange(50)) {
@@ -357,7 +357,7 @@ Y_UNIT_TEST_SUITE(TCompositeCache) {
 
     Y_UNIT_TEST(Switch_RotatePages_Force) {
         TCounterPtr counter = new NMonitoring::TCounterForPtr;
-        TCompositeCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter);
+        TSwitchableCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter);
 
         TPage page1{1, 2};
         TPage page2{2, 3};
@@ -387,7 +387,7 @@ Y_UNIT_TEST_SUITE(TCompositeCache) {
 
     Y_UNIT_TEST(Switch_RotatePages_Evicts) {
         TCounterPtr counter = new NMonitoring::TCounterForPtr;
-        TCompositeCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter);
+        TSwitchableCache<TPage, TPageTraits> cache(10, MakeHolder<TSimpleCache>(), counter);
 
         TPage page1{1, 2};
         TPage page2{2, 3};
@@ -413,7 +413,7 @@ Y_UNIT_TEST_SUITE(TCompositeCache) {
     Y_UNIT_TEST(Switch_Touch) {
         TCounterPtr counter1 = new NMonitoring::TCounterForPtr;
         TCounterPtr counter2 = new NMonitoring::TCounterForPtr;
-        TCompositeCache<TPage, TPageTraits> cache(50, MakeHolder<TSimpleCache>(), counter1);
+        TSwitchableCache<TPage, TPageTraits> cache(50, MakeHolder<TSimpleCache>(), counter1);
 
         TVector<THolder<TPage>> pages;
         for (ui32 pageId : xrange(50)) {
@@ -443,7 +443,7 @@ Y_UNIT_TEST_SUITE(TCompositeCache) {
     Y_UNIT_TEST(Switch_Erase) {
         TCounterPtr counter1 = new NMonitoring::TCounterForPtr;
         TCounterPtr counter2 = new NMonitoring::TCounterForPtr;
-        TCompositeCache<TPage, TPageTraits> cache(50, MakeHolder<TSimpleCache>(), counter1);
+        TSwitchableCache<TPage, TPageTraits> cache(50, MakeHolder<TSimpleCache>(), counter1);
 
         TVector<THolder<TPage>> pages;
         for (ui32 pageId : xrange(50)) {
@@ -473,7 +473,7 @@ Y_UNIT_TEST_SUITE(TCompositeCache) {
     Y_UNIT_TEST(Switch_EvictNext) {
         TCounterPtr counter1 = new NMonitoring::TCounterForPtr;
         TCounterPtr counter2 = new NMonitoring::TCounterForPtr;
-        TCompositeCache<TPage, TPageTraits> cache(50, MakeHolder<TSimpleCache>(), counter1);
+        TSwitchableCache<TPage, TPageTraits> cache(50, MakeHolder<TSimpleCache>(), counter1);
 
         TVector<THolder<TPage>> pages;
         for (ui32 pageId : xrange(50)) {
@@ -508,7 +508,7 @@ Y_UNIT_TEST_SUITE(TCompositeCache) {
     Y_UNIT_TEST(Switch_UpdateLimit) {
         TCounterPtr counter1 = new NMonitoring::TCounterForPtr;
         TCounterPtr counter2 = new NMonitoring::TCounterForPtr;
-        TCompositeCache<TPage, TPageTraits> cache(50, MakeHolder<TSimpleCache>(), counter1);
+        TSwitchableCache<TPage, TPageTraits> cache(50, MakeHolder<TSimpleCache>(), counter1);
 
         TVector<THolder<TPage>> pages;
         for (ui32 pageId : xrange(50)) {

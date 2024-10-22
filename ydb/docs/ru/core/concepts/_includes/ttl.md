@@ -72,7 +72,7 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
 
 В приведенном ниже примере строки таблицы `mytable` будут удаляться спустя час после наступления времени, записанного в колонке `created_at`:
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - YQL
 
@@ -128,7 +128,7 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
 
 Следующий пример демонстрирует использование колонки `modified_at` с числовым типом (`Uint32`) в качестве TTL-колонки. Значение колонки интерпретируется как секунды от Unix-эпохи:
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - YQL
 
@@ -180,7 +180,7 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
 
 Для вновь создаваемой таблицы можно передать настройки TTL вместе с ее описанием:
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - YQL
 
@@ -241,7 +241,7 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
 
 ### Выключение TTL {#disable}
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - YQL
 
@@ -291,7 +291,7 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
 
 Текущие настройки TTL можно получить из описания таблицы:
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - CLI
 

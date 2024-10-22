@@ -8,7 +8,7 @@
 
 ## Serializable {#serializable}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go (native)
 
@@ -83,7 +83,7 @@
 
 ## Online Read-Only {#online-read-only}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go (native)
 
@@ -131,7 +131,7 @@
 
 ## Stale Read-Only {#stale-read-only}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go (native)
 
@@ -179,7 +179,7 @@
 
 ## Snapshot Read-Only {#snapshot-read-only}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go (native)
 

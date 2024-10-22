@@ -119,11 +119,11 @@ class Factory:
         )
 
 
-    def _primitive_types(self) -> Sequence[TestCase]:
+    def _primitive_types_non_nullable(self) -> Sequence[TestCase]:
         schema = self.__primitive_types_schema
 
         tc = TestCase(
-            name_='primitive_types',
+            name_='primitive_types_non_nullable',
             schema=schema,
             select_what=SelectWhat.asterisk(schema.columns),
             select_where=None,
@@ -163,7 +163,7 @@ class Factory:
                     -10.10,
                     -11.11,
                     'буки',
-                    'буки     ',
+                    'буки\x00\x00\x00\x00\x00',
                     datetime.date(2023, 3, 21),
                     datetime.date(2023, 3, 21),
                     datetime.datetime(2023, 3, 21, 11, 21, 31),
@@ -249,6 +249,7 @@ class Factory:
                     None,
                     None,
                     None,
+                    None,
                 ],
                 [
                     3,
@@ -264,7 +265,7 @@ class Factory:
                     -10.10,
                     -11.11,
                     'буки',
-                    'буки     ',
+                    'буки\x00\x00\x00\x00\x00',
                     datetime.date(2023, 3, 21),
                     datetime.date(2023, 3, 21),
                     datetime.datetime(2023, 3, 21, 11, 21, 31),
@@ -437,7 +438,7 @@ class Factory:
 
         base_test_cases = list(
             itertools.chain(
-                self._primitive_types(),
+                self._primitive_types_non_nullable(),
                 self._primitive_types_nullable(),
                 self._constant(),
                 self._count(),

@@ -54,6 +54,7 @@ def select_positive(
 
     assert result.returncode == 0, result.output
 
+    print("CRAB0", test_case.data_out, result.data_out_with_types)
     assert_data_outs_equal(test_case.data_out, result.data_out_with_types), (
         test_case.data_out,
         result.data_out_with_types,

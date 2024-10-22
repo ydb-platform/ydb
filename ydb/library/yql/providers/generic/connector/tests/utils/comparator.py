@@ -44,7 +44,8 @@ def assert_data_outs_equal(
     actual: List,
 ):
     assert len(expected) == len(actual), ("Row size mismatch", expected, actual)
-    all(map(assert_rows_equal, expected, actual))
+    for i in range(len(expected)):
+        assert_rows_equal(expected[i], actual[i]), (f"Error at row {i}", expected[i], actual[i])
 
 
 def assert_schemas_equal(expected: Schema, actual: Schema):

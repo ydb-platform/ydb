@@ -12,7 +12,7 @@
 
 #define LOG_D(message) LOG_IMPL(NYdb::NBackup::GetLog(), ELogPriority::TLOG_DEBUG, message)
 #define LOG_I(message) LOG_IMPL(NYdb::NBackup::GetLog(), ELogPriority::TLOG_INFO, message)
-#define LOG_W(message) LOG_IMPL(NYdb::NBackup::GetLog(), ELogPriority::TLOG_WARN, message)
+#define LOG_W(message) LOG_IMPL(NYdb::NBackup::GetLog(), ELogPriority::TLOG_WARNING, message)
 #define LOG_E(message) LOG_IMPL(NYdb::NBackup::GetLog(), ELogPriority::TLOG_ERR, message)
 
 namespace NYdb {

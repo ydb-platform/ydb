@@ -1,12 +1,12 @@
 # System clock drift
 
-Synchronized clocks are critical for distributed databases. If system clocks on the {{ ydb-short-name }} servers start to drift too much, distributed transactions might be processed with higher latencies. In some cases {{ ydb-short-name }} might even fail to process distributed transactions and return errors.
+Synchronized clocks are critical for distributed databases. If system clocks on the {{ ydb-short-name }} servers drift excessively, distributed transactions will experience increased latencies.
 
-If a {{ ydb-short-name }} cluster contains multiple [coordinators](../../../../concepts/glossary.md#coordinator), planned transactions are merged by [mediators](../../../../concepts/glossary.md#mediator).
+If a {{ ydb-short-name }} cluster contains multiple [coordinators](../../../../concepts/glossary.md#coordinator), planned transactions are merged by [mediators](../../../../concepts/glossary.md#mediator) before being sent off for execution.
 
-If the system clocks of the nodes that run coordinator tablets differ, transaction latencies grow by the time difference between the fastest and the slowest system clocks. The latency grows because a transaction planned on a node, which system clock is faster, will be executed only after the coordinator with the slowest wall clock reaches that time.
+If the system clocks of the nodes running the coordinator tablets differ, transaction latencies increase by the time difference between the fastest and slowest system clocks. This occurs because a transaction planned on a node with a faster system clock can only be executed once the coordinator with the slowest clock reaches the same time.
 
-Moreover, if the system clock drift exceeds 30 seconds, {{ ydb-short-name }} might fail to process distributed transactions. Before coordinators start planning a transaction, affected DataShards determine an acceptable range of timestamps for the transaction. The start of the time range is the current clock time of the mediator tablet. The end time is determined by the planning timeout of 30 seconds. If the system clock of a given coordinator is past this time range of the DataShard, the coordinator cannot plan a distributed transaction for the DataShard, and such queries will always end with an error.
+Furthermore, if the system clock drift exceeds 30 seconds, {{ ydb-short-name }} will refuse to process distributed transactions. Before coordinators start planning a transaction, affected DataShards determine an acceptable range of timestamps for the transaction. The start of this range is the current time of the mediator tablet's clock, while the 30-second planning timeout determines the end. If the coordinator's system clock exceeds this time range, it cannot plan a distributed transaction for the DataShard, resulting in errors for such queries.
 
 ## Diagnostics
 
@@ -21,7 +21,7 @@ To diagnose the system clock drift, use [Embedded UI](../../../../reference/embe
 
 1. On the **Info** tab, click the **Healthcheck** button.
 
-    If the **Healthcheck** button has the `MAINTENANCE REQUIRED` status, the {{ ydb-short-name }} cluster might have some problems, including the system clock drift. The diagnosed problems will be listed in the **DATABASE** section under the **Healthcheck** button.
+    If the **Healthcheck** button displays a `MAINTENANCE REQUIRED` status, the {{ ydb-short-name }} cluster might have problems, such as system clock drift. Any identified issues will be listed in the **DATABASE** section beneath the **Healthcheck** button.
 
 1. To see the diagnosed problems, expand the **DATABASE** section.
 

@@ -28,4 +28,6 @@ You can also use the [Healthcheck API](../../../../reference/ydb-sdk/health-chec
 
 ## Recommendations
 
-Add more storage groups.
+Add more [storage groups](../../../../concepts/glossary.md#storage-group) to the database.
+
+If the cluster doesn't have spare storage groups, configure them first. Add additional [storage nodes](../../../../concepts/glossary.md#storage-node), if necessary.

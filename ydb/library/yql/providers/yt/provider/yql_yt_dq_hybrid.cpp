@@ -78,6 +78,11 @@ private:
         if (operation.Ref().StartsExecution() || operation.Ref().HasResult())
             return false;
 
+        if (!State_->Configuration->UseSystemColumns.Get().GetOrElse(DEFAULT_USE_SYS_COLUMNS)) {
+            PushSkipStat("FalseSystemColumns", nodeName);
+            return false;
+        }
+
         if (operation.Output().Size() != 1U) {
             PushSkipStat("MultipleOutputs", nodeName);
             return false;

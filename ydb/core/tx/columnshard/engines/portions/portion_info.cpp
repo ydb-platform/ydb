@@ -735,7 +735,7 @@ void TPortionInfo::Precalculate() {
         PrecalculatedColumnBlobBytes = 0;
         const auto aggr = [&](const TColumnRecord& r) {
             PrecalculatedColumnRawBytes += r.GetMeta().GetRawBytes();
-            PrecalculatedColumnRawBytes += r.GetMeta().GetBlobBytes();
+            PrecalculatedColumnBlobBytes += r.BlobRange.GetSize();
         };
         AggregateIndexChunksData(aggr, Records, nullptr, true);
     }

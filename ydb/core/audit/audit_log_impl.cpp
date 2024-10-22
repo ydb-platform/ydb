@@ -91,7 +91,7 @@ TString GetJsonLog(const TEvAuditLog::TEvWriteAuditLog::TPtr& ev) {
     return ss.Str();
 }
 
-TString GetJsonLogLog(const TEvAuditLog::TEvWriteAuditLog::TPtr& ev) {
+TString GetJsonLogCompatibleLog(const TEvAuditLog::TEvWriteAuditLog::TPtr& ev) {
     const auto* msg = ev->Get();
     NJsonWriter::TBuf json;
     {
@@ -165,8 +165,8 @@ private:
                 case NKikimrConfig::TAuditConfig::TXT:
                     WriteLog(GetTxtLog(ev), logBackends.second);
                     break;
-                case NKikimrConfig::TAuditConfig::JSON_LOG:
-                    WriteLog(GetJsonLogLog(ev), logBackends.second);
+                case NKikimrConfig::TAuditConfig::JSON_LOG_COMPATIBLE:
+                    WriteLog(GetJsonLogCompatibleLog(ev), logBackends.second);
                     break;
                 default:
                     WriteLog(GetJsonLog(ev), logBackends.second);

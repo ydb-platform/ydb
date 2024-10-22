@@ -648,7 +648,7 @@ private:
     }
 
     void ClearAfterFill(const TActorContext& ctx, TIndexBuildInfo& buildInfo) {
-        buildInfo.DoneShardsSize = 0;
+        buildInfo.DoneShards = {};
         buildInfo.InProgressShards = {};
         buildInfo.ToUploadShards = {};
 
@@ -668,7 +668,7 @@ private:
     }
 
     bool FillTable(TIndexBuildInfo& buildInfo) {
-        if (buildInfo.DoneShardsSize == 0 && buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.empty()) {
+        if (buildInfo.DoneShards.empty() && buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.empty()) {
             for (const auto& [idx, status] : buildInfo.Shards) {
                 switch (status.Status) {
                     case NKikimrIndexBuilder::EBuildStatus::INVALID:
@@ -678,7 +678,7 @@ private:
                         buildInfo.ToUploadShards.emplace_back(idx);
                         break;
                     case NKikimrIndexBuilder::EBuildStatus::DONE:
-                        ++buildInfo.DoneShardsSize;
+                        buildInfo.DoneShards.emplace_back(idx);
                         break;
                     case NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR:
                     case NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST:
@@ -687,11 +687,11 @@ private:
             }
         }
         return SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendBuildIndexRequest(shardIdx, buildInfo); }) &&
-               buildInfo.DoneShardsSize == buildInfo.Shards.size();
+               buildInfo.DoneShards.size() == buildInfo.Shards.size();
     }
 
     void ComputeKMeansState(TIndexBuildInfo& buildInfo) {
-        if (buildInfo.DoneShardsSize != 0 || !buildInfo.InProgressShards.empty() || !buildInfo.ToUploadShards.empty()) {
+        if (!buildInfo.DoneShards.empty() || !buildInfo.InProgressShards.empty() || !buildInfo.ToUploadShards.empty()) {
             return;
         }
         std::array<NScheme::TTypeInfo, 1> typeInfos{NScheme::NTypeIds::Uint32};
@@ -712,7 +712,7 @@ private:
                     buildInfo.ToUploadShards.emplace_back(idx);
                     break;
                 case NKikimrIndexBuilder::EBuildStatus::DONE:
-                    ++buildInfo.DoneShardsSize;
+                    buildInfo.DoneShards.emplace_back(idx);
                     break;
                 case NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR:
                 case NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST:
@@ -755,12 +755,17 @@ private:
         return true;
     }
 
-    bool FillVectorIndex(TIndexBuildInfo& buildInfo) {
+    bool FillVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         ComputeKMeansState(buildInfo);
         if (!SendVectorIndex(buildInfo)) {
             return false;
         }
-        buildInfo.DoneShardsSize = 0;
+        NIceDb::TNiceDb db{txc.DB};
+        for (const auto& idx : buildInfo.DoneShards) {
+            auto& status = buildInfo.Shards.at(idx);
+            Self->PersistBuildIndexUploadReset(db, BuildId, idx, status);
+        }
+        buildInfo.DoneShards.clear();
 
         if (!buildInfo.Sample.Sent && !buildInfo.Sample.Rows.empty()) {
             SendUploadSampleKRequest(buildInfo);
@@ -799,7 +804,7 @@ private:
             InitiateShards(db, buildInfo);
         }
         if (buildInfo.IsBuildVectorIndex()) {
-            return FillVectorIndex(buildInfo);
+            return FillVectorIndex(txc, buildInfo);
         } else {
             Y_ASSERT(buildInfo.IsBuildSecondaryIndex() || buildInfo.IsBuildColumns());
             return FillTable(buildInfo);
@@ -1045,14 +1050,16 @@ public:
         auto tableColumns = NTableIndex::ExtractInfo(table); // skip dropped columns
         TSerializedTableRange shardRange = InfiniteRange(tableColumns.Keys.size());
 
+        Y_ASSERT(buildInfo.Shards.empty());
         for (const auto& x: table->GetPartitions()) {
             Y_ABORT_UNLESS(Self->ShardInfos.contains(x.ShardIdx));
             TSerializedCellVec bound{x.EndOfRange};
             shardRange.To = bound;
-            buildInfo.Shards.emplace(x.ShardIdx, TIndexBuildInfo::TShardStatus{std::move(shardRange), ""});
+            auto [it, emplaced] = buildInfo.Shards.emplace(x.ShardIdx, TIndexBuildInfo::TShardStatus{std::move(shardRange), ""});
+            Y_ASSERT(emplaced);
             shardRange.From = std::move(bound);
 
-            Self->PersistBuildIndexUploadInitiate(db, buildInfo, x.ShardIdx);
+            Self->PersistBuildIndexUploadInitiate(db, BuildId, x.ShardIdx, it->second);
         }
     }
 
@@ -1272,33 +1279,21 @@ public:
             NYql::TIssues issues;
             NYql::IssuesFromMessage(record.GetIssues(), issues);
             shardStatus.DebugMessage = issues.ToString();
-
-            NIceDb::TNiceDb db(txc.DB);
-            Self->PersistBuildIndexUploadProgress(db, buildInfo, shardIdx);
             shardStatus.Status = record.GetStatus();
 
+            NIceDb::TNiceDb db(txc.DB);
             switch (shardStatus.Status) {
             case  NKikimrIndexBuilder::EBuildStatus::DONE:
                 if (buildInfo.InProgressShards.erase(shardIdx)) {
-                    ++buildInfo.DoneShardsSize;
-
-                    Self->IndexBuildPipes.Close(buildId, shardId, ctx);
-
-                    Progress(buildId);
+                    buildInfo.DoneShards.emplace_back(shardIdx);
                 }
                 break;
-
             case  NKikimrIndexBuilder::EBuildStatus::ABORTED:
                 // datashard gracefully rebooted, reschedule shard
                 if (buildInfo.InProgressShards.erase(shardIdx)) {
                     buildInfo.ToUploadShards.emplace_front(shardIdx);
-
-                    Self->IndexBuildPipes.Close(buildId, shardId, ctx);
-
-                    Progress(buildId);
                 }
                 break;
-
             case  NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST:
                 buildInfo.Issue += TStringBuilder()
                     << "One of the shards report BAD_REQUEST at Filling stage, process has to be canceled"
@@ -1308,14 +1303,16 @@ public:
                 ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
 
                 Progress(buildId);
-                break;
-
+                return true;
             case  NKikimrIndexBuilder::EBuildStatus::INVALID:
             case  NKikimrIndexBuilder::EBuildStatus::ACCEPTED:
             case  NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS:
             case  NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR:
                 Y_ABORT("Unreachable");
             }
+            Self->PersistBuildIndexUploadProgress(db, buildId, shardIdx, shardStatus);
+            Self->IndexBuildPipes.Close(buildId, shardId, ctx);
+            Progress(buildId);
             break;
         }
         case TIndexBuildInfo::EState::AlterMainTable:
@@ -1335,8 +1332,8 @@ public:
         case TIndexBuildInfo::EState::Rejection_Applying:
         case TIndexBuildInfo::EState::Rejection_Unlocking:
         case TIndexBuildInfo::EState::Rejected:
-            LOG_D("TTxReply : TEvSampleKResponse"
-                  << " superfluous message " << record.ShortDebugString());
+            LOG_D("TTxReply : TEvSampleKResponse superfluous message "
+                << record.ShortDebugString());
             break;
         }
 
@@ -1405,31 +1402,20 @@ public:
             shardStatus.DebugMessage = issues.ToString();
 
             NIceDb::TNiceDb db(txc.DB);
-            Self->PersistBuildIndexUploadProgress(db, buildInfo, shardIdx);
             shardStatus.Status = record.GetStatus();
 
             switch (shardStatus.Status) {
             case  NKikimrIndexBuilder::EBuildStatus::DONE:
                 if (buildInfo.InProgressShards.erase(shardIdx)) {
-                    ++buildInfo.DoneShardsSize;
-
-                    Self->IndexBuildPipes.Close(buildId, shardId, ctx);
-
-                    Progress(buildId);
+                    buildInfo.DoneShards.emplace_back(shardIdx);
                 }
                 break;
-
             case  NKikimrIndexBuilder::EBuildStatus::ABORTED:
                 // datashard gracefully rebooted, reschedule shard
                 if (buildInfo.InProgressShards.erase(shardIdx)) {
                     buildInfo.ToUploadShards.emplace_front(shardIdx);
-
-                    Self->IndexBuildPipes.Close(buildId, shardId, ctx);
-
-                    Progress(buildId);
                 }
                 break;
-
             case  NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR:
             case  NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST:
                 buildInfo.Issue += TStringBuilder()
@@ -1439,15 +1425,16 @@ public:
                     << ", shardIdx: " << shardIdx;
                 Self->PersistBuildIndexIssue(db, buildInfo);
                 ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
-
                 Progress(buildId);
-                break;
-
+                return true;
             case  NKikimrIndexBuilder::EBuildStatus::INVALID:
             case  NKikimrIndexBuilder::EBuildStatus::ACCEPTED:
             case  NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS:
                 Y_ABORT("Unreachable");
             }
+            Self->PersistBuildIndexUploadProgress(db, buildId, shardIdx, shardStatus);
+            Self->IndexBuildPipes.Close(buildId, shardId, ctx);
+            Progress(buildId);
             break;
         }
         case TIndexBuildInfo::EState::AlterMainTable:
@@ -1648,38 +1635,25 @@ public:
             shardStatus.DebugMessage = issues.ToString();
 
             NIceDb::TNiceDb db(txc.DB);
-            Self->PersistBuildIndexUploadProgress(db, buildInfo, shardIdx);
-
             switch (shardStatus.Status) {
             case  NKikimrIndexBuilder::EBuildStatus::INVALID:
                 Y_ABORT("Unreachable");
-
             case  NKikimrIndexBuilder::EBuildStatus::ACCEPTED:
             case  NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS:
                 // no oop, wait resolution. Progress key are persisted
-                break;
-
+                Self->PersistBuildIndexUploadProgress(db, buildId, shardIdx, shardStatus);
+                return true;
             case  NKikimrIndexBuilder::EBuildStatus::DONE:
                 if (buildInfo.InProgressShards.erase(shardIdx)) {
-                    ++buildInfo.DoneShardsSize;
-
-                    Self->IndexBuildPipes.Close(buildId, shardId, ctx);
-
-                    Progress(buildId);
+                    buildInfo.DoneShards.emplace_back(shardIdx);
                 }
                 break;
-
             case  NKikimrIndexBuilder::EBuildStatus::ABORTED:
                 // datashard gracefully rebooted, reschedule shard
                 if (buildInfo.InProgressShards.erase(shardIdx)) {
                     buildInfo.ToUploadShards.emplace_front(shardIdx);
-
-                    Self->IndexBuildPipes.Close(buildId, shardId, ctx);
-
-                    Progress(buildId);
                 }
                 break;
-
             case  NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR:
             case  NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST:
                 buildInfo.Issue += TStringBuilder()
@@ -1689,11 +1663,12 @@ public:
                     << ", shardIdx: " << shardIdx;
                 Self->PersistBuildIndexIssue(db, buildInfo);
                 ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
-
                 Progress(buildId);
-                break;
+                return true;
             }
-
+            Self->PersistBuildIndexUploadProgress(db, buildId, shardIdx, shardStatus);
+            Self->IndexBuildPipes.Close(buildId, shardId, ctx);
+            Progress(buildId);
             break;
         }
         case TIndexBuildInfo::EState::AlterMainTable:

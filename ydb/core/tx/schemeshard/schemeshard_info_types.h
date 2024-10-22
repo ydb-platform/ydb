@@ -3149,7 +3149,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     THashSet<TShardIdx> InProgressShards;
 
-    size_t DoneShardsSize = 0;
+    std::vector<TShardIdx> DoneShards;
 
     TBillingStats Processed;
     TBillingStats Billed;
@@ -3467,7 +3467,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         }
         if (Shards) {
             float totalShards = Shards.size();
-            return 100.0 * DoneShardsSize / totalShards;
+            return 100.0 * DoneShards.size() / totalShards;
         }
         // No shards - no progress
         return 0.0;
@@ -3612,7 +3612,7 @@ inline void Out<NKikimr::NSchemeShard::TIndexBuildInfo>
     o << ", UnlockTxDone: " << info.UnlockTxDone;
 
     o << ", ToUploadShards: " << info.ToUploadShards.size();
-    o << ", DoneShards: " << info.DoneShardsSize;
+    o << ", DoneShards: " << info.DoneShards.size();
 
     for (const auto& x: info.InProgressShards) {
         o << ", ShardsInProgress: " << x;

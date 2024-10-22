@@ -256,8 +256,8 @@ auto TTableMountCacheBase::TryHandleServantNotActiveError(const TError& error)
         return {};
     }
 
-    if (auto siblingCellDescriptor = attributes.ToMap()->FindChild("sibling_servant_cell_descriptor")) {
-        RegisterCell(std::move(siblingCellDescriptor));
+    if (auto siblingCellDescriptor = attributes.FindYson("sibling_servant_cell_descriptor")) {
+        RegisterCell(ConvertToNode(siblingCellDescriptor));
     } else {
         return {};
     }

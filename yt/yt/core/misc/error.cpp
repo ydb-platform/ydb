@@ -396,9 +396,14 @@ void Deserialize(TError& error, const NYTree::INodePtr& node)
     error.SetMessage(mapNode->GetChildValueOrThrow<TString>(MessageKey));
 
     static const TString AttributesKey("attributes");
-    auto attributes = IAttributeDictionary::FromMap(mapNode->GetChildOrThrow(AttributesKey)->AsMap());
+    auto children = mapNode->GetChildOrThrow(AttributesKey)->AsMap()->GetChildren();
 
-    error.SetAttributes(std::move(attributes));
+    for (const auto& [key, value] : children) {
+        // TODO(babenko): migrate to std::string
+        error <<= TErrorAttribute(TString(key), ConvertToYsonString(value));
+    }
+
+    error.UpdateOriginAttributes();
 
     static const TString InnerErrorsKey("inner_errors");
     if (auto innerErrorsNode = mapNode->FindChild(InnerErrorsKey)) {
@@ -428,7 +433,19 @@ void ToProto(NYT::NProto::TError* protoError, const TError& error)
 
     protoError->clear_attributes();
     if (error.HasAttributes()) {
-        ToProto(protoError->mutable_attributes(), error.Attributes());
+        auto* protoAttributes = protoError->mutable_attributes();
+
+        protoAttributes->Clear();
+        auto pairs = error.Attributes().ListPairs();
+        std::sort(pairs.begin(), pairs.end(), [] (const auto& lhs, const auto& rhs) {
+            return lhs.first < rhs.first;
+        });
+        protoAttributes->mutable_attributes()->Reserve(pairs.size());
+        for (const auto& [key, value] : pairs) {
+            auto* protoAttribute = protoAttributes->add_attributes();
+            protoAttribute->set_key(key);
+            protoAttribute->set_value(value.ToString());
+        }
     }
 
     auto addAttribute = [&] (const TString& key, const auto& value) {
@@ -487,9 +504,12 @@ void FromProto(TError* error, const NYT::NProto::TError& protoError)
     error->SetCode(TErrorCode(protoError.code()));
     error->SetMessage(FromProto<TString>(protoError.message()));
     if (protoError.has_attributes()) {
-        auto attributes = FromProto(protoError.attributes());
-
-        error->SetAttributes(std::move(attributes));
+        for (const auto& protoAttribute : protoError.attributes().attributes()) {
+            auto key = FromProto<TString>(protoAttribute.key());
+            auto value = FromProto<TString>(protoAttribute.value());
+            (*error) <<= TErrorAttribute(key, TYsonString(value));
+        }
+        error->UpdateOriginAttributes();
     }
     *error->MutableInnerErrors() = FromProto<std::vector<TError>>(protoError.inner_errors());
 }
@@ -605,8 +625,12 @@ void TErrorSerializer::Load(TStreamLoadContext& context, TError& error)
 
     IAttributeDictionaryPtr attributes;
     if (Load<bool>(context)) {
-        attributes = CreateEphemeralAttributes();
-        TAttributeDictionarySerializer::LoadNonNull(context, attributes);
+        size_t size = TSizeSerializer::Load(context);
+        for (size_t index = 0; index < size; ++index) {
+            auto key = Load<TString>(context);
+            auto value = Load<TYsonString>(context);
+            error <<= TErrorAttribute(key, value);
+        }
     }
 
     auto innerErrors = Load<std::vector<TError>>(context);
@@ -617,8 +641,8 @@ void TErrorSerializer::Load(TStreamLoadContext& context, TError& error)
     }
 
     error.SetCode(code);
+    error.UpdateOriginAttributes();
     error.SetMessage(std::move(message));
-    error.SetAttributes(std::move(attributes));
     *error.MutableInnerErrors() = std::move(innerErrors);
 }
 

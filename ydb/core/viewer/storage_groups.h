@@ -151,7 +151,6 @@ public:
     std::unordered_set<TGroupId> FilterGroupIds;
     std::unordered_set<TNodeId> FilterNodeIds;
     std::unordered_set<ui32> FilterPDiskIds;
-    std::vector<TNodeId> SubscriptionNodeIds;
 
     enum class EWith {
         Everything,
@@ -894,22 +893,6 @@ public:
         Schedule(TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup(TimeoutFinal)); // timeout for the rest
     }
 
-    void PassAway() override {
-        std::vector<bool> passedNodes;
-        for (const TNodeId nodeId : SubscriptionNodeIds) {
-            if (passedNodes.size() <= nodeId) {
-                passedNodes.resize(nodeId + 1);
-            } else {
-                if (passedNodes[nodeId]) {
-                    continue;
-                }
-            }
-            Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe());
-            passedNodes[nodeId] = true;
-        }
-        TBase::PassAway();
-    }
-
     void ApplyFilter() {
         // database pre-filter, affects TotalGroups count
         if (!DatabaseStoragePools.empty()) {
@@ -1229,6 +1212,7 @@ public:
     bool CollectedHiveData = false;
 
     void CollectHiveData() {
+        static TPathId badPathId(0, 0);
         if (!CollectedHiveData) {
             if (!GroupView.empty()) {
                 ui64 hiveId = AppData()->DomainsInfo->GetHive();
@@ -1241,6 +1225,9 @@ public:
             }
             for (const TGroup* group : GroupView) {
                 TPathId pathId(group->SchemeShardId, group->PathId);
+                if (pathId == badPathId) {
+                    pathId = {AppData()->DomainsInfo->Domain->SchemeRoot, 1};
+                }
                 if (NavigateKeySetResult.count(pathId) == 0) {
                     ui64 cookie = NavigateKeySetResult.size();
                     NavigateKeySetResult.emplace(pathId, MakeRequestSchemeCacheNavigate(pathId, cookie));
@@ -1849,12 +1836,7 @@ public:
             return;
         }
         if (BSGroupStateResponse.count(nodeId) == 0) {
-            TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
-            BSGroupStateResponse.emplace(nodeId, MakeRequest<TEvWhiteboard::TEvBSGroupStateResponse>(whiteboardServiceId,
-                new TEvWhiteboard::TEvBSGroupStateRequest(),
-                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-                nodeId));
-            SubscriptionNodeIds.push_back(nodeId);
+            BSGroupStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, new TEvWhiteboard::TEvBSGroupStateRequest()));
             ++BSGroupStateRequestsInFlight;
         }
     }
@@ -1863,22 +1845,13 @@ public:
         if (nodeId == 0) {
             return;
         }
-        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
         if (VDiskStateResponse.count(nodeId) == 0) {
-            VDiskStateResponse.emplace(nodeId, MakeRequest<TEvWhiteboard::TEvVDiskStateResponse>(whiteboardServiceId,
-                new TEvWhiteboard::TEvVDiskStateRequest(),
-                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-                nodeId));
+            VDiskStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, new TEvWhiteboard::TEvVDiskStateRequest()));
             ++VDiskStateRequestsInFlight;
-            SubscriptionNodeIds.push_back(nodeId);
         }
         if (PDiskStateResponse.count(nodeId) == 0) {
-            PDiskStateResponse.emplace(nodeId, MakeRequest<TEvWhiteboard::TEvPDiskStateResponse>(whiteboardServiceId,
-                new TEvWhiteboard::TEvPDiskStateRequest(),
-                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-                nodeId));
+            PDiskStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, new TEvWhiteboard::TEvPDiskStateRequest()));
             ++PDiskStateRequestsInFlight;
-            SubscriptionNodeIds.push_back(nodeId);
         }
     }
 

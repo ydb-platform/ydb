@@ -35,11 +35,11 @@ const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TIndexInf
     }
     auto itSnap = Snapshots.emplace(snapshot, itVersion.first->second);
     Y_ABORT_UNLESS(itSnap.second);
-    ui64 previousVersion = LastSchemaVersion;
+    ui64 oldLastVersion = LastSchemaVersion;
     LastSchemaVersion = std::max(newVersion, LastSchemaVersion);
-    if (LastSchemaVersion != previousVersion) {
-        if (previousVersion != 0) {
-            VersionCounters->VersionRemoveRef(previousVersion, 2);
+    if (LastSchemaVersion != oldLastVersion) {
+        if (oldLastVersion != 0) {
+            VersionCounters->VersionRemoveRef(oldLastVersion, 2);
         }
         VersionCounters->VersionAddRef(LastSchemaVersion, 2);
     }

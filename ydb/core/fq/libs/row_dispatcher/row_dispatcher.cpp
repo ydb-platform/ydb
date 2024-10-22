@@ -59,20 +59,6 @@ struct TEvPrivate {
 };
 
 struct TQueryStat {
-    struct TItem {
-        ui64 Sum = 0;
-        ui64 Max = 0;
-        ui64 Count = 0;
-        void Add(ui64 value) {
-            Sum += value;
-            Max = std::max(Max, value);
-            ++Count;
-        }
-        ui64 GetAvg() const {
-            return Count ? Sum / Count : 0.0;
-        }
-    };
-
     const TString QueryId;
     NYql::TCounters::TEntry UnreadRows;
     NYql::TCounters::TEntry UnreadBytes;

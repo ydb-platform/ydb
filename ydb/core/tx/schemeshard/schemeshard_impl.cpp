@@ -3025,30 +3025,24 @@ void TSchemeShard::PersistRemoveBackupCollection(NIceDb::TNiceDb& db, TPathId pa
     db.Table<Schema::BackupCollection>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
 }
 
-void TSchemeShard::PersistTieringRule(NIceDb::TNiceDb& db, TPathId pathId, const TTieringRuleInfo::TPtr tieringRule) {
+void TSchemeShard::PersistMetadataObject(NIceDb::TNiceDb& db, TPathId pathId, const TMetadataObjectInfo::TPtr object) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
-    NKikimrSchemeOp::TTieringIntervals intervalsProto;
-    for (const auto& interval : tieringRule->Intervals) {
-        auto* intervalProto = intervalsProto.AddIntervals();
-        intervalProto->SetTierName(interval.TierName);
-        intervalProto->SetEvictionDelayMs(interval.EvictionDelay.MilliSeconds());
-    }
+    NKikimrSchemeOp::TMetadataObjectProperties properties = object->SerializePropertiesToProto();
 
-    db.Table<Schema::TieringRules>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
-        NIceDb::TUpdate<Schema::TieringRules::AlterVersion>(tieringRule->AlterVersion),
-        NIceDb::TUpdate<Schema::TieringRules::DefaultColumn>(tieringRule->DefaultColumn),
-        NIceDb::TUpdate<Schema::TieringRules::Intervals>(intervalsProto.SerializeAsString())
+    db.Table<Schema::MetadataObjects>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::MetadataObjects::AlterVersion>(object->GetAlterVersion()),
+        NIceDb::TUpdate<Schema::MetadataObjects::Properties>(properties.SerializeAsString())
     );
 }
 
-void TSchemeShard::PersistRemoveTieringRule(NIceDb::TNiceDb& db, TPathId pathId) {
+void TSchemeShard::PersistRemoveMetadataObject(NIceDb::TNiceDb& db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
-    if (const auto tieringRule = TieringRules.find(pathId); tieringRule != TieringRules.end()) {
-        TieringRules.erase(tieringRule);
+    if (const auto tieringRule = MetadataObjects.find(pathId); tieringRule != MetadataObjects.end()) {
+        MetadataObjects.erase(tieringRule);
     }
 
-    db.Table<Schema::TieringRules>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+    db.Table<Schema::MetadataObjects>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
 }
 
 void TSchemeShard::PersistRemoveRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId) {
@@ -4307,10 +4301,10 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 break;
             }
             case NKikimrSchemeOp::EPathType::EPathTypeTieringRule: {
-                auto it = TieringRules.find(pathId);
-                Y_ABORT_UNLESS(it != TieringRules.end());
-                result.SetTieringRuleVersion(it->second->AlterVersion);
-                generalVersion += result.GetTieringRuleVersion();
+                auto it = MetadataObjects.find(pathId);
+                Y_ABORT_UNLESS(it != MetadataObjects.end());
+                result.SetMetadataObjectVersion(it->second->GetAlterVersion());
+                generalVersion += result.GetMetadataObjectVersion();
                 break;
             }
 

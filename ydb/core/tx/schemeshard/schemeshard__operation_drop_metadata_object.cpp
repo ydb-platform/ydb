@@ -29,9 +29,12 @@ public:
         const TPathElement::TPtr pathPtr = path.Base();
         const TPathElement::TPtr parentDirPtr = path.Parent().Base();
 
-        auto entity = NOperations::TMetadataEntity::GetEntity(context, path).DetachResult();
-        NOperations::TUpdateRestoreContext restoreContext(entity.get(), &context, ev->Get()->TxId);
-        auto update = entity->RestoreDropUpdate(restoreContext).DetachResult();
+        NOperations::TMetadataEntity entity(pathId);
+        NOperations::TEntityInitializationContext initializationContext(&context);
+        entity.Initialize(initializationContext).Validate();
+        NOperations::TUpdateRestoreContext restoreContext(&entity, &context, ev->Get()->TxId);
+        auto update = entity.RestoreUpdate(restoreContext).DetachResult();
+        AFL_VERIFY(std::dynamic_pointer_cast<NOperations::TMetadataUpdateDrop>(update));
         
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -176,12 +179,12 @@ public:
 
         std::shared_ptr<NOperations::ISSEntity> originalEntity;
         {
-            auto conclusion = NOperations::TMetadataEntity::GetEntity(context, dstPath);
-            if (conclusion.IsFail()) {
-                result->SetError(NKikimrScheme::StatusSchemeError, conclusion.GetErrorMessage());
+            originalEntity = std::make_shared<NOperations::TMetadataEntity>(dstPath->PathId);
+            NOperations::TEntityInitializationContext initializationContext(&context);
+            if (auto status = originalEntity->Initialize(initializationContext); status.IsFail()) {
+                result->SetError(NKikimrScheme::StatusSchemeError, status.GetErrorMessage());
                 return result;
             }
-            originalEntity = conclusion.GetResult();
         }
 
         std::shared_ptr<NOperations::ISSEntityUpdate> update;

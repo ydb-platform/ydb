@@ -138,12 +138,12 @@ public:
 
         std::shared_ptr<NOperations::ISSEntity> originalEntity;
         {
-            auto conclusion = NOperations::TMetadataEntity::GetEntity(context, dstPath);
-            if (conclusion.IsFail()) {
-                result->SetError(NKikimrScheme::StatusSchemeError, conclusion.GetErrorMessage());
+            originalEntity = std::make_shared<NOperations::TMetadataEntity>(dstPath->PathId);
+            NOperations::TEntityInitializationContext initializationContext(&context);
+            if (auto status = originalEntity->Initialize(initializationContext); status.IsFail()) {
+                result->SetError(NKikimrScheme::StatusSchemeError, status.GetErrorMessage());
                 return result;
             }
-            originalEntity = conclusion.GetResult();
         }
 
         std::shared_ptr<NOperations::ISSEntityUpdate> update;

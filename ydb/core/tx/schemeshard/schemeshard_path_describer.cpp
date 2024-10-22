@@ -5,6 +5,7 @@
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/public/api/protos/annotations/sensitive.pb.h>
+#include <ydb/core/tx/tiering/rule/info.h>
 
 #include <util/stream/format.h>
 
@@ -1105,20 +1106,21 @@ void TPathDescriber::DescribeBackupCollection(TPathId pathId, TPathElement::TPtr
 }
 
 void TPathDescriber::DescribeTieringRule(TPathId pathId, TPathElement::TPtr pathEl) {
-    auto it = Self->TieringRules.FindPtr(pathId);
+    auto it = Self->MetadataObjects.FindPtr(pathId);
     Y_ABORT_UNLESS(it, "TieringRule is not found");
-    TTieringRuleInfo::TPtr tieringRuleInfo = *it;
+    TMetadataObjectInfo::TPtr tieringRuleInfo = *it;
 
     auto entry = Result->Record.MutablePathDescription()->MutableTieringRuleDescription();
     entry->SetName(pathEl->Name);
     PathIdFromPathId(pathId, entry->MutablePathId());
-    entry->SetVersion(tieringRuleInfo->AlterVersion);
+    entry->SetVersion(tieringRuleInfo->GetAlterVersion());
     auto* tieringRuleProto = entry->MutableProperties()->MutableTieringRule();
-    tieringRuleProto->SetDefaultColumn(tieringRuleInfo->DefaultColumn);
-    for (const auto& interval : tieringRuleInfo->Intervals) {
+    auto& properties = tieringRuleInfo->GetPropertiesVerified<NColumnShard::NTiers::TTieringRuleInfo>();
+    tieringRuleProto->SetDefaultColumn(properties.GetDefaultColumn());
+    for (const auto& interval : properties.GetIntervals()) {
         auto* intervalProto = tieringRuleProto->MutableTiers()->AddIntervals();
-        intervalProto->SetTierName(interval.TierName);
-        intervalProto->SetEvictionDelayMs(interval.EvictionDelay.MilliSeconds());
+        intervalProto->SetTierName(interval.GetTierName());
+        intervalProto->SetEvictionDelayMs(interval.GetDurationForEvict().MilliSeconds());
     }
 }
 

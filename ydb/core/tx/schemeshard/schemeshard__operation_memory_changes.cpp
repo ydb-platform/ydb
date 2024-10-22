@@ -112,8 +112,8 @@ void TMemoryChanges::GrabBackupCollection(TSchemeShard* ss, const TPathId& pathI
     Grab<TBackupCollectionInfo>(pathId, ss->BackupCollections, BackupCollections);
 }
 
-void TMemoryChanges::GrabTieringRule(TSchemeShard* ss, const TPathId& pathId) {
-    Grab<TTieringRuleInfo>(pathId, ss->TieringRules, TieringRules);
+void TMemoryChanges::GrabMetadataObject(TSchemeShard* ss, const TPathId& pathId) {
+    Grab<TMetadataObjectInfo>(pathId, ss->MetadataObjects, MetadataObjects);
 }
 
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
@@ -253,14 +253,14 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
         ResourcePools.pop();
     }
 
-    while (TieringRules) {
-        const auto& [id, elem] = TieringRules.top();
+    while (MetadataObjects) {
+        const auto& [id, elem] = MetadataObjects.top();
         if (elem) {
-            ss->TieringRules[id] = elem;
+            ss->MetadataObjects[id] = elem;
         } else {
-            ss->TieringRules.erase(id);
+            ss->MetadataObjects.erase(id);
         }
-        TieringRules.pop();
+        MetadataObjects.pop();
     }
 }
 

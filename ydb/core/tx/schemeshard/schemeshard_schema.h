@@ -1837,16 +1837,24 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Description>;
     };
 
-    struct TieringRules : Table<111> {
+    struct MetadataObjects : Table<111> {
         struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion : Column<3, NScheme::NTypeIds::Uint64> {};
-        struct DefaultColumn : Column<4, NScheme::NTypeIds::String> {};
-        struct Intervals : Column<5, NScheme::NTypeIds::String> {}; // TTieringIntervals
+        struct Properties : Column<4, NScheme::NTypeIds::String> {}; // TMetadataObjectProperties
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
-        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, DefaultColumn, Intervals>;
+        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Properties>;
     };
+
+    // struct MetadataObjectsAlterData : Table<111> {
+    //     struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+    //     struct OperationType : Column<2, NScheme::NTypeIds::Uint64> {}; // EOperationType
+    //     struct Properties : Column<3, NScheme::NTypeIds::String> {}; // TMetadataObjectProperties
+
+    //     using TKey = TableKey<PathId>;
+    //     using TColumns = TableColumns<PathId, OperationType, Properties>;
+    // };
 
     using TTables = SchemaTables<
         Paths,
@@ -1959,7 +1967,7 @@ struct Schema : NIceDb::Schema {
         BackgroundSessions,
         ResourcePool,
         BackupCollection,
-        TieringRules
+        MetadataObjects
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

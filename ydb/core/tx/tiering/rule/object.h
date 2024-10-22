@@ -13,10 +13,6 @@ class TTieringRule: public TTieringRuleInfo {
 public:
     static NMetadata::IClassBehaviour::TPtr GetBehaviour();
 
-    static TString GetTypeId() {
-        return "TIERING_RULE";
-    }
-
     bool ContainsTier(const TString& tierName) const;
     NKikimr::NOlap::TTiering BuildOlapTiers() const;
 };

@@ -1,37 +1,31 @@
 #pragma once
 
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/tx/schemeshard/operations/metadata/abstract/object.h>
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/operations/metadata/abstract/info.h>
+#include <ydb/core/tx/tiering/rule/info.h>
 
 namespace NKikimr::NSchemeShard::NOperations {
 
-class TTieringRuleEntity: public TMetadataEntity {
+class TTieringRuleInfo final: public TMetadataObjectInfoImpl<NColumnShard::NTiers::TTieringRuleInfo> {
 private:
-    static TFactory::TRegistrator<TTieringRuleEntity> Registrator;
-
-private:
-    using TBase = TMetadataEntity;
-    YDB_READONLY_DEF(TTieringRuleInfo::TPtr, TieringRuleInfo);
-
-    std::shared_ptr<TMetadataUpdateDrop> GetDropUpdate() const override;
-
-protected:
-    [[nodiscard]] TConclusionStatus DoInitialize(const TEntityInitializationContext& context) override;
-
-    TTieringRuleEntity(const TPathId& pathId, const TTieringRuleInfo::TPtr& objectInfo)
-        : TBase(pathId)
-        , TieringRuleInfo(objectInfo) {
-    }
+    using TTieringRule = NColumnShard::NTiers::TTieringRuleInfo;
 
 public:
-    TString GetClassName() const override {
-        return "TIERING_RULE";
+    std::optional<TTieringRule> DoDeserializeFromProto(const NKikimrSchemeOp::TMetadataObjectProperties& proto) const override {
+        TTieringRule object;
+        if (!object.DeserializeFromProto(proto.GetTieringRule())) {
+            return std::nullopt;
+        }
+        return object;
     }
 
-public:
-    TTieringRuleEntity(const TPathId& pathId)
-        : TBase(pathId) {
+    bool DoApplyPatch(TTieringRule& object, const NKikimrSchemeOp::TMetadataObjectProperties& patch) const override {
+        return object.ApplyPatch(patch.GetTieringRule());
+    }
+
+    NKikimrSchemeOp::TMetadataObjectProperties DoSerializeToProto(const TTieringRule& object) const override {
+        NKikimrSchemeOp::TMetadataObjectProperties serialized;
+        *serialized.MutableTieringRule() = object.SerializeToProto();
+        return serialized;
     }
 };
 }

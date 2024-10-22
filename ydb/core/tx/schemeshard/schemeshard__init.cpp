@@ -3,6 +3,7 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tx/schemeshard/operations/metadata/abstract/info.h>
 #include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 #include <ydb/core/util/pb.h>
 
@@ -4895,30 +4896,31 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
-        // Tiering rules
+        // Metadata objects
         {
-            auto rowset = db.Table<Schema::TieringRules>().Range().Select();
+            auto rowset = db.Table<Schema::MetadataObjects>().Range().Select();
             if (!rowset.IsReady()) {
                 return false;
             }
 
             while (!rowset.EndOfSet()) {
-                const TOwnerId ownerPathId = rowset.GetValue<Schema::TieringRules::OwnerPathId>();
-                const TLocalPathId localPathId = rowset.GetValue<Schema::TieringRules::LocalPathId>();
+                const TOwnerId ownerPathId = rowset.GetValue<Schema::MetadataObjects::OwnerPathId>();
+                const TLocalPathId localPathId = rowset.GetValue<Schema::MetadataObjects::LocalPathId>();
                 TPathId pathId(ownerPathId, localPathId);
 
-                const ui64 alterVersion = rowset.GetValue<Schema::TieringRules::AlterVersion>();
-                const TString ttlColumn = rowset.GetValue<Schema::TieringRules::DefaultColumn>();
+                const ui64 alterVersion = rowset.GetValue<Schema::MetadataObjects::AlterVersion>();
+                const TString propertiesSerialized = rowset.GetValue<Schema::MetadataObjects::Properties>();
+                NKikimrSchemeOp::TMetadataObjectProperties propertiesProto;
+                Y_ABORT_UNLESS(propertiesProto.ParseFromString(propertiesSerialized));
 
-                const TString intervalsSerialized = rowset.GetValue<Schema::TieringRules::Intervals>();
-                NKikimrSchemeOp::TTieringIntervals intervalsProto;
-                Y_ABORT_UNLESS(intervalsProto.ParseFromString(intervalsSerialized));
-                std::vector<TTieringRuleInfo::TTieringInterval> intervals;
-                for (const auto& interval : intervalsProto.GetIntervals()) {
-                    intervals.emplace_back(interval.GetTierName(), TDuration::MilliSeconds(interval.GetEvictionDelayMs()));
-                }
+                auto findPathElement = Self->PathsById.FindPtr(pathId);
+                Y_ABORT_UNLESS(findPathElement);
+                NKikimrSchemeOp::EPathType pathType = (*findPathElement)->PathType;
+                auto objectInfo = TMetadataObjectInfo::Create(pathType);
+                Y_ABORT_UNLESS(objectInfo->DeserializePropertiesFromProto(propertiesProto));
+                objectInfo->SetAlterVersion(alterVersion);
 
-                Self->TieringRules.emplace(pathId, MakeIntrusive<TTieringRuleInfo>(alterVersion, ttlColumn, intervals));
+                Self->MetadataObjects.emplace(pathId, objectInfo);
                 Self->IncrementPathDbRefCount(pathId);
 
                 if (!rowset.Next()) {

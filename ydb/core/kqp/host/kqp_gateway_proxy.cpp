@@ -136,6 +136,9 @@ bool ConvertCreateTableSettingsToProto(NYql::TKikimrTableMetadataPtr metadata, Y
                 return false;
             }
         }
+        if (family.CompressionLevel) {
+            familyProto->set_compression_level(family.CompressionLevel.GetRef());
+        }
     }
 
     if (metadata->TableSettings.CompactionPolicy) {

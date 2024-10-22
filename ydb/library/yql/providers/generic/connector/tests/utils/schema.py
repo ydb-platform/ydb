@@ -362,6 +362,8 @@ class Schema:
         return SelectWhat(*items)
 
 
+# FIXME: switch to snake case in function names
+
 def makeYdbTypeFromTypeID(type_id: Type.PrimitiveTypeId) -> Type:
     return Type(type_id=type_id)
 

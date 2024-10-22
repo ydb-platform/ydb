@@ -14,6 +14,8 @@ from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     ColumnList,
     DataSourceType,
     SelectWhat,
+    makeYdbTypeFromTypeID,
+    makeOptionalYdbTypeFromTypeID
 )
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import GenericSettings
 
@@ -51,27 +53,27 @@ class Factory:
             columns=ColumnList(
                 Column(
                     name='col_00_id',
-                    ydb_type=Type.UINT8,
-                    data_source_type=DataSourceType(ch=clickhouse.UInt8()),
+                    ydb_type=makeYdbTypeFromTypeID(Type.INT32),
+                    data_source_type=DataSourceType(ch=clickhouse.Int32()),
                 ),
                 Column(
                     name='col_01_date',
-                    ydb_type=Type.DATE,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.DATE),
                     data_source_type=DataSourceType(ch=clickhouse.Date()),
                 ),
                 Column(
                     name='col_02_date32',
-                    ydb_type=Type.DATE,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.DATE),
                     data_source_type=DataSourceType(ch=clickhouse.Date32()),
                 ),
                 Column(
                     name='col_03_datetime',
-                    ydb_type=Type.DATETIME,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.DATETIME),
                     data_source_type=DataSourceType(ch=clickhouse.DateTime()),
                 ),
                 Column(
                     name='col_04_datetime64',
-                    ydb_type=Type.TIMESTAMP,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.TIMESTAMP),
                     data_source_type=DataSourceType(ch=clickhouse.DateTime64()),
                 ),
             ),
@@ -122,6 +124,7 @@ class Factory:
             protocol=EProtocol.NATIVE,
             schema=schema,
             pragmas=dict(),
+            check_output_schema=True,
         )
 
     def _make_test_string(self) -> TestCase:
@@ -129,27 +132,27 @@ class Factory:
             columns=ColumnList(
                 Column(
                     name='col_00_id',
-                    ydb_type=Type.UINT8,
-                    data_source_type=DataSourceType(ch=clickhouse.UInt8()),
+                    ydb_type=makeYdbTypeFromTypeID(Type.INT32),
+                    data_source_type=DataSourceType(ch=clickhouse.Int32()),
                 ),
                 Column(
                     name='col_01_date',
-                    ydb_type=Type.DATE,
+                    ydb_type=makeYdbTypeFromTypeID(Type.UTF8),
                     data_source_type=DataSourceType(ch=clickhouse.Date()),
                 ),
                 Column(
                     name='col_02_date32',
-                    ydb_type=Type.DATE,
+                    ydb_type=makeYdbTypeFromTypeID(Type.UTF8),
                     data_source_type=DataSourceType(ch=clickhouse.Date32()),
                 ),
                 Column(
                     name='col_03_datetime',
-                    ydb_type=Type.DATETIME,
+                    ydb_type=makeYdbTypeFromTypeID(Type.UTF8),
                     data_source_type=DataSourceType(ch=clickhouse.DateTime()),
                 ),
                 Column(
                     name='col_04_datetime64',
-                    ydb_type=Type.TIMESTAMP,
+                    ydb_type=makeYdbTypeFromTypeID(Type.UTF8),
                     data_source_type=DataSourceType(ch=clickhouse.DateTime64()),
                 ),
             ),
@@ -182,6 +185,7 @@ class Factory:
             data_source_kind=EDataSourceKind.CLICKHOUSE,
             schema=schema,
             pragmas=dict(),
+            check_output_schema=True,
         )
 
     def make_test_cases(self) -> Sequence[TestCase]:

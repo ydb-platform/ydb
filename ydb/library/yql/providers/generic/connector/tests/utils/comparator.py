@@ -51,6 +51,4 @@ def assert_data_outs_equal(
 def assert_schemas_equal(expected: Schema, actual: Schema):
     assert len(expected.columns) == len(actual.columns)
     for i in range(len(expected.columns)):
-        assert expected.columns[i] == actual.columns[i], (
-            f"Error at position {i}:\n{expected.columns[i]}\n{actual.columns[i]}",
-        )
+        assert expected.columns[i] == actual.columns[i], (f"Error at position {i}", expected.columns[i], actual.columns[i])

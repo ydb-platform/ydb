@@ -111,7 +111,17 @@ clickhouse-client -n <<-EOSQL
         (5, '2150-01-10', '2300-01-10', '2107-01-10 12:23:45', '2300-01-10 12:23:45.678910');
 EOSQL
 
-# Feel free to add new columns to this table to test new filters
+clickhouse-client -n <<-EOSQL
+    DROP TABLE IF EXISTS db.constant;
+    CREATE TABLE db.constant (
+        id Int32,
+    ) ENGINE = MergeTree ORDER BY id;
+    INSERT INTO db.constant (*) VALUES
+        (1) \
+        (2) \
+        (3);
+EOSQL
+
 clickhouse-client -n <<-EOSQL
     DROP TABLE IF EXISTS db.pushdown;
     CREATE TABLE db.pushdown (

@@ -290,9 +290,9 @@ class Factory:
         schema = Schema(
             columns=ColumnList(
                 Column(
-                    name='col',
-                    ydb_type=Type.INT64,
-                    data_source_type=DataSourceType(ch=clickhouse.Int64()),
+                    name='id',
+                    ydb_type=Type.INT32,
+                    data_source_type=DataSourceType(ch=clickhouse.Int32()),
                 ),
             )
         )
@@ -304,17 +304,7 @@ class Factory:
             schema=schema,
             select_what=SelectWhat(SelectWhat.Item(name='42', kind='expr')),
             select_where=None,
-            data_in=[
-                [
-                    1,
-                ],
-                [
-                    2,
-                ],
-                [
-                    3,
-                ],
-            ],
+            data_in=None,
             data_out_=[
                 [
                     42,

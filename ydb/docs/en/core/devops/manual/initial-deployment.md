@@ -16,8 +16,8 @@ The network configuration must allow TCP connections on the following ports (the
 
 * 22: SSH service
 * {{ def-ports.grpcs }}, {{ def-ports.grpc }}: GRPC for client-cluster interaction.
-* {{ def-ports.ic }}, 19002: Interconnect for intra-cluster node interaction
-* {{ def-ports.mon }}, 8766: HTTP interface of {{ ydb-short-name }} Embedded UI.
+* {{ def-ports.ic }}, {% calc {{ def-ports.ic }} + 1 %}: Interconnect for intra-cluster node interaction
+* {{ def-ports.mon }}, {% calc {{ def-ports.mon }} + 1 %}: HTTP interface of {{ ydb-short-name }} Embedded UI.
 
 Distinct ports are necessary for gRPC, Interconnect and HTTP interface of each dynamic node when hosting multiple dynamic nodes on a single server.
 

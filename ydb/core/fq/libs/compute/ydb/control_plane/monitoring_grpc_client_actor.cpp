@@ -55,7 +55,7 @@ public:
         , Settings(settings)
         , CredentialsProvider(credentialsProvider)
     {
-        Config.Timeout = TDuration::Seconds(20);
+        SetTimeout(TDuration::Seconds(20));
     }
 
     STRICT_STFUNC(StateFunc,

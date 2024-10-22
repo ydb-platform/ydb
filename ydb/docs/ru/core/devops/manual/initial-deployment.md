@@ -15,9 +15,9 @@
 Сетевая конфигурация должна разрешать TCP соединения по следующим портам (по умолчанию, могут быть изменены настройками):
 
 * 22: сервис SSH;
-* 2135, 2136: GRPC для клиент-кластерного взаимодействия;
-* 19001, 19002: Interconnect для внутрикластерного взаимодействия узлов;
-* 8765, 8766: HTTP интерфейс {{ ydb-short-name }} Embedded UI.
+* {{ def-ports.grpcs }}, {{ def-ports.grpc }}: GRPC для клиент-кластерного взаимодействия;
+* {{ def-ports.ic }}, 19002: Interconnect для внутрикластерного взаимодействия узлов;
+* {{ def-ports.mon }}, 8766: HTTP интерфейс {{ ydb-short-name }} Embedded UI.
 
 При размещении нескольких динамических узлов на одном сервере потребуются отдельные порты для gRPC, Interconnect и HTTP интерфейса каждого динамического узла в рамках сервера.
 
@@ -261,7 +261,7 @@ sudo chmod 700 /opt/ydb/certs
   cd /opt/ydb
   export LD_LIBRARY_PATH=/opt/ydb/lib
   /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config  /opt/ydb/cfg/config.yaml \
-      --grpcs-port 2135 --ic-port 19001 --mon-port 8765 --mon-cert /opt/ydb/certs/web.pem --node static
+      --grpcs-port {{ def-ports.grpcs }} --ic-port {{ def-ports.ic }} --mon-port {{ def-ports.mon }} --mon-cert /opt/ydb/certs/web.pem --node static
   ```
 
 - С использованием systemd
@@ -289,7 +289,7 @@ sudo chmod 700 /opt/ydb/certs
   Environment=LD_LIBRARY_PATH=/opt/ydb/lib
   ExecStart=/opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp \
       --yaml-config  /opt/ydb/cfg/config.yaml \
-      --grpcs-port 2135 --ic-port 19001 --mon-port 8765 \
+      --grpcs-port {{ def-ports.grpcs }} --ic-port {{ def-ports.ic }} --mon-port {{ def-ports.mon }} \
       --mon-cert /opt/ydb/certs/web.pem --node static
   LimitNOFILE=65536
   LimitCORE=0
@@ -324,7 +324,7 @@ sudo chmod 700 /opt/ydb/certs
   При первоначальной установке кластера в нём существует единственная учётная запись `root` с пустым паролем, поэтому команда получения токена выглядит следующим образом:
 
   ```bash
-  ydb -e grpcs://<node1.ydb.tech>:2135 -d /Root --ca-file ca.crt \
+  ydb -e grpcs://<node1.ydb.tech>:{{ def-ports.grpcs }} -d /Root --ca-file ca.crt \
        --user root --no-password auth get-token --force >token-file
   ```
 
@@ -334,7 +334,7 @@ sudo chmod 700 /opt/ydb/certs
 
   ```bash
   export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd -f token-file --ca-file ca.crt -s grpcs://`hostname -f`:2135 \
+  /opt/ydb/bin/ydbd -f token-file --ca-file ca.crt -s grpcs://`hostname -f`:{{ def-ports.grpcs }} \
       admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml
   echo $?
   ```
@@ -345,7 +345,7 @@ sudo chmod 700 /opt/ydb/certs
 
   ```bash
   export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -f`:2135 \
+  /opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -f`:{{ def-ports.grpcs }} \
       admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml
   echo $?
   ```
@@ -374,7 +374,7 @@ sudo chmod 700 /opt/ydb/certs
 
   ```bash
   export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd -f token-file --ca-file ca.crt -s grpcs://`hostname -s`:2135 \
+  /opt/ydb/bin/ydbd -f token-file --ca-file ca.crt -s grpcs://`hostname -s`:{{ def-ports.grpcs }} \
       admin database /Root/testdb create ssd:1
   echo $?
   ```
@@ -385,7 +385,7 @@ sudo chmod 700 /opt/ydb/certs
 
   ```bash
   export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -s`:2135 \
+  /opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -s`:{{ def-ports.grpcs }} \
       admin database /Root/testdb create ssd:1
   echo $?
   ```
@@ -412,13 +412,13 @@ sudo chmod 700 /opt/ydb/certs
   sudo su - ydb
   cd /opt/ydb
   export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd server --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
+  /opt/ydb/bin/ydbd server --grpcs-port {{ def-ports.grpc }} --grpc-ca /opt/ydb/certs/ca.crt \
       --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
       --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb \
-      --node-broker grpcs://<ydb1>:2135 \
-      --node-broker grpcs://<ydb2>:2135 \
-      --node-broker grpcs://<ydb3>:2135
+      --node-broker grpcs://<ydb1>:{{ def-ports.grpcs }} \
+      --node-broker grpcs://<ydb2>:{{ def-ports.grpcs }} \
+      --node-broker grpcs://<ydb3>:{{ def-ports.grpcs }}
   ```
 
   В примере команды выше `<ydbN>` - FQDN трех любых серверов, на которых запущены статические узлы кластера.
@@ -447,13 +447,13 @@ sudo chmod 700 /opt/ydb/certs
   SyslogLevel=err
   Environment=LD_LIBRARY_PATH=/opt/ydb/lib
   ExecStart=/opt/ydb/bin/ydbd server \
-      --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
+      --grpcs-port {{ def-ports.grpc }} --grpc-ca /opt/ydb/certs/ca.crt \
       --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
       --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb \
-      --node-broker grpcs://<ydb1>:2135 \
-      --node-broker grpcs://<ydb2>:2135 \
-      --node-broker grpcs://<ydb3>:2135
+      --node-broker grpcs://<ydb1>:{{ def-ports.grpcs }} \
+      --node-broker grpcs://<ydb2>:{{ def-ports.grpcs }} \
+      --node-broker grpcs://<ydb3>:{{ def-ports.grpcs }}
   LimitNOFILE=65536
   LimitCORE=0
   LimitMEMLOCK=32212254720
@@ -487,7 +487,7 @@ sudo chmod 700 /opt/ydb/certs
 1. Выполните установку пароля учетной записи `root`:
 
     ```bash
-    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root --no-password \
+    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:{{ def-ports.grpc }} -d /Root/testdb --user root --no-password \
         yql -s 'ALTER USER root PASSWORD "passw0rd"'
     ```
 
@@ -496,14 +496,14 @@ sudo chmod 700 /opt/ydb/certs
 1. Создайте дополнительные учетные записи:
 
     ```bash
-    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:{{ def-ports.grpc }} -d /Root/testdb --user root \
         yql -s 'CREATE USER user1 PASSWORD "passw0rd"'
     ```
 
 1. Установите права учетных записей, включив их во встроенные группы:
 
     ```bash
-    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:{{ def-ports.grpc }} -d /Root/testdb --user root \
         yql -s 'ALTER GROUP `ADMINS` ADD USER user1'
     ```
 
@@ -522,14 +522,14 @@ sudo chmod 700 /opt/ydb/certs
 - Создание строковой таблицы
 
     ```bash
-    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:{{ def-ports.grpc }} -d /Root/testdb --user root \
         yql -s 'CREATE TABLE `testdir/test_row_table` (id Uint64, title Utf8, PRIMARY KEY (id));'
     ```
 
 - Создание колоночной таблицы
 
     ```bash
-    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:{{ def-ports.grpc }} -d /Root/testdb --user root \
         yql -s 'CREATE TABLE `testdir/test_column_table` (id Uint64, title Utf8, PRIMARY KEY (id)) WITH (STORE = COLUMN);'
     ```
 
@@ -539,7 +539,7 @@ sudo chmod 700 /opt/ydb/certs
 
 ## Проверка доступа ко встроенному web-интерфейсу
 
-Для проверки доступа ко встроенному web-интерфейсу {{ ydb-short-name }} достаточно открыть в Web-браузере страницу с адресом `https://<node.ydb.tech>:8765`, где `<node.ydb.tech>` - FQDN сервера, на котором запущен любой статический узел {{ ydb-short-name }}.
+Для проверки доступа ко встроенному web-интерфейсу {{ ydb-short-name }} достаточно открыть в Web-браузере страницу с адресом `https://<node.ydb.tech>:{{ def-ports.mon }}`, где `<node.ydb.tech>` - FQDN сервера, на котором запущен любой статический узел {{ ydb-short-name }}.
 
 В Web-браузере должно быть настроено доверие в отношении центра регистрации, выпустившего сертификаты для кластера {{ ydb-short-name }}, в противном случае будет отображено предупреждение об использовании недоверенного сертификата.
 

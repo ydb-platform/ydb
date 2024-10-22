@@ -41,7 +41,7 @@ All plugins use the same set of parameters to configure the connection to {{ ydb
 # The plugins ydb_topics_output and ydb_topics_input configure the same way.
 ydb_storage {
     # Database connection string contains a schema, hostname, port, and database path
-    connection_string => "grpc://localhost:2136/local"
+    connection_string => "grpc://localhost:{{ def-ports.grpc }}/local"
     # Authentication token (for using the "Access Token" mode)
     token_auth => "<token_value>"
     # Authentication token file path (for using the "Access Token" mode)
@@ -166,8 +166,8 @@ The plugin configuration is done by adding a `ydb_topic` block to the `input` se
 Create a topic and add a consumer to it in any existing {{ ydb-short-name }} database:
 
 ```bash
-ydb -e grpc://localhost:2136 -d /local topic create /local/logstash_demo_topic
-ydb -e grpc://localhost:2136 -d /local topic consumer add --consumer logstash-consumer /local/logstash_demo_topic
+ydb -e grpc://localhost:{{ def-ports.grpc }} -d /local topic create /local/logstash_demo_topic
+ydb -e grpc://localhost:{{ def-ports.grpc }} -d /local topic consumer add --consumer logstash-consumer /local/logstash_demo_topic
 ```
 
 #### Setup plugin in Logstash pipeline config
@@ -177,7 +177,7 @@ To activate the plugin, add the `ydb_topic` block in the `input` section of the 
 ```ruby
 input {
   ydb_topic {
-    connection_string => "grpc://localhost:2136/local" # {{ ydb-short-name }} connection string
+    connection_string => "grpc://localhost:{{ def-ports.grpc }}/local" # {{ ydb-short-name }} connection string
     topic_path => "/local/logstash_demo_topic"         # The full path of the topic to read
     consumer_name => "logstash-consumer"               # The consumer name
     schema => "JSON"                                   # Use JSON mode
@@ -196,8 +196,8 @@ To apply these changes, restart Logstash.
 Send a few test messages to the topic:
 
 ```bash
-echo '{"message":"test"}' | ydb -e grpc://localhost:2136 -d /local topic write /local/logstash_demo_topic
-echo '{"user":123}' | ydb -e grpc://localhost:2136 -d /local topic write /local/logstash_demo_topic
+echo '{"message":"test"}' | ydb -e grpc://localhost:{{ def-ports.grpc }} -d /local topic write /local/logstash_demo_topic
+echo '{"user":123}' | ydb -e grpc://localhost:{{ def-ports.grpc }} -d /local topic write /local/logstash_demo_topic
 ```
 
 #### Check if Logstash processed the messages
@@ -235,7 +235,7 @@ The plugin configuration is done by adding a `ydb_topic` block to the `output` s
 Create a topic in any existing {{ ydb-short-name }} database:
 
 ```bash
-ydb -e grpc://localhost:2136 -d /local topic create /local/logstash_demo_topic
+ydb -e grpc://localhost:{{ def-ports.grpc }} -d /local topic create /local/logstash_demo_topic
 ```
 
 #### Setup plugin in Logstash pipeline config
@@ -245,7 +245,7 @@ To activate the plugin, add the `ydb_topic` block in the `output` section of the
 ```ruby
 output {
   ydb_topic {
-    connection_string => "grpc://localhost:2136/local" # {{ ydb-short-name }} connection string
+    connection_string => "grpc://localhost:{{ def-ports.grpc }}/local" # {{ ydb-short-name }} connection string
     topic_path => "/local/logstash_demo_topic"         # The topic name for writing
   }
 }
@@ -274,8 +274,8 @@ The command returns `ok` if the message has been sent successfully.
 Check that the plugin wrote the message to the topic successfully by reading this message via CLI:
 
 ```bash
-ydb -e grpc://localhost:2136 -d /local topic consumer add --consumer logstash-consumer /local/logstash_demo_topic
-ydb -e grpc://localhost:2136 -d /local topic read /local/logstash_demo_topic --consumer logstash-consumer --commit true
+ydb -e grpc://localhost:{{ def-ports.grpc }} -d /local topic consumer add --consumer logstash-consumer /local/logstash_demo_topic
+ydb -e grpc://localhost:{{ def-ports.grpc }} -d /local topic read /local/logstash_demo_topic --consumer logstash-consumer --commit true
 ```
 
 The latter command will return the message content:

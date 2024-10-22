@@ -278,7 +278,7 @@ Environment variables are defined as shown below:
 ```yaml
 env:
   - name: OUTPUT_YDB_CONNECTION_URL
-    value: grpc://ydb-endpoint:2135/path/to/database
+    value: grpc://ydb-endpoint:{{ def-ports.grpcs }}/path/to/database
   - name: OUTPUT_YDB_CREDENTIALS_TOKEN
     valueFrom:
       secretKeyRef:

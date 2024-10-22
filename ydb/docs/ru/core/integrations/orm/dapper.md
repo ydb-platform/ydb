@@ -29,7 +29,7 @@ dotnet add package Ydb.Sdk
     await ydbConnection.OpenAsync();
     ```
 
-   Этот вариант создаёт подключение к базе данных по URL: `grpc://localhost:2136/local`, с анонимной аутентификацией.
+   Этот вариант создаёт подключение к базе данных по URL: `grpc://localhost:{{ def-ports.grpc }}/local`, с анонимной аутентификацией.
 
 2. **Использование конструктора со строкой подключения**:
 
@@ -37,11 +37,11 @@ dotnet add package Ydb.Sdk
 
    ```C#
    await using var ydbConnection = new YdbConnection(
-       "Host=database-sample-grpc;Port=2135;Database=/root/database-sample");
+       "Host=database-sample-grpc;Port={{ def-ports.grpcs }};Database=/root/database-sample");
    await ydbConnection.OpenAsync();
    ```
 
-   В данном случае подключение будет установлено по URL: `grpc://database-sample-grpc:2135/root/database-sample`. При использовании метода со строкой подключения параметры задаются в виде пар ключ=значение, разделённые точкой с запятой (`key1=value1;key2=value2`). Набор ключей имеет фиксированные значения, которые будут детально рассмотрены в следующих разделах.
+   В данном случае подключение будет установлено по URL: `grpc://database-sample-grpc:{{ def-ports.grpcs }}/root/database-sample`. При использовании метода со строкой подключения параметры задаются в виде пар ключ=значение, разделённые точкой с запятой (`key1=value1;key2=value2`). Набор ключей имеет фиксированные значения, которые будут детально рассмотрены в следующих разделах.
 
 3. **Использование конструктора с аргументом `YdbConnectionStringBuilder`**:
 
@@ -51,7 +51,7 @@ dotnet add package Ydb.Sdk
    var ydbConnectionBuilder = new YdbConnectionStringBuilder
    {
        Host = "server",
-       Port = 2135,
+       Port = {{ def-ports.grpcs }},
        Database = "/ru-prestable/my-table",
        UseTls = true
    };
@@ -68,7 +68,7 @@ dotnet add package Ydb.Sdk
 | Параметр          | Описание                                                                                             | Значение по умолчанию |
 |-------------------|------------------------------------------------------------------------------------------------------|-----------------------|
 | `Host`            | Указывает хост сервера                                                                               | `localhost`           |
-| `Port`            | Определяет порт сервера                                                                              | `2136`                |
+| `Port`            | Определяет порт сервера                                                                              | `{{ def-ports.grpc }}`                |
 | `Database`        | Задаёт путь к базе данных                                                                            | `/local`              |
 | `User`            | Значение задаёт имя пользователя                                                                     | Не определено         |
 | `Password`        | Данный параметр задаёт пароль пользователя                                                           | Не определено         |

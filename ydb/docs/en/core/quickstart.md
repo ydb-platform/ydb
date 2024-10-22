@@ -68,7 +68,7 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
 
       Database started. Connection options for YDB CLI:
 
-      -e grpc://localhost:2136 -d /Root/test
+      -e grpc://localhost:{{ def-ports.grpc }} -d /Root/test
       ```
 
 - Docker
@@ -86,9 +86,9 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
       ```bash
       docker run -d --rm --name ydb-local -h localhost \
         --platform linux/amd64 \
-        -p 2135:2135 -p 2136:2136 -p 8765:8765 \
+        -p {{ def-ports.grpcs }}:{{ def-ports.grpcs }} -p {{ def-ports.grpc }}:{{ def-ports.grpc }} -p {{ def-ports.mon }}:{{ def-ports.mon }} \
         -v $(pwd)/ydb_certs:/ydb_certs -v $(pwd)/ydb_data:/ydb_data \
-        -e GRPC_TLS_PORT=2135 -e GRPC_PORT=2136 -e MON_PORT=8765 \
+        -e GRPC_TLS_PORT={{ def-ports.grpcs }} -e GRPC_PORT={{ def-ports.grpc }} -e MON_PORT={{ def-ports.mon }} \
         -e YDB_USE_IN_MEMORY_PDISKS=true \
         {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
       ```
@@ -131,9 +131,9 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
 
    8. Wait for `kubectl get databases.ydb.tech` to become `Ready`.
 
-   9. After processing the manifest, a StatefulSet object that describes a set of dynamic nodes is created. The created database will be accessible from inside the Kubernetes cluster by the `database-minikube-sample` DNS name on port 2135.
+   9. After processing the manifest, a StatefulSet object that describes a set of dynamic nodes is created. The created database will be accessible from inside the Kubernetes cluster by the `database-minikube-sample` DNS name on port {{ def-ports.grpcs }}.
 
-   10. To continue, get access to port 8765 from outside Kubernetes using `kubectl port-forward database-minikube-sample-0 8765`.
+   10. To continue, get access to port {{ def-ports.mon }} from outside Kubernetes using `kubectl port-forward database-minikube-sample-0 {{ def-ports.mon }}`.
 
 - Kind
 
@@ -175,16 +175,16 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
 
    9. Wait for `kubectl get databases.ydb.tech` to become `Ready`.
 
-   10. After processing the manifest, a StatefulSet object that describes a set of dynamic nodes is created. The created database will be accessible from inside the Kubernetes cluster by the `database-kind-sample` DNS name on port 2135.
+   10. After processing the manifest, a StatefulSet object that describes a set of dynamic nodes is created. The created database will be accessible from inside the Kubernetes cluster by the `database-kind-sample` DNS name on port {{ def-ports.grpcs }}.
 
-   11. To continue, get access to port 8765 from outside Kubernetes using `kubectl port-forward database-kind-sample-0 8765`.
+   11. To continue, get access to port {{ def-ports.mon }} from outside Kubernetes using `kubectl port-forward database-kind-sample-0 {{ def-ports.mon }}`.
 
 {% endlist %}
 
 
 ## Run your first "Hello, world!" query
 
-The simplest way to launch your first {{ ydb-short-name }} query is via the built-in web interface. It is launched by default on port 8765 of the {{ ydb-short-name }} server. If you have launched it locally, open [localhost:8765](http://localhost:8765) in your web browser. If not, replace `localhost` with your server's hostname in this URL or use `ssh -L 8765:localhost:8765 my-server-hostname-or-ip.example.com` to set up port forwarding and still open [localhost:8765](http://localhost:8765). You'll see a page like this:
+The simplest way to launch your first {{ ydb-short-name }} query is via the built-in web interface. It is launched by default on port {{ def-ports.mon }} of the {{ ydb-short-name }} server. If you have launched it locally, open [localhost:{{ def-ports.mon }}](http://localhost:{{ def-ports.mon }}) in your web browser. If not, replace `localhost` with your server's hostname in this URL or use `ssh -L {{ def-ports.mon }}:localhost:{{ def-ports.mon }} my-server-hostname-or-ip.example.com` to set up port forwarding and still open [localhost:{{ def-ports.mon }}](http://localhost:{{ def-ports.mon }}). You'll see a page like this:
 
 ![Web UI home page](_assets/web-ui-home.png)
 

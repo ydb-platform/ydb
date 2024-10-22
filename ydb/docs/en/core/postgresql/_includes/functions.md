@@ -292,7 +292,7 @@ sign(-8.4) → -1
 sqrt ( double precision ) → double precision|
 Square root|
 ```sql
-sqrt(2) → 1.4142135623730951
+sqrt(2) → 1.414{{ def-ports.grpcs }}623730951
 ```||
 ||trim_scale ( numeric ) → numeric|
 Reduces the value's scale (number of fractional decimal digits) by removing trailing zeroes|
@@ -2187,13 +2187,13 @@ box '(1,1),(0,0)' - point '(2,0)' → (-1,1),(-2,0)
 Multiplies each point of the first argument by the second point (treating a point as being a complex number represented by real and imaginary parts, and performing standard complex multiplication). If one interprets the second point as a vector, this is equivalent to scaling the object's size and distance from the origin by the length of the vector, and rotating it counterclockwise around the origin by the vector's angle from the x axis. Available for point, box,[a] path, circle.|
 ```sql
 path '((0,0),(1,0),(1,1))' * point '(3.0,0)' → ((0,0),(3,0),(3,3))
-path '((0,0),(1,0),(1,1))' * point(cosd(45), sind(45)) → ((0,0),(0.7071067811865475,0.7071067811865475),(0,1.414213562373095))
+path '((0,0),(1,0),(1,1))' * point(cosd(45), sind(45)) → ((0,0),(0.7071067811865475,0.7071067811865475),(0,1.414{{ def-ports.grpcs }}62373095))
 ```||
 ||geometric_type / point → geometric_type|
 Divides each point of the first argument by the second point (treating a point as being a complex number represented by real and imaginary parts, and performing standard complex division). If one interprets the second point as a vector, this is equivalent to scaling the object's size and distance from the origin down by the length of the vector, and rotating it clockwise around the origin by the vector's angle from the x axis. Available for point, box,[a] path, circle.|
 ```sql
 path '((0,0),(1,0),(1,1))' / point '(2.0,0)' → ((0,0),(0.5,0),(0.5,0.5))
-path '((0,0),(1,0),(1,1))' / point(cosd(45), sind(45)) → ((0,0),(0.7071067811865476,-0.7071067811865476),(1.4142135623730951,0))
+path '((0,0),(1,0),(1,1))' / point(cosd(45), sind(45)) → ((0,0),(0.7071067811865476,-0.7071067811865476),(1.414{{ def-ports.grpcs }}623730951,0))
 ```||
 ||@-@ geometric_type → double precision|
 Computes the total length. Available for lseg, path.|
@@ -2432,7 +2432,7 @@ Table 9.37. Geometric Type Conversion Functions
 ||box ( circle ) → box|
 Computes box inscribed within the circle.|
 ```sql
-box(circle '<(0,0),2>') → (1.414213562373095,1.414213562373095),(-1.414213562373095,-1.414213562373095)
+box(circle '<(0,0),2>') → (1.414{{ def-ports.grpcs }}62373095,1.414{{ def-ports.grpcs }}62373095),(-1.414{{ def-ports.grpcs }}62373095,-1.414{{ def-ports.grpcs }}62373095)
 ```||
 ||box ( point ) → box|
 Converts point to empty box.|

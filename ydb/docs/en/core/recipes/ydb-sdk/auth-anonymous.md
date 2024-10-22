@@ -111,7 +111,7 @@ Below are examples of the code for anonymous authentication in different {{ ydb-
   using Ydb.Sdk;
   using Ydb.Sdk.Auth;
 
-  const string endpoint = "grpc://localhost:2136";
+  const string endpoint = "grpc://localhost:{{ def-ports.grpc }}";
   const string database = "/local";
 
   var config = new DriverConfig(
@@ -137,7 +137,7 @@ Below are examples of the code for anonymous authentication in different {{ ydb-
       'database'    => '/local',
 
       // Database endpoint
-      'endpoint'    => 'localhost:2136',
+      'endpoint'    => 'localhost:{{ def-ports.grpc }}',
 
       // Auto discovery (dedicated server only)
       'discovery'   => false,

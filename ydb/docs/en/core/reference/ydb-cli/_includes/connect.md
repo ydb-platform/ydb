@@ -25,7 +25,7 @@ DB connection options in the command line are specified before defining the comm
 {{ ydb-cli }} <connection_options> <command> <command_options>
 ```
 
-- `-e, --endpoint <endpoint>` is the [endpoint](../../../concepts/connect.md#endpoint), that is, the main connection parameter that allows finding a {{ ydb-short-name }} server on the network. If no port is specified, port 2135 is used. If no protocol is specified, gRPCs (with encryption) is used in {{ ydb-short-name }} CLI public builds.
+- `-e, --endpoint <endpoint>` is the [endpoint](../../../concepts/connect.md#endpoint), that is, the main connection parameter that allows finding a {{ ydb-short-name }} server on the network. If no port is specified, port {{ def-ports.grpcs }} is used. If no protocol is specified, gRPCs (with encryption) is used in {{ ydb-short-name }} CLI public builds.
 - `-d, --database <database>` is the [database path](../../../concepts/connect.md#database).
 
 {% include [auth/options.md](auth/options.md) %}

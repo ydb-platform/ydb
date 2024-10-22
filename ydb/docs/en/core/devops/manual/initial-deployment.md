@@ -15,9 +15,9 @@ Make sure you have SSH access to all servers. This is required to install artifa
 The network configuration must allow TCP connections on the following ports (these are defaults, but you can change them by settings):
 
 * 22: SSH service
-* 2135, 2136: GRPC for client-cluster interaction.
-* 19001, 19002: Interconnect for intra-cluster node interaction
-* 8765, 8766: HTTP interface of {{ ydb-short-name }} Embedded UI.
+* {{ def-ports.grpcs }}, {{ def-ports.grpc }}: GRPC for client-cluster interaction.
+* {{ def-ports.ic }}, 19002: Interconnect for intra-cluster node interaction
+* {{ def-ports.mon }}, 8766: HTTP interface of {{ ydb-short-name }} Embedded UI.
 
 Distinct ports are necessary for gRPC, Interconnect and HTTP interface of each dynamic node when hosting multiple dynamic nodes on a single server.
 
@@ -261,7 +261,7 @@ sudo chmod 700 /opt/ydb/certs
   cd /opt/ydb
   export LD_LIBRARY_PATH=/opt/ydb/lib
   /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config  /opt/ydb/cfg/config.yaml \
-    --grpcs-port 2135 --ic-port 19001 --mon-port 8765 --mon-cert /opt/ydb/certs/web.pem --node static
+    --grpcs-port {{ def-ports.grpcs }} --ic-port {{ def-ports.ic }} --mon-port {{ def-ports.mon }} --mon-cert /opt/ydb/certs/web.pem --node static
   ```
 
 - Using systemd
@@ -289,7 +289,7 @@ sudo chmod 700 /opt/ydb/certs
   Environment=LD_LIBRARY_PATH=/opt/ydb/lib
   ExecStart=/opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp \
       --yaml-config  /opt/ydb/cfg/config.yaml \
-      --grpcs-port 2135 --ic-port 19001 --mon-port 8765 \
+      --grpcs-port {{ def-ports.grpcs }} --ic-port {{ def-ports.ic }} --mon-port {{ def-ports.mon }} \
       --mon-cert /opt/ydb/certs/web.pem --node static
   LimitNOFILE=65536
   LimitCORE=0
@@ -324,7 +324,7 @@ Cluster initialization actions depend on whether the user authentication mode is
   When the cluster is first installed, it has a single `root` account with a blank password, so the command to get the token is the following:
 
   ```bash
-  ydb -e grpcs://<node1.ydb.tech>:2135 -d /Root --ca-file ca.crt \
+  ydb -e grpcs://<node1.ydb.tech>:{{ def-ports.grpcs }} -d /Root --ca-file ca.crt \
     --user root --no-password auth get-token --force >token-file
   ```
 
@@ -334,7 +334,7 @@ Cluster initialization actions depend on whether the user authentication mode is
 
   ```bash
   export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd -f token-file --ca-file ca.crt -s grpcs://`hostname -f`:2135 \
+  /opt/ydb/bin/ydbd -f token-file --ca-file ca.crt -s grpcs://`hostname -f`:{{ def-ports.grpcs }} \
       admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml
   echo $?
   ```
@@ -345,7 +345,7 @@ Cluster initialization actions depend on whether the user authentication mode is
 
   ```bash
   export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -f`:2135 \
+  /opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -f`:{{ def-ports.grpcs }} \
       admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml
   echo $?
   ```
@@ -374,7 +374,7 @@ The database creation procedure depends on whether you enabled user authenticati
 
   ```bash
   export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd -f token-file --ca-file ca.crt -s grpcs://`hostname -s`:2135 \
+  /opt/ydb/bin/ydbd -f token-file --ca-file ca.crt -s grpcs://`hostname -s`:{{ def-ports.grpcs }} \
       admin database /Root/testdb create ssd:1
   echo $?
   ```
@@ -385,7 +385,7 @@ The database creation procedure depends on whether you enabled user authenticati
 
   ```bash
   export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -s`:2135 \
+  /opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -s`:{{ def-ports.grpcs }} \
       admin database /Root/testdb create ssd:1
   echo $?
   ```
@@ -412,13 +412,13 @@ The command example above uses the following parameters:
   sudo su - ydb
   cd /opt/ydb
   export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd server --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
+  /opt/ydb/bin/ydbd server --grpcs-port {{ def-ports.grpc }} --grpc-ca /opt/ydb/certs/ca.crt \
       --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
       --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb \
-      --node-broker grpcs://<ydb1>:2135 \
-      --node-broker grpcs://<ydb2>:2135 \
-      --node-broker grpcs://<ydb3>:2135
+      --node-broker grpcs://<ydb1>:{{ def-ports.grpcs }} \
+      --node-broker grpcs://<ydb2>:{{ def-ports.grpcs }} \
+      --node-broker grpcs://<ydb3>:{{ def-ports.grpcs }}
   ```
 
   In the command example above, `<ydbN>` is replaced by FQDNs of any three servers running the cluster's static nodes.
@@ -447,13 +447,13 @@ The command example above uses the following parameters:
   SyslogLevel=err
   Environment=LD_LIBRARY_PATH=/opt/ydb/lib
   ExecStart=/opt/ydb/bin/ydbd server \
-      --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
+      --grpcs-port {{ def-ports.grpc }} --grpc-ca /opt/ydb/certs/ca.crt \
       --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
       --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb \
-      --node-broker grpcs://<ydb1>:2135 \
-      --node-broker grpcs://<ydb2>:2135 \
-      --node-broker grpcs://<ydb3>:2135
+      --node-broker grpcs://<ydb1>:{{ def-ports.grpcs }} \
+      --node-broker grpcs://<ydb2>:{{ def-ports.grpcs }} \
+      --node-broker grpcs://<ydb3>:{{ def-ports.grpcs }}
   LimitNOFILE=65536
   LimitCORE=0
   LimitMEMLOCK=32212254720
@@ -487,7 +487,7 @@ To perform initial account setup in the created {{ ydb-short-name }} cluster, ru
 1. Set the password for the `root` account:
 
   ```bash
-  ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root --no-password \
+  ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:{{ def-ports.grpc }} -d /Root/testdb --user root --no-password \
       yql -s 'ALTER USER root PASSWORD "passw0rd"'
   ```
 
@@ -496,14 +496,14 @@ To perform initial account setup in the created {{ ydb-short-name }} cluster, ru
 1. Create additional accounts:
 
   ```bash
-  ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+  ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:{{ def-ports.grpc }} -d /Root/testdb --user root \
       yql -s 'CREATE USER user1 PASSWORD "passw0rd"'
   ```
 
 1. Set the account rights by including them in the integrated groups:
 
   ```bash
-  ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+  ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:{{ def-ports.grpc }} -d /Root/testdb --user root \
       yql -s 'ALTER GROUP `ADMINS` ADD USER user1'
   ```
 
@@ -522,14 +522,14 @@ When running the account creation and group assignment commands, the {{ ydb-shor
 - Creating a row-oriented table
 
    ```bash
-   ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+   ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:{{ def-ports.grpc }} -d /Root/testdb --user root \
       yql -s 'CREATE TABLE `testdir/test_row_table` (id Uint64, title Utf8, PRIMARY KEY (id));'
    ```
 
 - Creating a column-oriented table
 
    ```bash
-   ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+   ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:{{ def-ports.grpc }} -d /Root/testdb --user root \
       yql -s 'CREATE TABLE `testdir/test_column_table` (id Uint64, title Utf8, PRIMARY KEY (id)) WITH (STORE = COLUMN);'
    ```
 
@@ -540,7 +540,7 @@ Here, `<node.ydb.tech>` is the FQDN of the server running the dynamic node that 
 
 ## Checking access to the built-in web interface
 
-To check access to the {{ ydb-short-name }} built-in web interface, open in the browser the `https://<node.ydb.tech>:8765` URL, where `<node.ydb.tech>` is the FQDN of the server running any static {{ ydb-short-name }} node.
+To check access to the {{ ydb-short-name }} built-in web interface, open in the browser the `https://<node.ydb.tech>:{{ def-ports.mon }}` URL, where `<node.ydb.tech>` is the FQDN of the server running any static {{ ydb-short-name }} node.
 
 In the web browser, set as trusted the certificate authority that issued certificates for the {{ ydb-short-name }} cluster. Otherwise, you will see a warning about an untrusted certificate.
 

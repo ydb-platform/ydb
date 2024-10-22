@@ -44,13 +44,13 @@ $ goose <DB> <CONNECTION_STRING> <COMMAND> <COMMAND_ARGUMENTS>
 В случае подключения к ломальному докер-контейнеру {{ ydb-short-name }} строка подключения должна иметь вид:
 
 ```text
-grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric
+grpc://localhost:{{ def-ports.grpc }}/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric
 ```
 
 Давайте сохраним эту строку в переменную окружения для дальнейшего использования:
 
 ```bash
-export YDB_CONNECTION_STRING="grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric"
+export YDB_CONNECTION_STRING="grpc://localhost:{{ def-ports.grpc }}/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric"
 ```
 
 Далее примеры вызова команд `goose` будут содержать именно эту строку подключения.
@@ -160,14 +160,14 @@ $ goose ydb $YDB_CONNECTION_STRING status
 
 {% list tabs %}
 
-- Используя {{ ydb-short-name }} UI по адресу `http://localhost:8765`
+- Используя {{ ydb-short-name }} UI по адресу `http://localhost:{{ def-ports.mon }}`
 
   ![{{ ydb-short-name }} UI after apply first migration](_assets/goose-ydb-ui-after-first-migration.png =450x)
 
 - Используя YDB CLI
 
   ```bash
-  $ ydb -e grpc://localhost:2136 -d /local scheme describe users
+  $ ydb -e grpc://localhost:{{ def-ports.grpc }} -d /local scheme describe users
   <table> users
 
   Columns:
@@ -252,14 +252,14 @@ $ goose ydb $YDB_CONNECTION_STRING status
 
 {% list tabs %}
 
-- Используя {{ ydb-short-name }} UI по адресу `http://localhost:8765`
+- Используя {{ ydb-short-name }} UI по адресу `http://localhost:{{ def-ports.mon }}`
 
   ![{{ ydb-short-name }} UI after apply second migration](_assets/goose-ydb-ui-after-second-migration.png =450x)
 
 - Используя YDB CLI
 
   ```bash
-  $ ydb -e grpc://localhost:2136 -d /local scheme describe users
+  $ ydb -e grpc://localhost:{{ def-ports.grpc }} -d /local scheme describe users
   <table> users
 
   Columns:
@@ -316,14 +316,14 @@ $ goose ydb $YDB_CONNECTION_STRING status
 
 {% list tabs %}
 
-- Используя {{ ydb-short-name }} UI по адресу `http://localhost:8765`
+- Используя {{ ydb-short-name }} UI по адресу `http://localhost:{{ def-ports.mon }}`
 
   ![{{ ydb-short-name }} UI after apply first migration](_assets/goose-ydb-ui-after-first-migration.png =450x)
 
 - Используя {{ ydb-short-name }} CLI
 
   ```bash
-  $ ydb -e grpc://localhost:2136 -d /local scheme describe users
+  $ ydb -e grpc://localhost:{{ def-ports.grpc }} -d /local scheme describe users
   <table> users
 
   Columns:

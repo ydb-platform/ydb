@@ -144,7 +144,7 @@ CREATE TABLE episodes
 Установим `baselineVersion = 3`, затем выполним следующую команду:
 
 ```bash
-flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration -baselineVersion=3 baseline
+flyway -url=jdbc:ydb:grpc://localhost:{{ def-ports.grpc }}/local -locations=db/migration -baselineVersion=3 baseline
 ```
 
 {% note info %}
@@ -286,7 +286,7 @@ VALUES (1, 1, 1, "Yesterday's Jam", CAST(Date ("2006-02-03") AS Uint64)),
 Применим последнюю миграцию следующей командой:
 
 ```bash
-flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration migrate
+flyway -url=jdbc:ydb:grpc://localhost:{{ def-ports.grpc }}/local -locations=db/migration migrate
 ```
 
 В результате будут созданы таблицы `series`, `seasons` и `episodes`, которые будут заполнены данными:
@@ -315,7 +315,7 @@ ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 Применим последнюю миграцию следующей командой:
 
 ```bash
-flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration migrate
+flyway -url=jdbc:ydb:grpc://localhost:{{ def-ports.grpc }}/local -locations=db/migration migrate
 ```
 
 В результате будет создан вторичный индекс для таблицы `series`:
@@ -346,7 +346,7 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
 
 {% endcut %}
 
-Результатом исполнения команды `flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration info` будет подробная информация о состоянии миграций:
+Результатом исполнения команды `flyway -url=jdbc:ydb:grpc://localhost:{{ def-ports.grpc }}/local -locations=db/migration info` будет подробная информация о состоянии миграций:
 
 ```text
 +-----------+---------+---------------------------+----------+---------------------+--------------------+----------+
@@ -366,7 +366,7 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
 
 Команда [validate](https://documentation.red-gate.com/flyway/flyway-cli-and-api/usage/command-line/command-line-validate) проверяет соответствие примененных миграций к миграциям, которые находятся в файловой системе пользователя.
 
-После применения к текущим миграциям команды `flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration validate`, в логах будет написано, что последняя миграция не была применена к нашей базе данных:
+После применения к текущим миграциям команды `flyway -url=jdbc:ydb:grpc://localhost:{{ def-ports.grpc }}/local -locations=db/migration validate`, в логах будет написано, что последняя миграция не была применена к нашей базе данных:
 
 ```text
 ERROR: Validate failed: Migrations have failed validation
@@ -394,7 +394,7 @@ Migration checksum mismatch for migration version 4
 Устраним проблему с разными `checksum`, выполнив следующую команду:
 
 ```bash
-flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration repair
+flyway -url=jdbc:ydb:grpc://localhost:{{ def-ports.grpc }}/local -locations=db/migration repair
 ```
 
 Результатом будет обновление колонки `checksum` в таблице `flyway_schema_history` у записи, отвечающей за миграцию `V4__load_data.sql`:
@@ -418,7 +418,7 @@ flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration repair
 Удалим все таблицы в нашей базе данных следующей командой:
 
 ```bash
-flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration -cleanDisabled=false clean
+flyway -url=jdbc:ydb:grpc://localhost:{{ def-ports.grpc }}/local -locations=db/migration -cleanDisabled=false clean
 ```
 
 Результатом будет пустая база данных:

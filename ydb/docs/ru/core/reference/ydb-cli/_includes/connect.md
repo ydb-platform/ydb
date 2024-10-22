@@ -25,7 +25,7 @@
 {{ ydb-cli }} <опции_соединения> <команда> <опции_команды>
 ```
 
-- `-e, --endpoint <endpoint>` — [эндпоинт](../../../concepts/connect.md#endpoint) - основной параметр соединения, позволяющий найти сервер {{ ydb-short-name }} в сети. Если порт не указан, применяется 2135. Если протокол не указан, то в публичных сборках {{ ydb-short-name }} CLI применяется gRPCs (с шифрованием).
+- `-e, --endpoint <endpoint>` — [эндпоинт](../../../concepts/connect.md#endpoint) - основной параметр соединения, позволяющий найти сервер {{ ydb-short-name }} в сети. Если порт не указан, применяется {{ def-ports.grpcs }}. Если протокол не указан, то в публичных сборках {{ ydb-short-name }} CLI применяется gRPCs (с шифрованием).
 - `-d, --database <database>` — [путь базы данных](../../../concepts/connect.md#database).
 
 {% include [auth/options.md](auth/options.md) %}

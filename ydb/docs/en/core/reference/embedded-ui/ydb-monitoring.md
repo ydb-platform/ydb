@@ -7,7 +7,7 @@
 The page is available at:
 
 ```text
-http://<endpoint>:8765/monitoring/cluster
+http://<endpoint>:{{ def-ports.mon }}/monitoring/cluster
 ```
 
 An example of the page layout is shown in the screenshot below.
@@ -71,7 +71,7 @@ To open the [node page](#node_page), click the host name.
 The page is available at:
 
 ```text
-http://<endpoint>:8765/monitoring/node/<node-id>/
+http://<endpoint>:{{ def-ports.mon }}/monitoring/node/<node-id>/
 ```
 
 Information about the node is presented in the following sections:
@@ -142,7 +142,7 @@ Under the indicator, you can see a list of tablets, where each tablet is shown a
 ## Tenant page {#tenant_page}
 
 ```text
-http://<endpoint>:8765/monitoring/tenant/healthcheck?name=<tenant-path>
+http://<endpoint>:{{ def-ports.mon }}/monitoring/tenant/healthcheck?name=<tenant-path>
 ```
 
 Like the previous pages, this page includes the tenant summary, but unlike the other pages, this section is initially collapsed.

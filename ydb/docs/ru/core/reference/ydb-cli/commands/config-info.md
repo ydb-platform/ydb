@@ -29,8 +29,8 @@
 ### Вывод итоговых параметров соединения {#basic-example}
 
 ```bash
-$ ydb -e grpcs://another.endpoint:2135 --ca-file some_certs.crt -p db123 config info
-endpoint: another.endpoint:2135
+$ ydb -e grpcs://another.endpoint:{{ def-ports.grpcs }} --ca-file some_certs.crt -p db123 config info
+endpoint: another.endpoint:{{ def-ports.grpcs }}
 yc-token: SOME_A12****************21_TOKEN
 iam-endpoint: iam.api.cloud.yandex.net
 ca-file: some_certs.crt
@@ -39,10 +39,10 @@ ca-file: some_certs.crt
 ### Вывод всех параметров соединения вместе с источниками {#verbose-example}
 
 ```bash
-$ ydb -e grpcs://another.endpoint:2135 --ca-file some_certs.crt -p db123 -v config info
+$ ydb -e grpcs://another.endpoint:{{ def-ports.grpcs }} --ca-file some_certs.crt -p db123 -v config info
 Using Yandex.Cloud Passport token from YC_TOKEN env variable
 
-endpoint: another.endpoint:2135
+endpoint: another.endpoint:{{ def-ports.grpcs }}
 yc-token: SOME_A12****************21_TOKEN
 iam-endpoint: iam.api.cloud.yandex.net
 ca-file: some_certs.crt
@@ -55,9 +55,9 @@ current auth method: yc-token
   1. Value: /some/path. Got from: active profile "test_config_info"
 
 "endpoint" sources:
-  1. Value: another.endpoint:2135. Got from: explicit --endpoint option
-  2. Value: db123.endpoint:2135. Got from: profile "db123" from explicit --profile option
-  3. Value: some.endpoint:2135. Got from: active profile "test_config_info"
+  1. Value: another.endpoint:{{ def-ports.grpcs }}. Got from: explicit --endpoint option
+  2. Value: db123.endpoint:{{ def-ports.grpcs }}. Got from: profile "db123" from explicit --profile option
+  3. Value: some.endpoint:{{ def-ports.grpcs }}. Got from: active profile "test_config_info"
 
 "iam-endpoint" sources:
   1. Value: iam.api.cloud.yandex.net. Got from: default value

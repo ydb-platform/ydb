@@ -731,7 +731,7 @@ message IssueLog {
           "node": {
             "id": 3,
             "host": "man0-0026.ydb-dev.nemax.nebiuscloud.net",
-            "port": 19001
+            "port": {{ def-ports.ic }}
           },
           "pool": {
             "group": {
@@ -759,7 +759,7 @@ message IssueLog {
           "node": {
             "id": 3,
             "host": "man0-0026.ydb-dev.nemax.nebiuscloud.net",
-            "port": 19001
+            "port": {{ def-ports.ic }}
           },
           "pool": {
             "name": "static",
@@ -811,7 +811,7 @@ message IssueLog {
   "location": {
     "id": 5,
     "host": "man0-0028.ydb-dev.nemax.nebiuscloud.net",
-    "port": 19001
+    "port": {{ def-ports.ic }}
   }
 }
 ```

@@ -167,7 +167,7 @@
       'database'    => '/local',
 
       // Database endpoint
-      'endpoint'    => 'localhost:2136',
+      'endpoint'    => 'localhost:{{ def-ports.grpc }}',
 
       // Auto discovery (dedicated server only)
       'discovery'   => false,

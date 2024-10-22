@@ -66,7 +66,7 @@ The profile will update with the parameters entered on the command line. Any pro
 To connect to a DB in a single-node {{ ydb-short-name }} cluster, you can use the `quickstart` profile:
 
 ```bash
-ydb config profile create quickstart --endpoint grpc://localhost:2136 --database <path_database>
+ydb config profile create quickstart --endpoint grpc://localhost:{{ def-ports.grpc }} --database <path_database>
 ```
 
 * `path_database`: Database path. Specify one of these values:
@@ -82,7 +82,7 @@ For instance, if you successfully ran the `scheme Is` command with the following
 
 ```bash
 {{ ydb-cli }} \
-  -e grpcs://example.com:2135 -d /Root/somedatabase --sa-key-file ~/sa_key.json \
+  -e grpcs://example.com:{{ def-ports.grpcs }} -d /Root/somedatabase --sa-key-file ~/sa_key.json \
   scheme ls
 ```
 
@@ -91,7 +91,7 @@ You can create a profile to connect to the accessed database using the following
 ```bash
 {{ ydb-cli }} \
   config profile create db1 \
-  -e grpcs://example.com:2135 -d /Root/somedatabase --sa-key-file ~/sa_key.json
+  -e grpcs://example.com:{{ def-ports.grpcs }} -d /Root/somedatabase --sa-key-file ~/sa_key.json
 ```
 
 You can now use much shorter syntax to re-write the original command:
@@ -105,7 +105,7 @@ You can now use much shorter syntax to re-write the original command:
 Creating/replacing a `local` profile to connect to a local {{ ydb-short-name }} database deployed using [quick start](../../../../quickstart.md):
 
 ```bash
-{{ ydb-cli }} config profile replace local --endpoint grpc://localhost:2136 --database /Root/local
+{{ ydb-cli }} config profile replace local --endpoint grpc://localhost:{{ def-ports.grpc }} --database /Root/local
 ```
 
 Defining the login and password authentication method in the `local` profile:

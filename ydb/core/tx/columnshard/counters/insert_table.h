@@ -67,7 +67,7 @@ public:
         return TPathIdOwnedCounters(PathIdInserted.GetClient(), PathIdCommitted.GetClient());
     }
 };
-
+/*
 class TInsertTableLoadCounters: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
@@ -91,5 +91,5 @@ public:
         InsertTableLoadingFailCounter->Add(1);
     }
 };
-
+*/
 }

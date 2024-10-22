@@ -56,62 +56,51 @@ public:
 class TLoadTimeSignals: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
-    NMonitoring::TDynamicCounters::TCounterPtr TablesLoadingTimeCounter;
-    NMonitoring::TDynamicCounters::TCounterPtr SchemaPresetLoadingTimeCounter;
-    NMonitoring::TDynamicCounters::TCounterPtr TableVersionsLoadingTimeCounter;
-    NMonitoring::TDynamicCounters::TCounterPtr SchemaPresetVersionsLoadingTimeCounter;
-
-    NMonitoring::TDynamicCounters::TCounterPtr TablesLoadingFailCounter;
-    NMonitoring::TDynamicCounters::TCounterPtr SchemaPresetLoadingFailCounter;
-    NMonitoring::TDynamicCounters::TCounterPtr TableVersionsLoadingFailCounter;
-    NMonitoring::TDynamicCounters::TCounterPtr SchemaPresetVersionsLoadingFailCounter;
-
+    NMonitoring::TDynamicCounters::TCounterPtr LoadingTimeCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr LoadingFailCounter;
 
 public:
-    TLoadTimeSignals()
+    TLoadTimeSignals(const TString& type)
         : TBase("Startup")
     {
-        TablesLoadingTimeCounter = TBase::GetValue("Startup/TablesLoadingTime");;
-        SchemaPresetLoadingTimeCounter = TBase::GetValue("Startup/SchemaPresetLoadingTime");;
-        TableVersionsLoadingTimeCounter = TBase::GetValue("Startup/TableVersionsLoadingTime");;
-        SchemaPresetVersionsLoadingTimeCounter = TBase::GetValue("Startup/SchemaPreseVersionstLoadingTime");;
-
-        TablesLoadingFailCounter = TBase::GetValue("Startup/TablesLoadingFailCount");;
-        SchemaPresetLoadingFailCounter = TBase::GetValue("Startup/SchemaPresetLoadingFailCount");;
-        TableVersionsLoadingFailCounter = TBase::GetValue("Startup/TableVersionsLoadingFailCount");;
-        SchemaPresetVersionsLoadingFailCounter = TBase::GetValue("Startup/SchemaPreseVersionstLoadingFailCount");;
+        LoadingTimeCounter = TBase::GetValue("Startup/" + type + "LoadingTime");;
+        LoadingFailCounter = TBase::GetValue("Startup/" + type + "LoadingFailCount");;
     }
 
-    void AddTablesLoadingTime(ui64 microSeconds) {
-        TablesLoadingTimeCounter->Add(microSeconds);
+    void AddLoadingTime(ui64 microSeconds) {
+        LoadingTimeCounter->Add(microSeconds);
     }
 
-    void AddSchemaPresetLoadingTime(ui64 microSeconds) {
-        SchemaPresetLoadingTimeCounter->Add(microSeconds);
+    void AddLoadingFail() {
+        LoadingFailCounter->Add(1);
+    }
+};
+
+class TLoadTimer {
+private:
+    TLoadTimeSignals& Signals;
+    TInstant Start;
+    ui64& Duration;
+    static ui64 DummyDuration;
+
+public:
+    TLoadTimer(TLoadTimeSignals& signals, ui64& duration)
+        : Signals(signals)
+        , Duration(duration)
+    {
+        Start = TInstant::Now();
     }
 
-    void AddTableVersionsLoadingTime(ui64 microSeconds) {
-        TableVersionsLoadingTimeCounter->Add(microSeconds);
+    TLoadTimer(TLoadTimeSignals& signals)
+        : Signals(signals)
+        , Duration(DummyDuration)
+    {
+        Start = TInstant::Now();
     }
 
-    void AddSchemaPresetVersionsLoadingTime(ui64 microSeconds) {
-        SchemaPresetVersionsLoadingTimeCounter->Add(microSeconds);
-    }
-
-    void AddLoadingTablesFail() {
-        TablesLoadingFailCounter->Add(1);
-    }
-
-    void AddLoadingSchemaPresetFail() {
-        SchemaPresetLoadingFailCounter->Add(1);
-    }
-
-    void AddLoadingTableVersionsFail() {
-        TableVersionsLoadingFailCounter->Add(1);
-    }
-
-    void AddLoadingSchemaPresetVersionsFail() {
-        SchemaPresetVersionsLoadingFailCounter->Add(1);
+    ~TLoadTimer() {
+        TInstant finish = TInstant::Now();
+        Signals.AddLoadingTime(Duration = (finish - Start).MicroSeconds());
     }
 };
 

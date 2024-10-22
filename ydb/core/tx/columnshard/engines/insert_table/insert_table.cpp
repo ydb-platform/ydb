@@ -125,17 +125,15 @@ bool TInsertTable::Load(NIceDb::TNiceDb& db, IDbWrapper& dbTable, const TInstant
     Loaded = true;
     LastWriteId = (TInsertWriteId)0;
     if (!NColumnShard::Schema::GetSpecialValueOpt(db, NColumnShard::Schema::EValueIds::LastWriteId, LastWriteId)) {
-        LoadCounters.AddInsertTableLoadFail();
+        LoadCounters.AddLoadingFail();
         return false;
     }
 
-    TInstant start = TInstant::Now();
+    NColumnShard::TLoadTimer timer(LoadCounters);
     bool result = dbTable.Load(*this, loadTime);
-    TInstant finish = TInstant::Now();
     if (!result) {
-        LoadCounters.AddInsertTableLoadFail();
+        LoadCounters.AddLoadingFail();
     }
-    LoadCounters.AddInsertTableLoadingTime((finish - start).MicroSeconds());
     return result;
 }
 

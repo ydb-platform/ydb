@@ -19,4 +19,6 @@ TDataOwnerSignals::TDataOwnerSignals(const TString& module, const TString dataNa
     SkipEraseBytes = GetDeriviative(DataName + "/SkipErase/Bytes");
 }
 
+ui64 TLoadTimer::DummyDuration;
+
 }

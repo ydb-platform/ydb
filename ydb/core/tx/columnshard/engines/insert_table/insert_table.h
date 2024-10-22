@@ -6,6 +6,7 @@
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/columnshard/counters/common_data.h>
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
 
 namespace NKikimr::NOlap {
@@ -16,7 +17,12 @@ class TInsertTableAccessor {
 protected:
     TInsertionSummary Summary;
     THashMap<TUnifiedBlobId, ui32> BlobLinks;
-    NColumnShard::TInsertTableLoadCounters LoadCounters;
+    NColumnShard::TLoadTimeSignals LoadCounters;
+
+    TInsertTableAccessor()
+        : LoadCounters("InsertTable")
+    {
+    }
 
     void AddBlobLink(const TUnifiedBlobId& blobId) {
         ++BlobLinks[blobId];

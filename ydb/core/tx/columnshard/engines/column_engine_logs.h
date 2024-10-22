@@ -11,6 +11,7 @@
 #include <ydb/core/tx/columnshard/columnshard_ttl.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
+#include <ydb/core/tx/columnshard/counters/common_data.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 
 namespace NKikimr::NArrow {
@@ -49,6 +50,9 @@ class TColumnEngineForLogs: public IColumnEngine {
 private:
     bool ActualizationStarted = false;
     const NColumnShard::TEngineLogsCounters SignalCounters;
+    NColumnShard::TLoadTimeSignals PortionsLoadingTimeCounters;
+    NColumnShard::TLoadTimeSignals ColumnsLoadingTimeCounters;
+    NColumnShard::TLoadTimeSignals IndexesLoadingTimeCounters;
     std::shared_ptr<TGranulesStorage> GranulesStorage;
     std::shared_ptr<IStoragesManager> StoragesManager;
 

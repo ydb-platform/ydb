@@ -28,7 +28,10 @@ namespace NKikimr::NOlap {
 
 TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager,
     const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema)
-    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
+    : PortionsLoadingTimeCounters("PortionsLoading")
+    , ColumnsLoadingTimeCounters("ColumnsLoading")
+    , IndexesLoadingTimeCounters("IndexesLoading")
+    , GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
     , StoragesManager(storagesManager)
     , TabletId(tabletId)
     , LastPortion(0)
@@ -40,7 +43,10 @@ TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<
 
 TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager,
     const TSnapshot& snapshot, TIndexInfo&& schema)
-    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
+    : PortionsLoadingTimeCounters("PortionsLoading")
+    , ColumnsLoadingTimeCounters("ColumnsLoading")
+    , IndexesLoadingTimeCounters("IndexesLoading")
+    , GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
     , StoragesManager(storagesManager)
     , TabletId(tabletId)
     , LastPortion(0)
@@ -207,22 +213,24 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
 
 bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
     TPortionConstructors constructors;
-    TInstant start = TInstant::Now();
+    ui64 portionsLoadingDuration;
+    ui64 columnsLoadingDuration;
+    ui64 indexesLoadingDuration;
     {
+        NColumnShard::TLoadTimer timer(PortionsLoadingTimeCounters, portionsLoadingDuration);
         TMemoryProfileGuard g("TTxInit/LoadColumns/Portions");
         if (!db.LoadPortions([&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
             const TIndexInfo& indexInfo = portion.GetSchema(VersionedIndex)->GetIndexInfo();
             AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo));
             AFL_VERIFY(constructors.AddConstructorVerified(std::move(portion)));
         })) {
-            SignalCounters.AddLoadPortionsFail();
+            PortionsLoadingTimeCounters.AddLoadingFail();
             return false;
         }
     }
 
-    TInstant portionsLoaded = TInstant::Now();
-
     {
+        NColumnShard::TLoadTimer timer(ColumnsLoadingTimeCounters, columnsLoadingDuration);
         TMemoryProfileGuard g("TTxInit/LoadColumns/Records");
         TPortionInfo::TSchemaCursor schema(VersionedIndex);
         if (!db.LoadColumns([&](TPortionInfoConstructor&& portion, const TColumnChunkLoadContext& loadContext) {
@@ -230,29 +238,24 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
             auto* constructor = constructors.MergeConstructor(std::move(portion));
             constructor->LoadRecord(currentSchema->GetIndexInfo(), loadContext);
         })) {
-            SignalCounters.AddLoadColumnsFail();
+            ColumnsLoadingTimeCounters.AddLoadingFail();
             return false;
         }
     }
 
-    TInstant columnsLoaded = TInstant::Now();
-
     {
+        NColumnShard::TLoadTimer timer(IndexesLoadingTimeCounters, indexesLoadingDuration);
         TMemoryProfileGuard g("TTxInit/LoadColumns/Indexes");
         if (!db.LoadIndexes([&](const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext& loadContext) {
             auto* constructor = constructors.GetConstructorVerified(pathId, portionId);
             constructor->LoadIndex(loadContext);
         })) {
-            SignalCounters.AddLoadIndexFail();
+            IndexesLoadingTimeCounters.AddLoadingFail();
             return false;
         };
     }
 
-    TInstant indexesLoaded = TInstant::Now();
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "load_columns")("portions_loading_time", portionsLoaded - start)("columns_loading_time", columnsLoaded - portionsLoaded)("indexes_loading_time", indexesLoaded - columnsLoaded);
-    SignalCounters.AddPortionLoadingTime((portionsLoaded - start).MicroSeconds());
-    SignalCounters.AddColumnLoadingTime((columnsLoaded - portionsLoaded).MicroSeconds());
-    SignalCounters.AddIndexesLoadingTime((indexesLoaded - columnsLoaded).MicroSeconds());
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "load_columns")("portions_loading_time", portionsLoadingDuration)("columns_loading_time", columnsLoadingDuration)("indexes_loading_time", indexesLoadingDuration);
 
     {
         TMemoryProfileGuard g("TTxInit/LoadColumns/Constructors");

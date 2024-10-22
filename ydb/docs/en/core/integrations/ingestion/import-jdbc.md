@@ -137,13 +137,13 @@ Below is the explanation of the configuration file structure:
         -->
         <jdbc-class>driver-class-name</jdbc-class>
         <!-- JDBC driver URL. Value templates:
-              jdbc:postgresql://hostname:5432/dbname
-              jdbc:mysql://hostname:3306/dbname
-              jdbc:mariadb://hostname:3306/dbname
-              jdbc:oracle:thin:@//hostname:1521/serviceName
+              jdbc:postgresql://hostname:{{ jdbc-ports.postgresql }}/dbname
+              jdbc:mysql://hostname:{{ jdbc-ports.mysql }}/dbname
+              jdbc:mariadb://hostname:{{ jdbc-ports.mysql }}/dbname
+              jdbc:oracle:thin:@//hostname:{{ jdbc-ports.oracle }}/serviceName
               jdbc:sqlserver://localhost;encrypt=true;trustServerCertificate=true;database=AdventureWorks2022;
-              jdbc:db2://localhost:50000/SAMPLE
-              jdbc:informix-sqli://localhost:9088/stores_demo:INFORMIXSERVER=informix
+              jdbc:db2://localhost:{{ jdbc-ports.db2 }}/SAMPLE
+              jdbc:informix-sqli://localhost:{{ jdbc-ports.informix-sqli }}/stores_demo:INFORMIXSERVER=informix
         -->
         <jdbc-url>jdbc-url</jdbc-url>
         <username>username</username>

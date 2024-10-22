@@ -108,7 +108,7 @@ output {
 
 input {
   http {
-    port => 9876 # Можно указать любой порт
+    port => {{ log-stash.def-port }} # Можно указать любой порт
   }
 }
 ```
@@ -120,9 +120,9 @@ input {
 Затем можно отправить несколько тестовых сообщений:
 
 ```bash
-curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:9876/http/ping' -d '{ "user" : "demo_user", "message" : "demo message", "level": 4}'
-curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:9876/http/ping' -d '{ "user" : "test1", "level": 1}'
-curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:9876/http/ping' -d '{ "message" : "error", "level": -3}'
+curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:{{ log-stash.def-port }}/http/ping' -d '{ "user" : "demo_user", "message" : "demo message", "level": 4}'
+curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:{{ log-stash.def-port }}/http/ping' -d '{ "user" : "test1", "level": 1}'
+curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:{{ log-stash.def-port }}/http/ping' -d '{ "message" : "error", "level": -3}'
 ```
 
 Все команды должны вернуть `ok` в случае успешного выполнения.
@@ -253,7 +253,7 @@ output {
 
 input {
   http {
-    port => 9876 # Можно указать любой порт
+    port => {{ log-stash.def-port }} # Можно указать любой порт
   }
 }
 ```
@@ -265,7 +265,7 @@ input {
 С помощью плагина `http` отправим тестовое сообщение:
 
 ```bash
-curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:9876/http/ping' -d '{ "user" : "demo_user", "message" : "demo message", "level": 4}'
+curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:{{ log-stash.def-port }}/http/ping' -d '{ "user" : "demo_user", "message" : "demo message", "level": 4}'
 ```
 
 Команда вернет `ok` в случае успешного выполнения.

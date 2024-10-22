@@ -132,6 +132,11 @@ struct TEvYdbProxy {
         using TSelf = TTopicReaderSettings;
         using TBase = NYdb::NTopic::TReadSessionSettings;
 
+        TTopicReaderSettings()
+            : TBase() {
+            AutoPartitioningSupport(true);
+        }
+
         const TBase& GetBase() const {
             return *this;
         }

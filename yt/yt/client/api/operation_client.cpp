@@ -217,6 +217,19 @@ void Serialize(const TJob& job, NYson::IYsonConsumer* consumer, TStringBuf idKey
         .EndMap();
 }
 
+void Serialize(const TJobTraceEvent& traceEvent, NYson::IYsonConsumer* consumer)
+{
+    NYTree::BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("operation_id").Value(traceEvent.OperationId)
+            .Item("job_id").Value(traceEvent.JobId)
+            .Item("trace_id").Value(traceEvent.TraceId)
+            .Item("event_index").Value(traceEvent.EventIndex)
+            .Item("event").Value(traceEvent.Event)
+            .Item("event_time").Value(traceEvent.EventTime.MicroSeconds())
+        .EndMap();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TListOperationsAccessFilter::Register(TRegistrar registrar)

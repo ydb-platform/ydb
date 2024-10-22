@@ -2,8 +2,6 @@
 
 #include "defs.h"
 #include "event.h"
-#include "callstack.h"
-#include "probes.h"
 #include "thread_context.h"
 #include "worker_context.h"
 #include "log_settings.h"

@@ -149,6 +149,16 @@ void FillTablesMap(const TKqpTable& table, const TCoAtomList& columns,
     }
 }
 
+void FillTablesMap(const TKqpTable& table, const TVector<TStringBuf>& columns,
+    THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
+{
+    FillTablesMap(table, tablesMap);
+
+    for (const auto& column : columns) {
+        tablesMap[table.Path()].emplace(column);
+    }
+}
+
 void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& columns,
     NKqpProto::TKqpPhyTable& tableProto)
 {
@@ -181,6 +191,8 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& col
         phyColumn.SetIsBuildInProgress(column->IsBuildInProgress);
         if (column->IsDefaultFromSequence()) {
             phyColumn.SetDefaultFromSequence(column->DefaultFromSequence);
+            phyColumn.MutableDefaultFromSequencePathId()->SetOwnerId(column->DefaultFromSequencePathId.OwnerId());
+            phyColumn.MutableDefaultFromSequencePathId()->SetLocalPathId(column->DefaultFromSequencePathId.TableId());
         } else if (column->IsDefaultFromLiteral()) {
             phyColumn.MutableDefaultFromLiteral()->CopyFrom(column->DefaultFromLiteral);
         }
@@ -808,7 +820,7 @@ private:
                 YQL_ENSURE(maybeSinkNode);
                 auto sinkNode = maybeSinkNode.Cast();
                 auto* sinkProto = stageProto.AddSinks();
-                FillSink(sinkNode, sinkProto, tablesMap, ctx);
+                FillSink(sinkNode, sinkProto, tablesMap, stage, ctx);
                 sinkProto->SetOutputIndex(FromString(TStringBuf(sinkNode.Index())));
 
                 if (IsTableSink(sinkNode.DataSink().Cast<TCoDataSink>().Category())) {
@@ -1074,19 +1086,34 @@ private:
         }
     }
 
-    void FillKqpSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap) {
+    void FillKqpSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, const TDqPhyStage& stage) {
         if (auto settings = sink.Settings().Maybe<TKqpTableSinkSettings>()) {
             NKqpProto::TKqpInternalSink& internalSinkProto = *protoSink->MutableInternalSink();
             internalSinkProto.SetType(TString(NYql::KqpTableSinkName));
             NKikimrKqp::TKqpTableSinkSettings settingsProto;
-            FillTablesMap(settings.Table().Cast(), settings.Columns().Cast(), tablesMap);
+
+            const auto& tupleType = stage.Ref().GetTypeAnn()->Cast<TTupleExprType>();
+            YQL_ENSURE(tupleType);
+            YQL_ENSURE(tupleType->GetSize() == 1);
+            const auto& listType = tupleType->GetItems()[0]->Cast<TListExprType>();
+            YQL_ENSURE(listType);
+            const auto& structType = listType->GetItemType()->Cast<TStructExprType>();
+            YQL_ENSURE(structType);
+
+            TVector<TStringBuf> columns;
+            columns.reserve(structType->GetSize());
+            for (const auto& item : structType->GetItems()) {
+                columns.emplace_back(item->GetName());
+            }
+
+            FillTablesMap(settings.Table().Cast(), columns, tablesMap);
             FillTableId(settings.Table().Cast(), *settingsProto.MutableTable());
 
             const auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Cast().Path()).Metadata;
 
-            auto fillColumnProto = [] (TString columnName, const NYql::TKikimrColumnMetadata* column, NKikimrKqp::TKqpColumnMetadataProto* columnProto ) {
+            auto fillColumnProto = [] (TStringBuf columnName, const NYql::TKikimrColumnMetadata* column, NKikimrKqp::TKqpColumnMetadataProto* columnProto ) {
                 columnProto->SetId(column->Id);
-                columnProto->SetName(columnName);
+                columnProto->SetName(TString(columnName));
                 columnProto->SetTypeId(column->TypeInfo.GetTypeId());
 
                 if(NScheme::NTypeIds::IsParametrizedType(column->TypeInfo.GetTypeId())) {
@@ -1096,16 +1123,15 @@ private:
 
             for (const auto& columnName : tableMeta->KeyColumnNames) {
                 const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
-                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + columnName + "\"");
+                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
 
                 auto keyColumnProto = settingsProto.AddKeyColumns();
                 fillColumnProto(columnName, columnMeta, keyColumnProto);
             }
 
-            for (const auto& column : settings.Columns().Cast()) {
-                const auto columnName = column.StringValue();
+            for (const auto& columnName : columns) {
                 const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
-                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + columnName + "\"");
+                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
 
                 auto columnProto = settingsProto.AddColumns();
                 fillColumnProto(columnName, columnMeta, columnProto);
@@ -1141,11 +1167,11 @@ private:
             || dataSinkCategory == NYql::KqpTableSinkName;
     }
 
-    void FillSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, TExprContext& ctx) {
+    void FillSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, const TDqPhyStage& stage, TExprContext& ctx) {
         Y_UNUSED(ctx);
         const TStringBuf dataSinkCategory = sink.DataSink().Cast<TCoDataSink>().Category();
         if (IsTableSink(dataSinkCategory)) {
-            FillKqpSink(sink, protoSink, tablesMap);
+            FillKqpSink(sink, protoSink, tablesMap, stage);
         } else {
             // Delegate sink filling to dq integration of specific provider
             const auto provider = TypesCtx.DataSinkMap.find(dataSinkCategory);

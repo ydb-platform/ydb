@@ -347,79 +347,72 @@ public:
         return json;
     }
 
-    NJson::TJsonMap DeleteQueue(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
-        auto res = SendHttpRequest("/Root", "AmazonSQS.DeleteQueue", request, FormAuthorizationStr("ru-central1"));
+    NJson::TJsonMap SendJsonRequest(TString method, NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto res = SendHttpRequest("/Root", TStringBuilder() << "AmazonSQS." << method, request, FormAuthorizationStr("ru-central1"));
         UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
         NJson::TJsonMap json;
         UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
         return json;
+    }
+
+    NJson::TJsonMap DeleteQueue(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("DeleteQueue", request, expectedHttpCode);
     }
 
     NJson::TJsonMap GetQueueAttributes(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
-        auto res = SendHttpRequest("/Root", "AmazonSQS.GetQueueAttributes", request, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
-        NJson::TJsonMap json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        return json;
+        return SendJsonRequest("GetQueueAttributes", request, expectedHttpCode);
     }
 
     NJson::TJsonMap SendMessage(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
-        auto res = SendHttpRequest("/Root", "AmazonSQS.SendMessage", request, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
-        NJson::TJsonMap json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        auto json = SendJsonRequest("SendMessage", request, expectedHttpCode);
+        UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
         return json;
+    }
+
+    NJson::TJsonMap SendMessageBatch(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("SendMessageBatch", request, expectedHttpCode);
     }
 
     NJson::TJsonMap ReceiveMessage(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
-        auto res = SendHttpRequest("/Root", "AmazonSQS.ReceiveMessage", request, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
-        NJson::TJsonMap json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        return json;
+        return SendJsonRequest("ReceiveMessage", request, expectedHttpCode);
     }
 
     NJson::TJsonMap DeleteMessage(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
-        auto res = SendHttpRequest("/Root", "AmazonSQS.DeleteMessage", request, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
-        NJson::TJsonMap json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        return json;
+        return SendJsonRequest("DeleteMessage", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap DeleteMessageBatch(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("DeleteMessageBatch", request, expectedHttpCode);
     }
 
     NJson::TJsonMap GetQueueUrl(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
-        auto res = SendHttpRequest("/Root", "AmazonSQS.GetQueueUrl", request, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
-        NJson::TJsonMap json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        return json;
+        return SendJsonRequest("GetQueueUrl", request, expectedHttpCode);
     }
 
     NJson::TJsonMap ListQueues(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
-        auto res = SendHttpRequest("/Root", "AmazonSQS.ListQueues", request, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
-        NJson::TJsonMap json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        return json;
+        return SendJsonRequest("ListQueues", request, expectedHttpCode);
     }
 
     NJson::TJsonMap PurgeQueue(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
-        auto res = SendHttpRequest("/Root", "AmazonSQS.PurgeQueue", request, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
-        NJson::TJsonMap json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        return json;
+        return SendJsonRequest("PurgeQueue", request, expectedHttpCode);
     }
 
     NJson::TJsonMap SetQueueAttributes(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
-        auto res = SendHttpRequest("/Root", "AmazonSQS.SetQueueAttributes", request, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
-        NJson::TJsonMap json;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        return json;
+        return SendJsonRequest("SetQueueAttributes", request, expectedHttpCode);
     }
 
-    bool WaitQueueAttributes(TString queueUrl, size_t retries, std::function<bool (NJson::TJsonMap json)> predicate) {
+    void WaitQueueAttributes(TString queueUrl, size_t retries, NJson::TJsonMap attributes) {
+        WaitQueueAttributes(queueUrl, retries, [&attributes](NJson::TJsonMap json) {
+            for (const auto& [k, v] : attributes.GetMapSafe()) {
+                if (json["Attributes"][k] != v) {
+                    return false;
+                }
+            }
+            return true;
+        });
+    }
+
+    void WaitQueueAttributes(TString queueUrl, size_t retries, std::function<bool (NJson::TJsonMap json)> predicate) {
         for (size_t i = 0; i < retries; ++i) {
             auto json = GetQueueAttributes({
                 {"QueueUrl", queueUrl},
@@ -427,14 +420,22 @@ public:
             });
 
             if (predicate(json)) {
-                return true;
+                return;
             }
 
             if (i + 1 < retries) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(1000));
             }
         }
-        return false;
+        UNIT_FAIL("WaitQueueAttributes: predicate is still false");
+    }
+
+    NJson::TJsonMap ChangeMessageVisibility(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("ChangeMessageVisibility", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap ChangeMessageVisibilityBatch(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("ChangeMessageVisibilityBatch", request, expectedHttpCode);
     }
 
 private:
@@ -593,6 +594,54 @@ private:
            "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"Offset\"]"
         );
 
+        client.CreateTable("/Root/SQS/.FIFO",
+           "Name: \"Deduplication\""
+           "Columns { Name: \"QueueIdNumberHash\"     Type: \"Uint64\"}"
+           "Columns { Name: \"QueueIdNumber\"         Type: \"Uint64\"}"
+           "Columns { Name: \"DedupId\"               Type: \"String\"}"
+           "Columns { Name: \"Deadline\"              Type: \"Uint64\"}"
+           "Columns { Name: \"Offset\"                Type: \"Uint64\"}"
+           "Columns { Name: \"MessageId\"             Type: \"String\"}"
+           "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"DedupId\"]"
+        );
+
+        client.CreateTable("/Root/SQS/.FIFO",
+           "Name: \"Groups\""
+           "Columns { Name: \"QueueIdNumberHash\"     Type: \"Uint64\"}"
+           "Columns { Name: \"QueueIdNumber\"         Type: \"Uint64\"}"
+           "Columns { Name: \"GroupId\"               Type: \"String\"}"
+           "Columns { Name: \"VisibilityDeadline\"    Type: \"Uint64\"}"
+           "Columns { Name: \"RandomId\"              Type: \"Uint64\"}"
+           "Columns { Name: \"Head\"                  Type: \"Uint64\"}"
+           "Columns { Name: \"Tail\"                  Type: \"Uint64\"}"
+           "Columns { Name: \"ReceiveAttemptId\"      Type: \"Utf8\"}"
+           "Columns { Name: \"LockTimestamp\"         Type: \"Uint64\"}"
+           "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"GroupId\"]"
+        );
+
+        client.CreateTable("/Root/SQS/.FIFO",
+           "Name: \"Data\""
+           "Columns { Name: \"QueueIdNumberHash\"     Type: \"Uint64\"}"
+           "Columns { Name: \"QueueIdNumber\"         Type: \"Uint64\"}"
+           "Columns { Name: \"RandomId\"              Type: \"Uint64\"}"
+           "Columns { Name: \"Offset\"                Type: \"Uint64\"}"
+           "Columns { Name: \"SenderId\"              Type: \"String\"}"
+           "Columns { Name: \"DedupId\"               Type: \"String\"}"
+           "Columns { Name: \"Attributes\"            Type: \"String\"}"
+           "Columns { Name: \"Data\"                  Type: \"String\"}"
+           "Columns { Name: \"MessageId\"             Type: \"String\"}"
+           "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"RandomId\", \"Offset\"]"
+        );
+
+        client.CreateTable("/Root/SQS/.FIFO",
+           "Name: \"Reads\""
+           "Columns { Name: \"QueueIdNumberHash\"     Type: \"Uint64\"}"
+           "Columns { Name: \"QueueIdNumber\"         Type: \"Uint64\"}"
+           "Columns { Name: \"ReceiveAttemptId\"      Type: \"Utf8\"}"
+           "Columns { Name: \"Deadline\"              Type: \"Uint64\"}"
+           "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"ReceiveAttemptId\"]"
+        );
+
         client.CreateTable("/Root/SQS",
            "Name: \".Settings\""
            "Columns { Name: \"Account\"               Type: \"Utf8\"}"
@@ -697,12 +746,17 @@ private:
            << sentTimestampIdxCommonColumns
            << sendTimestampIdsKeys
         );
+
         client.CreateTable("/Root/SQS/.FIFO",
-           TStringBuilder()
-           << "Name: \"SentTimestampIdx\""
-           << "Columns { Name: \"GroupId\"  Type: \"String\"}"
-           << sentTimestampIdxCommonColumns
-           << sendTimestampIdsKeys
+           "Name: \"SentTimestampIdx\""
+           "Columns { Name: \"QueueIdNumberHash\"      Type: \"Uint64\"}"
+           "Columns { Name: \"QueueIdNumber\"          Type: \"Uint64\"}"
+           "Columns { Name: \"SentTimestamp\"          Type: \"Uint64\"}"
+           "Columns { Name: \"Offset\"                 Type: \"Uint64\"}"
+           "Columns { Name: \"GroupId\"                Type: \"String\"}"
+           "Columns { Name: \"RandomId\"               Type: \"Uint64\"}"
+           "Columns { Name: \"DelayDeadline\"          Type: \"Uint64\"}"
+           "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"SentTimestamp\", \"Offset\"]"
         );
 
         client.CreateTable("/Root/SQS/.STD",

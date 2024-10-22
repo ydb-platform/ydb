@@ -143,9 +143,9 @@
     ],
     "test.test[aggr_factory-avg-default.txt-Debug]": [
         {
-            "checksum": "d5dbbfdea210735b4bfb52d824386844",
-            "size": 6169,
-            "uri": "https://{canondata_backend}/1936273/16a5945b6fd0dd622c0f5a29d4b7818e35b19526/resource.tar.gz#test.test_aggr_factory-avg-default.txt-Debug_/opt.yql_patched"
+            "checksum": "ceef17e148274c597b03fe866cbbc5e5",
+            "size": 6193,
+            "uri": "https://{canondata_backend}/1942278/5eae7303204cecb578258cdbb0730e6f301fe9ed/resource.tar.gz#test.test_aggr_factory-avg-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggr_factory-avg-default.txt-Plan]": [
@@ -1763,9 +1763,9 @@
     ],
     "test.test[join-yql-14829_leftonly--Debug]": [
         {
-            "checksum": "772db6869260513f1245efaad787108e",
-            "size": 4725,
-            "uri": "https://{canondata_backend}/1599023/5ebe01f73e8e346a61b42aadb75da1a518ed1660/resource.tar.gz#test.test_join-yql-14829_leftonly--Debug_/opt.yql_patched"
+            "checksum": "b263b3a4c85b4c2caa6d29a2626c1153",
+            "size": 4797,
+            "uri": "https://{canondata_backend}/1942278/5eae7303204cecb578258cdbb0730e6f301fe9ed/resource.tar.gz#test.test_join-yql-14829_leftonly--Debug_/opt.yql_patched"
         }
     ],
     "test.test[join-yql-14829_leftonly--Plan]": [
@@ -2694,9 +2694,9 @@
     ],
     "test.test[select-optional_pull--Debug]": [
         {
-            "checksum": "7e14d579167bc661265684c7ed393fdb",
-            "size": 3662,
-            "uri": "https://{canondata_backend}/1936273/16a5945b6fd0dd622c0f5a29d4b7818e35b19526/resource.tar.gz#test.test_select-optional_pull--Debug_/opt.yql_patched"
+            "checksum": "7b5c24e97b382ab51f438c5258d22879",
+            "size": 3686,
+            "uri": "https://{canondata_backend}/1942278/5eae7303204cecb578258cdbb0730e6f301fe9ed/resource.tar.gz#test.test_select-optional_pull--Debug_/opt.yql_patched"
         }
     ],
     "test.test[select-optional_pull--Plan]": [

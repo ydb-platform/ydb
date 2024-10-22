@@ -89,9 +89,9 @@ class TestPqRowDispatcher(TestYdsBase):
         )
         connections = client.list_connections(fq.Acl.Visibility.PRIVATE).result.connection
         assert len(connections) == 1
-        assert connections[0].content.setting.data_streams.shared_reading == True
+        assert connections[0].content.setting.data_streams.shared_reading
 
-        self.init_topics("test_read_raw_format_without_row_dispatcher", create_output=False)
+        self.init_topics("test_read_raw_format_with_row_dispatcher", create_output=False)
         output_topic = "pq_test_pq_read_write_output"
         create_stream(output_topic, partitions_count=1)
         create_read_rule(output_topic, self.consumer_name)
@@ -106,7 +106,7 @@ class TestPqRowDispatcher(TestYdsBase):
         assert self.read_stream(len(data), topic_path=output_topic) == data
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
         stop_yds_query(client, query_id)
-        
+
         sql2 = Rf'''INSERT INTO {YDS_CONNECTION}.`{output_topic}`
                     SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}` WITH (format=raw, SCHEMA (data String NOT NULL))
                     WHERE data != "romashka";'''
@@ -155,7 +155,6 @@ class TestPqRowDispatcher(TestYdsBase):
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
 
     @yq_v1
-    @pytest.mark.skip(reason="Is not implemented")
     def test_simple_optional(self, kikimr, client):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
@@ -249,6 +248,9 @@ class TestPqRowDispatcher(TestYdsBase):
         wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
         stop_yds_query(client, query_id)
 
+        issues = str(client.describe_query(query_id).result.query.transient_issue)
+        assert "Row dispatcher will use the predicate:" in issues, "Incorrect Issues: " + issues
+
     @yq_v1
     def test_filter(self, kikimr, client):
         client.create_yds_connection(
@@ -290,20 +292,22 @@ class TestPqRowDispatcher(TestYdsBase):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
-        self.init_topics("test_filter")
+        self.init_topics("test_filter_missing_fields")
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
-                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String, event String NOT NULL))
-                WHERE data = "";'''
+                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, `data@data` String, event String NOT NULL))
+                WHERE `data@data` IS NULL;'''
 
         query_id = start_yds_query(kikimr, client, sql)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
 
         data = [
             '{"time": 101, "event": "event1"}',
-            '{"time": 102, "data": null, "event": "event2"}',
+            '{"time": 102, "data@data": null, "event": "event2"}',
+            '{"time": 103, "data@data": "", "event": "event2"}',
+            '{"time": 104, "data@data": "null", "event": "event2"}',
         ]
 
         self.write_stream(data)
@@ -312,6 +316,9 @@ class TestPqRowDispatcher(TestYdsBase):
 
         wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
         stop_yds_query(client, query_id)
+
+        issues = str(client.describe_query(query_id).result.query.transient_issue)
+        assert "Row dispatcher will use the predicate:" in issues, "Incorrect Issues: " + issues
 
     @yq_v1
     def test_filter_use_unsupported_predicate(self, kikimr, client):
@@ -496,7 +503,7 @@ class TestPqRowDispatcher(TestYdsBase):
         assert self.read_stream(len(expected), topic_path=output_topic) == expected
 
         kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
         )
         stop_yds_query(client, query_id)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
@@ -525,9 +532,9 @@ class TestPqRowDispatcher(TestYdsBase):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
-        self.init_topics("test_stop_start", create_output=False)
+        self.init_topics("test_stop_start_with_filter", create_output=False)
 
-        output_topic = "test_stop_start"
+        output_topic = "test_stop_start_with_filter"
         create_stream(output_topic, partitions_count=1)
         create_read_rule(output_topic, self.consumer_name)
 
@@ -544,7 +551,7 @@ class TestPqRowDispatcher(TestYdsBase):
         self.write_stream(data)
 
         kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 10
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 10     # long sleep to send status from topic_session to read_actor
         )
         stop_yds_query(client, query_id)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
@@ -594,7 +601,7 @@ class TestPqRowDispatcher(TestYdsBase):
         assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
 
         kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
         )
 
         wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
@@ -611,7 +618,7 @@ class TestPqRowDispatcher(TestYdsBase):
         expected = ['103', '104']
         assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
         kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
         )
 
         node_index = 1
@@ -674,7 +681,7 @@ class TestPqRowDispatcher(TestYdsBase):
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
 
         kikimr.compute_plane.wait_completed_checkpoints(
-            query_id1, kikimr.compute_plane.get_completed_checkpoints(query_id1) + 1
+            query_id1, kikimr.compute_plane.get_completed_checkpoints(query_id1) + 2
         )
         stop_yds_query(client, query_id1)
 
@@ -717,7 +724,7 @@ class TestPqRowDispatcher(TestYdsBase):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
-        self.init_topics("test_simple_not_null", partitions_count=4)
+        self.init_topics("test_many_partitions", partitions_count=4)
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`

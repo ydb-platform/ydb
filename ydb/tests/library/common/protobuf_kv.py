@@ -4,6 +4,8 @@ import string
 
 from enum import unique, IntEnum
 
+import ydb.core.protos.msgbus_kv_pb2 as msgbus_kv
+
 
 @unique
 class EStorageChannel(IntEnum):
@@ -14,6 +16,9 @@ class EStorageChannel(IntEnum):
     EXTRA4 = 4
     EXTRA5 = 5
     INLINE = 65535
+
+    def to_protobuf_object(self):
+        return getattr(msgbus_kv.TKeyValueRequest, self.name)
 
     @staticmethod
     def from_string(s):

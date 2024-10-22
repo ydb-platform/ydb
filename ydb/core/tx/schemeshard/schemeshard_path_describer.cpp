@@ -522,6 +522,31 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
                 << ", childType# " << static_cast<ui32>(childPath->PathType));
         }
     }
+
+    for (const auto& col : tableInfo.Columns) {
+        const auto& cinfo = col.second;
+        if (cinfo.IsDropped())
+            continue;
+
+        switch (cinfo.DefaultKind) {
+            case ETableColumnDefaultKind::None:
+                break;
+            case ETableColumnDefaultKind::FromSequence:
+                if (cinfo.DefaultValue.StartsWith('/')) {
+                    NSchemeShard::TPath sequencePath = NSchemeShard::TPath::Resolve(cinfo.DefaultValue, Self);
+                    NSchemeShard::TPath::TChecker checks = sequencePath.Check();
+                    checks
+                        .IsResolved()
+                        .NotDeleted();
+                    if (checks) {
+                        Self->DescribeSequence(sequencePath->PathId, cinfo.DefaultValue, *entry->AddSequences(), returnSetVal);
+                    }
+                }
+                break;
+            case ETableColumnDefaultKind::FromLiteral:
+                break;
+        }
+    }
 }
 
 void TPathDescriber::DescribeOlapStore(TPathId pathId, TPathElement::TPtr pathEl) {
@@ -1374,16 +1399,7 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
 
     if (indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
         if (const auto* vectorIndexKmeansTreeDescription = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(&indexInfo->SpecializedIndexDescription)) {
-            const auto& indexInfoSettings = vectorIndexKmeansTreeDescription->GetSettings();
-            auto entrySettings = entry.MutableVectorIndexKmeansTreeDescription()->MutableSettings();
-            if (indexInfoSettings.has_distance())
-                entrySettings->set_distance(indexInfoSettings.distance());
-            else if (indexInfoSettings.has_similarity())
-                entrySettings->set_similarity(indexInfoSettings.similarity());
-            else
-                Y_FAIL_S("Either distance or similarity should be set in index settings: " << indexInfoSettings);
-            entrySettings->set_vector_type(indexInfoSettings.vector_type());
-            entrySettings->set_vector_dimension(indexInfoSettings.vector_dimension());
+           *entry.MutableVectorIndexKmeansTreeDescription() = *vectorIndexKmeansTreeDescription;
         } else {
             Y_FAIL_S("SpecializedIndexDescription should be set");
         }

@@ -1388,16 +1388,24 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             std::map<TString, TDeferredAtom> kv;
-            if (!ParseBackupCollectionSettings(kv, node.GetRule_backup_collection_settings5())) {
+            if (!ParseBackupCollectionSettings(kv, node.GetRule_backup_collection_settings6())) {
                  return false;
             }
 
             bool database = false;
             TVector<TDeferredAtom> tables;
-            if (node.HasBlock7()) {
-                 database = node.GetBlock7().GetRule_database_or_table_list1().has_alt_database_or_table_list1();
-                 if (node.GetBlock7().GetRule_database_or_table_list1().has_alt_database_or_table_list2()) {
-                     if (!ParseBackupCollectionTables(tables, node.GetBlock7().GetRule_database_or_table_list1().alt_database_or_table_list2().rule_table_list1())) {
+            if (node.HasBlock3()) {
+                 database = node.GetBlock3().GetRule_create_backup_collection_entries1().has_alt_create_backup_collection_entries1();
+                 if (node.GetBlock3().GetRule_create_backup_collection_entries1().has_alt_create_backup_collection_entries2()) {
+                     if (!ParseBackupCollectionTables(
+                             tables,
+                             node
+                                 .GetBlock3()
+                                 .GetRule_create_backup_collection_entries1()
+                                 .alt_create_backup_collection_entries2()
+                                 .GetRule_create_backup_collection_entries_many1()
+                                 .GetRule_table_list2()))
+                     {
                          return false;
                      }
                  }

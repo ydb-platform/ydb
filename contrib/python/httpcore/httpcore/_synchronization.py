@@ -9,7 +9,7 @@ from ._exceptions import ExceptionMapping, PoolTimeout, map_exceptions
 
 try:
     import trio
-except ImportError:  # pragma: nocover
+except (ImportError, NotImplementedError):  # pragma: nocover
     trio = None  # type: ignore
 
 try:

@@ -571,7 +571,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(WarnUnknownJoinStrategyHint) {
         NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a JOIN /*+ xmerge() */ plato.Input AS b USING (key);");
         UNIT_ASSERT(res.Root);
-        UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:41: Warning: Unsupported join strategy: xmerge, code: 4534\n");
+        UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:41: Warning: Unsupported join hint: xmerge, code: 4534\n");
     }
 
     Y_UNIT_TEST(ReverseLabels) {
@@ -4309,6 +4309,17 @@ select FormatType($f());
                                           "<main>:6:39: Error: Unknown correlation name: t\n");
     }
 
+    Y_UNIT_TEST(ErrOrderByIgnoredButCheckedForMissingColumns) {
+        auto req = "$src = SELECT key FROM (SELECT 1 as key, 2 as subkey) ORDER BY x; SELECT * FROM $src;";
+        ExpectFailWithError(req, "<main>:1:8: Warning: ORDER BY without LIMIT in subquery will be ignored, code: 4504\n"
+                                 "<main>:1:64: Error: Column x is not in source column set\n");
+
+        req = "$src = SELECT key FROM plato.Input ORDER BY x; SELECT * FROM $src;";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Warning: ORDER BY without LIMIT in subquery will be ignored, code: 4504\n");
+    }
+
     Y_UNIT_TEST(InvalidTtlInterval) {
         auto req = R"(
             USE plato;
@@ -7037,11 +7048,10 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
     Y_UNIT_TEST(CreateBackupCollectionWithDatabase) {
         NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
-                CREATE BACKUP COLLECTION TestCollection WITH (
+                CREATE BACKUP COLLECTION TestCollection DATABASE WITH (
                     STORAGE="local",
                     TAG="test" -- for testing purposes, not a real thing
-                )
-                    DATABASE;
+                );
             )sql");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
 
@@ -7063,12 +7073,13 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
     Y_UNIT_TEST(CreateBackupCollectionWithTables) {
         NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
-                CREATE BACKUP COLLECTION TestCollection WITH (
+                CREATE BACKUP COLLECTION TestCollection (
+                    TABLE someTable,
+                    TABLE `prefix/anotherTable`
+                ) WITH (
                     STORAGE="local",
                     TAG="test" -- for testing purposes, not a real thing
-                )
-                    TABLE someTable,
-                    TABLE `prefix/anotherTable`;
+                );
             )sql");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
 
@@ -7092,22 +7103,17 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
         ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE BACKUP COLLECTION TestCollection;
-            )sql" , "<main>:3:55: Error: mismatched input ';' expecting WITH\n");
+            )sql" , "<main>:3:55: Error: mismatched input ';' expecting {'(', DATABASE, WITH}\n");
 
         ExpectFailWithError(R"sql(
                 USE plato;
-                CREATE BACKUP COLLECTION TestCollection TABLE;
-            )sql" , "<main>:3:56: Error: mismatched input 'TABLE' expecting WITH\n");
+                CREATE BACKUP COLLECTION TABLE TestCollection;
+            )sql" , "<main>:3:47: Error: mismatched input 'TestCollection' expecting {'(', DATABASE, WITH}\n");
 
         ExpectFailWithError(R"sql(
                 USE plato;
-                CREATE BACKUP COLLECTION TestCollection DATABASE `test`;
-            )sql" , "<main>:3:56: Error: mismatched input 'DATABASE' expecting WITH\n");
-
-        ExpectFailWithError(R"sql(
-                USE plato;
-                CREATE BACKUP COLLECTION TestCollection DATABASE, TABLE `test`;
-            )sql" , "<main>:3:56: Error: mismatched input 'DATABASE' expecting WITH\n");
+                CREATE BACKUP COLLECTION DATABASE `test` TestCollection;
+            )sql" , "<main>:3:50: Error: mismatched input '`test`' expecting {'(', DATABASE, WITH}\n");
 
         ExpectFailWithError(R"sql(
                 USE plato;

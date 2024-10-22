@@ -221,10 +221,10 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
     if (join->RightArg->Kind == EOptimizerNodeKind::JoinNodeType) {
         ComputeStatistics(static_pointer_cast<TJoinOptimizerNode>(join->RightArg), ctx);
     }
-    join->Stats = std::make_shared<TOptimizerStatistics>(
+    join->Stats = TOptimizerStatistics(
         ctx.ComputeJoinStats(
-            *join->LeftArg->Stats, 
-            *join->RightArg->Stats,
+            join->LeftArg->Stats, 
+            join->RightArg->Stats,
             join->LeftJoinKeys, 
             join->RightJoinKeys, 
             EJoinAlgoType::GraceJoin,
@@ -249,10 +249,10 @@ public:
 
         if (relsCount <= 64) { // The algorithm is more efficient.
             return JoinSearchImpl<TNodeSet64>(joinTree, hints);
-        }
-
-        if (64 < relsCount && relsCount <= 128) {
+        } else if (64 < relsCount && relsCount <= 128) {
             return JoinSearchImpl<TNodeSet128>(joinTree, hints);
+        } else if (128 < relsCount && relsCount <= 192) {
+            return JoinSearchImpl<TNodeSet192>(joinTree, hints);
         }
 
         ComputeStatistics(joinTree, this->Pctx);
@@ -262,6 +262,7 @@ public:
 private:
     using TNodeSet64 = std::bitset<64>;
     using TNodeSet128 = std::bitset<128>;
+    using TNodeSet192 = std::bitset<192>;
 
     template <typename TNodeSet>
     std::shared_ptr<TJoinOptimizerNode> JoinSearchImpl(
@@ -272,14 +273,36 @@ private:
         TDPHypSolver<TNodeSet> solver(hypergraph, this->Pctx);
 
         if (solver.CountCC(MaxDPhypTableSize_) >= MaxDPhypTableSize_) {
-            YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded\n";
+            YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded";
             ComputeStatistics(joinTree, this->Pctx);
             return joinTree;
         }
 
         auto bestJoinOrder = solver.Solve(hints);
-        return ConvertFromInternal(bestJoinOrder);
+        auto resTree = ConvertFromInternal(bestJoinOrder);
+        AddMissingConditions(hypergraph, resTree);
+        return resTree;
     }
+
+    /* Due to cycles we can miss some conditions in edges, because DPHyp enumerates trees */
+    template <typename TNodeSet>
+    void AddMissingConditions(
+        TJoinHypergraph<TNodeSet>& hypergraph,
+        const std::shared_ptr<IBaseOptimizerNode>& node
+    ) {
+        if (node->Kind != EOptimizerNodeKind::JoinNodeType) {
+            return;
+        }
+
+        auto joinNode = std::static_pointer_cast<TJoinOptimizerNode>(node);
+        AddMissingConditions(hypergraph, joinNode->LeftArg);
+        AddMissingConditions(hypergraph, joinNode->RightArg);
+        TNodeSet lhs = hypergraph.GetNodesByRelNames(joinNode->LeftArg->Labels());
+        TNodeSet rhs = hypergraph.GetNodesByRelNames(joinNode->RightArg->Labels());
+
+        hypergraph.FindAllConditionsBetween(lhs, rhs, joinNode->LeftJoinKeys, joinNode->RightJoinKeys);
+    }
+
 private:
     ui32 MaxDPhypTableSize_;
 };
@@ -342,7 +365,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     bool allRowStorage = std::all_of(
         rels.begin(), 
         rels.end(), 
-        [](std::shared_ptr<TRelOptimizerNode>& r) {return r->Stats->StorageType==EStorageType::RowStorage; });
+        [](std::shared_ptr<TRelOptimizerNode>& r) {return r->Stats.StorageType==EStorageType::RowStorage; });
 
     if (optLevel == 2 && allRowStorage) {
         return node;
@@ -373,7 +396,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
 
     // rewrite the join tree and record the output statistics
     TExprBase res = RearrangeEquiJoinTree(ctx, equiJoin, joinTree);
-    typesCtx.SetStats(res.Raw(), joinTree->Stats);
+    typesCtx.SetStats(res.Raw(), std::make_shared<TOptimizerStatistics>(joinTree->Stats));
     return res;
 
 }

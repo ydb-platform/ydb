@@ -6,6 +6,8 @@
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tablet_flat/flat_stat_table.h>
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+
 #include <util/generic/ptr.h>
 #include <util/generic/hash.h>
 

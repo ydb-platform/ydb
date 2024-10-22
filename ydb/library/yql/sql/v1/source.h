@@ -172,6 +172,7 @@ namespace NSQLTranslationV1 {
             ForceGrace
         };
         EStrategy Strategy = EStrategy::Default;
+        bool Compact = false;
     };
 
     class IJoin: public ISource {

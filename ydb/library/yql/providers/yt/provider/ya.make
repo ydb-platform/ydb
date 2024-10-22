@@ -31,6 +31,7 @@ SRCS(
     yql_yt_peephole.cpp
     yql_yt_physical_finalizing.cpp
     yql_yt_physical_optimize.cpp
+    yql_yt_provider_context.cpp
     yql_yt_provider_impl.cpp
     yql_yt_provider.cpp
     yql_yt_provider.h

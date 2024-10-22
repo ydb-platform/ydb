@@ -530,11 +530,11 @@ Y_UNIT_TEST_SUITE(TCompositeCache) {
         UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 19); // [32 .. 39, 23]
         UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 21); // [50, 0 .. 20]
 
-        cache.UpdateLimit(10);
+        cache.UpdateLimit(7);
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, *pages[7]).size(), 30);
-        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 7);
         UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 7);
     }
 
 }

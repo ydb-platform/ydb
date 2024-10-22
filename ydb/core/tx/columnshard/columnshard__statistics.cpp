@@ -4,19 +4,60 @@
 
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
-#include <ydb/core/tx/columnshard/subscriber/subscribers/analyze_subscriber.h>
 
 #include <ydb/library/minsketch/count_min_sketch.h>
 
 
 namespace NKikimr::NColumnShard {
 
+class TAnalyzeSubscriber: public NSubscriber::ISubscriber {
+private:
+    const TActorId OriginalSender;
+    const ui64 OriginalCookie;
+    const TActorContext& Context;
+    std::unique_ptr<NStat::TEvStatistics::TEvAnalyzeTableResponse> ResponseDraft;
+
+public:
+    virtual std::set<NSubscriber::EEventType> GetEventTypes() const override {
+        return { NSubscriber::EEventType::AppendCompleted };
+    }
+
+    virtual bool DoOnEvent(const std::shared_ptr<NSubscriber::ISubscriptionEvent>& ev, TColumnShard& shard) override {
+        AFL_VERIFY(ev->GetType() == NSubscriber::EEventType::AppendCompleted);
+
+        auto& responseRecord = ResponseDraft->Record;
+
+        AFL_VERIFY(shard.AnalyzeOperationsInFlight.erase(responseRecord.GetOperationId()));
+        responseRecord.SetStatus(NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+
+        return Context.Send(OriginalSender, ResponseDraft.release(), 0, OriginalCookie);
+    }
+
+    virtual bool IsFinished() const override {
+        return !ResponseDraft;
+    }
+
+    TAnalyzeSubscriber(const TActorId& sender,
+                       const ui64 cookie,
+                       const TActorContext& ctx,
+                       std::unique_ptr<NStat::TEvStatistics::TEvAnalyzeTableResponse>&& response)
+        : OriginalSender(sender)
+        , OriginalCookie(cookie)
+        , Context(ctx)
+        , ResponseDraft(std::move(response))
+    {
+    }
+};
+
+
 void TColumnShard::Handle(NStat::TEvStatistics::TEvAnalyzeTable::TPtr& ev, const TActorContext& ctx) {
     auto& requestRecord = ev->Get()->Record;
 
+    const TString operationId = requestRecord.GetOperationId();
+
     auto response = std::make_unique<NStat::TEvStatistics::TEvAnalyzeTableResponse>();
     auto& responseRecord = response->Record;
-    responseRecord.SetOperationId(requestRecord.GetOperationId());
+    responseRecord.SetOperationId(operationId);
     responseRecord.MutablePathId()->CopyFrom(requestRecord.GetTable().GetPathId());
     responseRecord.SetShardTabletId(TabletID());
 
@@ -61,7 +102,15 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvAnalyzeTable::TPtr& ev, const
         Send(ev->Sender, response.release(), 0, ev->Cookie);
     } else {
         AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "wait_analyze");
-        Subscribers->RegisterSubscriber(std::make_shared<NSubscriber::TAnalyzeSubscriber>(ev->Sender, ev->Cookie, ctx, std::move(response)));
+
+        if (AnalyzeOperationsInFlight.find(operationId) != AnalyzeOperationsInFlight.end()) {
+            // retried request, may contain new sender, so resubscribe
+            Subscribers->UnregisterSubscriber(AnalyzeOperationsInFlight[operationId]);
+        }
+
+        auto subscriber = std::make_shared<TAnalyzeSubscriber>(ev->Sender, ev->Cookie, ctx, std::move(response));
+        AnalyzeOperationsInFlight[operationId] = subscriber;
+        Subscribers->RegisterSubscriber(std::move(subscriber));
     }
 }
 

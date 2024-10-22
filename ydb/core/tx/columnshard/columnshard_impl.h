@@ -160,6 +160,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TTxRemoveSharedBlobs;
     friend class TTxFinishAsyncTransaction;
     friend class TWaitEraseTablesTxSubscriber;
+    friend class TAnalyzeSubscriber;
 
     friend class NOlap::TCleanupPortionsColumnEngineChanges;
     friend class NOlap::TCleanupTablesColumnEngineChanges;
@@ -479,6 +480,7 @@ private:
     NOlap::NResourceBroker::NSubscribe::TTaskContext CompactTaskSubscription;
     NOlap::NResourceBroker::NSubscribe::TTaskContext TTLTaskSubscription;
 
+    THashMap<TString, std::shared_ptr<NSubscriber::ISubscriber>> AnalyzeOperationsInFlight;
     std::optional<ui64> ProgressTxInFlight;
     THashMap<ui64, TInstant> ScanTxInFlight;
     THashMap<TInsertWriteId, TLongTxWriteInfo> LongTxWrites;

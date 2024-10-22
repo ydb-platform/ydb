@@ -999,7 +999,7 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
     if (!family) {
         return false;
     }
-    if (wasInactive) {
+    if (!wasInactive) {
         family->InactivatePartition(partitionId);
     }
 
@@ -1070,8 +1070,13 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
     }
 
     auto* partition = GetPartition(partitionId);
+    if (!partition) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                GetPrefix() << "Reading of the partition " << partitionId << " was started by " << ConsumerName << ".");
+    }
 
-    if (partition && partition->StartReading()) {
+    auto wasInactive = partition->IsInactive();
+    if (partition->StartReading()) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                 GetPrefix() << "Reading of the partition " << partitionId << " was started by " << ConsumerName << ". We stop reading from child partitions.");
 
@@ -1085,7 +1090,9 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
             return;
         }
 
-        family->ActivatePartition(partitionId);
+        if (wasInactive) {
+            family->ActivatePartition(partitionId);
+        }
 
         // We releasing all children's partitions because we don't start reading the partition from EndOffset
         GetPartitionGraph().Travers(partitionId, [&](ui32 partitionId) {
@@ -1102,8 +1109,6 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
             return true;
         });
     } else {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "Reading of the partition " << partitionId << " was started by " << ConsumerName << ".");
     }
 }
 

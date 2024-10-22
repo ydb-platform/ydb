@@ -1,9 +1,9 @@
 #include <ydb/library/yql/public/udf/udf_helpers.h>
+#include <ydb/library/yql/utils/line_split.h>
 
 #include <util/generic/yexception.h>
 #include <util/stream/buffered.h>
 #include <util/stream/file.h>
-#include <util/stream/line_split.h>
 #include <util/string/cast.h>
 #include <util/ysaveload.h>
 

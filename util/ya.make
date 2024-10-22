@@ -204,7 +204,6 @@ JOIN_SRCS(
     stream/input.cpp
     stream/labeled.cpp
     stream/length.cpp
-    stream/line_split.cpp
     stream/mem.cpp
     stream/multi.cpp
     stream/null.cpp

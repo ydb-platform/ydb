@@ -1,7 +1,8 @@
 #include "yql_position.h"
 
+#include <ydb/library/yql/utils/line_split.h>
+
 #include <util/charset/utf8.h>
-#include <util/stream/line_split.h>
 #include <util/stream/str.h>
 
 namespace NYdb {

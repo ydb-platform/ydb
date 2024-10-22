@@ -396,6 +396,9 @@ void TPartitionFamily::InactivatePartition(ui32 partitionId) {
 }
 
  void TPartitionFamily::ChangePartitionCounters(ssize_t active, ssize_t inactive) {
+    Y_VERIFY_DEBUG((ssize_t)ActivePartitionCount + active >= 0);
+    Y_VERIFY_DEBUG((ssize_t)InactivePartitionCount + inactive >= 0);
+
     ActivePartitionCount += active;
     InactivePartitionCount += inactive;
 
@@ -985,7 +988,7 @@ bool TConsumer::SetCommittedState(ui32 partitionId, ui32 generation, ui64 cookie
     return Partitions[partitionId].SetCommittedState(generation, cookie);
 }
 
-bool TConsumer::ProccessReadingFinished(ui32 partitionId, const TActorContext& ctx) {
+bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, const TActorContext& ctx) {
     if (!ScalingSupport()) {
         return false;
     }
@@ -996,7 +999,9 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, const TActorContext& c
     if (!family) {
         return false;
     }
-    family->InactivatePartition(partitionId);
+    if (wasInactive) {
+        family->InactivatePartition(partitionId);
+    }
 
     if (!family->IsLonely() && partition.Commited) {
         if (BreakUpFamily(family, partitionId, false, ctx)) {
@@ -1139,7 +1144,7 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
                     GetPrefix() << "Reading of the partition " << partitionId << " was finished by " << r.GetConsumer()
                     << ", firstMessage=" << r.GetStartedReadingFromEndOffset() << ", " << GetSdkDebugString0(r.GetScaleAwareSDK()));
 
-        if (ProccessReadingFinished(partitionId, ctx)) {
+        if (ProccessReadingFinished(partitionId, false, ctx)) {
             ScheduleBalance(ctx);
         }
     } else if (!partition.IsInactive()) {
@@ -1540,11 +1545,12 @@ bool TBalancer::SetCommittedState(const TString& consumerName, ui32 partitionId,
         return false;
     }
 
+    auto wasInactive = consumer->IsInactive(partitionId);
     if (consumer->SetCommittedState(partitionId, generation, cookie)) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                 GetPrefix() << "The offset of the partition " << partitionId << " was commited by " << consumerName);
 
-        if (consumer->ProccessReadingFinished(partitionId, ctx)) {
+        if (consumer->ProccessReadingFinished(partitionId, wasInactive, ctx)) {
             consumer->ScheduleBalance(ctx);
         }
 

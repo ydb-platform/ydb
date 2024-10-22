@@ -1,20 +1,32 @@
 #pragma once
+#include "behaviour.h"
+#include "object.h"
+
 #include <ydb/core/tx/schemeshard/olap/table/table.h>
 #include <ydb/core/tx/schemeshard/operations/abstract/context.h>
 #include <ydb/core/tx/schemeshard/operations/abstract/update.h>
-#include <ydb/core/tx/schemeshard/operations/metadata/abstract/object.h>
 
 #include <ydb/library/formats/arrow/accessor/common/const.h>
 
 namespace NKikimr::NSchemeShard::NOperations {
 
 class TMetadataUpdateBase: public ISSEntityUpdate {
+protected:
+    IMetadataUpdateBehaviour::TPtr Behaviour;
+
 private:
-    virtual NKikimrTxColumnShard::ETransactionKind GetShardTransactionKind() const override {
+    NKikimrTxColumnShard::ETransactionKind GetShardTransactionKind() const override {
         return NKikimrTxColumnShard::ETransactionKind::TX_KIND_SCHEMA;
     }
 
-protected:
+    TConclusionStatus DoInitialize(const TUpdateInitializationContext& context) override {
+        if (auto status = DoInitializeImpl(context); status.IsFail()) {
+            return status;
+        }
+        AFL_VERIFY(Behaviour);
+        return TConclusionStatus::Success();
+    }
+
     TString DoGetShardTxBodyString(const ui64 /*tabletId*/, const TMessageSeqNo& /*seqNo*/) const override {
         Y_ABORT();
     }
@@ -23,7 +35,10 @@ protected:
         return {};
     }
 
-public:
+protected:
+    virtual TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) = 0;
+
+    static void PersistObject(const TPathId& pathId, const TMetadataObjectInfo::TPtr& object, const TUpdateStartContext& context);
 };
 
 class TMetadataUpdateCreate: public TMetadataUpdateBase {
@@ -31,17 +46,14 @@ public:
     using TFactory = NObjectFactory::TObjectFactory<TMetadataUpdateCreate, NKikimrSchemeOp::TMetadataObjectProperties::PropertiesImplCase>;
 
 private:
-    TConclusionStatus DoStart(const TUpdateStartContext& context) override {
-        AFL_VERIFY(context.GetObjectPath()->IsResolved());
-        return Execute(context);
-    }
+    TMetadataObjectInfo::TPtr Result;
 
+private:
+    TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) override;
+    TConclusionStatus DoStart(const TUpdateStartContext& context) override;
     TConclusionStatus DoFinish(const TUpdateFinishContext& /*context*/) override {
         return TConclusionStatus::Success();
     }
-
-protected:
-    virtual TConclusionStatus Execute(const TUpdateStartContext& context) = 0;
 
 public:
     virtual TPathElement::EPathType GetObjectPathType() const = 0;
@@ -54,22 +66,27 @@ public:
     using TFactory = NObjectFactory::TObjectFactory<TMetadataUpdateAlter, NKikimrSchemeOp::TMetadataObjectProperties::PropertiesImplCase>;
 
 private:
-    TConclusionStatus DoStart(const TUpdateStartContext& context) override {
-        AFL_VERIFY(context.GetObjectPath()->IsResolved());
-        return Execute(context);
-    }
+    TMetadataObjectInfo::TPtr Result;
 
+private:
+    TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) override;
+    TConclusionStatus DoStart(const TUpdateStartContext& context) override;
     TConclusionStatus DoFinish(const TUpdateFinishContext& /*context*/) override {
         return TConclusionStatus::Success();
     }
-
-protected:
-    virtual TConclusionStatus Execute(const TUpdateStartContext& context) = 0;
 };
 
 class TMetadataUpdateDrop: public TMetadataUpdateBase {
 public:
     using TFactory = NObjectFactory::TObjectFactory<TMetadataUpdateDrop, NKikimrSchemeOp::TMetadataObjectProperties::PropertiesImplCase>;
+
+private:
+    TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) override;
+    TConclusionStatus DoStart(const TUpdateStartContext& context) override;
+    TConclusionStatus DoFinish(const TUpdateFinishContext& context) override;
+
+public:
+    static NKikimrSchemeOp::TModifyScheme RestoreRequest(const TPath& path);
 };
 
 }   // namespace NKikimr::NSchemeShard::NOperations

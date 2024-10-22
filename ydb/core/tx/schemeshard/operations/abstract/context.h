@@ -27,9 +27,19 @@ private:
     const ISSEntity* OriginalEntity;
     const TOperationContext* SSOperationContext = nullptr;
     const ui64 TxId;
+    // const TOperationId OperationId;
 public:
     ui64 GetTxId() const {
         return TxId;
+    }
+
+    ui64 GetOperationId() const {
+        // Not implemented
+        return 0;
+    }
+
+    bool OriginalEntityExists() const {
+        return !!OriginalEntity;
     }
 
     const ISSEntity& GetOriginalEntity() const {
@@ -51,7 +61,6 @@ public:
         : OriginalEntity(originalEntity)
         , SSOperationContext(ssOperationContext)
         , TxId(txId) {
-        AFL_VERIFY(originalEntity);
         AFL_VERIFY(SSOperationContext);
         AFL_VERIFY(TxId);
     }
@@ -98,6 +107,9 @@ public:
         return DB;
     }
     const TOperationContext* GetSSOperationContext() const {
+        return SSOperationContext;
+    }
+    TOperationContext* MutableSSOperationContext() {
         return SSOperationContext;
     }
 

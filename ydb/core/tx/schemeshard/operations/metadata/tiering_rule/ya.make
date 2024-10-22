@@ -6,8 +6,6 @@ SRCS(
 )
 
 PEERDIR(
-    # ydb/core/tx/schemeshard
-    # ydb/core/tx/schemeshard/operations/metadata/abstract
     ydb/core/tx/schemeshard/operations/abstract
 )
 

@@ -60,6 +60,24 @@ public:
         return true;
     }
 
+    bool ApplyPatch(const TProto& proto) {
+        if (proto.HasDefaultColumn()) {
+            DefaultColumn = proto.GetDefaultColumn();
+        }
+
+        if (proto.HasTiers()) {
+            Intervals.clear();
+            for (const auto& interval : proto.GetTiers().GetIntervals()) {
+                Intervals.emplace_back();
+                if (!Intervals.back().DeserializeFromProto(interval)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
     TProto SerializeToProto() const {
         TProto serialized;
 
@@ -70,6 +88,10 @@ public:
         }
 
         return serialized;
+    }
+
+    static TString GetTypeId() {
+        return "TIERING_RULE";
     }
 };
 

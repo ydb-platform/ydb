@@ -1,21 +1,30 @@
 #include "object.h"
 #include "update.h"
 
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+
 namespace NKikimr::NSchemeShard::NOperations {
+
+[[nodiscard]] TConclusionStatus TMetadataEntity::DoInitialize(const TEntityInitializationContext& context) {
+    auto* object = context.GetSSOperationContext()->SS->MetadataObjects.FindPtr(GetPathId());
+    if (!object) {
+        return TConclusionStatus::Fail("Object not found");
+    }
+    ObjectInfo = *object;
+    return TConclusionStatus::Success();
+}
 
 TConclusion<std::shared_ptr<ISSEntityUpdate>> TMetadataEntity::DoCreateUpdate(const TUpdateInitializationContext& context) const {
     std::shared_ptr<ISSEntityUpdate> update;
     switch (context.GetModification()->GetOperationType()) {
         case NKikimrSchemeOp::ESchemeOpCreateMetadataObject:
-            update.reset(TMetadataUpdateCreate::TFactory::Construct(
-                context.GetModification()->GetCreateMetadataObject().GetProperties().GetPropertiesImplCase()));
+            update = std::make_shared<TMetadataUpdateCreate>();
             break;
         case NKikimrSchemeOp::ESchemeOpAlterMetadataObject:
-            update.reset(TMetadataUpdateAlter::TFactory::Construct(
-                context.GetModification()->GetCreateMetadataObject().GetProperties().GetPropertiesImplCase()));
+            update = std::make_shared<TMetadataUpdateAlter>();
             break;
         case NKikimrSchemeOp::ESchemeOpDropMetadataObject:
-            update = GetDropUpdate();
+            update = std::make_shared<TMetadataUpdateDrop>();
             break;
         default:
             return TConclusionStatus::Fail("Not a metadata operation");
@@ -27,31 +36,42 @@ TConclusion<std::shared_ptr<ISSEntityUpdate>> TMetadataEntity::DoCreateUpdate(co
     return update;
 }
 
-TConclusion<std::shared_ptr<ISSEntityUpdate>> TMetadataEntity::DoRestoreUpdate(const TUpdateRestoreContext& /*context*/) const {
-    return TConclusionStatus::Fail("Restoring updates is not supported for metadata objects");
-}
+TConclusion<std::shared_ptr<ISSEntityUpdate>> TMetadataEntity::DoRestoreUpdate(const TUpdateRestoreContext& context) const {
+    auto findTxState = context.GetSSOperationContext()->SS->TxInFlight.FindPtr(context.GetOperationId());
+    AFL_VERIFY(findTxState);
+    if (findTxState->TxType != TTxState::TxDropMetadataObject) {
+        Y_ABORT("Only restoration of drop updates is supported");
+    }
 
-TConclusion<std::shared_ptr<ISSEntityUpdate>> TMetadataEntity::RestoreDropUpdate(const TUpdateRestoreContext& context) const {
-    auto update = GetDropUpdate();
+    auto update = std::make_shared<TMetadataUpdateDrop>();
     AFL_VERIFY(update);
-    NKikimrSchemeOp::TModifyScheme emptyRequest;
+
+    TPath objectPath = TPath::Init(context.GetOriginalEntityAsVerified<TMetadataEntity>().GetPathId(), context.GetSSOperationContext()->SS);
+    NKikimrSchemeOp::TModifyScheme request = TMetadataUpdateDrop::RestoreRequest(objectPath);
+
     TUpdateInitializationContext initializationContext(
-        &context.GetOriginalEntity(), context.GetSSOperationContext(), &emptyRequest, context.GetTxId());
+        &context.GetOriginalEntity(), context.GetSSOperationContext(), &request, context.GetTxId());
     if (auto status = update->Initialize(initializationContext); status.IsFail()) {
         return status;
     }
     return update;
 }
 
-TConclusion<std::shared_ptr<TMetadataEntity>> TMetadataEntity::GetEntity(TOperationContext& context, const TPath& path) {
-    auto entity = TMetadataEntity::TFactory::MakeHolder(path->PathType, path->PathId);
-    if (!entity) {
-        return TConclusionStatus::Fail("Not a metadata object at " + path.PathString());
-    }
-    if (auto status = entity->Initialize({&context}); status.IsFail()) {
-        return status;
-    }
-    return std::shared_ptr<TMetadataEntity>(entity.Release());
-}
+// TConclusion<std::shared_ptr<ISSEntityUpdate>> TMetadataEntity::RestoreDropUpdate(const TUpdateRestoreContext& context) const {
+//     auto update = GetDropUpdate();
+//     AFL_VERIFY(update);
+//     NKikimrSchemeOp::TModifyScheme emptyRequest;
+//     TUpdateInitializationContext initializationContext(
+//         &context.GetOriginalEntity(), context.GetSSOperationContext(), &emptyRequest, context.GetTxId());
+//     if (auto status = update->Initialize(initializationContext); status.IsFail()) {
+//         return status;
+//     }
+//     return update;
+// }
+
+// IMetadataObjectInfo::TPtr CreateObjectInfo(const TPathId& pathId, const NKikimrSchemeOp::EPathType pathType) {
+//     auto entity = TMetadataEntity::TFactory::MakeHolder(pathType, pathId);
+//     return entity->DoCreateObjectInfo();
+// }
 
 }   // namespace NKikimr::NSchemeShard::NOperations

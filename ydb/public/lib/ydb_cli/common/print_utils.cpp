@@ -43,6 +43,7 @@ void PrintSchemeEntry(IOutputStream& o, const NScheme::TSchemeEntry& entry, NCol
         o << colors.LightWhite();
         break;
     case NScheme::ESchemeEntryType::ResourcePool:
+    case NScheme::ESchemeEntryType::TieringRule:
         o << colors.LightWhite();
         break;
     default:
@@ -113,6 +114,8 @@ TString EntryTypeToString(NScheme::ESchemeEntryType entry) {
     case NScheme::ESchemeEntryType::Replication:
         return "replication";
     case NScheme::ESchemeEntryType::ResourcePool:
+        return "resource-pool";
+    case NScheme::ESchemeEntryType::TieringRule:
         return "resource-pool";
     case NScheme::ESchemeEntryType::Unknown:
     case NScheme::ESchemeEntryType::Sequence:

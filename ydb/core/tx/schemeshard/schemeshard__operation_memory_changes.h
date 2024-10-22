@@ -1,5 +1,6 @@
 #pragma once
 
+#include "operations/metadata/abstract/info.h"
 #include "schemeshard_identificators.h"
 #include "schemeshard_path_element.h"
 #include "schemeshard_info_types.h"
@@ -58,8 +59,8 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TBackupCollectionState = std::pair<TPathId, TBackupCollectionInfo::TPtr>;
     TStack<TBackupCollectionState> BackupCollections;
 
-    using TTieringRuleState = std::pair<TPathId, TTieringRuleInfo::TPtr>;
-    TStack<TTieringRuleState> TieringRules;
+    using TMetadataObjectState = std::pair<TPathId, TMetadataObjectInfo::TPtr>;
+    TStack<TMetadataObjectState> MetadataObjects;
 
 public:
     ~TMemoryChanges() = default;
@@ -99,7 +100,7 @@ public:
 
     void GrabBackupCollection(TSchemeShard* ss, const TPathId& pathId);
 
-    void GrabTieringRule(TSchemeShard* ss, const TPathId& pathId);
+    void GrabMetadataObject(TSchemeShard* ss, const TPathId& pathId);
 
     void UnDo(TSchemeShard* ss);
 };

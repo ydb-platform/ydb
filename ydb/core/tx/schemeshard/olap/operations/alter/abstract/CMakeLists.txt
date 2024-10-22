@@ -23,6 +23,7 @@ target_link_libraries(operations-alter-abstract PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  ydb-core-base
   ydb-core-scheme
   ydb-library-accessor
   ydb-core-protos

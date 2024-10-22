@@ -19,6 +19,7 @@ add_library(minikql-comp_nodes-packed_tuple)
 
 target_compile_options(minikql-comp_nodes-packed_tuple PRIVATE
   -mprfchw
+  -mavx2
   -DMKQL_DISABLE_CODEGEN
   -DUSE_CURRENT_UDF_ABI_VERSION
 )

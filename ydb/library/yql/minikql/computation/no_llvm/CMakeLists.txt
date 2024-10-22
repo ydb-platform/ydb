@@ -45,6 +45,7 @@ target_link_libraries(minikql-computation-no_llvm PUBLIC
   parser-pg_wrapper-interface
   yql-public-udf
   library-yql-utils
+  yql-utils-rope
   cpp-threading-future
 )
 

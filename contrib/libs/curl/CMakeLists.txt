@@ -76,17 +76,15 @@ target_sources(contrib-libs-curl PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/curl_memrchr.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/curl_multibyte.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/curl_ntlm_core.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/curl_ntlm_wb.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/curl_path.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/curl_range.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/curl_rtmp.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/curl_sasl.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/curl_sha512_256.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/curl_sspi.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/curl_threads.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/curl_trc.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/cw-out.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/dict.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/dllmain.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/doh.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/dynbuf.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/dynhds.c
@@ -148,7 +146,6 @@ target_sources(contrib-libs-curl PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/psl.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/rand.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/rename.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/request.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/rtsp.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/select.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/sendf.c
@@ -194,15 +191,12 @@ target_sources(contrib-libs-curl PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/version_win32.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/vquic/curl_msh3.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/vquic/curl_ngtcp2.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/vquic/curl_osslq.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/vquic/curl_quiche.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/vquic/vquic-tls.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/vquic/vquic.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/vssh/libssh.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/vssh/libssh2.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/vssh/wolfssh.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/vtls/bearssl.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/vtls/cipher_suite.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/vtls/hostcheck.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/vtls/keylog.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/curl/lib/vtls/mbedtls_threadlock.c

@@ -37,6 +37,7 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_index_build_reboots PUBLIC
   ydb-core-tx
   tx-schemeshard-ut_helpers
   udf-service-exception_policy
+  cpp-client-ydb_table
 )
 
 target_allocator(ydb-core-tx-schemeshard-ut_index_build_reboots

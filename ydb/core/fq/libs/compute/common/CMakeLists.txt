@@ -31,6 +31,7 @@ target_link_libraries(libs-compute-common PUBLIC
   fq-libs-grpc
   fq-libs-shared_resources
   yql-public-issue
+  public-issue-protos
   providers-common-http_gateway
   providers-dq-provider
   api-service-protos

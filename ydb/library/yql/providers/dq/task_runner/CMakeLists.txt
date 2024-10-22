@@ -32,6 +32,7 @@ target_link_libraries(providers-dq-task_runner PUBLIC
   library-yql-utils
   yql-utils-backtrace
   yql-utils-log
+  yql-utils-rope
   yql-dq-proto
   yql-dq-runtime
   providers-common-proto

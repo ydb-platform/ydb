@@ -29,9 +29,7 @@ target_link_libraries(core-wrappers-events PUBLIC
 
 target_sources(core-wrappers-events PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/wrappers/events/common.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/wrappers/events/list_objects.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/wrappers/events/object_exists.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/wrappers/events/delete_objects.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/wrappers/events/get_object.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/wrappers/events/s3_out.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/wrappers/events/abstract.cpp

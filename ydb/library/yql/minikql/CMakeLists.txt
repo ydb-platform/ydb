@@ -13,9 +13,9 @@
 # changes in this file.
 
 add_subdirectory(dom)
+add_subdirectory(jsonpath)
 add_subdirectory(computation)
 add_subdirectory(arrow)
-add_subdirectory(jsonpath)
 add_subdirectory(comp_nodes)
 add_subdirectory(invoke_builtins)
 add_subdirectory(codegen)
@@ -54,6 +54,7 @@ target_link_libraries(library-yql-minikql PUBLIC
   yql-public-udf
   public-udf-tz
   library-yql-utils
+  yql-utils-rope
   yql-core-sql_types
   ydb-library-uuid
   public-lib-scheme_types

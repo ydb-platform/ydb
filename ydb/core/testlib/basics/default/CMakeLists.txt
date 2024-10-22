@@ -20,7 +20,6 @@ target_link_libraries(testlib-basics-default INTERFACE
   contrib-libs-cxxsupp
   yutil
   core-testlib-basics
-  yql-parser-pg_wrapper
-  yql-sql-pg
+  yql-sql-pg_dummy
 )
 

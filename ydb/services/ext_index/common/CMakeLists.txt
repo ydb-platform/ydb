@@ -21,6 +21,7 @@ target_link_libraries(services-ext_index-common PUBLIC
   yutil
   library-actors-core
   api-protos
+  ydb-core-base
   ydb-core-protos
   libs-apache-arrow
 )

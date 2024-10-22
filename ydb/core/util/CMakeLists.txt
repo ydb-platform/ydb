@@ -55,6 +55,7 @@ target_sources(ydb-core-util PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/util/intrusive_heap.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/memory_tracker.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/page_map.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/util/random.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/single_thread_ic_mock.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/source_location.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/stlog.cpp

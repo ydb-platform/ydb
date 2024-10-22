@@ -14,6 +14,7 @@
 
 add_subdirectory(fetch)
 add_subdirectory(log)
+add_subdirectory(rope)
 add_subdirectory(backtrace)
 add_subdirectory(failure_injector)
 add_subdirectory(actors)
@@ -35,7 +36,6 @@ target_link_libraries(library-yql-utils PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-actors-util
   core-issue-protos
   cpp-digest-md5
   library-cpp-messagebus
@@ -59,7 +59,6 @@ target_sources(library-yql-utils PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/proc_alive.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/rand_guid.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/retry.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/rope_over_buffer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/sort.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/swap_bytes.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/url_builder.cpp
@@ -80,7 +79,6 @@ target_sources(library-yql-utils PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/rand_guid.h
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/resetable_setting.h
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/retry.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/rope_over_buffer.h
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/sort.h
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/swap_bytes.h
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/yql_panic.h

@@ -118,6 +118,7 @@ target_sources(providers-yt-provider PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_peephole.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_physical_finalizing.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_physical_optimize.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_provider_context.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_provider_impl.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_provider.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_table_desc.cpp

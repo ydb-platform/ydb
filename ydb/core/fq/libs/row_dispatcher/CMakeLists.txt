@@ -14,11 +14,13 @@
 
 add_subdirectory(protos)
 add_subdirectory(events)
+add_subdirectory(purecalc_no_pg_wrapper)
 
 add_library(fq-libs-row_dispatcher)
 
 
 target_compile_options(fq-libs-row_dispatcher PRIVATE
+  -Wno-assume
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
@@ -40,7 +42,7 @@ target_link_libraries(fq-libs-row_dispatcher PUBLIC
   dq-actors-compute
   yql-dq-proto
   providers-pq-provider
-  public-purecalc-common
+  libs-row_dispatcher-purecalc_no_pg_wrapper
   cpp-client-ydb_scheme
   cpp-client-ydb_table
 )

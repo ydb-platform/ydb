@@ -20,6 +20,7 @@ get_built_tool_path(
 )
 
 add_subdirectory(ut)
+add_subdirectory(ut_benchmark)
 
 add_library(ydb-library-binary_json)
 
@@ -34,8 +35,11 @@ target_link_libraries(ydb-library-binary_json PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  cpp-containers-absl_flat_hash
   library-cpp-json
+  ydb-library-conclusion
   yql-minikql-dom
+  contrib-libs-simdjson
   tools-enum_parser-enum_serialization_runtime
 )
 

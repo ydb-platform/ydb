@@ -13,14 +13,14 @@
 # changes in this file.
 
 add_subdirectory(base)
-add_subdirectory(debug)
-add_subdirectory(erasure)
-add_subdirectory(graph)
 add_subdirectory(protos)
 add_subdirectory(config)
 add_subdirectory(fq)
 add_subdirectory(scheme)
 add_subdirectory(tx)
+add_subdirectory(debug)
+add_subdirectory(erasure)
+add_subdirectory(graph)
 add_subdirectory(pgproxy)
 add_subdirectory(raw_socket)
 add_subdirectory(local_pgwire)

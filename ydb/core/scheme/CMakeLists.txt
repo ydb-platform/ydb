@@ -14,6 +14,7 @@
 
 add_subdirectory(protos)
 add_subdirectory(ut)
+add_subdirectory(ut_pg)
 
 add_library(ydb-core-scheme)
 

@@ -111,6 +111,7 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/change_exchange.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/channel_purpose.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/cms.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/protos/compaction.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/compile_service_config.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/config.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/config_units.proto
@@ -298,6 +299,9 @@ target_sources(ydb-core-protos PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/core/protos/cms.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/cms.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/cms.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/compaction.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/compaction.deps.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/compaction.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/compile_service_config.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/compile_service_config.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/compile_service_config.grpc.pb.h

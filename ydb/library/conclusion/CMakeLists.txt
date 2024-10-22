@@ -12,6 +12,8 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(generic)
+
 add_library(ydb-library-conclusion)
 
 
@@ -19,8 +21,7 @@ target_link_libraries(ydb-library-conclusion PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  api-protos
-  library-actors-core
+  library-conclusion-generic
 )
 
 target_sources(ydb-library-conclusion PRIVATE

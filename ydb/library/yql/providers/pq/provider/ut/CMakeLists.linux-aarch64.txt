@@ -47,6 +47,7 @@ target_link_libraries(ydb-library-yql-providers-pq-provider-ut PUBLIC
   providers-solomon-gateway
   providers-solomon-provider
   udf-service-exception_policy
+  yql-sql-pg_dummy
   cpp-client-ydb_params
   client-ydb_persqueue_public-codecs
 )

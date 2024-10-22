@@ -19,6 +19,8 @@ get_built_tool_path(
   enum_parser
 )
 
+add_subdirectory(ut)
+
 add_library(library-workload-benchmark_base)
 
 

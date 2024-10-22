@@ -16,8 +16,6 @@ add_subdirectory(minikql_compile)
 add_subdirectory(scheme_cache_lib)
 add_subdirectory(server)
 add_subdirectory(metadata)
-add_subdirectory(ut)
-add_subdirectory(minikql_result_lib)
 
 add_library(ydb-core-client INTERFACE)
 

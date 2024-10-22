@@ -66,8 +66,10 @@ target_sources(cli_utils PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_node.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_root.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_server.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_tablet.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_tenant.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_fakeinitshard.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_keyvalue.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_persqueue.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_persqueue_cluster_discovery.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_persqueue_stress.cpp

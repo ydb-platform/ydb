@@ -31,6 +31,7 @@ target_link_libraries(yql-dq-common PUBLIC
   library-mkql_proto-protos
   yql-dq-proto
   library-yql-utils
+  yql-utils-rope
   tools-enum_parser-enum_serialization_runtime
 )
 

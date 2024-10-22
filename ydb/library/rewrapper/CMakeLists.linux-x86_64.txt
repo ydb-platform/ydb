@@ -15,6 +15,7 @@
 add_subdirectory(hyperscan)
 add_subdirectory(proto)
 add_subdirectory(re2)
+add_subdirectory(ut)
 
 add_library(ydb-library-rewrapper)
 

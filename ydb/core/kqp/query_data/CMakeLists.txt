@@ -23,12 +23,15 @@ target_link_libraries(core-kqp-query_data PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  api-grpc-draft
+  lib-operation_id-protos
   library-actors-core
   ydb-core-actorlib_impl
   ydb-core-base
   kqp-common-simple
   yql-dq-expr_nodes
   yql-dq-proto
+  providers-result-expr_nodes
   core-kqp-expr_nodes
 )
 

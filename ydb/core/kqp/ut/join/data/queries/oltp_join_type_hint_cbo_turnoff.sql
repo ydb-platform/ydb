@@ -1,9 +1,9 @@
 PRAGMA TablePathPrefix='/Root';
 PRAGMA ydb.OptimizerHints = 
 '
-    JoinType(R S Broadcast)
-    JoinType(R S T Shuffle)
-    JoinType(R S T U Broadcast)
+    JoinType(R S Shuffle)
+    JoinType(R S T Broadcast)
+    JoinType(R S T U Shuffle)
     JoinType(R S T U V Broadcast)
 ';
 

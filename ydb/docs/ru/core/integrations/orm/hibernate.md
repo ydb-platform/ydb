@@ -53,7 +53,7 @@ Hibernate - это фреймворк объектно-реляционного 
 
 Или, если вы используете программную настройку:
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Java
 
@@ -108,7 +108,7 @@ Hibernate - это фреймворк объектно-реляционного 
 
 Например, для класса `Group`:
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Java
 
@@ -167,7 +167,7 @@ ALTER TABLE Groups
 
 Если эволюционировать сущность Group путем добавления поля `deparment`:
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Java
 
@@ -263,7 +263,7 @@ spring.datasource.url=jdbc:ydb:<grpc/grpcs>://<host>:<2135/2136>/path/to/databas
 
 Создадим простую сущность и репозиторий:
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Java
 
@@ -340,7 +340,7 @@ spring.datasource.url=jdbc:ydb:<grpc/grpcs>://<host>:<2135/2136>/path/to/databas
 
 Пример использования:
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Java
 

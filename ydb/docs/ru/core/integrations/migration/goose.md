@@ -158,7 +158,7 @@ $ goose ydb $YDB_CONNECTION_STRING status
 
 Статус `Pending` заменился на временную отметку `Fri Jan 12 11:55:18 2024` - это означает, что миграция успешно применена. Мы также можем убедиться в этом и другими способами:
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - Используя {{ ydb-short-name }} UI по адресу `http://localhost:8765`
 
@@ -250,7 +250,7 @@ $ goose ydb $YDB_CONNECTION_STRING status
 
 Обе миграции успешно применены. Убедимся в этом альтернативными способами:
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - Используя {{ ydb-short-name }} UI по адресу `http://localhost:8765`
 
@@ -314,7 +314,7 @@ $ goose ydb $YDB_CONNECTION_STRING status
 
 Статус `Fri Jan 12 12:04:56 2024` заменился на статус `Pending` - это означает, что последняя миграция успешно отменена. Мы также можем убедиться в этом и другими способами:
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - Используя {{ ydb-short-name }} UI по адресу `http://localhost:8765`
 

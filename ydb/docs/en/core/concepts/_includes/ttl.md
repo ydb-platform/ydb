@@ -72,7 +72,7 @@ Currently, you can manage TTL settings using:
 
 In the example below, the items of the `mytable` table will be deleted an hour after the time set in the `created_at` column:
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - YQL
 
@@ -128,7 +128,7 @@ When setting up TTL using YQL, an `Interval` is created from a string literal in
 
 The example below shows how to use the `modified_at` column with a numeric type (`Uint32`) as a TTL column. The column value is interpreted as the number of seconds since the Unix epoch:
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - YQL
 
@@ -180,7 +180,7 @@ The example below shows how to use the `modified_at` column with a numeric type 
 
 For a newly created table, you can pass TTL settings along with the table description:
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - YQL
 
@@ -241,7 +241,7 @@ For a newly created table, you can pass TTL settings along with the table descri
 
 ### Disabling TTL {#disable}
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - YQL
 
@@ -291,7 +291,7 @@ For a newly created table, you can pass TTL settings along with the table descri
 
 The current TTL settings can be obtained from the table description:
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - CLI
 

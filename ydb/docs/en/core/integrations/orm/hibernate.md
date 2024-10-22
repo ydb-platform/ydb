@@ -53,7 +53,7 @@ Configure Hibernate to use the custom {{ ydb-short-name }} dialect by updating y
 
 Or, if you are using programmatic configuration:
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Java
 
@@ -108,7 +108,7 @@ Table of comparison of Java types descriptions with [{{ ydb-short-name }} types]
 
 For example, for the `Group` class:
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Java
 
@@ -167,7 +167,7 @@ ALTER TABLE Groups
 
 If you evolve the Group entity by adding the `deparment` field:
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Java
 
@@ -264,7 +264,7 @@ spring.datasource.url=jdbc:ydb:<grpc/grpcs>://<host>:<2135/2136>/path/to/databas
 
 Create a simple entity and repository:
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Java
 
@@ -341,7 +341,7 @@ Create a simple entity and repository:
 
 Usage example:
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Java
 

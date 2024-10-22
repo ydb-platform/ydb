@@ -8,7 +8,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 ## Serializable {#serializable}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go (native)
 
@@ -83,7 +83,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 ## Online Read-Only {#online-read-only}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go (native)
 
@@ -131,7 +131,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 ## Stale Read-Only {#stale-read-only}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go (native)
 
@@ -179,7 +179,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 ## Snapshot Read-Only {#snapshot-read-only}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go (native)
 

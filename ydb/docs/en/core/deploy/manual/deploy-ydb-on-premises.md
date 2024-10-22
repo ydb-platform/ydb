@@ -180,7 +180,7 @@ sudo chmod 700 /opt/ydb/certs
 
 ## Start static nodes {#start-storage}
 
-{% list tabs %}
+{% list tabs group=manual-systemd %}
 
 - Manually
 
@@ -245,7 +245,7 @@ To initialize the cluster, you'll need the `ca.crt` file issued by the Certifica
 
 Cluster initialization actions depend on whether the user authentication mode is enabled in the {{ ydb-short-name }} configuration file.
 
-{% list tabs %}
+{% list tabs group=authentication %}
 
 - Authentication enabled
 
@@ -294,7 +294,7 @@ When creating your database, you set an initial number of storage groups that de
 
 The database creation procedure depends on whether you enabled user authentication in the {{ ydb-short-name }} configuration file.
 
-{% list tabs %}
+{% list tabs group=authentication %}
 
 - Authentication enabled
 
@@ -332,7 +332,7 @@ The command example above uses the following parameters:
 
 ## Run dynamic nodes {#start-dynnode}
 
-{% list tabs %}
+{% list tabs group=manual-systemd %}
 
 - Manually
 

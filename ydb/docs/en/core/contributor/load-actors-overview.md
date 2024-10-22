@@ -38,7 +38,7 @@ You can run load using the following tools:
 
 The use case described below shows how to create and run the KqpLoad actor. The actor accesses the `/slice/db` database as a key-value store using 64 threads with a 30-second load. Before the test, the actor creates the necessary tables and deletes them once the test is completed. When being created, the actor is automatically assigned a tag. The same tag will be assigned to the test result.
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - Embedded UI
 
@@ -134,7 +134,7 @@ The use case described below shows how to create and run the KqpLoad actor. The 
 
 You can view the test results using the Embedded UI. For a description of output parameters, see the documentation of the respective actor.
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - Embedded UI
 

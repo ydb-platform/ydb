@@ -54,7 +54,7 @@ Changeset `createTable` отвечает за создание таблицы. �
 
 `addColumn` - добавление колонки. Пример:
 
-{% list tabs %}
+{% list tabs group=format %}
 
 - xml
 
@@ -100,7 +100,7 @@ Changeset `createTable` отвечает за создание таблицы. �
 
 `createIndex` - создание вторичного индекса. Пример:
 
-{% list tabs %}
+{% list tabs group=format %}
 
 - xml
 
@@ -157,7 +157,7 @@ Changeset `createTable` отвечает за создание таблицы. �
 
 `dropIndex` - удаление вторичного индекса. Пример:
 
-{% list tabs %}
+{% list tabs group=format %}
 
 - xml
 
@@ -195,7 +195,7 @@ Changeset `createTable` отвечает за создание таблицы. �
 
 `insert` - changeset, который осуществляет единичный insert в таблицу командой [{#T}](../../yql/reference/syntax/insert_into.md). Например:
 
-{% list tabs %}
+{% list tabs group=format %}
 
 - xml
 

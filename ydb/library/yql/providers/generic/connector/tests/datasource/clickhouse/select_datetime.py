@@ -15,7 +15,7 @@ from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     DataSourceType,
     SelectWhat,
     makeYdbTypeFromTypeID,
-    makeOptionalYdbTypeFromTypeID
+    makeOptionalYdbTypeFromTypeID,
 )
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import GenericSettings
 
@@ -168,7 +168,7 @@ class Factory:
                 '2149-06-06',
                 '2299-12-31',
                 '1970-12-04T05:55:29Z',
-                '1900-01-01T00:00:00Z' # strange overflow issue with DateTime64 in ClickHouse
+                '1900-01-01T00:00:00Z',  # strange overflow issue with DateTime64 in ClickHouse
             ],
         ]
 

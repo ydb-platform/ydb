@@ -12,4 +12,3 @@ docker_compose_dir: Final = pathlib.Path("ydb/library/yql/providers/generic/conn
 @pytest.fixture
 def settings() -> Settings:
     return Settings.from_env(docker_compose_dir=docker_compose_dir, data_source_kinds=[EDataSourceKind.CLICKHOUSE])
-

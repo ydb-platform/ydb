@@ -147,3 +147,17 @@ clickhouse-client -n <<-EOSQL
         (4, NULL);
 EOSQL
 
+clickhouse-client -n <<-EOSQL
+    DROP TABLE IF EXISTS db.large;
+    CREATE TABLE db.large (
+        col_00_int32 Int32,
+        col_01_string Nullable(String)
+    ) ENGINE = MergeTree ORDER BY col_00_int32;
+
+    INSERT INTO db.large
+    SELECT
+        number AS col_00_int32,
+        substring(randomPrintableASCII(32), 1, 32) AS col_01_string
+    FROM
+        numbers(1000000);
+EOSQL

@@ -24,100 +24,99 @@ from ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_
 
 class Factory:
     __primitive_types_schema: Final = Schema(
-            columns=ColumnList(
-                Column(
-                    name='col_00_id',
-                    ydb_type=makeYdbTypeFromTypeID(Type.INT32),
-                    data_source_type=DataSourceType(ch=clickhouse.Int32()),
-                ),
-                Column(
-                    name='col_01_boolean',
-                    ydb_type=makeYdbTypeFromTypeID(Type.BOOL),
-                    data_source_type=DataSourceType(ch=clickhouse.Boolean()),
-                ),
-                Column(
-                    name='col_02_int8',
-                    ydb_type=makeYdbTypeFromTypeID(Type.INT8),
-                    data_source_type=DataSourceType(ch=clickhouse.Int8()),
-                ),
-                Column(
-                    name='col_03_uint8',
-                    ydb_type=makeYdbTypeFromTypeID(Type.UINT8),
-                    data_source_type=DataSourceType(ch=clickhouse.UInt8()),
-                ),
-                Column(
-                    name='col_04_int16',
-                    ydb_type=makeYdbTypeFromTypeID(Type.INT16),
-                    data_source_type=DataSourceType(ch=clickhouse.Int16()),
-                ),
-                Column(
-                    name='col_05_uint16',
-                    ydb_type=makeYdbTypeFromTypeID(Type.UINT16),
-                    data_source_type=DataSourceType(ch=clickhouse.UInt16()),
-                ),
-                Column(
-                    name='col_06_int32',
-                    ydb_type=makeYdbTypeFromTypeID(Type.INT32),
-                    data_source_type=DataSourceType(ch=clickhouse.Int32()),
-                ),
-                Column(
-                    name='col_07_uint32',
-                    ydb_type=makeYdbTypeFromTypeID(Type.UINT32),
-                    data_source_type=DataSourceType(ch=clickhouse.UInt32()),
-                ),
-                Column(
-                    name='col_08_int64',
-                    ydb_type=makeYdbTypeFromTypeID(Type.INT64),
-                    data_source_type=DataSourceType(ch=clickhouse.Int64()),
-                ),
-                Column(
-                    name='col_09_uint64',
-                    ydb_type=makeYdbTypeFromTypeID(Type.UINT64),
-                    data_source_type=DataSourceType(ch=clickhouse.UInt64()),
-                ),
-                Column(
-                    name='col_10_float32',
-                    ydb_type=makeYdbTypeFromTypeID(Type.FLOAT),
-                    data_source_type=DataSourceType(ch=clickhouse.Float32()),
-                ),
-                Column(
-                    name='col_11_float64',
-                    ydb_type=makeYdbTypeFromTypeID(Type.DOUBLE),
-                    data_source_type=DataSourceType(ch=clickhouse.Float64()),
-                ),
-                Column(
-                    name='col_12_string',
-                    ydb_type=makeYdbTypeFromTypeID(Type.STRING),
-                    data_source_type=DataSourceType(ch=clickhouse.String()),
-                ),
-                Column(
-                    name='col_13_fixed_string',
-                    ydb_type=makeYdbTypeFromTypeID(Type.STRING),
-                    data_source_type=DataSourceType(ch=clickhouse.FixedString()),
-                ),
-                Column(
-                    name='col_14_date',
-                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.DATE),
-                    data_source_type=DataSourceType(ch=clickhouse.Date()),
-                ),
-                Column(
-                    name='col_15_date32',
-                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.DATE),
-                    data_source_type=DataSourceType(ch=clickhouse.Date32()),
-                ),
-                Column(
-                    name='col_16_datetime',
-                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.DATETIME),
-                    data_source_type=DataSourceType(ch=clickhouse.DateTime()),
-                ),
-                Column(
-                    name='col_17_datetime64',
-                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.TIMESTAMP),
-                    data_source_type=DataSourceType(ch=clickhouse.DateTime64()),
-                ),
+        columns=ColumnList(
+            Column(
+                name='col_00_id',
+                ydb_type=makeYdbTypeFromTypeID(Type.INT32),
+                data_source_type=DataSourceType(ch=clickhouse.Int32()),
             ),
-        )
-
+            Column(
+                name='col_01_boolean',
+                ydb_type=makeYdbTypeFromTypeID(Type.BOOL),
+                data_source_type=DataSourceType(ch=clickhouse.Boolean()),
+            ),
+            Column(
+                name='col_02_int8',
+                ydb_type=makeYdbTypeFromTypeID(Type.INT8),
+                data_source_type=DataSourceType(ch=clickhouse.Int8()),
+            ),
+            Column(
+                name='col_03_uint8',
+                ydb_type=makeYdbTypeFromTypeID(Type.UINT8),
+                data_source_type=DataSourceType(ch=clickhouse.UInt8()),
+            ),
+            Column(
+                name='col_04_int16',
+                ydb_type=makeYdbTypeFromTypeID(Type.INT16),
+                data_source_type=DataSourceType(ch=clickhouse.Int16()),
+            ),
+            Column(
+                name='col_05_uint16',
+                ydb_type=makeYdbTypeFromTypeID(Type.UINT16),
+                data_source_type=DataSourceType(ch=clickhouse.UInt16()),
+            ),
+            Column(
+                name='col_06_int32',
+                ydb_type=makeYdbTypeFromTypeID(Type.INT32),
+                data_source_type=DataSourceType(ch=clickhouse.Int32()),
+            ),
+            Column(
+                name='col_07_uint32',
+                ydb_type=makeYdbTypeFromTypeID(Type.UINT32),
+                data_source_type=DataSourceType(ch=clickhouse.UInt32()),
+            ),
+            Column(
+                name='col_08_int64',
+                ydb_type=makeYdbTypeFromTypeID(Type.INT64),
+                data_source_type=DataSourceType(ch=clickhouse.Int64()),
+            ),
+            Column(
+                name='col_09_uint64',
+                ydb_type=makeYdbTypeFromTypeID(Type.UINT64),
+                data_source_type=DataSourceType(ch=clickhouse.UInt64()),
+            ),
+            Column(
+                name='col_10_float32',
+                ydb_type=makeYdbTypeFromTypeID(Type.FLOAT),
+                data_source_type=DataSourceType(ch=clickhouse.Float32()),
+            ),
+            Column(
+                name='col_11_float64',
+                ydb_type=makeYdbTypeFromTypeID(Type.DOUBLE),
+                data_source_type=DataSourceType(ch=clickhouse.Float64()),
+            ),
+            Column(
+                name='col_12_string',
+                ydb_type=makeYdbTypeFromTypeID(Type.STRING),
+                data_source_type=DataSourceType(ch=clickhouse.String()),
+            ),
+            Column(
+                name='col_13_fixed_string',
+                ydb_type=makeYdbTypeFromTypeID(Type.STRING),
+                data_source_type=DataSourceType(ch=clickhouse.FixedString()),
+            ),
+            Column(
+                name='col_14_date',
+                ydb_type=makeOptionalYdbTypeFromTypeID(Type.DATE),
+                data_source_type=DataSourceType(ch=clickhouse.Date()),
+            ),
+            Column(
+                name='col_15_date32',
+                ydb_type=makeOptionalYdbTypeFromTypeID(Type.DATE),
+                data_source_type=DataSourceType(ch=clickhouse.Date32()),
+            ),
+            Column(
+                name='col_16_datetime',
+                ydb_type=makeOptionalYdbTypeFromTypeID(Type.DATETIME),
+                data_source_type=DataSourceType(ch=clickhouse.DateTime()),
+            ),
+            Column(
+                name='col_17_datetime64',
+                ydb_type=makeOptionalYdbTypeFromTypeID(Type.TIMESTAMP),
+                data_source_type=DataSourceType(ch=clickhouse.DateTime64()),
+            ),
+        ),
+    )
 
     def _primitive_types_non_nullable(self) -> Sequence[TestCase]:
         schema = self.__primitive_types_schema
@@ -184,7 +183,7 @@ class Factory:
         schema = self.__primitive_types_schema
         schema_nullable = Schema(columns=ColumnList())
 
-        for i,col in enumerate(schema.columns):
+        for i, col in enumerate(schema.columns):
             # do not convert first column to nullable as it contains primary key
             if i == 0:
                 schema_nullable.columns.append(col)
@@ -198,7 +197,7 @@ class Factory:
                     data_source_type=DataSourceType(ch=ch_type.to_nullable()),
                 )
             )
-        
+
         return schema_nullable
 
     def _primitive_types_nullable(self) -> Sequence[TestCase]:
@@ -323,7 +322,7 @@ class Factory:
 
         return [tc]
 
-    def _count(self) -> Sequence[TestCase]:
+    def _counts(self) -> Sequence[TestCase]:
         '''
         In this test case set we check SELECT COUNT(*) from a ch table.
         '''
@@ -354,7 +353,7 @@ class Factory:
             protocol=EProtocol.NATIVE,
             data_source_kind=EDataSourceKind.CLICKHOUSE,
             pragmas=dict(),
-            check_output_schema=False, # because the aggregate's value has other type
+            check_output_schema=False,  # because the aggregate's value has other type
         )
 
         return [tc]
@@ -394,7 +393,7 @@ class Factory:
                 protocol=EProtocol.NATIVE,
                 schema=schema,
                 # TODO: implement schema checkswhen selecting only one column
-                check_output_schema=False, 
+                check_output_schema=False,
             )
         ]
 
@@ -406,7 +405,7 @@ class Factory:
                 self._primitive_types_non_nullable(),
                 self._primitive_types_nullable(),
                 self._constant(),
-                self._count(),
+                self._counts(),
                 self._pushdown(),
             )
         )

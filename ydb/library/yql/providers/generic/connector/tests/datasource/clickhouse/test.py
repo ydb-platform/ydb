@@ -1,14 +1,10 @@
-from typing import Sequence
-from datetime import datetime
-
 import pytest
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
 from ydb.library.yql.providers.generic.connector.tests.utils.run.runners import runner_types, configure_runner
 import ydb.library.yql.providers.generic.connector.tests.utils.scenario.clickhouse as scenario
-from ydb.library.yql.providers.generic.connector.tests.utils.one_time_waiter import OneTimeWaiter 
-
+from ydb.library.yql.providers.generic.connector.tests.utils.one_time_waiter import OneTimeWaiter
 
 from conftest import docker_compose_dir
 from collection import Collection
@@ -21,8 +17,13 @@ one_time_waiter = OneTimeWaiter(
     data_source_kind=EDataSourceKind.CLICKHOUSE,
     docker_compose_file_path=str(docker_compose_dir / 'docker-compose.yml'),
     expected_tables=[
+        "large",
+        "constant",
+        "counts",
+        "primitive_types_non_nullable",
         "primitive_types_nullable",
-    ]
+        "pushdown",
+    ],
 )
 
 # Global collection of test cases dependent on environment
@@ -41,9 +42,7 @@ def test_select_positive(
     test_case: select_positive_common.TestCase,
 ):
     runner = configure_runner(runner_type=runner_type, settings=settings)
-    scenario.select_positive(
-        test_name=request.node.name, settings=settings, runner=runner, test_case=test_case
-    )
+    scenario.select_positive(test_name=request.node.name, settings=settings, runner=runner, test_case=test_case)
 
 
 @pytest.mark.parametrize("runner_type", runner_types)

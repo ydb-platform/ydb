@@ -252,8 +252,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             auto describeResult = session.DescribeTable("/Root/DecimalTest" , TDescribeTableSettings().WithKeyShardBoundary(true)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(describeResult.GetStatus(), NYdb::EStatus::SUCCESS);
             const NYdb::NTable::TTableDescription& tableDescription = describeResult.GetTableDescription();
-            const TVector<NYdb::NTable::TKeyRange>& keyRanges = tableDescription.GetKeyRanges();
-            const TVector<NYdb::NTable::TTableColumn>& columns = tableDescription.GetTableColumns();
+            const std::vector<NYdb::NTable::TKeyRange>& keyRanges = tableDescription.GetKeyRanges();
+            const std::vector<NYdb::NTable::TTableColumn>& columns = tableDescription.GetTableColumns();
             UNIT_ASSERT_VALUES_EQUAL(columns.size(), 4);
             UNIT_ASSERT_STRINGS_EQUAL(columns[0].Type.ToString(), "Decimal(22,9)?");
             UNIT_ASSERT_STRINGS_EQUAL(columns[1].Type.ToString(), "Decimal(35,10)?");

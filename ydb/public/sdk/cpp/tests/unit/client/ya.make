@@ -7,5 +7,6 @@ RECURSE(
     oauth2_token_exchange
     params
     result
+    scripting
     value
 )

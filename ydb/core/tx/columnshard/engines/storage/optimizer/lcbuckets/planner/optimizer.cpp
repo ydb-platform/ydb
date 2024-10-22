@@ -14,8 +14,8 @@ TOptimizerPlanner::TOptimizerPlanner(
     , StoragesManager(storagesManager)
     , PrimaryKeysSchema(primaryKeysSchema) {
     std::shared_ptr<IPortionsLevel> nextLevel;
-    const ui64 maxPortionBlobBytes = (ui64)1 << 20;
 /*
+    const ui64 maxPortionBlobBytes = (ui64)1 << 20;
     Levels.emplace_back(
         std::make_shared<TLevelPortions>(2, 0.9, maxPortionBlobBytes, nullptr, PortionsInfo, Counters->GetLevelCounters(2)));
     Levels.emplace_back(

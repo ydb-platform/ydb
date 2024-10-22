@@ -17,6 +17,10 @@ private:
             : Portion(portion) {
         }
 
+        bool operator==(const TOrderedPortion& item) const {
+            return item.Portion->GetPathId() == Portion->GetPathId() && item.Portion->GetPortionId() == Portion->GetPortionId();
+        }
+
         bool operator<(const TOrderedPortion& item) const {
             auto cmp = Portion->IndexKeyStart().CompareNotNull(item.Portion->IndexKeyStart());
             if (cmp == std::partial_ordering::equivalent) {

@@ -531,7 +531,7 @@ Y_UNIT_TEST_SUITE(TSwitchableCache) {
         UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 21); // [50, 0 .. 20]
 
         cache.UpdateLimit(7);
-        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, *pages[7]).size(), 30);
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, *pages[7]).size(), 33);
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 7);
         UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 7);

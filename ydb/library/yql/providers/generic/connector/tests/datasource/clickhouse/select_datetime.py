@@ -36,6 +36,16 @@ class TestCase(select_positive_common.TestCase):
 class Factory:
     _name = 'datetime'
 
+    '''
+    ClickHouse values' bounds:
+    Date                    [1970-01-01, 2149-06-06]
+    Date32                  [1900-01-01, 2299-12-31]
+    Datetime                [1970-01-01 00:00:00, 2106-02-07 06:28:15]
+    Datetime64              [1900-01-01 00:00:00, 2299-12-31 23:59:59.99999999]
+
+    YQL datetime bounds:    [1970-01-01 00:00:00, 2106-01-01 00:00:00]
+    '''
+
     def _make_test_yql(self) -> TestCase:
         schema = Schema(
             columns=ColumnList(
@@ -66,64 +76,6 @@ class Factory:
                 ),
             ),
         )
-
-        '''
-        ClickHouse values' bounds:
-        Date                    [1970-01-01, 2149-06-06]
-        Date32                  [1900-01-01, 2299-12-31]
-        Datetime                [1970-01-01 00:00:00, 2106-02-07 06:28:15]
-        Datetime64              [1900-01-01 00:00:00, 2299-12-31 23:59:59.99999999]
-
-        YQL datetime bounds:    [1970-01-01 00:00:00, 2106-01-01 00:00:00]
-        '''
-
-        data_in = [
-            # Value is too early for both CH and YQL
-            # In this case ClickHouse behaviour is undefined
-            # Clickhouse cuts off only date part of value along ClickHouse bottom bound
-            [
-                1,
-                '1950-01-10',
-                '1850-01-10',
-                '1950-01-10 12:23:45',
-                '1850-01-10 12:23:45.678910',
-            ],
-            # Value is OK for CH, but can be too early for YQL
-            [
-                2,
-                '1970-01-10',
-                '1950-01-10',
-                '1980-01-10 12:23:45',
-                '1950-01-10 12:23:45.678910',
-            ],
-            # Value is OK for both CH and YQL
-            [
-                3,
-                '2004-01-10',
-                '2004-01-10',
-                '2004-01-10 12:23:45',
-                '2004-01-10 12:23:45.678910',
-            ],
-            # Value is OK for CH, but too late for YQL
-            [
-                4,
-                '2110-01-10',
-                '2110-01-10',
-                '2106-01-10 12:23:45',
-                '2110-01-10 12:23:45.678910',
-            ],
-            # Value is too late for both OK for CH
-            # In this case ClickHouse behaviour is undefined
-            # "Natural" overflow for Datetime
-            # Cutting off along ClickHouse top bound for other types
-            [
-                5,
-                '2150-01-10',
-                '2300-01-10',
-                '2107-01-10 12:23:45',
-                '2300-01-10 12:23:45.678910',
-            ],
-        ]
 
         data_out = [
             [
@@ -162,7 +114,7 @@ class Factory:
         return TestCase(
             name_=test_case_name,
             date_time_format=EDateTimeFormat.YQL_FORMAT,
-            data_in=data_in,
+            data_in=None,
             data_out_=data_out,
             select_what=SelectWhat.asterisk(schema.columns),
             select_where=None,
@@ -203,55 +155,6 @@ class Factory:
             ),
         )
 
-        data_in = [
-            # Value is too early for both CH and YQL
-            # In this case ClickHouse behaviour is undefined
-            # For Datetime Clickhouse returns bottom bound and
-            # cuts off only date part of value along ClickHouse bottom bound for other types
-            [
-                1,
-                '1950-01-10',
-                '1850-01-10',
-                '1950-01-10 12:23:45',
-                '1850-01-10 12:23:45.678910',
-            ],
-            # Value is OK for CH, but can be too early for YQL
-            [
-                2,
-                '1970-01-10',
-                '1950-01-10',
-                '1980-01-10 12:23:45',
-                '1950-01-10 12:23:45.678910',
-            ],
-            # Value is OK for both CH and YQL
-            [
-                3,
-                '2004-01-10',
-                '2004-01-10',
-                '2004-01-10 12:23:45',
-                '2004-01-10 12:23:45.678910',
-            ],
-            # Value is OK for CH, but too late for YQL
-            [
-                4,
-                '2110-01-10',
-                '2110-01-10',
-                '2106-01-10 12:23:45',
-                '2110-01-10 12:23:45.678910',
-            ],
-            # Value is too late for both OK for CH
-            # In this case ClickHouse behaviour is undefined
-            # "Natural" overflow for Datetime
-            # Cutting off along ClickHouse top bound for other types
-            [
-                5,
-                '2150-01-10',
-                '2300-01-10',
-                '2107-01-10 12:23:45',
-                '2300-01-10 12:23:45.678910',
-            ],
-        ]
-
         data_out = [
             [1, '1970-01-01', '1900-01-01', '1970-01-01T00:00:00Z', '1950-01-10T12:23:45.67891Z'],
             [2, '1970-01-10', '1950-01-10', '1980-01-10T12:23:45Z', '1950-01-10T12:23:45.67891Z'],
@@ -272,7 +175,7 @@ class Factory:
             name_=test_case_name,
             date_time_format=EDateTimeFormat.STRING_FORMAT,
             protocol=EProtocol.NATIVE,
-            data_in=data_in,
+            data_in=None,
             data_out_=data_out,
             select_what=SelectWhat.asterisk(schema.columns),
             select_where=None,

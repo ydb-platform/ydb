@@ -57,6 +57,44 @@ clickhouse-client -n <<-EOSQL
 EOSQL
 
 clickhouse-client -n <<-EOSQL
+    DROP TABLE IF EXISTS db.datetime_string;
+    CREATE TABLE db.datetime_string (
+        col_00_id Int32,
+        col_01_date Date,
+        col_02_date32 Date32,
+        col_03_datetime DateTime,
+        col_04_datetime64 DateTime64(8)
+    ) ENGINE = MergeTree ORDER BY col_00_id;
+/*
+    Value is too early for both CH and YQL
+    In this case ClickHouse behaviour is undefined
+    For Datetime Clickhouse returns bottom bound and
+    cuts off only date part of value along ClickHouse bottom bound for other types
+*/
+    INSERT INTO db.datetime_string (*) VALUES
+        (1, '1950-01-10', '1850-01-10', '1950-01-10 12:23:45', '1950-01-10 12:23:45.678910');
+
+    /* Value is OK for CH, but can be too early for YQL */
+    INSERT INTO db.datetime_string (*) VALUES
+        (2, '1970-01-10', '1950-01-10', '1980-01-10 12:23:45', '1950-01-10 12:23:45.678910');
+
+    /* Value is OK for both CH and YQL */
+    INSERT INTO db.datetime_string (*) VALUES
+        (3, '2004-01-10', '2004-01-10', '2004-01-10 12:23:45', '2004-01-10 12:23:45.678910');
+
+    /* Value is OK for CH, but too late for YQL */
+    INSERT INTO db.datetime_string (*) VALUES
+        (4, '2110-01-10', '2110-01-10', '2106-01-10 12:23:45', '2110-01-10 12:23:45.678910');
+       
+    /*
+    Value is too late for both YQL and CH.
+    In this case ClickHouse behaviour is undefined.
+    */
+    INSERT INTO db.datetime_string (*) VALUES
+        (5, '2150-01-10', '2300-01-10', '2107-01-10 12:23:45', '2300-01-10 12:23:45.678910');
+EOSQL
+
+clickhouse-client -n <<-EOSQL
     DROP TABLE IF EXISTS db.datetime_YQL;
     CREATE TABLE db.datetime_YQL (
         col_00_id Int32,
@@ -66,23 +104,6 @@ clickhouse-client -n <<-EOSQL
         col_04_datetime64 DateTime64(8)
     ) ENGINE = MergeTree ORDER BY col_00_id;
     INSERT INTO db.datetime_YQL (*) VALUES
-        (1, '1950-01-10', '1850-01-10', '1950-01-10 12:23:45', '1950-01-10 12:23:45.678910') \
-        (2, '1970-01-10', '1950-01-10', '1980-01-10 12:23:45', '1950-01-10 12:23:45.678910') \
-        (3, '2004-01-10', '2004-01-10', '2004-01-10 12:23:45', '2004-01-10 12:23:45.678910') \
-        (4, '2110-01-10', '2110-01-10', '2106-01-10 12:23:45', '2110-01-10 12:23:45.678910') \
-        (5, '2150-01-10', '2300-01-10', '2107-01-10 12:23:45', '2300-01-10 12:23:45.678910');
-EOSQL
-
-clickhouse-client -n <<-EOSQL
-    DROP TABLE IF EXISTS db.datetime_string;
-    CREATE TABLE db.datetime_string (
-        col_00_id Int32,
-        col_01_date Date,
-        col_02_date32 Date32,
-        col_03_datetime DateTime,
-        col_04_datetime64 DateTime64(8)
-    ) ENGINE = MergeTree ORDER BY col_00_id;
-    INSERT INTO db.datetime_string (*) VALUES
         (1, '1950-01-10', '1850-01-10', '1950-01-10 12:23:45', '1950-01-10 12:23:45.678910') \
         (2, '1970-01-10', '1950-01-10', '1980-01-10 12:23:45', '1950-01-10 12:23:45.678910') \
         (3, '2004-01-10', '2004-01-10', '2004-01-10 12:23:45', '2004-01-10 12:23:45.678910') \

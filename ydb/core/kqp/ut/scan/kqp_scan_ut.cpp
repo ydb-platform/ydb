@@ -237,14 +237,33 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 .BeginTuple().AddElement().BeginOptional().Decimal(TDecimalValue("1.5", 22, 9)).EndOptional().EndTuple()
                 .Build());
 
-        auto ret = session.CreateTable("/Root/DecimalTest",
+       auto ret = session.CreateTable("/Root/DecimalTest",
                 TTableBuilder()
                     .AddNullableColumn("Key", TDecimalType(22, 9))
                     .AddNullableColumn("Value", TDecimalType(22, 9))
                     .SetPrimaryKeyColumn("Key")
-                    // .SetPartitionAtKeys(partitions)  // Error at split boundary 0: Unsupported typeId 4865 at index 0
+                    .SetPartitionAtKeys(partitions)
                     .Build()).GetValueSync();
         UNIT_ASSERT_C(ret.IsSuccess(), ret.GetIssues().ToString());
+
+        {
+            auto describeResult = session.DescribeTable("/Root/DecimalTest" , TDescribeTableSettings().WithKeyShardBoundary(true)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(describeResult.GetStatus(), NYdb::EStatus::SUCCESS);
+            const NYdb::NTable::TTableDescription& tableDescription = describeResult.GetTableDescription();
+            const TVector<NYdb::NTable::TKeyRange>& keyRanges = tableDescription.GetKeyRanges();
+            const TVector<NYdb::NTable::TTableColumn>& columns = tableDescription.GetTableColumns();
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
+            UNIT_ASSERT_STRINGS_EQUAL(columns[0].Type.ToString(), "Decimal(22,9)?");
+            UNIT_ASSERT_STRINGS_EQUAL(columns[1].Type.ToString(), "Decimal(22,9)?");
+            auto extractValue = [](const TValue& val) {
+                auto parser = TValueParser(val);
+                parser.OpenTuple();
+                UNIT_ASSERT(parser.TryNextElement());
+                return parser.GetOptionalDecimal()->ToString();
+            };
+            UNIT_ASSERT_VALUES_EQUAL(keyRanges.size(), 2);
+            UNIT_ASSERT_STRINGS_EQUAL(extractValue(keyRanges[0].To()->GetValue()), "1.5");
+        }
 
         auto params = TParamsBuilder().AddParam("$in").BeginList()
                 .AddListItem().BeginStruct()

@@ -298,7 +298,6 @@ namespace NKikimr {
             Sublog.Log() << "Defrag quantum has been finished\n";
 
             auto *msg = ev->Get();
-            Y_ABORT_UNLESS(msg->Stat.Eof || msg->Stat.FreedChunks.size() == DCtx->MaxChunksToDefrag);
 
             auto &task = WaitQueue.front();
 

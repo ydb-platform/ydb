@@ -1410,11 +1410,13 @@ bool TSqlTranslation::FillFamilySettingsEntry(const TRule_family_settings_entry&
     TIdentifier id = IdEx(settingNode.GetRule_an_id1(), *this);
     const TRule_family_setting_value& value = settingNode.GetRule_family_setting_value3();
     if (to_lower(id.Name) == "data") {
-        const TString stringValue(Ctx.Token(value.GetToken1()));
+        const TString stringValue(Ctx.Token(value.GetAlt_family_setting_value1().GetToken1()));
         family.Data = BuildLiteralSmartString(Ctx, stringValue);
     } else if (to_lower(id.Name) == "compression") {
-        const TString stringValue(Ctx.Token(value.GetToken1()));
+        const TString stringValue(Ctx.Token(value.GetAlt_family_setting_value1().GetToken1()));
         family.Compression = BuildLiteralSmartString(Ctx, stringValue);
+    } else if (to_lower(id.Name) == "compression_level") {
+        family.CompressionLevel = LiteralNumber(Ctx, value.GetAlt_family_setting_value2().GetRule_integer1());
     } else {
         Ctx.Error() << "Unknown table setting: " << id.Name;
         return false;

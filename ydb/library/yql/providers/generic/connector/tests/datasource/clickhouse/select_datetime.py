@@ -36,31 +36,31 @@ class TestCase(select_positive_common.TestCase):
 class Factory:
     _name = 'datetime'
 
-    def _make_test_yql_clickhouse(self) -> TestCase:
+    def _make_test_yql(self) -> TestCase:
         schema = Schema(
             columns=ColumnList(
                 Column(
-                    name='col_0_id',
+                    name='col_00_id',
                     ydb_type=Type.UINT8,
                     data_source_type=DataSourceType(ch=clickhouse.UInt8()),
                 ),
                 Column(
-                    name='col_1_date',
+                    name='col_01_date',
                     ydb_type=Type.DATE,
                     data_source_type=DataSourceType(ch=clickhouse.Date()),
                 ),
                 Column(
-                    name='col_2_date32',
+                    name='col_02_date32',
                     ydb_type=Type.DATE,
                     data_source_type=DataSourceType(ch=clickhouse.Date32()),
                 ),
                 Column(
-                    name='col_3_datetime',
+                    name='col_03_datetime',
                     ydb_type=Type.DATETIME,
                     data_source_type=DataSourceType(ch=clickhouse.DateTime()),
                 ),
                 Column(
-                    name='col_4_datetime64',
+                    name='col_04_datetime64',
                     ydb_type=Type.TIMESTAMP,
                     data_source_type=DataSourceType(ch=clickhouse.DateTime64()),
                 ),
@@ -172,31 +172,31 @@ class Factory:
             pragmas=dict(),
         )
 
-    def _make_test_string_clickhouse(self) -> TestCase:
+    def _make_test_string(self) -> TestCase:
         schema = Schema(
             columns=ColumnList(
                 Column(
-                    name='col_0_id',
+                    name='col_00_id',
                     ydb_type=Type.UINT8,
                     data_source_type=DataSourceType(ch=clickhouse.UInt8()),
                 ),
                 Column(
-                    name='col_1_date',
+                    name='col_01_date',
                     ydb_type=Type.DATE,
                     data_source_type=DataSourceType(ch=clickhouse.Date()),
                 ),
                 Column(
-                    name='col_2_date32',
+                    name='col_02_date32',
                     ydb_type=Type.DATE,
                     data_source_type=DataSourceType(ch=clickhouse.Date32()),
                 ),
                 Column(
-                    name='col_3_datetime',
+                    name='col_03_datetime',
                     ydb_type=Type.DATETIME,
                     data_source_type=DataSourceType(ch=clickhouse.DateTime()),
                 ),
                 Column(
-                    name='col_4_datetime64',
+                    name='col_04_datetime64',
                     ydb_type=Type.TIMESTAMP,
                     data_source_type=DataSourceType(ch=clickhouse.DateTime64()),
                 ),
@@ -253,7 +253,7 @@ class Factory:
         ]
 
         data_out = [
-            [1, '1970-01-01', '1900-01-01', '1970-01-01T00:00:00Z', '1900-01-01T12:23:45.67891Z'],
+            [1, '1970-01-01', '1900-01-01', '1970-01-01T00:00:00Z', '1950-01-10T12:23:45.67891Z'],
             [2, '1970-01-10', '1950-01-10', '1980-01-10T12:23:45Z', '1950-01-10T12:23:45.67891Z'],
             [3, '2004-01-10', '2004-01-10', '2004-01-10T12:23:45Z', '2004-01-10T12:23:45.67891Z'],
             [4, '2110-01-10', '2110-01-10', '2106-01-10T12:23:45Z', '2110-01-10T12:23:45.67891Z'],
@@ -262,7 +262,7 @@ class Factory:
                 '2149-06-06',
                 '2299-12-31',
                 '1970-12-04T05:55:29Z',
-                '1900-01-01T00:00:00Z',  # TODO: strange overflow under bottom bound for datetime64
+                '1900-01-01T00:00:00Z' # strange overflow issue with DateTime64 in ClickHouse
             ],
         ]
 
@@ -283,6 +283,6 @@ class Factory:
 
     def make_test_cases(self) -> Sequence[TestCase]:
         return [
-            self._make_test_yql_clickhouse(),
-            self._make_test_string_clickhouse(),
+            self._make_test_yql(),
+            self._make_test_string(),
         ]

@@ -721,7 +721,10 @@ void DoCreatePqPart(
         ps->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
         ps->SetMinPartitionCount(table->GetPartitions().size());
         ps->SetMaxPartitionCount(std::max<ui32>(table->GetPartitions().size() * 2, 50));
-        ps->SetScaleThresholdSeconds(30);
+        ps->SetScaleThresholdSeconds(1);
+        ps->SetScaleDownPartitionWriteSpeedThresholdPercent(1);
+        ps->SetScaleUpPartitionWriteSpeedThresholdPercent(2);
+        ps->SetMaxPartitionCount(8);
     } else if (op.GetTopicAutoPartitioning()) {
         auto * ps = pqConfig.MutablePartitionStrategy();
         ps->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);

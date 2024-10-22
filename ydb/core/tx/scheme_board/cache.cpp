@@ -1000,7 +1000,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             if (::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType()) {
                 partitioning.reserve(pqDesc.GetPartitions().size());
                 for (const auto& partition : pqDesc.GetPartitions()) {
-                    partitioning.emplace_back(partition.GetPartitionId());
+                    if (NKikimrPQ::ETopicPartitionStatus::Active == partition.GetStatus()) {
+                        partitioning.emplace_back(partition.GetPartitionId());
+                    }
                 }
 
                 return;

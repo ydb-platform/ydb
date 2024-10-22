@@ -63,6 +63,11 @@ TRestoreResult::TRestoreResult(TStatus&& status)
 {
 }
 
+TClient::TClient(const TDriver& driver)
+    : Impl_(new TImpl(driver, std::make_shared<TLog>(CreateLogBackend("cerr"))))
+{
+}
+
 TClient::TClient(const TDriver& driver, std::shared_ptr<TLog>&& log)
     : Impl_(new TImpl(driver, std::move(log)))
 {

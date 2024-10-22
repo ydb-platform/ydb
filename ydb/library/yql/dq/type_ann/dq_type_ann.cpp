@@ -513,7 +513,7 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
         auto&& flags = input->Tail();
         for (ui32 i = 0; i < flags.ChildrenSize(); ++i) {
             auto&& flag = *flags.Child(i);
-            if ( !EnsureTupleOfAtoms(flag, ctx) || !EnsureTupleMinSize(flag, 1, ctx))
+            if (!EnsureTupleOfAtoms(flag, ctx) || !EnsureTupleMinSize(flag, 1, ctx))
                 return nullptr;
             auto&& name = *flag.Child(TCoNameValueTuple::idx_Name);
             if (name.IsAtom({"TTL", "MaxCachedRows", "MaxDelayedRows"})) {
@@ -522,8 +522,7 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
                        return nullptr;
                    continue;
                 }
-            } else
-            if (name.IsAtom({"LeftAny", "RightAny"})) {
+            } else if (name.IsAtom({"LeftAny", "RightAny"})) {
                 continue;
             }
             ctx.AddError(TIssue(ctx.GetPosition(flag.Pos()), TStringBuilder() << "DqJoin: Unsupported DQ join option: " << name.Content()));

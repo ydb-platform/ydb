@@ -144,7 +144,7 @@ public:
         bool leftAny = false, rightAny = false;
         if (const auto maybeJoin = join.Maybe<TDqJoin>()) {
             if (const auto maybeFlags = maybeJoin.Cast().Flags()) {
-                for (const auto &flag: maybeFlags.Cast()) {
+                for (const auto& flag: maybeFlags.Cast()) {
                     const auto name = flag.Name().Value();
                     if (name == "LeftAny"sv)
                         leftAny = true;

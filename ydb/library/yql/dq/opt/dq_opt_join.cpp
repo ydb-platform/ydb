@@ -1542,7 +1542,7 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
             bool leftAny = false, rightAny = false;
             TExprNode::TListType dictFlags;
             for (const auto& flag : flags) {
-                const auto name = flag->Child(0)->Content();
+                const auto name = flag->Head().Content();
                 if (name == "LeftAny"sv) {
                     leftAny = true;
                     dictFlags.push_back(ctx.NewAtom(flag->Pos(), "LeftUnique", TNodeFlags::Default));

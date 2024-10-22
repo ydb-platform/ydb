@@ -2267,7 +2267,7 @@ private:
 
         bool leftAny = false, rigthAny = false;
         for (const auto &flag: core.Flags()) {
-            auto&& name = flag.Name().Value();
+            auto name = flag.Name().Value();
             if (name == "LeftAny"sv)
                leftAny = true;
             else if (name == "RightAny"sv)

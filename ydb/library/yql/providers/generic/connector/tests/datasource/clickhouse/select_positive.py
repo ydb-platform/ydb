@@ -1,7 +1,7 @@
 import datetime
 import itertools
 from dataclasses import replace
-from typing import Sequence
+from typing import Sequence, Final
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
 from ydb.public.api.protos.ydb_value_pb2 import Type
@@ -23,9 +23,13 @@ from ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_
 
 
 class Factory:
-    def _primitive_types(self) -> Sequence[TestCase]:
-        schema = Schema(
+    __primitive_types_schema: Final = Schema(
             columns=ColumnList(
+                Column(
+                    name='col_00_id',
+                    ydb_type=makeYdbTypeFromTypeID(Type.INT32),
+                    data_source_type=DataSourceType(ch=clickhouse.Int32()),
+                ),
                 Column(
                     name='col_01_boolean',
                     ydb_type=makeYdbTypeFromTypeID(Type.BOOL),
@@ -114,55 +118,19 @@ class Factory:
             ),
         )
 
-        test_case_name = 'primitive_types'
+
+    def _primitive_types(self) -> Sequence[TestCase]:
+        schema = self.__primitive_types_schema
 
         tc = TestCase(
-            name_=test_case_name,
+            name_='primitive_types',
             schema=schema,
-            select_what=SelectWhat.asterisk(schema.columns),
+            select_what=SelectWhat.asterisk(schema),
             select_where=None,
-            data_in=[
-                [
-                    False,
-                    2,
-                    3,
-                    4,
-                    5,
-                    6,
-                    7,
-                    8,
-                    9,
-                    10.10,
-                    11.11,
-                    'az',
-                    'az   ',
-                    '2023-01-09',
-                    '2023-01-09',
-                    '2023-01-09 13:19:11',
-                    '2023-01-09 13:19:11.123456',
-                ],
-                [
-                    True,
-                    -2,
-                    3,
-                    -4,
-                    5,
-                    -6,
-                    7,
-                    -8,
-                    9,
-                    -10.10,
-                    -11.11,
-                    'buki',
-                    'buki ',
-                    '1988-11-20',
-                    '1988-11-20',
-                    '1988-11-20 12:00:00',
-                    '1988-11-20 12:00:00.100000',
-                ],
-            ],
+            data_in=None,
             data_out_=[
                 [
+                    1,
                     False,
                     2,
                     3,
@@ -175,13 +143,14 @@ class Factory:
                     10.10,
                     11.11,
                     'az',
-                    'az   ',
+                    'az\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00',
                     datetime.date(2023, 1, 9),
                     datetime.date(2023, 1, 9),
                     datetime.datetime(2023, 1, 9, 13, 19, 11),
                     datetime.datetime(2023, 1, 9, 13, 19, 11, 123456),
                 ],
                 [
+                    2,
                     True,
                     -2,
                     3,
@@ -207,15 +176,21 @@ class Factory:
             check_output_schema=True,
         )
 
-        # ClickHouse returns different data if columns are Nullable
+        return [
+            tc,
+        ]
+
+    def _make_primitive_types_nullable_schema(self) -> Schema:
+        schema = self.__primitive_types_schema
         schema_nullable = Schema(columns=ColumnList())
-        data_in_nullable = [[]]
-        data_out_nullable = [[]]
 
-        for i, col in enumerate(schema.columns):
+        for i,col in enumerate(schema.columns):
+            # do not convert first column to nullable as it contains primary key
+            if i == 0:
+                schema_nullable.columns.append(col)
+                continue
+
             ch_type = col.data_source_type.ch
-
-            # copy type and example value to new TestCase
             schema_nullable.columns.append(
                 Column(
                     name=col.name,
@@ -223,26 +198,80 @@ class Factory:
                     data_source_type=DataSourceType(ch=ch_type.to_nullable()),
                 )
             )
-            data_in_nullable[0].append(tc.data_in[0][i])
-            data_out_nullable[0].append(tc.data_out_[0][i])
+        
+        return schema_nullable
 
-        # Add row containing only NULL values
-        data_in_nullable.append([None] * len(data_in_nullable[0]))
-        data_out_nullable.append([None] * len(data_out_nullable[0]))
+    def _primitive_types_nullable(self) -> Sequence[TestCase]:
+        schema = self._make_primitive_types_nullable_schema()
 
-        # for the sake of CH output sorting
-        data_in_nullable[1][0] = data_out_nullable[1][0] = True
-
-        test_case_name_nullable = 'primitive_types_nullable'
-
-        tc_nullable = TestCase(
-            name_=test_case_name_nullable,
-            schema=schema_nullable,
-            select_what=SelectWhat.asterisk(schema_nullable.columns),
+        tc = TestCase(
+            name_='primitive_types_nullable',
+            schema=schema,
+            select_what=SelectWhat.asterisk(schema.columns),
             select_where=None,
+            data_in=None,
+            data_out_=[
+                [
+                    1,
+                    False,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    8,
+                    9,
+                    10.10,
+                    11.11,
+                    'az',
+                    'az\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00',
+                    datetime.date(1988, 11, 20),
+                    datetime.date(1988, 11, 20),
+                    datetime.datetime(1988, 11, 20, 12, 55, 28),
+                    datetime.datetime(1988, 11, 20, 12, 55, 28, 123000),
+                ],
+                [
+                    2,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                ],
+                [
+                    3,
+                    True,
+                    -2,
+                    3,
+                    -4,
+                    5,
+                    -6,
+                    7,
+                    -8,
+                    9,
+                    -10.10,
+                    -11.11,
+                    'буки',
+                    'буки     ',
+                    datetime.date(2023, 3, 21),
+                    datetime.date(2023, 3, 21),
+                    datetime.datetime(2023, 3, 21, 11, 21, 31),
+                    datetime.datetime(2023, 3, 21, 11, 21, 31, 456000),
+                ],
+            ],
             data_source_kind=EDataSourceKind.CLICKHOUSE,
-            data_in=data_in_nullable,
-            data_out_=data_out_nullable,
             protocol=EProtocol.NATIVE,
             pragmas=dict(),
             check_output_schema=True,
@@ -250,7 +279,6 @@ class Factory:
 
         return [
             tc,
-            tc_nullable,
         ]
 
     def _constant(self) -> Sequence[TestCase]:
@@ -410,6 +438,7 @@ class Factory:
         base_test_cases = list(
             itertools.chain(
                 self._primitive_types(),
+                self._primitive_types_nullable(),
                 self._constant(),
                 self._count(),
                 self._pushdown(),

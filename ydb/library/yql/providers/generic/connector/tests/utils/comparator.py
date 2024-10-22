@@ -43,7 +43,7 @@ def assert_data_outs_equal(
     expected: List,
     actual: List,
 ):
-    assert len(expected) == len(actual)
+    assert len(expected) == len(actual), ("Row size mismatch", expected, actual)
     all(map(assert_rows_equal, expected, actual))
 
 

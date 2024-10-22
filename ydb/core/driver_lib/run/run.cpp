@@ -1198,6 +1198,8 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
     );
 
     LogSettings->ClusterName = logConfig.HasClusterName() ? logConfig.GetClusterName() : "";
+    LogSettings->TenantName = runConfig.TenantName;
+    LogSettings->NodeId = runConfig.NodeId;
 
     if (logConfig.GetFormat() == "full") {
         LogSettings->Format = NLog::TSettings::PLAIN_FULL_FORMAT;

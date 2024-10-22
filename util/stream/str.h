@@ -229,10 +229,6 @@ public:
      */
     inline void Clear() {
         Str().clear();
-        Reset();
-    }
-
-    inline void Reset() {
         Pos_ = 0;
     }
 

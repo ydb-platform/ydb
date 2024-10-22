@@ -61,14 +61,6 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvAnalyzeTable::TPtr& ev, const
     responseRecord.MutablePathId()->CopyFrom(requestRecord.GetTable().GetPathId());
     responseRecord.SetShardTabletId(TabletID());
 
-    if (requestRecord.TypesSize() > 0 && (requestRecord.TypesSize() > 1 || requestRecord.GetTypes(0) != NKikimrStat::TYPE_COUNT_MIN_SKETCH)) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "Unsupported statistic type in analyze request");
-
-        responseRecord.SetStatus(NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
-        Send(ev->Sender, response.release(), 0, ev->Cookie);
-        return;
-    }
-
     AFL_VERIFY(HasIndex());
     auto index = GetIndexAs<NOlap::TColumnEngineForLogs>();
     auto spg = index.GetGranuleOptional(requestRecord.GetTable().GetPathId().GetLocalId());

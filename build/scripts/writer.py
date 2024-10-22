@@ -1,9 +1,6 @@
-import sys, os
+import sys
 import argparse
 
-# Explicitly enable local imports
-# Don't forget to add imported scripts to inputs of the calling command!
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import process_command_files as pcf
 
 

@@ -161,3 +161,57 @@ clickhouse-client -n <<-EOSQL
     FROM
         numbers(1000000);
 EOSQL
+
+clickhouse-client -n <<-EOSQL
+    DROP TABLE IF EXISTS db.column_selection_A_b_C_d_E;
+    CREATE TABLE db.column_selection_A_b_C_d_E (COL1 Int32, col2 Int32) 
+        ENGINE = MergeTree ORDER BY COL1;
+    INSERT INTO db.column_selection_A_b_C_d_E (*) VALUES
+        (1, 2) \
+        (10, 20);
+EOSQL
+
+clickhouse-client -n <<-EOSQL
+    DROP TABLE IF EXISTS db.column_selection_COL1;
+    CREATE TABLE db.column_selection_COL1 (COL1 Int32, col2 Int32) 
+        ENGINE = MergeTree ORDER BY COL1;
+    INSERT INTO db.column_selection_COL1 (*) VALUES
+        (1, 2) \
+        (10, 20);
+EOSQL
+
+clickhouse-client -n <<-EOSQL
+    DROP TABLE IF EXISTS db.column_selection_asterisk;
+    CREATE TABLE db.column_selection_asterisk (COL1 Int32, col2 Int32) 
+        ENGINE = MergeTree ORDER BY COL1;
+    INSERT INTO db.column_selection_asterisk (*) VALUES
+        (1, 2) \
+        (10, 20);
+EOSQL
+
+clickhouse-client -n <<-EOSQL
+    DROP TABLE IF EXISTS db.column_selection_col2_COL1;
+    CREATE TABLE db.column_selection_col2_COL1 (COL1 Int32, col2 Int32) 
+        ENGINE = MergeTree ORDER BY COL1;
+    INSERT INTO db.column_selection_col2_COL1 (*) VALUES
+        (1, 2) \
+        (10, 20);
+EOSQL
+
+clickhouse-client -n <<-EOSQL
+    DROP TABLE IF EXISTS db.column_selection_col2;
+    CREATE TABLE db.column_selection_col2 (COL1 Int32, col2 Int32) 
+        ENGINE = MergeTree ORDER BY COL1;
+    INSERT INTO db.column_selection_col2 (*) VALUES
+        (1, 2) \
+        (10, 20);
+EOSQL
+
+clickhouse-client -n <<-EOSQL
+    DROP TABLE IF EXISTS db.column_selection_col3;
+    CREATE TABLE db.column_selection_col3 (COL1 Int32, col2 Int32) 
+        ENGINE = MergeTree ORDER BY COL1;
+    INSERT INTO db.column_selection_col3 (*) VALUES
+        (1, 2) \
+        (10, 20);
+EOSQL

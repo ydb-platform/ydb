@@ -232,8 +232,7 @@ private:
         return {input, output};
     }
 public:
-    using TPatternConfigurationPtr = TNfaTransitionGraph::TPtr;
-    static TPatternConfigurationPtr Create(const TRowPattern& pattern, const THashMap<TString, size_t>& varNameToIndex) {
+    static TNfaTransitionGraph::TPtr Create(const TRowPattern& pattern, const THashMap<TString, size_t>& varNameToIndex) {
         auto result = std::make_shared<TNfaTransitionGraph>();
         TNfaTransitionGraphBuilder builder(result);
         auto item = builder.BuildTerms(pattern, varNameToIndex);
@@ -327,6 +326,29 @@ public:
 
     size_t GetActiveStatesCount() const {
         return ActiveStates.size();
+    }
+
+    void Save(TMrOutputSerializer& serializer) const {
+        // TransitionGraph is not saved/loaded, passed in constructor.
+        serializer.Write(ActiveStates.size());
+        for (const auto& state : ActiveStates) {
+            state.Save(serializer);
+        }
+        serializer.Write(EpsilonTransitionsLastRow);
+    }
+
+    void Load(TMrInputSerializer& serializer) {
+        auto stateSize = serializer.Read<ui64>();
+        for (size_t i = 0; i < stateSize; ++i) {
+            TState state;
+            state.Load(serializer);
+            ActiveStates.emplace(state);
+        }
+        serializer.Read(EpsilonTransitionsLastRow);
+    }
+
+    void Clear() {
+        ActiveStates.clear();
     }
 
 private:

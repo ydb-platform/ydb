@@ -71,6 +71,10 @@ public:
         }
     };
 
+    void SetTimeout(TDuration timeout) {
+        Config.Timeout = timeout;
+    }
+
     template <typename TCallType>
     void MakeCall(typename TCallType::TRequestEventType::TPtr ev) {
         using TRequestType = decltype(typename TCallType::TRequestEventType().Request);

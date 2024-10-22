@@ -24,6 +24,7 @@ class DescribeTableResult;
 class ExplicitPartitions;
 class GlobalIndexSettings;
 class VectorIndexSettings;
+class KMeansTreeSettings;
 class PartitioningSettings;
 class DateTypeColumnModeSettings;
 class TtlSettings;
@@ -187,8 +188,7 @@ struct TExplicitPartitions {
 
     FLUENT_SETTING_VECTOR(TValue, SplitPoints);
 
-    template <typename TProto>
-    static TExplicitPartitions FromProto(const TProto& proto);
+    static TExplicitPartitions FromProto(const Ydb::Table::ExplicitPartitions& proto);
 
     void SerializeTo(Ydb::Table::ExplicitPartitions& proto) const;
 };
@@ -199,47 +199,67 @@ struct TGlobalIndexSettings {
     TPartitioningSettings PartitioningSettings;
     TUniformOrExplicitPartitions Partitions;
 
-    template <typename TProto>
-    static TGlobalIndexSettings FromProto(const TProto& proto);
+    static TGlobalIndexSettings FromProto(const Ydb::Table::GlobalIndexSettings& proto);
 
     void SerializeTo(Ydb::Table::GlobalIndexSettings& proto) const;
 };
 
 struct TVectorIndexSettings {
 public:
-    enum class EDistance {
-        Cosine,
+    enum class EMetric {
+        Unspecified = 0,
+        InnerProduct,
+        CosineSimilarity,
+        CosineDistance,
         Manhattan,
         Euclidean,
-
-        Unknown = std::numeric_limits<int>::max()
-    };
-
-    enum class ESimilarity {
-        Cosine,
-        InnerProduct,
-
-        Unknown = std::numeric_limits<int>::max()
     };
 
     enum class EVectorType {
+        Unspecified = 0,
         Float,
         Uint8,
         Int8,
         Bit,
-
-        Unknown = std::numeric_limits<int>::max()
     };
-    using TMetric = std::variant<std::monostate, EDistance, ESimilarity>;
 
-    TMetric Metric;
-    EVectorType VectorType;
-    uint32_t VectorDimension;
+    EMetric Metric = EMetric::Unspecified;
+    EVectorType VectorType = EVectorType::Unspecified;
+    uint32_t VectorDimension = 0;
 
-    template <typename TProto>
-    static TVectorIndexSettings FromProto(const TProto& proto);
+    static TVectorIndexSettings FromProto(const Ydb::Table::VectorIndexSettings& proto);
 
     void SerializeTo(Ydb::Table::VectorIndexSettings& settings) const;
+
+    void Out(IOutputStream &o) const;
+};
+
+struct TKMeansTreeSettings {
+public:
+    enum class EMetric {
+        Unspecified = 0,
+        InnerProduct,
+        CosineSimilarity,
+        CosineDistance,
+        Manhattan,
+        Euclidean,
+    };
+
+    enum class EVectorType {
+        Unspecified = 0,
+        Float,
+        Uint8,
+        Int8,
+        Bit,
+    };
+
+    TVectorIndexSettings Settings;
+    uint32_t Clusters = 0;
+    uint32_t Levels = 0;
+
+    static TKMeansTreeSettings FromProto(const Ydb::Table::KMeansTreeSettings& proto);
+
+    void SerializeTo(Ydb::Table::KMeansTreeSettings& settings) const;
 
     void Out(IOutputStream &o) const;
 };
@@ -255,7 +275,7 @@ public:
         const std::vector<std::string>& indexColumns,
         const std::vector<std::string>& dataColumns = {},
         const std::vector<TGlobalIndexSettings>& globalIndexSettings = {},
-        const std::optional<TVectorIndexSettings>& vectorIndexSettings = {}
+        const std::variant<std::monostate, TKMeansTreeSettings>& specializedIndexSettings = {}
     );
 
     TIndexDescription(
@@ -269,7 +289,7 @@ public:
     EIndexType GetIndexType() const;
     const std::vector<std::string>& GetIndexColumns() const;
     const std::vector<std::string>& GetDataColumns() const;
-    const std::optional<TVectorIndexSettings>& GetVectorIndexSettings() const;
+    const std::variant<std::monostate, TKMeansTreeSettings>& GetVectorIndexSettings() const;
     uint64_t GetSizeBytes() const;
 
     void SerializeTo(Ydb::Table::TableIndex& proto) const;
@@ -289,8 +309,8 @@ private:
     std::vector<std::string> IndexColumns_;
     std::vector<std::string> DataColumns_;
     std::vector<TGlobalIndexSettings> GlobalIndexSettings_;
-    std::optional<TVectorIndexSettings> VectorIndexSettings_;
-    uint64_t SizeBytes = 0;
+    std::variant<std::monostate, TKMeansTreeSettings> SpecializedIndexSettings_;
+    uint64_t SizeBytes_ = 0;
 };
 
 struct TRenameIndex {
@@ -665,8 +685,8 @@ private:
     void AddUniqueSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns);
     void AddUniqueSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns);
     // vector KMeansTree
-    void AddVectorKMeansTreeSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TVectorIndexSettings& vectorIndexSettings);
-    void AddVectorKMeansTreeSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TVectorIndexSettings& vectorIndexSettings);
+    void AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings);
+    void AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings);
 
     // default
     void AddSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns);
@@ -889,8 +909,8 @@ public:
     TTableBuilder& AddUniqueSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns);
 
     // vector KMeansTree
-    TTableBuilder& AddVectorKMeansTreeSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TVectorIndexSettings& vectorIndexSettings);
-    TTableBuilder& AddVectorKMeansTreeSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TVectorIndexSettings& vectorIndexSettings);
+    TTableBuilder& AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings);
+    TTableBuilder& AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings);
 
     // default
     TTableBuilder& AddSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns);

@@ -253,8 +253,7 @@ static void SerializeTo(const TRenameIndex& rename, Ydb::Table::RenameIndexItem&
     proto.set_replace_destination(rename.ReplaceDestination_);
 }
 
-template <typename TProto>
-TExplicitPartitions TExplicitPartitions::FromProto(const TProto& proto) {
+TExplicitPartitions TExplicitPartitions::FromProto(const Ydb::Table::ExplicitPartitions& proto) {
     TExplicitPartitions out;
     for (const auto& splitPoint : proto.split_points()) {
         TValue value(TType(splitPoint.type()), splitPoint.value());
@@ -491,12 +490,12 @@ public:
         Indexes_.emplace_back(indexDescription);
     }
 
-    void AddVectorIndex(const std::string& indexName, EIndexType type, const std::vector<std::string>& indexColumns, const TVectorIndexSettings& vectorIndexSettings) {
-        Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, {}, {}, vectorIndexSettings));
+    void AddVectorKMeansTreeIndex(const std::string& indexName, EIndexType type, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings) {
+        Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, {}, {}, indexSettings));
     }
 
-    void AddVectorIndex(const std::string& indexName, EIndexType type, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TVectorIndexSettings& vectorIndexSettings) {
-        Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, dataColumns, {}, vectorIndexSettings));
+    void AddVectorKMeansTreeIndex(const std::string& indexName, EIndexType type, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings) {
+        Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, dataColumns, {}, indexSettings));
     }
 
     void AddChangefeed(const std::string& name, EChangefeedMode mode, EChangefeedFormat format) {
@@ -800,12 +799,12 @@ void TTableDescription::AddUniqueSecondaryIndex(const std::string& indexName, co
     AddSecondaryIndex(indexName, EIndexType::GlobalUnique, indexColumns, dataColumns);
 }
 
-void TTableDescription::AddVectorKMeansTreeSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TVectorIndexSettings& vectorIndexSettings) {
-    Impl_->AddVectorIndex(indexName, EIndexType::GlobalVectorKMeansTree, indexColumns, vectorIndexSettings);
+void TTableDescription::AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings) {
+    Impl_->AddVectorKMeansTreeIndex(indexName, EIndexType::GlobalVectorKMeansTree, indexColumns, indexSettings);
 }
 
-void TTableDescription::AddVectorKMeansTreeSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TVectorIndexSettings& vectorIndexSettings) {
-    Impl_->AddVectorIndex(indexName, EIndexType::GlobalVectorKMeansTree, indexColumns, dataColumns, vectorIndexSettings);
+void TTableDescription::AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings) {
+    Impl_->AddVectorKMeansTreeIndex(indexName, EIndexType::GlobalVectorKMeansTree, indexColumns, dataColumns, indexSettings);
 }
 
 void TTableDescription::AddSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns) {
@@ -1278,13 +1277,13 @@ TTableBuilder& TTableBuilder::AddUniqueSecondaryIndex(const std::string& indexNa
     return AddSecondaryIndex(indexName, EIndexType::GlobalUnique, indexColumns);
 }
 
-TTableBuilder& TTableBuilder::AddVectorKMeansTreeSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TVectorIndexSettings& vectorIndexSettings) {
-    TableDescription_.AddVectorKMeansTreeSecondaryIndex(indexName, indexColumns, dataColumns, vectorIndexSettings);
+TTableBuilder& TTableBuilder::AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings) {
+    TableDescription_.AddVectorKMeansTreeIndex(indexName, indexColumns, dataColumns, indexSettings);
     return *this;
 }
 
-TTableBuilder& TTableBuilder::AddVectorKMeansTreeSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TVectorIndexSettings& vectorIndexSettings) {
-    TableDescription_.AddVectorKMeansTreeSecondaryIndex(indexName, indexColumns, vectorIndexSettings);
+TTableBuilder& TTableBuilder::AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings) {
+    TableDescription_.AddVectorKMeansTreeIndex(indexName, indexColumns, indexSettings);
     return *this;
 }
 
@@ -2317,13 +2316,13 @@ TIndexDescription::TIndexDescription(
     const std::vector<std::string>& indexColumns,
     const std::vector<std::string>& dataColumns,
     const std::vector<TGlobalIndexSettings>& globalIndexSettings,
-    const std::optional<TVectorIndexSettings>& vectorIndexSettings
+    const std::variant<std::monostate, TKMeansTreeSettings>& specializedIndexSettings
 )   : IndexName_(name)
     , IndexType_(type)
     , IndexColumns_(indexColumns)
     , DataColumns_(dataColumns)
     , GlobalIndexSettings_(globalIndexSettings)
-    , VectorIndexSettings_(vectorIndexSettings)
+    , SpecializedIndexSettings_(specializedIndexSettings)
 {}
 
 TIndexDescription::TIndexDescription(
@@ -2358,21 +2357,20 @@ const std::vector<std::string>& TIndexDescription::GetDataColumns() const {
     return DataColumns_;
 }
 
-const std::optional<TVectorIndexSettings>& TIndexDescription::GetVectorIndexSettings() const {
-    return VectorIndexSettings_;
+const std::variant<std::monostate, TKMeansTreeSettings>& TIndexDescription::GetVectorIndexSettings() const {
+    return SpecializedIndexSettings_;
 }
 
 uint64_t TIndexDescription::GetSizeBytes() const {
-    return SizeBytes;
+    return SizeBytes_;
 }
 
-template <typename TProto>
-TGlobalIndexSettings TGlobalIndexSettings::FromProto(const TProto& proto) {
-    auto partitionsFromProto = [](const auto& proto) -> TUniformOrExplicitPartitions {
+TGlobalIndexSettings TGlobalIndexSettings::FromProto(const Ydb::Table::GlobalIndexSettings& proto) {
+    auto partitionsFromProto = [](const Ydb::Table::GlobalIndexSettings& proto) -> TUniformOrExplicitPartitions {
         switch (proto.partitions_case()) {
-        case TProto::kUniformPartitions:
+        case Ydb::Table::GlobalIndexSettings::kUniformPartitions:
             return proto.uniform_partitions();
-        case TProto::kPartitionAtKeys:
+        case Ydb::Table::GlobalIndexSettings::kPartitionAtKeys:
             return TExplicitPartitions::FromProto(proto.partition_at_keys());
         default:
             return {};
@@ -2399,34 +2397,26 @@ void TGlobalIndexSettings::SerializeTo(Ydb::Table::GlobalIndexSettings& settings
     std::visit(std::move(variantVisitor), Partitions);
 }
 
-template <typename TProto>
-TVectorIndexSettings TVectorIndexSettings::FromProto(const TProto& proto) {
-    auto convertDistance = [] (auto distance) -> auto {
-        switch (distance) {
-        case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
-            return EDistance::Cosine;
-        case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
-            return EDistance::Manhattan;
-        case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
-            return EDistance::Euclidean;
-        default:
-            return EDistance::Unknown;
-        }
-    };
-
-    auto convertSimilarity = [] (auto similarity) -> auto {
-        switch (similarity) {
-        case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
-            return ESimilarity::Cosine;
+TVectorIndexSettings TVectorIndexSettings::FromProto(const Ydb::Table::VectorIndexSettings& proto) {
+    auto covertMetric = [&] {
+        switch (proto.metric()) {
         case Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT:
-            return ESimilarity::InnerProduct;
+            return EMetric::InnerProduct;
+        case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
+            return EMetric::CosineSimilarity;
+        case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
+            return EMetric::CosineDistance;
+        case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
+            return EMetric::Manhattan;
+        case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
+            return EMetric::Euclidean;
         default:
-            return ESimilarity::Unknown;
+            return EMetric::Unspecified;
         }
     };
 
-    auto convertVectorType = [] (auto vectorType) -> auto {
-        switch (vectorType) {
+    auto convertVectorType = [&] {
+        switch (proto.vector_type()) {
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
             return EVectorType::Float;
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
@@ -2436,56 +2426,37 @@ TVectorIndexSettings TVectorIndexSettings::FromProto(const TProto& proto) {
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT:
             return EVectorType::Bit;
         default:
-            return EVectorType::Unknown;
-        }
-    }; 
-
-
-    auto metricFromProto = [&](const auto& proto) -> TVectorIndexSettings::TMetric {
-        switch (proto.metric_case()) {
-        case TProto::kDistance:
-            return convertDistance(proto.distance());
-        case TProto::kSimilarity:
-            return convertSimilarity(proto.similarity());
-        default:
-            return {};
+            return EVectorType::Unspecified;
         }
     };
 
     return {
-        .Metric = metricFromProto(proto),
-        .VectorType = convertVectorType(proto.vector_type()),
-        .VectorDimension = proto.vector_dimension()
+        .Metric = covertMetric(),
+        .VectorType = convertVectorType(),
+        .VectorDimension = proto.vector_dimension(),
     };
 }
 
 void TVectorIndexSettings::SerializeTo(Ydb::Table::VectorIndexSettings& settings) const {
-    auto convertDistance = [] (auto distance) -> auto {
-        switch (distance) {
-        case EDistance::Cosine:
-            return Ydb::Table::VectorIndexSettings::DISTANCE_COSINE;
-        case EDistance::Manhattan:
-            return Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN;
-        case EDistance::Euclidean:
-            return Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
-        case EDistance::Unknown:
-            return Ydb::Table::VectorIndexSettings::DISTANCE_UNSPECIFIED;
-        }
-    };
-
-    auto convertSimilarity = [] (auto similarity) -> auto {
-        switch (similarity) {
-        case ESimilarity::Cosine:
-            return Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE;
-        case ESimilarity::InnerProduct:
+    auto convertMetric = [&] {
+        switch (Metric) {
+        case EMetric::InnerProduct:
             return Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT;
-        case ESimilarity::Unknown:
-            return Ydb::Table::VectorIndexSettings::SIMILARITY_UNSPECIFIED;
+        case EMetric::CosineSimilarity:
+            return Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE;
+        case EMetric::CosineDistance:
+            return Ydb::Table::VectorIndexSettings::DISTANCE_COSINE;
+        case EMetric::Manhattan:
+            return Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN;
+        case EMetric::Euclidean:
+            return Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
+        case EMetric::Unspecified:
+            return Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED;
         }
     };
 
-    auto convertVectorType = [] (auto vectorType) -> auto {
-        switch (vectorType) {
+    auto convertVectorType = [&] {
+        switch (VectorType) {
         case EVectorType::Float:
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
         case EVectorType::Uint8:
@@ -2494,23 +2465,35 @@ void TVectorIndexSettings::SerializeTo(Ydb::Table::VectorIndexSettings& settings
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8;
         case EVectorType::Bit:
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT;
-        case EVectorType::Unknown:
+        case EVectorType::Unspecified:
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED;
         }
     };
 
-
-    if (const auto* distance = std::get_if<EDistance>(&Metric)) {
-        settings.set_distance(convertDistance(*distance));
-    } else if (const auto* similarity = std::get_if<ESimilarity>(&Metric)) {
-        settings.set_similarity(convertSimilarity(*similarity));
-    }
-
-    settings.set_vector_type(convertVectorType(VectorType));
+    settings.set_metric(convertMetric());
+    settings.set_vector_type(convertVectorType());
     settings.set_vector_dimension(VectorDimension);
 }
 
 void TVectorIndexSettings::Out(IOutputStream& o) const {
+    o << *this;
+}
+
+TKMeansTreeSettings TKMeansTreeSettings::FromProto(const Ydb::Table::KMeansTreeSettings& proto) {
+    return {
+        .Settings = TVectorIndexSettings::FromProto(proto.settings()),
+        .Clusters = proto.clusters(),
+        .Levels = proto.levels(),
+    };
+}
+
+void TKMeansTreeSettings::SerializeTo(Ydb::Table::KMeansTreeSettings& settings) const {
+    Settings.SerializeTo(*settings.mutable_settings());
+    settings.set_clusters(Clusters);
+    settings.set_levels(Levels);
+}
+
+void TKMeansTreeSettings::Out(IOutputStream& o) const {
     o << *this;
 }
 
@@ -2520,7 +2503,7 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
     std::vector<std::string> indexColumns;
     std::vector<std::string> dataColumns;
     std::vector<TGlobalIndexSettings> globalIndexSettings;
-    std::optional<TVectorIndexSettings> vectorIndexSettings;
+    std::variant<std::monostate, TKMeansTreeSettings> specializedIndexSettings;
 
     indexColumns.assign(proto.index_columns().begin(), proto.index_columns().end());
     dataColumns.assign(proto.data_columns().begin(), proto.data_columns().end());
@@ -2543,7 +2526,7 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
         const auto &vectorProto = proto.global_vector_kmeans_tree_index();
         globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(vectorProto.level_table_settings()));
         globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(vectorProto.posting_table_settings()));
-        vectorIndexSettings = TVectorIndexSettings::FromProto(vectorProto.vector_settings());
+        specializedIndexSettings = TKMeansTreeSettings::FromProto(vectorProto.vector_settings());
         break;
     }
     default: // fallback to global sync
@@ -2552,9 +2535,9 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
         break;
     }
 
-    auto result = TIndexDescription(proto.name(), type, indexColumns, dataColumns, globalIndexSettings, vectorIndexSettings);
+    auto result = TIndexDescription(proto.name(), type, indexColumns, dataColumns, globalIndexSettings, specializedIndexSettings);
     if constexpr (std::is_same_v<TProto, Ydb::Table::TableIndexDescription>) {
-        result.SizeBytes = proto.size_bytes();
+        result.SizeBytes_ = proto.size_bytes();
     }
 
     return result;
@@ -2596,8 +2579,8 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
             GlobalIndexSettings_[0].SerializeTo(level_settings);
             GlobalIndexSettings_[1].SerializeTo(posting_settings);
         }
-        if (VectorIndexSettings_) {
-            VectorIndexSettings_->SerializeTo(vector_settings);
+        if (const auto* settings = std::get_if<TKMeansTreeSettings>(&SpecializedIndexSettings_)) {
+            settings->SerializeTo(vector_settings);
         }
         break;
     }
@@ -2622,9 +2605,12 @@ void TIndexDescription::Out(IOutputStream& o) const {
         o << ", data_columns: [" << JoinSeq(", ", DataColumns_) << "]";
     }
 
-    if (VectorIndexSettings_) {
-        o << ", vector_settings: " << *VectorIndexSettings_ << "";
-    }
+    std::visit([&]<typename T>(const T& settings) {
+        if constexpr (!std::is_same_v<T, std::monostate>) {
+            o << ", vector_settings: " << settings;
+        }
+    }, SpecializedIndexSettings_);
+
     o << " }";
 }
 

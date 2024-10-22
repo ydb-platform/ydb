@@ -312,7 +312,7 @@ void TFixture::StartPartitionSession(TTopicReadSessionPtr reader, ui64 offset)
 
 void TFixture::ReadMessage(TTopicReadSessionPtr reader, NTable::TTransaction& tx, ui64 offset)
 {
-        TReadMessageSettings settings {
+    TReadMessageSettings settings {
         .Tx = tx,
         .CommitOffsets = false,
         .Offset = offset

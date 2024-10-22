@@ -1665,6 +1665,20 @@
             "uri": "https://{canondata_backend}/1931696/8382830b676a61af36d1344910d51cd1bf39f3ef/resource.tar.gz#test.test_limit-empty_sort_calc_after_limit-default.txt-Plan_/plan.txt"
         }
     ],
+    "test.test[match_recognize-after_match_skip_past_last_row-default.txt-Debug]": [
+        {
+            "checksum": "e6a51f8c3ed77a2c4dfdf2e55ec4517d",
+            "size": 1316,
+            "uri": "https://{canondata_backend}/1880306/5213fbc312a45950f1152a68258af55d6e4976a2/resource.tar.gz#test.test_match_recognize-after_match_skip_past_last_row-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[match_recognize-after_match_skip_past_last_row-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1880306/5213fbc312a45950f1152a68258af55d6e4976a2/resource.tar.gz#test.test_match_recognize-after_match_skip_past_last_row-default.txt-Plan_/plan.txt"
+        }
+    ],
     "test.test[optimizers-nonselected_direct_row--Debug]": [
         {
             "checksum": "8b5d70cb31c105309d443a31d1188534",

@@ -16,7 +16,7 @@ Troubleshooting performance issues in {{ ydb-short-name }} involves the followin
 
 - [Embedded UI](../../../reference/embedded-ui/index.md)
 
-- [Query plans](../../../yql/query_plans.md)
+- [Query plans](../../query-plans-optimization.md)
 
 
 ## Classification of {{ ydb-short-name }} performance issues
@@ -49,7 +49,7 @@ Database performance issues can be classified into several categories based on t
 
     - **Hardware resource allocation issues**. Suboptimal allocation of resources, for example poorly configured control groups (cgroups), may result in insufficient resources for {{ ydb-short-name }} and increase query latencies even though physical hardware resources are still available on the database server.
 
-    - **[System clock drift](system/system-clock-drift.md)**. If system clocks on the {{ ydb-short-name }} servers start to drift too much, distributed transactions might be processed with higher latencies. In some cases {{ ydb-short-name }} might even fail to process distributed transactions and return errors.
+    - **[System clock drift](system/system-clock-drift.md)**. If the system clocks on the {{ ydb-short-name }} servers start to drift apart, it will lead to increased distributed transaction latencies. In severe cases, {{ ydb-short-name }} might even refuse to process distributed transactions and return errors.
 
 - **Schema design issues**. These issues stem from inefficient decisions made during the creation of tables and indices. They can significantly impact query performance.
 

@@ -13,9 +13,9 @@
 
     <!-- TODO: Add user load charts -->
 
-    - Analyze diagrams on the **DataShard** dashboard in Grafana to see any changes in the volume of data read or written by queries.
+    - Review the diagrams on the **DataShard** dashboard in Grafana for any changes in the volume of data read or written by queries.
 
-    - Analyze the **Requests** chart on the **Query engine** dashboard in Grafana to see any spikes in the number of requests.
+    - Examine the **Requests** chart on the **Query engine** dashboard in Grafana for any spikes in the number of requests.
 
 1. To identify recently split or merged tables, follow these steps:
 
@@ -31,7 +31,7 @@
 
     1. On the **Tablets** page, click the **App** link.
 
-        The information about the table is displayed in the **User table <table-name>** section.
+        The information about the table is displayed in the **User table \<table-name\>** section.
 
 1. To pinpoint the schema issue, follow these steps:
 

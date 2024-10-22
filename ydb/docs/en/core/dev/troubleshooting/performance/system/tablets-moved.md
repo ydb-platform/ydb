@@ -1,6 +1,6 @@
 # Frequent tablet transfers between nodes
 
-{{ ydb-short-name }} automatically balances the load by transferring tablets from overloaded nodes to other nodes. This process is managed by [Hive](*hive). When Hive moves tablets, queries to those tablets suffer higher latencies.
+{{ ydb-short-name }} automatically balances the load by transferring tablets from overloaded nodes to other nodes. This process is managed by [Hive](*hive). When Hive moves tablets, queries affecting those tablets might experience increased latencies while they wait for the tablet to get initialized on the new node.
 
 <!-- This information is taken from a draft topic Concepts > Hive. -->
 <!-- TODO: When the above-mentioned topic is merged, remove the info from here and add a link.  -->

@@ -103,7 +103,6 @@ bool TDbWrapper::LoadColumns(const std::function<void(NOlap::TPortionInfoConstru
     using IndexColumns = NColumnShard::Schema::IndexColumns;
     auto rowset = db.Table<IndexColumns>().Prefix(0).Select();
     if (!rowset.IsReady()) {
-        LOG_S_CRIT("Load: index columns is not ready");
         return false;
     }
 
@@ -119,7 +118,6 @@ bool TDbWrapper::LoadColumns(const std::function<void(NOlap::TPortionInfoConstru
         callback(std::move(constructor), chunkLoadContext);
 
         if (!rowset.Next()) {
-            LOG_S_CRIT("Load: index columns next failed");
             return false;
         }
     }
@@ -131,7 +129,6 @@ bool TDbWrapper::LoadPortions(const std::function<void(NOlap::TPortionInfoConstr
     using IndexPortions = NColumnShard::Schema::IndexPortions;
     auto rowset = db.Table<IndexPortions>().Select();
     if (!rowset.IsReady()) {
-        LOG_S_CRIT("Load: index portions is not ready");
         return false;
     }
 
@@ -164,7 +161,6 @@ bool TDbWrapper::LoadPortions(const std::function<void(NOlap::TPortionInfoConstr
         callback(std::move(portion), metaProto);
 
         if (!rowset.Next()) {
-            LOG_S_CRIT("Load: index portions next failed");
             return false;
         }
     }
@@ -202,7 +198,6 @@ bool TDbWrapper::LoadIndexes(const std::function<void(const ui64 pathId, const u
     using IndexIndexes = NColumnShard::Schema::IndexIndexes;
     auto rowset = db.Table<IndexIndexes>().Select();
     if (!rowset.IsReady()) {
-        LOG_S_CRIT("Load: index indexes is not ready");
         return false;
     }
 
@@ -211,7 +206,6 @@ bool TDbWrapper::LoadIndexes(const std::function<void(const ui64 pathId, const u
         callback(rowset.GetValue<IndexIndexes::PathId>(), rowset.GetValue<IndexIndexes::PortionId>(), chunkLoadContext);
 
         if (!rowset.Next()) {
-            LOG_S_CRIT("Load: index indexes next failed");
             return false;
         }
     }

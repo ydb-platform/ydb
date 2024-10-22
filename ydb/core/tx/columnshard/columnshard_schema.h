@@ -883,7 +883,6 @@ struct Schema : NIceDb::Schema {
     static bool IndexCounters_Load(NIceDb::TNiceDb& db, const std::function<void(ui32 id, ui64 value)>& callback) {
         auto rowset = db.Table<IndexCounters>().Prefix(0).Select();
         if (!rowset.IsReady()) {
-            LOG_S_CRIT("Load: index counters rowset is not ready");
             return false;
         }
 
@@ -894,7 +893,6 @@ struct Schema : NIceDb::Schema {
             callback(id, value);
 
             if (!rowset.Next()) {
-                LOG_S_CRIT("Load: index counters next failed");
                 return false;
             }
         }

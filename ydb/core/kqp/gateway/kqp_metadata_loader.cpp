@@ -149,10 +149,14 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
         switch (entry.Kind) {
             case EKind::KindTable:
                 tableMeta->Kind = NYql::EKikimrTableKind::Datashard;
+                tableMeta->TableType = NYql::ETableType::Table;
+                tableMeta->StoreType = NYql::EStoreType::Row;
                 break;
 
             case EKind::KindColumnTable:
                 tableMeta->Kind = NYql::EKikimrTableKind::Olap;
+                tableMeta->TableType = NYql::ETableType::Table;
+                tableMeta->StoreType = NYql::EStoreType::Column;
                 break;
 
             default:

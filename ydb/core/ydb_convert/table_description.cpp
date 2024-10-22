@@ -733,10 +733,17 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
     return true;
 }
 
-bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out,
-    const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in, Ydb::StatusIds::StatusCode& status, TString& error) {
-    auto* schema = out.MutableSchema();
+NKikimrSchemeOp::TOlapColumnDescription* GetAddColumn(NKikimrSchemeOp::TColumnTableDescription& out) {
+    return out.MutableSchema()->AddColumns();
+}
 
+NKikimrSchemeOp::TOlapColumnDescription* GetAddColumn(NKikimrSchemeOp::TAlterColumnTable& out) {
+    return out.MutableAlterSchema()->AddAddColumns();
+}
+
+template <typename TColumnTable>
+bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in,
+    Ydb::StatusIds::StatusCode& status, TString& error) {
     for (const auto& column : in) {
         if (column.type().has_pg_type()) {
             status = Ydb::StatusIds::BAD_REQUEST;
@@ -744,7 +751,7 @@ bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out,
             return false;
         }
 
-        auto* columnDesc = schema->AddColumns();
+        auto* columnDesc = GetAddColumn(out);
         columnDesc->SetName(column.name());
 
         NScheme::TTypeInfo typeInfo;
@@ -763,34 +770,14 @@ bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out,
     return true;
 }
 
+bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out, const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in,
+    Ydb::StatusIds::StatusCode& status, TString& error) {
+    return FillColumnDescriptionImpl(out, in, status, error);
+}
+
 bool FillColumnDescription(NKikimrSchemeOp::TAlterColumnTable& out, const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in,
     Ydb::StatusIds::StatusCode& status, TString& error) {
-    auto* schema = out.MutableAlterSchema();
-
-    for (const auto& column : in) {
-        if (column.type().has_pg_type()) {
-            status = Ydb::StatusIds::BAD_REQUEST;
-            error = "Unsupported column type for column: " + column.name();
-            return false;
-        }
-
-        auto* columnDesc = schema->AddAddColumns();
-        columnDesc->SetName(column.name());
-
-        NScheme::TTypeInfo typeInfo;
-        TString typeMod;
-        if (!ExtractColumnTypeInfo(typeInfo, typeMod, column.type(), status, error)) {
-            return false;
-        }
-        columnDesc->SetType(NScheme::TypeName(typeInfo, typeMod));
-        columnDesc->SetNotNull(column.not_null());
-
-        if (NScheme::NTypeIds::IsParametrizedType(typeInfo.GetTypeId())) {
-            NScheme::ProtoFromTypeInfo(typeInfo, typeMod, *columnDesc->MutableTypeInfo());
-        }
-    }
-
-    return true;
+    return FillColumnDescriptionImpl(out, in, status, error);
 }
 
 bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
@@ -825,11 +812,10 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
     if (OpType == EAlterOperationKind::Common) {
         auto alterColumnTable = modifyScheme->MutableAlterColumnTable();
         alterColumnTable->SetName(name);
-        auto alterSchema = alterColumnTable->MutableAlterSchema();
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
 
         for (const auto& drop : req->drop_columns()) {
-            alterSchema->AddDropColumns()->SetName(drop);
+            alterColumnTable->MutableAlterSchema()->AddDropColumns()->SetName(drop);
         }
 
         if (!FillColumnDescription(*alterColumnTable, req->add_columns(), status, error)) {
@@ -837,7 +823,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
         }
 
         for (const auto& alter : req->alter_columns()) {
-            auto alterColumn = alterSchema->AddAlterColumns();
+            auto alterColumn = alterColumnTable->MutableAlterSchema()->AddAlterColumns();
             alterColumn->SetName(alter.Getname());
         }
 
@@ -1768,4 +1754,4 @@ bool FillSequenceDescription(NKikimrSchemeOp::TSequenceDescription& out, const Y
     return true;
 }
 
-} // namespace NKikimr
+}  // namespace NKikimr

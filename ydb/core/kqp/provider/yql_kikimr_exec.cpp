@@ -1978,7 +1978,9 @@ public:
             NThreading::TFuture<IKikimrGateway::TGenericResult> future;
             bool isTableStore = (table.Metadata->TableType == ETableType::TableStore);
             bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
-            Cerr << "isColumn: " << isColumn << Endl;
+
+            // Cerr << "isTableStore: " << (isTableStore ? "True" : "False") << Endl;
+            // Cerr << "isColumn: " << (isColumn ? "True" : "False") << Endl;
 
             if (isTableStore) {
                 if (!isColumn) {

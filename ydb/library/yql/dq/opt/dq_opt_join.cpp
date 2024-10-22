@@ -436,7 +436,7 @@ TExprBase DqRewriteEquiJoin(
 TExprBase DqRewriteEquiJoin(
     const TExprBase& node, 
     EHashJoinMode mode, 
-    bool useCBO, 
+    bool /* useCBO */, 
     TExprContext& ctx, 
     const TTypeAnnotationContext& typeCtx, 
     int& joinCounter, 

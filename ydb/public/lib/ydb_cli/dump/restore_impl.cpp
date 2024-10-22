@@ -48,7 +48,8 @@ bool IsFileExists(const TFsPath& path) {
     return path.Exists() && path.IsFile();
 }
 
-Ydb::Table::CreateTableRequest ReadTableScheme(const TString& fsPath) {
+Ydb::Table::CreateTableRequest ReadTableScheme(const TString& fsPath, TLog& log) {
+    LOG_IMPL(log, ELogPriority::TLOG_DEBUG, "Read scheme from '" << fsPath << "'");
     Ydb::Table::CreateTableRequest proto;
     Y_ENSURE(google::protobuf::TextFormat::ParseFromString(TFileInput(fsPath).ReadAll(), &proto));
     return proto;
@@ -63,7 +64,8 @@ TTableDescription TableDescriptionWithoutIndexesFromProto(Ydb::Table::CreateTabl
     return TableDescriptionFromProto(proto);
 }
 
-Ydb::Scheme::ModifyPermissionsRequest ReadPermissions(const TString& fsPath) {
+Ydb::Scheme::ModifyPermissionsRequest ReadPermissions(const TString& fsPath, TLog& log) {
+    LOG_IMPL(log, ELogPriority::TLOG_DEBUG, "Read ACL from '" << fsPath << "'");
     Ydb::Scheme::ModifyPermissionsRequest proto;
     Y_ENSURE(google::protobuf::TextFormat::ParseFromString(TFileInput(fsPath).ReadAll(), &proto));
     return proto;
@@ -260,8 +262,7 @@ TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString
             TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
     }
 
-    LOG_D("Read scheme from '" << fsPath.Child(SCHEME_FILE_NAME) << "'");
-    auto scheme = ReadTableScheme(fsPath.Child(SCHEME_FILE_NAME));
+    auto scheme = ReadTableScheme(fsPath.Child(SCHEME_FILE_NAME), Log);
     auto dumpedDesc = TableDescriptionFromProto(scheme);
 
     if (dumpedDesc.GetAttributes().contains(DOC_API_TABLE_VERSION_ATTR) && settings.SkipDocumentTables_) {
@@ -292,6 +293,8 @@ TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString
         if (!result.IsSuccess()) {
             return result;
         }
+    } else {
+        LOG_D("Skip restoring data of '" << dbPath << "'");
     }
 
     if (settings.RestoreIndexes_) {
@@ -299,6 +302,8 @@ TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString
         if (!result.IsSuccess()) {
             return result;
         }
+    } else if (!scheme.indexes().empty()) {
+        LOG_D("Skip restoring indexes of '" << dbPath << "'");
     }
 
     return RestorePermissions(fsPath, dbPath, settings, oldEntries);
@@ -447,7 +452,7 @@ TRestoreResult TRestoreClient::RestoreIndexes(const TString& dbPath, const TTabl
             continue;
         }
 
-        LOG_D("Build index '" << index.GetIndexName() << "' on '" << dbPath << "'");
+        LOG_D("Restore index '" << index.GetIndexName() << "' on '" << dbPath << "'");
 
         TOperation::TOperationId buildIndexId;
         auto buildIndexStatus = TableClient.RetryOperationSync([&, &outId = buildIndexId](TSession session) {
@@ -502,9 +507,9 @@ TRestoreResult TRestoreClient::RestorePermissions(const TFsPath& fsPath, const T
         return Result<TRestoreResult>();
     }
 
-    LOG_D("Restore permissions to '" << dbPath << "'");
+    LOG_D("Restore ACL '" << fsPath << "' to '" << dbPath << "'");
 
-    auto permissions = ReadPermissions(fsPath.Child(PERMISSIONS_FILE_NAME));
+    auto permissions = ReadPermissions(fsPath.Child(PERMISSIONS_FILE_NAME), Log);
     return ModifyPermissions(SchemeClient, dbPath, TModifyPermissionsSettings(permissions));
 }
 

@@ -144,6 +144,15 @@ bool CellFromTuple(NScheme::TTypeInfo type,
         }
         break;
     }
+    case NScheme::NTypeIds::Decimal:
+    {
+        if (tupleValue.Haslow_128()) {
+            c = TCell::Make<std::pair<ui64, ui64>>({tupleValue.Getlow_128(), tupleValue.Gethigh_128()});
+        } else {
+            CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type Decimal in tuple at position %" PRIu32, position));
+        }
+        break;
+    }    
     default:
         CHECK_OR_RETURN_ERROR(false, Sprintf("Unsupported typeId %" PRIu16 " at index %" PRIu32, typeId, position));
         break;

@@ -223,6 +223,15 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
             }
             break;
         }
+        case NScheme::NTypeIds::Decimal:
+        {
+            if (v.HasLow128() && v.HasHi128()) {
+                c = TCell::Make<std::pair<ui64, ui64>>({v.GetLow128(), v.GetHi128()});
+            } else {
+                CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type Decimal in tuple at position %" PRIu32, i));
+            }
+            break;
+        }        
         default:
             CHECK_OR_RETURN_ERROR(false, Sprintf("Unsupported typeId %" PRIu16 " at index %" PRIu32, typeId, i));
             break;

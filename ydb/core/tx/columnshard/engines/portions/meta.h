@@ -32,6 +32,10 @@ private:
     TSnapshot RecordSnapshotMax;
 
 public:
+    const NArrow::TFirstLastSpecialKeys& GetFirstLastPK() const {
+        return ReplaceKeyEdges;
+    }
+
     void ResetCompactionLevel(const ui32 level) {
         CompactionLevel = level;
     }

@@ -139,9 +139,6 @@ public:
     }
 
     virtual NArrow::NMerger::TIntervalPositions GetBucketPositions() const = 0;
-    bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
-        return DoIsLocked(dataLocksManager);
-    }
 
     NJson::TJsonValue SerializeToJsonVisual() const {
         return DoSerializeToJsonVisual();
@@ -191,7 +188,7 @@ private:
 public:
 
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault() {
-        auto result = TFactory::MakeHolder("l-buckets");
+        auto result = TFactory::MakeHolder("lc-buckets");
         AFL_VERIFY(!!result);
         return std::shared_ptr<IOptimizerPlannerConstructor>(result.Release());
     }

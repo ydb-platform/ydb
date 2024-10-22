@@ -85,6 +85,7 @@ TPortionInfo TPortionInfoConstructor::Build(const bool needChunksNormalization) 
     result.Indexes = std::move(Indexes);
     result.Records = std::move(Records);
     result.BlobIds = std::move(BlobIds);
+    result.Precalculate();
     return result;
 }
 

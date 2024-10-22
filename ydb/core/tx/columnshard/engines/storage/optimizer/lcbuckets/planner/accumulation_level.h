@@ -16,25 +16,44 @@ private:
         return std::nullopt;
     }
 
+    virtual ui64 DoGetAffectedPortionBytes(const NArrow::TReplaceKey& /*from*/, const NArrow::TReplaceKey& /*to*/) const override {
+        return 0;
+    }
+
     virtual ui64 DoGetWeight() const override {
         if (PortionsInfo.GetCount() <= 1) {
             return 0;
         }
 
         THashSet<ui64> portionIds;
-        TSimplePortionsGroupInfo portionsInfo;
-        for (auto&& i : Portions) {
-            auto chain = NextLevel->GetAffectedPortions(i.GetPortion()->IndexKeyStart(), i.GetPortion()->IndexKeyEnd());
-            if (chain) {
-                for (auto&& p : chain->GetPortions()) {
-                    if (portionIds.emplace(p->GetPortionId()).second) {
-                        portionsInfo.AddPortion(p);
+        auto targetLevel = GetNextLevel();
+
+
+        const ui64 affectedRawBytes = targetLevel->GetAffectedPortionBytes(
+            Portions.begin()->GetPortion()->IndexKeyStart(), Portions.rbegin()->GetPortion()->IndexKeyEnd());
+        /*
+        auto chain =
+            targetLevel->GetAffectedPortions(Portions.begin()->GetPortion()->IndexKeyStart(), Portions.rbegin()->GetPortion()->IndexKeyEnd());
+        if (chain) {
+            auto it = Portions.begin();
+            auto itNext = chain->GetPortions().begin();
+            while (it != Portions.end() && itNext != chain->GetPortions().end()) {
+                const auto& nextLevelPortion = *itNext;
+                if (nextLevelPortion->IndexKeyEnd() < it->GetPortion()->IndexKeyStart()) {
+                    ++itNext;
+                } else if (it->GetPortion()->IndexKeyEnd() < nextLevelPortion->IndexKeyStart()) {
+                    ++it;
+                } else {
+                    if (portionIds.emplace(nextLevelPortion->GetPortionId()).second) {
+                        affectedRawBytes += nextLevelPortion->GetTotalRawBytes();
                     }
+                    ++itNext;
                 }
             }
         }
+*/
 
-        const ui64 mb = (portionsInfo.GetRawBytes() + PortionsInfo.GetRawBytes()) / 1000000 + 1;
+        const ui64 mb = (affectedRawBytes + PortionsInfo.GetRawBytes()) / 1000000 + 1;
         return 1000000000.0 * PortionsInfo.GetCount() * PortionsInfo.GetCount() / mb;
     }
 
@@ -82,6 +101,7 @@ public:
                 result.AddCurrentLevelPortion(
                     i.GetPortion(), targetLevel->GetAffectedPortions(i.GetPortion()->IndexKeyStart(), i.GetPortion()->IndexKeyEnd()), true);
                 if (!result.CanTakeMore()) {
+                    result.SetStopSeparation(i.GetPortion()->IndexKeyStart());
                     break;
                 }
             }

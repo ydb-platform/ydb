@@ -28,30 +28,36 @@ private:
     };
     std::set<TOrderedPortion> Portions;
 
-    std::shared_ptr<IPortionsLevel> GetTargetLevelVerified() const {
-        auto targetLevel = NextLevel;
-        if (PortionsInfo.PredictPackedBlobBytes(GetPackKff()) > (1 << 20) && PortionsInfo.GetRawBytes() < (512 << 20)) {
-            targetLevel = targetLevel->GetNextLevel();
-        }
-        AFL_VERIFY(targetLevel);
-        return targetLevel;
-    }
-
     virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& /*pkSchema*/) const override {
-        AFL_VERIFY(false);
         return NArrow::NMerger::TIntervalPositions();
     }
 
     virtual std::optional<TPortionsChain> DoGetAffectedPortions(
         const NArrow::TReplaceKey& /*from*/, const NArrow::TReplaceKey& /*to*/) const override {
-        AFL_VERIFY(false);
         return std::nullopt;
+    }
+
+    virtual ui64 DoGetAffectedPortionBytes(const NArrow::TReplaceKey& /*from*/, const NArrow::TReplaceKey& /*to*/) const override {
+        return 0;
     }
 
     virtual void DoModifyPortions(
         const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) override {
+        const bool constructionFlag = Portions.empty();
+        if (constructionFlag) {
+            std::vector<TOrderedPortion> ordered;
+            ordered.reserve(add.size());
+            for (auto&& i : add) {
+                ordered.emplace_back(i);
+            }
+            std::sort(ordered.begin(), ordered.end());
+            AFL_VERIFY(std::unique(ordered.begin(), ordered.end()) == ordered.end());
+            Portions = std::set<TOrderedPortion>(ordered.begin(), ordered.end());
+        }
         for (auto&& i : add) {
-            AFL_VERIFY(Portions.emplace(i).second);
+            if (!constructionFlag) {
+                AFL_VERIFY(Portions.emplace(i).second);
+            }
             PortionsInfo.AddPortion(i);
             LevelCounters.Portions->AddPortion(i);
             i->RemoveRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized);
@@ -77,10 +83,9 @@ private:
     virtual TCompactionTaskData DoGetOptimizationTask() const override;
 
 public:
-    TZeroLevelPortions(const std::shared_ptr<IPortionsLevel>& nextLevel, const TLevelCounters& levelCounters)
-        : TBase(0, nextLevel)
+    TZeroLevelPortions(const ui32 levelIdx, const std::shared_ptr<IPortionsLevel>& nextLevel, const TLevelCounters& levelCounters)
+        : TBase(levelIdx, nextLevel)
         , LevelCounters(levelCounters) {
-        AFL_VERIFY(nextLevel);
     }
 };
 

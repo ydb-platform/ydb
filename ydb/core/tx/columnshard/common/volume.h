@@ -1,4 +1,6 @@
 #pragma once
+#include <ydb/library/accessor/accessor.h>
+
 #include <util/system/types.h>
 
 namespace NKikimr::NOlap {
@@ -31,17 +33,8 @@ public:
         RawBytes += item.RawBytes;
     }
 
-    TBlobsVolume operator-(const TBlobsVolume& item) const {
-        AFL_VERIFY(item.BlobBytes <= BlobBytes);
-        AFL_VERIFY(item.RawBytes <= RawBytes);
-        return TBlobsVolume(BlobBytes - item.BlobBytes, RawBytes - item.RawBytes);
-    }
+    TBlobsVolume operator-(const TBlobsVolume& item) const;
 
-    void operator-=(const TBlobsVolume& item) {
-        AFL_VERIFY(item.BlobBytes <= BlobBytes);
-        AFL_VERIFY(item.RawBytes <= RawBytes);
-        BlobBytes -= item.BlobBytes;
-        RawBytes -= item.RawBytes;
-    }
+    void operator-=(const TBlobsVolume& item);
 };
 }   // namespace NKikimr::NOlap

@@ -93,6 +93,26 @@ public:
         return false;
     }
 
+    virtual ui64 DoGetAffectedPortionBytes(const NArrow::TReplaceKey& from, const NArrow::TReplaceKey& to) const override {
+        if (Portions.empty()) {
+            return 0;
+        }
+        ui64 result = 0;
+        auto itFrom = Portions.upper_bound(from);
+        auto itTo = Portions.upper_bound(to);
+        if (itFrom != Portions.begin()) {
+            auto it = itFrom;
+            --it;
+            if (from <= it->GetPortion()->IndexKeyEnd()) {
+                result += it->GetPortion()->GetTotalRawBytes();
+            }
+        }
+        for (auto it = itFrom; it != itTo; ++it) {
+            result += it->GetPortion()->GetTotalRawBytes();
+        }
+        return result;
+    }
+
     virtual void DoModifyPortions(
         const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) override;
 
@@ -102,7 +122,7 @@ public:
         NArrow::NMerger::TIntervalPositions result;
         const auto& sortingColumns = pkSchema->field_names();
         for (auto&& i : Portions) {
-            result.AddPosition(NArrow::NMerger::TSortableBatchPosition(i.GetStart().ToBatch(pkSchema), 0, sortingColumns, {}, false), false);
+            result.AddPosition(i.GetStartPosition(), false);
         }
         return result;
     }

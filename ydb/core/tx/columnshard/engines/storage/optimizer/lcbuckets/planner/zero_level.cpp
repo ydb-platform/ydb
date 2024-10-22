@@ -4,13 +4,12 @@ namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
 TCompactionTaskData TZeroLevelPortions::DoGetOptimizationTask() const {
     AFL_VERIFY(Portions.size());
-    auto targetLevel = GetTargetLevelVerified();
-    TCompactionTaskData result(targetLevel->GetLevelId());
-    AFL_VERIFY(targetLevel);
+    TCompactionTaskData result(NextLevel->GetLevelId());
     for (auto&& i : Portions) {
         result.AddCurrentLevelPortion(
-            i.GetPortion(), targetLevel->GetAffectedPortions(i.GetPortion()->IndexKeyStart(), i.GetPortion()->IndexKeyEnd()), true);
+            i.GetPortion(), NextLevel->GetAffectedPortions(i.GetPortion()->IndexKeyStart(), i.GetPortion()->IndexKeyEnd()), true);
         if (!result.CanTakeMore()) {
+            result.SetStopSeparation(i.GetPortion()->IndexKeyStart());
             break;
         }
     }
@@ -23,16 +22,22 @@ TCompactionTaskData TZeroLevelPortions::DoGetOptimizationTask() const {
 }
 
 ui64 TZeroLevelPortions::DoGetWeight() const {
-    if (PortionsInfo.GetCount() <= 10) {
+    if (!NextLevel || Portions.size() < 10) {
         return 0;
+    }
+    if (TInstant::Now() - *PredOptimization < TDuration::Seconds(180)) {
+        if (PortionsInfo.GetCount() <= 100 || PortionsInfo.PredictPackedBlobBytes(GetPackKff()) < (1 << 20)) {
+            return 0;
+        }
     }
 
     THashSet<ui64> portionIds;
-    TSimplePortionsGroupInfo portionsInfo;
-    auto targetLevel = GetTargetLevelVerified();
-
+    const ui64 affectedRawBytes =
+        NextLevel->GetAffectedPortionBytes(Portions.begin()->GetPortion()->IndexKeyStart(), Portions.rbegin()->GetPortion()->IndexKeyEnd());
+    /*
     auto chain =
         targetLevel->GetAffectedPortions(Portions.begin()->GetPortion()->IndexKeyStart(), Portions.rbegin()->GetPortion()->IndexKeyEnd());
+    ui64 affectedRawBytes = 0;
     if (chain) {
         auto it = Portions.begin();
         auto itNext = chain->GetPortions().begin();
@@ -44,15 +49,16 @@ ui64 TZeroLevelPortions::DoGetWeight() const {
                 ++it;
             } else {
                 if (portionIds.emplace(nextLevelPortion->GetPortionId()).second) {
-                    portionsInfo.AddPortion(nextLevelPortion);
+                    affectedRawBytes += nextLevelPortion->GetTotalRawBytes();
                 }
                 ++itNext;
             }
         }
     }
+*/
 
-    const ui64 mb = (portionsInfo.GetRawBytes() + PortionsInfo.GetRawBytes()) / 1000000 + 1;
-    return 1000000000.0 * PortionsInfo.GetCount() * PortionsInfo.GetCount() / mb;
+    const ui64 mb = (affectedRawBytes + PortionsInfo.GetRawBytes()) / 1000000 + 1;
+    return 1000.0 * PortionsInfo.GetCount() * PortionsInfo.GetCount() / mb;
 }
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

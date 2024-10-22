@@ -75,6 +75,7 @@ private:
         return StartPosition <= position && position < FinishPosition;
     }
 public:
+    TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch);
     TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns);
     TSortableScanData(const ui64 position, const std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& columns);
     TSortableScanData(const ui64 position, const std::shared_ptr<TGeneralContainer>& batch, const std::vector<std::string>& columns);
@@ -357,6 +358,19 @@ public:
         Y_ABORT_UNLESS(Sorting->GetColumns().size());
     }
 
+    template <class TRecords>
+    TSortableBatchPosition(const std::shared_ptr<TRecords>& batch, const ui32 position, const bool reverseSort)
+        : Position(position)
+        , ReverseSort(reverseSort) {
+        Y_ABORT_UNLESS(batch);
+        Y_ABORT_UNLESS(batch->num_rows());
+        RecordsCount = batch->num_rows();
+        AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
+        Sorting = std::make_shared<TSortableScanData>(Position, batch);
+        Y_DEBUG_ABORT_UNLESS(batch->ValidateFull().ok());
+        Y_ABORT_UNLESS(Sorting->GetColumns().size());
+    }
+
     std::partial_ordering GetReverseForCompareResult(const std::partial_ordering directResult) const {
         if (directResult == std::partial_ordering::less) {
             return std::partial_ordering::greater;
@@ -582,6 +596,7 @@ public:
             return { batch };
         }
         TRWSortableBatchPosition pos(batch, 0, columnNames, {}, false);
+        it.SkipToUpper(pos);
         bool batchFinished = false;
         i64 recordsCountSplitted = 0;
         for (; it.IsValid() && !batchFinished; it.Next()) {
@@ -637,6 +652,10 @@ public:
         const auto& CurrentPosition() const {
             return Current->first;
         }
+
+        void SkipToUpper(const TSortableBatchPosition& /*toPos*/) {
+            return;
+        }
     };
 
     template <class TContainer>
@@ -667,6 +686,10 @@ public:
         const auto& CurrentPosition() const {
             return *Current;
         }
+
+        void SkipToUpper(const TSortableBatchPosition& /*toPos*/) {
+            return;
+        }
     };
 
     template <class TContainer>
@@ -677,8 +700,8 @@ public:
 
     class TIntervalPointsIterator {
     private:
-        typename TIntervalPositions::const_iterator Current;
-        typename TIntervalPositions::const_iterator End;
+        TIntervalPositions::const_iterator Current;
+        TIntervalPositions::const_iterator End;
 
     public:
         TIntervalPointsIterator(const TIntervalPositions& container)
@@ -696,6 +719,20 @@ public:
 
         const auto& CurrentPosition() const {
             return Current->GetPosition();
+        }
+
+        struct TComparator {
+            bool operator()(const TIntervalPosition& pos, const TSortableBatchPosition& value) const {
+                return pos.GetPosition() < value;
+            }
+            bool operator()(const TSortableBatchPosition& value, const TIntervalPosition& pos) const {
+                return value < pos.GetPosition();
+            }
+
+        };
+
+        void SkipToUpper(const TSortableBatchPosition& toPos) {
+            Current = std::upper_bound(Current, End, toPos, TComparator());
         }
     };
 

@@ -29,13 +29,13 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
         }
     };
     AppendedPortions.erase(std::remove_if(AppendedPortions.begin(), AppendedPortions.end(), predRemoveDroppedTable), AppendedPortions.end());
+    AFL_VERIFY(TargetCompactionLevel);
     for (auto& portionInfoWithBlobs : AppendedPortions) {
         auto& portionInfo = portionInfoWithBlobs.GetPortionResult();
         AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
         portionInfo.SaveToDatabase(context.DBWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
     }
     if (PortionsToMove.size()) {
-        AFL_VERIFY(TargetCompactionLevel);
         for (auto&& [_, i] : PortionsToMove) {
             const auto pred = [&](TPortionInfo& portionCopy) {
                 portionCopy.MutableMeta().ResetCompactionLevel(*TargetCompactionLevel);
@@ -128,8 +128,12 @@ void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
 }
 
 void TChangesWithAppend::DoOnAfterCompile() {
-    for (auto&& i : AppendedPortions) {
-        i.FinalizePortionConstructor();
+    if (AppendedPortions.size()) {
+        AFL_VERIFY(TargetCompactionLevel)("type", TypeString());
+        for (auto&& i : AppendedPortions) {
+            i.GetPortionConstructor().MutableMeta().SetCompactionLevel(*TargetCompactionLevel);
+            i.FinalizePortionConstructor();
+        }
     }
 }
 

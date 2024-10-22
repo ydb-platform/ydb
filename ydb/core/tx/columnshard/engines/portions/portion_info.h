@@ -61,6 +61,12 @@ public:
         Optimized = 1 /* "optimized" */
     };
 private:
+    ui64 PrecalculatedColumnRawBytes = 0;
+    ui64 PrecalculatedColumnBlobBytes = 0;
+    bool Precalculated = false;
+
+    void Precalculate();
+
     friend class TPortionInfoConstructor;
     TPortionInfo(TPortionMeta&& meta)
         : Meta(std::move(meta)) {
@@ -597,10 +603,10 @@ public:
     }
 
     ui64 GetColumnRawBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
-    ui64 GetColumnRawBytes(const bool validation = true) const;
+    ui64 GetColumnRawBytes() const;
 
     ui64 GetColumnBlobBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
-    ui64 GetColumnBlobBytes(const bool validation = true) const;
+    ui64 GetColumnBlobBytes() const;
 
     ui64 GetTotalBlobBytes() const noexcept {
         return GetIndexBlobBytes() + GetColumnBlobBytes();

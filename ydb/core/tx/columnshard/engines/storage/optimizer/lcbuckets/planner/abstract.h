@@ -13,6 +13,7 @@ private:
     std::shared_ptr<TPortionInfo> Portion;
     NArrow::TReplaceKey Start;
     ui64 PortionId;
+    NArrow::NMerger::TSortableBatchPosition StartPosition;
 
 public:
     const std::shared_ptr<TPortionInfo>& GetPortion() const {
@@ -24,10 +25,16 @@ public:
         return Start;
     }
 
+    const NArrow::NMerger::TSortableBatchPosition& GetStartPosition() const {
+        AFL_VERIFY(Portion);
+        return StartPosition;
+    }
+
     TOrderedPortion(const std::shared_ptr<TPortionInfo>& portion)
         : Portion(portion)
         , Start(portion->IndexKeyStart())
-        , PortionId(portion->GetPortionId()) {
+        , PortionId(portion->GetPortionId())
+        , StartPosition(Portion->GetMeta().GetFirstLastPK().GetBatch(), 0, false) {
     }
 
     TOrderedPortion(const NArrow::TReplaceKey& start)
@@ -102,7 +109,7 @@ public:
 class TCompactionTaskData {
 private:
     YDB_ACCESSOR_DEF(std::vector<std::shared_ptr<TPortionInfo>>, Portions);
-    YDB_ACCESSOR(ui64, TargetCompactionLevel, 0);
+    const ui64 TargetCompactionLevel = 0;
     std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges::IMemoryPredictor> Predictor =
         NCompaction::TGeneralCompactColumnEngineChanges::BuildMemoryPredictor();
     ui64 MemoryUsage = 0;
@@ -116,11 +123,41 @@ private:
     THashSet<ui64> NextLevelPortionIds;
     THashSet<ui64> CurrentLevelPortionIds;
     std::vector<TPortionsChain> Chains;
+    std::optional<NArrow::TReplaceKey> StopSeparation;
 
 public:
-    std::vector<std::shared_ptr<TPortionInfo>> GetRepackPortions() const {
-        auto moveIds = GetMovePortionIds();
+    ui64 GetTargetCompactionLevel() const {
+        if (MemoryUsage > ((ui64)1 << 30)) {
+            AFL_VERIFY(TargetCompactionLevel);
+            return TargetCompactionLevel - 1;
+        } else {
+            return TargetCompactionLevel;
+        }
+    }
+
+    void SetStopSeparation(const NArrow::TReplaceKey& point) { 
+        AFL_VERIFY(!StopSeparation);
+        StopSeparation = point;
+    }
+
+    std::vector<std::shared_ptr<TPortionInfo>> GetRepackPortions(const ui32 levelIdx) const {
         std::vector<std::shared_ptr<TPortionInfo>> result;
+        if (MemoryUsage > ((ui64)1 << 30)) {
+            auto predictor = NCompaction::TGeneralCompactColumnEngineChanges::BuildMemoryPredictor();
+            for (auto&& i : Portions) {
+                if (CurrentLevelPortionIds.contains(i->GetPortionId())) {
+                    if (predictor->AddPortion(*i) < MemoryUsage || result.size() < 2) {
+                        result.emplace_back(i);
+                    } else {
+                        break;
+                    }
+                }
+            }
+            return result;
+        } else if (levelIdx == 0) {
+            return Portions;
+        }
+        auto moveIds = GetMovePortionIds();
         for (auto&& i : Portions) {
             if (!moveIds.contains(i->GetPortionId())) {
                 result.emplace_back(i);
@@ -130,6 +167,9 @@ public:
     }
 
     std::vector<std::shared_ptr<TPortionInfo>> GetMovePortions() const {
+        if (MemoryUsage > ((ui64)1 << 30)) {
+            return {};
+        }
         auto moveIds = GetMovePortionIds();
         std::vector<std::shared_ptr<TPortionInfo>> result;
         for (auto&& i : Portions) {
@@ -211,7 +251,7 @@ public:
     }
 
     bool CanTakeMore() const {
-        return MemoryUsage < (((ui64)512) << 20);
+        return MemoryUsage < (((ui64)512) << 20) && Portions.size() < 10000;
     }
 
     TCompactionTaskData(const ui64 targetCompactionLevel)
@@ -227,6 +267,7 @@ private:
     virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& pkSchema) const = 0;
     virtual TCompactionTaskData DoGetOptimizationTask() const = 0;
     virtual std::optional<TPortionsChain> DoGetAffectedPortions(const NArrow::TReplaceKey& from, const NArrow::TReplaceKey& to) const = 0;
+    virtual ui64 DoGetAffectedPortionBytes(const NArrow::TReplaceKey& from, const NArrow::TReplaceKey& to) const = 0;
 
     virtual NJson::TJsonValue DoSerializeToJson() const {
         return NJson::JSON_MAP;
@@ -241,7 +282,7 @@ private:
 protected:
     std::shared_ptr<IPortionsLevel> NextLevel;
     TSimplePortionsGroupInfo PortionsInfo;
-    mutable std::optional<TInstant> PredOptimization;
+    mutable std::optional<TInstant> PredOptimization = TInstant::Now();
 
 public:
     bool HasData() const {
@@ -306,6 +347,10 @@ public:
         return DoGetAffectedPortions(from, to);
     }
 
+    ui64 GetAffectedPortionBytes(const NArrow::TReplaceKey& from, const NArrow::TReplaceKey& to) const {
+        return DoGetAffectedPortionBytes(from, to);
+    }
+
     void ModifyPortions(const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) {
         return DoModifyPortions(add, remove);
     }
@@ -319,6 +364,7 @@ public:
     }
 
     TCompactionTaskData GetOptimizationTask() const {
+        AFL_VERIFY(NextLevel);
         TCompactionTaskData result = DoGetOptimizationTask();
         AFL_VERIFY(!result.IsEmpty());
         return result;

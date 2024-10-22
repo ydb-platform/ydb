@@ -9,6 +9,7 @@ private:
     using TBase = IOptimizerPlanner;
     std::shared_ptr<TCounters> Counters;
     std::shared_ptr<TSimplePortionsGroupInfo> PortionsInfo = std::make_shared<TSimplePortionsGroupInfo>();
+    TInstant LastActualization = TInstant::Now();
 
     std::vector<std::shared_ptr<IPortionsLevel>> Levels;
     class TReverseSorting {
@@ -83,17 +84,12 @@ protected:
                 continue;
             }
             if (i->GetTotalBlobBytes() > 512 * 1024 && i->GetMeta().GetProduced() != NPortion::EProduced::INSERTED) {
-                bool found = false;
-                for (ui32 levelIdx = 2; levelIdx < Levels.size(); ++levelIdx) {
+                for (i32 levelIdx = Levels.size() - 1; levelIdx >= 0; --levelIdx) {
                     if (Levels[levelIdx]->CanTakePortion(i)) {
                         Levels[levelIdx]->ModifyPortions({i}, {});
                         i->MutableMeta().ResetCompactionLevel(levelIdx);
-                        found = true;
                         break;
                     }
-                }
-                if (!found) {
-                    Levels[0]->ModifyPortions({ i }, {});
                 }
             } else {
                 Levels[0]->ModifyPortions({ i }, {});
@@ -104,8 +100,13 @@ protected:
     virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override;
 
-    virtual void DoActualize(const TInstant /*currentInstant*/) override {
-//        RefreshWeights();
+    virtual void DoActualize(const TInstant currentInstant) override {
+        if (currentInstant - LastActualization > TDuration::Seconds(180)) {
+            LastActualization = currentInstant;
+        } else {
+            return;
+        }
+        RefreshWeights();
     }
 
     virtual TOptimizationPriority DoGetUsefulMetric() const override {
@@ -124,6 +125,7 @@ protected:
         for (auto&& i : Levels) {
             sb << "{" << i->GetLevelId() << ":" << i->DebugString() << "},";
         }
+        sb << "]";
         return sb;
     }
 
@@ -138,7 +140,6 @@ protected:
 
 public:
     virtual NArrow::NMerger::TIntervalPositions GetBucketPositions() const override {
-//        return NArrow::NMerger::TIntervalPositions();
         NArrow::NMerger::TIntervalPositions result = Levels.back()->GetBucketPositions(PrimaryKeysSchema);
         return result;
     }

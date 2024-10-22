@@ -12,13 +12,23 @@ NKikimr::NArrow::NMerger::TIntervalPositions TCompactionTaskData::GetCheckPositi
 }
 
 std::vector<NArrow::TReplaceKey> TCompactionTaskData::GetFinishPoints(const bool withMoved) {
+    std::vector<NArrow::TReplaceKey> points;
+    if (MemoryUsage > ((ui64)1 << 30)) {
+        for (auto&& i : Portions) {
+            if (!CurrentLevelPortionIds.contains(i->GetPortionId())) {
+                points.emplace_back(i->IndexKeyStart());
+            }
+        }
+        std::sort(points.begin(), points.end());
+        return points;
+    }
+
     THashSet<ui64> middlePortions;
     for (auto&& i : Chains) {
         for (auto&& p : i.GetPortions()) {
             middlePortions.emplace(p->GetPortionId());
         }
     }
-    std::vector<NArrow::TReplaceKey> points;
     THashSet<ui64> endPortions;
     for (auto&& i : Chains) {
         if (!i.GetNotIncludedNextPortion()) {
@@ -36,6 +46,9 @@ std::vector<NArrow::TReplaceKey> TCompactionTaskData::GetFinishPoints(const bool
         for (auto&& i : GetMovePortions()) {
             points.emplace_back(i->IndexKeyStart());
         }
+    }
+    if (StopSeparation) {
+        points.emplace_back(*StopSeparation);
     }
     std::sort(points.begin(), points.end());
     return points;

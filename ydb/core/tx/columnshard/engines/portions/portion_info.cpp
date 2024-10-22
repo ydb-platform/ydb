@@ -50,22 +50,14 @@ ui64 TPortionInfo::GetColumnBlobBytes(const std::set<ui32>& entityIds, const boo
     return sum;
 }
 
-ui64 TPortionInfo::GetColumnRawBytes(const bool validation) const {
-    ui64 sum = 0;
-    const auto aggr = [&](const TColumnRecord& r) {
-        sum += r.GetMeta().GetRawBytes();
-    };
-    AggregateIndexChunksData(aggr, Records, nullptr, validation);
-    return sum;
+ui64 TPortionInfo::GetColumnRawBytes() const {
+    AFL_VERIFY(Precalculated);
+    return PrecalculatedColumnRawBytes;
 }
 
-ui64 TPortionInfo::GetColumnBlobBytes(const bool validation) const {
-    ui64 sum = 0;
-    const auto aggr = [&](const TColumnRecord& r) {
-        sum += r.GetBlobRange().GetSize();
-    };
-    AggregateIndexChunksData(aggr, Records, nullptr, validation);
-    return sum;
+ui64 TPortionInfo::GetColumnBlobBytes() const {
+    AFL_VERIFY(Precalculated);
+    return PrecalculatedColumnBlobBytes;
 }
 
 ui64 TPortionInfo::GetIndexRawBytes(const std::set<ui32>& entityIds, const bool validation) const {
@@ -732,6 +724,20 @@ NKikimr::NOlap::NSplitter::TEntityGroups TPortionInfo::GetEntityGroupsByStorageI
         return groups;
     } else {
         return indexInfo.GetEntityGroupsByStorageId(specialTier, storages);
+    }
+}
+
+void TPortionInfo::Precalculate() {
+    AFL_VERIFY(!Precalculated);
+    Precalculated = true;
+    {
+        PrecalculatedColumnRawBytes = 0;
+        PrecalculatedColumnBlobBytes = 0;
+        const auto aggr = [&](const TColumnRecord& r) {
+            PrecalculatedColumnRawBytes += r.GetMeta().GetRawBytes();
+            PrecalculatedColumnRawBytes += r.GetMeta().GetBlobBytes();
+        };
+        AggregateIndexChunksData(aggr, Records, nullptr, true);
     }
 }
 

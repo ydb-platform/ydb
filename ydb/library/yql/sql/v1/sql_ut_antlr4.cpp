@@ -7426,9 +7426,8 @@ Y_UNIT_TEST_SUITE(ColumnFamily) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("compression_level"));
-            }
-            if (word == "compression_level") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("compression_level"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("5"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("3"));
             }
         };
 

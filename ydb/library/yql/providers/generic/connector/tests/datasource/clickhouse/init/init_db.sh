@@ -123,29 +123,27 @@ clickhouse-client -n <<-EOSQL
 EOSQL
 
 clickhouse-client -n <<-EOSQL
-    DROP TABLE IF EXISTS db.pushdown;
-    CREATE TABLE db.pushdown (
-        id Int32,
-        col_01_int32 Nullable(Int32),
-        col_02_string Nullable(String)
-    ) ENGINE = MergeTree ORDER BY id;
-    INSERT INTO db.pushdown (*) VALUES
-        (1, 10, 'a') \
-        (2, 20, 'b') \
-        (3, 30, 'c') \
-        (4, NULL, NULL);
+    DROP TABLE IF EXISTS db.counts;
+    CREATE TABLE db.counts (
+        col Float64,
+    ) ENGINE = MergeTree ORDER BY col;
+    INSERT INTO db.counts (*) VALUES
+        (3.14) \
+        (1.0) \
+        (2.718) \
+        (-0.0);
 EOSQL
-
 
 clickhouse-client -n <<-EOSQL
-    DROP TABLE IF EXISTS db.arrays;
-    CREATE TABLE db.arrays (
-        id Int32,
-        col_01_int32 Nullable(Int32),
-        col_02_array Array(DateTime)
-    ) ENGINE = MergeTree ORDER BY id;
-    INSERT INTO db.arrays (*) VALUES
-        (1, 10, []) \
-        (2, 20, ['1950-05-27 01:02:03']) \
-        (3, 30, ['1950-05-27 01:02:03', '2023-03-21 11:21:31']);
+    DROP TABLE IF EXISTS db.pushdown;
+    CREATE TABLE db.pushdown (
+        col_00_int32 Int32,
+        col_01_string Nullable(String)
+    ) ENGINE = MergeTree ORDER BY col_00_int32;
+    INSERT INTO db.pushdown (*) VALUES
+        (1, 'one') \
+        (2, 'two') \
+        (3, 'three') \
+        (4, NULL);
 EOSQL
+

@@ -291,7 +291,7 @@ class Factory:
             columns=ColumnList(
                 Column(
                     name='id',
-                    ydb_type=Type.INT32,
+                    ydb_type=makeYdbTypeFromTypeID(Type.INT32),
                     data_source_type=DataSourceType(ch=clickhouse.Int32()),
                 ),
             )
@@ -332,33 +332,20 @@ class Factory:
             columns=ColumnList(
                 Column(
                     name='col',
-                    ydb_type=Type.FLOAT,
+                    ydb_type=makeYdbTypeFromTypeID(Type.FLOAT),
                     data_source_type=DataSourceType(ch=clickhouse.Float64()),
                 ),
             )
         )
 
-        test_case_name = 'count'
+        test_case_name = 'counts'
 
         tc = TestCase(
             name_=test_case_name,
             schema=schema,
             select_what=SelectWhat(SelectWhat.Item(name='COUNT(*)', kind='expr')),
             select_where=None,
-            data_in=[
-                [
-                    3.14,
-                ],
-                [
-                    1.0,
-                ],
-                [
-                    2.718,
-                ],
-                [
-                    -0.0,
-                ],
-            ],
+            data_in=None,
             data_out_=[
                 [
                     4,
@@ -367,6 +354,7 @@ class Factory:
             protocol=EProtocol.NATIVE,
             data_source_kind=EDataSourceKind.CLICKHOUSE,
             pragmas=dict(),
+            check_output_schema=False, # because the aggregate's value has other type
         )
 
         return [tc]
@@ -375,32 +363,17 @@ class Factory:
         schema = Schema(
             columns=ColumnList(
                 Column(
-                    name='col_int32',
-                    ydb_type=Type.INT32,
+                    name='col_00_int32',
+                    ydb_type=makeYdbTypeFromTypeID(Type.INT32),
                     data_source_type=DataSourceType(ch=clickhouse.Int32()),
                 ),
                 Column(
-                    name='col_string',
-                    ydb_type=Type.UTF8,
+                    name='col_01_string',
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.STRING),
                     data_source_type=DataSourceType(ch=clickhouse.String()),
                 ),
             ),
         )
-
-        data_in = [
-            [
-                1,
-                'one',
-            ],
-            [
-                2,
-                'two',
-            ],
-            [
-                3,
-                'three',
-            ],
-        ]
 
         data_out = [
             ['one'],
@@ -412,14 +385,16 @@ class Factory:
         return [
             TestCase(
                 name_=test_case_name,
-                data_in=data_in,
+                data_in=None,
                 data_out_=data_out,
                 pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
-                select_what=SelectWhat(SelectWhat.Item(name='col_string')),
-                select_where=SelectWhere('col_int32 = 1'),
+                select_what=SelectWhat(SelectWhat.Item(name='col_01_string')),
+                select_where=SelectWhere('col_00_int32 = 1'),
                 data_source_kind=data_source_kind,
                 protocol=EProtocol.NATIVE,
                 schema=schema,
+                # TODO: implement schema checkswhen selecting only one column
+                check_output_schema=False, 
             )
         ]
 

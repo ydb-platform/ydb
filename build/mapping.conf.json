@@ -936,6 +936,11 @@
         "5647712429": "https://devtools-registry.s3.yandex.net/5647712429",
         "5690801745": "https://devtools-registry.s3.yandex.net/5690801745",
         "5731299437": "https://devtools-registry.s3.yandex.net/5731299437",
+        "7305344928": "https://devtools-registry.s3.yandex.net/7305344928",
+        "7305350444": "https://devtools-registry.s3.yandex.net/7305350444",
+        "7305345577": "https://devtools-registry.s3.yandex.net/7305345577",
+        "7305300819": "https://devtools-registry.s3.yandex.net/7305300819",
+        "7305304147": "https://devtools-registry.s3.yandex.net/7305304147",
         "6048579718": "https://devtools-registry.s3.yandex.net/6048579718",
         "2980468199": "https://devtools-registry.s3.yandex.net/2980468199",
         "5562224408": "https://devtools-registry.s3.yandex.net/5562224408"
@@ -1876,6 +1881,11 @@
         "5647712429": "ymake.exe for win32-clang-cl",
         "5690801745": "ymake.exe for win32-clang-cl",
         "5731299437": "ymake.exe for win32-clang-cl",
+        "7305344928": "ynd-bin-frozen-python3-darwin-arm64-ab0a502817597e3d47908a57acddc152998e979e",
+        "7305350444": "ynd-bin-frozen-python3-darwin-x86_64-ab0a502817597e3d47908a57acddc152998e979e",
+        "7305345577": "ynd-bin-frozen-python3-linux-aarch64-ab0a502817597e3d47908a57acddc152998e979e",
+        "7305300819": "ynd-bin-frozen-python3-linux-x86_64-ab0a502817597e3d47908a57acddc152998e979e",
+        "7305304147": "ynd-bin-frozen-python3-mingw-w64-x86_64-ab0a502817597e3d47908a57acddc152998e979e",
         "6048579718": "yt/go/ytrecipe/cmd/ytexec for linux",
         "2980468199": "ytexec for linux",
         "5562224408": "ytexec for linux"

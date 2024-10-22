@@ -7,7 +7,6 @@
 #include <library/cpp/regex/pcre/regexp.h>
 
 #include <util/folder/path.h>
-#include <util/generic/singleton.h>
 #include <util/stream/output.h>
 #include <util/system/file.h>
 

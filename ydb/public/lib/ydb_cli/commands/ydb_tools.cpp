@@ -98,7 +98,9 @@ int TCommandDump::Run(TConfig& config) {
         throw yexception() << "Incorrect consistency level. Available options: \"database\", \"table\"" << Endl;
     }
 
-    NYdb::SetVerbosity(config.IsVerbose());
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
+    log->SetFormatter(GetPrefixLogFormatter(""));
+    NYdb::NBackup::SetLog(std::move(log));
 
     try {
         TString relPath = NYdb::RelPathFromAbsolute(config.Database, Path);
@@ -200,8 +202,6 @@ void TCommandRestore::Parse(TConfig& config) {
 }
 
 int TCommandRestore::Run(TConfig& config) {
-    NYdb::SetVerbosity(config.IsVerbose());
-
     auto settings = NDump::TRestoreSettings()
         .DryRun(IsDryRun)
         .RestoreData(RestoreData)

@@ -8,6 +8,21 @@
 
 namespace NYql::NMatchRecognize {
 
+enum class EAfterMatchSkipTo {
+    NextRow,
+    PastLastRow,
+    ToFirst,
+    ToLast,
+    To
+};
+
+struct TAfterMatchSkipTo {
+    EAfterMatchSkipTo To;
+    TString Var;
+
+    [[nodiscard]] bool operator==(const TAfterMatchSkipTo&) const noexcept = default;
+};
+
 constexpr size_t MaxPatternNesting = 20; //Limit recursion for patterns
 constexpr size_t MaxPermutedItems = 6;
 

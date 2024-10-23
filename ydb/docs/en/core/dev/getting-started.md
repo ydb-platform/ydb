@@ -1,6 +1,6 @@
 # Getting started with {{ ydb-short-name }} as an Application Developer / Software Engineer
 
-First of all, you'll need to obtain access to a {{ ydb-short-name }} cluster. Follow the [quickstart instructions](../quickstart.md) to get a basic local instance. Later on, you can work with your DevOps team to [build a production-ready cluster](../devops/index.md) or leverage one of the cloud service providers that offer a managed {{ ydb-short-name }} service.
+First of all, you'll need to obtain access to a {{ ydb-short-name }} cluster. Follow the [quickstart instructions](../quickstart.md) to get a basic local instance. Later on, you can work with your DevOps team to [build a production-ready cluster](../devops/index.md) or leverage one of the cloud service providers that offer a managed {{ ydb-short-name }} service. You may also need information about the [ports](../reference/ydb-ports.md) of {{ ydb-short-name }} that are configured by default.
 
 The second step is designing a data schema for an application you will build from scratch or adapt the schema of an existing application if you're migrating from another database management system.
 

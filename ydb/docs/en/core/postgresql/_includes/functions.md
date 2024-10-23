@@ -2432,7 +2432,7 @@ Table 9.37. Geometric Type Conversion Functions
 ||box ( circle ) → box|
 Computes box inscribed within the circle.|
 ```sql
-box(circle '<(0,0),2>') → (1.414213562373095,414213562373095),(-1.414213562373095,-1.414213562373095)
+box(circle '<(0,0),2>') → (1.414213562373095,1.414213562373095),(-1.414213562373095,-1.414213562373095)
 ```||
 ||box ( point ) → box|
 Converts point to empty box.|

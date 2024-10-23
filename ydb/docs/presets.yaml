@@ -68,23 +68,20 @@ default:
 #=== YDB default settings ===#
 
   ydb-ports:
-    grpcs: 2135            #swapped
-    grpc: 2136             #swapped 
-    interconnect: 19001    #swapped
-    https: 8765            #swapped
-    tracing: 4317          #swapped
+    grpcs: 2135
+    grpc: 2136
+    interconnect: 19001
+    https: 8765
+    tracing: 4317
 
 #=== JDBC default settings ===#
 
   third-party-ports:
-    fq: 2130             #swapped
-    postgresql: 5432     #swapped
-    mysql: 3306          #swapped
-    oracle: 1521         #swapped
-    db2: 5000            #swapped
-    informix: 9088       #swapped
-    logstash: 9876       #swapped
-    kafka: 9093          #swapped
-
-  #ydb-test-domain: ydb-cluster.com
-  #ydb-disk-partlabel: ydb_disk_  
+    fq: 2130
+    postgresql: 5432
+    mysql: 3306
+    oracle: 1521
+    db2: 5000
+    informix: 9088
+    logstash: 9876
+    kafka: 9093 

@@ -431,13 +431,13 @@ Y_UNIT_TEST_SUITE(TSwitchableCache) {
 
         Touch(cache, *pages[23]);
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 50);
-        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 29);
-        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 21);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 28);
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 22);
 
         Touch(cache, *pages[7]);
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 50);
-        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 19);
-        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 31);
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 18);
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 32);
     }
 
     Y_UNIT_TEST(Switch_Erase) {
@@ -527,8 +527,8 @@ Y_UNIT_TEST_SUITE(TSwitchableCache) {
         cache.UpdateLimit(40);
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, *pages[23]), (TVector<ui32>{21, 22, 24, 25, 26, 27, 28, 29, 30, 31}));
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 40);
-        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 19); // [32 .. 39, 23]
-        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 21); // [50, 0 .. 20]
+        UNIT_ASSERT_VALUES_EQUAL(counter1->Val(), 18); // [32 .. 49]
+        UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 22); // [50, 0 .. 9, 23, 11 .. 20]
 
         cache.UpdateLimit(7);
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, *pages[7]).size(), 33);

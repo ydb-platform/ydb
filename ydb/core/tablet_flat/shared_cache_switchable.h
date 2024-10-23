@@ -81,6 +81,7 @@ class TSwitchableCache : public ICacheCache<TPage> {
 
     public:
         const ui32 Id; // in [1 .. MaxCachesCount] range
+
     private:
         const THolder<ICacheCache<TPage>> Cache;
         const TCounterPtr SizeCounter;
@@ -129,12 +130,18 @@ public:
             return Caches.back().Touch(page);
         }
 
-        TIntrusiveList<TPage> evictedList = GetCache(TPageTraits::GetCacheId(page)).Touch(page);
+        ui32 cacheId = TPageTraits::GetCacheId(page);
+        if (cacheId > 0 && cacheId != Caches.back().Id) {
+            // rotate the current page first:
+            GetCache(cacheId).Erase(page);
+        }
+        
+        TIntrusiveList<TPage> evictedList = Caches.back().Touch(page);
 
         RotatePages(evictedList);
 
         while (GetSize() > Limit && Caches.size() > 1) {
-            Append(evictedList, EvictNext());
+            evictedList.Append(EvictNext());
         }
 
         return evictedList;
@@ -210,18 +217,11 @@ private:
                 
                 // touch each page multiple times to make it warm
                 for (ui32 touchTimes = 0; touchTimes < 3; touchTimes++) {
-                    Append(evictedList, Caches.back().Touch(page));
+                    evictedList.Append(Caches.back().Touch(page));
                 }
                 
                 rotatedPagesCount++;
             }
-        }
-    }
-
-    void Append(TIntrusiveList<TPage>& left, TIntrusiveList<TPage>&& right) {
-        while (!right.Empty()) {
-            TPage* page = right.PopFront();
-            left.PushBack(page);
         }
     }
 

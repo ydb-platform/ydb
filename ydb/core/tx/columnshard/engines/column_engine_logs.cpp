@@ -299,6 +299,16 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
     return changes;
 }
 
+ui64 TColumnEngineForLogs::GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<ui64>& pathIds,
+    const std::optional<ui64> waitingPriority) noexcept {
+    auto priority = GranulesStorage->GetCompactionPriority(dataLocksManager, pathIds, waitingPriority);
+    if (!priority) {
+        return 0;
+    } else {
+        return priority->GetGeneralPriority();
+    }
+}
+
 std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
     AFL_VERIFY(dataLocksManager);
     auto granule = GranulesStorage->GetGranuleForCompaction(dataLocksManager);

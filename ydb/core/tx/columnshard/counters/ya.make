@@ -13,6 +13,7 @@ SRCS(
     req_tracer.cpp
     scan.cpp
     splitter.cpp
+    portions.cpp
 )
 
 PEERDIR(

@@ -22,6 +22,7 @@ target_link_libraries(kikimr_backup PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-bucket_quoter
+  library-cpp-logger
   cpp-regex-pcre
   cpp-string_utils-quote
   ydb-library-dynumber

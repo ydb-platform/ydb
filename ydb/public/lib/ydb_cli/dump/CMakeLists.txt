@@ -22,6 +22,7 @@ target_link_libraries(lib-ydb_cli-dump PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-bucket_quoter
+  library-cpp-logger
   cpp-string_utils-quote
   kikimr_backup
   api-protos

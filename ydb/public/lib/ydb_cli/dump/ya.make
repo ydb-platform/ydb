@@ -10,6 +10,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/bucket_quoter
+    library/cpp/logger
     library/cpp/string_utils/quote
     ydb/library/backup
     ydb/public/api/protos

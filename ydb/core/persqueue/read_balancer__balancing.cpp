@@ -484,6 +484,10 @@ bool TPartitionFamily::PossibleForBalance(TSession* session) {
 
 template<typename TCollection>
 bool TPartitionFamily::CanAttache(const TCollection& partitionsIds) {
+    if (partitionsIds.empty()) {
+        return true;
+    }
+
     if (Consumer.WithCommonSessions) {
         return true;
     }
@@ -943,15 +947,14 @@ void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext&
                     }
                 }
             }
+
+            if (!family->CanAttache(family->WantedPartitions)) {
+                targetStatus = TPartitionFamily::ETargetStatus::Destroy;
+            }
+
             if (family->Reset(targetStatus, ctx)) {
                 UnreadableFamilies[family->Id] = family;
                 FamiliesRequireBalancing.erase(family->Id);
-
-                if (special && !WithCommonSessions && !family->WantedPartitions.empty()) {
-                    if (!family->CanAttache(family->WantedPartitions)) {
-                        family->WantedPartitions.clear();
-                    }
-                }
             } else {
                 for (auto& r : roots) {
                     if (IsReadable(r)) {
@@ -1051,8 +1054,8 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
     if (partition.NeedReleaseChildren()) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                 GetPrefix() << "Attache partitions [" << JoinRange(", ", newPartitions.begin(), newPartitions.end()) << "] to " << family->DebugStr());
-        if (family->CanAttache(newPartitions)) {
-            for (auto id : newPartitions) {
+        for (auto id : newPartitions) {
+            if (family->CanAttache(std::vector{id})) {
                 auto* node = GetPartitionGraph().GetPartition(id);
                 bool allParentsMerged = true;
                 if (node->Parents.size() > 1) {
@@ -1081,10 +1084,10 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
                         family->AttachePartitions({id}, ctx);
                     }
                 }
+            } else {
+                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                        GetPrefix() << "Can't attache partition " << id << " to " << family->DebugStr());
             }
-        } else {
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                    GetPrefix() << "Can't attache partitions [" << JoinRange(", ", newPartitions.begin(), newPartitions.end()) << "] to " << family->DebugStr());
         }
     } else {
         for (auto p : newPartitions) {

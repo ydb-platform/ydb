@@ -2,13 +2,18 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/fluent_settings_helpers.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/request_settings.h>
+
+#include <library/cpp/regex/pcre/regexp.h>
 
 #include <util/generic/size_literals.h>
 
 class TLog;
 
 namespace NYdb {
+
+class TDriver;
+
 namespace NDump {
 
 extern const char SCHEME_FILE_NAME[10];
@@ -21,6 +26,34 @@ TString DataFileName(ui32 id);
 /// dump
 struct TDumpSettings: public TOperationRequestSettings<TDumpSettings> {
     using TSelf = TDumpSettings;
+
+    enum class EConsistencyLevel {
+        Table /* "table" */,
+        Database /* "database" */,
+    };
+
+    TVector<TRegExMatch> ExclusionPatterns_;
+    TSelf& ExclusionPatterns(TVector<TRegExMatch>&& value) {
+        ExclusionPatterns_ = std::move(value);
+        return *this;
+    }
+
+    FLUENT_SETTING(TString, Database);
+    FLUENT_SETTING_DEFAULT(bool, SchemaOnly, false);
+    FLUENT_SETTING_DEFAULT(EConsistencyLevel, ConsistencyLevel, EConsistencyLevel::Database);
+    FLUENT_SETTING_DEFAULT(bool, AvoidCopy, false);
+    FLUENT_SETTING_DEFAULT(bool, SavePartialResult, false);
+    FLUENT_SETTING_DEFAULT(bool, PreservePoolKinds, false);
+    FLUENT_SETTING_DEFAULT(bool, Ordered, false);
+
+    bool UseConsistentCopyTable() const {
+        switch (ConsistencyLevel_) {
+            case EConsistencyLevel::Table:
+                return false;
+            case EConsistencyLevel::Database:
+                return true;
+        }
+    }
 
 }; // TDumpSettings
 

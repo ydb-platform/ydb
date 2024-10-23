@@ -918,7 +918,7 @@ const TPath::TChecker& TPath::TChecker::IsTieringRule(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not an abstract object"
+    return Fail(status, TStringBuilder() << "path is not a tiering rule"
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 

@@ -5,6 +5,8 @@
 
 namespace NKikimr::NColumnShard::NTiers {
 
+TTieringRule::TFactory::TRegistrator<TTieringRule> TTieringRule::Registrator(NKikimrSchemeOp::EPathTypeTieringRule);
+
 NKikimr::NOlap::TTiering TTieringRule::BuildOlapTiers() const {
     AFL_VERIFY(!GetIntervals().empty());
     NOlap::TTiering result;

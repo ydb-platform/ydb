@@ -5,6 +5,11 @@
 #include <ydb/core/tx/schemeshard/operations/abstract/context.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 
+// needed for IMetadataUpdateBehaviour::TFactoryByPropertiesImpl
+template <>
+void Out<NKikimrSchemeOp::TMetadataObjectProperties::PropertiesImplCase>(
+    IOutputStream& o, NKikimrSchemeOp::TMetadataObjectProperties::PropertiesImplCase w);
+
 namespace NKikimr::NSchemeShard::NOperations {
 
 class IMetadataUpdateValidator {
@@ -12,13 +17,6 @@ protected:
     const TPath Parent;
     const TString Name;
     const TOperationContext& Ctx;
-
-protected:
-    IMetadataUpdateValidator(const TPath& parent, const TString& objectName, const TOperationContext& ctx)
-        : Parent(parent)
-        , Name(objectName)
-        , Ctx(ctx) {
-    }
 
 public:
     using TPtr = std::shared_ptr<IMetadataUpdateValidator>;
@@ -33,6 +31,12 @@ public:
     virtual TSchemeConclusionStatus ValidateDrop(const IMetadataObjectProperties::TPtr object) const = 0;
 
     virtual ~IMetadataUpdateValidator() = default;
+
+    IMetadataUpdateValidator(const TPath& parent, const TString& objectName, const TOperationContext& ctx)
+        : Parent(parent)
+        , Name(objectName)
+        , Ctx(ctx) {
+    }
 };
 
 class IMetadataUpdateBehaviour {
@@ -43,6 +47,7 @@ public:
 
     virtual NKikimrSchemeOp::TMetadataObjectProperties::PropertiesImplCase GetPropertiesImplCase() const = 0;
     virtual NKikimrSchemeOp::EPathType GetObjectPathType() const = 0;
+    virtual ESimpleCounters GetCounterType() const = 0;
 
     virtual IMetadataUpdateValidator::TPtr MakeValidator(const TPath& parent, const TString& objectName, const TOperationContext& ctx) = 0;
 

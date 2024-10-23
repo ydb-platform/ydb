@@ -17,19 +17,22 @@ public:
 
 class TTieringRuleUpdateBehaviour final: public NSchemeShard::NOperations::IMetadataUpdateBehaviour {
 private:
-    inline static const NKikimrSchemeOp::EPathType PathType = NKikimrSchemeOp::EPathTypeTieringRule;
-    inline static const NKikimrSchemeOp::TMetadataObjectProperties::PropertiesImplCase PropertiesImplCase =
+    inline static constexpr NKikimrSchemeOp::EPathType PathType = NKikimrSchemeOp::EPathTypeTieringRule;
+    inline static constexpr NKikimrSchemeOp::TMetadataObjectProperties::PropertiesImplCase PropertiesImplCase =
         NKikimrSchemeOp::TMetadataObjectProperties::PropertiesImplCase::kTieringRule;
 
-public:
-    static TFactoryByPropertiesImpl::TRegistrator<TTieringRuleUpdateBehaviour> RegistratorByPropertiesImpl;
-    static TFactoryByPath::TRegistrator<TTieringRuleUpdateBehaviour> RegistratorByPath;
+    inline static const TFactoryByPropertiesImpl::TRegistrator<TTieringRuleUpdateBehaviour> RegistratorByPropertiesImpl = PropertiesImplCase;
+    inline static const TFactoryByPath::TRegistrator<TTieringRuleUpdateBehaviour> RegistratorByPath = PathType;
 
+public:
     NKikimrSchemeOp::TMetadataObjectProperties::PropertiesImplCase GetPropertiesImplCase() const {
         return PropertiesImplCase;
     }
     NKikimrSchemeOp::EPathType GetObjectPathType() const {
         return PathType;
+    }
+    NSchemeShard::ESimpleCounters GetCounterType() const {
+        return NSchemeShard::COUNTER_TIERING_RULE_COUNT;
     }
 
     TTieringRuleValidator::IMetadataUpdateValidator::TPtr MakeValidator(

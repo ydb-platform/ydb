@@ -222,6 +222,7 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
         }
     }
 
+    // test the YQL pipeline from the moment of the alter table AST node creation to the TKiAlterTable TExprNode
     Y_UNIT_TEST(AlterTableAddIndexWithTableSettings) {
         NYql::TIssues issues;
         auto parserContext = CreateDefaultParserContext(issues);
@@ -276,31 +277,32 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
 
         auto alterActions = TExprNode::TPtr(writeSettings->AlterActions.MutableRaw());
         TString tableSettingsExpr;
-        VisitExpr(alterActions, [&tableSettingsExpr](const TExprNode::TPtr& node) {
+        VisitExpr(alterActions, [&](const TExprNode::TPtr& node) {
             if (node->IsList()
                 && node->ChildrenSize() == 2
                 && node->Child(0)->IsAtom("tableSettings")
             ) {
-                tableSettingsExpr = node->Child(1)->Dump();
+                tableSettingsExpr = NCommon::SerializeExpr(exprContext, *node->Child(1));
                 return false;
             }
             return true;
         });
-        UNIT_ASSERT_STRINGS_EQUAL(
-            Strip(Collapse(tableSettingsExpr)),
-            Strip(Collapse(TString(
-            R"(
-                #37 [List]
-                 #32 [List]
-                  #29 [Atom] <minPartitions>
-                  #31 [Callable] <Int32>
-                   #30 [Atom] <12345>
-                 #36 [List]
-                  #33 [Atom] <maxPartitions>
-                  #35 [Callable] <Int32>
-                   #34 [Atom] <54321>
-            )"
-        ))));
+        UNIT_ASSERT_STRING_CONTAINS_C(
+            tableSettingsExpr, R"('('('minPartitions (Int32 '"12345")) '('maxPartitions (Int32 '"54321"))))",
+            NCommon::SerializeExpr(exprContext, *alterActions)
+        );
+
+        // the main result of the test is the TKiAlterTable TExprNode built from the initial alter table AST node
+        UNIT_ASSERT_C(NNodes::Build<NNodes::TKiAlterTable>(exprContext, alterTableExpr->Pos())
+            .World(alterTableExpr->Child(0))
+            .DataSink(alterTableExpr->Child(1))
+            .Table().Build(key.GetTablePath())
+            .Actions(writeSettings->AlterActions.Cast())
+            .TableType().Build("table")
+            .Done()
+            .Ptr(),
+            alterTableExpr->Dump()
+        );
     }
 }
 

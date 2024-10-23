@@ -328,25 +328,6 @@ public:
         return ActiveStates.size();
     }
 
-    void Save(TMrOutputSerializer& serializer) const {
-        // TransitionGraph is not saved/loaded, passed in constructor.
-        serializer.Write(ActiveStates.size());
-        for (const auto& state : ActiveStates) {
-            state.Save(serializer);
-        }
-        serializer.Write(EpsilonTransitionsLastRow);
-    }
-
-    void Load(TMrInputSerializer& serializer) {
-        auto stateSize = serializer.Read<ui64>();
-        for (size_t i = 0; i < stateSize; ++i) {
-            TState state;
-            state.Load(serializer);
-            ActiveStates.emplace(state);
-        }
-        serializer.Read(EpsilonTransitionsLastRow);
-    }
-
     void Clear() {
         ActiveStates.clear();
     }

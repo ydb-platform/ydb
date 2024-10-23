@@ -123,57 +123,7 @@ public:
     , RowPatternConfiguration(TNfaTransitionGraphBuilder::Create(parameters.Pattern, parameters.VarNamesLookup))
     , Cache(cache)
     , Terminating(false)
-    , SerializerContext(ctx, rowType, rowPacker)
-    , Ctx(ctx)
     {}
-
-    NUdf::TUnboxedValue Save() const override {
-        TMrOutputSerializer out(SerializerContext, EMkqlStateType::SIMPLE_BLOB, StateVersion, Ctx);
-        out.Write(CurPartitionPackedKey);
-        bool isValid = static_cast<bool>(PartitionHandler);
-        out.Write(isValid);
-        if (isValid) {
-            PartitionHandler->Save(out);
-        }
-        isValid = static_cast<bool>(DelayedRow);
-        out.Write(isValid);
-        if (isValid) {
-            out.Write(DelayedRow);
-        }
-        RowPatternConfiguration->Save(out);
-        return out.MakeState();
-    }
-
-    bool Load2(const NUdf::TUnboxedValue& state) override {
-        TMrInputSerializer in(SerializerContext, state);
-
-        const auto loadStateVersion = in.GetStateVersion();
-        if (loadStateVersion != StateVersion) {
-            THROW yexception() << "Invalid state version " << loadStateVersion;
-        }
-
-        in.Read(CurPartitionPackedKey);
-        bool validPartitionHandler = in.Read<bool>();
-        if (validPartitionHandler) {
-            NUdf::TUnboxedValue key = PartitionKeyPacker.Unpack(CurPartitionPackedKey, SerializerContext.Ctx.HolderFactory);
-            PartitionHandler.reset(new TStreamingMatchRecognize(
-                std::move(key),
-                Parameters,
-                RowPatternConfiguration,
-                Cache
-            ));
-            PartitionHandler->Load(in);
-        }
-        bool validDelayedRow = in.Read<bool>();
-        if (validDelayedRow) {
-            in(DelayedRow);
-        }
-        auto restoredRowPatternConfiguration = std::make_shared<TNfaTransitionGraph>(); 
-        restoredRowPatternConfiguration->Load(in);
-        MKQL_ENSURE(*restoredRowPatternConfiguration == *RowPatternConfiguration, "Restored and current RowPatternConfiguration is different");
-        MKQL_ENSURE(in.Empty(), "State is corrupted");
-        return true;
-    }
 
     bool HasListItems() const override {
         return false;
@@ -576,7 +526,6 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
             , LocateNode(ctx.NodeLocator, *partitionKeySelector.GetNode())
             , partitionKeySelector.GetStaticType()
             , std::move(parameters)
-            , rowType
         );
     }
 }

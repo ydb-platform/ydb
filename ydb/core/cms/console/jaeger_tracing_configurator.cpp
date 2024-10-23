@@ -176,6 +176,13 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
             continue;
         }
 
+        ui64 level = throttlingRule.HasLevel() ? TComponentTracingLevels::ProductionVerbose : throttlingRule.GetLevel();
+        if (level > 15) {
+            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "external tracing level exceeds maximum allowed value (" << level
+                       << " provided, maximum is 15). Lowering the level");
+            level = 15;
+        }
+
         if (!throttlingRule.HasMaxTracesPerMinute()) {
             ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "missing required field max_traces_per_minute in rule "
                        << throttlingRule.ShortDebugString() << ". Skipping the rule");

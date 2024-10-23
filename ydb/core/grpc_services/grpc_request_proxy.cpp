@@ -447,11 +447,8 @@ void TGRpcRequestProxyImpl::MaybeStartTracing(IRequestProxyCtx& ctx) {
         return;
     }
 
-    NWilson::TTraceId traceId;
-    if (const auto otelHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER)) {
-        traceId = NWilson::TTraceId::FromTraceparentHeader(otelHeader.GetRef(), TComponentTracingLevels::ProductionVerbose);
-    }
-    TracingControl->HandleTracing(traceId, ctx.GetRequestDiscriminator());
+    TMaybe<TString> traceparentHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER);
+    NWilson::TTraceId traceId = TracingControl->HandleTracing(traceId, ctx.GetRequestDiscriminator(), traceparentHeader);
     if (traceId) {
         NWilson::TSpan grpcRequestProxySpan(TWilsonGrpc::RequestProxy, std::move(traceId), "GrpcRequestProxy");
         if (auto database = ctx.GetDatabaseName()) {

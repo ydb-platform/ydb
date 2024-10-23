@@ -526,7 +526,7 @@ void TPushStreamWorker::FeedToConsumer() {
     }
 }
 
-NYql::NUdf::IBoxedValue* TPushStreamWorker::GetPushStream() {
+NYql::NUdf::IBoxedValue* TPushStreamWorker::GetPushStream() const {
     auto& ctx = Graph_.ComputationGraph_->GetContext();
     NUdf::TUnboxedValue pushStream = SelfNode_->GetValue(ctx);
 

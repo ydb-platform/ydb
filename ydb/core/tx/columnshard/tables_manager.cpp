@@ -57,6 +57,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
         while (!rowset.EndOfSet()) {
             TTableInfo table;
             if (!table.InitFromDB(rowset)) {
+                timer.AddLoadingFail();
                 return false;
             }
             if (table.IsDropped()) {

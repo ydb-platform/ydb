@@ -17,6 +17,12 @@ struct ICacheCache {
     // WARN: do not evict items
     virtual void UpdateLimit(ui64 limit) = 0;
 
+    virtual ui64 GetSize() const = 0;
+
+    virtual TString Dump() const {
+        return {};
+    }
+
     virtual ~ICacheCache() = default;
 };
 

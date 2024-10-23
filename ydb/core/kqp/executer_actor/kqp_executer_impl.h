@@ -298,10 +298,9 @@ protected:
             batch.Proto = std::move(*computeData.Proto.MutableChannelData()->MutableData());
             batch.Payload = std::move(computeData.Payload);
 
-            TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
-            auto resultSet = protoBuilder.BuildYdbResultSet(std::move(batches), txResult.MkqlItemType, txResult.ColumnOrder, txResult.ColumnHints);
-
             if (!trailingResults) {
+                TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
+                auto resultSet = protoBuilder.BuildYdbResultSet(std::move(batches), txResult.MkqlItemType, txResult.ColumnOrder, txResult.ColumnHints);
                 auto streamEv = MakeHolder<TEvKqpExecuter::TEvStreamData>();
                 streamEv->Record.SetSeqNo(computeData.Proto.GetSeqNo());
                 streamEv->Record.SetQueryResultIndex(*txResult.QueryResultIndex + StatementResultIndex);
@@ -319,10 +318,11 @@ protected:
                 ackEv->Record.SetChannelId(channel.Id);
                 ackEv->Record.SetFreeSpace(50_MB);
                 this->Send(channelComputeActorId, ackEv.Release(), /* TODO: undelivery */ 0, /* cookie */ channel.Id);
-                txResult.TrailingResult.Swap(&resultSet);
+                ui64 rowCount = batch.RowCount();
+                ResponseEv->TakeResult(channel.DstInputIndex, std::move(batch));
                 txResult.HasTrailingResult = true;
                 LOG_D("staging TEvStreamData to " << Target << ", seqNo: " << computeData.Proto.GetSeqNo()
-                    << ", nRows: " << txResult.TrailingResult.rows().size());
+                    << ", nRows: " << rowCount);
             }
 
             return;
@@ -828,7 +828,7 @@ protected:
         std::map<ui32, TStageScheduleInfo> result;
         if (!resourceSnapshot.empty()) // can't schedule w/o node count
         {
-            // collect costs and schedule stages with external sources only 
+            // collect costs and schedule stages with external sources only
             double totalCost = 0.0;
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 auto& stage = tx.Body->GetStages(stageIdx);
@@ -843,11 +843,11 @@ protected:
             if (!result.empty()) {
                 // allow use 2/3 of threads in single stage
                 ui32 maxStageTaskCount = (TStagePredictor::GetUsableThreads() * 2 + 2) / 3;
-                // total limit per mode is x2 
+                // total limit per mode is x2
                 ui32 maxTotalTaskCount = maxStageTaskCount * 2;
                 for (auto& [_, stageInfo] : result) {
                     // schedule tasks evenly between nodes
-                    stageInfo.TaskCount = 
+                    stageInfo.TaskCount =
                         std::max<ui32>(
                             std::min(static_cast<ui32>(maxTotalTaskCount * stageInfo.StageCost / totalCost), maxStageTaskCount)
                             , 1
@@ -1918,7 +1918,7 @@ protected:
             if (Stats->CollectStatsByLongTasks) {
                 const auto& txPlansWithStats = response.GetResult().GetStats().GetTxPlansWithStats();
                 if (!txPlansWithStats.empty()) {
-                    LOG_N("Full stats: " << response.GetResult().GetStats());
+                    LOG_I("Full stats: " << response.GetResult().GetStats());
                 }
             }
         }

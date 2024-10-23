@@ -150,7 +150,7 @@ public:
         return std::make_pair(Database, PoolId);
     }
 
-    TString ToString() const {
+    TString ToString(bool verbose = false) const {
         auto res = TStringBuilder() << "TxResourcesInfo { "
             << "TxId: " << TxId
             << ", Database: " << Database;
@@ -168,10 +168,10 @@ public:
             << ", started at: " << CreatedAt
             << " }" << Endl;
 
-        if (TxMaxAllocationBacktrace.load()) {
+        if (verbose && TxMaxAllocationBacktrace.load()) {
             res << "TxMaxAllocationBacktrace:" << Endl << TxMaxAllocationBacktrace.load()->PrintToString();
         }
-        if (TxFailedAllocationBacktrace.load()) {
+        if (verbose && TxFailedAllocationBacktrace.load()) {
             res << "TxFailedAllocationBacktrace:" << Endl << TxFailedAllocationBacktrace.load()->PrintToString();
         }
 

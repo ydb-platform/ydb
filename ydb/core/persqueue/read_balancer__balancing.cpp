@@ -261,7 +261,7 @@ bool TPartitionFamily::Reset(ETargetStatus targetStatus, const TActorContext& ct
                 return true;
             }
             auto* targetFamily = it->second.get();
-            if (targetFamily->CanAttache(Partitions) && targetFamily->CanAttache(WantedPartitions)) {
+            if (targetFamily->CanAttach(Partitions) && targetFamily->CanAttach(WantedPartitions)) {
                 Consumer.MergeFamilies(targetFamily, this, ctx);
             } else {
                 WantedPartitions.clear();
@@ -483,7 +483,11 @@ bool TPartitionFamily::PossibleForBalance(TSession* session) {
 }
 
 template<typename TCollection>
-bool TPartitionFamily::CanAttache(const TCollection& partitionsIds) {
+bool TPartitionFamily::CanAttach(const TCollection& partitionsIds) {
+    if (partitionsIds.empty()) {
+        return true;
+    }
+
     if (Consumer.WithCommonSessions) {
         return true;
     }
@@ -493,8 +497,8 @@ bool TPartitionFamily::CanAttache(const TCollection& partitionsIds) {
     });
 }
 
-template bool TPartitionFamily::CanAttache(const std::unordered_set<ui32>& partitionsIds);
-template bool TPartitionFamily::CanAttache(const std::vector<ui32>& partitionsIds);
+template bool TPartitionFamily::CanAttach(const std::unordered_set<ui32>& partitionsIds);
+template bool TPartitionFamily::CanAttach(const std::vector<ui32>& partitionsIds);
 
 void TPartitionFamily::ClassifyPartitions() {
     auto [activePartitionCount, inactivePartitionCount] = ClassifyPartitions(Partitions);
@@ -943,12 +947,17 @@ void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext&
                     }
                 }
             }
+
+            if (!family->CanAttach(family->WantedPartitions)) {
+                targetStatus = TPartitionFamily::ETargetStatus::Destroy;
+            }
+
             if (family->Reset(targetStatus, ctx)) {
                 UnreadableFamilies[family->Id] = family;
                 FamiliesRequireBalancing.erase(family->Id);
 
                 if (special && !WithCommonSessions && !family->WantedPartitions.empty()) {
-                    if (!family->CanAttache(family->WantedPartitions)) {
+                    if (!family->CanAttach(family->WantedPartitions)) {
                         family->WantedPartitions.clear();
                     }
                 }
@@ -1051,8 +1060,8 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
     if (partition.NeedReleaseChildren()) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                 GetPrefix() << "Attache partitions [" << JoinRange(", ", newPartitions.begin(), newPartitions.end()) << "] to " << family->DebugStr());
-        if (family->CanAttache(newPartitions)) {
-            for (auto id : newPartitions) {
+        for (auto id : newPartitions) {
+            if (family->CanAttach(std::vector{id})) {
                 auto* node = GetPartitionGraph().GetPartition(id);
                 bool allParentsMerged = true;
                 if (node->Parents.size() > 1) {
@@ -1081,10 +1090,10 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
                         family->AttachePartitions({id}, ctx);
                     }
                 }
+            } else {
+                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                        GetPrefix() << "Can't attache partition " << id << " to " << family->DebugStr());
             }
-        } else {
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                    GetPrefix() << "Can't attache partitions [" << JoinRange(", ", newPartitions.begin(), newPartitions.end()) << "] to " << family->DebugStr());
         }
     } else {
         for (auto p : newPartitions) {

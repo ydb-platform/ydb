@@ -14,5 +14,5 @@ message TSharedCacheConfig {
     optional uint32 ActivePagesReservationPercent = 4 [default = 50];
     reserved 5;
     optional TReplacementPolicy ReplacementPolicy = 6 [default = ThreeLeveledLRU];
-    optional uint32 ReplacementPolicySwitchUniformDelaySeconds = 7 [default = 3600];
+    reserved 7;
 }

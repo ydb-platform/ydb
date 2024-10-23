@@ -225,7 +225,11 @@ public:
         GhostQueue.UpdateLimit(limit);
     }
 
-    TString Dump() const {
+    ui64 GetSize() const override {
+        return SmallQueue.Size + MainQueue.Size;
+    }
+
+    TString Dump() const override {
         TStringBuilder result;
 
         auto dump = [&](const TQueue& queue) {

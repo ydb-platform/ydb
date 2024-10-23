@@ -10,6 +10,8 @@ struct TActorFactory : public IActorFactory {
 
     NActors::TActorId RegisterTopicSession(
         const TString& topicPath,
+        const TString& endpoint,
+        const TString& database,
         const NConfig::TRowDispatcherConfig& config,
         NActors::TActorId rowDispatcherActorId,
         ui32 partitionId,
@@ -20,6 +22,8 @@ struct TActorFactory : public IActorFactory {
 
         auto actorPtr = NFq::NewTopicSession(
             topicPath,
+            endpoint,
+            database,
             config,
             rowDispatcherActorId,
             partitionId,

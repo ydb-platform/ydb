@@ -7,7 +7,7 @@ TEST_SRCS(
     test_recompiles_requests.py
 )
 
-IF (SANITIZER_TYPE == "thread")
+IF (SANITIZER_TYPE)
     TIMEOUT(2400)
     SIZE(LARGE)
     TAG(ya:fat)

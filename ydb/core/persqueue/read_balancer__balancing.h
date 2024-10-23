@@ -128,7 +128,7 @@ struct TPartitionFamily {
 
     bool PossibleForBalance(TSession* session);
     template<typename TCollection>
-    bool CanAttache(const TCollection& partitionsIds);
+    bool CanAttach(const TCollection& partitionsIds);
 
     TString DebugStr() const;
 

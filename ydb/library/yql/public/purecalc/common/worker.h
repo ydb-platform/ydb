@@ -164,6 +164,7 @@ namespace NYql {
 
         private:
             void FeedToConsumer();
+            NYql::NUdf::IBoxedValue* GetPushStream();
 
         public:
             void SetConsumer(THolder<IConsumer<const NKikimr::NUdf::TUnboxedValue*>>) override;

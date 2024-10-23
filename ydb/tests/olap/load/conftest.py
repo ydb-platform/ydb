@@ -71,6 +71,10 @@ class LoadSuiteBase:
             result = stats.get(field)
             return float(result) / 1e3 if result is not None else None
 
+        def _duration_text(duration: float | int):
+            s = f'{int(duration)}s ' if duration >= 1 else ''
+            return f'{s}{int(duration * 1000) % 1000}ms'
+
         def _attach_plans(plan: YdbCliHelper.QueryPlan) -> None:
             if plan.plan is not None:
                 allure.attach(json.dumps(plan.plan), 'Plan json', attachment_type=allure.attachment_type.JSON)
@@ -95,10 +99,15 @@ class LoadSuiteBase:
                 _attach_plans(result.explain_plan)
 
         if result.plans is not None:
-            for i in range(self._get_iterations(query_num)):
+            for i in range(iterations):
+                s = allure.step(f'Iteration {i}')
+                if i in result.time_by_iter:
+                    s.params['duration'] = _duration_text(result.time_by_iter[i])
                 try:
-                    with allure.step(f'Iteration {i}'):
+                    with s:
                         _attach_plans(result.plans[i])
+                        if i in result.time_by_iter:
+                            allure.dynamic.parameter('duration', _duration_text(result.time_by_iter[i]))
                         if i in result.errors_by_iter:
                             pytest.fail(result.errors_by_iter[i])
                 except BaseException:
@@ -120,9 +129,7 @@ class LoadSuiteBase:
             allure.attach(result.stderr, 'Stderr', attachment_type=allure.attachment_type.TEXT)
         for p in ['Mean']:
             if p in stats:
-                value = int(stats[p])
-                s = f'{int(value / 1000)}s ' if value >= 1000 else ''
-                allure.dynamic.parameter(p, f'{s}{value % 1000}ms')
+                allure.dynamic.parameter(p, _duration_text(stats[p] / 1000.))
         error_message = ''
         success = True
         if not result.success:
@@ -191,4 +198,4 @@ class LoadSuiteBase:
             check_canonical=self.check_canonical
         )
         allure_test_description(self.suite, self._test_name(query_num), refference_set=self.refference, start_time=start_time, end_time=time())
-        self.process_query_result(result, query_num, self.iterations, True)
+        self.process_query_result(result, query_num, self._get_iterations(query_num), True)

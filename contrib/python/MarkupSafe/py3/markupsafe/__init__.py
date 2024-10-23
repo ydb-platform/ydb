@@ -34,7 +34,9 @@ def escape(s: t.Any, /) -> Markup:
     """
     # If the object is already a plain string, skip __html__ check and string
     # conversion. This is the most common use case.
-    if s.__class__ is str:
+    # Use type(s) instead of s.__class__ because a proxy object may be reporting
+    # the __class__ of the proxied value.
+    if type(s) is str:
         return Markup(_escape_inner(s))
 
     if hasattr(s, "__html__"):

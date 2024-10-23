@@ -160,11 +160,11 @@ escape_unicode(PyObject *self, PyObject *s)
 
 	switch (PyUnicode_KIND(s)) {
 	case PyUnicode_1BYTE_KIND:
-		return escape_unicode_kind1(s);
+		return escape_unicode_kind1((PyUnicodeObject*) s);
 	case PyUnicode_2BYTE_KIND:
-		return escape_unicode_kind2(s);
+		return escape_unicode_kind2((PyUnicodeObject*) s);
 	case PyUnicode_4BYTE_KIND:
-		return escape_unicode_kind4(s);
+		return escape_unicode_kind4((PyUnicodeObject*) s);
 	}
 	assert(0);  /* shouldn't happen */
 	return NULL;

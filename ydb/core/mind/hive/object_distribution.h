@@ -127,18 +127,19 @@ struct TObjectDistributions {
     struct TObjectToBalance {
         TFullObjectId ObjectId;
         std::vector<TNodeId> Nodes;
+        TSubDomainKey SubDomain;
 
-        TObjectToBalance(TFullObjectId objectId) : ObjectId(objectId) {}
+        TObjectToBalance(const TFullObjectId& object, const TSubDomainKey& subDomain) : ObjectId(object), SubDomain(subDomain) {}
     };
 
     TObjectToBalance GetObjectToBalance() {
         Y_DEBUG_ABORT_UNLESS(!SortedDistributions.empty());
         if (SortedDistributions.empty()) {
-            return TObjectToBalance(TFullObjectId());
+            return TObjectToBalance({}, {});
         }
         const auto& dist = *SortedDistributions.rbegin();
         i64 maxCnt = dist.SortedDistribution.rbegin()->Count;
-        TObjectToBalance result(dist.Id);
+        TObjectToBalance result(dist.Id, dist.NodeFilter.ObjectDomain);
         for (const auto& [node, cnt] : dist.Distribution) {
             if (cnt == maxCnt) {
                 result.Nodes.push_back(node);

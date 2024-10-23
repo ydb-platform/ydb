@@ -79,15 +79,17 @@ enum class EFollowerStrategy : ui32 {
 
 TString EFollowerStrategyName(EFollowerStrategy value);
 
+// Note: the order in enum is used for priority
+// Values are not required to be stable between versions
 enum class EBalancerType {
     Manual,
+    Emergency,
+    SpreadNeighbours,
     Scatter,
     ScatterCounter,
     ScatterCPU,
     ScatterMemory,
     ScatterNetwork,
-    Emergency,
-    SpreadNeighbours,
     Storage,
 
     Last = Storage,
@@ -295,9 +297,10 @@ struct TBalancerSettings {
     int MaxMovements = 0;
     bool RecheckOnFinish = false;
     ui64 MaxInFlight = 1;
-    const std::vector<TNodeId> FilterNodeIds = {};
+    std::vector<TNodeId> FilterNodeIds = {};
     EResourceToBalance ResourceToBalance = EResourceToBalance::ComputeResources;
     std::optional<TFullObjectId> FilterObjectId;
+    TSubDomainKey FilterSubDomain;
 };
 
 struct TStorageBalancerSettings {

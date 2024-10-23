@@ -37,7 +37,7 @@ std::shared_ptr<arrow::RecordBatch> TConstructor::DoConstruct(
     const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
     auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", externalInfo.GetColumnType()) }));
     if (columnData->GetType() == IChunkedArray::EType::Array) {
-        const auto* arr = std::static_cast<const TTrivialArray*>(columnData.get());
+        const auto* arr = static_cast<const TTrivialArray*>(columnData.get());
         return arrow::RecordBatch::Make(schema, columnData->GetRecordsCount(), { arr->GetArray() });
     } else {
         auto chunked = columnData->GetChunkedArray();

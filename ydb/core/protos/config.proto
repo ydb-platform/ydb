@@ -592,6 +592,11 @@ message TConveyorConfig {
     optional double WorkersCountDouble = 5;
 }
 
+message TPrioritiesQueueConfig {
+    optional bool Enabled = 1 [default = true];
+    optional uint32 Limit = 2 [default = 32];
+}
+
 message TLimiterConfig {
     optional bool Enabled = 1 [default = true];
     optional uint64 Limit = 2;
@@ -2003,9 +2008,10 @@ message TAppConfig {
     optional TLimiterConfig CompDiskLimiterConfig = 79;
     optional TMetadataCacheConfig MetadataCacheConfig = 80;
     //optional TMemoryControllerConfig MemoryControllerConfig = 81; NB. exist in main
-	optional TGroupedMemoryLimiterConfig GroupedMemoryLimiterConfig = 82;
+    optional TGroupedMemoryLimiterConfig GroupedMemoryLimiterConfig = 82;
     optional NKikimrReplication.TReplicationDefaults ReplicationConfig = 83;
     optional TShutdownConfig ShutdownConfig = 84;
+    optional TPrioritiesQueueConfig CompPrioritiesConfig = 85;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

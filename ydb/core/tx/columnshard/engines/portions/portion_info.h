@@ -61,6 +61,12 @@ public:
         Optimized = 1 /* "optimized" */
     };
 private:
+    ui64 PrecalculatedColumnRawBytes = 0;
+    ui64 PrecalculatedColumnBlobBytes = 0;
+    bool Precalculated = false;
+
+    void Precalculate();
+
     friend class TPortionInfoConstructor;
     TPortionInfo(TPortionMeta&& meta)
         : Meta(std::move(meta)) {
@@ -127,6 +133,10 @@ private:
         }
     }
 public:
+    ui32 GetCompactionLevel() const {
+        return GetMeta().GetCompactionLevel();
+    }
+
     ui64 GetMinMemoryForReadColumns(const std::optional<std::set<ui32>>& columnIds) const;
 
     bool NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) const;
@@ -593,10 +603,10 @@ public:
     }
 
     ui64 GetColumnRawBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
-    ui64 GetColumnRawBytes(const bool validation = true) const;
+    ui64 GetColumnRawBytes() const;
 
     ui64 GetColumnBlobBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
-    ui64 GetColumnBlobBytes(const bool validation = true) const;
+    ui64 GetColumnBlobBytes() const;
 
     ui64 GetTotalBlobBytes() const noexcept {
         return GetIndexBlobBytes() + GetColumnBlobBytes();
@@ -656,7 +666,7 @@ public:
             return DefaultRowsCount && !Data;
         }
 
-        std::shared_ptr<NArrow::NAccessor::IChunkedArray> BuildRecordBatch(const TColumnLoader& loader) const;
+        TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> BuildRecordBatch(const TColumnLoader& loader) const;
         NArrow::NAccessor::TDeserializeChunkedArray::TChunk BuildDeserializeChunk(const std::shared_ptr<TColumnLoader>& loader) const;
     };
 
@@ -684,7 +694,7 @@ public:
         }
 
         std::shared_ptr<NArrow::NAccessor::TDeserializeChunkedArray> AssembleForSeqAccess() const;
-        std::shared_ptr<NArrow::NAccessor::IChunkedArray> AssembleAccessor() const;
+        TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> AssembleAccessor() const;
     };
 
     class TPreparedBatchData {
@@ -743,7 +753,7 @@ public:
             , RowsCount(rowsCount) {
         }
 
-        std::shared_ptr<NArrow::TGeneralContainer> AssembleToGeneralContainer(const std::set<ui32>& sequentialColumnIds) const;
+        TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> AssembleToGeneralContainer(const std::set<ui32>& sequentialColumnIds) const;
     };
 
     class TColumnAssemblingInfo {

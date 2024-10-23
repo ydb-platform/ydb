@@ -23,6 +23,7 @@
 #include "data_sharing/common/transactions/tx_extension.h"
 
 #include "engines/changes/indexation.h"
+#include "engines/changes/general_compaction.h"
 #include "engines/changes/cleanup_portions.h"
 #include "engines/changes/cleanup_tables.h"
 #include "engines/changes/ttl.h"
@@ -42,6 +43,9 @@
 #include <ydb/services/metadata/service.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/priorities/usage/abstract.h>
+#include <ydb/core/tx/priorities/usage/events.h>
+#include <ydb/core/tx/priorities/usage/service.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 
 namespace NKikimr::NColumnShard {
@@ -511,7 +515,7 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     SharingSessionsManager->Start(*this);
 
     SetupIndexation();
-    SetupCompaction();
+    SetupCompaction({});
     SetupCleanupPortions();
     SetupCleanupTables();
     SetupTtl();
@@ -705,32 +709,69 @@ void TColumnShard::SetupIndexation() {
     }
 }
 
-void TColumnShard::SetupCompaction() {
-    if (!AppDataVerified().ColumnShardConfig.GetCompactionEnabled() || !NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::Compaction)) {
+namespace {
+class TCompactionAllocated: public NPrioritiesQueue::IRequest {
+private:
+    const NActors::TActorId TabletActorId;
+    virtual void DoOnAllocated(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard) override {
+        NActors::TActorContext::AsActorContext().Send(TabletActorId, new TEvPrivate::TEvStartCompaction(guard));
+    }
+
+public:
+    TCompactionAllocated(const NActors::TActorId& tabletActorId)
+        : TabletActorId(tabletActorId)
+    {
+
+    }
+};
+}   // namespace
+
+void TColumnShard::SetupCompaction(const std::set<ui64>& pathIds) {
+    if (!AppDataVerified().ColumnShardConfig.GetCompactionEnabled() ||
+        !NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::Compaction)) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_compaction")("reason", "disabled");
         return;
     }
-    Counters.GetCSCounters().OnSetupCompaction();
 
     BackgroundController.CheckDeadlines();
-    while (BackgroundController.GetCompactionsCount() < TSettings::MAX_ACTIVE_COMPACTIONS) {
-        auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(DataLocksManager);
-        if (!indexChanges) {
-            LOG_S_DEBUG("Compaction not started: cannot prepare compaction at tablet " << TabletID());
-            break;
-        }
-
-        indexChanges->Start(*this);
-
-        auto actualIndexInfo = std::make_shared<NOlap::TVersionedIndex>(TablesManager.GetPrimaryIndex()->GetVersionedIndex());
-        auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(actualIndexInfo, indexChanges, Settings.CacheDataAfterCompaction);
-        const TString externalTaskId = indexChanges->GetTaskIdentifier();
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "compaction")("external_task_id", externalTaskId);
-
-        NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
-            ResourceSubscribeActor, std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(
-                std::make_shared<TCompactChangesReadTask>(std::move(ev), SelfId(), TabletID(), Counters.GetCompactionCounters(), GetLastCompletedTx()), 0, indexChanges->CalcMemoryForUsage(), externalTaskId, CompactTaskSubscription));
+    if (BackgroundController.GetCompactionsCount()) {
+        return;
     }
+    const ui64 priority = TablesManager.MutablePrimaryIndex().GetCompactionPriority(DataLocksManager, pathIds, BackgroundController.GetWaitingPriorityOptional());
+    if (priority) {
+        BackgroundController.UpdateWaitingPriority(priority);
+        if (pathIds.size()) {
+            NPrioritiesQueue::TCompServiceOperator::AskMax(PrioritizationClientId, priority, std::make_shared<TCompactionAllocated>(SelfId()));
+        } else {
+            NPrioritiesQueue::TCompServiceOperator::Ask(PrioritizationClientId, priority, std::make_shared<TCompactionAllocated>(SelfId()));
+        }
+    }
+}
+
+void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard) {
+    Counters.GetCSCounters().OnSetupCompaction();
+    BackgroundController.ResetWaitingPriority();
+
+    auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(DataLocksManager);
+    if (!indexChanges) {
+        LOG_S_DEBUG("Compaction not started: cannot prepare compaction at tablet " << TabletID());
+        return;
+    }
+
+    auto compaction = dynamic_pointer_cast<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>(indexChanges);
+    compaction->SetQueueGuard(guard);
+    indexChanges->Start(*this);
+
+    auto actualIndexInfo = std::make_shared<NOlap::TVersionedIndex>(TablesManager.GetPrimaryIndex()->GetVersionedIndex());
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(actualIndexInfo, indexChanges, Settings.CacheDataAfterCompaction);
+    const TString externalTaskId = indexChanges->GetTaskIdentifier();
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "compaction")("external_task_id", externalTaskId);
+
+    NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
+        ResourceSubscribeActor, std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(
+                                    std::make_shared<TCompactChangesReadTask>(
+                                        std::move(ev), SelfId(), TabletID(), Counters.GetCompactionCounters(), GetLastCompletedTx()),
+                                    0, indexChanges->CalcMemoryForUsage(), externalTaskId, CompactTaskSubscription));
 
     LOG_S_DEBUG("ActiveCompactions: " << BackgroundController.GetCompactionsCount() << " at tablet " << TabletID());
 }
@@ -845,6 +886,10 @@ void TColumnShard::SetupGC() {
         }
         Execute(new TTxGarbageCollectionStart(this, gcTask, i.second), NActors::TActivationContext::AsActorContext());
     }
+}
+
+void TColumnShard::Handle(TEvPrivate::TEvStartCompaction::TPtr& ev, const TActorContext& /*ctx*/) {
+    StartCompaction(ev->Get()->GetGuard());
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, const TActorContext& ctx) {

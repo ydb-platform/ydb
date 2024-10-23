@@ -147,8 +147,8 @@ public:
     static std::shared_ptr<arrow::Field> GetColumnFieldOptional(const ui32 columnId);
     static std::shared_ptr<arrow::Field> GetColumnFieldVerified(const ui32 columnId);
 
-    virtual std::shared_ptr<TColumnLoader> GetColumnLoaderOptional(const ui32 columnId) const = 0;
-    std::shared_ptr<TColumnLoader> GetColumnLoaderVerified(const ui32 columnId) const;
+    virtual const std::shared_ptr<TColumnLoader>& GetColumnLoaderOptional(const ui32 columnId) const = 0;
+    const std::shared_ptr<TColumnLoader>& GetColumnLoaderVerified(const ui32 columnId) const;
 
     static void NormalizeDeletionColumn(NArrow::TGeneralContainer& batch);
 

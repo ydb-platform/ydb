@@ -2348,11 +2348,11 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 }
             }
             Cerr << "compacted=" << sumCompactedRows << ";inserted=" << sumInsertedRows << ";expected=" << fullNumRows << ";" << Endl;
-            if (!sumInsertedRows && sumCompactedRows == fullNumRows) {
+            if (sumCompactedRows && sumInsertedRows + sumCompactedRows == fullNumRows) {
                 success = true;
                 RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
                 UNIT_ASSERT(sumCompactedRows < sumCompactedBytes);
-                UNIT_ASSERT(sumInsertedBytes == 0);
+                UNIT_ASSERT(sumInsertedRows <= sumInsertedBytes);
             } else {
                 Wakeup(runtime, sender, TTestTxConfig::TxTablet0);
             }

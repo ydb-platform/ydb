@@ -16,7 +16,7 @@
 
 #include <ydb/library/binary_json/write.h>
 #include <ydb/library/dynumber/dynumber.h>
-#include <ydb/library/uuid/uuid.h>
+#include <ydb/public/sdk/cpp/src/library/uuid/uuid.h>
 
 
 #include <ydb/public/api/protos/ydb_import.pb.h>

@@ -1,0 +1,3 @@
+[submodule "compression-corpus"]
+	path = compression-corpus
+	url = https://github.com/ariya/compression-corpus.git

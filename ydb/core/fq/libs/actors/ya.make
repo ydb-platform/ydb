@@ -81,15 +81,15 @@ PEERDIR(
     ydb/library/yql/providers/s3/actors_factory
     ydb/library/yql/providers/s3/provider
     ydb/library/yql/public/issue
-    ydb/library/yql/public/issue/protos
+    ydb/public/sdk/cpp/src/library/yql_common/issue/protos
     ydb/library/yql/sql/settings
     ydb/library/yql/utils
     ydb/library/yql/utils/actor_log
     ydb/public/api/protos
     ydb/public/lib/fq
-    ydb/public/sdk/cpp/client/ydb_query
-    ydb/public/sdk/cpp/client/ydb_operation
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/query
+    ydb/public/sdk/cpp/src/client/operation
+    ydb/public/sdk/cpp/src/client/table
 )
 
 YQL_LAST_ABI_VERSION()

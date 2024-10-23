@@ -1,12 +1,12 @@
 #pragma once
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
+#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 
 namespace NYql::NTestCreds {
 
     class TCredentialsProvider: public NYdb::ICredentialsProvider {
     public:
-        NYdb::TStringType GetAuthInfo() const override {
+        std::string GetAuthInfo() const override {
             return "TEST_TOKEN";
         }
         bool IsValid() const override {

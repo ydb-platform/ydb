@@ -2,7 +2,7 @@
 
 #include "replication.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
+#include <ydb-cpp-sdk/client/params/params.h>
 
 #include <library/cpp/string_utils/csv/csv.h>
 
@@ -25,10 +25,10 @@ public:
     ~TCsvParser() = default;
 
     TCsvParser(TString&& headerRow, const char delimeter, const std::optional<TString>& nullValue,
-               const std::map<TString, TType>* paramTypes = nullptr,
+               const std::map<std::string, TType>* paramTypes = nullptr,
                const std::map<TString, TString>* paramSources = nullptr);
     TCsvParser(TVector<TString>&& header, const char delimeter, const std::optional<TString>& nullValue,
-               const std::map<TString, TType>* paramTypes = nullptr,
+               const std::map<std::string, TType>* paramTypes = nullptr,
                const std::map<TString, TString>* paramSources = nullptr);
 
     void GetParams(TString&& data, TParamsBuilder& builder, const TParseMetadata& meta) const;
@@ -40,7 +40,7 @@ private:
     TString HeaderRow;
     char Delimeter;
     std::optional<TString> NullValue;
-    const std::map<TString, TType>* ParamTypes;
+    const std::map<std::string, TType>* ParamTypes;
     const std::map<TString, TString>* ParamSources;
 };
 

@@ -1,6 +1,6 @@
 #include "parameters.h"
 
-#include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb-cpp-sdk/library/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <library/cpp/json/json_reader.h>
@@ -187,7 +187,7 @@ void TCommandWithParameters::AddParams(TParamsBuilder& paramBuilder) {
             }
         }
         const TType& type = (*paramIt).second;
-        paramBuilder.AddParam(name, JsonToYdbValue(value, type, InputBinaryStringEncoding));
+        paramBuilder.AddParam(name, JsonToYdbValue(std::string{value}, type, InputBinaryStringEncoding));
     }
 }
 
@@ -429,7 +429,7 @@ bool TCommandWithParameters::GetNextParams(const TDriver& driver, const TString&
                         case EDataFormat::Json:
                         case EDataFormat::JsonUnicode:
                         case EDataFormat::JsonBase64: {
-                            paramBuilder->AddParam(fullname, JsonToYdbValue(*data, type, InputBinaryStringEncoding));
+                            paramBuilder->AddParam(fullname, JsonToYdbValue(std::string{*data}, type, InputBinaryStringEncoding));
                             break;
                         }
                         case EDataFormat::Raw: {
@@ -513,7 +513,7 @@ bool TCommandWithParameters::GetNextParams(const TDriver& driver, const TString&
                     case EDataFormat::Json:
                     case EDataFormat::JsonUnicode:
                     case EDataFormat::JsonBase64: {
-                        valueBuilder.AddListItem(JsonToYdbValue(*data, type.GetProto().list_type().item(),
+                        valueBuilder.AddListItem(JsonToYdbValue(std::string{*data}, type.GetProto().list_type().item(),
                             InputBinaryStringEncoding));
                         break;
                     }
@@ -578,7 +578,7 @@ void TCommandWithParameters::ApplyJsonParams(const std::map<TString, TString> &p
         if (paramSource != ParameterSources.end()) {
             throw TMisuseException() << "Parameter " << name << " value found in more than one source: stdin, " << paramSource->second << ".";
         }
-        paramBuilder.AddParam(name, JsonToYdbValue(value, paramIt->second, InputBinaryStringEncoding));
+        paramBuilder.AddParam(name, JsonToYdbValue(std::string{value}, paramIt->second, InputBinaryStringEncoding));
     }
 }
 

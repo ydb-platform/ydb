@@ -1,0 +1,12 @@
+RECURSE(
+    grpc/client
+    json_value
+    jwt
+    operation_id
+    persqueue/obfuscate
+    persqueue/topic_parser_public
+    string_utils/helpers
+    uuid
+    yql_common
+    yson_value
+)

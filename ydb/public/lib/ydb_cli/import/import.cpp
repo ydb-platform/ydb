@@ -1,14 +1,14 @@
 #include "import.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/public/api/protos/ydb_formats.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb-cpp-sdk/library/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/csv_parser.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
@@ -83,7 +83,7 @@ void InitCsvParser(TCsvParser& parser,
                    bool& removeLastDelimiter,
                    NCsvFormat::TLinesSplitter& csvSource,
                    const TImportFileSettings& settings,
-                   const std::map<TString, TType>* columnTypes,
+                   const std::map<std::string, TType>* columnTypes,
                    const NTable::TTableDescription* dbTableInfo) {
     if (settings.Header_ || settings.HeaderRow_) {
         TString headerRow;
@@ -110,7 +110,7 @@ void InitCsvParser(TCsvParser& parser,
     TVector<TString> columns;
     Y_ENSURE_BT(dbTableInfo);
     for (const auto& column : dbTableInfo->GetColumns()) {
-        columns.push_back(column.Name);
+        columns.push_back(TString{column.Name});
     }
     parser = TCsvParser(std::move(columns), settings.Delimiter_[0], settings.NullValue_, columnTypes);
     return;
@@ -823,8 +823,8 @@ TType TImportFileClient::GetTableType() {
     return typeBuilder.Build();
 }
 
-std::map<TString, TType> TImportFileClient::GetColumnTypes() {
-    std::map<TString, TType> columnTypes;
+std::map<std::string, TType> TImportFileClient::GetColumnTypes() {
+    std::map<std::string, TType> columnTypes;
     Y_ENSURE_BT(DbTableInfo);
     const auto& columns = DbTableInfo->GetTableColumns();
     for (auto it = columns.begin(); it != columns.end(); it++) {

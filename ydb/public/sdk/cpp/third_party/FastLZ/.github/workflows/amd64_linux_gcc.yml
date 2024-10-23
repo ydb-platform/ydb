@@ -1,0 +1,32 @@
+name: amd64_linux_gcc
+
+on: [push, pull_request]
+
+jobs:
+
+  amd64_linux_gcc:
+    runs-on: ubuntu-20.04
+    timeout-minutes: 10
+    env:
+      CC: gcc
+    steps:
+    - uses: actions/checkout@v3
+    - name: Retrieve test compression corpus
+      run: |
+        git clone https://github.com/ariya/compression-corpus.git
+        cd compression-corpus
+        cd enwik
+        unzip enwik8.zip
+    - run: sudo apt install -y make gcc
+    - run: gcc --version
+    - run: cd tests && make roundtrip
+      name: Perform round-trip tests
+    - name: 'Build examples: 6pack and 6unpack'
+      run: cd examples && make
+    - name: 'Run examples: 6pack and 6unpack'
+      run: |
+        cd examples
+        ./6pack -v
+        ./6pack ../compression-corpus/enwik/enwik8.txt archive.6pk
+        ./6unpack -v
+        ./6unpack archive.6pk

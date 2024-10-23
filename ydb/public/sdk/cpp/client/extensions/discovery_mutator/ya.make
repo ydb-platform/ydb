@@ -1,15 +1,13 @@
 LIBRARY()
 
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
+
 SRCS(
-    discovery_mutator.cpp
+    discovery_mutator.h
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp/client/ydb_extension
+    ydb/public/sdk/cpp/src/client/extensions/discovery_mutator
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)

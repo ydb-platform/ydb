@@ -1,17 +1,13 @@
 LIBRARY()
 
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
+
 SRCS(
-    monitoring.cpp
+    monitoring.h
 )
 
-GENERATE_ENUM_SERIALIZATION(monitoring.h)
-
 PEERDIR(
-    ydb/public/sdk/cpp/client/ydb_proto
-    ydb/public/sdk/cpp/client/impl/ydb_internal/make_request
-    ydb/public/sdk/cpp/client/ydb_common_client/impl
-    ydb/public/sdk/cpp/client/ydb_driver
+    ydb/public/sdk/cpp/src/client/monitoring
 )
 
 END()
-

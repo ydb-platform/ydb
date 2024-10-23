@@ -77,7 +77,7 @@ public:
             return;
         }
 
-        const TVector<NYdb::TResultSet>& resultSets = *ev->Get()->ResultSets;
+        const std::vector<NYdb::TResultSet>& resultSets = *ev->Get()->ResultSets;
         if (resultSets.size() != 2) {
             ReplyWithError(TStringBuilder() << "Result set size is not equal to 2 but equal to " << resultSets.size() << ". Please contact internal support");
             return;

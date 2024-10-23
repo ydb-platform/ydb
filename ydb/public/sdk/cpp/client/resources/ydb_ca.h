@@ -1,9 +1,3 @@
 #pragma once
 
-#include <util/generic/string.h>
-
-namespace NYdb {
-
-TString GetRootCertificate();
-
-} // namespace NYdb
+#include <ydb-cpp-sdk/client/resources/ydb_ca.h>

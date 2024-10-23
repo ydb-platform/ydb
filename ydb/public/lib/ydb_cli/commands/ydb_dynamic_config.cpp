@@ -1,6 +1,6 @@
 #include "ydb_dynamic_config.h"
 
-#include <ydb/public/sdk/cpp/client/draft/ydb_dynamic_config.h>
+#include <ydb-cpp-sdk/client/draft/ydb_dynamic_config.h>
 #include <ydb/library/yaml_config/public/yaml_config.h>
 
 #include <openssl/sha.h>
@@ -59,7 +59,7 @@ int TCommandConfigFetch::Run(TConfig& config) {
     auto result = client.GetConfig().GetValueSync();
     ThrowOnError(result);
 
-    auto cfg = result.GetConfig();
+    auto cfg = TString{result.GetConfig()};
 
     ui64 version = 0;
 
@@ -88,11 +88,11 @@ int TCommandConfigFetch::Run(TConfig& config) {
     if (All) {
         for (auto [id, cfg] : result.GetVolatileConfigs()) {
             if (StripMetadata) {
-                cfg = NYamlConfig::StripMetadata(cfg);
+                cfg = NYamlConfig::StripMetadata(TString{cfg});
             }
 
             if (!OutDir) {
-                Cout << WrapYaml(cfg);
+                Cout << WrapYaml(TString{cfg});
             } else {
                 auto filename = TString("volatile_") + ToString(version) + "_" + ToString(id) + ".yaml";
                 auto filepath = (TFsPath(OutDir) / filename);
@@ -251,7 +251,7 @@ int TCommandConfigResolve::Run(TConfig& config) {
     }
 
     TString configStr;
-    TMap<ui64, TString> volatileConfigStrs;
+    std::map<uint64_t, std::string> volatileConfigStrs;
 
     if (!Filename.empty()) {
         configStr = TFileInput(Filename).ReadAll();
@@ -286,7 +286,7 @@ int TCommandConfigResolve::Run(TConfig& config) {
 
     if (!SkipVolatile) {
         for (auto& [_, cfgStr]: volatileConfigStrs) {
-            auto volatileCfg = NFyaml::TDocument::Parse(cfgStr);
+            auto volatileCfg = NFyaml::TDocument::Parse(TString{cfgStr});
             auto selectors = volatileCfg.Root().Map().at("selector_config");
             NYamlConfig::AppendVolatileConfigs(tree, selectors);
         }
@@ -336,7 +336,7 @@ int TCommandConfigResolve::Run(TConfig& config) {
             auto map = doc.Buildf("{}");
             TSet<NYamlConfig::TNamedLabel> namedLabels;
             for (auto& [name, value] : Labels) {
-                namedLabels.insert(NYamlConfig::TNamedLabel{name, value});
+                namedLabels.insert(NYamlConfig::TNamedLabel{TString{name}, TString{value}});
                 auto node = doc.Buildf("%s: {type: COMMON, value: %s}", name.c_str(), value.c_str());
                 map.Insert(node);
             }
@@ -357,7 +357,7 @@ int TCommandConfigResolve::Run(TConfig& config) {
 
             for (const auto& [labelSets, configStr] : result.GetConfigs()) {
                 auto doc = NFyaml::TDocument::Parse("---\nlabel_sets: []\nconfig: {}\n");
-                auto config = NFyaml::TDocument::Parse(configStr);
+                auto config = NFyaml::TDocument::Parse(TString{configStr});
 
                 auto node = config.Root().Copy(doc);
                 doc.Root().Map().at("config").Insert(node.Ref());
@@ -398,13 +398,13 @@ int TCommandConfigResolve::Run(TConfig& config) {
             auto map = doc.Buildf("{}");
             TSet<NYamlConfig::TNamedLabel> namedLabels;
             for (auto& [name, value] : Labels) {
-                namedLabels.insert(NYamlConfig::TNamedLabel{name, value});
+                namedLabels.insert(NYamlConfig::TNamedLabel{TString{name}, TString{value}});
                 auto node = doc.Buildf("%s: {type: COMMON, value: %s}", name.c_str(), value.c_str());
                 map.Insert(node);
             }
             labelSetsSeq.Append(map);
 
-            auto config = NFyaml::TDocument::Parse(result.GetConfig());
+            auto config = NFyaml::TDocument::Parse(TString{result.GetConfig()});
             auto node = config.Root().Copy(doc);
             doc.Root().Map().at("config").Insert(node.Ref());
 
@@ -481,7 +481,7 @@ int TCommandConfigVolatileAdd::Run(TConfig& config) {
 
         NYamlConfig::GetVolatileMetadata(configStr);
 
-        auto tree = NFyaml::TDocument::Parse(result.GetConfig());
+        auto tree = NFyaml::TDocument::Parse(TString{result.GetConfig()});
 
         auto volatileCfg = NFyaml::TDocument::Parse(configStr);
         auto selectors = volatileCfg.Root().Map().at("selector_config");
@@ -584,10 +584,10 @@ int TCommandConfigVolatileDrop::Run(TConfig& config) {
         }
 
         if (Force) {
-            return client.ForceRemoveVolatileConfig(TVector<ui64>(Ids.begin(), Ids.end())).GetValueSync();
+            return client.ForceRemoveVolatileConfig(std::vector<uint64_t>(Ids.begin(), Ids.end())).GetValueSync();
         }
 
-        return client.RemoveVolatileConfig(Cluster, Version, TVector<ui64>(Ids.begin(), Ids.end())).GetValueSync();
+        return client.RemoveVolatileConfig(Cluster, Version, std::vector<uint64_t>(Ids.begin(), Ids.end())).GetValueSync();
     }();
 
     ThrowOnError(status);
@@ -636,14 +636,14 @@ int TCommandConfigVolatileFetch::Run(TConfig& config) {
 
     for (auto [id, cfg] : result.GetVolatileConfigs()) {
         if (All || Ids.contains(id)) {
-            version = NYamlConfig::GetVolatileMetadata(cfg).Version.value();
+            version = NYamlConfig::GetVolatileMetadata(TString{cfg}).Version.value();
 
             if (StripMetadata) {
-                cfg = NYamlConfig::StripMetadata(cfg);
+                cfg = NYamlConfig::StripMetadata(TString{cfg});
             }
 
             if (!OutDir) {
-                Cout << WrapYaml(cfg);
+                Cout << WrapYaml(TString{cfg});
             } else {
                 auto filename = TString("volatile_") + ToString(version) + "_" + ToString(id) + ".yaml";
                 auto filepath = (TFsPath(OutDir) / filename);

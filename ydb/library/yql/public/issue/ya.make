@@ -13,7 +13,7 @@ PEERDIR(
     library/cpp/colorizer
     library/cpp/resource
     ydb/public/api/protos
-    ydb/library/yql/public/issue/protos
+    ydb/public/sdk/cpp/src/library/yql_common/issue
     ydb/library/yql/utils
 )
 

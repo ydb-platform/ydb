@@ -13,8 +13,8 @@
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
 #include <ydb/public/lib/fq/scope.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
+#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb-cpp-sdk/client/operation/operation.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -646,7 +646,7 @@ private:
     }
 
     static bool IsPathExistsIssue(const NYdb::TStatus& status) {
-        return status.GetIssues().ToOneLineString().Contains("error: path exist");
+        return status.GetIssues().ToOneLineString().contains("error: path exist");
     }
 
     bool AlterResourcePool(size_t index) {

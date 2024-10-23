@@ -71,7 +71,7 @@ public:
 
         if (Components_ & TSerializedExprGraphComponents::Positions) {
             WriteVar32(Files_.size());
-            TVector<std::pair<TStringBuf, ui32>> sortedFiles;
+            std::vector<std::pair<std::string_view, ui32>> sortedFiles;
             sortedFiles.reserve(Files_.size());
             for (const auto& x : Files_) {
                 sortedFiles.push_back({ x.first, x.second });
@@ -84,7 +84,7 @@ public:
             }
 
             WriteVar32(Positions_.size());
-            TVector<std::tuple<ui32, ui32, ui32, ui32>> sortedPositions;
+            std::vector<std::tuple<ui32, ui32, ui32, ui32>> sortedPositions;
             sortedPositions.reserve(Positions_.size());
             for (const auto& x : Positions_) {
                 sortedPositions.push_back({ std::get<0>(x.first), std::get<1>(x.first), std::get<2>(x.first), x.second });
@@ -141,7 +141,7 @@ public:
         if ((Components_ & TSerializedExprGraphComponents::Positions) && !(command & SAME_POSITION)) {
             const auto& pos = Ctx.GetPosition(node.Pos());
             ui32 fileNum = 0;
-            if (pos.File) {
+            if (!pos.File.empty()) {
                 auto fileIt = Files_.find(pos.File);
                 YQL_ENSURE(fileIt != Files_.end());
                 fileNum = fileIt->second;
@@ -184,7 +184,7 @@ private:
             const auto& pos = Ctx.GetPosition(node.Pos());
             const auto& file = pos.File;
             ui32 fileNum = 0;
-            if (file) {
+            if (!file.empty()) {
                 fileNum = Files_.emplace(file, 1 + (ui32)Files_.size()).first->second;
             }
 
@@ -218,7 +218,7 @@ private:
 private:
     TExprContext& Ctx;
     const ui16 Components_;
-    THashMap<TStringBuf, ui32> Files_;
+    THashMap<std::string, ui32> Files_;
     THashMap<std::tuple<ui32, ui32, ui32>, ui32> Positions_;
     THashMap<TStringBuf, std::pair<ui32, ui32>> StringCounters_; // str -> id + serialized id
 

@@ -3,8 +3,8 @@
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
+#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb-cpp-sdk/client/operation/operation.h>
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
@@ -70,7 +70,7 @@ public:
                 try {
                     auto response = future.ExtractValueSync();
                     if (response.Status().IsSuccess()) {
-                        actorSystem->Send(recipient, new TEvYdbCompute::TEvExecuteScriptResponse(response.Id(), response.Metadata().ExecutionId), 0, cookie);
+                        actorSystem->Send(recipient, new TEvYdbCompute::TEvExecuteScriptResponse(response.Id(), TString{response.Metadata().ExecutionId}), 0, cookie);
                     } else {
                         actorSystem->Send(
                             recipient,
@@ -98,7 +98,7 @@ public:
             .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), recipient = ev->Sender, cookie = ev->Cookie, database = ComputeConnection.database()](auto future) {
                 try {
                     auto response = future.ExtractValueSync();
-                    if (response.Id().GetKind() != Ydb::TOperationId::UNUSED) {
+                    if (response.Id().GetKind() != NKikimr::NOperationId::TOperationId::UNUSED) {
                         actorSystem->Send(
                             recipient, 
                             new TEvYdbCompute::TEvGetOperationResponse(
@@ -142,7 +142,7 @@ public:
                 try {
                     auto response = future.ExtractValueSync();
                     if (response.IsSuccess()) {
-                        actorSystem->Send(recipient, new TEvYdbCompute::TEvFetchScriptResultResponse(response.ExtractResultSet(), response.GetNextFetchToken()), 0, cookie);
+                        actorSystem->Send(recipient, new TEvYdbCompute::TEvFetchScriptResultResponse(response.ExtractResultSet(), TString{response.GetNextFetchToken()}), 0, cookie);
                     } else {
                         actorSystem->Send(
                             recipient,

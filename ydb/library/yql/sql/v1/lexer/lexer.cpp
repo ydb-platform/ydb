@@ -9,6 +9,8 @@
 #include <ydb/library/yql/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <ydb/library/yql/parser/proto_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Lexer.h>
 
+#include <util/generic/algorithm.h>
+
 #if defined(_tsan_enabled_)
 #include <util/system/mutex.h>
 #endif
@@ -60,7 +62,7 @@ public:
         }
 
         issues.AddIssues(newIssues);
-        return !AnyOf(newIssues.begin(), newIssues.end(), [](auto issue) { return issue.GetSeverity() == NYql::ESeverity::TSeverityIds_ESeverityId_S_ERROR; });
+        return !std::any_of(newIssues.begin(), newIssues.end(), [](auto issue) { return issue.GetSeverity() == NYql::ESeverity::TSeverityIds_ESeverityId_S_ERROR; });
     }
 
 private:

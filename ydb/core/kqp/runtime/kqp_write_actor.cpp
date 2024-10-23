@@ -422,7 +422,7 @@ private:
                     << getIssues().ToOneLineString());
             
             // TODO: Add new status for splits in datashard. This is tmp solution.
-            if (getIssues().ToOneLineString().Contains("in a pre/offline state assuming this is due to a finished split (wrong shard state)")) {
+            if (getIssues().ToOneLineString().contains("in a pre/offline state assuming this is due to a finished split (wrong shard state)")) {
                 ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
                 RetryResolveTable();
             } else {

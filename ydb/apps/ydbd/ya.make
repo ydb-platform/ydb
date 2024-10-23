@@ -67,7 +67,7 @@ PEERDIR(
     ydb/library/yql/udfs/common/url_base
     ydb/library/yql/udfs/common/yson2
     ydb/library/yql/udfs/logs/dsv
-    ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
+    ydb/public/sdk/cpp/src/client/persqueue_public/codecs
 )
 
 #

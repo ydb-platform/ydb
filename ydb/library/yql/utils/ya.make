@@ -41,6 +41,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/public/sdk/cpp/src/library/yql_common/utils
     ydb/library/yql/core/issue/protos
     library/cpp/digest/md5
     library/cpp/messagebus

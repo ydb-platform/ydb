@@ -1,0 +1,35 @@
+RECURSE(
+    draft
+    extensions
+    helpers
+    resources
+    ydb_common_client
+    ydb_coordination
+    ydb_datastreams
+    ydb_discovery
+    ydb_driver
+    ydb_export
+    ydb_extension
+    ydb_federated_topic
+    ydb_import
+    ydb_operation
+    ydb_params
+    ydb_persqueue_core
+    ydb_persqueue_public
+    ydb_proto
+    ydb_query
+    ydb_rate_limiter
+    ydb_result
+    ydb_scheme
+    ydb_table
+    ydb_table/query_stats
+    ydb_topic
+    ydb_topic/codecs
+    ydb_types
+    ydb_types/credentials
+    ydb_types/exceptions
+    ydb_types/fatal_error_handlers
+    ydb_types/operation
+    ydb_types/status
+    ydb_value
+)

@@ -9,8 +9,8 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/string_utils/csv/csv.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/library/yson_value/ydb_yson_value.h>
 
 #include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
@@ -161,7 +161,7 @@ private:
 
 public:
     virtual ~IQueryResultScanner() = default;
-    virtual void OnStart(const TVector<NYdb::TColumn>& columns) = 0;
+    virtual void OnStart(const std::vector<NYdb::TColumn>& columns) = 0;
     virtual void OnBeforeRow() = 0;
     virtual void OnAfterRow() = 0;
     virtual void OnRowItem(const NYdb::TColumn& c, const NYdb::TValue& value) = 0;
@@ -185,15 +185,15 @@ public:
             if constexpr (std::is_same_v<TIterator, NTable::TScanQueryPartIterator>) {
                 if (streamPart.HasQueryStats()) {
                     ServerTiming += streamPart.GetQueryStats().GetTotalDuration();
-                    QueryPlan = streamPart.GetQueryStats().GetPlan().GetOrElse("");
-                    PlanAst = streamPart.GetQueryStats().GetAst().GetOrElse("");
+                    QueryPlan = streamPart.GetQueryStats().GetPlan().value_or("");
+                    PlanAst = streamPart.GetQueryStats().GetAst().value_or("");
                 }
             } else {
                 const auto& stats = streamPart.GetStats();
                 if (stats) {
                     ServerTiming += stats->GetTotalDuration();
-                    QueryPlan = stats->GetPlan().GetOrElse("");
-                    PlanAst = stats->GetAst().GetOrElse("");
+                    QueryPlan = stats->GetPlan().value_or("");
+                    PlanAst = stats->GetAst().value_or("");
                 }
             }
 
@@ -233,7 +233,7 @@ public:
         Scanners.emplace_back(scanner);
     }
 
-    virtual void OnStart(const TVector<NYdb::TColumn>& columns) override {
+    virtual void OnStart(const std::vector<NYdb::TColumn>& columns) override {
         for (auto&& i : Scanners) {
             i->OnStart(columns);
         }
@@ -271,7 +271,7 @@ public:
         Writer.reset();
         return ResultString.Str();
     }
-    virtual void OnStart(const TVector<NYdb::TColumn>& /*columns*/) override {
+    virtual void OnStart(const std::vector<NYdb::TColumn>& /*columns*/) override {
         Writer = std::make_unique<NYson::TYsonWriter>(&ResultString, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
         Writer->OnBeginList();
     }
@@ -295,7 +295,7 @@ class TCSVResultScanner: public IQueryResultScanner, public TQueryResultInfo {
 public:
     TCSVResultScanner() {
     }
-    virtual void OnStart(const TVector<NYdb::TColumn>& columns) override {
+    virtual void OnStart(const std::vector<NYdb::TColumn>& columns) override {
         Columns = columns;
     }
     virtual void OnBeforeRow() override {

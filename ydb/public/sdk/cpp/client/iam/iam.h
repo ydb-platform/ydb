@@ -1,3 +1,3 @@
 #pragma once
 
-#include "common/iam.h"
+#include <ydb-cpp-sdk/client/iam/iam.h>

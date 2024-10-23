@@ -73,7 +73,7 @@ PEERDIR(
     ydb/library/yql/utils
     ydb/library/yql/utils/rope
     ydb/library/yql/core/sql_types
-    ydb/library/uuid
+    ydb/public/sdk/cpp/src/library/uuid
     ydb/public/lib/scheme_types
 )
 

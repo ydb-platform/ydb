@@ -1,12 +1,13 @@
 LIBRARY()
 
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
+
 SRCS(
-    settings.cpp
+    settings.h
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp/client/impl/ydb_internal/common
-    ydb/public/sdk/cpp/client/ydb_types/credentials
+    ydb/public/sdk/cpp/src/client/common_client
 )
 
 END()

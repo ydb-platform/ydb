@@ -1,13 +1,13 @@
 LIBRARY()
 
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
+
 SRCS(
-    rate_limiter.cpp
+    rate_limiter.h
 )
 
 PEERDIR(
-    ydb/public/api/grpc
-    ydb/public/sdk/cpp/client/ydb_common_client/impl
-    ydb/public/sdk/cpp/client/ydb_driver
+    ydb/public/sdk/cpp/src/client/rate_limiter
 )
 
 END()

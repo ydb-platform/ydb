@@ -25,7 +25,7 @@ PEERDIR(
     ydb/apps/version
     ydb/library/actors/core
     ydb/library/actors/interconnect
-    ydb/library/grpc/client
+    ydb/public/sdk/cpp/src/library/grpc/client
     ydb/library/grpc/server
     ydb/library/grpc/server/actors
     library/cpp/regex/pcre
@@ -92,10 +92,10 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/lib/base
     ydb/public/lib/deprecated/kicli
-    ydb/public/sdk/cpp/client/ydb_driver
-    ydb/public/sdk/cpp/client/ydb_topic/codecs
-    ydb/public/sdk/cpp/client/ydb_query
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/topic/codecs
+    ydb/public/sdk/cpp/src/client/query
+    ydb/public/sdk/cpp/src/client/table
     ydb/services/auth
     ydb/services/cms
     ydb/services/datastreams

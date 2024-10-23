@@ -1,6 +1,6 @@
 #include "cmd_run_query.h"
 
-#include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb-cpp-sdk/library/yson_value/ydb_yson_value.h>
 #include <ydb/core/kqp/tests/tpch/lib/tpch_runner.h>
 
 

@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -215,7 +215,7 @@ static TDataQueryResult ExecQuery(TSession& session, const TString& query, const
 
     if (checkRewrite) {
         auto explain = session.ExplainDataQuery(query).GetValueSync();
-        UNIT_ASSERT_C(explain.GetAst().Contains("PartitionByKey"), explain.GetAst());
+        UNIT_ASSERT_C(explain.GetAst().contains("PartitionByKey"), explain.GetAst());
     }
 
     return result;
@@ -699,7 +699,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                     .AddListItem().BeginStruct().AddMember("v").OptionalString("1.One").EndStruct()   // dup
                     .AddListItem().BeginStruct().AddMember("v").OptionalString("1.Two").EndStruct()
                     .AddListItem().BeginStruct().AddMember("v").OptionalString("Any").EndStruct()     // not exists
-                    .AddListItem().BeginStruct().AddMember("v").OptionalString(Nothing()).EndStruct() // null
+                    .AddListItem().BeginStruct().AddMember("v").OptionalString(std::nullopt).EndStruct() // null
                     .EndList().Build().Build();
 
             auto result = ExecQuery(session, query, params, R"([[[1];["1.One"]];[[2];["1.Two"]]])", false);
@@ -741,7 +741,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(1).EndStruct()   // dup
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(2).EndStruct()
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(42).EndStruct()  // not exists
-                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(Nothing()).EndStruct() // null
+                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(std::nullopt).EndStruct() // null
                     .EndList().Build().Build();
 
             auto result = ExecQuery(session, query, params, R"([[[1];["1.One"]];[[2];["1.Two"]]])");
@@ -789,12 +789,12 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                                                 .AddMember("k2").OptionalString("Two").EndStruct()
                     .AddListItem().BeginStruct().AddMember("k1").OptionalInt32(42)
                                                 .AddMember("k2").OptionalString("FortyTwo").EndStruct()  // not exists
-                    .AddListItem().BeginStruct().AddMember("k1").OptionalInt32(Nothing())
+                    .AddListItem().BeginStruct().AddMember("k1").OptionalInt32(std::nullopt)
                                                 .AddMember("k2").OptionalString("One").EndStruct()       // null
                     .AddListItem().BeginStruct().AddMember("k1").OptionalInt32(1)
-                                                .AddMember("k2").OptionalString(Nothing()).EndStruct()   // null
-                    .AddListItem().BeginStruct().AddMember("k1").OptionalInt32(Nothing())
-                                                .AddMember("k2").OptionalString(Nothing()).EndStruct()   // null
+                                                .AddMember("k2").OptionalString(std::nullopt).EndStruct()   // null
+                    .AddListItem().BeginStruct().AddMember("k1").OptionalInt32(std::nullopt)
+                                                .AddMember("k2").OptionalString(std::nullopt).EndStruct()   // null
                     .EndList().Build().Build();
 
             auto result = ExecQuery(session, query, params, R"([[[1];["One"];["1.1.One"]];[[2];["Two"];["1.2.Two"]]])");
@@ -905,7 +905,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(1).EndStruct()   // dup
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(2).EndStruct()
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(42).EndStruct()  // not exists
-                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(Nothing()).EndStruct() // null
+                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(std::nullopt).EndStruct() // null
                     .EndList().Build().Build();
 
             auto result = ExecQuery(session, query, params, R"([[[1];["One"];["1.1.One"]];[[2];["Two"];["1.2.Two"]]])");
@@ -968,7 +968,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                     .AddListItem().BeginStruct().AddMember("v").OptionalString("2.One").EndStruct()   // dup
                     .AddListItem().BeginStruct().AddMember("v").OptionalString("2.Five").EndStruct()
                     .AddListItem().BeginStruct().AddMember("v").OptionalString("Any").EndStruct()     // not exists
-                    .AddListItem().BeginStruct().AddMember("v").OptionalString(Nothing()).EndStruct() // null
+                    .AddListItem().BeginStruct().AddMember("v").OptionalString(std::nullopt).EndStruct() // null
                     .EndList().Build().Build();
 
             auto result = ExecQuery(session, query, params, R"([[[1];["2.One"];["Payload1"]];[[5];["2.Five"];["Payload2"]]])");
@@ -1021,8 +1021,8 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                                                 .AddMember("v").OptionalString("2.Five").EndStruct()
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(42)
                                                 .AddMember("v").OptionalString("Any").EndStruct()     // not exists
-                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(Nothing())
-                                                .AddMember("v").OptionalString(Nothing()).EndStruct() // null
+                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(std::nullopt)
+                                                .AddMember("v").OptionalString(std::nullopt).EndStruct() // null
                     .EndList().Build().Build();
 
             auto result = ExecQuery(session, query, params, R"([[[1];[1];["2.One"];["Payload1"]];[[5];[5];["2.Five"];["Payload2"]]])");
@@ -1072,7 +1072,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(1).EndStruct()   // dup
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(5).EndStruct()
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(42).EndStruct()     // not exists
-                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(Nothing()).EndStruct() // null
+                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(std::nullopt).EndStruct() // null
                     .EndList().Build().Build();
 
             auto result = ExecQuery(session, query, params, R"([[[1];[1];["2.One"];["Payload1"]];[[5];[5];["2.Five"];["Payload2"]]])");
@@ -1665,7 +1665,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 [[105u];["One"];[105u];["One"];["Name2"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
             AssertTableReads(result, "/Root/Join2", 5);
-            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
+            UNIT_ASSERT(result.GetQueryPlan().contains("Lookup"));
         }
 
         {
@@ -1683,7 +1683,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 [[101u];["Two"];[101u];["Two"];["Name1"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
             AssertTableReads(result, "/Root/Join2", 2);
-            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
+            UNIT_ASSERT(result.GetQueryPlan().contains("Lookup"));
         }
 
         {
@@ -1702,7 +1702,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 [[103u];["One"];[103u];["One"];["Name1"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
             AssertTableReads(result, "/Root/Join2", 3);
-            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
+            UNIT_ASSERT(result.GetQueryPlan().contains("Lookup"));
         }
 
         {
@@ -1721,7 +1721,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 [[105u];["One"];[105u];["One"];["Name2"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
             AssertTableReads(result, "/Root/Join2", 3);
-            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
+            UNIT_ASSERT(result.GetQueryPlan().contains("Lookup"));
         }
 
         {
@@ -1739,7 +1739,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 [[105u];["One"];[105u];["One"];["Name2"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
             AssertTableReads(result, "/Root/Join2", 2);
-            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
+            UNIT_ASSERT(result.GetQueryPlan().contains("Lookup"));
         }
     }
 

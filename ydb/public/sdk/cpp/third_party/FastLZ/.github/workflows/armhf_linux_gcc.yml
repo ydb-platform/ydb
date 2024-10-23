@@ -1,0 +1,41 @@
+name: armhf_linux_gcc
+
+on: [push, pull_request]
+
+jobs:
+
+  armhf_linux_gcc:
+    runs-on: ubuntu-20.04
+    timeout-minutes: 10
+    env:
+      CC: /opt/armel-linux-musleabihf-cross/bin/armel-linux-musleabihf-gcc
+    steps:
+    - uses: actions/checkout@v3
+    - name: Retrieve test compression corpus
+      run: |
+        git clone https://github.com/ariya/compression-corpus.git
+        cd compression-corpus
+        cd enwik
+        unzip enwik8.zip
+    - run: sudo apt-get -y -qq update
+    - run: sudo apt install -y qemu-user
+    - name: Prepare cross-compiler
+      run: |
+        curl -O https://musl.cc/armel-linux-musleabihf-cross.tgz
+        tar xzf armel-linux-musleabihf-cross.tgz -C /opt
+    - name: Verify compiler version
+      run: /opt/armel-linux-musleabihf-cross/bin/armel-linux-musleabihf-gcc --version
+    - name: Perform round-trip tests
+      run: |
+        cd tests
+        make test_roundtrip CFLAGS=-static
+        file ./test_roundtrip
+        qemu-arm ./test_roundtrip
+    - name: 'Build and run example: 6pack and 6unpack'
+      run: |
+        cd examples
+        make CFLAGS=-static
+        qemu-arm ./6pack -v
+        qemu-arm ./6pack ../compression-corpus/enwik/enwik8.txt archive.6pk
+        qemu-arm ./6unpack -v
+        qemu-arm ./6unpack archive.6pk

@@ -16,7 +16,7 @@
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/protos/follower_group.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb-cpp-sdk/client/result/result.h>
 
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 
@@ -2571,7 +2571,7 @@ namespace {
             if (pg.IsNull()) {
                 out << "(pg null)";
             } else {
-                out << pg.Content_.Quote();
+                out << TString{pg.Content_}.Quote();
             }
         }
 

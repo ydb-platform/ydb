@@ -2,7 +2,7 @@ IF (NOT OS_WINDOWS)
     PROGRAM()
 
     PEERDIR(
-        ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
+        ydb/public/sdk/cpp/src/client/persqueue_public/codecs
         library/cpp/getopt
         yt/cpp/mapreduce/client
         ydb/library/yql/dq/actors/compute

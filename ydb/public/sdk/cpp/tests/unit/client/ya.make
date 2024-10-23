@@ -1,0 +1,12 @@
+RECURSE(
+    coordination
+    discovery_mutator
+    draft
+    driver
+    endpoints
+    oauth2_token_exchange
+    params
+    result
+    scripting
+    value
+)

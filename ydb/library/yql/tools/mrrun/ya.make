@@ -15,7 +15,7 @@ ENDIF()
 
 PEERDIR(
     contrib/libs/protobuf
-    ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
+    ydb/public/sdk/cpp/src/client/persqueue_public/codecs
     library/cpp/digest/md5
     library/cpp/getopt
     library/cpp/logger
@@ -59,7 +59,7 @@ PEERDIR(
     ydb/library/yql/utils/log
     ydb/library/yql/utils/backtrace
     ydb/library/yql/utils/failure_injector
-    ydb/public/sdk/cpp/client/ydb_driver
+    ydb/public/sdk/cpp/src/client/driver
     ydb/library/yql/core/url_preprocessing
     ydb/library/yql/providers/yt/comp_nodes/dq
     ydb/library/yql/providers/yt/comp_nodes/llvm14

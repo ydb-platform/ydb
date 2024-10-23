@@ -15,7 +15,7 @@
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 
 #include <ydb/library/aclib/aclib.h>
-#include <ydb/library/persqueue/obfuscate/obfuscate.h>
+#include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 #include <ydb/library/persqueue/tests/counters.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
@@ -38,11 +38,11 @@
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/include/client.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/data_plane_helpers.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
 #include <thread>
 
 
@@ -157,7 +157,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         auto driver = server.Server->AnnoyingClient->GetDriver();
 
         NYdb::NPersQueue::TReadSessionSettings settings;
-        settings.ConsumerName("shared/user").AppendTopics(topicPath).ReadMirrored("dc1");
+        settings.ConsumerName("shared/user").AppendTopics(std::string{topicPath}).ReadMirrored("dc1");
         Cerr << "=== Create reader\n";
         auto reader = CreateReader(*driver, settings);
 
@@ -1215,14 +1215,14 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
 
         rcontext.AddMetadata("x-ydb-auth-ticket", "user@" BUILTIN_ACL_DOMAIN);
 
-        TVector<std::pair<TString, TVector<TString>>> permissions;
+        std::vector<std::pair<std::string, std::vector<std::string>>> permissions;
         permissions.push_back({"user@" BUILTIN_ACL_DOMAIN, {"ydb.generic.read"}});
         for (ui32 i = 0; i < 10; ++i) {
             permissions.push_back({"test_user_" + ToString(i) + "@" + BUILTIN_ACL_DOMAIN, {"ydb.generic.read"}});
         }
         server.ModifyTopicACL("/Root/PQ/rt3.dc1--acc--topic1", permissions);
 
-        TVector<std::pair<TString, TVector<TString>>> consumerPermissions;
+        std::vector<std::pair<std::string, std::vector<std::string>>> consumerPermissions;
         consumerPermissions.push_back({"user@" BUILTIN_ACL_DOMAIN, {"ydb.generic.read", "ydb.granular.write_attributes"}});
         for (ui32 i = 0; i < 10; ++i) {
             consumerPermissions.push_back({"test_user_" + ToString(i) + "@" + BUILTIN_ACL_DOMAIN, {"ydb.generic.read", "ydb.granular.write_attributes"}});
@@ -1527,8 +1527,8 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
             for (const auto& partInfo: desc.GetPartitions()) {
                 Cerr << ">>>Describe result: partition id = " << partInfo.GetPartitionId() << ", ";
                 auto stats = partInfo.GetPartitionStats();
-                UNIT_ASSERT(stats.Defined());
-                Cerr << "offsets: [ " << stats.Get()->GetStartOffset() << ", " << stats.Get()->GetEndOffset() << " )" << Endl;
+                UNIT_ASSERT(stats.has_value());
+                Cerr << "offsets: [ " << stats.value().GetStartOffset() << ", " << stats.value().GetEndOffset() << " )" << Endl;
             }
 
             TAlterTopicSettings alterSettings;
@@ -3010,7 +3010,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         auto decompressor = CreateSyncExecutorWrapper();
 
         NYdb::NPersQueue::TReadSessionSettings settings;
-        settings.ConsumerName("shared/user").AppendTopics(SHORT_TOPIC_NAME).ReadOriginal({"dc1"});
+        settings.ConsumerName("shared/user").AppendTopics(std::string{SHORT_TOPIC_NAME}).ReadOriginal({"dc1"});
         settings.DecompressionExecutor(decompressor);
         auto reader = CreateReader(*driver, settings);
 
@@ -3107,7 +3107,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         auto decompressor = CreateThreadPoolExecutorWrapper(2);
 
         NYdb::NPersQueue::TReadSessionSettings settings;
-        settings.ConsumerName("shared/user").AppendTopics(SHORT_TOPIC_NAME).ReadOriginal({"dc1"});
+        settings.ConsumerName("shared/user").AppendTopics(std::string{SHORT_TOPIC_NAME}).ReadOriginal({"dc1"});
         settings.DecompressionExecutor(decompressor);
         auto reader = CreateReader(*driver, settings);
 
@@ -3246,7 +3246,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         auto decompressor = CreateThreadPoolExecutorWrapper(2);
 
         NYdb::NPersQueue::TReadSessionSettings settings;
-        settings.ConsumerName("shared/user").AppendTopics(SHORT_TOPIC_NAME).ReadOriginal({"dc1"});
+        settings.ConsumerName("shared/user").AppendTopics(std::string{SHORT_TOPIC_NAME}).ReadOriginal({"dc1"});
         settings.DecompressionExecutor(decompressor);
         auto reader = CreateReader(*driver, settings);
 
@@ -3385,7 +3385,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         auto decompressor = CreateThreadPoolExecutorWrapper(2);
 
         NYdb::NPersQueue::TReadSessionSettings settings;
-        settings.ConsumerName("shared/user").AppendTopics(SHORT_TOPIC_NAME).ReadOriginal({"dc1"});
+        settings.ConsumerName("shared/user").AppendTopics(std::string{SHORT_TOPIC_NAME}).ReadOriginal({"dc1"});
         settings.DecompressionExecutor(decompressor);
         settings.MaxMemoryUsageBytes(5_MB);
         settings.Decompress(true);
@@ -3438,7 +3438,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         auto decompressor = CreateThreadPoolExecutorWrapper(2);
 
         NYdb::NPersQueue::TReadSessionSettings settings;
-        settings.ConsumerName("shared/user").AppendTopics(SHORT_TOPIC_NAME).ReadOriginal({"dc1"});
+        settings.ConsumerName("shared/user").AppendTopics(std::string{SHORT_TOPIC_NAME}).ReadOriginal({"dc1"});
         settings.DecompressionExecutor(decompressor);
         settings.MaxMemoryUsageBytes(maxMemoryUsageSize);
         settings.Decompress(decompress);
@@ -3633,7 +3633,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         auto decompressor = CreateThreadPoolExecutorWrapper(2);
 
         NYdb::NPersQueue::TReadSessionSettings settings;
-        settings.ConsumerName("shared/user").AppendTopics(SHORT_TOPIC_NAME).ReadOriginal({"dc1"});
+        settings.ConsumerName("shared/user").AppendTopics(std::string{SHORT_TOPIC_NAME}).ReadOriginal({"dc1"});
         settings.DecompressionExecutor(decompressor);
 
         auto reader = CreateReader(*driver, settings);
@@ -3788,7 +3788,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
             {
                 NYdb::NPersQueue::TReadSessionSettings settings;
                 settings.ConsumerName(originallyProvidedConsumerName)
-                    .AppendTopics(TString("account/topic1")).ReadOriginal({"dc1"});
+                    .AppendTopics(std::string{"account/topic1"}).ReadOriginal({"dc1"});
 
                 auto reader = CreateReader(*driver, settings);
 
@@ -5312,7 +5312,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
             auto ct = std::get_if<NYdb::NPersQueue::TWriteSessionEvent::TReadyToAcceptEvent>(&*ev);
             UNIT_ASSERT(ct);
             writer->Write(std::move(ct->ContinuationToken), "1234567890");
-            UNIT_ASSERT(ev.Defined());
+            UNIT_ASSERT(ev.has_value());
             while(true) {
                 ev = writer->GetEvent(true);
                 auto ack = std::get_if<NYdb::NPersQueue::TWriteSessionEvent::TAcksEvent>(&*ev);
@@ -6545,7 +6545,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
                     .ReadOnlyOriginal(true)
             );
 
-            TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(true, 1);
+            std::optional<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(true, 1);
             auto createStream = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*event);
             UNIT_ASSERT(createStream);
             TString stepDescription = TStringBuilder() << "create stream for partition=" << partition
@@ -6593,7 +6593,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
             auto ct = std::get_if<NYdb::NPersQueue::TWriteSessionEvent::TReadyToAcceptEvent >(&*ev);
             UNIT_ASSERT(ct);
             writer->Write(std::move(ct->ContinuationToken), "1234567890");
-            UNIT_ASSERT(ev.Defined());
+            UNIT_ASSERT(ev.has_value());
             while(true) {
                 ev = writer->GetEvent(true);
                 auto ack = std::get_if<NYdb::NPersQueue::TWriteSessionEvent::TAcksEvent>(&*ev);
@@ -6635,14 +6635,14 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         auto reader = CreateReader(
             *driver,
             NYdb::NPersQueue::TReadSessionSettings()
-                .AppendTopics(topic)
+                .AppendTopics(std::string{topic})
                 .ConsumerName("shared/user")
                 .ReadOnlyOriginal(true)
         );
 
 
         {
-            TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(true, 1);
+            std::optional<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(true, 1);
             auto createStream = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*event);
             UNIT_ASSERT(createStream);
             Cerr << "Create stream event: " << createStream->DebugString() << Endl;
@@ -6651,7 +6651,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         {
             auto future = reader->WaitEvent();
             UNIT_ASSERT(future.Wait(TDuration::Seconds(10)));
-            TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(true, 1);
+            std::optional<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(true, 1);
             auto partitionStatus = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TPartitionStreamStatusEvent>(&*event);
             UNIT_ASSERT(partitionStatus);
             Cerr << "partition status: " << partitionStatus->DebugString() << Endl;
@@ -6679,7 +6679,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
 
         THashSet<ui32> locksGot = {};
         while(locksGot.size() < 2) {
-            TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(true, 1);
+            std::optional<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(true, 1);
             auto createStream = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*event);
             UNIT_ASSERT(createStream);
             Cerr << "Create stream event: " << createStream->DebugString() << Endl;
@@ -6701,7 +6701,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         locksGot.clear();
         THashSet<ui32> releasesGot = {};
         while (locksGot.size() < 3) {
-            TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader2->GetEvent(true, 1);
+            std::optional<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader2->GetEvent(true, 1);
             auto createStream = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*event);
             UNIT_ASSERT(createStream);
             Cerr << "Create stream event: " << createStream->DebugString() << Endl;
@@ -6718,7 +6718,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         }
 
         while (!releasesGot.empty()) {
-            TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(true, 1);
+            std::optional<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(true, 1);
             auto release = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*event);
             UNIT_ASSERT(release);
             UNIT_ASSERT_VALUES_EQUAL(release->GetPartitionStream()->GetTopicPath(), topic);
@@ -6758,7 +6758,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         NYdb::NTopic::TWriteSessionSettings wSettings {topicFullName, "srcId", "srcId"};
         wSettings.DirectWriteToPartition(false);
         auto writer = topicClient.CreateSimpleBlockingWriteSession(wSettings);
-        TVector<std::pair<TString, TString>> metadata = {{"key1", "val1"}, {"key2", "val2"}};
+        std::vector<std::pair<std::string, std::string>> metadata = {{"key1", "val1"}, {"key2", "val2"}};
         {
             auto message = NYdb::NTopic::TWriteMessage{"Somedata"}.MessageMeta(metadata);
             writer->Write(std::move(message));
@@ -6775,7 +6775,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         auto readSession = topicClient.CreateReadSession(rSettings);
 
         auto ev = readSession->GetEvent(true);
-        UNIT_ASSERT(ev.Defined());
+        UNIT_ASSERT(ev.has_value());
         auto spsEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev);
         UNIT_ASSERT(spsEv);
         spsEv->Confirm();
@@ -6875,7 +6875,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         Cerr << "Start reads\n";
         while(totalMessages < 9) {
             auto ev = readSession->GetEvent(true);
-            UNIT_ASSERT(ev.Defined());
+            UNIT_ASSERT(ev.has_value());
 
             auto spsEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev);
             if (spsEv) {
@@ -6915,7 +6915,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         NYdb::NPersQueue::TPersQueueClient persqueueClient(*driver);
         NYdb::NPersQueue::TReadSessionSettings settings;
 
-        settings.ConsumerName("shared/user").AppendTopics(SHORT_TOPIC_NAME).ReadOriginal({"dc1"});
+        settings.ConsumerName("shared/user").AppendTopics(std::string{SHORT_TOPIC_NAME}).ReadOriginal({"dc1"});
         settings.MaxMemoryUsageBytes(1_MB);
         settings.DisableClusterDiscovery(true);
 

@@ -1,12 +1,13 @@
 LIBRARY()
 
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
+
 SRCS(
-    extension.cpp
+    extension.h
 )
 
 PEERDIR(
-    library/cpp/monlib/metrics
-    ydb/public/sdk/cpp/client/ydb_driver
+    ydb/public/sdk/cpp/src/client/extension_common
 )
 
 END()

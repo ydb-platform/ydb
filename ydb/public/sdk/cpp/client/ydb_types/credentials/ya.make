@@ -1,18 +1,13 @@
 LIBRARY()
 
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
+
 SRCS(
-    credentials.cpp
+    credentials.h
 )
 
 PEERDIR(
-    ydb/library/login
-    ydb/public/api/grpc
-    ydb/public/sdk/cpp/client/ydb_types/status
-    ydb/library/yql/public/issue
+    ydb/public/sdk/cpp/src/client/types/credentials
 )
 
 END()
-
-RECURSE(
-    oauth2_token_exchange
-)

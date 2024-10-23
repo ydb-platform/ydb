@@ -643,7 +643,7 @@ private:
     // Result
     std::vector<TResultSetInfo> ResultSetInfos;
     std::queue<TPendingAck> PendingAcks;
-    TMaybe<TInstant> ExpireAt;
+    std::optional<TInstant> ExpireAt;
     NJson::TJsonValue ResultSetMetas;
     ui32 SaveResultInflight = 0;
     ui32 SaveResultMetaInflight = 0;

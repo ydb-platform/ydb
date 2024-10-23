@@ -1,0 +1,6 @@
+[submodule "third_party/api-common-protos"]
+	path = third_party/api-common-protos
+	url = https://github.com/googleapis/api-common-protos.git
+[submodule "third_party/FastLZ"]
+	path = third_party/FastLZ
+	url = https://github.com/ariya/FastLZ

@@ -1,9 +1,6 @@
 LIBRARY()
 
-GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/client/ydb_topic/include/codecs.h)
-GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/client/ydb_topic/include/control_plane.h)
-GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/client/ydb_topic/include/read_events.h)
-GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/client/ydb_topic/include/write_events.h)
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
 
 SRCS(
     client.h
@@ -21,13 +18,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/api/grpc
-    ydb/public/api/protos
-
-    ydb/library/yql/public/issue/protos
-
-    library/cpp/retry
-    library/cpp/streams/zstd
+    ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic
 )
 
 END()

@@ -495,17 +495,17 @@ private:
     void HandleReply(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         NJson::TJsonValue jsonResponse;
         jsonResponse["version"] = Viewer->GetCapabilityVersion("/viewer/query");
-        if (ev->Get()->Record.GetRef().GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+        if (ev->Get()->Record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             QueryResponse.Set(std::move(ev));
-            MakeOkReply(jsonResponse, QueryResponse->Record.GetRef());
+            MakeOkReply(jsonResponse, QueryResponse->Record);
             if (Schema == ESchemaType::Classic && Stats.empty() && (Action.empty() || Action == "execute")) {
                 jsonResponse = std::move(jsonResponse["result"]);
             }
         } else {
             QueryResponse.Error("QueryError");
             NYql::TIssues issues;
-            NYql::IssuesFromMessage(ev->Get()->Record.GetRef().GetResponse().GetQueryIssues(), issues);
-            MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(ev->Get()->Record.GetRef().GetYdbStatus()), std::move(issues)));
+            NYql::IssuesFromMessage(ev->Get()->Record.GetResponse().GetQueryIssues(), issues);
+            MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(ev->Get()->Record.GetYdbStatus()), std::move(issues)));
         }
 
         TStringStream stream;

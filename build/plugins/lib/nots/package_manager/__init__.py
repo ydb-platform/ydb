@@ -1,4 +1,4 @@
-import typing
+from typing import Literal
 
 from .base import (
     bundle_node_modules,
@@ -14,10 +14,13 @@ from .base.package_json import PackageJsonWorkspaceError
 from .pnpm import PnpmPackageManager
 from .npm import NpmPackageManager
 
+
+type PackageManagerType = Literal["pnpm", "npm"]
+
 manager = PnpmPackageManager
 
 
-def get_package_manager_type(key: typing.Literal["pnpm", "npm"]) -> typing.Type[BasePackageManager]:
+def get_package_manager_type(key: PackageManagerType) -> type[BasePackageManager]:
     if key == "pnpm":
         return PnpmPackageManager
     if key == "npm":
@@ -33,6 +36,7 @@ __all__ = [
     "PackageJson",
     "PackageJsonWorkspaceError",
     "PackageManagerCommandError",
+    "PackageManagerType",
     "bundle_node_modules",
     "constants",
     "extract_node_modules",

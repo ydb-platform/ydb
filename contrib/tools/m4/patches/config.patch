@@ -1,0 +1,8 @@
+--- contrib/tools/m4/lib/config-linux.h	(index)
++++ contrib/tools/m4/lib/config-linux.h	(working tree)
+@@ -2902,2 +2902,5 @@
+ /* Define as a macro for copying va_list variables. */
+ /* #undef va_copy */
++#undef HAVE_SYS_SINGLE_THREADED_H
++#define __attribute_maybe_unused__
++#define __attribute_nonnull__(...)

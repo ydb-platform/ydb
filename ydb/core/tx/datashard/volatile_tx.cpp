@@ -271,9 +271,6 @@ namespace NKikimr::NDataShard {
 
     void TVolatileTxManager::Start(const TActorContext& ctx) {
         for (auto& pr : VolatileTxs) {
-            if (!pr.second->Dependencies.empty()) {
-                continue;
-            }
             switch (pr.second->State) {
                 case EVolatileTxState::Waiting:
                     for (ui64 target : pr.second->Participants) {
@@ -347,7 +344,7 @@ namespace NKikimr::NDataShard {
         std::vector<TVolatileTxInfo*> byCommitOrder;
         byCommitOrder.reserve(VolatileTxs.size());
 
-        auto postProcessTxInfo = [this, &byCommitOrder](TVolatileTxInfo* info) {
+        auto postProcessTxInfo = [&](TVolatileTxInfo* info) {
             switch (info->State) {
                 case EVolatileTxState::Waiting:
                 case EVolatileTxState::Committed: {
@@ -401,6 +398,28 @@ namespace NKikimr::NDataShard {
         for (TVolatileTxInfo* info : byCommitOrder) {
             VolatileTxByCommitOrder.PushBack(info);
         }
+
+        ui64 numWaiting = 0;
+        ui64 numCommitted = 0;
+        ui64 numAborting = 0;
+        for (auto& pr : VolatileTxs) {
+            switch (pr.second->State) {
+                case EVolatileTxState::Waiting:
+                    ++numWaiting;
+                    break;
+                case EVolatileTxState::Committed:
+                    ++numCommitted;
+                    break;
+                case EVolatileTxState::Aborting:
+                    ++numAborting;
+                    break;
+            }
+        }
+
+        Self->SetCounter(COUNTER_VOLATILE_TX_INFLIGHT, VolatileTxs.size());
+        Self->SetCounter(COUNTER_VOLATILE_TX_WAITING_COUNT, numWaiting);
+        Self->SetCounter(COUNTER_VOLATILE_TX_COMMITTED_COUNT, numCommitted);
+        Self->SetCounter(COUNTER_VOLATILE_TX_ABORTING_COUNT, numAborting);
 
         return true;
     }
@@ -557,6 +576,8 @@ namespace NKikimr::NDataShard {
             db.Table<Schema::TxVolatileParticipants>().Key(info->TxId, shardId).Update();
         }
 
+        UpdateCountersAdd(info);
+
         txc.DB.OnRollback([this, txId]() {
             RollbackAddVolatileTx(txId);
         });
@@ -596,7 +617,10 @@ namespace NKikimr::NDataShard {
 
         // FIXME: do we need to handle WaitingSnapshotEvents somehow?
 
+        // Note: not counting latency (this is a rollback)
+
         // This will also unlink from linked lists
+        UpdateCountersRemove(info);
         VolatileTxs.erase(txId);
     }
 
@@ -635,6 +659,10 @@ namespace NKikimr::NDataShard {
             VolatileTxByCommitTxId.erase(commitTxId);
         }
         VolatileTxByVersion.erase(info);
+
+        Self->IncCounter(COUNTER_VOLATILE_TX_TOTAL_LATENCY_MS, info->LatencyTimer.Passed() * 1000);
+
+        UpdateCountersRemove(info);
         VolatileTxs.erase(txId);
 
         if (prevUncertain < GetMinUncertainVersion()) {
@@ -731,7 +759,7 @@ namespace NKikimr::NDataShard {
         ui64 txId = info->TxId;
 
         // Move tx to aborting, but don't persist yet, we need a separate transaction for that
-        info->State = EVolatileTxState::Aborting;
+        ChangeState(info, EVolatileTxState::Aborting);
 
         // Aborted transactions don't have dependencies
         for (ui64 dependencyTxId : info->Dependencies) {
@@ -845,7 +873,7 @@ namespace NKikimr::NDataShard {
             // Move tx to committed.
             // Note that we don't need to wait until the new state is committed (it's repeatable),
             // but we need to wait until the initial effects are committed and persisted.
-            info->State = EVolatileTxState::Committed;
+            ChangeState(info, EVolatileTxState::Committed);
             db.Table<Schema::TxVolatileDetails>().Key(txId).Update(
                 NIceDb::TUpdate<Schema::TxVolatileDetails::State>(info->State));
 
@@ -875,7 +903,7 @@ namespace NKikimr::NDataShard {
             if (info->AddCommitted) {
                 RunCommitCallbacks(info);
             }
-            if (info->Dependencies.empty() && ReadyToDbCommit(info)) {
+            if (ReadyToDbCommit(info)) {
                 AddPendingCommit(txId);
             }
         }
@@ -926,7 +954,9 @@ namespace NKikimr::NDataShard {
                     case EVolatileTxState::Waiting:
                         break;
                     case EVolatileTxState::Committed:
-                        AddPendingCommit(dependentTxId);
+                        if (ReadyToDbCommit(dependent)) {
+                            AddPendingCommit(dependentTxId);
+                        }
                         break;
                     case EVolatileTxState::Aborting:
                         Y_ABORT("FIXME: unexpected dependency removed from aborting tx");
@@ -1029,6 +1059,45 @@ namespace NKikimr::NDataShard {
         }
 
         return false;
+    }
+
+    void TVolatileTxManager::UpdateCountersAdd(TVolatileTxInfo* info) {
+        Self->IncCounter(COUNTER_VOLATILE_TX_INFLIGHT);
+        switch (info->State) {
+            case EVolatileTxState::Waiting:
+                Self->IncCounter(COUNTER_VOLATILE_TX_WAITING_COUNT);
+                break;
+            case EVolatileTxState::Committed:
+                Self->IncCounter(COUNTER_VOLATILE_TX_COMMITTED_COUNT);
+                break;
+            case EVolatileTxState::Aborting:
+                Self->IncCounter(COUNTER_VOLATILE_TX_ABORTING_COUNT);
+                break;
+        }
+    }
+
+    void TVolatileTxManager::UpdateCountersRemove(TVolatileTxInfo* info) {
+        Self->DecCounter(COUNTER_VOLATILE_TX_INFLIGHT);
+        switch (info->State) {
+            case EVolatileTxState::Waiting:
+                Self->DecCounter(COUNTER_VOLATILE_TX_WAITING_COUNT);
+                break;
+            case EVolatileTxState::Committed:
+                Self->DecCounter(COUNTER_VOLATILE_TX_COMMITTED_COUNT);
+                break;
+            case EVolatileTxState::Aborting:
+                Self->DecCounter(COUNTER_VOLATILE_TX_ABORTING_COUNT);
+                break;
+        }
+    }
+
+    void TVolatileTxManager::ChangeState(TVolatileTxInfo* info, EVolatileTxState state) {
+        if (info->State == EVolatileTxState::Waiting) {
+            Self->IncCounter(COUNTER_VOLATILE_TX_WAIT_LATENCY_MS, info->LatencyTimer.Passed() * 1000);
+        }
+        UpdateCountersRemove(info);
+        info->State = state;
+        UpdateCountersAdd(info);
     }
 
 } // namespace NKikimr::NDataShard

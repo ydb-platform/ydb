@@ -28,8 +28,6 @@ SRCS(
     resetable_setting.h
     retry.cpp
     retry.h
-    rope_over_buffer.cpp
-    rope_over_buffer.h
     sort.cpp
     sort.h
     swap_bytes.cpp
@@ -43,7 +41,6 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/actors/util
     ydb/library/yql/core/issue/protos
     library/cpp/digest/md5
     library/cpp/messagebus
@@ -65,6 +62,7 @@ RECURSE(
     fetch
     log
     plan
+    rope
     signals
     simd
     sys

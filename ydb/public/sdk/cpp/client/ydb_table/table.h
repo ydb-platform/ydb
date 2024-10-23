@@ -186,9 +186,7 @@ struct TExplicitPartitions {
 
     FLUENT_SETTING_VECTOR(TValue, SplitPoints);
 
-    template <typename TProto>
-    static TExplicitPartitions FromProto(const TProto& proto);
-
+    static TExplicitPartitions FromProto(const Ydb::Table::ExplicitPartitions& proto);
     void SerializeTo(Ydb::Table::ExplicitPartitions& proto) const;
 };
 
@@ -198,9 +196,7 @@ struct TGlobalIndexSettings {
     TPartitioningSettings PartitioningSettings;
     TUniformOrExplicitPartitions Partitions;
 
-    template <typename TProto>
-    static TGlobalIndexSettings FromProto(const TProto& proto);
-
+    static TGlobalIndexSettings FromProto(const Ydb::Table::GlobalIndexSettings& proto);
     void SerializeTo(Ydb::Table::GlobalIndexSettings& proto) const;
 };
 
@@ -227,9 +223,7 @@ public:
     EVectorType VectorType = EVectorType::Unspecified;
     ui32 VectorDimension = 0;
 
-    template <typename TProto>
-    static TVectorIndexSettings FromProto(const TProto& proto);
-
+    static TVectorIndexSettings FromProto(const Ydb::Table::VectorIndexSettings& proto);
     void SerializeTo(Ydb::Table::VectorIndexSettings& settings) const;
 
     void Out(IOutputStream &o) const;
@@ -258,9 +252,7 @@ public:
     ui32 Clusters = 0;
     ui32 Levels = 0;
 
-    template <typename TProto>
-    static TKMeansTreeSettings FromProto(const TProto& proto);
-
+    static TKMeansTreeSettings FromProto(const Ydb::Table::KMeansTreeSettings& proto);
     void SerializeTo(Ydb::Table::KMeansTreeSettings& settings) const;
 
     void Out(IOutputStream &o) const;
@@ -985,6 +977,9 @@ public:
 
     TCopyItem& SetOmitIndexes();
     bool OmitIndexes() const;
+
+    void Out(IOutputStream& out) const;
+
 private:
     TString Source_;
     TString Destination_;

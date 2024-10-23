@@ -314,6 +314,7 @@ struct TSchemeCacheNavigate {
         THashSet<TString> NotNullColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
+        TVector<NKikimrSchemeOp::TSequenceDescription> Sequences;
 
         // other
         TIntrusiveConstPtr<TDomainDescription> DomainDescription;

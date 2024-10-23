@@ -1155,12 +1155,15 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> FreezeUsedF
         return SyncError();
     }
 
+    if (types.QContext.CanRead()) {
+        return SyncOk();
+    }
+
     auto future = FreezeUserDataTableIfNeeded(types.UserDataStorage, files, urlDownloadFilter);
     if (future.Wait(TDuration::Zero())) {
         files = future.GetValue()();
         return SyncOk();
-    }
-    else {
+    } else {
         return std::make_pair(IGraphTransformer::TStatus::Async, future.Apply(
             [](const NThreading::TFuture<std::function<TUserDataTable()>>& completedFuture) {
                 return TAsyncTransformCallback([completedFuture](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {

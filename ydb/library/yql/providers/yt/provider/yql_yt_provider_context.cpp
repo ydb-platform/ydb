@@ -136,10 +136,10 @@ bool TYtProviderContext::IsJoinApplicable(
     EJoinAlgoType joinAlgo,
     EJoinKind /*joinKind*/) {
     if (joinAlgo == EJoinAlgoType::LookupJoin) {
-        return !leftJoinKeys.empty() && IsLookupJoinApplicable(*left->Stats, *right->Stats, leftJoinKeys);
+        return !leftJoinKeys.empty() && IsLookupJoinApplicable(left->Stats, right->Stats, leftJoinKeys);
     }
     if (joinAlgo == EJoinAlgoType::MapJoin) {
-        return IsMapJoinApplicable(*right->Stats);
+        return IsMapJoinApplicable(right->Stats);
     }
     return joinAlgo == EJoinAlgoType::MergeJoin;
 }

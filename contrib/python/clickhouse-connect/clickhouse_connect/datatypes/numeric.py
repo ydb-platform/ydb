@@ -4,7 +4,7 @@ from typing import Union, Type, Sequence, MutableSequence
 from math import nan
 
 from clickhouse_connect.datatypes.base import TypeDef, ArrayType, ClickHouseType
-from clickhouse_connect.driver.common import array_type, write_array, decimal_size, decimal_prec
+from clickhouse_connect.driver.common import array_type, write_array, decimal_size, decimal_prec, first_value
 from clickhouse_connect.driver.ctypes import numpy_conv, data_conv
 from clickhouse_connect.driver.insert import InsertContext
 from clickhouse_connect.driver.options import pd, np
@@ -98,7 +98,7 @@ class BigInt(ClickHouseType, registered=False):
     def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx: InsertContext):
         if len(column) == 0:
             return
-        first = self._first_value(column)
+        first = first_value(column, self.nullable)
         sz = self.byte_size
         signed = self._signed
         empty = bytes(b'\x00' * sz)
@@ -189,8 +189,8 @@ class Bool(ClickHouseType):
             return np.array(column)
         return column
 
-    def _write_column_binary(self, column, dest, _ctx):
-        write_array('B', [1 if x else 0 for x in column], dest)
+    def _write_column_binary(self, column, dest, ctx):
+        write_array('B', [1 if x else 0 for x in column], dest, ctx.column_name)
 
 
 class Boolean(Bool):
@@ -218,15 +218,15 @@ class Enum(ClickHouseType):
         lookup = self._int_map.get
         return [lookup(x, None) for x in column]
 
-    def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, _ctx):
-        first = self._first_value(column)
+    def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx:InsertContext):
+        first = first_value(column, self.nullable)
         if first is None or not isinstance(first, str):
             if self.nullable:
                 column = [0 if not x else x for x in column]
-            write_array(self._array_type, column, dest)
+            write_array(self._array_type, column, dest, ctx.column_name)
         else:
             lookup = self._name_map.get
-            write_array(self._array_type, [lookup(x, 0) for x in column], dest)
+            write_array(self._array_type, [lookup(x, 0) for x in column], dest, ctx.column_name)
 
 
 class Enum8(Enum):
@@ -285,15 +285,15 @@ class Decimal(ClickHouseType):
                 app(dec(f'-{digits[:-scale]}.{digits[-scale:]}'))
         return new_col
 
-    def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, _ctx):
-        with decimal.localcontext() as ctx:
-            ctx.prec = self.prec
+    def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx:InsertContext):
+        with decimal.localcontext() as dec_ctx:
+            dec_ctx.prec = self.prec
             dec = decimal.Decimal
             mult = self._mult
             if self.nullable:
-                write_array(self._array_type, [int(dec(str(x)) * mult) if x else 0 for x in column], dest)
+                write_array(self._array_type, [int(dec(str(x)) * mult) if x else 0 for x in column], dest, ctx.column_name)
             else:
-                write_array(self._array_type, [int(dec(str(x)) * mult) for x in column], dest)
+                write_array(self._array_type, [int(dec(str(x)) * mult) for x in column], dest, ctx.column_name)
 
     def _active_null(self, ctx: QueryContext):
         if ctx.use_none:

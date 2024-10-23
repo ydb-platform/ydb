@@ -1445,6 +1445,7 @@ message TIndexInfo
     required NYT.NProto.TGuid index_table_id = 1;
     required int32 index_kind = 2; // NTableClient::ESecondaryIndexKind
     optional string predicate = 3;
+    optional string unfolded_column = 4;
 }
 
 message TReqGetTableMountInfo
@@ -2484,6 +2485,27 @@ message TRspGetJobStderr
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TReqGetJobTrace
+{
+    oneof operation_id_or_alias {
+        NYT.NProto.TGuid operation_id = 1;
+        string operation_alias = 2;
+    }
+    optional NYT.NProto.TGuid job_id = 3;
+    optional NYT.NProto.TGuid trace_id = 4;
+    optional int64 from_event_index = 5;
+    optional int64 to_event_index = 6;
+    optional int64 from_time = 7;
+    optional int64 to_time = 8;
+}
+
+message TRspGetJobTrace
+{
+    repeated TJobTraceEvent events = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TReqGetJobFailContext
 {
     oneof operation_id_or_alias {
@@ -3156,6 +3178,16 @@ message TListJobsResult
     repeated NYT.NProto.TError errors = 6;
 }
 
+message TJobTraceEvent
+{
+    required NYT.NProto.TGuid operation_id = 1;
+    required NYT.NProto.TGuid job_id = 2;
+    required NYT.NProto.TGuid trace_id = 3;
+    required int64 event_index = 4;
+    required string event = 5;
+    required int64 event_time = 6; // TInstant
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 message TGetFileFromCacheResult
@@ -3377,15 +3409,14 @@ message TRspGetQueryTrackerInfo
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// NB(arkady-e1ppa): Under construction.
 // Distributed table client
 ////////////////////////////////////////////////////////////////////////////////
 
 message TReqStartDistributedWriteSession
 {
-    optional string path = 1;
-
-    // TDistributedWriteSessionStartOptions contents...
+    required string path = 1;
+    
+    optional TTransactionalOptions transactional_options = 100;
 }
 
 message TRspStartDistributedWriteSession
@@ -3395,29 +3426,27 @@ message TRspStartDistributedWriteSession
 
 message TReqFinishDistributedWriteSession
 {
-    required bytes session = 2; // YSON-serialized TDistributedWriteSession
+    required bytes session = 1; // YSON-serialized TDistributedWriteSession
 
-    // TDistributedWriteSessionFinishOptions contents...
+    required int32 max_children_per_attach_request = 2;
 }
 
 message TRspFinishDistributedWriteSession
 {
 }
 
-message TReqParticipantWriteTable
+message TReqWriteTableFragment
 {
     optional bytes config = 1; // YSON-serialized TTableWriterConfig
 
     optional bytes format = 2; // YSON-serialized TFormat
 
-    required bytes cookie = 3; // YSON-serialized TDistributedWriteCookie
-
-    // TParticipantTableWriterOptions contents...
+    required bytes cookie = 3; // YSON-serialized TFragmentWriteCookie
 }
 
-message TRspParticipantWriteTable
+message TRspWriteTableFragment
 {
-    required bytes cookie = 1; // YSON-serialized TDistributedWriteCookie
+    required bytes cookie = 1; // YSON-serialized TFragmentWriteCookie
 }
 
 ///////////////////////////////////////////////////////////////////////////////

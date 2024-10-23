@@ -522,6 +522,31 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
                 << ", childType# " << static_cast<ui32>(childPath->PathType));
         }
     }
+
+    for (const auto& col : tableInfo.Columns) {
+        const auto& cinfo = col.second;
+        if (cinfo.IsDropped())
+            continue;
+
+        switch (cinfo.DefaultKind) {
+            case ETableColumnDefaultKind::None:
+                break;
+            case ETableColumnDefaultKind::FromSequence:
+                if (cinfo.DefaultValue.StartsWith('/')) {
+                    NSchemeShard::TPath sequencePath = NSchemeShard::TPath::Resolve(cinfo.DefaultValue, Self);
+                    NSchemeShard::TPath::TChecker checks = sequencePath.Check();
+                    checks
+                        .IsResolved()
+                        .NotDeleted();
+                    if (checks) {
+                        Self->DescribeSequence(sequencePath->PathId, cinfo.DefaultValue, *entry->AddSequences(), returnSetVal);
+                    }
+                }
+                break;
+            case ETableColumnDefaultKind::FromLiteral:
+                break;
+        }
+    }
 }
 
 void TPathDescriber::DescribeOlapStore(TPathId pathId, TPathElement::TPtr pathEl) {

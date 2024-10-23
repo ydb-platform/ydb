@@ -84,7 +84,7 @@ def create_client(*,
         database = database or parsed.path
         for k, v in parse_qs(parsed.query).items():
             kwargs[k] = v[0]
-    use_tls = str(secure).lower() == 'true' or interface == 'https' or (not interface and port in (443, 8443))
+    use_tls = str(secure).lower() == 'true' or interface == 'https' or (not interface and str(port) in ('443', '8443'))
     if not host:
         host = 'localhost'
     if not interface:

@@ -7,7 +7,7 @@
 $p = (select p_partkey, p_name
 from
     {{part}}
-where p_name like '%rose%');
+where p_name like '%green%');
 
 $j1 = (select ps_partkey, ps_suppkey, ps_supplycost
 from

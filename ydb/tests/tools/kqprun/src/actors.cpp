@@ -131,7 +131,7 @@ public:
         RequestsLatency_ += TInstant::Now() - RunningRequests_[requestId].StartTime;
         RunningRequests_.erase(requestId);
 
-        const auto& response = ev->Get()->Result.Response->Get()->Record.GetRef();
+        const auto& response = ev->Get()->Result.Response->Get()->Record;
         const auto status = response.GetYdbStatus();
 
         if (status == Ydb::StatusIds::SUCCESS) {

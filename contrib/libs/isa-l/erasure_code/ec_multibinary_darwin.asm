@@ -53,6 +53,16 @@
  extern _gf_vect_mad_avx2
 %endif
 
+%if (AS_FEATURE_LEVEL) >= 10
+ extern _ec_init_tables_gfni
+ extern _ec_encode_data_avx512_gfni
+ extern _ec_encode_data_avx2_gfni
+ extern _ec_encode_data_update_avx512_gfni
+ extern _ec_encode_data_update_avx2_gfni
+%endif
+
+extern _ec_init_tables_base
+
 extern _gf_vect_mul_base
 extern _ec_encode_data_base
 extern _ec_encode_data_update_base
@@ -71,6 +81,7 @@ mbin_interface _gf_vect_dot_prod
 mbin_interface _gf_vect_mul
 mbin_interface _ec_encode_data_update
 mbin_interface _gf_vect_mad
+mbin_interface _ec_init_tables
 
 %ifidn __OUTPUT_FORMAT__, elf32
  mbin_dispatch_init5 _ec_encode_data, _ec_encode_data_base, _ec_encode_data_sse, _ec_encode_data_avx, _ec_encode_data_avx2
@@ -78,19 +89,13 @@ mbin_interface _gf_vect_mad
  mbin_dispatch_init2 _gf_vect_mul, _gf_vect_mul_base
  mbin_dispatch_init2 _ec_encode_data_update, _ec_encode_data_update_base
  mbin_dispatch_init2 _gf_vect_mad, _gf_vect_mad_base
+ mbin_dispatch_init2 _ec_init_tables, _ec_init_tables_base
 %else
 
  mbin_dispatch_init5 _gf_vect_mul, _gf_vect_mul_base, _gf_vect_mul_sse, _gf_vect_mul_avx, _gf_vect_mul_avx
- mbin_dispatch_init6 _ec_encode_data, _ec_encode_data_base, _ec_encode_data_sse, _ec_encode_data_avx, _ec_encode_data_avx2, _ec_encode_data_avx512
- mbin_dispatch_init6 _ec_encode_data_update, _ec_encode_data_update_base, _ec_encode_data_update_sse, _ec_encode_data_update_avx, _ec_encode_data_update_avx2, _ec_encode_data_update_avx512
+ mbin_dispatch_init8 _ec_encode_data, _ec_encode_data_base, _ec_encode_data_sse, _ec_encode_data_avx, _ec_encode_data_avx2, _ec_encode_data_avx512, _ec_encode_data_avx2_gfni, _ec_encode_data_avx512_gfni
+ mbin_dispatch_init8 _ec_encode_data_update, _ec_encode_data_update_base, _ec_encode_data_update_sse, _ec_encode_data_update_avx, _ec_encode_data_update_avx2, _ec_encode_data_update_avx512, _ec_encode_data_update_avx2_gfni, _ec_encode_data_update_avx512_gfni
  mbin_dispatch_init6 _gf_vect_mad, _gf_vect_mad_base, _gf_vect_mad_sse, _gf_vect_mad_avx, _gf_vect_mad_avx2, _gf_vect_mad_avx512
  mbin_dispatch_init6 _gf_vect_dot_prod, _gf_vect_dot_prod_base, _gf_vect_dot_prod_sse, _gf_vect_dot_prod_avx, _gf_vect_dot_prod_avx2, _gf_vect_dot_prod_avx512
+ mbin_dispatch_init8 _ec_init_tables, _ec_init_tables_base, _ec_init_tables_base, _ec_init_tables_base, _ec_init_tables_base, _ec_init_tables_base, _ec_init_tables_gfni, _ec_init_tables_gfni
 %endif
-
-
-;;;       func                 		core, ver, snum
-slversion ec_encode_data,		00,   06,  0133
-slversion gf_vect_mul,			00,   05,  0134
-slversion ec_encode_data_update,	00,   05,  0212
-slversion gf_vect_dot_prod,		00,   05,  0138
-slversion gf_vect_mad,			00,   04,  0213

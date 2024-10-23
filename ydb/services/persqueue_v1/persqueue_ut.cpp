@@ -1167,7 +1167,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
     }
 
     Y_UNIT_TEST(DirectReadCleanCache) {
-        TPersQueueV1TestServer server;
+        TPersQueueV1TestServer server{{.NodeCount=1}};
         SET_LOCALS;
         TString topicPath{"/Root/PQ/rt3.dc1--acc--topic2"};
         server.Server->AnnoyingClient->CreateTopicNoLegacy(topicPath, 1);

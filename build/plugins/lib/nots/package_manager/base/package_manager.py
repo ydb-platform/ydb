@@ -34,7 +34,6 @@ class BasePackageManager(object):
         sources_path,
         nodejs_bin_path,
         script_path,
-        contribs_path,
         module_path=None,
         sources_root=None,
     ):
@@ -45,7 +44,6 @@ class BasePackageManager(object):
         self.sources_root = sources_path[: -len(self.module_path) - 1] if sources_root is None else sources_root
         self.nodejs_bin_path = nodejs_bin_path
         self.script_path = script_path
-        self.contribs_path = contribs_path
 
     @classmethod
     def load_package_json(cls, path):
@@ -149,9 +147,6 @@ class BasePackageManager(object):
 
     def _nm_path(self, *parts):
         return os.path.join(build_nm_path(self.build_path), *parts)
-
-    def _contrib_tarball_path(self, pkg):
-        return os.path.join(self.contribs_path, pkg.tarball_path)
 
     def _tarballs_store_path(self, pkg, store_path):
         return os.path.join(self.module_path, store_path, pkg.tarball_path)

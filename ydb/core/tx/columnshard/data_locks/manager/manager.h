@@ -3,30 +3,47 @@
 #include <util/generic/hash.h>
 #include <util/generic/string.h>
 #include <optional>
+#include <deque>
 
 namespace NKikimr::NOlap::NDataLocks {
 
+
+enum class ELockType {
+    Shared,
+    Exclusive
+};
+
 class TManager {
 private:
-    THashMap<TString, std::shared_ptr<ILock>> ProcessLocks;
+    struct TLockInfo {
+        std::unique_ptr<ILock> Lock;
+        ELockType LockType;
+        size_t LockCount;
+    };
+    THashMap<size_t, TLockInfo> Locks;
+    std::deque<TLockInfo> Awaiting;
+    size_t LastLockId = 0;
     std::shared_ptr<TAtomicCounter> StopFlag = std::make_shared<TAtomicCounter>(0);
-    void UnregisterLock(const TString& processId);
+    void ReleaseLock(const size_t lockId);
 public:
     TManager() = default;
 
     void Stop();
 
-    class TGuard {
+    class TGuard: TNonCopyable {
     private:
-        const TString ProcessId;
+        const size_t LockId;
         std::shared_ptr<TAtomicCounter> StopFlag;
         bool Released = false;
     public:
-        TGuard(const TString& processId, const std::shared_ptr<TAtomicCounter>& stopFlag)
-            : ProcessId(processId)
+        TGuard(const size_t lockId, const std::shared_ptr<TAtomicCounter>& stopFlag)
+            : LockId(lockId)
             , StopFlag(stopFlag)
         {
+        }
 
+        size_t GetLockId() const {
+            return LockId;
         }
 
         void AbortLock();
@@ -36,14 +53,21 @@ public:
         void Release(TManager& manager);
     };
 
-    [[nodiscard]] std::shared_ptr<TGuard> RegisterLock(const std::shared_ptr<ILock>& lock);
-    template <class TLock, class ...Args>
-    [[nodiscard]] std::shared_ptr<TGuard> RegisterLock(Args&&... args) {
-        return RegisterLock(std::make_shared<TLock>(args...));
-    }
-    std::optional<TString> IsLocked(const TPortionInfo& portion, const THashSet<TString>& excludedLocks = {}) const;
-    std::optional<TString> IsLocked(const TGranuleMeta& granule, const THashSet<TString>& excludedLocks = {}) const;
+    struct ILockAcquired {
+        using TPtr = std::unique_ptr<ILockAcquired>;
+        virtual void OnLockAcquired(TGuard&& guard) = 0;
+        virtual ~ILockAcquired() = default;
+    };
 
+    std::unique_ptr<TGuard> Lock(ILock::TPtr&& lock,  const ELockType type, ILockAcquired::TPtr&& onAcquired);
+    std::unique_ptr<TGuard> TryLock(ILock::TPtr&& lock,  const ELockType type) {
+        return Lock(std::move(lock), type, ILockAcquired::TPtr{});
+    }
+    
+    std::optional<TString> IsLocked(const TPortionInfo& portion, const TLockScope& scope = TLockScope{.Action = EAction::Modify, .Originator = EOriginator::Bg}, const std::unique_ptr<TGuard>& ignored = nullptr) const;
+    std::optional<TString> IsLocked(const TGranuleMeta& granule, const TLockScope& scope = TLockScope{.Action = EAction::Modify, .Originator = EOriginator::Bg}, const std::unique_ptr<TGuard>& ignored = nullptr) const;
+    std::optional<TString> IsLockedTableSchema(const ui64 pathId, const TLockScope& scope = TLockScope{.Action = EAction::Modify, .Originator = EOriginator::Bg});
+    //std::optional<TString> IsLockedTableDataCommitted(const ui64 pathId, const TLockScope& scope = TLockScope{.Action = EAction::Modify, .Originator = EOriginator::Bg});
 };
 
 }

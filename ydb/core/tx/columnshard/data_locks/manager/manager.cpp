@@ -3,36 +3,83 @@
 
 namespace NKikimr::NOlap::NDataLocks {
 
-std::shared_ptr<TManager::TGuard> TManager::RegisterLock(const std::shared_ptr<ILock>& lock) {
+std::unique_ptr<TManager::TGuard> TManager::Lock(ILock::TPtr&& lock, const ELockType lockType, ILockAcquired::TPtr&& onAcquired) {
     AFL_VERIFY(lock);
-    AFL_VERIFY(ProcessLocks.emplace(lock->GetLockName(), lock).second)("process_id", lock->GetLockName());
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "lock")("process_id", lock->GetLockName());
-    return std::make_shared<TGuard>(lock->GetLockName(), StopFlag);
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "lock")("name", lock->GetLockName())("try", onAcquired ? "yes" : "no");
+    for (const auto& awaiting: Awaiting) {
+        if (!lock->IsCompatibleWith(*awaiting.Lock)) {
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "lock")("name", lock->GetLockName())("incompatible", awaiting.Lock->GetLockName());
+            if (onAcquired) {
+                Awaiting.emplace_back(TLockInfo{
+                    .Lock = std::move(lock),
+                    .LockType = lockType,
+                    .LockCount = 0
+                });
+            }
+            return nullptr;
+        }
+    }
+    for (auto&[id, existing]: Locks) {
+        if (existing.LockType == ELockType::Shared && existing.LockType == ELockType::Shared && lock->IsEqualTo(*existing.Lock)) {
+            ++existing.LockCount;
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "lock")("name", lock->GetLockName())("reuse", existing.Lock->GetLockName())("count", existing.LockCount);
+            return std::make_unique<TGuard>(id, StopFlag);
+        }
+        if (lockType == ELockType::Exclusive || existing.LockType == ELockType::Exclusive) {
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "lock")("name", lock->GetLockName())("incompatible", existing.Lock->GetLockName());
+            if (!lock->IsCompatibleWith(*existing.Lock)) {
+                if (onAcquired) {
+                    Awaiting.emplace_back(TLockInfo{
+                        .Lock = std::move(lock),
+                        .LockType = lockType,
+                        .LockCount = 0
+                    });
+                }
+                return nullptr;
+            }
+        }
+    }
+    ++LastLockId;
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "lock")("name", lock->GetLockName())("registered", LastLockId);
+    AFL_VERIFY(Locks.emplace(
+        LastLockId, 
+        TLockInfo {
+            .Lock = std::move(lock),
+            .LockType = lockType,
+            .LockCount = 1
+        }
+    ).second);
+    return std::make_unique<TGuard>(LastLockId, StopFlag);
 }
 
-void TManager::UnregisterLock(const TString& processId) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "unlock")("process_id", processId);
-    AFL_VERIFY(ProcessLocks.erase(processId))("process_id", processId);
+void TManager::ReleaseLock(const size_t lockId) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "unlock")("lock_id", lockId);
+    const auto lockInfo = Locks.FindPtr(lockId);
+    AFL_VERIFY(lockInfo);
+    AFL_VERIFY(lockInfo->LockCount != 0);
+    if (0 == --lockInfo->LockCount) {
+        AFL_VERIFY(Locks.erase(lockId))("lock_id", lockId);
+    }
 }
 
-std::optional<TString> TManager::IsLocked(const TPortionInfo& portion, const THashSet<TString>& excludedLocks) const {
-    for (auto&& i : ProcessLocks) {
-        if (excludedLocks.contains(i.first)) {
+std::optional<TString> TManager::IsLocked(const TPortionInfo& portion, const TLockScope& scope, const std::unique_ptr<TGuard>& ignored) const {
+    for (const auto& [id, lockInfo] : Locks) {
+        if (ignored && ignored->GetLockId() == id) {
             continue;
         }
-        if (auto lockName = i.second->IsLocked(portion, excludedLocks)) {
+        if (auto lockName = lockInfo.Lock->IsLocked(portion, scope)) {
             return lockName;
         }
     }
     return {};
 }
 
-std::optional<TString> TManager::IsLocked(const TGranuleMeta& granule, const THashSet<TString>& excludedLocks) const {
-    for (auto&& i : ProcessLocks) {
-        if (excludedLocks.contains(i.first)) {
+std::optional<TString> TManager::IsLocked(const TGranuleMeta& granule, const TLockScope& scope, const std::unique_ptr<TGuard>& ignored) const {
+    for (const auto& [id, lockInfo] : Locks) {
+        if (ignored && ignored->GetLockId() == id) {
             continue;
         }
-        if (auto lockName = i.second->IsLocked(granule, excludedLocks)) {
+        if (auto lockName = lockInfo.Lock->IsLocked(granule, scope)) {
             return lockName;
         }
     }
@@ -49,7 +96,7 @@ TManager::TGuard::~TGuard() {
 
 void TManager::TGuard::Release(TManager& manager) {
     AFL_VERIFY(!Released);
-    manager.UnregisterLock(ProcessId);
+    manager.ReleaseLock(LockId);
     Released = true;
 }
 
@@ -60,4 +107,4 @@ void TManager::TGuard::AbortLock() {
     Released = true;
 }
 
-}
+} //namespace NKikimr::NOlap::NDataLocks

@@ -24,7 +24,12 @@ bool TCommonSession::TryStart(const NColumnShard::TColumnShard& shard) {
     for (auto&& i : GetPathIdsForStart()) {
         const auto& g = index.GetGranuleVerified(i);
         for (auto&& p : g.GetPortionsOlderThenSnapshot(GetSnapshotBarrier())) {
-            if (shard.GetDataLocksManager()->IsLocked(*p.second, { "sharing_session:" + GetSessionId() })) {
+            using namespace NDataLocks;
+            if (shard.GetDataLocksManager()->IsLocked(
+                *p.second,
+                TLockScope{.Action = EAction::Modify, .Originator = EOriginator::Bg},
+                LockGuard))
+            {
                 return false;
             }
             portionsByPath[i].emplace_back(p.second);
@@ -45,8 +50,15 @@ void TCommonSession::PrepareToStart(const NColumnShard::TColumnShard& shard) {
     AFL_VERIFY(State == EState::Created);
     State = EState::Prepared;
     AFL_VERIFY(!LockGuard);
-    LockGuard = shard.GetDataLocksManager()->RegisterLock<NDataLocks::TSnapshotLock>("sharing_session:" + GetSessionId(),
-        TransferContext.GetSnapshotBarrierVerified(), GetPathIdsForStart(), true);
+    LockGuard  = shard.GetDataLocksManager()->TryLock(
+        std::make_unique<NDataLocks::TSnapshotLock>(
+            "sharing_session:" + GetSessionId(),
+            TransferContext.GetSnapshotBarrierVerified(), 
+            GetPathIdsForStart()
+        ), 
+        NDataLocks::ELockType::Exclusive
+    );
+    AFL_VERIFY(LockGuard);
     shard.GetSharingSessionsManager()->StartSharingSession();
 }
 

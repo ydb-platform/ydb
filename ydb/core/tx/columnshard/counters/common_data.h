@@ -94,9 +94,8 @@ public:
     }
 
     ~TLoadTimer() {
-        ui64 duration;
-        TInstant finish = TInstant::Now();
-        Signals.AddLoadingTime(duration = (finish - Start).MicroSeconds());
+        ui64 duration = (TInstant::Now() - Start).MicroSeconds();
+        Signals.AddLoadingTime(duration);
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)(Name, duration);
     }
 };

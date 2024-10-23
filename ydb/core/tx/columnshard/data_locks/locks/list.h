@@ -1,7 +1,7 @@
 #pragma once
 #include "abstract.h"
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
-#include <ydb/core/tx/columnshard/engines/storage/granule.h>
+#include <ydb/core/tx/columnshard/engines/storage/granule/granule.h>
 
 namespace NKikimr::NOlap::NDataLocks {
 
@@ -59,6 +59,14 @@ public:
         : TBase(lockName, readOnly) {
         for (auto&& p : portions) {
             const auto address = p.first;
+            Portions.emplace(address);
+            Granules.emplace(address.GetPathId());
+        }
+    }
+
+    TListPortionsLock(const TString& lockName, const THashSet<TPortionAddress>& portions, const bool readOnly = false)
+        : TBase(lockName, readOnly) {
+        for (auto&& address : portions) {
             Portions.emplace(address);
             Granules.emplace(address.GetPathId());
         }

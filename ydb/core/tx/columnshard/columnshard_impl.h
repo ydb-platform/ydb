@@ -217,6 +217,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvStartCompaction::TPtr& ev, const TActorContext& ctx);
     void Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvScanStats::TPtr& ev, const TActorContext& ctx);
@@ -376,6 +377,7 @@ protected:
             HFunc(TEvTxProcessing::TEvPlanStep, Handle);
             HFunc(TEvColumnShard::TEvWrite, Handle);
             HFunc(TEvPrivate::TEvWriteBlobsResult, Handle);
+            HFunc(TEvPrivate::TEvStartCompaction, Handle);
             HFunc(NPrivateEvents::NWrite::TEvWritePortionResult, Handle);
 
             HFunc(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
@@ -429,6 +431,8 @@ private:
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     std::shared_ptr<NOlap::NBackground::TSessionsManager> BackgroundSessionsManager;
     std::shared_ptr<NOlap::NDataLocks::TManager> DataLocksManager;
+
+    ui64 PrioritizationClientId = 0;
 
     using TSchemaPreset = TSchemaPreset;
     using TTableInfo = TTableInfo;
@@ -535,7 +539,9 @@ private:
 
     void StartIndexTask(std::vector<const NOlap::TCommittedData*>&& dataToIndex, const i64 bytesToIndex);
     void SetupIndexation();
-    void SetupCompaction();
+    void SetupCompaction(const std::set<ui64>& pathIds);
+    void StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
+
     bool SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {});
     void SetupCleanupPortions();
     void SetupCleanupTables();
@@ -564,6 +570,10 @@ public:
     void EnqueueProgressTx(const TActorContext& ctx, const std::optional<ui64> continueTxId);
     NOlap::TSnapshot GetLastTxSnapshot() const {
         return NOlap::TSnapshot(LastPlannedStep, LastPlannedTxId);
+    }
+
+    NOlap::TSnapshot GetCurrentSnapshotForInternalModification() const {
+        return NOlap::TSnapshot::MaxForPlanStep(GetOutdatedStep());
     }
 
     const std::shared_ptr<NOlap::NDataSharing::TSessionsManager>& GetSharingSessionsManager() const {

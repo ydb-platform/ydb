@@ -11,6 +11,7 @@ namespace NKikimr::NOlap::NCompaction {
 class TMerger {
 private:
     YDB_ACCESSOR(bool, OptimizationWritingPackMode, false);
+    YDB_ACCESSOR(ui64, PortionExpectedSize, 1.5 * (1 << 20));
     std::vector<std::shared_ptr<NArrow::TGeneralContainer>> Batches;
     std::vector<std::shared_ptr<NArrow::TColumnFilter>> Filters;
     const TConstructionContext& Context;

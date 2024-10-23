@@ -1,0 +1,310 @@
+#!/usr/bin/env python3
+import argparse
+import configparser
+import datetime
+import os
+import posixpath
+import re
+import ydb
+import logging
+
+from get_diff_lines_of_file import get_diff_lines_of_file
+from mute_utils import pattern_to_re
+from transform_ya_junit import YaMuteCheck
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# ... (load your config file here, this is where you should have your ydb endpoint and database)
+dir = os.path.dirname(__file__)
+config = configparser.ConfigParser()
+config_file_path = f"{dir}/../../config/ydb_qa_db.ini"
+repo_path = f"{dir}/../../../"
+muted_ya_path = '.github/config/muted_ya.txt'
+config.read(config_file_path)
+
+DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
+DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
+
+
+def execute_query(driver):
+    query_string = '''
+    SELECT * from (
+        SELECT data.*,
+        CASE WHEN new_flaky.full_name IS NOT NULL THEN True ELSE False END AS new_flaky_today,
+        CASE WHEN flaky.full_name IS NOT NULL THEN True ELSE False END AS flaky_today,
+        CASE WHEN muted_stable.full_name IS NOT NULL THEN True ELSE False END AS muted_stable_today,
+        CASE WHEN muted_stable_n_days.full_name IS NOT NULL THEN True ELSE False END AS muted_stable_n_days_today,
+        CASE WHEN muted_flaky.full_name IS NOT NULL THEN True ELSE False END AS muted_flaky_today,
+        CASE WHEN deleted.full_name IS NOT NULL THEN True ELSE False END AS deleted_today
+
+        FROM
+        (SELECT test_name, suite_folder, full_name, date_window, build_type, branch, days_ago_window, history, history_class, pass_count, mute_count, fail_count, skip_count, success_rate, summary, owner, is_muted, is_test_chunk, state, previous_state, state_change_date, days_in_state, previous_state_filtered, state_change_date_filtered, days_in_state_filtered, state_filtered
+        FROM `test_results/analytics/tests_monitor_test_with_filtered_states`) as data
+        left JOIN 
+        (SELECT full_name, build_type, branch
+            FROM `test_results/analytics/tests_monitor_test_with_filtered_states`
+            WHERE state = 'Flaky'
+            AND days_in_state = 1
+            AND date_window = CurrentUtcDate()
+            )as new_flaky
+        ON 
+            data.full_name = new_flaky.full_name
+            and data.build_type = new_flaky.build_type
+            and data.branch = new_flaky.branch
+        LEFT JOIN 
+        (SELECT full_name, build_type, branch
+            FROM `test_results/analytics/tests_monitor_test_with_filtered_states`
+            WHERE state = 'Flaky'
+            AND date_window = CurrentUtcDate()
+            )as flaky
+        ON 
+            data.full_name = flaky.full_name
+            and data.build_type = flaky.build_type
+            and data.branch = flaky.branch
+        LEFT JOIN 
+        (SELECT full_name, build_type, branch
+            FROM `test_results/analytics/tests_monitor_test_with_filtered_states`
+            WHERE state = 'Muted Stable'
+            AND date_window = CurrentUtcDate()
+            )as muted_stable
+
+        ON 
+            data.full_name = muted_stable.full_name
+            and data.build_type = muted_stable.build_type
+            and data.branch = muted_stable.branch
+        LEFT JOIN 
+        (SELECT full_name, build_type, branch
+            FROM `test_results/analytics/tests_monitor_test_with_filtered_states`
+            WHERE state= 'Muted Stable'
+            AND days_in_state >= 14
+            AND date_window = CurrentUtcDate()
+            )as muted_stable_n_days
+
+        ON 
+            data.full_name = muted_stable_n_days.full_name
+            and data.build_type = muted_stable_n_days.build_type
+            and data.branch = muted_stable_n_days.branch
+        LEFT JOIN 
+        (SELECT full_name, build_type, branch
+            FROM `test_results/analytics/tests_monitor_test_with_filtered_states`
+            WHERE state = 'Muted Flaky'
+            AND days_in_state >= 5
+            AND date_window = CurrentUtcDate()
+            )as muted_flaky
+
+        ON 
+            data.full_name = muted_flaky.full_name
+            and data.build_type = muted_flaky.build_type
+            and data.branch = muted_flaky.branch
+        LEFT JOIN 
+        (SELECT full_name, build_type, branch
+            FROM `test_results/analytics/tests_monitor_test_with_filtered_states`
+            WHERE state = 'no_runs'
+            AND days_in_state >= 14
+            AND date_window = CurrentUtcDate()
+            and is_test_chunk = 0
+            )as deleted
+
+        ON 
+            data.full_name = deleted.full_name
+            and data.build_type = deleted.build_type
+            and data.branch = deleted.branch
+        ) 
+        where date_window = CurrentUtcDate() and branch = 'main'
+    
+    '''
+
+    query = ydb.ScanQuery(query_string, {})  # Removed unnecessary arguments
+    table_client = ydb.TableClient(driver, ydb.TableClientSettings())  # Simplified
+    it = table_client.scan_query(query)
+    results = []
+    while True:
+        try:
+            result = next(it)
+            results = results + result.result_set.rows
+        except StopIteration:
+            break
+
+    return results
+
+
+def add_lines_to_file(file_path, lines_to_add):
+    try:
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        with open(file_path, 'w') as f:
+            f.writelines(lines_to_add)
+        logging.info(f"Lines added to {file_path}")
+    except Exception as e:
+        logging.error(f"Error adding lines to {file_path}: {e}")
+
+
+def apply_and_add_mutes(all_tests, output_path, mute_check):
+
+    output_path = os.path.join(output_path, 'mute_update')
+
+    all_tests = sorted(all_tests, key=lambda d: d['full_name'])
+
+    try:
+
+        deleted_tests = set(
+            f"{test.get('suite_folder')} {test.get('test_name')}\n" for test in all_tests if test.get('deleted_today')
+        )
+
+        deleted_tests = sorted(deleted_tests)
+        add_lines_to_file(os.path.join(output_path, 'deleted.txt'), deleted_tests)
+
+        deleted_tests_debug = set(
+            f"{test.get('suite_folder')} {test.get('test_name')} # owner {test.get('owner')} success_rate {test.get('success_rate')}%, state {test.get('state')} days in state {test.get('days_in_state')}\n"
+            for test in all_tests
+            if test.get('deleted_today')
+        )
+
+        deleted_tests_debug = sorted(deleted_tests_debug)
+        add_lines_to_file(os.path.join(output_path, 'deleted_debug.txt'), deleted_tests_debug)
+        # Get muted stable tests directly from the query result
+        muted_stable_tests = set(
+            f"{test.get('suite_folder')} {test.get('test_name')}\n"
+            for test in all_tests
+            if test.get('muted_stable_n_days_today')
+        )
+
+        muted_stable_tests = sorted(muted_stable_tests)
+        add_lines_to_file(os.path.join(output_path, 'muted_stable.txt'), muted_stable_tests)
+
+        muted_stable_tests_debug = set(
+            f"{test.get('suite_folder')} {test.get('test_name')} # owner {test.get('owner')} success_rate {test.get('success_rate')}%, state {test.get('state')} days in state {test.get('days_in_state')}\n"
+            for test in all_tests
+            if test.get('muted_stable_n_days_today')
+        )
+
+        muted_stable_tests_debug = sorted(muted_stable_tests_debug)
+        add_lines_to_file(os.path.join(output_path, 'muted_stable_debug.txt'), muted_stable_tests_debug)
+
+        # Add all flaky tests
+        flaky_tests = set(
+            f"{test.get('suite_folder')} {test.get('test_name')}\n"
+            for test in all_tests
+            if test.get('days_in_state') >= 2
+            and test.get('flaky_today')
+            and (test.get('pass_count') + test.get('fail_count')) > 4
+            and test.get('fail_count') > 2
+        )
+        flaky_tests = sorted(flaky_tests)
+        add_lines_to_file(os.path.join(output_path, 'flaky.txt'), flaky_tests)
+
+        flaky_tests_debug = set(
+            f"{test.get('suite_folder')} {test.get('test_name')} # owner {test.get('owner')} success_rate {test.get('success_rate')}%, state {test.get('state')}, days in state {test.get('days_in_state')}, pass_count {test.get('pass_count')}, fail count {test.get('fail_count')}\n"
+            for test in all_tests
+            if test.get('days_in_state') >= 2
+            and test.get('flaky_today')
+            and (test.get('pass_count') + test.get('fail_count')) > 4
+            and test.get('fail_count') > 2
+        )
+        flaky_tests_debug = sorted(flaky_tests_debug)
+        add_lines_to_file(os.path.join(output_path, 'flaky_debug.txt'), flaky_tests_debug)
+
+        new_muted_ya_tests_debug = []
+        new_muted_ya_tests = []
+        new_muted_ya_tests_with_flaky = []
+        new_muted_ya_tests_with_flaky_debug = []
+        unmuted_tests_debug = []
+        muted_before_count = 0
+        unmuted_stable = 0
+        unmuted_deleted = 0
+        # Apply mute check and filter out already muted tests
+        for test in all_tests:
+            testsuite = test.get('suite_folder')
+            testcase = test.get('test_name')
+            success_rate = test.get('success_rate')
+            days_in_state = test.get('days_in_state')
+            owner = test.get('owner')
+            state = test.get('state')
+            test_string = f"{testsuite} {testcase}\n"
+            test_string_debug = f"{testsuite} {testcase} # owner {owner} success_rate {success_rate}%, state {state} days in state {days_in_state}\n"
+            test_string = re.sub(r'\d+/(\d+)\]', r'*/*]', test_string)
+            if test_string in flaky_tests:
+                new_muted_ya_tests_with_flaky.append(test_string)
+                new_muted_ya_tests_with_flaky_debug.append(test_string_debug)
+            if testsuite and testcase and mute_check(testsuite, testcase):
+                muted_before_count += 1
+                if test_string not in new_muted_ya_tests:
+
+                    if test_string not in muted_stable_tests and test_string not in deleted_tests:
+                        # if test_string not in deleted_tests:
+                        new_muted_ya_tests.append(test_string)
+                        new_muted_ya_tests_debug.append(test_string_debug)
+                        new_muted_ya_tests_with_flaky.append(test_string)
+                        new_muted_ya_tests_with_flaky_debug.append(test_string_debug)
+                    elif test_string in muted_stable_tests or test_string in deleted_tests:
+                        if test_string in muted_stable_tests:
+                            unmuted_stable += 1
+                        if test_string in deleted_tests:
+                            unmuted_deleted += 1
+                        unmuted_tests_debug.append(test_string_debug)
+        new_muted_ya_tests = sorted(new_muted_ya_tests)
+        add_lines_to_file(os.path.join(output_path, 'new_muted_ya.txt'), new_muted_ya_tests)
+        new_muted_ya_tests_debug = sorted(new_muted_ya_tests_debug)
+        add_lines_to_file(os.path.join(output_path, 'new_muted_ya_debug.txt'), new_muted_ya_tests_debug)
+        new_muted_ya_tests_with_flaky = sorted(new_muted_ya_tests_with_flaky)
+        add_lines_to_file(os.path.join(output_path, 'new_muted_ya_with_flaky.txt'), new_muted_ya_tests_with_flaky)
+        new_muted_ya_tests_with_flaky_debug = sorted(new_muted_ya_tests_with_flaky_debug)
+        add_lines_to_file(
+            os.path.join(output_path, 'new_muted_ya_with_flaky_debug.txt'), new_muted_ya_tests_with_flaky_debug
+        )
+        unmuted_tests_debug = sorted(unmuted_tests_debug)
+        add_lines_to_file(os.path.join(output_path, 'unmuted_debug.txt'), unmuted_tests_debug)
+
+        logging.info(f"Muted before script: {muted_before_count} tests")
+        logging.info(f"Muted stable : {len(muted_stable_tests)}")
+        logging.info(f"Flaky tests : {len(flaky_tests)}")
+        logging.info(f"Deleted (no runs) tests : {len(deleted_tests)}")
+        logging.info(f"Result: Muted without deleted and stable : {len(new_muted_ya_tests)}")
+        logging.info(f"Result: Muted without deleted and stable, with flaky : {len(new_muted_ya_tests_with_flaky)}")
+        logging.info(f"Result: Unmuted tests : stable {unmuted_stable} and deleted {unmuted_deleted}")
+    except (KeyError, TypeError) as e:
+        logging.error(f"Error processing test data: {e}. Check your query results for valid keys.")
+        return []
+
+    return len(new_muted_ya_tests)
+
+
+def mute_applier(args):
+    output_path = args.output_folder
+    os.makedirs(output_path, exist_ok=True)
+
+    # Simplified Connection
+    if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
+        print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
+        return 1
+    else:
+        # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
+        # So, set up it locally
+        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
+            "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
+        ]
+
+    mute_check = YaMuteCheck()
+    mute_check.load(muted_ya_path)
+
+    with ydb.Driver(
+        endpoint=DATABASE_ENDPOINT,
+        database=DATABASE_PATH,
+        credentials=ydb.credentials_from_env_variables(),
+    ) as driver:
+        driver.wait(timeout=10, fail_fast=True)
+        session = ydb.retry_operation_sync(lambda: driver.table_client.session().create())
+        tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
+
+        all_tests = execute_query(driver)
+        added_count = apply_and_add_mutes(all_tests, output_path, mute_check)
+        logging.info(f"{added_count} tests added to files.")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Add tests to mutes files based on flaky_today condition")
+    parser.add_argument('--output_folder', default=repo_path, required=False, help='Output folder.')
+
+    args = parser.parse_args()
+
+    mute_applier(args)

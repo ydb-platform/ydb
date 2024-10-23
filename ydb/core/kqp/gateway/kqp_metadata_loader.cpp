@@ -165,10 +165,6 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
         }
     }
 
-    if (tableMeta->Kind == NYql::EKikimrTableKind::Olap) {
-        tableMeta->StoreType = NYql::EStoreType::Column;
-    }
-
     tableMeta->Attributes = entry.Attributes;
 
     if (queryName) {

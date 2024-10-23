@@ -24,13 +24,13 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
 
-        localHelper.CreateTestOlapTableWithoutStore();
+        localHelper.CreateTestOlapTable();
         testHelper.CreateTier("tier1");
         const TString tieringRule = testHelper.CreateTieringRule("tier1", "timestamp");
 
         for (ui64 i = 0; i < 100; ++i) {
-            WriteTestData(testHelper.GetKikimr(), "/Root/olapTable", 0, i * 10000, 1000);
-            WriteTestData(testHelper.GetKikimr(), "/Root/olapTable", 0, i * 10000, 1000);
+            WriteTestData(testHelper.GetKikimr(), "/Root/olapStore/olapTable", 0, i * 10000, 1000);
+            WriteTestData(testHelper.GetKikimr(), "/Root/olapStore/olapTable", 0, i * 10000, 1000);
         }
 
         csController->WaitCompactions(TDuration::Seconds(5));
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             auto selectQuery = TString(R"(
                 SELECT
                     TierName, SUM(ColumnRawBytes) As RawBytes
-                FROM `/Root/olapTable/.sys/primary_index_portion_stats`
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
                 WHERE Activity == 1
                 GROUP BY TierName
             )");
@@ -54,14 +54,14 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             UNIT_ASSERT_GT(columnRawBytes, 0);
         }
 
-        testHelper.SetTiering("/Root/olapTable", tieringRule);
+        testHelper.SetTiering("/Root/olapStore/olapTable", tieringRule);
         csController->WaitActualization(TDuration::Seconds(5));
 
         {
             auto selectQuery = TString(R"(
                 SELECT
                     TierName, SUM(ColumnRawBytes) As RawBytes
-                FROM `/Root/olapTable/.sys/primary_index_portion_stats`
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
                 WHERE Activity == 1
                 GROUP BY TierName
             )");
@@ -74,14 +74,14 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
                                  << " after=" << GetUint64(rows[0].at("RawBytes")));
         }
 
-        testHelper.ResetTiering("/Root/olapTable");
+        testHelper.ResetTiering("/Root/olapStore/olapTable");
         csController->WaitCompactions(TDuration::Seconds(5));
 
         {
             auto selectQuery = TString(R"(
                 SELECT
                     TierName, SUM(ColumnRawBytes) As RawBytes
-                FROM `/Root/olapTable/.sys/primary_index_portion_stats`
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
                 WHERE Activity == 1
                 GROUP BY TierName
             )");

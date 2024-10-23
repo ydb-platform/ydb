@@ -94,6 +94,8 @@ struct TInstanceSize
     TInstanceResourcesPtr ResourceGuarantee;
     TDefaultInstanceConfigPtr DefaultConfig;
 
+    std::optional<TString> HostTagFilter;
+
     REGISTER_YSON_STRUCT(TInstanceSize);
 
     static void Register(TRegistrar registrar);

@@ -1051,6 +1051,43 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         readSession2->Close();
     }
 
+    Y_UNIT_TEST(ReBalancingAfterSplit_sessionsWithPartition) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 2, 100);
+
+        TTopicClient client = setup.MakeClient();
+
+        auto writeSession = CreateWriteSession(client, "producer-1", 0);
+        UNIT_ASSERT(writeSession->Write(Msg("message_1.1", 2)));
+        writeSession->Close();
+
+        ui64 txId = 1023;
+        SplitPartition(setup, ++txId, 0, "a");
+
+        auto readSession1 = CreateTestReadSession({ .Name="Session-1", .Setup=setup, .Sdk = SdkVersion::Topic, .AutoCommit = false, .Partitions = {1}, .AutoPartitioningSupport = true });
+        auto readSession0 = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = SdkVersion::Topic, .ExpectedMessagesCount = 1, .AutoCommit = false, .Partitions = {0}, .AutoPartitioningSupport = true });
+
+        readSession0->WaitAndAssertPartitions({0}, "Must read partition 0");
+        readSession0->WaitAllMessages();
+
+        for(size_t i = 0; i < 10; ++i) {
+            auto events = readSession0->GetEndedPartitionEvents();
+            if (events.empty()) {
+                Sleep(TDuration::Seconds(1));
+                continue;
+            }
+            readSession0->Commit();
+            break;
+        }
+
+        readSession0->Close();
+
+        readSession0 = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = SdkVersion::Topic, .AutoCommit = false, .Partitions = {0}, .AutoPartitioningSupport = true });
+        readSession0->WaitAndAssertPartitions({0}, "Must read partition 0 because no more readers of it");
+
+        readSession0->Close();
+    }
+
     Y_UNIT_TEST(MidOfRange) {
         auto AsString = [](std::vector<ui16> vs) {
             TStringBuilder a;

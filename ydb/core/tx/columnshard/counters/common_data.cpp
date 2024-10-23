@@ -19,4 +19,9 @@ TDataOwnerSignals::TDataOwnerSignals(const TString& module, const TString dataNa
     SkipEraseBytes = GetDeriviative(DataName + "/SkipErase/Bytes");
 }
 
+TLoadTimer::~TLoadTimer() {
+    ui64 duration = (TInstant::Now() - Start).MicroSeconds();
+    Signals.AddLoadingTime(duration);
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)(Name, duration);
+}
 }

@@ -53,6 +53,7 @@ private:
     NColumnShard::TLoadTimeSignals PortionsLoadingTimeCounters;
     NColumnShard::TLoadTimeSignals ColumnsLoadingTimeCounters;
     NColumnShard::TLoadTimeSignals IndexesLoadingTimeCounters;
+    TTableLoadTimeCounters TableLoadTimeCounters;
     std::shared_ptr<TGranulesStorage> GranulesStorage;
     std::shared_ptr<IStoragesManager> StoragesManager;
 
@@ -190,6 +191,10 @@ public:
         VersionedIndex.AddShardingInfo(shardingInfo);
     }
     void UpsertPortion(const TPortionInfo& portionInfo, const TPortionInfo* exInfo = nullptr);
+
+    TTableLoadTimeCounters& GetTableLoadTimeCounters() override {
+        return TableLoadTimeCounters;
+    }
 
 private:
     TVersionedIndex VersionedIndex;

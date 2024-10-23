@@ -214,7 +214,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
 bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
     TPortionConstructors constructors;
     {
-        NColumnShard::TLoadTimer timer(PortionsLoadingTimeCounters, "portions_loading_time");
+        NColumnShard::TLoadTimer timer = PortionsLoadingTimeCounters.StartGuard("portions_loading_time");
         TMemoryProfileGuard g("TTxInit/LoadColumns/Portions");
         if (!db.LoadPortions([&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
             const TIndexInfo& indexInfo = portion.GetSchema(VersionedIndex)->GetIndexInfo();
@@ -227,7 +227,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
     }
 
     {
-        NColumnShard::TLoadTimer timer(ColumnsLoadingTimeCounters, "columns_loading_time");
+        NColumnShard::TLoadTimer timer = ColumnsLoadingTimeCounters.StartGuard("columns_loading_time");
         TMemoryProfileGuard g("TTxInit/LoadColumns/Records");
         TPortionInfo::TSchemaCursor schema(VersionedIndex);
         if (!db.LoadColumns([&](TPortionInfoConstructor&& portion, const TColumnChunkLoadContext& loadContext) {
@@ -241,7 +241,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
     }
 
     {
-        NColumnShard::TLoadTimer timer(IndexesLoadingTimeCounters, "indexes_loading_time");
+        NColumnShard::TLoadTimer timer = IndexesLoadingTimeCounters.StartGuard("indexes_loading_time");
         TMemoryProfileGuard g("TTxInit/LoadColumns/Indexes");
         if (!db.LoadIndexes([&](const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext& loadContext) {
             auto* constructor = constructors.GetConstructorVerified(pathId, portionId);

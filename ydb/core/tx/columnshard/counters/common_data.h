@@ -56,28 +56,7 @@ public:
 
 };
 
-class TLoadTimeSignals: public TCommonCountersOwner {
-private:
-    using TBase = TCommonCountersOwner;
-    NMonitoring::TDynamicCounters::TCounterPtr LoadingTimeCounter;
-    NMonitoring::TDynamicCounters::TCounterPtr LoadingFailCounter;
-
-public:
-    TLoadTimeSignals(const TString& type)
-        : TBase("Startup")
-    {
-        LoadingTimeCounter = TBase::GetValue("Startup/" + type + "LoadingTime");;
-        LoadingFailCounter = TBase::GetValue("Startup/" + type + "LoadingFailCount");;
-    }
-
-    void AddLoadingTime(ui64 microSeconds) {
-        LoadingTimeCounter->Add(microSeconds);
-    }
-
-    void AddLoadingFail() {
-        LoadingFailCounter->Add(1);
-    }
-};
+class TLoadTimeSignals;
 
 class TLoadTimer {
 private:
@@ -93,10 +72,38 @@ public:
         Start = TInstant::Now();
     }
 
-    ~TLoadTimer() {
-        ui64 duration = (TInstant::Now() - Start).MicroSeconds();
-        Signals.AddLoadingTime(duration);
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)(Name, duration);
+    ~TLoadTimer();
+};
+
+class TLoadTimeSignals: public TCommonCountersOwner {
+private:
+    using TBase = TCommonCountersOwner;
+    NMonitoring::TDynamicCounters::TCounterPtr LoadingTimeCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr FailedLoadingTimeCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr LoadingFailCounter;
+    bool Failed = false;
+
+public:
+    TLoadTimeSignals(const TString& type)
+        : TBase("Startup")
+    {
+        LoadingTimeCounter = TBase::GetValue("Startup/" + type + "LoadingTime");;
+        FailedLoadingTimeCounter = TBase::GetValue("Startup/" + type + "FailedLoadingTime");;
+        LoadingFailCounter = TBase::GetValue("Startup/" + type + "LoadingFailCount");;
+    }
+
+    TLoadTimer StartGuard(const TString& name) {
+        Failed = false;
+        return TLoadTimer(*this, name);
+    }
+
+    void AddLoadingTime(ui64 microSeconds) {
+        (Failed ? FailedLoadingTimeCounter : LoadingTimeCounter)->Add(microSeconds);
+    }
+
+    void AddLoadingFail() {
+        Failed = true;
+        LoadingFailCounter->Add(1);
     }
 };
 

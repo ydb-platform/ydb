@@ -275,6 +275,7 @@ target_sources(core-tx-schemeshard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_build_index__list.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_build_index__progress.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_build_index_tx_base.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_cdc_stream_common.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_cdc_stream_scan.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_domain_links.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_effective_acl.cpp

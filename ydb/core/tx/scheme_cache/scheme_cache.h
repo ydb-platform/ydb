@@ -280,6 +280,7 @@ struct TSchemeCacheNavigate {
     struct TBackupCollectionInfo : public TAtomicRefCount<TBackupCollectionInfo> {
         EKind Kind = KindUnknown;
         NKikimrSchemeOp::TBackupCollectionDescription Description;
+    };
 
     struct TTieringRuleInfo : public TAtomicRefCount<TTieringRuleInfo> {
         EKind Kind = KindUnknown;

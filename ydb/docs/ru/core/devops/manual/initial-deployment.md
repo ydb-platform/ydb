@@ -16,8 +16,8 @@
 
 * 22: сервис SSH;
 * {{ ydb-ports.grpcs }}, {{ ydb-ports.grpc }}: GRPC для клиент-кластерного взаимодействия;
-* {{ ydb-ports.ic }}, 19002: Interconnect для внутрикластерного взаимодействия узлов;
-* {{ ydb-ports.mon }}, 8766: HTTP интерфейс {{ ydb-short-name }} Embedded UI.
+* {{ ydb-ports.interconnect }}, 19002: Interconnect для внутрикластерного взаимодействия узлов;
+* {{ ydb-ports.https }}, 8766: HTTP интерфейс {{ ydb-short-name }} Embedded UI.
 
 При размещении нескольких динамических узлов на одном сервере потребуются отдельные порты для gRPC, Interconnect и HTTP интерфейса каждого динамического узла в рамках сервера.
 
@@ -261,7 +261,7 @@ sudo chmod 700 /opt/ydb/certs
   cd /opt/ydb
   export LD_LIBRARY_PATH=/opt/ydb/lib
   /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config  /opt/ydb/cfg/config.yaml \
-      --grpcs-port {{ ydb-ports.grpcs }} --ic-port {{ ydb-ports.ic }} --mon-port {{ ydb-ports.mon }} --mon-cert /opt/ydb/certs/web.pem --node static
+      --grpcs-port {{ ydb-ports.grpcs }} --ic-port {{ ydb-ports.interconnect }} --mon-port {{ ydb-ports.https }} --mon-cert /opt/ydb/certs/web.pem --node static
   ```
 
 - С использованием systemd
@@ -289,7 +289,7 @@ sudo chmod 700 /opt/ydb/certs
   Environment=LD_LIBRARY_PATH=/opt/ydb/lib
   ExecStart=/opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp \
       --yaml-config  /opt/ydb/cfg/config.yaml \
-      --grpcs-port {{ ydb-ports.grpcs }} --ic-port {{ ydb-ports.ic }} --mon-port {{ ydb-ports.mon }} \
+      --grpcs-port {{ ydb-ports.grpcs }} --ic-port {{ ydb-ports.interconnect }} --mon-port {{ ydb-ports.https }} \
       --mon-cert /opt/ydb/certs/web.pem --node static
   LimitNOFILE=65536
   LimitCORE=0
@@ -539,7 +539,7 @@ sudo chmod 700 /opt/ydb/certs
 
 ## Проверка доступа ко встроенному web-интерфейсу
 
-Для проверки доступа ко встроенному web-интерфейсу {{ ydb-short-name }} достаточно открыть в Web-браузере страницу с адресом `https://<node.ydb.tech>:{{ ydb-ports.mon }}`, где `<node.ydb.tech>` - FQDN сервера, на котором запущен любой статический узел {{ ydb-short-name }}.
+Для проверки доступа ко встроенному web-интерфейсу {{ ydb-short-name }} достаточно открыть в Web-браузере страницу с адресом `https://<node.ydb.tech>:{{ ydb-ports.https }}`, где `<node.ydb.tech>` - FQDN сервера, на котором запущен любой статический узел {{ ydb-short-name }}.
 
 В Web-браузере должно быть настроено доверие в отношении центра регистрации, выпустившего сертификаты для кластера {{ ydb-short-name }}, в противном случае будет отображено предупреждение об использовании недоверенного сертификата.
 

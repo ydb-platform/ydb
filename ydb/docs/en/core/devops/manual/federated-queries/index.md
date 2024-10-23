@@ -41,7 +41,7 @@ Currently, we do not support deploying the connector in {{ k8s }}, but we plan t
 
 1. Follow the steps in the dynamic node {{ ydb-short-name }} deployment guide up to and including [preparing the configuration files](../initial-deployment.md#config).
 2. If a connector must be deployed to access the desired source, do so [according to the instructions](./connector-deployment.md).
-3. If a connector needs to be deployed to access your desired source, add the `generic` subsection to the `query_service_config` section of the {{ ydb-short-name }} configuration file as shown below. Specify the network address of the connector in the `connector.endpoint.host` and `connector.endpoint.port` fields (default values are `localhost` and `2130`). When co-locating the connector and the {{ ydb-short-name }} dynamic node on the same server, encrypted connections between them are *not required*. If necessary, you can enable encryption by setting `connector.use_ssl` to `true` and specifying the path to the CA certificate that is used to sign the connector's TLS keys in `connector.ssl_ca_crt`:
+3. If a connector needs to be deployed to access your desired source, add the `generic` subsection to the `query_service_config` section of the {{ ydb-short-name }} configuration file as shown below. Specify the network address of the connector in the `connector.endpoint.host` and `connector.endpoint.port` fields (default values are `localhost` and `{{ third-party-ports.fq }}`). When co-locating the connector and the {{ ydb-short-name }} dynamic node on the same server, encrypted connections between them are *not required*. If necessary, you can enable encryption by setting `connector.use_ssl` to `true` and specifying the path to the CA certificate that is used to sign the connector's TLS keys in `connector.ssl_ca_crt`:
 
     ```yaml
     query_service_config:
@@ -49,7 +49,7 @@ Currently, we do not support deploying the connector in {{ k8s }}, but we plan t
             connector:
                 endpoint:
                     host: localhost                 # hostname where the connector is deployed
-                    port: 2130                      # port number for the connector's listening socket
+                    port: {{ third-party-ports.fq }}                      # port number for the connector's listening socket
                 use_ssl: false                      # flag to enable encrypted connections
                 ssl_ca_crt: "/opt/ydb/certs/ca.crt" # (optional) path to the CA certificate
             default_settings:

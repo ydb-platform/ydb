@@ -112,18 +112,18 @@ Use binary distributions to install the connector on a physical or virtual Linux
     ```bash
     docker run -d \
         --name=fq-connector-go \
-        -p 2130:2130 \
+        -p {{ third-party-ports.fq }}:{{ third-party-ports.fq }} \
         ghcr.io/ydb-platform/fq-connector-go:latest
     ```
 
-    A listening socket of the GRPC service connector will start on port 2130 of your host's public network interface. Subsequently, the {{ ydb-short-name }} server must connect to this network address.
+    A listening socket of the GRPC service connector will start on port {{ third-party-ports.fq }} of your host's public network interface. Subsequently, the {{ ydb-short-name }} server must connect to this network address.
 
 1. If configuration changes are needed, prepare the configuration file [based on the sample](#fq-connector-go-config) and mount it to the container:
 
     ```bash
     docker run -d \
         --name=fq-connector-go \
-        -p 2130:2130 \
+        -p {{ third-party-ports.fq }}:{{ third-party-ports.fq }} \
         -v /path/to/config.yaml:/opt/ydb/cfg/fq-connector-go.yaml
         ghcr.io/ydb-platform/fq-connector-go:latest
     ```
@@ -143,7 +143,7 @@ Use binary distributions to install the connector on a physical or virtual Linux
     ```bash
     docker run -d \
         --name=fq-connector-go \
-        -p 2130:2130 \
+        -p {{ third-party-ports.fq }}:{{ third-party-ports.fq }} \
         -v /path/to/config.yaml:/opt/ydb/cfg/fq-connector-go.yaml
         -v /path/to/keys/:/opt/ydb/certs/
         ghcr.io/ydb-platform/fq-connector-go:latest

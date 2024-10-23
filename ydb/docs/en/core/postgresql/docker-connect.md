@@ -27,8 +27,8 @@ To preserve the container's state, you need to remove the environment variable `
         ydb:
             image: ghcr.io/ydb-platform/local-ydb:nightly
             ports:
-            - "{{ jdbc-ports.postgresql }}:{{ jdbc-ports.postgresql }}"
-            - "{{ ydb-ports.mon }}:{{ ydb-ports.mon }}"
+            - "{{ third-party-ports.postgresql }}:{{ third-party-ports.postgresql }}"
+            - "{{ ydb-ports.https }}:{{ ydb-ports.https }}"
             environment:
             - "YDB_USE_IN_MEMORY_PDISKS=true"
             - "POSTGRES_USER=${YDB_PG_USER:-root}"
@@ -45,19 +45,19 @@ To preserve the container's state, you need to remove the environment variable `
 - Docker command
 
     ```bash
-    docker run --name ydb-postgres -d --pull always -p {{ jdbc-ports.postgresql }}:{{ jdbc-ports.postgresql }} -p {{ ydb-ports.mon }}:{{ ydb-ports.mon }} -e POSTGRES_USER=root -e POSTGRES_PASSWORD=1234 -e YDB_EXPERIMENTAL_PG=1 -e YDB_USE_IN_MEMORY_PDISKS=true ghcr.io/ydb-platform/local-ydb:nightly
+    docker run --name ydb-postgres -d --pull always -p {{ third-party-ports.postgresql }}:{{ third-party-ports.postgresql }} -p {{ ydb-ports.https }}:{{ ydb-ports.https }} -e POSTGRES_USER=root -e POSTGRES_PASSWORD=1234 -e YDB_EXPERIMENTAL_PG=1 -e YDB_USE_IN_MEMORY_PDISKS=true ghcr.io/ydb-platform/local-ydb:nightly
     ```
 
 {% endlist %}
 
-After launching the container, you can connect to it via PostgreSQL clients on port {{ jdbc-ports.postgresql }}, the database `local`, or open the [web interface](http://localhost:{{ ydb-ports.mon }}) on port {{ ydb-ports.mon }}.
+After launching the container, you can connect to it via PostgreSQL clients on port {{ third-party-ports.postgresql }}, the database `local`, or open the [web interface](http://localhost:{{ ydb-ports.https }}) on port {{ ydb-ports.https }}.
 
 ## Connecting to the Running Container via psql
 
 Upon executing this command, the interactive command-line interface of `psql`, the PostgreSQL client, will be launched. All subsequent queries should be entered within this client interface.
 
 ```bash
-docker run --rm -it --network=host postgres:14 psql postgresql://root:1234@localhost:{{ jdbc-ports.postgresql }}/local
+docker run --rm -it --network=host postgres:14 psql postgresql://root:1234@localhost:{{ third-party-ports.postgresql }}/local
 ```
 
 ### Hello world example

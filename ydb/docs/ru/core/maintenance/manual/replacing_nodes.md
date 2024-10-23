@@ -35,9 +35,9 @@ DefineBox выглядит так:
 ```proto
 DefineBox {
     BoxId: 1
-    Host { Key { Fqdn: "host1.my.sub.net" IcPort: {{ ydb-ports.ic }} } HostConfigId: 1 }
-    Host { Key { Fqdn: "host2.my.sub.net" IcPort: {{ ydb-ports.ic }} } HostConfigId: 1 }
-    Host { Key { Fqdn: "host3.my.sub.net" IcPort: {{ ydb-ports.ic }} } HostConfigId: 1 }
+    Host { Key { Fqdn: "host1.my.sub.net" IcPort: {{ ydb-ports.interconnect }} } HostConfigId: 1 }
+    Host { Key { Fqdn: "host2.my.sub.net" IcPort: {{ ydb-ports.interconnect }} } HostConfigId: 1 }
+    Host { Key { Fqdn: "host3.my.sub.net" IcPort: {{ ydb-ports.interconnect }} } HostConfigId: 1 }
 }
 ```
 
@@ -46,9 +46,9 @@ DefineBox {
 ```proto
 DefineBox {
     BoxId: 1
-    Host { Key { Fqdn: "host1.my.sub.net" IcPort: {{ ydb-ports.ic }} } HostConfigId: 1 EnforcedNodeId: 1 }
-    Host { Key { Fqdn: "host2.my.sub.net" IcPort: {{ ydb-ports.ic }} } HostConfigId: 1 }
-    Host { Key { Fqdn: "host3.my.sub.net" IcPort: {{ ydb-ports.ic }} } HostConfigId: 1 }
+    Host { Key { Fqdn: "host1.my.sub.net" IcPort: {{ ydb-ports.interconnect }} } HostConfigId: 1 EnforcedNodeId: 1 }
+    Host { Key { Fqdn: "host2.my.sub.net" IcPort: {{ ydb-ports.interconnect }} } HostConfigId: 1 }
+    Host { Key { Fqdn: "host3.my.sub.net" IcPort: {{ ydb-ports.interconnect }} } HostConfigId: 1 }
 }
 ```
 
@@ -73,8 +73,8 @@ DefineBox {
 ```proto
 DefineBox {
     BoxId: 1
-    Host { Key { Fqdn: "host4.my.sub.net" IcPort: {{ ydb-ports.ic }} } HostConfigId: 1 }
-    Host { Key { Fqdn: "host2.my.sub.net" IcPort: {{ ydb-ports.ic }} } HostConfigId: 1 }
-    Host { Key { Fqdn: "host3.my.sub.net" IcPort: {{ ydb-ports.ic }} } HostConfigId: 1 }
+    Host { Key { Fqdn: "host4.my.sub.net" IcPort: {{ ydb-ports.interconnect }} } HostConfigId: 1 }
+    Host { Key { Fqdn: "host2.my.sub.net" IcPort: {{ ydb-ports.interconnect }} } HostConfigId: 1 }
+    Host { Key { Fqdn: "host3.my.sub.net" IcPort: {{ ydb-ports.interconnect }} } HostConfigId: 1 }
 }
 ```

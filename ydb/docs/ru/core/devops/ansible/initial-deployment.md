@@ -216,13 +216,13 @@ all:
 
 {% endcut %}
 
-В результате выполнения плейбука будет создан кластер {{ ydb-short-name }}, на котором развернута тестовая база данных – `database`, создан `root` пользователь с максимальными правами доступа и запущен Embedded UI на порту {{ ydb-ports.mon }}. Для подключения к Embedded UI можно настроить SSH-туннелирование. Для этого на локальной машине выполните команду `ssh -L {{ ydb-ports.mon }}:localhost:{{ ydb-ports.mon }} -i <ssh private key> <user>@<first ydb static node ip>`. После успешного установления соединения можно перейти по URL [localhost:{{ ydb-ports.mon }}](http://localhost:{{ ydb-ports.mon }}):
+В результате выполнения плейбука будет создан кластер {{ ydb-short-name }}, на котором развернута тестовая база данных – `database`, создан `root` пользователь с максимальными правами доступа и запущен Embedded UI на порту {{ ydb-ports.https }}. Для подключения к Embedded UI можно настроить SSH-туннелирование. Для этого на локальной машине выполните команду `ssh -L {{ ydb-ports.https }}:localhost:{{ ydb-ports.https }} -i <ssh private key> <user>@<first ydb static node ip>`. После успешного установления соединения можно перейти по URL [localhost:{{ ydb-ports.https }}](http://localhost:{{ ydb-ports.https }}):
 
 ![ydb-web-ui](../../_assets/ydb-web-console.png)
 
 ## Мониторинг состояния кластера { #troubleshooting }
 
-После успешного создания кластера {{ ydb-short-name }} проверить его состояние можно с помощью Embedded UI – [http://localhost:{{ ydb-ports.mon }}/monitoring/cluster/tenants](http://localhost:{{ ydb-ports.mon }}/monitoring/cluster/tenants):
+После успешного создания кластера {{ ydb-short-name }} проверить его состояние можно с помощью Embedded UI – [http://localhost:{{ ydb-ports.https }}/monitoring/cluster/tenants](http://localhost:{{ ydb-ports.https }}/monitoring/cluster/tenants):
 
 ![ydb-cluster-check](../../_assets/ydb-cluster-check.png)
 
@@ -232,7 +232,7 @@ all:
 * `Nodes` – количество и состояние запущенных статических и динамических нод в кластере. Индикатор состояния нод должен быть зелёным, а пропорция созданных и запущенных нод должна быть равной. Например, 27/27 для кластера из девяти нод.
 * Индикаторы показателей `Load` (количество используемой RAM) и `Storage` (количество используемого дискового пространства) должны быть зелёными.
 
-Проверить состояние сторадж группы можно в разделе `storage` – [http://localhost:{{ ydb-ports.mon }}/monitoring/cluster/storage](http://localhost:{{ ydb-ports.mon }}/monitoring/cluster/storage):
+Проверить состояние сторадж группы можно в разделе `storage` – [http://localhost:{{ ydb-ports.https }}/monitoring/cluster/storage](http://localhost:{{ ydb-ports.https }}/monitoring/cluster/storage):
 
 ![ydb-storage-gr-check](../../_assets/ydb-storage-gr-check.png)
 

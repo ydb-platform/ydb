@@ -7,7 +7,7 @@
 Страница доступна по адресу:
 
 ```text
-http://<ендпоинт>:{{ ydb-ports.mon }}/monitoring/cluster
+http://<ендпоинт>:{{ ydb-ports.https }}/monitoring/cluster
 ```
 
 Примерный внешний вид страницы показан на скриншоте ниже.
@@ -71,7 +71,7 @@ http://<ендпоинт>:{{ ydb-ports.mon }}/monitoring/cluster
 Страница доступна по адресу:
 
 ```text
-http://<ендпоинт>:{{ ydb-ports.mon }}/monitoring/node/<node-id>/
+http://<ендпоинт>:{{ ydb-ports.https }}/monitoring/node/<node-id>/
 ```
 
 Информация об узле представлена следующими блоками:
@@ -142,7 +142,7 @@ http://<ендпоинт>:{{ ydb-ports.mon }}/monitoring/node/<node-id>/
 ## Страница тенанта {#tenant_page}
 
 ```text
-http://<ендпоинт>:{{ ydb-ports.mon }}/monitoring/tenant/healthcheck?name=<tenant-path>
+http://<ендпоинт>:{{ ydb-ports.https }}/monitoring/tenant/healthcheck?name=<tenant-path>
 ```
 
 Так же как и предыдущие страницы, данная страница содержит краткую информацию о тенанте, но в отличии от других страниц этот блок изначально свернут.

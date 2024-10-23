@@ -16,8 +16,8 @@ The network configuration must allow TCP connections on the following ports (the
 
 * 22: SSH service
 * {{ ydb-ports.grpcs }}, {{ ydb-ports.grpc }}: GRPC for client-cluster interaction.
-* {{ ydb-ports.ic }}, 19002: Interconnect for intra-cluster node interaction
-* {{ ydb-ports.mon }}, 8766: HTTP interface of {{ ydb-short-name }} Embedded UI.
+* {{ ydb-ports.interconnect }}, 19002: Interconnect for intra-cluster node interaction
+* {{ ydb-ports.https }}, 8766: HTTP interface of {{ ydb-short-name }} Embedded UI.
 
 Distinct ports are necessary for gRPC, Interconnect and HTTP interface of each dynamic node when hosting multiple dynamic nodes on a single server.
 
@@ -261,7 +261,7 @@ sudo chmod 700 /opt/ydb/certs
   cd /opt/ydb
   export LD_LIBRARY_PATH=/opt/ydb/lib
   /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config  /opt/ydb/cfg/config.yaml \
-    --grpcs-port {{ ydb-ports.grpcs }} --ic-port {{ ydb-ports.ic }} --mon-port {{ ydb-ports.mon }} --mon-cert /opt/ydb/certs/web.pem --node static
+    --grpcs-port {{ ydb-ports.grpcs }} --ic-port {{ ydb-ports.interconnect }} --mon-port {{ ydb-ports.https }} --mon-cert /opt/ydb/certs/web.pem --node static
   ```
 
 - Using systemd
@@ -289,7 +289,7 @@ sudo chmod 700 /opt/ydb/certs
   Environment=LD_LIBRARY_PATH=/opt/ydb/lib
   ExecStart=/opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp \
       --yaml-config  /opt/ydb/cfg/config.yaml \
-      --grpcs-port {{ ydb-ports.grpcs }} --ic-port {{ ydb-ports.ic }} --mon-port {{ ydb-ports.mon }} \
+      --grpcs-port {{ ydb-ports.grpcs }} --ic-port {{ ydb-ports.interconnect }} --mon-port {{ ydb-ports.https }} \
       --mon-cert /opt/ydb/certs/web.pem --node static
   LimitNOFILE=65536
   LimitCORE=0
@@ -540,7 +540,7 @@ Here, `<node.ydb.tech>` is the FQDN of the server running the dynamic node that 
 
 ## Checking access to the built-in web interface
 
-To check access to the {{ ydb-short-name }} built-in web interface, open in the browser the `https://<node.ydb.tech>:{{ ydb-ports.mon }}` URL, where `<node.ydb.tech>` is the FQDN of the server running any static {{ ydb-short-name }} node.
+To check access to the {{ ydb-short-name }} built-in web interface, open in the browser the `https://<node.ydb.tech>:{{ ydb-ports.https }}` URL, where `<node.ydb.tech>` is the FQDN of the server running any static {{ ydb-short-name }} node.
 
 In the web browser, set as trusted the certificate authority that issued certificates for the {{ ydb-short-name }} cluster. Otherwise, you will see a warning about an untrusted certificate.
 

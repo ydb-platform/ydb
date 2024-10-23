@@ -20,7 +20,7 @@
     ydb-dstool -e <bs_endpoint> cluster list
     ```
 
-    * `bs_endpoint` — URI интерфейса управления распределенным хранилищем кластера {{ ydb-short-name }}. Интерфейс доступен на любом узле кластера по протоколу HTTP на порте {{ ydb-ports.mon }} по умолчанию. Пример URI: `http://localhost:{{ ydb-ports.mon }}`.
+    * `bs_endpoint` — URI интерфейса управления распределенным хранилищем кластера {{ ydb-short-name }}. Интерфейс доступен на любом узле кластера по протоколу HTTP на порте {{ ydb-ports.https }} по умолчанию. Пример URI: `http://localhost:{{ ydb-ports.https }}`.
 
     Результат:
 

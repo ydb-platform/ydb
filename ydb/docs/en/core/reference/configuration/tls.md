@@ -117,7 +117,7 @@ Example of enabling TLS for tracing data by specifying `grpcs://` protocol:
 tracing_config:
   backend:
     opentelemetry:
-      collector_url: grpcs://example.com:4317
+      collector_url: grpcs://example.com:{{ ydb-ports.tracing }}
       service_name: ydb
 ```
 

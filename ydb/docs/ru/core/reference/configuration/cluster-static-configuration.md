@@ -88,7 +88,7 @@ host_configs:
 hosts:
 - host: <DNS-имя хоста>
   host_config_id: <числовой идентификатор типовой конфигурации хоста>
-  port: <порт> # {{ ydb-ports.ic }} по умолчанию
+  port: <порт> # {{ ydb-ports.interconnect }} по умолчанию
   location:
     unit: <строка с инвентарным номером сервера>
     data_center: <строка с идентификатором зоны доступности>
@@ -104,7 +104,7 @@ hosts:
 - host: hostname1
   host_config_id: 1
   node_id: 1
-  port: {{ ydb-ports.ic }}
+  port: {{ ydb-ports.interconnect }}
   location:
     unit: '1'
     data_center: '1'
@@ -112,7 +112,7 @@ hosts:
 - host: hostname2
   host_config_id: 1
   node_id: 2
-  port: {{ ydb-ports.ic }}
+  port: {{ ydb-ports.interconnect }}
   location:
     unit: '1'
     data_center: '1'

@@ -139,13 +139,13 @@ ALTER DATABASE dbname SET lo_compat_privileges TO on;
         -->
         <jdbc-class>driver-class-name</jdbc-class>
         <!-- URL JDBC для подключения к источнику. Примеры значений:
-              jdbc:postgresql://hostname:{{ jdbc-ports.postgresql }}/dbname
-              jdbc:mysql://hostname:{{ jdbc-ports.mysql }}/dbname
-              jdbc:mariadb://hostname:{{ jdbc-ports.mysql }}/dbname
-              jdbc:oracle:thin:@//hostname:{{ jdbc-ports.oracle }}/serviceName
+              jdbc:postgresql://hostname:{{ third-party-ports.postgresql }}/dbname
+              jdbc:mysql://hostname:{{ third-party-ports.mysql }}/dbname
+              jdbc:mariadb://hostname:{{ third-party-ports.mysql }}/dbname
+              jdbc:oracle:thin:@//hostname:{{ third-party-ports.oracle }}/serviceName
               jdbc:sqlserver://localhost;encrypt=true;trustServerCertificate=true;database=AdventureWorks2022;
-              jdbc:db2://localhost:{{ jdbc-ports.db2 }}/SAMPLE
-              jdbc:informix-sqli://localhost:{{ jdbc-ports.informix-sqli }}/stores_demo:INFORMIXSERVER=informix
+              jdbc:db2://localhost:{{ third-party-ports.db2 }}/SAMPLE
+              jdbc:informix-sqli://localhost:{{ third-party-ports.informix }}/stores_demo:INFORMIXSERVER=informix
         -->
         <jdbc-url>jdbc-url</jdbc-url>
         <username>username</username>

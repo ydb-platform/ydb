@@ -42,7 +42,7 @@ The use case described below shows how to create and run the KqpLoad actor. The 
 
 - Embedded UI
 
-  1. Open the page for managing load actors on the desired node (for example, `http://<address>:{{ ydb-ports.mon }}/actors/load`, where `address` is the address of the cluster node to run the load on).
+  1. Open the page for managing load actors on the desired node (for example, `http://<address>:{{ ydb-ports.https }}/actors/load`, where `address` is the address of the cluster node to run the load on).
   2. Paste the actor configuration into the input/output field:
 
     ```proto

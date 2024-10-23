@@ -5,13 +5,13 @@
 {{ ydb-short-name }} предоставляет множество сенсоров состояния системы. Мгновенные значения сенсоров можно посмотреть в веб-интерфейсе:
 
 ```text
-http://localhost:31002/counters/
+http://localhost:{{ ydb-ports.https }}/counters/
 ```
 
 Связанные сенсоры объединены в подгруппы (например `counters auth`). Чтобы посмотреть значения сенсоров только определенной подгруппы, перейдите по URL следующего вида:
 
 ```text
-http://localhost:31002/counters/counters=<servicename>/
+http://localhost:{{ ydb-ports.https }}/counters/counters=<servicename>/
 ```
 
 * `<servicename>` — имя подгруппы сенсоров.
@@ -19,13 +19,13 @@ http://localhost:31002/counters/counters=<servicename>/
 Например, данные об утилизации аппаратных ресурсов сервера доступны по следующему URL:
 
 ```text
-http://localhost:31002/counters/counters=utils
+http://localhost:{{ ydb-ports.https }}/counters/counters=utils
 ```
 
 Для сбора значений метрик вы можете использовать популярный инструмент с открытым исходным кодом [Prometheus](https://prometheus.io/). Значения сенсоров {{ ydb-short-name }} в [формате Prometheus](https://prometheus.io/docs/instrumenting/exposition_formats/) доступны по URL следующего вида:
 
 ```text
-http://localhost:31002/counters/counters=<servicename>/prometheus
+http://localhost:{{ ydb-ports.https }}/counters/counters=<servicename>/prometheus
 ```
 
 * `<servicename>` — имя подгруппы сенсоров.

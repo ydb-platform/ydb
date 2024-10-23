@@ -217,13 +217,13 @@ The sequence of role executions and their brief descriptions:
 
 {% endcut %}
 
-As a result of executing the playbook, a {{ ydb-short-name }} cluster will be created, with a test database named `database`, a `root` user with maximum access rights created, and [Embedded UI](../../reference/embedded-ui/index.md) running on port {{ ydb-ports.mon }}. To connect to the Embedded UI, you can set up SSH tunneling. For this, execute the command `ssh -L {{ ydb-ports.mon }}:localhost:{{ ydb-ports.mon }} -i <ssh private key> <user>@<first-ydb-static-node-ip>` on your local machine. After successfully establishing the connection, you can navigate to the URL [localhost:{{ ydb-ports.mon }}](http://localhost:{{ ydb-ports.mon }}):
+As a result of executing the playbook, a {{ ydb-short-name }} cluster will be created, with a test database named `database`, a `root` user with maximum access rights created, and [Embedded UI](../../reference/embedded-ui/index.md) running on port {{ ydb-ports.https }}. To connect to the Embedded UI, you can set up SSH tunneling. For this, execute the command `ssh -L {{ ydb-ports.https }}:localhost:{{ ydb-ports.https }} -i <ssh private key> <user>@<first-ydb-static-node-ip>` on your local machine. After successfully establishing the connection, you can navigate to the URL [localhost:{{ ydb-ports.https }}](http://localhost:{{ ydb-ports.https }}):
 
 ![ydb-web-ui](../../_assets/ydb-web-console.png)
 
 ## Monitoring the cluster state {#troubleshooting}
 
-After successfully creating the {{ ydb-short-name }} cluster, you can check its state using the Embedded UI – [http://localhost:{{ ydb-ports.mon }}/monitoring/cluster/tenants](http://localhost:{{ ydb-ports.mon }}/monitoring/cluster/tenants):
+After successfully creating the {{ ydb-short-name }} cluster, you can check its state using the Embedded UI – [http://localhost:{{ ydb-ports.https }}/monitoring/cluster/tenants](http://localhost:{{ ydb-ports.https }}/monitoring/cluster/tenants):
 
 ![ydb-cluster-check](../../_assets/ydb-cluster-check.png)
 
@@ -234,7 +234,7 @@ This section displays the following parameters of the {{ ydb-short-name }} clust
 
 The `Load` indicators (amount of RAM used) and `Storage` (amount of disk space used) should also be green.
 
-You can check the state of the storage group in the `storage` section – [http://localhost:{{ ydb-ports.mon }}/monitoring/cluster/storage](http://localhost:{{ ydb-ports.mon }}/monitoring/cluster/storage):
+You can check the state of the storage group in the `storage` section – [http://localhost:{{ ydb-ports.https }}/monitoring/cluster/storage](http://localhost:{{ ydb-ports.https }}/monitoring/cluster/storage):
 
 ![ydb-storage-gr-check](../../_assets/ydb-storage-gr-check.png)
 

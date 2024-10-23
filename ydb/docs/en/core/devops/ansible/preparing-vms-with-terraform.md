@@ -122,7 +122,7 @@ The following are step-by-step instructions for creating infrastructure in [AWS]
 * VMs in three availability zones.
 * Cloud network, public and private subnets (per subnet per availability zone).
 * Private DNS zone.
-* Security groups allowing ICMP and traffic on ports: 22, 65535, {{ ydb-ports.ic }}, {{ ydb-ports.mon }}, and {{ ydb-ports.grpcs }}.
+* Security groups allowing ICMP and traffic on ports: 22, 65535, {{ ydb-ports.interconnect }}, {{ ydb-ports.https }}, and {{ ydb-ports.grpcs }}.
 
 Most cluster parameters are adjustable (number of VMs, size and type of connected disks, number of networks, DNS zone domain name, etc.), but please note that the defaults are minimum recommended values, so changing them downwards may cause issues.
 

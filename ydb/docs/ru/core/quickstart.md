@@ -85,9 +85,9 @@
       ```bash
       docker run -d --rm --name ydb-local -h localhost \
         --platform linux/amd64 \
-        -p {{ ydb-ports.grpcs }}:{{ ydb-ports.grpcs }} -p {{ ydb-ports.grpc }}:{{ ydb-ports.grpc }} -p {{ ydb-ports.mon }}:{{ ydb-ports.mon }} \
+        -p {{ ydb-ports.grpcs }}:{{ ydb-ports.grpcs }} -p {{ ydb-ports.grpc }}:{{ ydb-ports.grpc }} -p {{ ydb-ports.https }}:{{ ydb-ports.https }} \
         -v $(pwd)/ydb_certs:/ydb_certs -v $(pwd)/ydb_data:/ydb_data \
-        -e GRPC_TLS_PORT={{ ydb-ports.grpcs }} -e GRPC_PORT={{ ydb-ports.grpc }} -e MON_PORT={{ ydb-ports.mon }} \
+        -e GRPC_TLS_PORT={{ ydb-ports.grpcs }} -e GRPC_PORT={{ ydb-ports.grpc }} -e MON_PORT={{ ydb-ports.https }} \
         -e YDB_USE_IN_MEMORY_PDISKS=true \
         {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
       ```
@@ -130,9 +130,9 @@
 
    8. Подождите, пока `kubectl get databases.ydb.tech` станет `Ready`.
 
-   9. После обработки манифеста создаётся объект StatefulSet, описывающий набор динамических узлов. Созданная база данных будет доступна изнутри кластера Kubernetes по DNS-имени `database-minikube-sample` на портах {{ ydb-ports.grpcs }} и {{ ydb-ports.mon }}.
+   9. После обработки манифеста создаётся объект StatefulSet, описывающий набор динамических узлов. Созданная база данных будет доступна изнутри кластера Kubernetes по DNS-имени `database-minikube-sample` на портах {{ ydb-ports.grpcs }} и {{ ydb-ports.https }}.
 
-   10. Получите доступ к порту {{ ydb-ports.mon }} снаружи Kubernetes через `kubectl port-forward database-minikube-sample-0 {{ ydb-ports.mon }}` для продолжения.
+   10. Получите доступ к порту {{ ydb-ports.https }} снаружи Kubernetes через `kubectl port-forward database-minikube-sample-0 {{ ydb-ports.https }}` для продолжения.
 
 - Kind
 
@@ -174,16 +174,16 @@
 
    9. Подождите, пока `kubectl get databases.ydb.tech` станет `Ready`.
 
-   10. После обработки манифеста создаётся объект StatefulSet, описывающий набор динамических узлов. Созданная база данных будет доступна изнутри кластера Kubernetes по DNS-имени `database-kind-sample` на портах {{ ydb-ports.grpcs }} и {{ ydb-ports.mon }}.
+   10. После обработки манифеста создаётся объект StatefulSet, описывающий набор динамических узлов. Созданная база данных будет доступна изнутри кластера Kubernetes по DNS-имени `database-kind-sample` на портах {{ ydb-ports.grpcs }} и {{ ydb-ports.https }}.
 
-   11. Получите доступ к порту {{ ydb-ports.mon }} снаружи Kubernetes через `kubectl port-forward database-kind-sample-0 {{ ydb-ports.mon }}` для продолжения.
+   11. Получите доступ к порту {{ ydb-ports.https }} снаружи Kubernetes через `kubectl port-forward database-kind-sample-0 {{ ydb-ports.https }}` для продолжения.
 
 {% endlist %}
 
 
 ## Запустите первый запрос "Hello, world!"
 
-Самый простой способ выполнить свой первый запрос к {{ ydb-short-name }} - это встроенный веб-интерфейс. Он запускается по умолчанию на порту {{ ydb-ports.mon }} сервера {{ ydb-short-name }}, поэтому, если вы запустили его локально, вам нужно открыть [localhost:{{ ydb-ports.mon }}](http://localhost:{{ ydb-ports.mon }}) в вашем веб-браузере. Если нет, замените `localhost` на имя хоста вашего сервера в этом URL, либо используйте `ssh -L {{ ydb-ports.mon }}:localhost:{{ ydb-ports.mon }} my-server-hostname-or-ip.example.com` для настройки проброса порта и все равно откройте [localhost:{{ ydb-ports.mon }}](http://localhost:{{ ydb-ports.mon }}). Вы увидите страницу подобного вида:
+Самый простой способ выполнить свой первый запрос к {{ ydb-short-name }} - это встроенный веб-интерфейс. Он запускается по умолчанию на порту {{ ydb-ports.https }} сервера {{ ydb-short-name }}, поэтому, если вы запустили его локально, вам нужно открыть [localhost:{{ ydb-ports.https }}](http://localhost:{{ ydb-ports.https }}) в вашем веб-браузере. Если нет, замените `localhost` на имя хоста вашего сервера в этом URL, либо используйте `ssh -L {{ ydb-ports.https }}:localhost:{{ ydb-ports.https }} my-server-hostname-or-ip.example.com` для настройки проброса порта и все равно откройте [localhost:{{ ydb-ports.https }}](http://localhost:{{ ydb-ports.https }}). Вы увидите страницу подобного вида:
 
 ![Стартовая страница веб-интерфейса](_assets/web-ui-home.png)
 

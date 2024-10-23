@@ -755,7 +755,7 @@ Response with `EMERGENCY` status:
           "node": {
             "id": 3,
             "host": "man0-0026.ydb-dev.nemax.nebiuscloud.net",
-            "port": {{ ydb-ports.ic }}
+            "port": {{ ydb-ports.interconnect }}
           },
           "pool": {
             "group": {
@@ -783,7 +783,7 @@ Response with `EMERGENCY` status:
           "node": {
             "id": 3,
             "host": "man0-0026.ydb-dev.nemax.nebiuscloud.net",
-            "port": {{ ydb-ports.ic }}
+            "port": {{ ydb-ports.interconnect }}
           },
           "pool": {
             "name": "static",
@@ -835,7 +835,7 @@ Response with `EMERGENCY` status:
   "location": {
     "id": 5,
     "host": "man0-0028.ydb-dev.nemax.nebiuscloud.net",
-    "port": {{ ydb-ports.ic }}
+    "port": {{ ydb-ports.interconnect }}
   }
 }
 ```

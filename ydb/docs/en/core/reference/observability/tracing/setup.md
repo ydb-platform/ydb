@@ -20,7 +20,7 @@ To enable tracing in {{ ydb-short-name }}, add the following section to the [con
 tracing_config:
   backend:
     opentelemetry:
-      collector_url: grpc://example.com:4317
+      collector_url: grpc://example.com:{{ ydb-ports.tracing }}
       service_name: ydb
   external_throttling:
     - max_traces_per_minute: 10
@@ -41,7 +41,7 @@ tracing_config:
   # ...
   backend:
     opentelemetry:
-      collector_url: grpc://example.com:4317
+      collector_url: grpc://example.com:{{ ydb-ports.tracing }}
       service_name: ydb
 ```
 

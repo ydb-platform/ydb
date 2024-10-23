@@ -23,7 +23,7 @@ To change the logging level:
 1. Follow the link in the format
 
     ```text
-    http://<endpoint>:{{ ydb-ports.mon }}/cms
+    http://<endpoint>:{{ ydb-ports.https }}/cms
     ```
 
     The `Cluster Management System` page opens.

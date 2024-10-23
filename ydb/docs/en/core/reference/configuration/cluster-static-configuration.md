@@ -88,7 +88,7 @@ This group lists the static cluster nodes on which the Storage processes run and
 hosts:
 - host: <DNS host name>
   host_config_id: <numeric ID of the standard host configuration>
-  port: <port> # {{ ydb-ports.ic }} by default
+  port: <port> # {{ ydb-ports.interconnect }} by default
   location:
     unit: <string with the server serial number>
     data_center: <string with the availability zone ID>
@@ -104,7 +104,7 @@ hosts:
 - host: hostname1
   host_config_id: 1
   node_id: 1
-  port: {{ ydb-ports.ic }}
+  port: {{ ydb-ports.interconnect }}
   location:
     unit: '1'
     data_center: '1'
@@ -112,7 +112,7 @@ hosts:
 - host: hostname2
   host_config_id: 1
   node_id: 2
-  port: {{ ydb-ports.ic }}
+  port: {{ ydb-ports.interconnect }}
   location:
     unit: '1'
     data_center: '1'

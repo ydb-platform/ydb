@@ -3,7 +3,7 @@
 Overview of cluster node interconnects. Available at:
 
 ```text
-http://<endpoint>:{{ ydb-ports.mon }}/actors/interconnect/overview
+http://<endpoint>:{{ ydb-ports.https }}/actors/interconnect/overview
 ```
 
 Shows, for every other node:

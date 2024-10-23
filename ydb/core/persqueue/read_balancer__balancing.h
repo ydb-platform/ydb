@@ -228,7 +228,7 @@ struct TConsumer {
     bool Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx);
 
     bool SetCommittedState(ui32 partitionId, ui32 generation, ui64 cookie);
-    bool ProccessReadingFinished(ui32 partitionId, const TActorContext& ctx);
+    bool ProccessReadingFinished(ui32 partitionId, bool wasInactive, const TActorContext& ctx);
     void StartReading(ui32 partitionId, const TActorContext& ctx);
     void FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx);
 

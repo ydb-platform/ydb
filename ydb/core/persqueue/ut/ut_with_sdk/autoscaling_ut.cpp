@@ -905,8 +905,6 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         auto tableClient = setup.MakeTableClient();
         auto session = tableClient.CreateSession().GetValueSync().GetSession();
 
-        setup.GetServer().AnnoyingClient->MkDir("/Root", "dir");
-
         ExecuteQuery(session, R"(
             --!syntax_v1
             CREATE TOPIC `/Root/dir/origin`
@@ -982,6 +980,45 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         auto result = client.AlterTopic("/Root/tbl/Feed", alterSettings).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+    }
+
+    Y_UNIT_TEST(BalancingAfterSplit_sessionsWithPartition) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+
+        TTopicClient client = setup.MakeClient();
+
+        auto writeSession = CreateWriteSession(client, "producer-1", 0);
+        UNIT_ASSERT(writeSession->Write(Msg("message_1.1", 2)));
+
+        ui64 txId = 1023;
+        SplitPartition(setup, ++txId, 0, "a");
+
+        TTestReadSession readSession0("Session-0", client, 1, false, {0}, true);
+
+        readSession0.WaitAndAssertPartitions({0}, "Must read partition 0");
+        readSession0.WaitAllMessages();
+
+
+        for(size_t i = 0; i < 10; ++i) {
+            if (readSession0.Impl->EndedPartitionEvents.empty()) {
+                Sleep(TDuration::Seconds(1));
+                continue;
+            }
+            readSession0.Commit();
+            break;
+        }
+
+        TTestReadSession readSession1("Session-1", client, 0, false, {1}, true);
+        readSession1.WaitAndAssertPartitions({1}, "Must read partition 1");
+
+        TTestReadSession readSession2("Session-2", client, 0, false, {2}, true);
+        readSession2.WaitAndAssertPartitions({2}, "Must read partition 2");
+
+        writeSession->Close();
+        readSession0.Close();
+        readSession1.Close();
+        readSession2.Close();
     }
 
     Y_UNIT_TEST(MidOfRange) {

@@ -29,7 +29,6 @@ class Table:
 
     @property
     def select_what(self) -> SelectWhat:
-        print("CRAB SW", self.schema.select_every_column().items, self.schema.select_every_column().columns)
         return self.schema.select_every_column()
 
 
@@ -170,7 +169,6 @@ class Factory:
         ]
 
         data_out = list(map(lambda x: list(itertools.chain(*x)), zip(*(t.data_in for t in tables))))
-        print("CRAB", data_out)
 
         data_sources: Sequence[EDataSourceKind] = (
             EDataSourceKind.CLICKHOUSE,

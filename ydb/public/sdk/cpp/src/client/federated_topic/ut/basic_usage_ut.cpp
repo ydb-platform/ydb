@@ -1,16 +1,16 @@
-#include <ydb/public/sdk/cpp/client/ydb_federated_topic/federated_topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_federated_topic/impl/federated_write_session.h>
+#include <ydb-cpp-sdk/client/federated_topic/federated_topic.h>
+#include <src/client/federated_topic/impl/federated_write_session.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/ut/ut_utils/managed_executor.h>
+#include <src/client/topic/ut/ut_utils/managed_executor.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
+#include <src/client/persqueue_public/persqueue.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/common/executor_impl.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/include/write_session.h>
+#include <src/client/topic/impl/common.h>
+#include <src/client/topic/common/executor_impl.h>
+#include <src/client/persqueue_public/include/write_session.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/ut_utils.h>
-#include <ydb/public/sdk/cpp/client/ydb_federated_topic/ut/fds_mock/fds_mock.h>
+#include <src/client/persqueue_public/ut/ut_utils/ut_utils.h>
+#include <src/client/federated_topic/ut/fds_mock/fds_mock.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NYdb::TDriverConfig cfg;
         cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
         cfg.SetDatabase("/Root");
-        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         NYdb::TDriver driver(cfg);
         NYdb::NFederatedTopic::TFederatedTopicClient topicClient(driver);
 
@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         Cerr << "Session was created" << Endl;
 
         ReadSession->WaitEvent().Wait(TDuration::Seconds(1));
-        TMaybe<NYdb::NFederatedTopic::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
+        std::optional<NYdb::NFederatedTopic::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
         Y_ASSERT(!event);
 
         auto fdsRequest = fdsMock.GetNextPendingRequest();
@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         for (size_t i = 0; i < partitionsCount; ++i) {
             ReadSession->WaitEvent().Wait();
             // Get event
-            TMaybe<NYdb::NFederatedTopic::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(true/*block - will block if no event received yet*/);
+            std::optional<NYdb::NFederatedTopic::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(true/*block - will block if no event received yet*/);
             Cerr << "Got new read session event: " << DebugString(*event) << Endl;
 
             auto* startPartitionSessionEvent = std::get_if<NYdb::NFederatedTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event);
@@ -126,7 +126,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NYdb::TDriverConfig cfg;
         cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
         cfg.SetDatabase("/Root");
-        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         NYdb::TDriver driver(cfg);
         NYdb::NFederatedTopic::TFederatedTopicClient topicClient(driver);
 
@@ -170,7 +170,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NYdb::TDriverConfig cfg;
         cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
         cfg.SetDatabase("/Root");
-        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         NYdb::TDriver driver(cfg);
         auto clientSettings = TFederatedTopicClientSettings()
             .RetryPolicy(NTopic::IRetryPolicy::GetFixedIntervalPolicy(
@@ -215,7 +215,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NYdb::TDriverConfig cfg;
         cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
         cfg.SetDatabase("/Root");
-        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         NYdb::TDriver driver(cfg);
         auto clientSettings = TFederatedTopicClientSettings()
             .RetryPolicy(NTopic::IRetryPolicy::GetFixedIntervalPolicy(
@@ -324,7 +324,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NYdb::TDriverConfig cfg;
         cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
         cfg.SetDatabase("/Root");
-        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         NYdb::TDriver driver(cfg);
         auto clientSettings = TFederatedTopicClientSettings()
             .RetryPolicy(NTopic::IRetryPolicy::GetNoRetryPolicy());
@@ -343,14 +343,14 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         ReadSession->WaitEvent().Wait(TDuration::Seconds(1));
         auto event = ReadSession->GetEvent(false);
-        UNIT_ASSERT(!event.Defined());
+        UNIT_ASSERT(!event.has_value());
 
         auto fdsRequest = fdsMock.WaitNextPendingRequest();
         fdsRequest.Result.SetValue({{}, grpc::Status(grpc::StatusCode::UNAVAILABLE, "mock 'unavailable'")});
 
         ReadSession->WaitEvent().Wait();
         event = ReadSession->GetEvent(false);
-        UNIT_ASSERT(event.Defined());
+        UNIT_ASSERT(event.has_value());
         Cerr << ">>> Got event: " << DebugString(*event) << Endl;
         UNIT_ASSERT(std::holds_alternative<NTopic::TSessionClosedEvent>(*event));
 
@@ -359,13 +359,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         ReadSession2->WaitEvent().Wait(TDuration::Seconds(1));
         event = ReadSession2->GetEvent(false);
-        UNIT_ASSERT(!event.Defined());
+        UNIT_ASSERT(!event.has_value());
 
         fdsRequest = fdsMock.WaitNextPendingRequest();
         fdsRequest.Result.SetValue(fdsMock.ComposeOkResultAvailableDatabases());
 
         event = ReadSession2->GetEvent(true);
-        UNIT_ASSERT(event.Defined());
+        UNIT_ASSERT(event.has_value());
         Cerr << ">>> Got event: " << DebugString(*event) << Endl;
         UNIT_ASSERT(std::holds_alternative<TReadSessionEvent::TStartPartitionSessionEvent>(*event));
 
@@ -393,7 +393,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         Cerr << "Session was created" << Endl;
 
         ReadSession->WaitEvent().Wait(TDuration::Seconds(1));
-        TMaybe<NYdb::NFederatedTopic::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
+        std::optional<NYdb::NFederatedTopic::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
         Y_ASSERT(event);
         Cerr << "Got new read session event: " << DebugString(*event) << Endl;
 
@@ -418,7 +418,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NYdb::TDriverConfig cfg;
         cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
         cfg.SetDatabase("/Root");
-        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         NYdb::TDriver driver(cfg);
         auto clientSettings = TFederatedTopicClientSettings();
         NYdb::NFederatedTopic::TFederatedTopicClient topicClient(driver, clientSettings);
@@ -434,7 +434,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         Cerr << "Session was created" << Endl;
 
         ReadSession->WaitEvent().Wait(TDuration::Seconds(1));
-        TMaybe<NYdb::NFederatedTopic::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
+        std::optional<NYdb::NFederatedTopic::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
         Y_ASSERT(!event);
 
         {
@@ -449,7 +449,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
 
         ReadSession->WaitEvent().Wait();
-        TMaybe<NYdb::NFederatedTopic::TReadSessionEvent::TEvent> event2 = ReadSession->GetEvent(true);
+        std::optional<NYdb::NFederatedTopic::TReadSessionEvent::TEvent> event2 = ReadSession->GetEvent(true);
         Cerr << "Got new read session event: " << DebugString(*event2) << Endl;
 
         auto* sessionEvent = std::get_if<NYdb::NFederatedTopic::TSessionClosedEvent>(&*event2);
@@ -475,7 +475,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NYdb::TDriverConfig cfg;
         cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
         cfg.SetDatabase("/Root");
-        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         NYdb::TDriver driver(cfg);
         auto clientSettings = TFederatedTopicClientSettings()
             .RetryPolicy(NTopic::IRetryPolicy::GetFixedIntervalPolicy(
@@ -568,7 +568,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NYdb::TDriverConfig cfg;
         cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
         cfg.SetDatabase("/Root");
-        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         NYdb::TDriver driver(cfg);
         auto clientSettings = TFederatedTopicClientSettings()
             .RetryPolicy(NTopic::IRetryPolicy::GetFixedIntervalPolicy(
@@ -613,10 +613,10 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 auto& message = messages[i];
                 UNIT_ASSERT(message.GetFederatedPartitionSession()->GetReadSourceDatabaseName() == "dc1");
                 UNIT_ASSERT(message.GetFederatedPartitionSession()->GetTopicPath() == setup->GetTestTopic());
-                UNIT_ASSERT(message.GetData().EndsWith(message.GetFederatedPartitionSession()->GetTopicOriginDatabaseName()));
+                UNIT_ASSERT(message.GetData().ends_with(message.GetFederatedPartitionSession()->GetTopicOriginDatabaseName()));
 
                 UNIT_ASSERT(!sentSet.empty());
-                UNIT_ASSERT_C(sentSet.erase(message.GetData()), "no such element is sentSet: " + message.GetData());
+                UNIT_ASSERT_C(sentSet.erase(TString{message.GetData()}), "no such element is sentSet: " + message.GetData());
                 totalReceived++;
             }
             if (totalReceived == 3 * sentMessages.size()) {
@@ -719,7 +719,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NYdb::TDriverConfig cfg;
         cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
         cfg.SetDatabase("/Root");
-        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         NYdb::TDriver driver(cfg);
         NYdb::NFederatedTopic::TFederatedTopicClient topicClient(driver);
 
@@ -787,7 +787,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NYdb::TDriverConfig cfg;
         cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
         cfg.SetDatabase("/Root");
-        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         NYdb::TDriver driver(cfg);
         NYdb::NFederatedTopic::TFederatedTopicClient topicClient(driver);
 
@@ -821,7 +821,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NYdb::TDriverConfig cfg;
         cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
         cfg.SetDatabase("/Root");
-        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         NYdb::TDriver driver(cfg);
         NYdb::NFederatedTopic::TFederatedTopicClient topicClient(driver);
 
@@ -878,7 +878,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NYdb::TDriverConfig cfg;
         cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
         cfg.SetDatabase("/Root");
-        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         NYdb::TDriver driver(cfg);
         TFederatedTopicClientSettings clientSettings;
         clientSettings.RetryPolicy(NPersQueue::IRetryPolicy::GetNoRetryPolicy());
@@ -934,7 +934,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NYdb::TDriverConfig cfg;
         cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
         cfg.SetDatabase("/Root");
-        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         NYdb::TDriver driver(cfg);
         NYdb::NFederatedTopic::TFederatedTopicClient topicClient(driver);
 
@@ -1017,7 +1017,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NYdb::TDriverConfig cfg;
         cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
         cfg.SetDatabase("/Root");
-        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         NYdb::TDriver driver(cfg);
         TFederatedTopicClientSettings clientSettings;
         NYdb::NFederatedTopic::TFederatedTopicClient topicClient(driver, clientSettings);
@@ -1036,13 +1036,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         {
             auto e = WriteSession->GetEvent(true);
-            UNIT_ASSERT(e.Defined());
+            UNIT_ASSERT(e.has_value());
             Cerr << ">>> Got event: " << DebugString(*e) << Endl;
             UNIT_ASSERT(std::holds_alternative<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(*e));
         }
         {
             auto e = WriteSession->GetEvent(true);
-            UNIT_ASSERT(e.Defined());
+            UNIT_ASSERT(e.has_value());
             Cerr << ">>> Got event: " << DebugString(*e) << Endl;
             UNIT_ASSERT(std::holds_alternative<NYdb::NTopic::TSessionClosedEvent>(*e));
         }
@@ -1052,7 +1052,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
     NTopic::TContinuationToken GetToken(std::shared_ptr<NTopic::IWriteSession> writer) {
         auto e = writer->GetEvent(true);
-        UNIT_ASSERT(e.Defined());
+        UNIT_ASSERT(e.has_value());
         Cerr << ">>> Got event: " << DebugString(*e) << Endl;
         auto* readyToAcceptEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*e);
         UNIT_ASSERT(readyToAcceptEvent);
@@ -1076,7 +1076,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto driverConfig = NYdb::TDriverConfig()
             .SetEndpoint(TStringBuilder() << "localhost:" << newServicePort)
             .SetDatabase("/Root")
-            .SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         auto driver = NYdb::TDriver(driverConfig);
         auto topicClient = NYdb::NFederatedTopic::TFederatedTopicClient(driver);
 
@@ -1169,7 +1169,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NYdb::TDriverConfig cfg;
         cfg.SetEndpoint(TStringBuilder() << "localhost:" << setup->GetGrpcPort());
         cfg.SetDatabase("/Root");
-        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         NYdb::TDriver driver(cfg);
         NYdb::NFederatedTopic::TFederatedTopicClient client(driver);
 

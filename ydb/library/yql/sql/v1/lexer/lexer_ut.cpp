@@ -44,11 +44,11 @@ void AssertEquivialent(const TParsedToken& lhs, const TParsedToken& rhs) {
 
     UNIT_ASSERT_VALUES_EQUAL(lhs.Name, rhs.Name);
     UNIT_ASSERT_VALUES_EQUAL(lhs.Content, rhs.Content);
-    UNIT_ASSERT_EQUAL(lhs.Line, rhs.Line);
+    UNIT_ASSERT_VALUES_EQUAL(lhs.Line, rhs.Line);
 }
 
 void AssertEquivialent(const TParsedTokenList& lhs, const TParsedTokenList& rhs) {
-    UNIT_ASSERT_EQUAL(lhs.size(), rhs.size());
+    UNIT_ASSERT_VALUES_EQUAL(lhs.size(), rhs.size());
     for (size_t i = 0; i < lhs.size(); ++i) {
         AssertEquivialent(lhs.at(i), rhs.at(i));
     }
@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
             "SELECT \"\xF0\x9F\x98\x8A\" FROM ydb",
             (
                 "SELECT \"\xF0\x9F\x98\x8A Hello, друзья\", count, name\n"
-                "FROM ydb -- главная таблица 数据库 \n"
+                "FROM table -- главная таблица 数据库 \n"
                 "WHERE count < 6\n"
                 "  AND name = \"可靠性\"\n"
                 "  AND count > 12"),
@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
         auto lexer = MakeLexer(/* ansi = */ false, antlr4);
 
         auto input = InvalidQueries();
-        UNIT_ASSERT_EQUAL(input.size(), expected.size());
+        UNIT_ASSERT_VALUES_EQUAL(input.size(), expected.size());
 
         for (size_t i = 0; i < input.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL(GetTokenViews(lexer, input[i]), expected[i]);

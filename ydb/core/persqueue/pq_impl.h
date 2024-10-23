@@ -342,6 +342,8 @@ private:
 
     void CheckTxState(const TActorContext& ctx,
                       TDistributedTransaction& tx);
+    void TryExecuteTxs(const TActorContext& ctx,
+                       TDistributedTransaction& tx);
 
     void WriteTx(TDistributedTransaction& tx, NKikimrPQ::TTransaction::EState state);
     void DeleteTx(TDistributedTransaction& tx);
@@ -523,6 +525,8 @@ private:
 
     void BeginInitTransactions();
     void EndInitTransactions();
+
+    void InitTxsOrder();
 
     void EndReadConfig(const TActorContext& ctx);
 

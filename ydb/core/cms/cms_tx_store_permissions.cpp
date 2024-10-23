@@ -74,7 +74,14 @@ public:
 
             if (Scheduled && Scheduled->Request.GetEvictVDisks()) {
                 auto ret = Self->SetHostMarker(permission.GetAction().GetHost(), NKikimrCms::MARKER_DISK_FAULTY, txc, ctx);
-                std::move(ret.begin(), ret.end(), std::back_inserter(UpdateMarkers));
+                std::move(ret.begin(), ret.end(), std::back_inserter(HostUpdateMarkers));
+            }
+
+            if (Scheduled && Scheduled->Request.GetDecomissionPDisk()) {
+                for (auto& device : permission.GetAction().GetDevices()) {
+                    auto ret = Self->SetPDiskMarker(TPDiskInfo::NameToId(device), NKikimrCms::MARKER_DISK_READONLY_FAULTY, txc, ctx);
+                    std::move(ret.begin(), ret.end(), std::back_inserter(PDiskUpdateMarkers));
+                }
             }
         }
 
@@ -82,11 +89,13 @@ public:
             auto &id = Scheduled->RequestId;
             auto &owner = Scheduled->Owner;
 
-            if (Scheduled->Request.ActionsSize() || Scheduled->Request.GetEvictVDisks()) {
+            auto& request = Scheduled->Request;
+
+            if (request.ActionsSize() || request.GetEvictVDisks() || request.GetDecomissionPDisk()) {
                 ui64 order = Scheduled->Order;
                 i32 priority = Scheduled->Priority;
                 TString requestStr;
-                google::protobuf::TextFormat::PrintToString(Scheduled->Request, &requestStr);
+                google::protobuf::TextFormat::PrintToString(request, &requestStr);
 
                 auto row = db.Table<Schema::Request>().Key(id);
                 row.Update(NIceDb::TUpdate<Schema::Request::Owner>(owner),
@@ -101,10 +110,19 @@ public:
                     << ", priority# " << priority
                     << ", body# " << requestStr);
 
-                if (Scheduled->Request.GetEvictVDisks()) {
-                    for (const auto &action : Scheduled->Request.GetActions()) {
+                if (request.GetEvictVDisks()) {
+                    for (const auto &action : request.GetActions()) {
                         auto ret = Self->SetHostMarker(action.GetHost(), NKikimrCms::MARKER_DISK_FAULTY, txc, ctx);
-                        std::move(ret.begin(), ret.end(), std::back_inserter(UpdateMarkers));
+                        std::move(ret.begin(), ret.end(), std::back_inserter(HostUpdateMarkers));
+                    }
+                }
+
+                if (request.GetDecomissionPDisk()) {
+                    for (const auto &action : request.GetActions()) {
+                        for (auto& device : action.GetDevices()) {
+                            auto ret = Self->SetPDiskMarker(TPDiskInfo::NameToId(device), NKikimrCms::MARKER_DISK_READONLY_FAULTY, txc, ctx);
+                            std::move(ret.begin(), ret.end(), std::back_inserter(PDiskUpdateMarkers));
+                        }
                     }
                 }
             } else {
@@ -125,7 +143,7 @@ public:
 
         Self->Reply(Request.Get(), Response, ctx);
         Self->SchedulePermissionsCleanup(ctx);
-        Self->SentinelUpdateHostMarkers(std::move(UpdateMarkers), ctx);
+        Self->SentinelUpdateMarkers(std::move(HostUpdateMarkers), std::move(PDiskUpdateMarkers), ctx);
     }
 
 private:
@@ -136,7 +154,8 @@ private:
     const TMaybe<TString> MaintenanceTaskId;
     ui64 NextPermissionId;
     ui64 NextRequestId;
-    TVector<TEvSentinel::TEvUpdateHostMarkers::THostMarkers> UpdateMarkers;
+    TVector<TEvSentinel::TEvUpdateMarkers::THostMarkers> HostUpdateMarkers;
+    TVector<TEvSentinel::TEvUpdateMarkers::TPDiskMarkers> PDiskUpdateMarkers;
 };
 
 ITransaction *TCms::CreateTxStorePermissions(THolder<IEventBase> req, TAutoPtr<IEventHandle> resp,

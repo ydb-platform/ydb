@@ -29,6 +29,7 @@ const EPDiskStatus = {
     3: "BROKEN",
     5: "FAULTY",
     6: "TO_BE_REMOVED",
+    7: "READONLY_FAULTY"
 };
 
 const PDiskHeaders = [

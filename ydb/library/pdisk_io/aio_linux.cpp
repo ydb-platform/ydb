@@ -116,6 +116,7 @@ class TAsyncIoContextLibaio : public IAsyncIoContext {
     TPool<TAsyncIoOperation, 1024> Pool;
     THolder<TFileHandle> File;
     int LastErrno = 0;
+    std::atomic_bool FailWrites = false;
 
     TPDiskDebugInfo PDiskInfo;
 public:
@@ -232,6 +233,14 @@ public:
         io_prep_pwrite(cb, static_cast<FHANDLE>(*File), const_cast<void*>(source), size, offset);
     }
 
+    void SetFailWrites(bool fail) override {
+        FailWrites = fail;
+    }
+
+    bool GetFailWritesStatus() override {
+        return FailWrites;
+    }
+
     void PreparePTrim(IAsyncIoOperation *op, size_t size, size_t offset) override {
         PreparePWrite(op, nullptr, size, offset);
         static_cast<TAsyncIoOperation*>(op)->IsTrim = true;
@@ -335,6 +344,9 @@ public:
         //}
 
         if (op->GetType() == IAsyncIoOperation::EType::PWrite) {
+            if (FailWrites) {
+                return EIoResult::IOError;
+            }
             //PDISK_FAIL_INJECTION(1);
         }
 
@@ -455,6 +467,7 @@ class TAsyncIoContextLiburing : public IAsyncIoContext {
     TPool<TAsyncIoOperationLiburing, 1024> Pool;
     THolder<TFileHandle> File;
     int LastErrno = 0;
+    std::atomic_bool FailWrites = false;
 
     TPDiskDebugInfo PDiskInfo;
     struct io_uring Ring;
@@ -561,6 +574,14 @@ public:
         tOp->DataOffset = offset;
     }
 
+    void SetFailWrites(bool fail) override {
+        FailWrites = fail;
+    }
+
+    bool GetFailWritesStatus() override {
+        return FailWrites;
+    }
+
     void PreparePTrim(IAsyncIoOperation *op, size_t size, size_t offset) override {
         PreparePWrite(op, nullptr, size, offset);
         static_cast<TAsyncIoOperationLiburing*>(op)->IsTrim = true;
@@ -663,6 +684,10 @@ public:
 
     EIoResult Submit(IAsyncIoOperation *op, ICallback *callback) override {
         op->SetCallback(callback);
+
+        if (op->GetType() == IAsyncIoOperation::EType::PWrite && FailWrites) {
+            return EIoResult::IOError;
+        }
 
         auto sqe = io_uring_get_sqe(&Ring);
         if (sqe == nullptr) {

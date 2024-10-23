@@ -325,6 +325,14 @@ public:
         PrepareImpl(op, const_cast<void*>(source), size, offset, IAsyncIoOperation::EType::PWrite);
     }
 
+    void SetFailWrites(bool) override {
+        Cout << "SetFailWrites is not implemented for SectorMap" << Endl;
+    }
+
+    bool GetFailWritesStatus() override {
+        return false;
+    }
+
     void PreparePTrim(IAsyncIoOperation *op, size_t size, size_t offset) override {
         PrepareImpl(op, nullptr, size, offset, IAsyncIoOperation::EType::PTrim);
     }

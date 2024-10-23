@@ -51,6 +51,9 @@ enum EMarker {
     // Can be applied to hosts, nodes and PDisks to mark
     // specific disk or all disks on the host/node as inactive.
     MARKER_DISK_INACTIVE = 4;
+    // Can be applied to PDisks to mark
+    // specific disks as readonly faulty.
+    MARKER_DISK_READONLY_FAULTY = 5;
 }
 
 message TServiceState {
@@ -108,6 +111,7 @@ message TAction {
     REPLACE_DEVICES = 8;
     REMOVE_DEVICES = 9;
     REBOOT_HOST = 10; // Same as SHUTDOWN_HOST, but forcibly allowed if host is down
+    DECOMISSION_DISK = 11;
   }
 
   message TIssue {
@@ -181,6 +185,7 @@ message TPermissionRequest {
   // Evit vdisks before granting permission
   optional bool EvictVDisks = 11 [default = false];
   optional int32 Priority = 12;
+  optional bool DecomissionPDisk = 13 [default = false];
 }
 
 enum EExtensionType {

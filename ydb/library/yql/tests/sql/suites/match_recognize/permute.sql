@@ -22,6 +22,7 @@ FROM AS_TABLE($data) MATCH_RECOGNIZE(
         FIRST(B.dt) as b,
         FIRST(C.dt) as c
     ONE ROW PER MATCH
+    AFTER MATCH SKIP TO NEXT ROW
     PATTERN (
       PERMUTE(A, B, C)
     )

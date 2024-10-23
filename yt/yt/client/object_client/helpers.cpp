@@ -211,6 +211,7 @@ bool IsChunkOwnerType(EObjectType type)
 bool IsCellType(EObjectType type)
 {
     return
+        type == EObjectType::MasterCell ||
         type == EObjectType::TabletCell ||
         type == EObjectType::ChaosCell;
 }

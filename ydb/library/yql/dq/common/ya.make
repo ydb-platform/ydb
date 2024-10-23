@@ -6,6 +6,7 @@ PEERDIR(
     ydb/library/mkql_proto/protos
     ydb/library/yql/dq/proto
     ydb/library/yql/utils
+    ydb/library/yql/utils/rope
 )
 
 SRCS(

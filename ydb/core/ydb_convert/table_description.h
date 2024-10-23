@@ -37,6 +37,10 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
 bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme,
     const TTableProfiles& profiles, const TPathId& resolvedPathId,
     Ydb::StatusIds::StatusCode& status, TString& error);
+bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme, Ydb::StatusIds::StatusCode& status, TString& error);
+bool BuildAlterColumnTableModifyScheme(
+    const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme, Ydb::StatusIds::StatusCode& status, TString& error);
 
 bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
     const Ydb::Table::AlterTableRequest& in, const TTableProfiles& profiles,
@@ -55,8 +59,10 @@ void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSc
 // in
 bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
     const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in, Ydb::StatusIds::StatusCode& status, TString& error);
-bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out,
-    const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in, Ydb::StatusIds::StatusCode& status, TString& error);
+bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out, const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in,
+    Ydb::StatusIds::StatusCode& status, TString& error);
+bool FillColumnDescription(NKikimrSchemeOp::TAlterColumnTable& out, const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in,
+    Ydb::StatusIds::StatusCode& status, TString& error);
 bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
     const Ydb::Type& inType, Ydb::StatusIds::StatusCode& status, TString& error);
 

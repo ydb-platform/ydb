@@ -228,6 +228,7 @@ public:
         Fq::Private::PingTaskRequest pingTaskRequest = Builder.Build(QueryStats, Issues);
         if (Builder.Issues) {
             LOG_W(Builder.Issues.ToOneLineString());
+            GetStepCountersSubgroup()->GetCounter("StatIssues", true)->Inc();
         }
         ReportPublicCounters(Builder.PublicStat);
         Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest), 0, 1);
@@ -248,6 +249,7 @@ public:
         Fq::Private::PingTaskRequest pingTaskRequest = Builder.Build(QueryStats, Issues, std::nullopt, StatusCode);
         if (Builder.Issues) {
             LOG_W(Builder.Issues.ToOneLineString());
+            GetStepCountersSubgroup()->GetCounter("StatIssues", true)->Inc();
         }
         ReportPublicCounters(Builder.PublicStat);
         UpdateCpuQuota(Builder.CpuUsage);
@@ -263,6 +265,7 @@ public:
         Fq::Private::PingTaskRequest pingTaskRequest = Builder.Build(QueryStats, Issues, ComputeStatus, std::nullopt);
         if (Builder.Issues) {
             LOG_W(Builder.Issues.ToOneLineString());
+            GetStepCountersSubgroup()->GetCounter("StatIssues", true)->Inc();
         }
         ReportPublicCounters(Builder.PublicStat);
         UpdateCpuQuota(Builder.CpuUsage);

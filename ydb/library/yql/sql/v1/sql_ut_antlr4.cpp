@@ -7048,11 +7048,10 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
     Y_UNIT_TEST(CreateBackupCollectionWithDatabase) {
         NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
-                CREATE BACKUP COLLECTION TestCollection WITH (
+                CREATE BACKUP COLLECTION TestCollection DATABASE WITH (
                     STORAGE="local",
                     TAG="test" -- for testing purposes, not a real thing
-                )
-                    DATABASE;
+                );
             )sql");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
 
@@ -7074,12 +7073,13 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
     Y_UNIT_TEST(CreateBackupCollectionWithTables) {
         NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
-                CREATE BACKUP COLLECTION TestCollection WITH (
+                CREATE BACKUP COLLECTION TestCollection (
+                    TABLE someTable,
+                    TABLE `prefix/anotherTable`
+                ) WITH (
                     STORAGE="local",
                     TAG="test" -- for testing purposes, not a real thing
-                )
-                    TABLE someTable,
-                    TABLE `prefix/anotherTable`;
+                );
             )sql");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
 
@@ -7103,22 +7103,17 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
         ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE BACKUP COLLECTION TestCollection;
-            )sql" , "<main>:3:55: Error: mismatched input ';' expecting WITH\n");
+            )sql" , "<main>:3:55: Error: mismatched input ';' expecting {'(', DATABASE, WITH}\n");
 
         ExpectFailWithError(R"sql(
                 USE plato;
-                CREATE BACKUP COLLECTION TestCollection TABLE;
-            )sql" , "<main>:3:56: Error: mismatched input 'TABLE' expecting WITH\n");
+                CREATE BACKUP COLLECTION TABLE TestCollection;
+            )sql" , "<main>:3:47: Error: mismatched input 'TestCollection' expecting {'(', DATABASE, WITH}\n");
 
         ExpectFailWithError(R"sql(
                 USE plato;
-                CREATE BACKUP COLLECTION TestCollection DATABASE `test`;
-            )sql" , "<main>:3:56: Error: mismatched input 'DATABASE' expecting WITH\n");
-
-        ExpectFailWithError(R"sql(
-                USE plato;
-                CREATE BACKUP COLLECTION TestCollection DATABASE, TABLE `test`;
-            )sql" , "<main>:3:56: Error: mismatched input 'DATABASE' expecting WITH\n");
+                CREATE BACKUP COLLECTION DATABASE `test` TestCollection;
+            )sql" , "<main>:3:50: Error: mismatched input '`test`' expecting {'(', DATABASE, WITH}\n");
 
         ExpectFailWithError(R"sql(
                 USE plato;
@@ -7399,5 +7394,41 @@ Y_UNIT_TEST_SUITE(Restore) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+}
+
+Y_UNIT_TEST_SUITE(ColumnFamily) {
+    Y_UNIT_TEST(CompressionLevel) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            CREATE TABLE tableName (
+                Key Uint32 FAMILY default,
+                Value String FAMILY family1,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = "test",
+                     COMPRESSION = "lz4",
+                     COMPRESSION_LEVEL = 5
+                ),
+                FAMILY family1 (
+                     DATA = "test",
+                     COMPRESSION = "lz4",
+                     COMPRESSION_LEVEL = 3
+                )
+            );
+        )");
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("compression_level"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("5"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("3"));
+            }
+        };
+
+        TWordCountHive elementStat = { { TString("Write"), 0 }, { TString("compression_level"), 0 } };
+        VerifyProgram(res, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["compression_level"]);
     }
 }

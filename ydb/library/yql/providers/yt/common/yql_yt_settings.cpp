@@ -54,7 +54,7 @@ void MediaValidator(const NYT::TNode& value) {
     }
 }
 
-TYtConfiguration::TYtConfiguration()
+TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
 {
     const auto codecValidator = [] (const TString&, TString str) {
         if (!ValidateCompressionCodecValue(str)) {
@@ -188,7 +188,7 @@ TYtConfiguration::TYtConfiguration()
             }
         });
     REGISTER_SETTING(*this, ExpirationDeadline)
-        .Lower(Now())
+        .Lower(typeCtx.QContext.CanRead() ? TInstant::Zero() : Now())
         .ValueSetter([this] (const TString& cluster, TInstant value) {
             ExpirationDeadline[cluster] = value;
         });

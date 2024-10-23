@@ -210,6 +210,7 @@ struct TColumnFamily {
     TString Name;
     TMaybe<TString> Data;
     TMaybe<TString> Compression;
+    TMaybe<i32> CompressionLevel;
 };
 
 struct TTtlSettings {
@@ -309,14 +310,14 @@ struct TKikimrColumnMetadata {
     TVector<TString> Families;
     NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED;
     TString DefaultFromSequence;
-    TKikimrPathId DefaultFromSequencePathId; 
+    TKikimrPathId DefaultFromSequencePathId;
     Ydb::TypedValue DefaultFromLiteral;
     bool IsBuildInProgress = false;
 
     TKikimrColumnMetadata() = default;
 
     TKikimrColumnMetadata(const TString& name, ui32 id, const TString& type, bool notNull,
-        NKikimr::NScheme::TTypeInfo typeInfo = {}, const TString& typeMod = {}, const TString& defaultFromSequence = {}, 
+        NKikimr::NScheme::TTypeInfo typeInfo = {}, const TString& typeMod = {}, const TString& defaultFromSequence = {},
         const TKikimrPathId& defaultFromSequencePathId = {}, NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED,
         const Ydb::TypedValue& defaultFromLiteral = {}, bool isBuildInProgress = false)
         : Name(name)
@@ -912,6 +913,10 @@ public:
     };
 
     struct TQueryResult : public TGenericResult {
+        TQueryResult()
+            : ProtobufArenaPtr(MakeIntrusive<NActors::TProtoArenaHolder>())
+        {}
+
         TString SessionId;
         TVector<Ydb::ResultSet*> Results;
         NKqpProto::TKqpStatsQuery QueryStats;
@@ -919,7 +924,7 @@ public:
         std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;
         TString QueryAst;
         TString QueryPlan;
-        std::shared_ptr<google::protobuf::Arena> ProtobufArenaPtr;
+        TIntrusivePtr<NActors::TProtoArenaHolder> ProtobufArenaPtr;
         TMaybe<ui16> SqlVersion;
         google::protobuf::RepeatedPtrField<NKqpProto::TResultSetMeta> ResultSetsMeta;
         bool NeedToSplit = false;
@@ -1056,7 +1061,7 @@ public:
     virtual NThreading::TFuture<TGenericResult> CreateColumnTable(
         TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> AlterColumnTable(const TString& cluster, const TAlterColumnTableSettings& settings) = 0;
+    virtual NThreading::TFuture<TGenericResult> AlterColumnTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateTableStore(const TString& cluster,
         const TCreateTableStoreSettings& settings, bool existingOk = false) = 0;

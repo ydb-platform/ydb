@@ -511,29 +511,24 @@ public:
     {
         auto guard = Guard(SpinLock_);
         auto config = Config_.Acquire();
-
-        bool enabled = true;
-        for (const auto& prefix : config->SuppressedMessages) {
-            if (anchor->AnchorMessage.StartsWith(prefix)) {
-                enabled = false;
-                break;
-            }
-        }
-
-        anchor->Enabled.store(enabled, std::memory_order::relaxed);
-        anchor->CurrentVersion.store(GetVersion(), std::memory_order::relaxed);
+        DoUpdateAnchor(config, anchor);
     }
 
-    void RegisterStaticAnchor(TLoggingAnchor* anchor, ::TSourceLocation sourceLocation, TStringBuf message)
+    void RegisterStaticAnchor(
+        TLoggingAnchor* anchor,
+        ::TSourceLocation sourceLocation,
+        TStringBuf message)
     {
         if (anchor->Registered.exchange(true)) {
             return;
         }
 
         auto guard = Guard(SpinLock_);
+        auto config = Config_.Acquire();
         anchor->SourceLocation = sourceLocation;
         anchor->AnchorMessage = BuildAnchorMessage(sourceLocation, message);
         DoRegisterAnchor(anchor);
+        DoUpdateAnchor(config, anchor);
     }
 
     TLoggingAnchor* RegisterDynamicAnchor(TString anchorMessage)
@@ -1356,9 +1351,7 @@ private:
         return eventsWritten;
     }
 
-    void DoUpdateCategory(
-        const TLogManagerConfigPtr& config,
-        TLoggingCategory* category)
+    void DoUpdateCategory(const TLogManagerConfigPtr& config, TLoggingCategory* category)
     {
         VERIFY_THREAD_AFFINITY_ANY();
 
@@ -1382,6 +1375,33 @@ private:
         AnchorMap_.emplace(anchor->AnchorMessage, anchor);
         anchor->NextAnchor = FirstAnchor_;
         FirstAnchor_.store(anchor);
+    }
+
+    void DoUpdateAnchor(const TLogManagerConfigPtr& config, TLoggingAnchor* anchor)
+    {
+        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+
+        auto isPrefixOf = [] (const TString& message, const std::vector<TString>& prefixes) {
+            for (const auto& prefix : prefixes) {
+                if (message.StartsWith(prefix)) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        auto findByPrefix = [] (const TString& message, const THashMap<TString, ELogLevel>& levelOverrides) -> std::optional<ELogLevel> {
+            for (const auto& [prefix, level] : levelOverrides) {
+                if (message.StartsWith(prefix)) {
+                    return level;
+                }
+            }
+            return std::nullopt;
+        };
+
+        anchor->Suppressed.store(isPrefixOf(anchor->AnchorMessage, config->SuppressedMessages));
+        anchor->LevelOverride.store(findByPrefix(anchor->AnchorMessage, config->MessageLevelOverrides));
+        anchor->CurrentVersion.store(GetVersion());
     }
 
     static TString BuildAnchorMessage(::TSourceLocation sourceLocation, TStringBuf message)

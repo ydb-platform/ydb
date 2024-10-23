@@ -110,7 +110,7 @@ public:
     void Handle(TEvKqp::TEvQueryResponse::TPtr& ev) {
         SendNotification<TEvQueryRunner::TEvExecutionFinished>();
 
-        Result_.Response = ev->Get()->Record.GetRef();
+        Result_.Response = ev->Get()->Record;
         Promise_.SetValue(Result_);
         PassAway();
     }
@@ -359,7 +359,7 @@ public:
                 new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest(), nodeIndex
             );
             auto response = GetRuntime()->GrabEdgeEvent<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
-            
+
             if (!response->Get()->Record.SystemStateInfoSize()) {
                 errorString = "empty system state info";
                 return false;

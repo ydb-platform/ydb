@@ -54,11 +54,7 @@ bool THorizontalJoinBase::IsGoodForHorizontalJoin(TYtMap map) const {
     }
 
     // Map has output limit or is sharded MapJoin
-    if (NYql::HasAnySetting(map.Settings().Ref(), EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::Sharded | EYtSettingType::JobCount)) {
-        return false;
-    }
-
-    if (auto blockInputSetting = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::BlockInput); blockInputSetting && blockInputSetting->ChildrenSize() == 2) {
+    if (NYql::HasAnySetting(map.Settings().Ref(), EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::Sharded | EYtSettingType::JobCount | EYtSettingType::BlockInputApplied)) {
         return false;
     }
 

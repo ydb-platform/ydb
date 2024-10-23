@@ -96,7 +96,8 @@ enum class EYtSettingType: ui64 {
     Flow                     /* "flow" */,                     // hybrid supported
     KeepSorted               /* "keepSorted" */,               // hybrid supported
     KeySwitch                /* "keySwitch" */,                // hybrid supported
-    BlockInput               /* "blockInput" */,               // hybrid supported
+    BlockInputReady          /* "blockInputReady" */,          // hybrid supported
+    BlockInputApplied        /* "blockInputApplied" */,        // hybrid supported
     // Out tables
     UniqueBy                 /* "uniqueBy" */,
     OpHash                   /* "opHash" */,
@@ -166,7 +167,7 @@ EYtSettingTypes operator|(EYtSettingType left, EYtSettingType right);
 const auto DqReadSupportedSettings = EYtSettingType::SysColumns | EYtSettingType::Sample | EYtSettingType::Unordered | EYtSettingType::NonUnique | EYtSettingType::KeyFilter2;
 const auto DqOpSupportedSettings = EYtSettingType::Ordered | EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::SortBy |
                                        EYtSettingType::ReduceBy | EYtSettingType::ForceTransform | EYtSettingType::JobCount | EYtSettingType::JoinReduce |
-                                       EYtSettingType::FirstAsPrimary | EYtSettingType::Flow | EYtSettingType::BlockInput | EYtSettingType::KeepSorted | EYtSettingType::KeySwitch |
+                                       EYtSettingType::FirstAsPrimary | EYtSettingType::Flow | EYtSettingType::BlockInputReady | EYtSettingType::BlockInputApplied | EYtSettingType::KeepSorted | EYtSettingType::KeySwitch |
                                        EYtSettingType::ReduceInputType | EYtSettingType::MapOutputType | EYtSettingType::Sharded | EYtSettingType::TransformColGroups;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////

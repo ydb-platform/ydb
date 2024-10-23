@@ -40,7 +40,7 @@ bool IsWideRepresentation(const TTypeAnnotationNode* leftType, const TTypeAnnota
     return true;
 }
 
-const TTypeAnnotationNode* MakeInputType(const TTypeAnnotationNode* itemType, const TExprNode::TPtr& useFlowSetting, const TExprNode::TPtr& useBlockInputSetting, TExprContext& ctx) {
+const TTypeAnnotationNode* MakeInputType(const TTypeAnnotationNode* itemType, const TExprNode::TPtr& useFlowSetting, const TExprNode::TPtr& blockInputAppliedSetting, TExprContext& ctx) {
     if (!useFlowSetting) {
         return ctx.MakeType<TStreamExprType>(itemType);
     }
@@ -52,7 +52,7 @@ const TTypeAnnotationNode* MakeInputType(const TTypeAnnotationNode* itemType, co
             types.reserve(items.size());
 
             std::transform(items.cbegin(), items.cend(), std::back_inserter(types), std::bind(&TItemExprType::GetItemType, std::placeholders::_1));
-            if (useBlockInputSetting && useBlockInputSetting->ChildrenSize() == 2) {
+            if (blockInputAppliedSetting) {
                 std::transform(types.begin(), types.end(), types.begin(), [&](auto type) {
                     return ctx.MakeType<TBlockExprType>(type);
                 });
@@ -1071,7 +1071,8 @@ private:
             | EYtSettingType::Flow
             | EYtSettingType::KeepSorted
             | EYtSettingType::NoDq
-            | EYtSettingType::BlockInput;
+            | EYtSettingType::BlockInputReady
+            | EYtSettingType::BlockInputApplied;
         if (!ValidateSettings(map.Settings().Ref(), accpeted, ctx)) {
             return TStatus::Error;
         }
@@ -1095,8 +1096,8 @@ private:
 
         const auto inputItemType = GetInputItemType(map.Input(), ctx);
         const auto useFlow = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::Flow);
-        const auto useBlockInput = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::BlockInput);
-        const auto lambdaInputType = MakeInputType(inputItemType, useFlow, useBlockInput, ctx);
+        const auto blockInputApplied = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::BlockInputApplied);
+        const auto lambdaInputType = MakeInputType(inputItemType, useFlow, blockInputApplied, ctx);
 
         auto& lambda = input->ChildRef(TYtMap::idx_Mapper);
 
@@ -1213,8 +1214,7 @@ private:
         }
 
         const auto useFlow = NYql::GetSetting(reduce.Settings().Ref(), EYtSettingType::Flow);
-        const auto useBlockInput = NYql::GetSetting(reduce.Settings().Ref(), EYtSettingType::BlockInput);
-        const auto lambdaInputType = MakeInputType(inputItemType, useFlow, useBlockInput, ctx);
+        const auto lambdaInputType = MakeInputType(inputItemType, useFlow, TExprNode::TPtr(), ctx);
 
         auto& lambda = input->ChildRef(TYtReduce::idx_Reducer);
         if (!UpdateLambdaAllArgumentsTypes(lambda, {lambdaInputType}, ctx)) {

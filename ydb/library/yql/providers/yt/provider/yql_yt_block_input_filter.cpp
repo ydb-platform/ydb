@@ -43,17 +43,17 @@ private:
             return map;
         }
 
-        if (auto blockInputSetting = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::BlockInput); blockInputSetting && blockInputSetting->ChildrenSize() == 2) {
+        if (NYql::HasSetting(map.Settings().Ref(), EYtSettingType::BlockInputApplied)) {
             return map;
         }
 
         auto settings = map.Settings().Ptr();
         bool canUseBlockInput = CanUseBlockInputForMap(map);
-        bool hasSetting = HasSetting(*settings, EYtSettingType::BlockInput);
+        bool hasSetting = HasSetting(*settings, EYtSettingType::BlockInputReady);
         if (canUseBlockInput && !hasSetting) {
-            settings = AddSetting(*settings, EYtSettingType::BlockInput, TExprNode::TPtr(), ctx);
+            settings = AddSetting(*settings, EYtSettingType::BlockInputReady, TExprNode::TPtr(), ctx);
         } else if (!canUseBlockInput && hasSetting) {
-            settings = RemoveSetting(*settings, EYtSettingType::BlockInput, ctx);
+            settings = RemoveSetting(*settings, EYtSettingType::BlockInputReady, ctx);
         } else {
             return map;
         }

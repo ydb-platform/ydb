@@ -290,14 +290,11 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseInnerMap(TExprBase 
         return node;
     }
     if (NYql::HasAnySetting(outerMap.Input().Item(0).Settings().Ref(),
-        EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::DirectRead | EYtSettingType::Sample | EYtSettingType::SysColumns))
+        EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::DirectRead | EYtSettingType::Sample | EYtSettingType::SysColumns | EYtSettingType::BlockInputApplied))
     {
         return node;
     }
     if (NYql::HasSetting(innerMap.Settings().Ref(), EYtSettingType::Flow) != NYql::HasSetting(outerMap.Settings().Ref(), EYtSettingType::Flow)) {
-        return node;
-    }
-    if (auto blockInputSetting = NYql::GetSetting(outerMap.Settings().Ref(), EYtSettingType::BlockInput); blockInputSetting && blockInputSetting->ChildrenSize() == 2) {
         return node;
     }
     if (NYql::HasAnySetting(outerMap.Settings().Ref(), EYtSettingType::JobCount)) {
@@ -385,7 +382,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseInnerMap(TExprBase 
     }
 
     const auto mergedSettings = MergeSettings(
-        *NYql::RemoveSettings(outerMap.Settings().Ref(), EYtSettingType::Flow | EYtSettingType::BlockInput, ctx),
+        *NYql::RemoveSettings(outerMap.Settings().Ref(), EYtSettingType::Flow | EYtSettingType::BlockInputReady, ctx),
         *NYql::RemoveSettings(innerMap.Settings().Ref(), EYtSettingType::Ordered | EYtSettingType::KeepSorted, ctx), ctx);
 
     return Build<TYtMap>(ctx, node.Pos())
@@ -438,16 +435,13 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseOuterMap(TExprBase 
     if (NYql::HasAnySetting(inner.Settings().Ref(), EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::JobCount)) {
         return node;
     }
-    if (NYql::HasSetting(outerMap.Settings().Ref(), EYtSettingType::JobCount)) {
+    if (NYql::HasAnySetting(outerMap.Settings().Ref(), EYtSettingType::JobCount | EYtSettingType::BlockInputApplied)) {
         return node;
     }
     if (outerMap.Input().Item(0).Settings().Size() != 0) {
         return node;
     }
     if (NYql::HasSetting(inner.Settings().Ref(), EYtSettingType::Flow) != NYql::HasSetting(outerMap.Settings().Ref(), EYtSettingType::Flow)) {
-        return node;
-    }
-    if (auto blockInputSetting = NYql::GetSetting(outerMap.Settings().Ref(), EYtSettingType::BlockInput); blockInputSetting && blockInputSetting->ChildrenSize() == 2) {
         return node;
     }
     if (!path.Ranges().Maybe<TCoVoid>()) {
@@ -539,7 +533,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseOuterMap(TExprBase 
         lambda.Ptr());
     res = ctx.ChangeChild(*res, TYtWithUserJobsOpBase::idx_Output, outerMap.Output().Ptr());
 
-    auto mergedSettings = NYql::RemoveSettings(outerMap.Settings().Ref(), EYtSettingType::Ordered | EYtSettingType::Sharded | EYtSettingType::Flow | EYtSettingType::BlockInput, ctx);
+    auto mergedSettings = NYql::RemoveSettings(outerMap.Settings().Ref(), EYtSettingType::Ordered | EYtSettingType::Sharded | EYtSettingType::Flow | EYtSettingType::BlockInputReady, ctx);
     mergedSettings = MergeSettings(inner.Settings().Ref(), *mergedSettings, ctx);
     res = ctx.ChangeChild(*res, TYtWithUserJobsOpBase::idx_Settings, std::move(mergedSettings));
     res = ctx.ChangeChild(*res, TYtWithUserJobsOpBase::idx_World,

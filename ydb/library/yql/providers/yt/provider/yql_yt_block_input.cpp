@@ -30,13 +30,18 @@ private:
     TMaybeNode<TExprBase> TryTransformMap(TExprBase node, TExprContext& ctx) const {
         auto map = node.Cast<TYtMap>();
 
-        if (auto blockInputSetting = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::BlockInput); !blockInputSetting || blockInputSetting->ChildrenSize() == 2 || !CanRewriteMap(map, ctx)) {
+        if (
+            NYql::HasSetting(map.Settings().Ref(), EYtSettingType::BlockInputApplied)
+            || !NYql::HasSetting(map.Settings().Ref(), EYtSettingType::BlockInputReady)
+            || !CanRewriteMap(map, ctx)
+        ) {
             return map;
         }
         
         YQL_CLOG(INFO, ProviderYt) << "Rewrite YtMap with block input";
 
-        auto settings = UpdateSettingValue(map.Settings().Ref(), EYtSettingType::BlockInput, ctx.NewAtom(map.Pos(), 1), ctx);
+        auto settings = RemoveSetting(map.Settings().Ref(), EYtSettingType::BlockInputReady, ctx);
+        settings = AddSetting(*settings, EYtSettingType::BlockInputApplied, TExprNode::TPtr(), ctx);
         auto mapperLambda = Build<TCoLambda>(ctx, map.Mapper().Pos())
             .Args({"flow"})
             .Body<TExprApplier>()

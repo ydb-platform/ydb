@@ -3470,11 +3470,7 @@ private:
 
     TFuture<void> DoMap(TYtMap map, const TExecContext<TRunOptions>::TPtr& execCtx, TExprContext& ctx) {
         const bool ordered = NYql::HasSetting(map.Settings().Ref(), EYtSettingType::Ordered);
-        
-        bool blockInput = false;
-        if (auto setting = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::BlockInput)) {
-            blockInput = setting->ChildrenSize() == 2;
-        }
+        const bool blockInput = NYql::HasSetting(map.Settings().Ref(), EYtSettingType::BlockInputApplied);
 
         TMaybe<ui64> jobCount;
         if (auto setting = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::JobCount)) {

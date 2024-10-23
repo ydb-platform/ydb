@@ -214,12 +214,7 @@ private:
 
             while (!rotatedList.Empty()) {
                 TPage* page = rotatedList.PopFront();
-                
-                // touch each page multiple times to make it warm
-                for (ui32 touchTimes = 0; touchTimes < 3; touchTimes++) {
-                    evictedList.Append(Caches.back().Touch(page));
-                }
-                
+                evictedList.Append(Caches.back().Touch(page));
                 rotatedPagesCount++;
             }
         }

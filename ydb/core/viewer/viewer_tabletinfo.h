@@ -181,7 +181,7 @@ public:
         case NScheme::NTypeIds::Pg: {
             NScheme::TTypeInfo typeInfo = NKikimr::NScheme::TypeInfoFromProto(type.GetTypeId(), type.GetTypeInfo());
             auto convert = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(),typeInfo.GetPgTypeDesc());
-            return !convert.Error ? convert.Str : *convert.Error;
+            return TStringBuilder() << '"' << (!convert.Error ? convert.Str : *convert.Error) << '"';;
         }        
         case NScheme::NTypeIds::DyNumber:        return "DyNumber";
         case NScheme::NTypeIds::Uuid:            return "Uuid";

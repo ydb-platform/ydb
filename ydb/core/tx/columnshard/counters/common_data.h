@@ -1,6 +1,9 @@
 #pragma once
 #include "common/owner.h"
 
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/actors/core/log.h>
+
 namespace NKikimr::NColumnShard {
 
 class TDataOwnerSignals: public TCommonCountersOwner {
@@ -80,27 +83,21 @@ class TLoadTimer {
 private:
     TLoadTimeSignals& Signals;
     TInstant Start;
-    ui64& Duration;
-    static ui64 DummyDuration;
+    TString Name;
 
 public:
-    TLoadTimer(TLoadTimeSignals& signals, ui64& duration)
+    TLoadTimer(TLoadTimeSignals& signals, const TString& name)
         : Signals(signals)
-        , Duration(duration)
-    {
-        Start = TInstant::Now();
-    }
-
-    TLoadTimer(TLoadTimeSignals& signals)
-        : Signals(signals)
-        , Duration(DummyDuration)
+        , Name(name)
     {
         Start = TInstant::Now();
     }
 
     ~TLoadTimer() {
+        ui64 duration;
         TInstant finish = TInstant::Now();
-        Signals.AddLoadingTime(Duration = (finish - Start).MicroSeconds());
+        Signals.AddLoadingTime(duration = (finish - Start).MicroSeconds());
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)(Name, duration);
     }
 };
 

@@ -213,11 +213,8 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
 
 bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
     TPortionConstructors constructors;
-    ui64 portionsLoadingDuration;
-    ui64 columnsLoadingDuration;
-    ui64 indexesLoadingDuration;
     {
-        NColumnShard::TLoadTimer timer(PortionsLoadingTimeCounters, portionsLoadingDuration);
+        NColumnShard::TLoadTimer timer(PortionsLoadingTimeCounters, "portions_loading_time");
         TMemoryProfileGuard g("TTxInit/LoadColumns/Portions");
         if (!db.LoadPortions([&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
             const TIndexInfo& indexInfo = portion.GetSchema(VersionedIndex)->GetIndexInfo();
@@ -230,7 +227,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
     }
 
     {
-        NColumnShard::TLoadTimer timer(ColumnsLoadingTimeCounters, columnsLoadingDuration);
+        NColumnShard::TLoadTimer timer(ColumnsLoadingTimeCounters, "columns_loading_time");
         TMemoryProfileGuard g("TTxInit/LoadColumns/Records");
         TPortionInfo::TSchemaCursor schema(VersionedIndex);
         if (!db.LoadColumns([&](TPortionInfoConstructor&& portion, const TColumnChunkLoadContext& loadContext) {
@@ -244,7 +241,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
     }
 
     {
-        NColumnShard::TLoadTimer timer(IndexesLoadingTimeCounters, indexesLoadingDuration);
+        NColumnShard::TLoadTimer timer(IndexesLoadingTimeCounters, "indexes_loading_time");
         TMemoryProfileGuard g("TTxInit/LoadColumns/Indexes");
         if (!db.LoadIndexes([&](const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext& loadContext) {
             auto* constructor = constructors.GetConstructorVerified(pathId, portionId);
@@ -254,8 +251,6 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
             return false;
         };
     }
-
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "load_columns")("portions_loading_time", portionsLoadingDuration)("columns_loading_time", columnsLoadingDuration)("indexes_loading_time", indexesLoadingDuration);
 
     {
         TMemoryProfileGuard g("TTxInit/LoadColumns/Constructors");

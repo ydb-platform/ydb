@@ -129,7 +129,7 @@ bool TInsertTable::Load(NIceDb::TNiceDb& db, IDbWrapper& dbTable, const TInstant
         return false;
     }
 
-    NColumnShard::TLoadTimer timer(LoadCounters);
+    NColumnShard::TLoadTimer timer(LoadCounters, "insert_table_loading_time");
     bool result = dbTable.Load(*this, loadTime);
     if (!result) {
         LoadCounters.AddLoadingFail();

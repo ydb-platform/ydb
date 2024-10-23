@@ -45,12 +45,8 @@ bool TTablesManager::FillMonitoringReport(NTabletFlatExecutor::TTransactionConte
 
 bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
     THashMap<ui32, TSchemaPreset> schemaPresets;
-    ui64 tableLoadDuration;
-    ui64 schemaPresetsLoadDuration;
-    ui64 tableVersionsLoadDuration;
-    ui64 schemaPresetVersionsLoadDuration;
     {
-        TLoadTimer timer(*TableLoadTimeCounters, tableLoadDuration);
+        TLoadTimer timer(*TableLoadTimeCounters, "tables_loading_time");
         TMemoryProfileGuard g("TTablesManager/InitFromDB::Tables");
         auto rowset = db.Table<Schema::TableInfo>().Select();
         if (!rowset.IsReady()) {
@@ -78,7 +74,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
 
     bool isFakePresetOnly = true;
     {
-        TLoadTimer timer(*SchemaPresetLoadTimeCounters, schemaPresetsLoadDuration);
+        TLoadTimer timer(*SchemaPresetLoadTimeCounters, "schema_presets_loading_time");
         TMemoryProfileGuard g("TTablesManager/InitFromDB::SchemaPresets");
         auto rowset = db.Table<Schema::SchemaPresetInfo>().Select();
         if (!rowset.IsReady()) {
@@ -106,7 +102,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
     }
 
     {
-        TLoadTimer timer(*TableVersionsLoadTimeCounters, tableVersionsLoadDuration);
+        TLoadTimer timer(*TableVersionsLoadTimeCounters, "table_versions_loading_time");
         TMemoryProfileGuard g("TTablesManager/InitFromDB::Versions");
         auto rowset = db.Table<Schema::TableVersionInfo>().Select();
         if (!rowset.IsReady()) {
@@ -151,7 +147,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
     }
 
     {
-        TLoadTimer timer(*SchemaPresetVersionsLoadTimeCounters, schemaPresetVersionsLoadDuration);
+        TLoadTimer timer(*SchemaPresetVersionsLoadTimeCounters, "schema_preset_versions_loading_time");
         TMemoryProfileGuard g("TTablesManager/InitFromDB::PresetVersions");
         auto rowset = db.Table<Schema::SchemaPresetVersionInfo>().Select();
         if (!rowset.IsReady()) {
@@ -176,8 +172,6 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             }
         }
     }
-
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "init_from_db")("tables_loading_time", tableLoadDuration)("schema_preset_loading_time", schemaPresetsLoadDuration)("table_versions_loading_time", tableVersionsLoadDuration)("schema_preset_versions_loading_time", schemaPresetVersionsLoadDuration);
 
     TMemoryProfileGuard g("TTablesManager/InitFromDB::Other");
     for (auto& [id, preset] : schemaPresets) {

@@ -2,8 +2,8 @@
 #include "schemeshard__operation_common_metadata_object.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/tx/schemeshard/operations/metadata/abstract/object.h>
-#include <ydb/core/tx/schemeshard/operations/metadata/abstract/update.h>
+#include <ydb/core/tx/schemeshard/operations/metadata/object.h>
+#include <ydb/core/tx/schemeshard/operations/metadata/update.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -153,14 +153,10 @@ public:
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(context.SS->SelfTabletId()));
 
-        auto update = NOperations::TMetadataUpdateCreate::TFactory::MakeHolder(
-            Transaction.GetCreateMetadataObject().GetProperties().GetPropertiesImplCase());
-
         TPath dstPath = TPath::Resolve(pathString, context.SS);
         TPath parentPath = dstPath.Parent();
         const TString& acl = Transaction.GetModifyACL().GetDiffACL();
         RETURN_RESULT_UNLESS(NMetadataObject::IsParentPathValid(result, parentPath));
-        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl, !Transaction.GetFailOnExist(), update->GetObjectPathType()));
         RETURN_RESULT_UNLESS(NMetadataObject::IsApplyIfChecksPassed(Transaction, result, context));
         const bool exists = dstPath.IsResolved();
 
@@ -174,13 +170,14 @@ public:
             }
         }
 
-        NOperations::TUpdateInitializationContext initializationContext(
-            originalEntity.get(), &context, &Transaction, OperationId.GetTxId().GetValue());
+        auto update = std::make_shared<NOperations::TMetadataUpdateCreate>();
+        NOperations::TUpdateInitializationContext initializationContext(originalEntity.get(), &context, &Transaction, OperationId);
         if (auto status = update->Initialize(initializationContext); status.IsFail()) {
             result->SetError(NKikimrScheme::StatusSchemeError, status.GetErrorMessage());
             return result;
         }
 
+        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl, !Transaction.GetFailOnExist(), update->GetObjectPathType()));
         AddPathInSchemeShard(result, dstPath, owner);
         const TPathElement::TPtr object = CreatePathElement(dstPath, update->GetObjectPathType());
         NMetadataObject::CreateTransaction(OperationId, context, object->PathId, TTxState::TxCreateMetadataObject);

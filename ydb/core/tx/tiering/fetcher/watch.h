@@ -153,7 +153,7 @@ private:
         }
     }
 
-    void OnTieringRuleFetched(const TString& name, const NKikimrSchemeOp::TTieringRuleProperties& properties) {
+    void OnTieringRuleFetched(const TString& name, const NKikimrSchemeOp::TMetadataObjectProperties& properties) {
         NTiers::TTieringRule config;
         AFL_VERIFY(config.DeserializeFromProto(properties))("name", name)("proto", properties.DebugString());
         Send(Owner, new NTiers::TEvNotifyTieringRuleUpdated(name, config));
@@ -222,7 +222,7 @@ public:
 
         switch (pathDescription.GetSelf().GetPathType()) {
             case NKikimrSchemeOp::EPathTypeTieringRule:
-                OnTieringRuleFetched(name, pathDescription.GetTieringRuleDescription().GetProperties().GetTieringRule());
+                OnTieringRuleFetched(name, pathDescription.GetTieringRuleDescription().GetProperties());
                 break;
             default:
                 AFL_VERIFY(false)("issue", "invalid_object_kind")("kind", pathDescription.GetSelf().GetPathType());

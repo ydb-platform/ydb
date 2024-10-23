@@ -1,26 +1,21 @@
 #pragma once
 
-#include <ydb/core/tx/schemeshard/operations/metadata/abstract/behaviour.h>
+#include <ydb/core/tx/schemeshard/operations/metadata/behaviour.h>
 
-namespace NKikimr::NSchemeShard::NOperations {
+namespace NKikimr::NColumnShard::NTiers {
 
-class TTieringRuleValidator final: public IMetadataUpdateValidator {
+class TTieringRuleValidator final: public NSchemeShard::NOperations::IMetadataUpdateValidator {
 public:
     TSchemeConclusionStatus ValidatePath() const override;
-    TSchemeConclusionStatus ValidateObject(const TMetadataObjectInfo::TPtr object) const override;
+    TSchemeConclusionStatus ValidateProperties(const NSchemeShard::IMetadataObjectProperties::TPtr object) const override;
     TSchemeConclusionStatus ValidateAlter(
-        const TMetadataObjectInfo::TPtr object, const NKikimrSchemeOp::TMetadataObjectProperties& request) const override;
-    TSchemeConclusionStatus ValidateDrop(const TMetadataObjectInfo::TPtr object) const override;
+        const NSchemeShard::IMetadataObjectProperties::TPtr object, const NKikimrSchemeOp::TMetadataObjectProperties& request) const override;
+    TSchemeConclusionStatus ValidateDrop(const NSchemeShard::IMetadataObjectProperties::TPtr object) const override;
 
     using IMetadataUpdateValidator::IMetadataUpdateValidator;
 };
 
-class TTieringRuleCallbacks final: public IMetadataUpdateCallbacks {
-public:
-    using IMetadataUpdateCallbacks::IMetadataUpdateCallbacks;
-};
-
-class TTieringRuleUpdateBehaviour final: public IMetadataUpdateBehaviour {
+class TTieringRuleUpdateBehaviour final: public NSchemeShard::NOperations::IMetadataUpdateBehaviour {
 private:
     inline static const NKikimrSchemeOp::EPathType PathType = NKikimrSchemeOp::EPathTypeTieringRule;
     inline static const NKikimrSchemeOp::TMetadataObjectProperties::PropertiesImplCase PropertiesImplCase =
@@ -37,14 +32,12 @@ public:
         return PathType;
     }
 
-    IMetadataUpdateValidator::TPtr MakeValidator(const TPath& parent, const TString& objectName, const TOperationContext& ctx) {
+    TTieringRuleValidator::IMetadataUpdateValidator::TPtr MakeValidator(
+        const NSchemeShard::TPath& parent, const TString& objectName, const NSchemeShard::TOperationContext& ctx) {
         return std::make_shared<TTieringRuleValidator>(parent, objectName, ctx);
-    }
-    IMetadataUpdateCallbacks::TPtr MakeCallbacks(TUpdateStartContext& ctx) {
-        return std::make_shared<TTieringRuleCallbacks>(ctx);
     }
 
     using IMetadataUpdateBehaviour::IMetadataUpdateBehaviour;
 };
 
-}   // namespace NKikimr::NSchemeShard::NOperations
+}   // namespace NKikimr::NColumnShard::NTiers

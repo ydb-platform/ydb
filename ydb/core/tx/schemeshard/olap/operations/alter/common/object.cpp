@@ -18,7 +18,7 @@ TConclusion<std::shared_ptr<NOperations::ISSEntityUpdate>> TColumnTableEntity::D
     NKikimrSchemeOp::TModifyScheme mScheme;
     *mScheme.MutableAlterColumnTable() = *tableInfo->AlterData->AlterBody;
     mScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnTable);
-    NOperations::TUpdateInitializationContext uContext(&context.GetOriginalEntity(), context.GetSSOperationContext(), &mScheme, context.GetTxId());
+    NOperations::TUpdateInitializationContext uContext(&context.GetOriginalEntity(), context.GetSSOperationContext(), &mScheme, context.GetOperationId());
     return DoCreateUpdateImpl(uContext);
 }
 

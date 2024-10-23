@@ -10,7 +10,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/services/metadata/abstract
+    ydb/services/metadata
     ydb/services/metadata/common
     ydb/services/metadata/initializer
     ydb/services/metadata/manager

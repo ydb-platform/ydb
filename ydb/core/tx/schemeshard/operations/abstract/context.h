@@ -26,16 +26,14 @@ class TUpdateRestoreContext {
 private:
     const ISSEntity* OriginalEntity;
     const TOperationContext* SSOperationContext = nullptr;
-    const ui64 TxId;
-    // const TOperationId OperationId;
+    const TOperationId OperationId;
 public:
     ui64 GetTxId() const {
-        return TxId;
+        return OperationId.GetTxId().GetValue();
     }
 
-    ui64 GetOperationId() const {
-        // Not implemented
-        return 0;
+    TOperationId GetOperationId() const {
+        return OperationId;
     }
 
     bool OriginalEntityExists() const {
@@ -57,12 +55,12 @@ public:
     const TOperationContext* GetSSOperationContext() const {
         return SSOperationContext;
     }
-    TUpdateRestoreContext(const ISSEntity* originalEntity, const TOperationContext* ssOperationContext, const ui64 txId)
+    TUpdateRestoreContext(const ISSEntity* originalEntity, const TOperationContext* ssOperationContext, const TOperationId& operationId)
         : OriginalEntity(originalEntity)
         , SSOperationContext(ssOperationContext)
-        , TxId(txId) {
+        , OperationId(operationId) {
         AFL_VERIFY(SSOperationContext);
-        AFL_VERIFY(TxId);
+        AFL_VERIFY(operationId);
     }
 };
 
@@ -74,8 +72,8 @@ public:
     const NKikimrSchemeOp::TModifyScheme* GetModification() const {
         return Modification;
     }
-    TUpdateInitializationContext(const ISSEntity* originalEntity, const TOperationContext* ssOperationContext, const NKikimrSchemeOp::TModifyScheme* modification, const ui64 txId)
-        : TBase(originalEntity, ssOperationContext, txId)
+    TUpdateInitializationContext(const ISSEntity* originalEntity, const TOperationContext* ssOperationContext, const NKikimrSchemeOp::TModifyScheme* modification, const TOperationId& operationId)
+        : TBase(originalEntity, ssOperationContext, operationId)
         , Modification(modification) {
         AFL_VERIFY(Modification);
     }

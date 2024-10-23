@@ -20,7 +20,7 @@
 #include "schemeshard__stats.h"
 
 #include "olap/manager/manager.h"
-#include "operations/metadata/abstract/info.h"
+#include "operations/metadata/info.h"
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/storage_pools.h>

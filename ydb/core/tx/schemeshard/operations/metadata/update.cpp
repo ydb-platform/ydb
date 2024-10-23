@@ -24,16 +24,16 @@ TConclusionStatus TMetadataUpdateCreate::DoInitializeImpl(const TUpdateInitializ
         return TConclusionStatus::Fail("Object already exists");
     }
 
-    Result = TMetadataObjectInfo::Create(Behaviour->GetObjectPathType());
-    Result->SetAlterVersion(1);
-    if (!Result->DeserializePropertiesFromProto(request.GetProperties())) {
+    auto properties = IMetadataObjectProperties::Create(Behaviour->GetObjectPathType());
+    AFL_VERIFY(properties);
+    if (!properties->DeserializeFromProto(request.GetProperties())) {
         return TConclusionStatus::Fail("Cannot parse object properties");
     }
-
-    if (auto status = validator->ValidateObject(Result); status.IsFail()) {
+    if (auto status = validator->ValidateProperties(properties); status.IsFail()) {
         return TConclusionStatus::Fail(status.GetErrorMessage());
     }
 
+    Result = MakeIntrusive<TMetadataObjectInfo>(1u, properties);
     return TConclusionStatus::Success();
 }
 
@@ -56,20 +56,20 @@ TConclusionStatus TMetadataUpdateAlter::DoInitializeImpl(const TUpdateInitializa
     const auto validator = Behaviour->MakeValidator(
         TPath::Resolve(modification->GetWorkingDir(), context.GetSSOperationContext()->SS), request.GetName(), *context.GetSSOperationContext());
 
-    if (auto status = validator->ValidateAlter(originalEntity.GetObjectInfo(), request.GetProperties()); status.IsFail()) {
+    if (auto status = validator->ValidateAlter(originalEntity.GetObjectInfo()->GetProperties(), request.GetProperties()); status.IsFail()) {
         return TConclusionStatus::Fail(status.GetErrorMessage());
     }
 
-    Result = TMetadataObjectInfo::Create(Behaviour->GetObjectPathType());
-    Result->SetAlterVersion(originalEntity.GetObjectInfo()->GetAlterVersion() + 1);
-    if (!Result->ApplyPatch(request.GetProperties())) {
+    auto properties = IMetadataObjectProperties::Create(Behaviour->GetObjectPathType());
+    if (!properties->ApplyPatch(request.GetProperties())) {
         return TConclusionStatus::Fail("Cannot parse object properties");
     }
 
-    if (auto status = validator->ValidateObject(Result); status.IsFail()) {
+    if (auto status = validator->ValidateProperties(properties); status.IsFail()) {
         return TConclusionStatus::Fail(status.GetErrorMessage());
     }
 
+    Result = MakeIntrusive<TMetadataObjectInfo>(originalEntity.GetObjectInfo()->GetAlterVersion() + 1, properties);
     return TConclusionStatus::Success();
 }
 
@@ -94,7 +94,7 @@ TConclusionStatus TMetadataUpdateDrop::DoInitializeImpl(const TUpdateInitializat
     }
     const auto validator = Behaviour->MakeValidator(objectPath, request.GetName(), *context.GetSSOperationContext());
 
-    if (auto status = validator->ValidateDrop(originalEntity.GetObjectInfo()); status.IsFail()) {
+    if (auto status = validator->ValidateDrop(originalEntity.GetObjectInfo()->GetProperties()); status.IsFail()) {
         return TConclusionStatus::Fail(status.GetErrorMessage());
     }
 

@@ -84,7 +84,7 @@ private:
         AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_lister")("event", "object_fetched")("exists", !!description);
         if (description) {
             TTieringRule tieringRule;
-            AFL_VERIFY(tieringRule.DeserializeFromProto(description->GetProperties().GetTieringRule()));
+            AFL_VERIFY(tieringRule.DeserializeFromProto(description->GetProperties()));
             Result.emplace(description->GetName(), std::move(tieringRule));
         }
         UnfetchedObjects.erase(pathId);

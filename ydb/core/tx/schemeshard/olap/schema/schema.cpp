@@ -34,9 +34,10 @@ bool TOlapSchema::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycl
             }
         }
 
-        const auto* tieringRule = context.TieringRules.FindPtr(path.Base()->PathId);
-        AFL_VERIFY(tieringRule)("name", tieringId);
-        const auto* column = Columns.GetByName((*tieringRule)->DefaultColumn);
+        const auto* tieringRuleInfo = context.MetadataObjects.FindPtr(path.Base()->PathId);
+        AFL_VERIFY(tieringRuleInfo)("name", tieringId);
+        const auto tieringRule = (*tieringRuleInfo)->GetPropertiesVerified<NColumnShard::NTiers::TTieringRule>();
+        const auto* column = Columns.GetByName(tieringRule->GetDefaultColumn());
         if (!column) {
             errors.AddError("Incorrect tiering column - not found in scheme");
             return false;

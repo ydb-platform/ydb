@@ -5,7 +5,6 @@
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/public/api/protos/annotations/sensitive.pb.h>
-#include <ydb/core/tx/tiering/rule/info.h>
 
 #include <util/stream/format.h>
 
@@ -1114,14 +1113,7 @@ void TPathDescriber::DescribeTieringRule(TPathId pathId, TPathElement::TPtr path
     entry->SetName(pathEl->Name);
     PathIdFromPathId(pathId, entry->MutablePathId());
     entry->SetVersion(tieringRuleInfo->GetAlterVersion());
-    auto* tieringRuleProto = entry->MutableProperties()->MutableTieringRule();
-    auto& properties = tieringRuleInfo->GetPropertiesVerified<NColumnShard::NTiers::TTieringRuleInfo>();
-    tieringRuleProto->SetDefaultColumn(properties.GetDefaultColumn());
-    for (const auto& interval : properties.GetIntervals()) {
-        auto* intervalProto = tieringRuleProto->MutableTiers()->AddIntervals();
-        intervalProto->SetTierName(interval.GetTierName());
-        intervalProto->SetEvictionDelayMs(interval.GetDurationForEvict().MilliSeconds());
-    }
+    *entry->MutableProperties() = tieringRuleInfo->GetProperties()->SerializeToProto();
 }
 
 static bool ConsiderAsDropped(const TPath& path) {

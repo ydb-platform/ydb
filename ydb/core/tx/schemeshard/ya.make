@@ -288,7 +288,7 @@ PEERDIR(
     ydb/core/tx/schemeshard/backup
     ydb/core/tx/schemeshard/common
     ydb/core/tx/schemeshard/olap
-    ydb/core/tx/schemeshard/operations/metadata/abstract
+    ydb/core/tx/schemeshard/operations/metadata
     ydb/core/tx/scheme_board
     ydb/core/tx/tx_allocator_client
     ydb/core/util

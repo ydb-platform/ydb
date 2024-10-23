@@ -409,7 +409,7 @@ void TSchemeShard::Clear() {
     ExternalTables.clear();
     ExternalDataSources.clear();
     Views.clear();
-    TieringRules.clear();
+    MetadataObjects.clear();
 
     ColumnTables = { };
     BackgroundSessionsManager = std::make_shared<NKikimr::NOlap::NBackground::TSessionsManager>(
@@ -3028,11 +3028,9 @@ void TSchemeShard::PersistRemoveBackupCollection(NIceDb::TNiceDb& db, TPathId pa
 void TSchemeShard::PersistMetadataObject(NIceDb::TNiceDb& db, TPathId pathId, const TMetadataObjectInfo::TPtr object) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
-    NKikimrSchemeOp::TMetadataObjectProperties properties = object->SerializePropertiesToProto();
-
     db.Table<Schema::MetadataObjects>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
         NIceDb::TUpdate<Schema::MetadataObjects::AlterVersion>(object->GetAlterVersion()),
-        NIceDb::TUpdate<Schema::MetadataObjects::Properties>(properties.SerializeAsString())
+        NIceDb::TUpdate<Schema::MetadataObjects::Properties>(object->GetProperties()->SerializeToProto().SerializeAsString())
     );
 }
 

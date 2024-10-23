@@ -249,6 +249,68 @@ void TestTableSplitBoundariesArePreserved(
     UNIT_ASSERT_EQUAL(restoredTableDescription.GetKeyRanges(), originalKeyRanges);
 }
 
+void TestIndexTableSplitBoundariesArePreserved(
+    const char* table, const char* index, ui64 indexPartitions, TSession& session,
+    TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    const TString indexTablePath = JoinFsPaths(table, index, "indexImplTable");
+
+    {
+        TExplicitPartitions indexPartitionBoundaries;
+        for (ui32 boundary : {1, 2, 4, 8, 16, 32, 64, 128, 256}) {
+            indexPartitionBoundaries.AppendSplitPoints(
+                // split boundary is technically always a tuple
+                TValueBuilder().BeginTuple().AddElement().OptionalUint32(boundary).EndTuple().Build()
+            );
+        }
+        // By default indexImplTable has auto partitioning by size enabled,
+        // so you must set min partition count for partitions to not merge immediately after indexImplTable is built.
+        TPartitioningSettingsBuilder partitioningSettingsBuilder;
+        partitioningSettingsBuilder
+            .SetMinPartitionsCount(indexPartitions)
+            .SetMaxPartitionsCount(indexPartitions);
+
+        const auto indexSettings = TGlobalIndexSettings{
+            .PartitioningSettings = partitioningSettingsBuilder.Build(),
+            .Partitions = std::move(indexPartitionBoundaries)
+        };
+
+        auto tableBuilder = TTableBuilder()
+            .AddNullableColumn("Key", EPrimitiveType::Uint32)
+            .AddNullableColumn("Value", EPrimitiveType::Uint32)
+            .SetPrimaryKeyColumn("Key")
+            .AddSecondaryIndex(TIndexDescription("byValue", EIndexType::GlobalSync, { "Value" }, {}, { indexSettings }));
+
+        const auto result = session.CreateTable(table, tableBuilder.Build()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+    const auto describeSettings = TDescribeTableSettings()
+            .WithTableStatistics(true)
+            .WithKeyShardBoundary(true);
+    const auto originalIndexTableDescription = GetTableDescription(
+        session, indexTablePath, describeSettings
+    );
+    UNIT_ASSERT_VALUES_EQUAL(originalIndexTableDescription.GetPartitionsCount(), indexPartitions);
+    const auto& originalKeyRanges = originalIndexTableDescription.GetKeyRanges();
+    UNIT_ASSERT_VALUES_EQUAL(originalKeyRanges.size(), indexPartitions);
+
+    backup(table);
+
+    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+            DROP TABLE `%s`;
+        )", table
+    ));
+
+    restore(table);
+    const auto restoredIndexTableDescription = GetTableDescription(
+        session, indexTablePath, describeSettings
+    );
+    UNIT_ASSERT_VALUES_EQUAL(restoredIndexTableDescription.GetPartitionsCount(), indexPartitions);
+    const auto& restoredKeyRanges = restoredIndexTableDescription.GetKeyRanges();
+    UNIT_ASSERT_VALUES_EQUAL(restoredKeyRanges.size(), indexPartitions);
+    UNIT_ASSERT_EQUAL(restoredKeyRanges, originalKeyRanges);
+}
+
 }
 
 Y_UNIT_TEST_SUITE(BackupRestore) {
@@ -539,6 +601,22 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         TestTableSplitBoundariesArePreserved(
             table,
             partitions,
+            testEnv.GetSession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())
+        );
+    }
+
+    Y_UNIT_TEST(RestoreIndexTableSplitBoundaries) {
+        TS3TestEnv testEnv;
+        constexpr const char* table = "/Root/table";
+        constexpr const char* index = "byValue";
+        constexpr ui64 indexPartitions = 10;
+
+        TestIndexTableSplitBoundariesArePreserved(
+            table,
+            index,
+            indexPartitions,
             testEnv.GetSession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())

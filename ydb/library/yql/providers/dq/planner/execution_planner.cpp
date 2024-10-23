@@ -604,6 +604,7 @@ namespace NYql::NDqs {
         const auto narrowOutputRowType = GetSeqItemType(streamLookup.Ptr()->GetTypeAnn());
         Y_ABORT_UNLESS(narrowOutputRowType->GetKind() == ETypeAnnotationKind::Struct);
         settings.SetNarrowOutputRowType(NYql::NCommon::GetSerializedTypeAnnotation(narrowOutputRowType));
+        settings.SetMaxDelayedRows(1'000'000); //TODO configure me
         settings.SetCacheLimit(1'000'000); //TODO configure me
         settings.SetCacheTtlSeconds(60); //TODO configure me
 

@@ -12,6 +12,7 @@
 
 #include <ydb/library/backup/backup.h>
 
+#include <library/cpp/regex/pcre/regexp.h>
 #include <library/cpp/testing/hook/hook.h>
 #include <library/cpp/testing/unittest/registar.h>
 

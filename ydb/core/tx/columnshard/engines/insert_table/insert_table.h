@@ -17,12 +17,6 @@ class TInsertTableAccessor {
 protected:
     TInsertionSummary Summary;
     THashMap<TUnifiedBlobId, ui32> BlobLinks;
-    NColumnShard::TLoadTimeSignals LoadCounters;
-
-    TInsertTableAccessor()
-        : LoadCounters("InsertTable")
-    {
-    }
 
     void AddBlobLink(const TUnifiedBlobId& blobId) {
         ++BlobLinks[blobId];

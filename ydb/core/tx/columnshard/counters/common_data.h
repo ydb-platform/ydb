@@ -58,27 +58,28 @@ public:
 
 class TLoadTimeSignals;
 
-class TLoadTimer {
-private:
-    TLoadTimeSignals& Signals;
-    TInstant Start;
-    TString Name;
-    bool Failed = false;
-
-public:
-    TLoadTimer(TLoadTimeSignals& signals, const TString& name)
-        : Signals(signals)
-        , Name(name)
-    {
-        Start = TInstant::Now();
-    }
-
-    void AddLoadingFail();
-
-    ~TLoadTimer();
-};
-
 class TLoadTimeSignals: public TCommonCountersOwner {
+public:
+    class TLoadTimer : public TNonCopyable {
+    private:
+        const TLoadTimeSignals& Signals;
+        TInstant Start;
+        TString Name;
+        bool Failed = false;
+
+    public:
+        TLoadTimer(const TLoadTimeSignals& signals, const TString& name)
+            : Signals(signals)
+            , Name(name)
+        {
+            Start = TInstant::Now();
+        }
+
+        void AddLoadingFail();
+
+        ~TLoadTimer();
+    };
+
 private:
     using TBase = TCommonCountersOwner;
     NMonitoring::TDynamicCounters::TCounterPtr LoadingTimeCounter;
@@ -94,19 +95,20 @@ public:
         LoadingFailCounter = TBase::GetValue("Startup/" + type + "LoadingFailCount");;
     }
 
-    TLoadTimer StartGuard(const TString& name) {
+    TLoadTimer StartGuard(const TString& name) const {
         return TLoadTimer(*this, name);
     }
 
-    void AddLoadingTime(ui64 microSeconds) {
+private:
+    void AddLoadingTime(ui64 microSeconds) const {
         LoadingTimeCounter->Add(microSeconds);
     }
 
-    void AddFailedLoadingTime(ui64 microSeconds) {
+    void AddFailedLoadingTime(ui64 microSeconds) const {
         FailedLoadingTimeCounter->Add(microSeconds);
     }
 
-    void AddLoadingFail() {
+    void AddLoadingFail() const {
         LoadingFailCounter->Add(1);
     }
 };

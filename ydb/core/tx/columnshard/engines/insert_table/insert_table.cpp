@@ -124,17 +124,19 @@ bool TInsertTable::Load(NIceDb::TNiceDb& db, IDbWrapper& dbTable, const TInstant
     Y_ABORT_UNLESS(!Loaded);
     Loaded = true;
     LastWriteId = (TInsertWriteId)0;
-    if (!NColumnShard::Schema::GetSpecialValueOpt(db, NColumnShard::Schema::EValueIds::LastWriteId, LastWriteId)) {
-        LoadCounters.AddLoadingFail();
-        return false;
-    }
+    {
+        NColumnShard::TLoadTimeSignals::TLoadTimer timer = Summary.GetCounters().LoadCounters.StartGuard("insert_table_loading_time");
+        if (!NColumnShard::Schema::GetSpecialValueOpt(db, NColumnShard::Schema::EValueIds::LastWriteId, LastWriteId)) {
+            timer.AddLoadingFail();
+            return false;
+        }
 
-    NColumnShard::TLoadTimer timer = LoadCounters.StartGuard("insert_table_loading_time");
-    bool result = dbTable.Load(*this, loadTime);
-    if (!result) {
-        timer.AddLoadingFail();
+        if (!dbTable.Load(*this, loadTime)) {
+            timer.AddLoadingFail();
+            return false;
+        }
+        return true;
     }
-    return result;
 }
 
 std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const std::optional<ui64> lockId, const TSnapshot& reqSnapshot,

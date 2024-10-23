@@ -107,4 +107,21 @@ public:
     }
 };
 
+class TTableLoadTimeCounters {
+public:
+    NColumnShard::TLoadTimeSignals TableLoadTimeCounters;
+    NColumnShard::TLoadTimeSignals SchemaPresetLoadTimeCounters;
+    NColumnShard::TLoadTimeSignals TableVersionsLoadTimeCounters;
+    NColumnShard::TLoadTimeSignals SchemaPresetVersionsLoadTimeCounters;
+
+public:
+    TTableLoadTimeCounters()
+    : TableLoadTimeCounters("Tables")
+    , SchemaPresetLoadTimeCounters("SchemaPreset")
+    , TableVersionsLoadTimeCounters("TableVersionss")
+    , SchemaPresetVersionsLoadTimeCounters("SchemaPresetVersions")
+    {
+    }
+};
+
 }

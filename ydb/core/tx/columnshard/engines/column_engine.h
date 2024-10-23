@@ -259,23 +259,6 @@ public:
     }
 };
 
-class TTableLoadTimeCounters {
-public:
-    NColumnShard::TLoadTimeSignals TableLoadTimeCounters;
-    NColumnShard::TLoadTimeSignals SchemaPresetLoadTimeCounters;
-    NColumnShard::TLoadTimeSignals TableVersionsLoadTimeCounters;
-    NColumnShard::TLoadTimeSignals SchemaPresetVersionsLoadTimeCounters;
-
-public:
-    TTableLoadTimeCounters()
-    : TableLoadTimeCounters("Tables")
-    , SchemaPresetLoadTimeCounters("SchemaPreset")
-    , TableVersionsLoadTimeCounters("TableVersionss")
-    , SchemaPresetVersionsLoadTimeCounters("SchemaPresetVersions")
-    {
-    }
-};
-
 class IColumnEngine {
 protected:
     virtual void DoRegisterTable(const ui64 pathId) = 0;
@@ -310,7 +293,6 @@ public:
     virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema) = 0;
     virtual const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const = 0;
     virtual const TColumnEngineStats& GetTotalStats() = 0;
-    virtual TTableLoadTimeCounters& GetTableLoadTimeCounters() = 0;
     virtual ui64 MemoryUsage() const {
         return 0;
     }

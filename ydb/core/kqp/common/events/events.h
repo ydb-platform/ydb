@@ -49,9 +49,6 @@ struct TEvKqp {
 
     struct TEvDataQueryStreamPartAck : public TEventLocal<TEvDataQueryStreamPartAck, TKqpEvents::EvDataQueryStreamPartAck> {};
 
-    template <typename TProto>
-    using TProtoArenaHolder = NPrivateEvents::TProtoArenaHolder<TProto>;
-
     using TEvQueryResponse = NPrivateEvents::TEvQueryResponse;
 
     struct TEvListSessionsRequest: public TEventPB<TEvListSessionsRequest, NKikimrKqp::TEvListSessionsRequest,

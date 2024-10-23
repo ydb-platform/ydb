@@ -5075,10 +5075,10 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             SELECT 2 y, 1 x;
         )");
 
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetResponse().GetYdbResults().size(), 1);
-        Cerr << reply->Get()->Record.GetRef().GetResponse().DebugString() << Endl;
-        auto ydbResults = reply->Get()->Record.GetRef().GetResponse().GetYdbResults();
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetResponse().GetYdbResults().size(), 1);
+        Cerr << reply->Get()->Record.GetResponse().DebugString() << Endl;
+        auto ydbResults = reply->Get()->Record.GetResponse().GetYdbResults();
         TVector <TString> colNames = {"y", "x"};
         UNIT_ASSERT_VALUES_EQUAL(colNames.size(), ydbResults.begin()->Getcolumns().size());
         for (size_t i = 0; i < colNames.size(); i++) {

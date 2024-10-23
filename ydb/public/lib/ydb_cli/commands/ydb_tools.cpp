@@ -1,5 +1,9 @@
 #include "ydb_tools.h"
 
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
+#undef INCLUDE_YDB_INTERNAL_H
+
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/pg_dump_parser.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
@@ -91,7 +95,9 @@ int TCommandDump::Run(TConfig& config) {
         throw yexception() << "Incorrect consistency level. Available options: \"database\", \"table\"" << Endl;
     }
 
-    NYdb::SetVerbosity(config.IsVerbose());
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
+    log->SetFormatter(GetPrefixLogFormatter(""));
+    NYdb::NBackup::SetLog(std::move(log));
 
     try {
         TString relPath = NYdb::RelPathFromAbsolute(config.Database, Path);
@@ -193,8 +199,6 @@ void TCommandRestore::Parse(TConfig& config) {
 }
 
 int TCommandRestore::Run(TConfig& config) {
-    NYdb::SetVerbosity(config.IsVerbose());
-
     auto settings = NDump::TRestoreSettings()
         .DryRun(IsDryRun)
         .RestoreData(RestoreData)
@@ -231,7 +235,10 @@ int TCommandRestore::Run(TConfig& config) {
         settings.Mode(NDump::TRestoreSettings::EMode::ImportData);
     }
 
-    NDump::TClient client(CreateDriver(config));
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
+    log->SetFormatter(GetPrefixLogFormatter(""));
+
+    NDump::TClient client(CreateDriver(config), std::move(log));
     ThrowOnError(client.Restore(FilePath, Path, settings));
 
     return EXIT_SUCCESS;

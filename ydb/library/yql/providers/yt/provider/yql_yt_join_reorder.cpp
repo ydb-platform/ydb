@@ -145,7 +145,7 @@ private:
 
 class TYtRelOptimizerNode: public TRelOptimizerNode {
 public:
-    TYtRelOptimizerNode(TString label, std::shared_ptr<TOptimizerStatistics> stats, TYtJoinNodeLeaf* leaf)
+    TYtRelOptimizerNode(TString label, TOptimizerStatistics stats, TYtJoinNodeLeaf* leaf)
         : TRelOptimizerNode(std::move(label), std::move(stats))
         , OriginalLeaf(leaf)
     { }
@@ -331,7 +331,7 @@ private:
         });
 
         stat->Specific = std::move(providerStats);
-        return std::make_shared<TYtRelOptimizerNode>(std::move(label), std::move(stat), leaf);
+        return std::make_shared<TYtRelOptimizerNode>(std::move(label), std::move(*stat), leaf);
     }
 
     void ExtractInMemorySize(

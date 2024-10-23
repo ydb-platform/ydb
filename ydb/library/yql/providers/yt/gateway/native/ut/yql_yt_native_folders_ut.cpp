@@ -185,14 +185,14 @@ private:
 
 Y_UNIT_TEST_SUITE(YtNativeGateway) {
     
-std::pair<TIntrusivePtr<TYtState>, IYtGateway::TPtr> InitTest(const NTesting::TPortHolder& port) {
+std::pair<TIntrusivePtr<TYtState>, IYtGateway::TPtr> InitTest(const NTesting::TPortHolder& port, TTypeAnnotationContext* types) {
     TYtNativeServices nativeServices;
     auto gatewaysConfig = MakeGatewaysConfig(port);
     nativeServices.Config = std::make_shared<TYtGatewayConfig>(gatewaysConfig.GetYt());
     nativeServices.FileStorage = CreateFileStorage(TFileStorageConfig{});
 
     auto ytGateway = CreateYtNativeGateway(nativeServices);
-    auto ytState = MakeIntrusive<TYtState>();
+    auto ytState = MakeIntrusive<TYtState>(types);
     ytState->Gateway = ytGateway;
 
     InitializeYtGateway(ytGateway, ytState);
@@ -206,7 +206,8 @@ TMaybe<std::function<void(const NYT::TNode& request)>> gatewayRequestAssertion, 
         [gatewayRequestAssertion, handleList, handleGet] () {return new TYtReplier(handleList, handleGet, gatewayRequestAssertion);}
     };
 
-    auto [ytState, ytGateway] = InitTest(port);
+    TTypeAnnotationContext types;
+    auto [ytState, ytGateway] = InitTest(port, &types);
 
     IYtGateway::TFolderOptions folderOptions = makeFolderOptions(ytState->SessionId);
     auto folderFuture = ytGateway->GetFolder(std::move(folderOptions));

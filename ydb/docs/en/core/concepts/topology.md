@@ -38,7 +38,7 @@ The storage volume multiplier specified above only applies to the fault toleranc
 
 When creating a [storage group](glossary.md#storage-group), which is a basic allocation unit for storage management, {{ ydb-short-name }} selects [VDisks](glossary.md#vdisk) that are located on [PDisks](glossary.md#pdisk) from different fail domains. For `block-4-2` mode, a storage group should be distributed across at least 8 fail domains, while for `mirror-3-dc` mode, it should be distributed across 3 fail realms, with at least 3 fail domains in each realm.
 
-For information about how to set the {{ ydb-short-name }} cluster topology, see [{#T}](../deploy/configuration/config.md#domains-blob).
+For information about how to set the {{ ydb-short-name }} cluster topology, see [{#T}](../reference/configuration/index.md#domains-blob).
 
 ### Reduced configurations {#reduced}
 

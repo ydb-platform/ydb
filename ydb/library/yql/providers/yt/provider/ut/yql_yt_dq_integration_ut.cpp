@@ -10,11 +10,9 @@ namespace {
 struct TTestSetup {
     TTestSetup()
         : TypesCtx(MakeHolder<TTypeAnnotationContext>())
-        , State(MakeIntrusive<TYtState>())
+        , State(MakeIntrusive<TYtState>(TypesCtx.Get()))
     {
-        State->Types = TypesCtx.Get();
         State->DqIntegration_ = CreateYtDqIntegration(State.Get());
-
     }
 
     THolder<TTypeAnnotationContext> TypesCtx;

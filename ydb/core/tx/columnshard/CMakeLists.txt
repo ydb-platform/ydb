@@ -83,6 +83,7 @@ target_link_libraries(core-tx-columnshard PUBLIC
   columnshard-blobs_action-storages_manager
   core-tx-tiering
   tx-conveyor-usage
+  tx-priorities-service
   core-tx-tracing
   tx-long_tx_service-public
   ydb-core-util

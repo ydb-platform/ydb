@@ -49,6 +49,7 @@ target_sources(tx-columnshard-counters PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/req_tracer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/scan.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/splitter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/portions.cpp
 )
 
 

@@ -12,21 +12,35 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(abstract)
-add_subdirectory(lbuckets)
-add_subdirectory(lcbuckets)
-add_subdirectory(sbuckets)
-
-add_library(engines-storage-optimizer INTERFACE)
+add_library(optimizer-lcbuckets-constructor INTERFACE)
 
 
-target_link_libraries(engines-storage-optimizer INTERFACE
+target_link_libraries(optimizer-lcbuckets-constructor INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  storage-optimizer-abstract
-  storage-optimizer-lbuckets
-  storage-optimizer-lcbuckets
-  storage-optimizer-sbuckets
+  libs-apache-arrow
+  ydb-core-protos
+  core-formats-arrow
+  engines-changes-abstract
+)
+
+
+add_global_library_for(optimizer-lcbuckets-constructor.global
+  optimizer-lcbuckets-constructor)
+
+
+target_link_libraries(optimizer-lcbuckets-constructor.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  libs-apache-arrow
+  ydb-core-protos
+  core-formats-arrow
+  engines-changes-abstract
+)
+
+target_sources(optimizer-lcbuckets-constructor.global PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/constructor/constructor.cpp
 )
 

@@ -12,21 +12,20 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(abstract)
-add_subdirectory(lbuckets)
-add_subdirectory(lcbuckets)
-add_subdirectory(sbuckets)
-
-add_library(engines-storage-optimizer INTERFACE)
+add_library(tx-priorities-service)
 
 
-target_link_libraries(engines-storage-optimizer INTERFACE
+target_link_libraries(tx-priorities-service PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  storage-optimizer-abstract
-  storage-optimizer-lbuckets
-  storage-optimizer-lcbuckets
-  storage-optimizer-sbuckets
+  tx-priorities-usage
+  ydb-core-protos
+)
+
+target_sources(tx-priorities-service PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/priorities/service/service.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/priorities/service/manager.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/priorities/service/counters.cpp
 )
 

@@ -12,21 +12,5 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(abstract)
-add_subdirectory(lbuckets)
-add_subdirectory(lcbuckets)
-add_subdirectory(sbuckets)
-
-add_library(engines-storage-optimizer INTERFACE)
-
-
-target_link_libraries(engines-storage-optimizer INTERFACE
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  storage-optimizer-abstract
-  storage-optimizer-lbuckets
-  storage-optimizer-lcbuckets
-  storage-optimizer-sbuckets
-)
-
+add_subdirectory(service)
+add_subdirectory(usage)

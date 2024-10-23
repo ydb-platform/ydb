@@ -38,6 +38,7 @@ void ToProto(NProto::TQueryStatistics* serialized, const TQueryStatistics& origi
     serialized->set_incomplete_input(original.IncompleteInput);
     serialized->set_incomplete_output(original.IncompleteOutput);
     serialized->set_memory_usage(original.MemoryUsage);
+    serialized->set_total_grouped_row_count(original.TotalGroupedRowCount);
     ToProto(serialized->mutable_inner_statistics(), original.InnerStatistics);
 }
 
@@ -56,6 +57,7 @@ void FromProto(TQueryStatistics* original, const NProto::TQueryStatistics& seria
     original->IncompleteInput = serialized.incomplete_input();
     original->IncompleteOutput = serialized.incomplete_output();
     original->MemoryUsage = serialized.memory_usage();
+    original->TotalGroupedRowCount = serialized.total_grouped_row_count();
     FromProto(&original->InnerStatistics, serialized.inner_statistics());
 }
 

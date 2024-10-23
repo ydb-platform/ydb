@@ -26,14 +26,14 @@ target_link_libraries(kikimr_backup PUBLIC
   cpp-regex-pcre
   cpp-string_utils-quote
   ydb-library-dynumber
-  api-grpc
   api-protos
   common
   ydb_cli-dump-util
   public-lib-yson_value
-  cpp-client-ydb_proto
-  cpp-client-ydb_scheme
+  cpp-client-ydb_driver
+  cpp-client-ydb_result
   cpp-client-ydb_table
+  cpp-client-ydb_value
 )
 
 target_sources(kikimr_backup PRIVATE

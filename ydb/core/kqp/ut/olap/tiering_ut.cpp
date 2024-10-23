@@ -106,6 +106,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
 
+        localHelper.CreateTestOlapTable();
         testHelper.CreateTier("tier1");
 
         {

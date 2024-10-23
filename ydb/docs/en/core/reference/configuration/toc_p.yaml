@@ -1,7 +1,3 @@
 items:
-- name: Default ports assigned to {{ ydb-short-name }}
-  href: ydb-ports.md
-- name: {{ ydb-short-name }} cluster configuration
-  href: cluster-static-configuration.md
 - name: TLS
   href: tls.md

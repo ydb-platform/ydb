@@ -63,8 +63,6 @@ public:
         return mask;
     }
 
-    static constexpr TDuration DEFAULT_TIMEOUT = TDuration::Seconds(10);
-
     struct TGrpcRequest {
         static const google::protobuf::Message& Obfuscate(const google::protobuf::Message& p) {
             return p;
@@ -117,8 +115,8 @@ public:
     }
 
     static NYdbGrpc::TGRpcClientConfig InitGrpcConfig(const NGrpcActorClient::TGrpcClientSettings& settings) {
-        const TDuration effectiveTimeout = settings.RequestTimeoutMs ? TDuration::MilliSeconds(settings.RequestTimeoutMs) : DEFAULT_TIMEOUT;
-        NYdbGrpc::TGRpcClientConfig config(settings.Endpoint, effectiveTimeout, NYdbGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT, 0, settings.CertificateRootCA);
+        const TDuration requestTimeout = TDuration::MilliSeconds(settings.RequestTimeoutMs);
+        NYdbGrpc::TGRpcClientConfig config(settings.Endpoint, requestTimeout, NYdbGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT, 0, settings.CertificateRootCA);
         config.EnableSsl = settings.EnableSsl;
         config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIME_MS] = settings.GrpcKeepAliveTimeMs;
         config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIMEOUT_MS] = settings.GrpcKeepAliveTimeoutMs;

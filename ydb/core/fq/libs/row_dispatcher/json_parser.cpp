@@ -179,7 +179,9 @@ public:
                 }
                 rowId++;
             }
-            Y_ENSURE(rowId == Buffer.NumberValues, "Unexpected number of json documents");
+            if (rowId < Buffer.NumberValues) {
+                throw yexception() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows but got " << rowId;
+            }
 
             for (size_t i = 0; i < Columns.size(); ++i) {
                 ResizeColumn(Columns[i], ParsedValues[i], Buffer.NumberValues);

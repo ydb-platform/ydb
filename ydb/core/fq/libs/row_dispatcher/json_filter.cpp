@@ -11,9 +11,6 @@
 #include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/fq/libs/row_dispatcher/json_filter.h>
 
-#include <cxxabi.h>
-
-
 namespace {
 
 using TCallback = NFq::TJsonFilter::TCallback;

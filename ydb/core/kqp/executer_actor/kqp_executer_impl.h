@@ -1918,7 +1918,7 @@ protected:
             if (Stats->CollectStatsByLongTasks) {
                 const auto& txPlansWithStats = response.GetResult().GetStats().GetTxPlansWithStats();
                 if (!txPlansWithStats.empty()) {
-                    LOG_N("Full stats: " << response.GetResult().GetStats());
+                    LOG_I("Full stats: " << response.GetResult().GetStats());
                 }
             }
         }

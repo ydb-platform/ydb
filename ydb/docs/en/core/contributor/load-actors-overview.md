@@ -106,7 +106,7 @@ The use case described below shows how to create and run the KqpLoad actor. The 
     2. Start the actor:
 
     ```bash
-    curl <endpoint>/actors/load --data mode=start --data all_nodes=<start_on_all_nodes> --data config=$(cat proto_file)
+    curl <endpoint>/actors/load -H "Content-Type: application/x-protobuf-text" --data mode=start --data all_nodes=<start_on_all_nodes> --data config="$(cat proto_file)"
     ```
 
     * `endpoint`: Node HTTP endpoint (for example, `http://<address>:<port>`, where `address` is the node address and `port` is the node HTTP port).

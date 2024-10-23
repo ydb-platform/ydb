@@ -106,12 +106,12 @@
     2. Запустите актор:
 
     ```bash
-    curl <endpoint>/actors/load --data mode=start --data all_nodes=<start_on_all_nodes> --data config=$(cat proto_file)
+    curl <endpoint>/actors/load -H "Content-Type: application/x-protobuf-text" --data mode=start --data all_nodes=<start_on_all_nodes> --data config="$(cat proto_file)"
     ```
 
     * `endpoint` — http-эндпоит узла (например, `http://<address>:<port>`, где `address` — адрес узла, `port` — http-порт узла).
     * `proto_file` — путь к файлу с конфигурацией актора.
-    * `start_on_all_nodes` - `true`, чтобы запустить нагрузку на всех узлах тенанта, `false`, чтобы запустить нагрузку только на узле с данным `endpoint`.
+    * `start_on_all_nodes` – `true`, чтобы запустить нагрузку на всех узлах тенанта, `false`, чтобы запустить нагрузку только на узле с данным `endpoint`.
 
 {% endlist %}
 

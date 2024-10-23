@@ -17,6 +17,16 @@ class Database:
             case EDataSourceKind.CLICKHOUSE:
                 # We use preinitialized database when working with ClickHouse.
                 self.name = "db"
+            case EDataSourceKind.MS_SQL_SERVER:
+                # For this kind of database this name is provided by the external logic
+                self.name = name
+            case EDataSourceKind.MYSQL:
+                # For this kind of database this name is provided by the external logic
+                self.name = name
+            case EDataSourceKind.ORACLE:
+                # Oracle is not sensitive for identifiers until they are inclosed in quota marks,
+                # therefore, we'd better use uppercase for ease of testing
+                self.name = name[:127].upper()  # TODO: is it needed? max length of Oracle table name is 128 bytes/chars
             case EDataSourceKind.YDB:
                 # We use preinitialized database when working with YDB.
                 self.name = "local"

@@ -1,6 +1,6 @@
 import itertools
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Sequence, Final
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
@@ -29,6 +29,7 @@ class Table:
 
     @property
     def select_what(self) -> SelectWhat:
+        print("CRAB SW", self.schema.select_every_column().items, self.schema.select_every_column().columns)
         return self.schema.select_every_column()
 
 
@@ -119,7 +120,7 @@ class InnerJoinTestCase(TestCase):
 
 
 class Factory:
-    _id_column: Column = Column(
+    _id_column: Final = Column(
         name='id',
         ydb_type=Type.INT32,
         data_source_type=DataSourceType(ch=clickhouse.Int32(), pg=postgresql.Serial()),
@@ -169,6 +170,7 @@ class Factory:
         ]
 
         data_out = list(map(lambda x: list(itertools.chain(*x)), zip(*(t.data_in for t in tables))))
+        print("CRAB", data_out)
 
         data_sources: Sequence[EDataSourceKind] = (
             EDataSourceKind.CLICKHOUSE,

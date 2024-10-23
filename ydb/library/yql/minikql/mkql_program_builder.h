@@ -210,7 +210,7 @@ public:
     TRuntimeNode FromString(TRuntimeNode data, TType* type);
     TRuntimeNode StrictFromString(TRuntimeNode data, TType* type);
     TRuntimeNode ToBytes(TRuntimeNode data);
-    TRuntimeNode FromBytes(TRuntimeNode data, NUdf::TDataTypeId schemeType);
+    TRuntimeNode FromBytes(TRuntimeNode data, TType* type);
     TRuntimeNode InversePresortString(TRuntimeNode data);
     TRuntimeNode InverseString(TRuntimeNode data);
     TRuntimeNode Random(const TArrayRef<const TRuntimeNode>& dependentNodes);
@@ -713,7 +713,8 @@ public:
         const TArrayRef<std::pair<TStringBuf, TBinaryLambda>>& getMeasures,
         const NYql::NMatchRecognize::TRowPattern& pattern,
         const TArrayRef<std::pair<TStringBuf, TTernaryLambda>>& getDefines,
-        bool streamingMode
+        bool streamingMode,
+        const NYql::NMatchRecognize::TAfterMatchSkipTo& skipTo
     );
 
     TRuntimeNode TimeOrderRecover(

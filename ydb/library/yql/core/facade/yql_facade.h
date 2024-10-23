@@ -446,4 +446,6 @@ private:
     TIssues FinalIssues_;
 };
 
+void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& flags);
+
 } // namspace NYql

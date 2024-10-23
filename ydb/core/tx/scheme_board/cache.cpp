@@ -231,6 +231,7 @@ namespace {
             entry.Columns.clear();
             entry.NotNullColumns.clear();
             entry.Indexes.clear();
+            entry.Sequences.clear();
             entry.CdcStreams.clear();
             entry.RTMRVolumeInfo.Drop();
             entry.KesusInfo.Drop();
@@ -244,6 +245,7 @@ namespace {
             entry.BlobDepotInfo.Drop();
             entry.BlockStoreVolumeInfo.Drop();
             entry.FileStoreInfo.Drop();
+            entry.BackupCollectionInfo.Drop();
         }
 
         static void SetErrorAndClear(TResolveContext* context, TResolve::TEntry& entry, const bool isDescribeDenied) {
@@ -741,6 +743,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             KeyColumnTypes.clear();
             NotNullColumns.clear();
             Indexes.clear();
+            Sequences.clear();
             CdcStreams.clear();
             Partitioning = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
 
@@ -763,6 +766,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             FileStoreInfo.Drop();
             ViewInfo.Drop();
             ResourcePoolInfo.Drop();
+            BackupCollectionInfo.Drop();
         }
 
         void FillTableInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
@@ -803,6 +807,11 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             Indexes.reserve(tableDesc.TableIndexesSize());
             for (const auto& index : tableDesc.GetTableIndexes()) {
                 Indexes.push_back(index);
+            }
+
+            Sequences.reserve(tableDesc.SequencesSize());
+            for (const auto& sequence : tableDesc.GetSequences()) {
+                Sequences.push_back(sequence);
             }
 
             CdcStreams.reserve(tableDesc.CdcStreamsSize());
@@ -1278,6 +1287,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             DESCRIPTION_PART(FileStoreInfo);
             DESCRIPTION_PART(ViewInfo);
             DESCRIPTION_PART(ResourcePoolInfo);
+            DESCRIPTION_PART(BackupCollectionInfo);
 
             #undef DESCRIPTION_PART
 
@@ -1610,6 +1620,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 Kind = TNavigate::KindResourcePool;
                 FillInfo(Kind, ResourcePoolInfo, std::move(*pathDesc.MutableResourcePoolDescription()));
                 break;
+            case NKikimrSchemeOp::EPathTypeBackupCollection:
+                Kind = TNavigate::KindBackupCollection;
+                FillInfo(Kind, BackupCollectionInfo, std::move(*pathDesc.MutableBackupCollectionDescription()));
+                break;
             case NKikimrSchemeOp::EPathTypeInvalid:
                 Y_DEBUG_ABORT("Invalid path type");
                 break;
@@ -1682,6 +1696,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         break;
                     case NKikimrSchemeOp::EPathTypeResourcePool:
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindResourcePool);
+                        break;
+                    case NKikimrSchemeOp::EPathTypeBackupCollection:
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindBackupCollection);
                         break;
                     case NKikimrSchemeOp::EPathTypeTableIndex:
                     case NKikimrSchemeOp::EPathTypeInvalid:
@@ -1887,6 +1904,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.NotNullColumns = NotNullColumns;
             entry.Indexes = Indexes;
             entry.CdcStreams = CdcStreams;
+            entry.Sequences = Sequences;
             entry.DomainDescription = DomainDescription;
             entry.RTMRVolumeInfo = RtmrVolumeInfo;
             entry.KesusInfo = KesusInfo;
@@ -1904,6 +1922,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.FileStoreInfo = FileStoreInfo;
             entry.ViewInfo = ViewInfo;
             entry.ResourcePoolInfo = ResourcePoolInfo;
+            entry.BackupCollectionInfo = BackupCollectionInfo;
         }
 
         bool CheckColumns(TResolveContext* context, TResolve::TEntry& entry,
@@ -2154,6 +2173,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         THashSet<TString> NotNullColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
+        TVector<NKikimrSchemeOp::TSequenceDescription> Sequences;
         std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
 
         TIntrusivePtr<TNavigate::TDirEntryInfo> Self;
@@ -2202,6 +2222,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         // ResourcePool specific
         TIntrusivePtr<TNavigate::TResourcePoolInfo> ResourcePoolInfo;
 
+        // BackupCollection specific
+        TIntrusivePtr<TNavigate::TBackupCollectionInfo> BackupCollectionInfo;
     }; // TCacheItem
 
     struct TMerger {

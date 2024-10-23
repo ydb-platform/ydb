@@ -222,6 +222,11 @@ namespace NYql::NDq::NWorker {
                 auto archive = layerPath.substr(pos+1);
                 TShellCommand cmd("tar", {"xf", archive, "-C", layerDir});
                 cmd.Run().Wait();
+                TMaybe<int> exitCode = cmd.GetExitCode();
+                if (!exitCode.Defined() || exitCode != 0) {
+                    const TString msg = TStringBuilder() << "'tar' exited with non-zero code, stderr: " << cmd.GetError();
+                    YQL_LOG(ERROR) << msg;
+                }
             }
         } else {
             NFs::MakeDirectoryRecursive("mnt/work");

@@ -14,7 +14,7 @@ from ydb.public.api.protos.draft import datastreams_pb2
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 
 
-READ_TOOL_TIMEOUT = yatest_common.plain_or_under_sanitizer(20, 300)
+READ_TOOL_TIMEOUT = yatest_common.plain_or_under_sanitizer(30, 300)
 
 
 def write_stream(path, data, partition_key=None):

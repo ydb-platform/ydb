@@ -33,6 +33,26 @@ class TExpirationCondition: public IEraseRowsCondition {
         }
     }
 
+    TMaybe<TString> GetWallClockDyNumber() const {
+        const auto instantValue = InstantValue(WallClockInstant, Unit);
+        if (!instantValue) {
+            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                "Unsupported unit: " << static_cast<ui32>(Unit));
+            CannotSerialize = true;
+            return Nothing();
+        }
+
+        const auto strInstant = ToString(*instantValue);
+        WallClockSerialized = NDyNumber::ParseDyNumberString(strInstant);
+        if (!WallClockSerialized) {
+            CannotSerialize = true;
+            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                "Cannot parse DyNumber from: " << strInstant.Quote());
+        }
+
+        return WallClockSerialized;
+    }
+
     void ParsePgFromText(const TString& value) const {
         const auto& result = NPg::PgNativeBinaryFromNativeText(value, Type.GetPgTypeDesc());
         if (result.Error) {
@@ -42,6 +62,34 @@ class TExpirationCondition: public IEraseRowsCondition {
         } else {
             WallClockSerialized = std::move(result.Str);
         }
+    }
+
+    TMaybe<TString> GetWallClockPg() const {
+        switch (NPg::PgTypeIdFromTypeDesc(Type.GetPgTypeDesc())) {
+            case DATEOID:
+            case TIMESTAMPOID: {
+                const auto& wallClockIsoString = WallClockInstant.ToString();
+                ParsePgFromText(wallClockIsoString);
+                break;
+            }
+            case INT4OID:
+            case INT8OID: {
+                const auto instantValue = InstantValue(WallClockInstant, Unit);
+                if (!instantValue) {
+                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                        "Unsupported unit: " << static_cast<ui32>(Unit));
+                    CannotSerialize = true;
+                    return Nothing();
+                }
+                const auto strInstant = ToString(*instantValue);
+                ParsePgFromText(strInstant);
+                break;
+            }
+            default:
+                CannotSerialize = true;
+                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Unsupported PG type");
+        }
+        return WallClockSerialized;
     }
 
     TMaybe<TString> GetWallClockSerialized() const {
@@ -54,53 +102,13 @@ class TExpirationCondition: public IEraseRowsCondition {
         }
 
         switch (Type.GetTypeId()) {
-        case NScheme::NTypeIds::DyNumber: {
-            const auto instantValue = InstantValue(WallClockInstant, Unit);
-            if (!instantValue) {
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                    "Unsupported unit: " << static_cast<ui32>(Unit));
-                return Nothing();
-            }
-
-            const auto strInstant = ToString(*instantValue);
-            const auto wallClockDyNumber = NDyNumber::ParseDyNumberString(strInstant);
-            if (!wallClockDyNumber) {
-                CannotSerialize = true;
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                    "Cannot parse DyNumber from: " << strInstant.Quote());
-            } else {
-                WallClockSerialized = *wallClockDyNumber;
-            }
-            break;
+        case NScheme::NTypeIds::DyNumber:
+            return GetWallClockDyNumber();
+        case NScheme::NTypeIds::Pg:
+            return GetWallClockPg();
+        default:
+            Y_ABORT("Unreachable");
         }
-        case NScheme::NTypeIds::Pg: {
-            switch (NPg::PgTypeIdFromTypeDesc(Type.GetPgTypeDesc())) {
-                case DATEOID:
-                case TIMESTAMPOID: {
-                    const auto& wallClockIsoString = WallClockInstant.ToString();
-                    ParsePgFromText(wallClockIsoString);
-                    break;
-                }
-                case INT4OID:
-                case INT8OID: {
-                    const auto instantValue = InstantValue(WallClockInstant, Unit);
-                    if (!instantValue) {
-                        LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                            "Unsupported unit: " << static_cast<ui32>(Unit));
-                        return Nothing();
-                    }
-                    const auto strInstant = ToString(*instantValue);
-                    ParsePgFromText(strInstant);
-                    break;
-                }
-                default:
-                    CannotSerialize = true;
-                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Unsupported PG type");
-            }
-            break;
-        }
-        }
-        return WallClockSerialized;
     }
 
     bool CheckUi64(ui64 value) const {
@@ -154,15 +162,15 @@ class TExpirationCondition: public IEraseRowsCondition {
     }
 
     bool CheckSerialized(TStringBuf value) const {
-        if (const auto& wallClockDSerialized = GetWallClockSerialized()) {
+        if (const auto& wallClockSerialized = GetWallClockSerialized()) {
             switch (Type.GetTypeId()) {
             // 'value since epoch' mode
             case NScheme::NTypeIds::DyNumber:
-                return value <= *wallClockDSerialized;
+                return value <= *wallClockSerialized;
             case NScheme::NTypeIds::Pg: {
                 int result = NPg::PgNativeBinaryCompare(
                     value.Data(), value.Size(),
-                    wallClockDSerialized->Data(), wallClockDSerialized->Size(),
+                    wallClockSerialized->Data(), wallClockSerialized->Size(),
                     Type.GetPgTypeDesc());
                 return result <= 0;
             }

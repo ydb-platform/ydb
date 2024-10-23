@@ -52,6 +52,7 @@ public:
 
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TClSourceSettings>()
+                    .World(clReadTable.World())
                     .Table(clReadTable.Table())
                     .Token<TCoSecureParam>()
                         .Name().Build(token)

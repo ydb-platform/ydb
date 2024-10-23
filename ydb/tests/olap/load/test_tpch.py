@@ -48,6 +48,7 @@ class TestTpch1(TpchSuiteBase):
         'lineitem': 6001215,
     }
     size: int = 1
+    check_canonical: bool = True
 
 
 class TestTpch10(TpchSuiteBase):
@@ -68,6 +69,9 @@ class TestTpch100(TpchSuiteBase):
 class TestTpch1000(TpchSuiteBase):
     size: int = 1000
     timeout = max(TpchSuiteBase.timeout, 1000.)
+    query_settings = {
+        9: LoadSuiteBase.QuerySettings(timeout=max(TpchSuiteBase.timeout, 3600.)),
+    }
 
 
 class TestTpch10000(TpchSuiteBase):

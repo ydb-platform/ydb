@@ -31,7 +31,14 @@ class DartValueError(ValueError):
 
 
 def create_dart_record(fields, *args):
-    return reduce(operator.or_, (value for field in fields if (value := field(*args))), {})
+    try:
+        return reduce(operator.or_, (value for field in fields if (value := field(*args))), {})
+    except Exception as e:
+        if str(e) != "":
+            ymake.report_configure_error("Exception: {}".format(e))
+        else:
+            raise (e)
+        return None
 
 
 def with_fields(fields):
@@ -840,12 +847,8 @@ class TestClasspath:
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        test_classpath_origins = unit.get('TEST_CLASSPATH_VALUE')
         ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
-        if test_classpath_origins:
-            value = '${TEST_CLASSPATH_MANAGED}'
-            return {cls.KEY: value}
-        elif ymake_java_test:
+        if ymake_java_test:
             value = '${DART_CLASSPATH}'
             return {cls.KEY: value}
 
@@ -855,20 +858,9 @@ class TestClasspathDeps:
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        test_classpath_origins = unit.get('TEST_CLASSPATH_VALUE')
         ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
-        if not test_classpath_origins and ymake_java_test:
+        if ymake_java_test:
             return {cls.KEY: '${DART_CLASSPATH_DEPS}'}
-
-
-class TestClasspathOrigins:
-    KEY = 'TEST_CLASSPATH_ORIGINS'
-
-    @classmethod
-    def value(cls, unit, flat_args, spec_args):
-        test_classpath_origins = unit.get('TEST_CLASSPATH_VALUE')
-        if test_classpath_origins:
-            return {cls.KEY: test_classpath_origins}
 
 
 class TestCwd:
@@ -1227,9 +1219,8 @@ class TestJar:
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        test_classpath_origins = unit.get('TEST_CLASSPATH_VALUE')
         ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
-        if not test_classpath_origins and ymake_java_test:
+        if ymake_java_test:
             if unit.get('UNITTEST_DIR'):
                 value = '${UNITTEST_MOD}'
             else:

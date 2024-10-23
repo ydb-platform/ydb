@@ -73,16 +73,19 @@ struct IConnection
     virtual const TNetworkAddress& GetLocalAddress() const = 0;
     virtual const TNetworkAddress& GetRemoteAddress() const = 0;
 
-    // Returns true if connection is not is failed state and has no
-    // active IO operations.
+    //! Returns true if connection is not is failed state and has no
+    //! active IO operations.
     virtual bool IsIdle() const = 0;
+
+    //! Returns true if connection can be reused by a pool.
+    virtual bool IsReusable() const = 0;
 
     virtual bool SetNoDelay() = 0;
     virtual bool SetKeepAlive() = 0;
 
     TFuture<void> Abort() override = 0;
 
-    // SubscribePeerDisconnect is best effort and is not guaranteed to fire.
+    //! This callback is best effort and is not guaranteed to fire.
     virtual void SubscribePeerDisconnect(TCallback<void()> callback) = 0;
 };
 

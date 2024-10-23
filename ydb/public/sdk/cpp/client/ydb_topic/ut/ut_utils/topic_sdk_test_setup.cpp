@@ -136,3 +136,9 @@ TTopicClient TTopicSdkTestSetup::MakeClient() const
 {
     return TTopicClient(MakeDriver());
 }
+
+NYdb::NTable::TTableClient TTopicSdkTestSetup::MakeTableClient() const
+{
+    return NYdb::NTable::TTableClient(MakeDriver(), NYdb::NTable::TClientSettings()
+            .UseQueryCache(false));
+}

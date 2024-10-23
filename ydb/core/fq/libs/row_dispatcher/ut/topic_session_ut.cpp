@@ -1,3 +1,5 @@
+#include <ydb/core/base/backtrace.h>
+
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/events/events.h>
 
@@ -33,6 +35,8 @@ public:
         Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_TRACE);
         Runtime.SetDispatchTimeout(TDuration::Seconds(5));
 
+        NKikimr::EnableYDBBacktraceFormat();
+
         ReadActorId1 = Runtime.AllocateEdgeActor();
         ReadActorId2 = Runtime.AllocateEdgeActor();
         RowDispatcherActorId = Runtime.AllocateEdgeActor();
@@ -56,6 +60,8 @@ public:
 
         TopicSession = Runtime.Register(NewTopicSession(
             topicPath,
+            GetDefaultPqEndpoint(),
+            GetDefaultPqDatabase(),
             Config,
             RowDispatcherActorId,
             0,
@@ -332,30 +338,29 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         Init(topicName, 50);
         auto source = BuildSource(topicName);
         StartSession(ReadActorId1, source);
-        StartSession(ReadActorId2, source);
+        StartSession(ReadActorId2, source); // slow session
 
         size_t messagesSize = 5;
-        for (size_t i = 0; i < messagesSize; ++i) {
-            const std::vector<TString> data = { Json1 };
-            PQWrite(data, topicName);
-        }
+        auto writeMessages = [&]() {
+            for (size_t i = 0; i < messagesSize; ++i) {
+                const std::vector<TString> data = { Json1 };
+                PQWrite(data, topicName);
+            }
+            Sleep(TDuration::MilliSeconds(100));
+            Runtime.DispatchEvents({}, Runtime.GetCurrentTime() - TDuration::MilliSeconds(1));
+        };
+        
+        writeMessages();
         ExpectNewDataArrived({ReadActorId1, ReadActorId2});
 
         auto readMessages = ReadMessages(ReadActorId1);
         UNIT_ASSERT(readMessages == messagesSize);
 
         // Reading from yds is stopped.
-
-        for (size_t i = 0; i < messagesSize; ++i) {
-            const std::vector<TString> data = { Json1 };
-            PQWrite(data, topicName);
-        }
-        Sleep(TDuration::MilliSeconds(100));
-        Runtime.DispatchEvents({}, Runtime.GetCurrentTime() - TDuration::MilliSeconds(1));
+        writeMessages();
 
         readMessages = ReadMessages(ReadActorId1);
         UNIT_ASSERT(readMessages == 0);
-
         readMessages = ReadMessages(ReadActorId2);
         UNIT_ASSERT(readMessages == messagesSize);
 
@@ -365,11 +370,14 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         readMessages = ReadMessages(ReadActorId1);
         UNIT_ASSERT(readMessages == messagesSize);
 
-        readMessages = ReadMessages(ReadActorId2);
-        UNIT_ASSERT(readMessages == messagesSize);
+        writeMessages();
+        StopSession(ReadActorId2, source);      // delete slow client, clear unread buffer
+        Sleep(TDuration::MilliSeconds(100));
+        Runtime.DispatchEvents({}, Runtime.GetCurrentTime() - TDuration::MilliSeconds(1));
 
+        readMessages = ReadMessages(ReadActorId1);
+        UNIT_ASSERT(readMessages == messagesSize);
         StopSession(ReadActorId1, source);
-        StopSession(ReadActorId2, source);
     }
 
      Y_UNIT_TEST_F(TwoSessionsWithDifferentSchemes, TFixture) {
@@ -386,7 +394,8 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
         TString json1 = "{\"dt\":101,\"value\":\"value1\", \"field1\":\"field1\"}";
         TString json2 = "{\"dt\":102,\"value\":\"value2\", \"field1\":\"field2\"}";
-    
+
+        Sleep(TDuration::Seconds(3));
         PQWrite({ json1, json2 }, topicName);
         ExpectNewDataArrived({ReadActorId1, ReadActorId2});
         ExpectMessageBatch(ReadActorId1, { "{\"dt\":101,\"value\":\"value1\"}", "{\"dt\":102,\"value\":\"value2\"}" });

@@ -36,17 +36,15 @@ public:
     }
 
     void MakeParser(TVector<TString> columns, TVector<TString> types) {
-        Parser = NFq::NewJsonParser(columns, types);
+        Parser = NFq::NewJsonParser(columns, types, 0, TDuration::Zero());
     }
 
     void MakeParser(TVector<TString> columns) {
         MakeParser(columns, TVector<TString>(columns.size(), "String"));
     }
 
-    void PushToParser(const TString& data) {
-        TJsonParserBuffer& buffer = Parser->GetBuffer();
-        buffer.Reserve(data.size());
-        buffer.AddValue(data);
+    void PushToParser(ui64 offset, const TString& data) {
+        Parser->AddMessages({GetMessage(offset, data)});
 
         ParsedValues = Parser->Parse();
         ResultNumberValues = ParsedValues ? ParsedValues.front().size() : 0;
@@ -61,6 +59,11 @@ public:
         return result;
     }
 
+    static NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage GetMessage(ui64 offset, const TString& data) {
+        NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageInformation info(offset, "", 0, TInstant::Zero(), TInstant::Zero(), nullptr, nullptr, 0, "");
+        return NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage(data, nullptr, info, nullptr);
+    }
+
     TActorSystemStub actorSystemStub;
     NActors::TTestActorRuntime Runtime;
     std::unique_ptr<NFq::TJsonParser> Parser;
@@ -72,7 +75,7 @@ public:
 Y_UNIT_TEST_SUITE(TJsonParserTests) {
     Y_UNIT_TEST_F(Simple1, TFixture) {
         MakeParser({"a1", "a2"}, {"String", "Optional<Uint64>"});
-        PushToParser(R"({"a1": "hello1", "a2": 101, "event": "event1"})");
+        PushToParser(42,R"({"a1": "hello1", "a2": 101, "event": "event1"})");
         UNIT_ASSERT_VALUES_EQUAL(1, ResultNumberValues);
 
         const auto& result = GetParsedRow(0);
@@ -83,7 +86,7 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
 
     Y_UNIT_TEST_F(Simple2, TFixture) {
         MakeParser({"a2", "a1"});
-        PushToParser(R"({"a1": "hello1", "a2": "101", "event": "event1"})");
+        PushToParser(42,R"({"a1": "hello1", "a2": "101", "event": "event1"})");
         UNIT_ASSERT_VALUES_EQUAL(1, ResultNumberValues);
 
         const auto& result = GetParsedRow(0);
@@ -94,7 +97,7 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
 
     Y_UNIT_TEST_F(Simple3, TFixture) {
         MakeParser({"a1", "a2"});
-        PushToParser(R"({"a2": "hello1", "a1": "101", "event": "event1"})");
+        PushToParser(42,R"({"a2": "hello1", "a1": "101", "event": "event1"})");
         UNIT_ASSERT_VALUES_EQUAL(1, ResultNumberValues);
 
         const auto& result = GetParsedRow(0);
@@ -105,7 +108,7 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
 
     Y_UNIT_TEST_F(Simple4, TFixture) {
         MakeParser({"a2", "a1"});
-        PushToParser(R"({"a2": "hello1", "a1": "101", "event": "event1"})");
+        PushToParser(42, R"({"a2": "hello1", "a1": "101", "event": "event1"})");
         UNIT_ASSERT_VALUES_EQUAL(1, ResultNumberValues);
 
         const auto& result = GetParsedRow(0);
@@ -117,10 +120,11 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
     Y_UNIT_TEST_F(ManyValues, TFixture) {
         MakeParser({"a1", "a2"});
 
-        TJsonParserBuffer& buffer = Parser->GetBuffer();
-        buffer.AddValue(R"({"a1": "hello1", "a2": "101", "event": "event1"})");
-        buffer.AddValue(R"({"a1": "hello1", "a2": "101", "event": "event2"})");
-        buffer.AddValue(R"({"a2": "101", "a1": "hello1", "event": "event3"})");
+        Parser->AddMessages({
+            GetMessage(42, R"({"a1": "hello1", "a2": "101", "event": "event1"})"),
+            GetMessage(43, R"({"a1": "hello1", "a2": "101", "event": "event2"})"),
+            GetMessage(44, R"({"a2": "101", "a1": "hello1", "event": "event3"})")
+        });
 
         ParsedValues = Parser->Parse();
         ResultNumberValues = ParsedValues.front().size();
@@ -136,10 +140,11 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
     Y_UNIT_TEST_F(MissingFields, TFixture) {
         MakeParser({"a1", "a2"});
 
-        TJsonParserBuffer& buffer = Parser->GetBuffer();
-        buffer.AddValue(R"({"a1": "hello1", "a2": "101", "event": "event1"})");
-        buffer.AddValue(R"({"a1": "hello1", "event": "event2"})");
-        buffer.AddValue(R"({"a2": "101", "a1": null, "event": "event3"})");
+        Parser->AddMessages({
+            GetMessage(42, R"({"a1": "hello1", "a2": "101", "event": "event1"})"),
+            GetMessage(43, R"({"a1": "hello1", "event": "event2"})"),
+            GetMessage(44, R"({"a2": "101", "a1": null, "event": "event3"})")
+        });
 
         ParsedValues = Parser->Parse();
         ResultNumberValues = ParsedValues.front().size();
@@ -155,9 +160,10 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
     Y_UNIT_TEST_F(NestedTypes, TFixture) {
         MakeParser({"nested", "a1"}, {"Optional<Json>", "String"});
 
-        TJsonParserBuffer& buffer = Parser->GetBuffer();
-        buffer.AddValue(R"({"a1": "hello1", "nested": {"key": "value"}})");
-        buffer.AddValue(R"({"a1": "hello1", "nested": ["key1", "key2"]})");
+        Parser->AddMessages({
+            GetMessage(42, R"({"a1": "hello1", "nested": {"key": "value"}})"),
+            GetMessage(43, R"({"a1": "hello1", "nested": ["key1", "key2"]})")
+        });
 
         ParsedValues = Parser->Parse();
         ResultNumberValues = ParsedValues.front().size();
@@ -176,17 +182,17 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
 
     Y_UNIT_TEST_F(StringTypeValidation, TFixture) {
         MakeParser({"a1"}, {"String"});
-        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(R"({"a1": 1234})"), simdjson::simdjson_error, "INCORRECT_TYPE: The JSON element does not have the requested type.");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": 1234})"), simdjson::simdjson_error, "INCORRECT_TYPE: The JSON element does not have the requested type.");
     }
 
     Y_UNIT_TEST_F(JsonTypeValidation, TFixture) {
         MakeParser({"a1"}, {"Int32"});
-        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(R"({"a1": {"key": "value"}})"), yexception, "Failed to parse json string, expected scalar type for column 'a1' with type Int32 but got nested json, please change column type to Json.");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": {"key": "value"}})"), yexception, "Failed to parse json string, expected scalar type for column 'a1' with type Int32 but got nested json, please change column type to Json.");
     }
 
     Y_UNIT_TEST_F(ThrowExceptionByError, TFixture) {
         MakeParser({"a2", "a1"});
-        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(R"(ydb)"), simdjson::simdjson_error, "INCORRECT_TYPE: The JSON element does not have the requested type.");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"(ydb)"), simdjson::simdjson_error, "INCORRECT_TYPE: The JSON element does not have the requested type.");
     }
 }
 

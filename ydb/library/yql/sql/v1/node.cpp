@@ -294,6 +294,10 @@ void INode::UseAsInner() {
     AsInner = true;
 }
 
+void INode::DisableSort() {
+    DisableSort_ = true;
+}
+
 bool INode::UsedSubquery() const {
     return false;
 }
@@ -3455,7 +3459,7 @@ TNodePtr BuildNamedExpr(TNodePtr parent) {
 }
 
 bool TVectorIndexSettings::Validate(TContext& ctx) const {
-    if (Metric.index() == 0) {
+    if (!Distance && !Similarity) {
         ctx.Error() << "either distance or similarity should be set";
         return false;
     } 

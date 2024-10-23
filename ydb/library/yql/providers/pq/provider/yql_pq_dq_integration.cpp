@@ -147,6 +147,7 @@ public:
 
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TDqPqTopicSource>()
+                    .World(pqReadTopic.World())
                     .Topic(pqReadTopic.Topic())
                     .Columns(std::move(columnNames))
                     .Settings(BuildTopicReadSettings(clusterName, dqSettings, read->Pos(), format, ctx))
@@ -268,7 +269,7 @@ public:
                     }
                 }
 
-                sharedReading = sharedReading && (format == "json_each_row" || (format == "raw"));
+                sharedReading = sharedReading && (format == "json_each_row" || format == "raw");
                 TString predicateSql = NYql::FormatWhere(predicateProto);
                 if (sharedReading) {
                     if (format == "json_each_row") {

@@ -8,6 +8,7 @@ namespace NPQ {
 
 TPartitionScaleManager::TPartitionScaleManager(
     const TString& topicName,
+    const TString& topicPath,
     const TString& databasePath,
     ui64 pathId,
     int version,
@@ -15,6 +16,7 @@ TPartitionScaleManager::TPartitionScaleManager(
     const TPartitionGraph& partitionGraph
 )
     : TopicName(topicName)
+    , TopicPath(topicPath)
     , DatabasePath(databasePath)
     , BalancerConfig(pathId, version, config)
     , PartitionGraph(partitionGraph) {
@@ -47,6 +49,7 @@ void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
         << "send split request");
     CurrentScaleRequest = ctx.Register(new TPartitionScaleRequest(
         TopicName,
+        TopicPath,
         DatabasePath,
         BalancerConfig.PathId,
         BalancerConfig.PathVersion,

@@ -831,28 +831,33 @@ private:
         return TStatus::Ok;
     }
 
-Ydb::Table::VectorIndexSettings SerializeVectorIndexSettingsToProto(const TCoNameValueTupleList& indexSettings) {
-    Ydb::Table::VectorIndexSettings proto;
+Ydb::Table::KMeansTreeSettings SerializeVectorIndexSettingsToProto(const TCoNameValueTupleList& indexSettings) {
+    Ydb::Table::KMeansTreeSettings proto;
 
     for (const auto& indexSetting : indexSettings) {
         const auto& name = indexSetting.Name().Value();
         const auto& value = indexSetting.Value().Cast<TCoAtom>().StringValue();
 
-        if (name == "distance")
-            proto.set_distance(VectorIndexSettingsParseDistance(value));
-        else if (name =="similarity")
-            proto.set_similarity(VectorIndexSettingsParseSimilarity(value));
-        else if (name =="vector_type")
-            proto.set_vector_type(VectorIndexSettingsParseVectorType(value));
-        else if (name =="vector_dimension")
-            proto.set_vector_dimension(FromString<ui32>(value));
-        else
+        if (name == "distance") {
+            proto.mutable_settings()->set_metric(VectorIndexSettingsParseDistance(value));
+        } else if (name == "similarity") {
+            proto.mutable_settings()->set_metric(VectorIndexSettingsParseSimilarity(value));
+        } else if (name =="vector_type") {
+            proto.mutable_settings()->set_vector_type(VectorIndexSettingsParseVectorType(value));
+        } else if (name =="vector_dimension") {
+            proto.mutable_settings()->set_vector_dimension(FromString<ui32>(value));
+        } else if (name =="clusters") {
+            proto.set_clusters(FromString<ui32>(value));
+        } else if (name =="levels") {
+            proto.set_levels(FromString<ui32>(value));
+        } else {
             YQL_ENSURE(false, "Wrong index setting name: " << name);
+        }
     }
 
-    YQL_ENSURE(proto.metric_case() != Ydb::Table::VectorIndexSettings::METRIC_NOT_SET, "Missed index setting distance or similarity");
-    YQL_ENSURE(proto.vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED, "Missed index setting vector_type");
-    YQL_ENSURE(proto.vector_dimension(), "Missed index setting vector_dimension");
+    YQL_ENSURE(proto.settings().metric() != Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED, "Missed index setting metric");
+    YQL_ENSURE(proto.settings().vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED, "Missed index setting vector_type");
+    YQL_ENSURE(proto.settings().vector_dimension(), "Missed index setting vector_dimension");
 
     return proto;
 }    
@@ -991,9 +996,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
             TIndexDescription::TSpecializedIndexDescription specializedIndexDescription;
             if (indexType == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexDescription;
-                *vectorIndexDescription.MutableSettings() = SerializeVectorIndexSettingsToProto(index.IndexSettings());
-                specializedIndexDescription = vectorIndexDescription;
+                *specializedIndexDescription.emplace<NKikimrKqp::TVectorIndexKmeansTreeDescription>()
+                     .MutableSettings() = SerializeVectorIndexSettingsToProto(index.IndexSettings());
             }
 
             // IndexState and version, pathId are ignored for create table with index request
@@ -1034,6 +1038,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                         family.Compression = TString(
                             familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                         );
+                    } else if (name == "compression_level") {
+                        family.CompressionLevel = FromString<i32>(familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                     } else {
                         ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()),
                             TStringBuilder() << "Unknown column family setting name: " << name));

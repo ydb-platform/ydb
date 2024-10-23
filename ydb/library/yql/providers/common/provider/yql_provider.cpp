@@ -1155,12 +1155,15 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> FreezeUsedF
         return SyncError();
     }
 
+    if (types.QContext.CanRead()) {
+        return SyncOk();
+    }
+
     auto future = FreezeUserDataTableIfNeeded(types.UserDataStorage, files, urlDownloadFilter);
     if (future.Wait(TDuration::Zero())) {
         files = future.GetValue()();
         return SyncOk();
-    }
-    else {
+    } else {
         return std::make_pair(IGraphTransformer::TStatus::Async, future.Apply(
             [](const NThreading::TFuture<std::function<TUserDataTable()>>& completedFuture) {
                 return TAsyncTransformCallback([completedFuture](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -1657,6 +1660,30 @@ bool ValidateFormatForInput(
         if (realSchemaColumnsCount != 1) {
             ctx.AddError(TIssue(TStringBuilder() << "Only one column in schema supported in raw format (you have "
                 << realSchemaColumnsCount << " fields)"));
+            return false;
+        }
+    }
+    else if (schemaStructRowType && format == TStringBuf("json_list")) {
+        bool failedSchemaColumns = false;
+
+        for (const TItemExprType* item : schemaStructRowType->GetItems()) {
+            if (excludeFields && excludeFields(item->GetName())) {
+                continue;
+            }
+            const TTypeAnnotationNode* rowType = item->GetItemType();
+            if (rowType->GetKind() == ETypeAnnotationKind::Optional) {
+                rowType = rowType->Cast<TOptionalExprType>()->GetItemType();
+            }
+
+            if (rowType->GetKind() == ETypeAnnotationKind::Data
+                && IsDataTypeDateOrTzDateOrInterval(rowType->Cast<TDataExprType>()->GetSlot())) {
+                ctx.AddError(TIssue(TStringBuilder() << "Date, Timestamp and Interval types are not allowed in json_list format (you have '"
+                    << item->GetName() << " " << FormatType(rowType) << "' field)"));
+                failedSchemaColumns = true;
+            }
+        }
+
+        if (failedSchemaColumns) {
             return false;
         }
     }

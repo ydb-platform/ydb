@@ -284,16 +284,20 @@ static INode::TPtr CreateVectorIndexSettings(const TVectorIndexSettings& vectorI
 
     auto settings = Y();
 
-    if (const auto* distance = std::get_if<TVectorIndexSettings::EDistance>(&vectorIndexSettings.Metric)) {
-        settings = L(settings, Q(Y(Q("distance"), Q(ToString(*distance)))));
-    } else if (const auto* similarity = std::get_if<TVectorIndexSettings::ESimilarity>(&vectorIndexSettings.Metric)) {
-        settings = L(settings, Q(Y(Q("similarity"), Q(ToString(*similarity)))));
+    if (vectorIndexSettings.Distance && vectorIndexSettings.Similarity) {
+        Y_ENSURE(false, "distance and similarity shouldn't be set at the same time");
+    } else if (vectorIndexSettings.Distance) {
+        settings = L(settings, Q(Y(Q("distance"), Q(ToString(*vectorIndexSettings.Distance)))));
+    } else if (vectorIndexSettings.Similarity) {
+        settings = L(settings, Q(Y(Q("similarity"), Q(ToString(*vectorIndexSettings.Similarity)))));
     } else {
-        Y_ENSURE(false, "Metric should be set");
+        Y_ENSURE(false, "distance or similarity should be set");
     }
 
     settings = L(settings, Q(Y(Q("vector_type"), Q(ToString(*vectorIndexSettings.VectorType)))));
-    settings = L(settings, Q(Y(Q("vector_dimension"), Q(ToString(*vectorIndexSettings.VectorDimension)))));
+    settings = L(settings, Q(Y(Q("vector_dimension"), Q(ToString(vectorIndexSettings.VectorDimension)))));
+    settings = L(settings, Q(Y(Q("clusters"), Q(ToString(vectorIndexSettings.Clusters)))));
+    settings = L(settings, Q(Y(Q("levels"), Q(ToString(vectorIndexSettings.Levels)))));
 
     return settings;
 }
@@ -1108,6 +1112,9 @@ public:
                 if (family.Compression) {
                     familyDesc = L(familyDesc, Q(Y(Q("compression"), family.Compression)));
                 }
+                if (family.CompressionLevel) {
+                    familyDesc = L(familyDesc, Q(Y(Q("compression_level"), family.CompressionLevel)));
+                }
                 columnFamilies = L(columnFamilies, Q(familyDesc));
             }
             opts = L(opts, Q(Y(Q("columnFamilies"), Q(columnFamilies))));
@@ -1409,6 +1416,9 @@ public:
                 if (family.Compression) {
                     familyDesc = L(familyDesc, Q(Y(Q("compression"), family.Compression)));
                 }
+                if (family.CompressionLevel) {
+                    familyDesc = L(familyDesc, Q(Y(Q("compression_level"), family.CompressionLevel)));
+                }
                 columnFamilies = L(columnFamilies, Q(familyDesc));
             }
             actions = L(actions, Q(Y(Q("addColumnFamilies"), Q(columnFamilies))));
@@ -1424,6 +1434,9 @@ public:
                 }
                 if (family.Compression) {
                     familyDesc = L(familyDesc, Q(Y(Q("compression"), family.Compression)));
+                }
+                if (family.CompressionLevel) {
+                    familyDesc = L(familyDesc, Q(Y(Q("compression_level"), family.CompressionLevel)));
                 }
                 columnFamilies = L(columnFamilies, Q(familyDesc));
             }

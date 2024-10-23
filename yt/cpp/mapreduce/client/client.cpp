@@ -1243,6 +1243,14 @@ IFileReaderPtr TClient::GetJobStderr(
     return NRawClient::GetJobStderr(Context_, operationId, jobId, options);
 }
 
+std::vector<TJobTraceEvent> TClient::GetJobTrace(
+    const TOperationId& operationId,
+    const TGetJobTraceOptions& options)
+{
+    CheckShutdown();
+    return NRawClient::GetJobTrace(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, operationId, options);
+}
+
 TNode::TListType TClient::SkyShareTable(
     const std::vector<TYPath>& tablePaths,
     const TSkyShareTableOptions& options)

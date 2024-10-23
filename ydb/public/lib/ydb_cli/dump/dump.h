@@ -6,6 +6,8 @@
 
 #include <util/generic/size_literals.h>
 
+class TLog;
+
 namespace NYdb {
 namespace NDump {
 
@@ -59,7 +61,7 @@ struct TRestoreSettings: public TOperationRequestSettings<TRestoreSettings> {
         ImportData,
     };
 
-    static constexpr ui64 MaxBytesPerRequest = 8_MB;
+    static constexpr ui64 MaxBytesPerRequest = 16_MB;
 
     FLUENT_SETTING_DEFAULT(EMode, Mode, EMode::Yql);
     FLUENT_SETTING_DEFAULT(bool, DryRun, false);
@@ -69,7 +71,7 @@ struct TRestoreSettings: public TOperationRequestSettings<TRestoreSettings> {
     FLUENT_SETTING_DEFAULT(bool, SkipDocumentTables, false);
     FLUENT_SETTING_DEFAULT(bool, SavePartialResult, false);
 
-    FLUENT_SETTING_DEFAULT(ui64, MemLimit, 16_MB);
+    FLUENT_SETTING_DEFAULT(ui64, MemLimit, 32_MB);
     FLUENT_SETTING_DEFAULT(ui64, RowsPerRequest, 0);
     FLUENT_SETTING_DEFAULT(ui64, BytesPerRequest, 512_KB);
     FLUENT_SETTING_DEFAULT(ui64, RequestUnitsPerRequest, 30);
@@ -92,6 +94,7 @@ private:
 
 public:
     explicit TClient(const TDriver& driver);
+    explicit TClient(const TDriver& driver, std::shared_ptr<TLog>&& log);
 
     TDumpResult Dump(const TString& dbPath, const TString& fsPath, const TDumpSettings& settings = {});
     TRestoreResult Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings = {});

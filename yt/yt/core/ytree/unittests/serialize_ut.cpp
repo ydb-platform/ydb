@@ -51,6 +51,12 @@ DEFINE_BIT_ENUM(ETestBitEnum,
     ((Green)  (0x0004))
 );
 
+enum class EPlainTestEnum
+{
+    First,
+    Second,
+};
+
 template <typename T>
 T PullParserConvert(TYsonStringBuf s)
 {
@@ -425,6 +431,13 @@ TEST(TSerializationTest, SerializableArcadiaEnum)
     for (const auto original : GetEnumAllValues<ESerializableArcadiaEnum>()) {
         TestSerializationDeserialization(original);
     }
+}
+
+TEST(TSerializationTest, PlainEnum)
+{
+    TestSerializationDeserialization(EPlainTestEnum::First);
+
+    TestSerializationDeserialization(static_cast<EPlainTestEnum>(42));
 }
 
 TEST(TYTreeSerializationTest, Protobuf)

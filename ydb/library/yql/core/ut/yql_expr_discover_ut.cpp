@@ -31,9 +31,8 @@ Y_UNIT_TEST_SUITE(TDiscoverYqlExpr) {
         auto ytGateway = CreateYtFileGateway(yqlNativeServices);
         auto typeAnnotationContext = MakeIntrusive<TTypeAnnotationContext>();
         typeAnnotationContext->DiscoveryMode = true;
-        auto ytState = MakeIntrusive<TYtState>();
+        auto ytState = MakeIntrusive<TYtState>(typeAnnotationContext.Get());
         ytState->Gateway = ytGateway;
-        ytState->Types = typeAnnotationContext.Get();
 
         InitializeYtGateway(ytGateway, ytState);
         auto randomProvider = CreateDeterministicRandomProvider(1);

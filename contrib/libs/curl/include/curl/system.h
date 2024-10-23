@@ -31,7 +31,7 @@
  * changed.
  *
  * In order to differentiate between platforms/compilers/architectures use
- * only compiler built-in predefined preprocessor symbols.
+ * only compiler built in predefined preprocessor symbols.
  *
  * curl_off_t
  * ----------
@@ -46,7 +46,7 @@
  * As a general rule, curl_off_t shall not be mapped to off_t. This rule shall
  * only be violated if off_t is the only 64-bit data type available and the
  * size of off_t is independent of large file support settings. Keep your
- * build on the safe side avoiding an off_t gating. If you have a 64-bit
+ * build on the safe side avoiding an off_t gating.  If you have a 64-bit
  * off_t then take for sure that another 64-bit data type exists, dig deeper
  * and you will find it.
  *
@@ -184,8 +184,9 @@
 #  define CURL_FORMAT_CURL_OFF_TU    PRIu64
 #  define CURL_SUFFIX_CURL_OFF_T     LL
 #  define CURL_SUFFIX_CURL_OFF_TU    ULL
-#  define CURL_TYPEOF_CURL_SOCKLEN_T int
+#  define CURL_TYPEOF_CURL_SOCKLEN_T socklen_t
 #  define CURL_PULL_SYS_TYPES_H      1
+#  define CURL_PULL_WS2TCPIP_H       1
 
 #elif defined(__VMS)
 #  if defined(__VAX)
@@ -402,7 +403,7 @@
 #  define CURL_PULL_SYS_SOCKET_H     1
 
 #else
-/* generic "safe guess" on old 32-bit style */
+/* generic "safe guess" on old 32 bit style */
 # define CURL_TYPEOF_CURL_OFF_T     long
 # define CURL_FORMAT_CURL_OFF_T     "ld"
 # define CURL_FORMAT_CURL_OFF_TU    "lu"
@@ -414,6 +415,15 @@
 #ifdef _AIX
 /* AIX needs <sys/poll.h> */
 #define CURL_PULL_SYS_POLL_H
+#endif
+
+
+/* CURL_PULL_WS2TCPIP_H is defined above when inclusion of header file  */
+/* ws2tcpip.h is required here to properly make type definitions below. */
+#ifdef CURL_PULL_WS2TCPIP_H
+#  include <winsock2.h>
+#  include <windows.h>
+#  include <ws2tcpip.h>
 #endif
 
 /* CURL_PULL_SYS_TYPES_H is defined above when inclusion of header file  */

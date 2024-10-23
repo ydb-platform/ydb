@@ -1,8 +1,0 @@
-81c81
-< 			table[i * 256 + j] = gf_mul_erasure(i, j);
----
-> 			table[i * 256 + j] = gf_mul(i, j);
-91c91
-< 			s ^= gf_mul_erasure(src[j][i], v[j]);
----
-> 			s ^= gf_mul(src[j][i], v[j]);

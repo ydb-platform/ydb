@@ -1522,7 +1522,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateContinuousBackup:
     case TTxState::TxCreateResourcePool:
     case TTxState::TxCreateBackupCollection:
-    case TTxState::TxCreateTieringRule:
+    case TTxState::TxCreateMetadataObject:
         return TPathElement::EPathState::EPathStateCreate;
     case TTxState::TxAlterPQGroup:
     case TTxState::TxAlterTable:
@@ -1559,8 +1559,11 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterContinuousBackup:
     case TTxState::TxAlterResourcePool:
     case TTxState::TxAlterBackupCollection:
-    case TTxState::TxAlterTieringRule:
+    case TTxState::TxAlterMetadataObject:
         return TPathElement::EPathState::EPathStateAlter;
+    case TTxState::TxDropTable:
+    case TTxState::TxDropPQGroup:
+    case TTxState::TxRmDir:
     case TTxState::TxDropSubDomain:
     case TTxState::TxForceDropSubDomain:
     case TTxState::TxForceDropExtSubDomain:
@@ -1582,8 +1585,11 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropContinuousBackup:
     case TTxState::TxDropResourcePool:
     case TTxState::TxDropBackupCollection:
-    case TTxState::TxDropTieringRule:
+    case TTxState::TxDropMetadataObject:
         return TPathElement::EPathState::EPathStateDrop;
+    case TTxState::TxBackup:
+        return TPathElement::EPathState::EPathStateBackup;
+    case TTxState::TxRestore:
         return TPathElement::EPathState::EPathStateRestore;
     case TTxState::TxUpgradeSubDomain:
         return TPathElement::EPathState::EPathStateUpgrade;
@@ -3036,8 +3042,8 @@ void TSchemeShard::PersistMetadataObject(NIceDb::TNiceDb& db, TPathId pathId, co
 
 void TSchemeShard::PersistRemoveMetadataObject(NIceDb::TNiceDb& db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
-    if (const auto tieringRule = MetadataObjects.find(pathId); tieringRule != MetadataObjects.end()) {
-        MetadataObjects.erase(tieringRule);
+    if (const auto object = MetadataObjects.find(pathId); object != MetadataObjects.end()) {
+        MetadataObjects.erase(object);
     }
 
     db.Table<Schema::MetadataObjects>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();

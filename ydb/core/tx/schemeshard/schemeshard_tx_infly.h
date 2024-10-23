@@ -668,6 +668,9 @@ struct TTxState {
         case TxAlterBackupCollection:
         case TxAlterMetadataObject:
             return false;
+        case TxInvalid:
+        case TxAllocatePQ:
+            Y_DEBUG_ABORT_UNLESS("UNREACHABLE");
             Y_UNREACHABLE();
         }
     }

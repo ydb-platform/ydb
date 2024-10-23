@@ -1914,7 +1914,7 @@ message TPathVersion {
     optional uint64 ViewVersion = 29;
     optional uint64 ResourcePoolVersion = 30;
     optional uint64 BackupCollectionVersion = 31;
-    optional uint64 MetadataObjectVersion = 31;
+    optional uint64 MetadataObjectVersion = 32;
 }
 
 // Describes single path

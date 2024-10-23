@@ -536,7 +536,7 @@ void TWriteSessionActor<UseMigrationProtocol>::SetupCounters()
     SessionsCreated.Inc();
     SessionsActive.Inc();
 
-    SetupBytesWrittenByUserAgentCounter(FullConverter->GetPrimaryPath());
+    SetupBytesWrittenByUserAgentCounter(FullConverter->GetFederationPath());
 }
 
 template<bool UseMigrationProtocol>

@@ -66,7 +66,7 @@ class BaseTestCase:
         '''
         match self.data_source_kind:
             case EDataSourceKind.CLICKHOUSE:
-                return self.name_ # without protocol
+                return self.name_  # without protocol
             case EDataSourceKind.MS_SQL_SERVER:
                 return self.name
             case EDataSourceKind.MYSQL:

@@ -18,7 +18,7 @@ from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     DataSourceType,
     SelectWhat,
     SelectWhere,
-    makeYdbTypeFromTypeID
+    makeYdbTypeFromTypeID,
 )
 
 from ydb.library.yql.providers.generic.connector.tests.common_test_cases.base import BaseTestCase
@@ -275,7 +275,7 @@ class Factory:
                         data_source_kind=data_source_kind,
                         protocol=EProtocol.NATIVE,
                         data_in=None,
-                        data_out_=[[999999]], # We put 1M of rows in the large table
+                        data_out_=[[999999]],  # We put 1M of rows in the large table
                         select_what=SelectWhat(SelectWhat.Item(name='MAX(col_00_int32)', kind='expr')),
                         select_where=None,
                         schema=schema,

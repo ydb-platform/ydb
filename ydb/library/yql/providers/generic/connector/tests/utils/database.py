@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
 
+
 @dataclass
 class Database:
     name: str
@@ -56,6 +57,14 @@ class Database:
                 return f"Database {self.name} doesn't exist"
             case EDataSourceKind.POSTGRESQL:
                 return f'database "{self.name}" does not exist'
+            case EDataSourceKind.YDB:
+                raise Exception("Fix me first in YQ-3315")
+            case EDataSourceKind.MS_SQL_SERVER:
+                return 'Cannot open database'
+            case EDataSourceKind.MYSQL:
+                return 'Unknown database'
+            case EDataSourceKind.ORACLE:
+                raise Exception("Fix me first in YQ-3413")
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
 
@@ -67,6 +76,12 @@ class Database:
                 return 'table does not exist'
             case EDataSourceKind.YDB:
                 raise Exception("Fix me first in YQ-3315")
+            case EDataSourceKind.MS_SQL_SERVER:
+                return 'table does not exist'
+            case EDataSourceKind.MYSQL:
+                return 'table does not exist'
+            case EDataSourceKind.ORACLE:
+                return 'table does not exist'
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
 

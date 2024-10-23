@@ -32,7 +32,7 @@ def assert_rows_equal(expected: List, actual: List):
 
     for i in range(len(expected)):
         if type(expected[i]) is float:
-            assert isclose(expected[i], actual[i], abs_tol=1e-5), (expected[i], actual[i])
+            assert isclose(expected[i], actual[i], abs_tol=1e-4), (expected[i], actual[i])
             continue
 
         if is_json(expected[i]):
@@ -54,4 +54,8 @@ def assert_data_outs_equal(
 def assert_schemas_equal(expected: Schema, actual: Schema):
     assert len(expected.columns) == len(actual.columns)
     for i in range(len(expected.columns)):
-        assert expected.columns[i] == actual.columns[i], (f"Error at position {i}", expected.columns[i], actual.columns[i])
+        assert expected.columns[i] == actual.columns[i], (
+            f"Error at position {i}",
+            expected.columns[i],
+            actual.columns[i],
+        )

@@ -10,15 +10,16 @@ from ydb.library.yql.providers.generic.connector.tests.utils.docker_compose impo
 
 LOGGER = make_logger(__name__)
 
+
 class OneTimeWaiter:
     __launched: bool = False
 
     def __init__(
-            self,
-            docker_compose_file_path: str,
-            data_source_kind: EDataSourceKind,
-            expected_tables: Sequence[str],
-            ):
+        self,
+        docker_compose_file_path: str,
+        data_source_kind: EDataSourceKind,
+        expected_tables: Sequence[str],
+    ):
         docker_compose_file_abs_path = yatest.common.source_path(docker_compose_file_path)
         self.docker_compose_helper = DockerComposeHelper(docker_compose_yml_path=docker_compose_file_abs_path)
         self.expected_tables = set(expected_tables)
@@ -43,4 +44,6 @@ class OneTimeWaiter:
             LOGGER.warning(f"Not enough tables: expected={self.expected_tables}, actual={self.actual_tables}")
             time.sleep(5)
 
-        raise ValueError(f"Datasource failed to initialize in {timeout} seconds, latest table set: {self.actual_tables}")
+        raise ValueError(
+            f"Datasource failed to initialize in {timeout} seconds, latest table set: {self.actual_tables}"
+        )

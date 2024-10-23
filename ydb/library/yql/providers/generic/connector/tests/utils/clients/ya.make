@@ -6,7 +6,6 @@ IF (AUTOCHECK)
 ENDIF()
 
 PY_SRCS(
-    #clickhouse.py
     postgresql.py
     ydb.py
 )

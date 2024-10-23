@@ -822,11 +822,6 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             return false;
         }
 
-        for (const auto& alter : req->alter_columns()) {
-            auto alterColumn = alterColumnTable->MutableAlterSchema()->AddAlterColumns();
-            alterColumn->SetName(alter.Getname());
-        }
-
         if (req->has_set_ttl_settings()) {
             if (!FillTtlSettings(*alterColumnTable->MutableAlterTtlSettings()->MutableEnabled(), req->Getset_ttl_settings(), status, error)) {
                 return false;

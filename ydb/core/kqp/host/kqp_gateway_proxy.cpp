@@ -1522,9 +1522,7 @@ public:
         }
     }
 
-    TFuture<TGenericResult> AlterColumnTable(const TString& cluster,
-        const TAlterColumnTableSettings& settings) override
-    {
+    TFuture<TGenericResult> AlterColumnTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req) override {
         CHECK_PREPARED_DDL(AlterColumnTable);
 
         try {
@@ -1532,20 +1530,16 @@ public:
                 return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
             }
 
-            std::pair<TString, TString> pathPair;
-            {
-                TString error;
-                if (!NSchemeHelpers::SplitTablePath(settings.Table, GetDatabase(), pathPair, error, false)) {
-                    return MakeFuture(ResultFromError<TGenericResult>(error));
-                }
-            }
-
             NKikimrSchemeOp::TModifyScheme schemeTx;
-            schemeTx.SetWorkingDir(pathPair.first);
 
-            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnTable);
-            NKikimrSchemeOp::TAlterColumnTable* alter = schemeTx.MutableAlterColumnTable();
-            alter->SetName(settings.Table);
+            Ydb::StatusIds::StatusCode code;
+            TString error;
+            if (!BuildAlterColumnTableModifyScheme(&req, &schemeTx, code, error)) {
+                IKqpGateway::TGenericResult errResult;
+                errResult.AddIssue(NYql::TIssue(error));
+                errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+                return MakeFuture(errResult);
+            }
 
             if (IsPrepare()) {
                 auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();

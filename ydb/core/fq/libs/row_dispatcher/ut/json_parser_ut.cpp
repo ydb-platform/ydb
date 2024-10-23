@@ -235,8 +235,9 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
     }
 
     Y_UNIT_TEST_F(ThrowExceptionByError, TFixture) {
-        MakeParser({"a2", "a1"});
+        MakeParser({"a"});
         UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"(ydb)"), simdjson::simdjson_error, "INCORRECT_TYPE: The JSON element does not have the requested type.");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a": "value1"} {"a": "value2"})"), yexception, "Failed to parse json messages, expected 1 json rows from offset 42 but got 2");
     }
 }
 

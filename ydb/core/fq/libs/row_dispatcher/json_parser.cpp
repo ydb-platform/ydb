@@ -177,8 +177,8 @@ public:
                 }
                 rowId++;
             }
-            if (rowId < Buffer.NumberValues) {
-                throw yexception() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows but got " << rowId;
+            if (rowId != Buffer.NumberValues) {
+                throw yexception() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << Buffer.Offsets.front() << " but got " << rowId;
             }
 
             for (size_t i = 0; i < Columns.size(); ++i) {

@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    behaviour.cpp
     update.cpp
     object.cpp
 )

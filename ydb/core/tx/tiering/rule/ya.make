@@ -7,6 +7,7 @@ SRCS(
     ss_checker.cpp
     checker.cpp
     GLOBAL ss_fetcher.cpp
+    GLOBAL update.cpp
 )
 
 PEERDIR(

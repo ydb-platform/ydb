@@ -1,6 +1,4 @@
 #pragma once
-#include "info.h"
-
 #include <ydb/core/tx/columnshard/engines/scheme/tier_info.h>
 #include <ydb/core/tx/schemeshard/operations/metadata/properties.h>
 
@@ -46,6 +44,8 @@ class TTieringRule: public NSchemeShard::IMetadataObjectProperties {
 private:
     YDB_ACCESSOR_DEF(TString, DefaultColumn);
     YDB_ACCESSOR_DEF(std::vector<TTieringInterval>, Intervals);
+
+    static TFactory::TRegistrator<TTieringRule> Registrator;
 
 private:
     static const NKikimrSchemeOp::TTieringRuleProperties& GetProperties(const TProto& proto) {

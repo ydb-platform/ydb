@@ -5,11 +5,6 @@
 
 namespace NKikimr::NColumnShard::NTiers {
 
-TTieringRuleUpdateBehaviour::TFactoryByPropertiesImpl::TRegistrator<TTieringRuleUpdateBehaviour>
-    TTieringRuleUpdateBehaviour::RegistratorByPropertiesImpl(TTieringRuleUpdateBehaviour::PropertiesImplCase);
-TTieringRuleUpdateBehaviour::TFactoryByPath::TRegistrator<TTieringRuleUpdateBehaviour> TTieringRuleUpdateBehaviour::RegistratorByPath(
-    TTieringRuleUpdateBehaviour::PathType);
-
 TTieringRuleValidator::TSchemeConclusionStatus TTieringRuleValidator::ValidatePath() const {
     const TString storagePath = NColumnShard::NTiers::TTieringRuleBehaviour().GetStorageTablePath();
     if (!IsEqualPaths(Parent.PathString(), storagePath)) {

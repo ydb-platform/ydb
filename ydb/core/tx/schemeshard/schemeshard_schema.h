@@ -1847,15 +1847,6 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Properties>;
     };
 
-    // struct MetadataObjectsAlterData : Table<111> {
-    //     struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
-    //     struct OperationType : Column<2, NScheme::NTypeIds::Uint64> {}; // EOperationType
-    //     struct Properties : Column<3, NScheme::NTypeIds::String> {}; // TMetadataObjectProperties
-
-    //     using TKey = TableKey<PathId>;
-    //     using TColumns = TableColumns<PathId, OperationType, Properties>;
-    // };
-
     using TTables = SchemaTables<
         Paths,
         TxInFlight,

@@ -39,8 +39,7 @@ TConclusionStatus TMetadataUpdateCreate::DoInitializeImpl(const TUpdateInitializ
 
 TConclusionStatus TMetadataUpdateCreate::DoStart(const TUpdateStartContext& context) {
     PersistObject(context.GetObjectPath()->Base()->PathId, Result, context);
-    // Not implemented: counters
-    // context.GetSSOperationContext()->SS->TabletCounters->Simple()[COUNTER_TIERING_RULE_COUNT].Add(1);
+    context.GetSSOperationContext()->SS->TabletCounters->Simple()[Behaviour->GetCounterType()].Add(1);
     return TConclusionStatus::Success();
 }
 
@@ -107,8 +106,7 @@ TConclusionStatus TMetadataUpdateDrop::DoStart(const TUpdateStartContext& contex
 }
 
 TConclusionStatus TMetadataUpdateDrop::DoFinish(const TUpdateFinishContext& context) {
-    // Not implemented: counters
-    // context.GetSSOperationContext()->SS->TabletCounters->Simple()[COUNTER_TIERING_RULE_COUNT].Sub(1);
+    context.GetSSOperationContext()->SS->TabletCounters->Simple()[Behaviour->GetCounterType()].Sub(1);
     context.GetSSOperationContext()->SS->PersistRemoveMetadataObject(*context.GetDB(), context.GetObjectPath()->Base()->PathId);
     return TConclusionStatus::Success();
 }

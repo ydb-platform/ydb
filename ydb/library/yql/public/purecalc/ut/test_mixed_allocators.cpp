@@ -1,6 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 
 #include <ydb/library/yql/public/purecalc/io_specs/protobuf/spec.h>
@@ -99,8 +99,8 @@ struct TInputSpecTraits<TStatelessInputSpec> {
     }
 };
 
-Y_UNIT_TEST_SUITE(TestPushStream) {
-    Y_UNIT_TEST(TestGraphInvalidation) {
+Y_UNIT_TEST_SUITE(TestMixedAllocators) {
+    Y_UNIT_TEST(TestPushStream) {
         const auto targetString = "large string >= 14 bytes";
         const auto factory = MakeProgramFactory();
         const auto sql = TStringBuilder() << "SELECT InputValue AS X FROM Input WHERE InputValue = \"" << targetString << "\";";
@@ -113,17 +113,19 @@ Y_UNIT_TEST_SUITE(TestPushStream) {
 
         const ui64 numberRows = 5;
         const auto inputConsumer = program->Apply(MakeHolder<TStatelessConsumer>(targetString, numberRows));
-        const NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false);
+        NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false);
 
         const auto pushString = [&](TString inputValue) {
             NYql::NUdf::TUnboxedValue stringValue;
             with_lock(alloc) {
                 stringValue = NKikimr::NMiniKQL::MakeString(inputValue);
+                alloc.Ref().LockObject(stringValue);
             }
 
             inputConsumer->OnObject(stringValue);
 
             with_lock(alloc) {
+                alloc.Ref().UnlockObject(stringValue);
                 stringValue.Clear();
             }
         };
@@ -131,7 +133,6 @@ Y_UNIT_TEST_SUITE(TestPushStream) {
         for (ui64 i = 0; i < numberRows; ++i) {
             pushString(targetString);
             pushString("another large string >= 14 bytes");
-            Cerr << "Computed string " << i << "\n";
         }
         inputConsumer->OnFinish();
     }

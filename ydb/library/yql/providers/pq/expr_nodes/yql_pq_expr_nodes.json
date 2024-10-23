@@ -71,8 +71,7 @@
                 {"Index": 1, "Name": "Topic", "Type": "TPqTopic"},
                 {"Index": 2, "Name": "Columns", "Type": "TExprBase"},
                 {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"},
-                {"Index": 4, "Name": "Token", "Type": "TCoSecureParam"},
-                {"Index": 5, "Name": "FilterPredicate", "Type": "TCoLambda"}
+                {"Index": 4, "Name": "Token", "Type": "TCoSecureParam"}
             ]
         },
         {

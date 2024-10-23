@@ -129,16 +129,6 @@ public:
                 columns = ctx.NewList(pos, std::move(cols));
             }
 
-            auto row = Build<TCoArgument>(ctx, read->Pos())
-                .Name("row")
-                .Done();
-            auto emptyPredicate = Build<TCoLambda>(ctx, read->Pos())
-                .Args({row})
-                .Body<TCoBool>()
-                    .Literal().Build("true")
-                    .Build()
-                .Done().Ptr();
-
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TDqPqTopicSource>()
                     .World(pqReadTopic.World())
@@ -148,7 +138,6 @@ public:
                     .Token<TCoSecureParam>()
                         .Name().Build(token)
                         .Build()
-                    .FilterPredicate(emptyPredicate)
                     .Build()
                 .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
                 .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>())

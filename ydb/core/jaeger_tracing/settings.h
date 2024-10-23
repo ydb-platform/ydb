@@ -45,6 +45,7 @@ struct TSamplingRule {
 
 template<class TThrottling>
 struct TExternalThrottlingRule {
+    ui8 Level;
     TThrottling Throttler;
 
     template<class TFunc>
@@ -52,6 +53,7 @@ struct TExternalThrottlingRule {
         using TNewThrottlingType = std::invoke_result_t<TFunc, const TThrottling&>;
 
         return TExternalThrottlingRule<TNewThrottlingType> {
+            .Level = Level,
             .Throttler = std::forward<TFunc>(f)(Throttler),
         };
     }

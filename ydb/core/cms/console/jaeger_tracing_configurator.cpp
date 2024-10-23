@@ -6,6 +6,7 @@
 #include <ydb/core/jaeger_tracing/sampling_throttling_configurator.h>
 #include <ydb/core/jaeger_tracing/settings.h>
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 namespace NKikimr::NConsole {
 
@@ -174,6 +175,13 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
             ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "failed to parse request type in rule "
                        << throttlingRule.ShortDebugString() << ". Skipping the rule");
             continue;
+        }
+
+        ui64 level = throttlingRule.HasLevel() ? throttlingRule.GetLevel() : TComponentTracingLevels::ProductionVerbose;
+        if (level > 15) {
+            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "external tracing level exceeds maximum allowed value (" << level
+                       << " provided, maximum is 15). Lowering the level");
+            level = 15;
         }
 
         if (!throttlingRule.HasMaxTracesPerMinute()) {

@@ -29,6 +29,10 @@ ui64 TZeroLevelPortions::DoGetWeight() const {
         if (PortionsInfo.GetCount() <= 100 || PortionsInfo.PredictPackedBlobBytes(GetPackKff()) < (1 << 20)) {
             return 0;
         }
+    } else {
+        if (PortionsInfo.PredictPackedBlobBytes(GetPackKff()) < (512 << 10)) {
+            return 0;
+        }
     }
 
     THashSet<ui64> portionIds;

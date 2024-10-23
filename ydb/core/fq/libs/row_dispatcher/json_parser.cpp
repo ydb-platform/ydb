@@ -153,10 +153,7 @@ public:
         LOG_ROW_DISPATCHER_TRACE("Parse values:\n" << values);
 
         with_lock (Alloc) {
-            for (auto& parsedColumn : ParsedValues) {
-                parsedColumn.clear();
-                parsedColumn.reserve(Buffer.NumberValues);
-            }
+            ClearColumns(Buffer.NumberValues);
 
             size_t rowId = 0;
             simdjson::ondemand::document_stream documents = Parser.iterate_many(values, size, simdjson::ondemand::DEFAULT_BATCH_SIZE);
@@ -173,6 +170,7 @@ public:
 
                     try {
                         parsedColumn.emplace_back(ParseJsonValue(columnDesc.Type, item.value()));
+                        Alloc.Ref().LockObject(parsedColumn.back());
                     } catch (...) {
                         throw yexception() << "Failed to parse json string at offset " << Buffer.Offsets[rowId] << ", got parsing error for column '" << columnDesc.Name << "' with type " << columnDesc.TypeYson << ", description: " << CurrentExceptionMessage();
                     }
@@ -202,9 +200,20 @@ public:
 
     ~TImpl() {
         Alloc.Acquire();
+        ClearColumns(0);
     }
 
 private:
+    void ClearColumns(size_t reserveSize) {
+        for (auto& parsedColumn : ParsedValues) {
+            for (const auto& value : parsedColumn) {
+                Alloc.Ref().UnlockObject(value);
+            }
+            parsedColumn.clear();
+            parsedColumn.reserve(reserveSize);
+        }
+    }
+
     void ResizeColumn(const TColumnDescription& columnDesc, NKikimr::NMiniKQL::TUnboxedValueVector& parsedColumn, size_t size) const {
         if (columnDesc.Type->IsOptional()) {
             parsedColumn.resize(size);
@@ -213,7 +222,7 @@ private:
         }
     }
 
-    NYql::NUdf::TUnboxedValue ParseJsonValue(const NKikimr::NMiniKQL::TType* type, simdjson::fallback::ondemand::value jsonValue) const {
+    NYql::NUdf::TUnboxedValuePod ParseJsonValue(const NKikimr::NMiniKQL::TType* type, simdjson::fallback::ondemand::value jsonValue) const {
         switch (type->GetKind()) {
             case NKikimr::NMiniKQL::TTypeBase::EKind::Data: {
                 const auto* dataType = AS_TYPE(NKikimr::NMiniKQL::TDataType, type);
@@ -236,7 +245,7 @@ private:
         }
     }
 
-    NYql::NUdf::TUnboxedValue ParseJsonValue(NYql::NUdf::EDataSlot dataSlot, simdjson::fallback::ondemand::value jsonValue) const {
+    NYql::NUdf::TUnboxedValuePod ParseJsonValue(NYql::NUdf::EDataSlot dataSlot, simdjson::fallback::ondemand::value jsonValue) const {
         const auto& typeInfo = NYql::NUdf::GetDataTypeInfo(dataSlot);
         switch (jsonValue.type()) {
             case simdjson::fallback::ondemand::json_type::number: {
@@ -307,7 +316,7 @@ private:
     }
 
     template <typename TResult, typename TJsonNumber>
-    static NYql::NUdf::TUnboxedValue ParseJsonNumber(TJsonNumber number) {
+    static NYql::NUdf::TUnboxedValuePod ParseJsonNumber(TJsonNumber number) {
         if (number < std::numeric_limits<TResult>::min() || std::numeric_limits<TResult>::max() < number) {
             throw yexception() << "number is out of range";
         }

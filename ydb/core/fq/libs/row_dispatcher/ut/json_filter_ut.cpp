@@ -36,6 +36,11 @@ public:
 
     void TearDown(NUnitTest::TTestContext& /* context */) override {
         with_lock (Alloc) {
+            for (const auto& holder : Holders) {
+                for (const auto& value : holder) {
+                    Alloc.Ref().UnlockObject(value);
+                }
+            }
             Holders.clear();
         }
         Filter.reset();
@@ -58,6 +63,7 @@ public:
             Holders.emplace_front();
             for (size_t i = 0; i < size; ++i) {
                 Holders.front().emplace_back(valueCreator(i));
+                Alloc.Ref().LockObject(Holders.front().back());
             }
             return &Holders.front();
         }

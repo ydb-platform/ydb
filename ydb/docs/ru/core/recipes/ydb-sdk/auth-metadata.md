@@ -138,7 +138,7 @@
       'database'    => '/local',
 
       // Database endpoint
-      'endpoint'    => 'localhost:{{ def-ports.grpc }}',
+      'endpoint'    => 'localhost:{{ ydb-ports.grpc }}',
 
       // Auto discovery (dedicated server only)
       'discovery'   => false,

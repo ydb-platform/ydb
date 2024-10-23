@@ -27,7 +27,7 @@ Below are examples of the code for authentication based on a username and token 
   You can pass the username and password in the connection string. For example:
 
   ```shell
-  "grpcs://login:password@localohost:{{ def-ports.grpcs }}/local"
+  "grpcs://login:password@localohost:{{ ydb-ports.grpcs }}/local"
   ```
 
   You can also explicitly pass them using the `ydb.WithStaticCredentials` parameter:
@@ -81,7 +81,7 @@ Below are examples of the code for authentication based on a username and token 
   using Ydb.Sdk;
   using Ydb.Sdk.Auth;
 
-  const string endpoint = "grpc://localhost:{{ def-ports.grpc }}";
+  const string endpoint = "grpc://localhost:{{ ydb-ports.grpc }}";
   const string database = "/local";
 
   var config = new DriverConfig(
@@ -107,7 +107,7 @@ Below are examples of the code for authentication based on a username and token 
       'database'    => '/local',
 
       // Database endpoint
-      'endpoint'    => 'localhost:{{ def-ports.grpc }}',
+      'endpoint'    => 'localhost:{{ ydb-ports.grpc }}',
 
       // Auto discovery (dedicated server only)
       'discovery'   => false,

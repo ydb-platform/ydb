@@ -6,7 +6,7 @@
 
   ``` bash
   {{ ydb-cli }} \
-  -e grpsc://some.host.in.some.domain:{{ def-ports.grpc }} \
+  -e grpsc://some.host.in.some.domain:{{ ydb-ports.grpc }} \
   -d /some_long_identifier1/some_long_identifier2/database_name \
   --yc-token-file ~/secrets/token_database1 \
   scheme ls

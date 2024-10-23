@@ -31,8 +31,8 @@ General format of the command:
 ### Display final connection parameters {#basic-example}
 
 ```bash
-$ ydb -e grpcs://another.endpoint:{{ def-ports.grpcs }} --ca-file some_certs.crt -p db123 config info
-endpoint: another.endpoint:{{ def-ports.grpcs }}
+$ ydb -e grpcs://another.endpoint:{{ ydb-ports.grpcs }} --ca-file some_certs.crt -p db123 config info
+endpoint: another.endpoint:{{ ydb-ports.grpcs }}
 yc-token: SOME_A12****************21_TOKEN
 iam-endpoint: iam.api.cloud.yandex.net
 ca-file: some_certs.crt
@@ -41,10 +41,10 @@ ca-file: some_certs.crt
 ### Display all connection parameters along with their sources {#verbose-example}
 
 ```bash
-$ ydb -e grpcs://another.endpoint:{{ def-ports.grpcs }} --ca-file some_certs.crt -p db123 -v config info
+$ ydb -e grpcs://another.endpoint:{{ ydb-ports.grpcs }} --ca-file some_certs.crt -p db123 -v config info
 Using Yandex.Cloud Passport token from YC_TOKEN env variable
 
-endpoint: another.endpoint:{{ def-ports.grpcs }}
+endpoint: another.endpoint:{{ ydb-ports.grpcs }}
 yc-token: SOME_A12****************21_TOKEN
 iam-endpoint: iam.api.cloud.yandex.net
 ca-file: some_certs.crt
@@ -57,9 +57,9 @@ current auth method: yc-token
   1. Value: /some/path. Got from: active profile "test_config_info"
 
 "endpoint" sources:
-  1. Value: another.endpoint:{{ def-ports.grpcs }}. Got from: explicit --endpoint option
-  2. Value: db123.endpoint:{{ def-ports.grpcs }}. Got from: profile "db123" from explicit --profile option
-  3. Value: some.endpoint:{{ def-ports.grpcs }}. Got from: active profile "test_config_info"
+  1. Value: another.endpoint:{{ ydb-ports.grpcs }}. Got from: explicit --endpoint option
+  2. Value: db123.endpoint:{{ ydb-ports.grpcs }}. Got from: profile "db123" from explicit --profile option
+  3. Value: some.endpoint:{{ ydb-ports.grpcs }}. Got from: active profile "test_config_info"
 
 "iam-endpoint" sources:
   1. Value: iam.api.cloud.yandex.net. Got from: default value

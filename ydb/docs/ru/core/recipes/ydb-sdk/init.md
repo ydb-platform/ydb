@@ -23,7 +23,7 @@
     ctx, cancel := context.WithCancel(context.Background())
     defer cancel()
 
-    db, err := ydb.Open(ctx, "grpc://localhost:{{ def-ports.grpc }}/local")
+    db, err := ydb.Open(ctx, "grpc://localhost:{{ ydb-ports.grpc }}/local")
     if err != nil {
         panic(err)
     }
@@ -89,7 +89,7 @@
     )
 
     func main() {
-      db, err := sql.Open("ydb", "grpc://localhost:{{ def-ports.grpc }}/local")
+      db, err := sql.Open("ydb", "grpc://localhost:{{ ydb-ports.grpc }}/local")
       if err != nil {
         panic(err)
       }
@@ -110,7 +110,7 @@
   ```python
   import ydb
 
-  with ydb.Driver(connection_string="grpc://localhost:{{ def-ports.grpc }}?database=/local") as driver:
+  with ydb.Driver(connection_string="grpc://localhost:{{ ydb-ports.grpc }}?database=/local") as driver:
     driver.wait(timeout=5)
     ...
   ```
@@ -122,7 +122,7 @@
   import asyncio
 
   async def ydb_init():
-    async with ydb.aio.Driver(endpoint="grpc://localhost:{{ def-ports.grpc }}", database="/local") as driver:
+    async with ydb.aio.Driver(endpoint="grpc://localhost:{{ ydb-ports.grpc }}", database="/local") as driver:
       await driver.wait()
       ...
 
@@ -135,7 +135,7 @@
   using Ydb.Sdk;
 
   var config = new DriverConfig(
-      endpoint: "grpc://localhost:{{ def-ports.grpc }}",
+      endpoint: "grpc://localhost:{{ ydb-ports.grpc }}",
       database: "/local"
   );
 
@@ -154,7 +154,7 @@
       'database'    => '/ru-central1/b1glxxxxxxxxxxxxxxxx/etn0xxxxxxxxxxxxxxxx',
 
       // Database endpoint
-      'endpoint'    => 'ydb.serverless.yandexcloud.net:{{ def-ports.grpcs }}',
+      'endpoint'    => 'ydb.serverless.yandexcloud.net:{{ ydb-ports.grpcs }}',
 
       // Auto discovery (dedicated server only)
       'discovery'   => false,

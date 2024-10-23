@@ -67,7 +67,7 @@
 
       Database started. Connection options for YDB CLI:
 
-      -e grpc://localhost:{{ def-ports.grpc }} -d /Root/test
+      -e grpc://localhost:{{ ydb-ports.grpc }} -d /Root/test
       ```
 
 - Docker
@@ -85,9 +85,9 @@
       ```bash
       docker run -d --rm --name ydb-local -h localhost \
         --platform linux/amd64 \
-        -p {{ def-ports.grpcs }}:{{ def-ports.grpcs }} -p {{ def-ports.grpc }}:{{ def-ports.grpc }} -p {{ def-ports.mon }}:{{ def-ports.mon }} \
+        -p {{ ydb-ports.grpcs }}:{{ ydb-ports.grpcs }} -p {{ ydb-ports.grpc }}:{{ ydb-ports.grpc }} -p {{ ydb-ports.mon }}:{{ ydb-ports.mon }} \
         -v $(pwd)/ydb_certs:/ydb_certs -v $(pwd)/ydb_data:/ydb_data \
-        -e GRPC_TLS_PORT={{ def-ports.grpcs }} -e GRPC_PORT={{ def-ports.grpc }} -e MON_PORT={{ def-ports.mon }} \
+        -e GRPC_TLS_PORT={{ ydb-ports.grpcs }} -e GRPC_PORT={{ ydb-ports.grpc }} -e MON_PORT={{ ydb-ports.mon }} \
         -e YDB_USE_IN_MEMORY_PDISKS=true \
         {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
       ```
@@ -130,9 +130,9 @@
 
    8. Подождите, пока `kubectl get databases.ydb.tech` станет `Ready`.
 
-   9. После обработки манифеста создаётся объект StatefulSet, описывающий набор динамических узлов. Созданная база данных будет доступна изнутри кластера Kubernetes по DNS-имени `database-minikube-sample` на портах {{ def-ports.grpcs }} и {{ def-ports.mon }}.
+   9. После обработки манифеста создаётся объект StatefulSet, описывающий набор динамических узлов. Созданная база данных будет доступна изнутри кластера Kubernetes по DNS-имени `database-minikube-sample` на портах {{ ydb-ports.grpcs }} и {{ ydb-ports.mon }}.
 
-   10. Получите доступ к порту {{ def-ports.mon }} снаружи Kubernetes через `kubectl port-forward database-minikube-sample-0 {{ def-ports.mon }}` для продолжения.
+   10. Получите доступ к порту {{ ydb-ports.mon }} снаружи Kubernetes через `kubectl port-forward database-minikube-sample-0 {{ ydb-ports.mon }}` для продолжения.
 
 - Kind
 
@@ -174,16 +174,16 @@
 
    9. Подождите, пока `kubectl get databases.ydb.tech` станет `Ready`.
 
-   10. После обработки манифеста создаётся объект StatefulSet, описывающий набор динамических узлов. Созданная база данных будет доступна изнутри кластера Kubernetes по DNS-имени `database-kind-sample` на портах {{ def-ports.grpcs }} и {{ def-ports.mon }}.
+   10. После обработки манифеста создаётся объект StatefulSet, описывающий набор динамических узлов. Созданная база данных будет доступна изнутри кластера Kubernetes по DNS-имени `database-kind-sample` на портах {{ ydb-ports.grpcs }} и {{ ydb-ports.mon }}.
 
-   11. Получите доступ к порту {{ def-ports.mon }} снаружи Kubernetes через `kubectl port-forward database-kind-sample-0 {{ def-ports.mon }}` для продолжения.
+   11. Получите доступ к порту {{ ydb-ports.mon }} снаружи Kubernetes через `kubectl port-forward database-kind-sample-0 {{ ydb-ports.mon }}` для продолжения.
 
 {% endlist %}
 
 
 ## Запустите первый запрос "Hello, world!"
 
-Самый простой способ выполнить свой первый запрос к {{ ydb-short-name }} - это встроенный веб-интерфейс. Он запускается по умолчанию на порту {{ def-ports.mon }} сервера {{ ydb-short-name }}, поэтому, если вы запустили его локально, вам нужно открыть [localhost:{{ def-ports.mon }}](http://localhost:{{ def-ports.mon }}) в вашем веб-браузере. Если нет, замените `localhost` на имя хоста вашего сервера в этом URL, либо используйте `ssh -L {{ def-ports.mon }}:localhost:{{ def-ports.mon }} my-server-hostname-or-ip.example.com` для настройки проброса порта и все равно откройте [localhost:{{ def-ports.mon }}](http://localhost:{{ def-ports.mon }}). Вы увидите страницу подобного вида:
+Самый простой способ выполнить свой первый запрос к {{ ydb-short-name }} - это встроенный веб-интерфейс. Он запускается по умолчанию на порту {{ ydb-ports.mon }} сервера {{ ydb-short-name }}, поэтому, если вы запустили его локально, вам нужно открыть [localhost:{{ ydb-ports.mon }}](http://localhost:{{ ydb-ports.mon }}) в вашем веб-браузере. Если нет, замените `localhost` на имя хоста вашего сервера в этом URL, либо используйте `ssh -L {{ ydb-ports.mon }}:localhost:{{ ydb-ports.mon }} my-server-hostname-or-ip.example.com` для настройки проброса порта и все равно откройте [localhost:{{ ydb-ports.mon }}](http://localhost:{{ ydb-ports.mon }}). Вы увидите страницу подобного вида:
 
 ![Стартовая страница веб-интерфейса](_assets/web-ui-home.png)
 

@@ -8,7 +8,7 @@ Before executing the examples, [create a topic](../ydb-cli/topic-create.md) and 
 
 The examples use:
 
-* `ydb:{{ kafka-api.def-port }}` — host name and port.
+* `ydb:{{ kafka-api.port }}` — host name and port.
 * `/Root/Database` — database name.
 * `/Root/Database/Topic-1` — topic name. It is allowed to specify either the full name (along with the database) or just the topic name.
 * `user@/Root/Database` — username. The username includes the database name, which is specified after `@`.
@@ -23,7 +23,7 @@ The examples use:
 This example includes a code snippet for writing data to a topic via [Kafka API](https://kafka.apache.org/documentation/).
 
 ```java
-String HOST = "ydb:{{ kafka-api.def-port }}";
+String HOST = "ydb:{{ kafka-api.port }}";
 String TOPIC = "/Root/Database/Topic-1";
 String USER = "user@/Root/Database";
 String PASS = "*****";
@@ -58,7 +58,7 @@ output {
   kafka {
     codec => json
     topic_id => "/Root/Database/Topic-1"
-    bootstrap_servers => "ydb:{{ kafka-api.def-port }}"
+    bootstrap_servers => "ydb:{{ kafka-api.port }}"
     compression_type => none
     security_protocol => SASL_SSL
     sasl_mechanism => PLAIN
@@ -75,7 +75,7 @@ To configure [Fluent Bit](https://github.com/fluent/fluent-bit), use the followi
 [OUTPUT]
   name                          kafka
   match                         *
-  Brokers                       ydb:{{ kafka-api.def-port }}
+  Brokers                       ydb:{{ kafka-api.port }}
   Topics                        /Root/Database/Topic-1
   rdkafka.client.id             Fluent-bit
   rdkafka.request.required.acks 1
@@ -93,7 +93,7 @@ To configure [Fluent Bit](https://github.com/fluent/fluent-bit), use the followi
 This example includes a code snippet for reading data from a topic via Kafka Java SDK.
 
 ```java
-String HOST = "ydb:{{ kafka-api.def-port }}";
+String HOST = "ydb:{{ kafka-api.port }}";
 String TOPIC = "/Root/Database/Topic-1";
 String USER = "user@/Root/Database";
 String PASS = "*****";
@@ -131,7 +131,7 @@ This example shows a code snippet for reading data from a topic via Kafka API wi
 You don't need to create a consumer for this reading mode.
 
 ```java
-String HOST = "ydb:{{ kafka-api.def-port }}";
+String HOST = "ydb:{{ kafka-api.port }}";
 String TOPIC = "/Root/Database/Topic-1";
 String USER = "user@/Root/Database";
 String PASS = "*****";
@@ -208,7 +208,7 @@ For more information about Kafka Connect and its configuration, see the [Apache 
 
     ```ini
     # Main properties
-    bootstrap.servers=ydb:{{ kafka-api.def-port }}
+    bootstrap.servers=ydb:{{ kafka-api.port }}
 
     # AdminAPI properties
     sasl.mechanism=PLAIN

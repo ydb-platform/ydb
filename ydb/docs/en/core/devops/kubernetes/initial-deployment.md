@@ -178,7 +178,7 @@ The value referenced by `.spec.storageClusterRef.name` key must match the name o
 
 {% endnote %}
 
-A `StatefulSet` object that describes a set of dynamic nodes is created after processing the manifest. The created database will be accessible from inside the {{ k8s }} cluster by the `database-sample` hostname or the `database-sample.<namespace>.svc.cluster.local` FQDN, where `namespace` indicates the namespace that was used for the installation. You can connect the database via port {{ def-ports.grpcs }}.
+A `StatefulSet` object that describes a set of dynamic nodes is created after processing the manifest. The created database will be accessible from inside the {{ k8s }} cluster by the `database-sample` hostname or the `database-sample.<namespace>.svc.cluster.local` FQDN, where `namespace` indicates the namespace that was used for the installation. You can connect the database via port {{ ydb-ports.grpcs }}.
 
 View the status of the created resource:
 
@@ -249,7 +249,7 @@ Check how {{ ydb-short-name }} works:
 
     ```bash
     ydb \
-      --endpoint grpc://database-sample-grpc:{{ def-ports.grpcs }} \
+      --endpoint grpc://database-sample-grpc:{{ ydb-ports.grpcs }} \
       --database /root/database-sample \
       table query execute --query 'SELECT 2 + 2;'
     ```

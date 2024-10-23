@@ -158,9 +158,9 @@ Below is the explanation of the configuration file structure:
         -->
         <script-file>sample-database.yql.tmp</script-file>
         <!-- Connection string: protocol + endpoint + database. Typical values:
-            grpcs://ydb.serverless.yandexcloud.net:{{ def-ports.grpcs }}?database=/ru-central1/b1gfvslmokutuvt2g019/etn63999hrinbapmef6g
-            grpcs://localhost:{{ def-ports.grpcs }}?database=/local
-            grpc://localhost:{{ def-ports.grpc }}?database=/Root/testdb
+            grpcs://ydb.serverless.yandexcloud.net:{{ ydb-ports.grpcs }}?database=/ru-central1/b1gfvslmokutuvt2g019/etn63999hrinbapmef6g
+            grpcs://localhost:{{ ydb-ports.grpcs }}?database=/local
+            grpc://localhost:{{ ydb-ports.grpc }}?database=/Root/testdb
          -->
         <connection-string>ydb-connection-string</connection-string>
         <!-- Authentication mode:

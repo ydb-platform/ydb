@@ -11,8 +11,8 @@ An endpoint is a string structured as `protocol://host:port` and provided by a {
 Examples:
 
 * `grpc://localhost:7135` is an unencrypted data interchange protocol (gRPC) with the server running on port 7135 of the same host as the client.
-* `grpcs://ydb.example.com` is an encrypted data interchange protocol (gRPCs) with the server running on the ydb.example.com host on an isolated corporate network and listening for connections on YDB default port {{ def-ports.grpcs }}.
-* `grpcs://ydb.serverless.yandexcloud.net:{{ def-ports.grpcs }}` is an encrypted data interchange protocol (gRPCs), public {{ yandex-cloud }} Serverless YDB server at ydb.serverless.yandexcloud.net, port {{ def-ports.grpcs }}.
+* `grpcs://ydb.example.com` is an encrypted data interchange protocol (gRPCs) with the server running on the ydb.example.com host on an isolated corporate network and listening for connections on YDB default port {{ ydb-ports.grpcs }}.
+* `grpcs://ydb.serverless.yandexcloud.net:{{ ydb-ports.grpcs }}` is an encrypted data interchange protocol (gRPCs), public {{ yandex-cloud }} Serverless YDB server at ydb.serverless.yandexcloud.net, port {{ ydb-ports.grpcs }}.
 
 ## Database path {#database}
 
@@ -44,7 +44,7 @@ A connection string is a URL-formatted string that specifies the endpoint and pa
 Examples:
 
 - `grpc://localhost:7135?database=/local`
-- `grpcs://ydb.serverless.yandexcloud.net:{{ def-ports.grpcs }}?database=/ru-central1/b1g8skpblkos03malf3s/etn01q5ko6sh271beftr`
+- `grpcs://ydb.serverless.yandexcloud.net:{{ ydb-ports.grpcs }}?database=/ru-central1/b1g8skpblkos03malf3s/etn01q5ko6sh271beftr`
 
 Using a connection string is an alternative to specifying the endpoint and database path separately and can be used in tools that support this method.
 

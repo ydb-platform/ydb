@@ -20,7 +20,7 @@ To install and configure {{ ydb-short-name }} DSTool:
    ydb-dstool -e <bs_endpoint> cluster list
    ```
 
-   * `bs_endpoint`: URI of the interface for {{ ydb-short-name }} cluster distributed storage management. The interface is accessible over HTTP on any cluster node on port {{ def-ports.mon }} by default. URI example: `http://localhost:{{ def-ports.mon }}`.
+   * `bs_endpoint`: URI of the interface for {{ ydb-short-name }} cluster distributed storage management. The interface is accessible over HTTP on any cluster node on port {{ ydb-ports.mon }} by default. URI example: `http://localhost:{{ ydb-ports.mon }}`.
 
    Result:
 

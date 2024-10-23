@@ -67,7 +67,7 @@ default:
 
 #=== YDB default settings ===#
 
-  def-ports:
+  ydb-ports:
     grpcs: 2135            #swapped (\b\d{4,5}\b)
     grpc: 2136             #swapped 
     ic: 19001              #swapped
@@ -76,8 +76,8 @@ default:
     docker-connector: 2130
     tracing: 4317
 
-  #def-domain: ydb-cluster.com
-  #def-partlabel: ydb_disk_
+  #ydb-test-domain: ydb-cluster.com
+  #ydb-disk-partlabel: ydb_disk_
 
 #=== JDBC default settings ===#
 
@@ -91,9 +91,9 @@ default:
 #=== Log-stash default settings ===#
 
   log-stash:
-    def-port: 9876      #swapped
+    port: 9876      #swapped
 
 #=== Kafka-API default settings ===#
 
   kafka-api:
-    def-port: 9093     #swapped
+    port: 9093     #swapped

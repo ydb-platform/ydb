@@ -26,7 +26,7 @@
 
 ```bash
 ydbops restart \
- -e grpc://<hostname>:{{ def-ports.grpcs }} \
+ -e grpc://<hostname>:{{ ydb-ports.grpcs }} \
  --kubeconfig ~/.kube/config \
  --k8s-namespace <k8s-namespace> \
  --user admin \
@@ -47,7 +47,7 @@ ydbops restart \
 ```yaml
 current-profile: my-profile
 my-profile:
-  endpoint: grpc://<hostname>:{{ def-ports.grpcs }}
+  endpoint: grpc://<hostname>:{{ ydb-ports.grpcs }}
   user: admin
   password-file: ~/<password-file>
   k8s-namespace: <k8s-namespace>
@@ -70,7 +70,7 @@ my-profile:
 current-profile: my-profile
 
 my-profile:
-  endpoint: grpc://your.ydb.cluster.fqdn:{{ def-ports.grpcs }}
+  endpoint: grpc://your.ydb.cluster.fqdn:{{ ydb-ports.grpcs }}
 
   # расположение файла CA при использовании grpcs в endpoint
   ca-file: /path/to/custom/ca/file

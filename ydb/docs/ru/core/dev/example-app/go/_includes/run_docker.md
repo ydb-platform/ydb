@@ -2,5 +2,5 @@
 
 ```bash
 ( export YDB_ANONYMOUS_CREDENTIALS=1 && cd ydb-go-examples && \
-go run ./basic -ydb="grpc://localhost:{{ def-ports.grpc }}?database=/local" )
+go run ./basic -ydb="grpc://localhost:{{ ydb-ports.grpc }}?database=/local" )
 ```

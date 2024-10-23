@@ -548,10 +548,10 @@ In the examples above, a Docker container was used, which didn't require any add
 
 List of different authentication options through URL parameters:
 
-* Local or remote Docker (anonymous authentication):<br/>`jdbc:ydb:grpc://localhost:{{ def-ports.grpc }}/local`
-* Self-hosted cluster:<br/>`jdbc:ydb:grpcs://<host>:{{ def-ports.grpcs }}/Root/testdb?secureConnectionCertificate=file:~/myca.cer`
-* Connect with token to the cloud instance:<br/>`jdbc:ydb:grpcs://<host>:{{ def-ports.grpcs }}/path/to/database?token=file:~/my_token`
-* Connect with service account to the cloud instance:<br/>`jdbc:ydb:grpcs://<host>:{{ def-ports.grpcs }}/path/to/database?saFile=file:~/sa_key.json`
+* Local or remote Docker (anonymous authentication):<br/>`jdbc:ydb:grpc://localhost:{{ ydb-ports.grpc }}/local`
+* Self-hosted cluster:<br/>`jdbc:ydb:grpcs://<host>:{{ ydb-ports.grpcs }}/Root/testdb?secureConnectionCertificate=file:~/myca.cer`
+* Connect with token to the cloud instance:<br/>`jdbc:ydb:grpcs://<host>:{{ ydb-ports.grpcs }}/path/to/database?token=file:~/my_token`
+* Connect with service account to the cloud instance:<br/>`jdbc:ydb:grpcs://<host>:{{ ydb-ports.grpcs }}/path/to/database?saFile=file:~/sa_key.json`
 
 Also, if your cluster is configured using username and password, authentication is done through Liquibase parameters.
 

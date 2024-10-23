@@ -28,7 +28,7 @@ To preserve the container's state, you need to remove the environment variable `
             image: ghcr.io/ydb-platform/local-ydb:nightly
             ports:
             - "{{ jdbc-ports.postgresql }}:{{ jdbc-ports.postgresql }}"
-            - "{{ def-ports.mon }}:{{ def-ports.mon }}"
+            - "{{ ydb-ports.mon }}:{{ ydb-ports.mon }}"
             environment:
             - "YDB_USE_IN_MEMORY_PDISKS=true"
             - "POSTGRES_USER=${YDB_PG_USER:-root}"
@@ -45,12 +45,12 @@ To preserve the container's state, you need to remove the environment variable `
 - Docker command
 
     ```bash
-    docker run --name ydb-postgres -d --pull always -p {{ jdbc-ports.postgresql }}:{{ jdbc-ports.postgresql }} -p {{ def-ports.mon }}:{{ def-ports.mon }} -e POSTGRES_USER=root -e POSTGRES_PASSWORD=1234 -e YDB_EXPERIMENTAL_PG=1 -e YDB_USE_IN_MEMORY_PDISKS=true ghcr.io/ydb-platform/local-ydb:nightly
+    docker run --name ydb-postgres -d --pull always -p {{ jdbc-ports.postgresql }}:{{ jdbc-ports.postgresql }} -p {{ ydb-ports.mon }}:{{ ydb-ports.mon }} -e POSTGRES_USER=root -e POSTGRES_PASSWORD=1234 -e YDB_EXPERIMENTAL_PG=1 -e YDB_USE_IN_MEMORY_PDISKS=true ghcr.io/ydb-platform/local-ydb:nightly
     ```
 
 {% endlist %}
 
-After launching the container, you can connect to it via PostgreSQL clients on port {{ jdbc-ports.postgresql }}, the database `local`, or open the [web interface](http://localhost:{{ def-ports.mon }}) on port {{ def-ports.mon }}.
+After launching the container, you can connect to it via PostgreSQL clients on port {{ jdbc-ports.postgresql }}, the database `local`, or open the [web interface](http://localhost:{{ ydb-ports.mon }}) on port {{ ydb-ports.mon }}.
 
 ## Connecting to the Running Container via psql
 

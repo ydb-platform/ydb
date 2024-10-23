@@ -60,7 +60,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
       'database'    => '/ru-central1/b1glxxxxxxxxxxxxxxxx/etn0xxxxxxxxxxxxxxxx',
 
       // Database endpoint
-      'endpoint'    => 'ydb.serverless.yandexcloud.net:{{ def-ports.grpcs }}',
+      'endpoint'    => 'ydb.serverless.yandexcloud.net:{{ ydb-ports.grpcs }}',
 
       // Auto discovery (dedicated server only)
       'discovery'   => false,

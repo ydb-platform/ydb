@@ -24,7 +24,7 @@ DROP ASYNC REPLICATION <name> [CASCADE]
 CREATE ASYNC REPLICATION my_replication
 FOR original_table AS replica_table
 WITH (
-    CONNECTION_STRING = 'grpcs://example.com:{{ def-ports.grpcs }}/?database=/Root/another_database',
+    CONNECTION_STRING = 'grpcs://example.com:{{ ydb-ports.grpcs }}/?database=/Root/another_database',
     TOKEN_SECRET_NAME = 'my_secret'
 );
 ```

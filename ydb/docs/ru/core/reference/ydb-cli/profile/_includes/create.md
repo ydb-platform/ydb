@@ -66,7 +66,7 @@
 Вы можете использовать профиль `quickstart` для соединения с БД в составе одноузлового кластера {{ ydb-short-name }}:
 
 ```bash
-{{ ydb-cli }} config profile create quickstart --endpoint grpc://localhost:{{ def-ports.grpc }} --database <path_database>
+{{ ydb-cli }} config profile create quickstart --endpoint grpc://localhost:{{ ydb-ports.grpc }} --database <path_database>
 ```
 
 * `path_database` — путь базы данных. Укажите одно из значений:
@@ -82,7 +82,7 @@
 
 ```bash
 {{ ydb-cli }} \
-  -e grpcs://example.com:{{ def-ports.grpcs }} -d /Root/somedatabase --sa-key-file ~/sa_key.json \
+  -e grpcs://example.com:{{ ydb-ports.grpcs }} -d /Root/somedatabase --sa-key-file ~/sa_key.json \
   scheme ls
 ```
 
@@ -91,7 +91,7 @@
 ```bash
 {{ ydb-cli }} \
   config profile create db1 \
-  -e grpcs://example.com:{{ def-ports.grpcs }} -d /Root/somedatabase --sa-key-file ~/sa_key.json
+  -e grpcs://example.com:{{ ydb-ports.grpcs }} -d /Root/somedatabase --sa-key-file ~/sa_key.json
 ```
 
 Теперь можно записать исходную команду гораздо короче:
@@ -105,7 +105,7 @@
 Создание/замена профиля `local` для соединения с локальной БД {{ ydb-short-name }}, развернутой сценариями [быстрого развертывания](../../../../quickstart.md):
 
 ```bash
-{{ ydb-cli}} config profile replace local --endpoint grpc://localhost:{{ def-ports.grpc }} --database /Root/test
+{{ ydb-cli}} config profile replace local --endpoint grpc://localhost:{{ ydb-ports.grpc }} --database /Root/test
 ```
 
 Определение способа аутентификации по логину и паролю в профиле `local`:

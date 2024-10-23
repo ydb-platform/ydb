@@ -51,13 +51,13 @@
 1. Получить токен аутентификации для выполнения административных команд с помощью {{ ydb-short-name }} CLI, например:
 
     ```bash
-    ydb -e grpcs://<node1.ydb.tech>:{{ def-ports.grpcs }} -d /Root --ca-file ca.crt \
+    ydb -e grpcs://<node1.ydb.tech>:{{ ydb-ports.grpcs }} -d /Root --ca-file ca.crt \
         --user root auth get-token --force >token-file
     ```
 
     В примере команды выше используются следующие параметры:
     * `node1.ydb.tech` - FQDN любого из серверов, на которых размещены статические узлы кластера;
-    * `{{ def-ports.grpcs }}` - номер порта grpcs сервиса статических узлов;
+    * `{{ ydb-ports.grpcs }}` - номер порта grpcs сервиса статических узлов;
     * `ca.crt` - имя файла с сертификатом центра регистрации;
     * `root` - логин пользователя с административными правами;
     * `token-file` - имя файла, в который сохраняется токен аутентификации для последующего использования.
@@ -68,7 +68,7 @@
 
     ```bash
     export LD_LIBRARY_PATH=/opt/ydb/lib
-    /opt/ydb/bin/ydbd -f ydbd-token-file --ca-file ca.crt -s grpcs://`hostname -f`:{{ def-ports.grpcs }} \
+    /opt/ydb/bin/ydbd -f ydbd-token-file --ca-file ca.crt -s grpcs://`hostname -f`:{{ ydb-ports.grpcs }} \
         admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml
     echo $?
     ```
@@ -76,7 +76,7 @@
     В примере команды выше используются следующие параметры:
 
     * `ydbd-token-file` - имя файла ранее полученного токена аутентификации;
-    * `{{ def-ports.grpcs }}` - номер порта grpcs сервиса статических узлов;
+    * `{{ ydb-ports.grpcs }}` - номер порта grpcs сервиса статических узлов;
     * `ca.crt` - имя файла с сертификатом центра регистрации.
 
     Если при выполнении приведенной выше команды возвращается ошибка сверки номера конфигурации, это означает, что при корректировке конфигурационного файла кластера было неверно установлено поле `storage_config_generation`. Текст ошибки содержит ожидаемое значение номера конфигурации, которое можно использовать для корректировки файла настроек кластера. Пример сообщения об ошибке сверки номера конфигурации:
@@ -89,7 +89,7 @@
 
     ```bash
     export LD_LIBRARY_PATH=/opt/ydb/lib
-    /opt/ydb/bin/ydbd -f ydbd-token-file --ca-file ca.crt -s grpcs://`hostname -f`:{{ def-ports.grpcs }} \
+    /opt/ydb/bin/ydbd -f ydbd-token-file --ca-file ca.crt -s grpcs://`hostname -f`:{{ ydb-ports.grpcs }} \
         admin database /Root/testdb pools add ssd:1
     echo $?
     ```
@@ -97,7 +97,7 @@
     В примере команды выше используются следующие параметры:
 
     * `ydbd-token-file` - имя файла ранее полученного токена аутентификации;
-    * `{{ def-ports.grpcs }}` - номер порта grpcs сервиса статических узлов;
+    * `{{ ydb-ports.grpcs }}` - номер порта grpcs сервиса статических узлов;
     * `ca.crt` - имя файла с сертификатом центра регистрации;
     * `/Root/testdb` - полный путь к базе данных;
     * `ssd:1` - имя пула хранения и количество выделяемых групп хранения.

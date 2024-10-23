@@ -11,7 +11,7 @@
 Примеры:
 
 * `grpc://localhost:7135` — протокол обмена данными без шифрования (gRPC), сервер запущен на том же хосте что и клиент, принимает соединения на порту 7135.
-* `grpcs://ydb.example.com` — протокол обмена данными с шифрованием (gRPCs), сервер запущен на хосте ydb.example.com в изолированной корпоративной интрасети, принимает соединения на порту {{ ydb-short-name }} по умолчанию {{ def-ports.grpcs }}.
+* `grpcs://ydb.example.com` — протокол обмена данными с шифрованием (gRPCs), сервер запущен на хосте ydb.example.com в изолированной корпоративной интрасети, принимает соединения на порту {{ ydb-short-name }} по умолчанию {{ ydb-ports.grpcs }}.
 
 ## Путь базы данных {#database}
 
@@ -43,7 +43,7 @@
 Примеры:
 
 - `grpc://localhost:7135?database=/local`
-- `grpcs://ydb.serverless.yandexcloud.net:{{ def-ports.grpcs }}?database=/ru-central1/b1g8skpblkos03malf3s/etn01q5ko6sh271beftr`
+- `grpcs://ydb.serverless.yandexcloud.net:{{ ydb-ports.grpcs }}?database=/ru-central1/b1g8skpblkos03malf3s/etn01q5ko6sh271beftr`
 
 Использование строки соединения является альтернативой раздельному указанию эндпоинта и пути к базе данных и может применяться в тех инструментах, которые поддерживают данный метод.
 

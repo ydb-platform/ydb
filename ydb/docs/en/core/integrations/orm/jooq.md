@@ -40,7 +40,7 @@ An example using the `maven` plugin:
     <configuration>
         <jdbc>
             <driver>tech.ydb.jdbc.YdbDriver</driver>
-            <url>jdbc:ydb:grpc://localhost:{{ def-ports.grpc }}/local</url>
+            <url>jdbc:ydb:grpc://localhost:{{ ydb-ports.grpc }}/local</url>
         </jdbc>
         <generator>
             <strategy>

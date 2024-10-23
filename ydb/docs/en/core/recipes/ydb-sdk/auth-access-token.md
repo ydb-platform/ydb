@@ -87,7 +87,7 @@ Below are examples of the code for authentication using a token in different {{ 
   )
 
   func main() {
-    db, err := sql.Open("ydb", "grpcs://localohost:{{ def-ports.grpcs }}/local?token="+os.Getenv("YDB_TOKEN"))
+    db, err := sql.Open("ydb", "grpcs://localohost:{{ ydb-ports.grpcs }}/local?token="+os.Getenv("YDB_TOKEN"))
     if err != nil {
       panic(err)
     }
@@ -136,7 +136,7 @@ Below are examples of the code for authentication using a token in different {{ 
   using Ydb.Sdk;
   using Ydb.Sdk.Auth;
 
-  const string endpoint = "grpc://localhost:{{ def-ports.grpc }}";
+  const string endpoint = "grpc://localhost:{{ ydb-ports.grpc }}";
   const string database = "/local";
   const string token = "MY_VERY_SECURE_TOKEN";
 
@@ -163,7 +163,7 @@ Below are examples of the code for authentication using a token in different {{ 
       'database'    => '/local',
 
       // Database endpoint
-      'endpoint'    => 'localhost:{{ def-ports.grpc }}',
+      'endpoint'    => 'localhost:{{ ydb-ports.grpc }}',
 
       // Auto discovery (dedicated server only)
       'discovery'   => false,

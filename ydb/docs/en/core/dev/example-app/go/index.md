@@ -46,7 +46,7 @@ App code snippet for driver initialization:
 ```go
 ctx := context.Background()
 // connection string
-dsn := "grpcs://ydb.serverless.yandexcloud.net:{{ def-ports.grpcs }}/?database=/ru-central1/b1g8skpblkos03malf3s/etn01f8gv9an9sedo9fu"
+dsn := "grpcs://ydb.serverless.yandexcloud.net:{{ ydb-ports.grpcs }}/?database=/ru-central1/b1g8skpblkos03malf3s/etn01f8gv9an9sedo9fu"
 // IAM token
 token := "t1.9euelZrOy8aVmZKJm5HGjceMkMeVj-..."
 // create a connection object called db, it is an entry point for YDB services

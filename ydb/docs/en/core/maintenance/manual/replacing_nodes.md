@@ -35,9 +35,9 @@ DefineBox looks like this:
 ```yaml
 DefineBox {
     BoxId: 1
-    Host { Key { Fqdn: "host1.my.sub.net" IcPort: {{ def-ports.ic }} } HostConfigId: 1 }
-    Host { Key { Fqdn: "host2.my.sub.net" IcPort: {{ def-ports.ic }} } HostConfigId: 1 }
-    Host { Key { Fqdn: "host3.my.sub.net" IcPort: {{ def-ports.ic }} } HostConfigId: 1 }
+    Host { Key { Fqdn: "host1.my.sub.net" IcPort: {{ ydb-ports.ic }} } HostConfigId: 1 }
+    Host { Key { Fqdn: "host2.my.sub.net" IcPort: {{ ydb-ports.ic }} } HostConfigId: 1 }
+    Host { Key { Fqdn: "host3.my.sub.net" IcPort: {{ ydb-ports.ic }} } HostConfigId: 1 }
 }
 ```
 
@@ -46,9 +46,9 @@ Suppose we want to rename host1.my.sub.net to host4.my.sub.net. First, we create
 ```yaml
 DefineBox {
     BoxId: 1
-    Host { Key { Fqdn: "host1.my.sub.net" IcPort: {{ def-ports.ic }} } HostConfigId: 1 EnforcedNodeId: 1 }
-    Host { Key { Fqdn: "host2.my.sub.net" IcPort: {{ def-ports.ic }} } HostConfigId: 1 }
-    Host { Key { Fqdn: "host3.my.sub.net" IcPort: {{ def-ports.ic }} } HostConfigId: 1 }
+    Host { Key { Fqdn: "host1.my.sub.net" IcPort: {{ ydb-ports.ic }} } HostConfigId: 1 EnforcedNodeId: 1 }
+    Host { Key { Fqdn: "host2.my.sub.net" IcPort: {{ ydb-ports.ic }} } HostConfigId: 1 }
+    Host { Key { Fqdn: "host3.my.sub.net" IcPort: {{ ydb-ports.ic }} } HostConfigId: 1 }
 }
 ```
 
@@ -73,8 +73,8 @@ Finally, perform the second adjusted DefineBox:
 ```yaml
 DefineBox {
     BoxId: 1
-    Host { Key { Fqdn: "host4.my.sub.net" IcPort: {{ def-ports.ic }} } HostConfigId: 1 }
-    Host { Key { Fqdn: "host2.my.sub.net" IcPort: {{ def-ports.ic }} } HostConfigId: 1 }
-    Host { Key { Fqdn: "host3.my.sub.net" IcPort: {{ def-ports.ic }} } HostConfigId: 1 }
+    Host { Key { Fqdn: "host4.my.sub.net" IcPort: {{ ydb-ports.ic }} } HostConfigId: 1 }
+    Host { Key { Fqdn: "host2.my.sub.net" IcPort: {{ ydb-ports.ic }} } HostConfigId: 1 }
+    Host { Key { Fqdn: "host3.my.sub.net" IcPort: {{ ydb-ports.ic }} } HostConfigId: 1 }
 }
 ```

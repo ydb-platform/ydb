@@ -354,7 +354,7 @@ id,bool,bigint,smallint,tinyint,float,double,decimal,uint8,uint16,uint32,uint64,
 
 ```properties
 changelog-file=changelogs.xml
-url=jdbc:ydb:grpc://localhost:{{ def-ports.grpc }}/local
+url=jdbc:ydb:grpc://localhost:{{ ydb-ports.grpc }}/local
 ```
 
 Применим к пустой базе данных следующий changeset:
@@ -553,10 +553,10 @@ liquibase changelog-sync --changelog-file=dbchangelog.xml
 
 Существуют различные варианты настройки аутентификации через параметр URL:
 
-* Docker контейнер (anonymous authentication):<br/>`jdbc:ydb:grpc://localhost:{{ def-ports.grpc }}/local`
-* Self-hosted кластер:<br/>`jdbc:ydb:grpcs://<host>:{{ def-ports.grpcs }}/Root/testdb?secureConnectionCertificate=file:~/myca.cer`
-* Подключение с использованием токена:<br/>`jdbc:ydb:grpcs://<host>:{{ def-ports.grpcs }}/path/to/database?token=file:~/my_token`
-* Подключение с использованием сервисного аккаунта:<br/>`jdbc:ydb:grpcs://<host>:{{ def-ports.grpcs }}/path/to/database?saFile=file:~/sa_key.json`
+* Docker контейнер (anonymous authentication):<br/>`jdbc:ydb:grpc://localhost:{{ ydb-ports.grpc }}/local`
+* Self-hosted кластер:<br/>`jdbc:ydb:grpcs://<host>:{{ ydb-ports.grpcs }}/Root/testdb?secureConnectionCertificate=file:~/myca.cer`
+* Подключение с использованием токена:<br/>`jdbc:ydb:grpcs://<host>:{{ ydb-ports.grpcs }}/path/to/database?token=file:~/my_token`
+* Подключение с использованием сервисного аккаунта:<br/>`jdbc:ydb:grpcs://<host>:{{ ydb-ports.grpcs }}/path/to/database?saFile=file:~/sa_key.json`
 
 Если ваш кластер настроен с использованием логина и пароля, процесс аутентификации происходит через параметры Liquibase.
 

@@ -51,14 +51,14 @@ To add static nodes to the cluster, perform the following steps:
 8. Issue an authentication token using the {{ ydb-short-name }} CLI, for example:
 
     ```bash
-    ydb -e grpcs://<node1.ydb.tech>:{{ def-ports.grpcs }} -d /Root --ca-file ca.crt \
+    ydb -e grpcs://<node1.ydb.tech>:{{ ydb-ports.grpcs }} -d /Root --ca-file ca.crt \
           --user root auth get-token --force >token-file
     ```
 
     The command example above uses the following options:
 
     * `node1.ydb.tech`: The FQDN of any server hosting the cluster's static nodes.
-    * `{{ def-ports.grpcs }}`: Port number of the gRPCs service for the static nodes.
+    * `{{ ydb-ports.grpcs }}`: Port number of the gRPCs service for the static nodes.
     * `ca.crt`: Name of the file with the certificate authority certificate.
     * `root`: The name of a user who has administrative rights.
     * `token-file`: name of the file where the authentication token is saved for later use.
@@ -69,7 +69,7 @@ To add static nodes to the cluster, perform the following steps:
 
     ```bash
     export LD_LIBRARY_PATH=/opt/ydb/lib
-    /opt/ydb/bin/ydbd -f ydbd-token-file --ca-file ca.crt -s grpcs://`hostname -f`:{{ def-ports.grpcs }} \
+    /opt/ydb/bin/ydbd -f ydbd-token-file --ca-file ca.crt -s grpcs://`hostname -f`:{{ ydb-ports.grpcs }} \
         admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml
     echo $?
     ```
@@ -77,7 +77,7 @@ To add static nodes to the cluster, perform the following steps:
     The command example above uses the following options:
 
     * `ydbd-token-file`: File name of the previously issued authentication token.
-    * `{{ def-ports.grpcs }}`: Port number of the gRPCs service for the static nodes.
+    * `{{ ydb-ports.grpcs }}`: Port number of the gRPCs service for the static nodes.
     * `ca.crt`: Name of the file with the certificate authority certificate.
 
     If the above command results in the error of the configuration ID mismatch, it means that you made an error editing the `storage_config_generation` field in the cluster configuration file. In the error text, you can find the expected configuration ID that can be used to edit the cluster configuration file. Sample error message for the configuration ID mismatch:
@@ -90,7 +90,7 @@ To add static nodes to the cluster, perform the following steps:
 
     ```bash
     export LD_LIBRARY_PATH=/opt/ydb/lib
-    /opt/ydb/bin/ydbd -f ydbd-token-file --ca-file ca.crt -s grpcs://`hostname -f`:{{ def-ports.grpcs }} \
+    /opt/ydb/bin/ydbd -f ydbd-token-file --ca-file ca.crt -s grpcs://`hostname -f`:{{ ydb-ports.grpcs }} \
         admin database /Root/testdb pools add ssd:1
     echo $?
     ```
@@ -98,7 +98,7 @@ To add static nodes to the cluster, perform the following steps:
     The command example above uses the following options:
 
     * `ydbd-token-file`: File name of the previously issued authentication token.
-    * `{{ def-ports.grpcs }}`: Port number of the gRPCs service for the static nodes.
+    * `{{ ydb-ports.grpcs }}`: Port number of the gRPCs service for the static nodes.
     * `ca.crt`: Name of the file with the certificate authority certificate.
     * `/Root/testdb`: Full path to the database.
     * `ssd:1`: Name of the storage pool and the number of storage groups allocated.

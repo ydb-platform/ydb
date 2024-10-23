@@ -47,7 +47,7 @@ After importing all the necessary dependencies, the dialect is ready for use. Be
 
 ```properties
 spring.datasource.driver-class-name=tech.ydb.jdbc.YdbDriver
-spring.datasource.url=jdbc:ydb:<grpc/grpcs>://<host>:<{{ def-ports.grpcs }}/{{ def-ports.grpc }}>/path/to/database[?saFile=file:~/sa_key.json]
+spring.datasource.url=jdbc:ydb:<grpc/grpcs>://<host>:<{{ ydb-ports.grpcs }}/{{ ydb-ports.grpc }}>/path/to/database[?saFile=file:~/sa_key.json]
 ```
 
 ```java

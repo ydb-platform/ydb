@@ -216,13 +216,13 @@ all:
 
 {% endcut %}
 
-В результате выполнения плейбука будет создан кластер {{ ydb-short-name }}, на котором развернута тестовая база данных – `database`, создан `root` пользователь с максимальными правами доступа и запущен Embedded UI на порту {{ def-ports.mon }}. Для подключения к Embedded UI можно настроить SSH-туннелирование. Для этого на локальной машине выполните команду `ssh -L {{ def-ports.mon }}:localhost:{{ def-ports.mon }} -i <ssh private key> <user>@<first ydb static node ip>`. После успешного установления соединения можно перейти по URL [localhost:{{ def-ports.mon }}](http://localhost:{{ def-ports.mon }}):
+В результате выполнения плейбука будет создан кластер {{ ydb-short-name }}, на котором развернута тестовая база данных – `database`, создан `root` пользователь с максимальными правами доступа и запущен Embedded UI на порту {{ ydb-ports.mon }}. Для подключения к Embedded UI можно настроить SSH-туннелирование. Для этого на локальной машине выполните команду `ssh -L {{ ydb-ports.mon }}:localhost:{{ ydb-ports.mon }} -i <ssh private key> <user>@<first ydb static node ip>`. После успешного установления соединения можно перейти по URL [localhost:{{ ydb-ports.mon }}](http://localhost:{{ ydb-ports.mon }}):
 
 ![ydb-web-ui](../../_assets/ydb-web-console.png)
 
 ## Мониторинг состояния кластера { #troubleshooting }
 
-После успешного создания кластера {{ ydb-short-name }} проверить его состояние можно с помощью Embedded UI – [http://localhost:{{ def-ports.mon }}/monitoring/cluster/tenants](http://localhost:{{ def-ports.mon }}/monitoring/cluster/tenants):
+После успешного создания кластера {{ ydb-short-name }} проверить его состояние можно с помощью Embedded UI – [http://localhost:{{ ydb-ports.mon }}/monitoring/cluster/tenants](http://localhost:{{ ydb-ports.mon }}/monitoring/cluster/tenants):
 
 ![ydb-cluster-check](../../_assets/ydb-cluster-check.png)
 
@@ -232,7 +232,7 @@ all:
 * `Nodes` – количество и состояние запущенных статических и динамических нод в кластере. Индикатор состояния нод должен быть зелёным, а пропорция созданных и запущенных нод должна быть равной. Например, 27/27 для кластера из девяти нод.
 * Индикаторы показателей `Load` (количество используемой RAM) и `Storage` (количество используемого дискового пространства) должны быть зелёными.
 
-Проверить состояние сторадж группы можно в разделе `storage` – [http://localhost:{{ def-ports.mon }}/monitoring/cluster/storage](http://localhost:{{ def-ports.mon }}/monitoring/cluster/storage):
+Проверить состояние сторадж группы можно в разделе `storage` – [http://localhost:{{ ydb-ports.mon }}/monitoring/cluster/storage](http://localhost:{{ ydb-ports.mon }}/monitoring/cluster/storage):
 
 ![ydb-storage-gr-check](../../_assets/ydb-storage-gr-check.png)
 
@@ -248,7 +248,7 @@ all:
 ./ydb \
   config profile create <profile name> \
   -d /Root/database \
-  -e grpcs://<FQDN node>:{{ def-ports.grpcs }} \
+  -e grpcs://<FQDN node>:{{ ydb-ports.grpcs }} \
   --ca-file <path to generated certs>/CA/certs/ca.crt \
   --user root \
   --password-file <path to vault password file>/ansible_vault_password_file
@@ -257,7 +257,7 @@ all:
 Параметры команды и их значения:
 
 * `config profile create` – команда создания профиля подключения. Задаётся имя профиля. Более детальную информацию о том, как создавать и изменять профили, можно найти в статье [{#T}](../../reference/ydb-cli/profile/create.md).
-* `-e` – эндпоинт (endpoint), строка в формате `protocol://host:port`. Можно указать FQDN любой ноды кластера и не указывать порт. По умолчанию будет использован {{ def-ports.grpcs }} порт.
+* `-e` – эндпоинт (endpoint), строка в формате `protocol://host:port`. Можно указать FQDN любой ноды кластера и не указывать порт. По умолчанию будет использован {{ ydb-ports.grpcs }} порт.
 * `--ca-file` – путь к корневому сертификату для подключения к базе по `grpcs`. Сертификат создаётся скриптом `ydb-ca-update.sh` в директории `TLS` и располагается по пути `TLS/CA/certs/` относительно корня репозитория `ydb-ansible-examples`.
 * `--user` – пользователь для подключения к БД. По умолчанию при выполнении плейбука `ydb_platform.ydb.initial_setup` создаётся пользователь root.
 * `--password-file` – путь к файлу с паролем. В каждой папке с шаблоном развёртывания YDB кластера находится файл `ansible_vault_password_file`, который содержит пароль пользователя root.

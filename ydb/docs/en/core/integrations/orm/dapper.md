@@ -29,7 +29,7 @@ A connection to {{ ydb-short-name }} is established using `YdbConnection`.
     await ydbConnection.OpenAsync();
     ```
 
-   This option creates a connection to the database at the URL `grpc://localhost:{{ def-ports.grpc }}/local` with anonymous authentication.
+   This option creates a connection to the database at the URL `grpc://localhost:{{ ydb-ports.grpc }}/local` with anonymous authentication.
 
 2. **Using the constructor with a connection string**:
 
@@ -37,11 +37,11 @@ A connection to {{ ydb-short-name }} is established using `YdbConnection`.
 
    ```c#
    await using var ydbConnection = new YdbConnection(
-       "Host=database-sample-grpc;Port={{ def-ports.grpcs }};Database=/root/database-sample");
+       "Host=database-sample-grpc;Port={{ ydb-ports.grpcs }};Database=/root/database-sample");
    await ydbConnection.OpenAsync();
    ```
 
-   In this case, the connection is established at the URL `grpc://database-sample-grpc:{{ def-ports.grpcs }}/root/database-sample`. When using the connection string method, parameters are specified as key-value pairs, separated by semicolons (`key1=value1;key2=value2`). The supported set of keys is explained [below](#connection-parameters).
+   In this case, the connection is established at the URL `grpc://database-sample-grpc:{{ ydb-ports.grpcs }}/root/database-sample`. When using the connection string method, parameters are specified as key-value pairs, separated by semicolons (`key1=value1;key2=value2`). The supported set of keys is explained [below](#connection-parameters).
 
 3. **Using the constructor with a `YdbConnectionStringBuilder` argument**:
 
@@ -51,7 +51,7 @@ A connection to {{ ydb-short-name }} is established using `YdbConnection`.
     var ydbConnectionBuilder = new YdbConnectionStringBuilder
     {
         Host = "server",
-        Port = {{ def-ports.grpcs }},
+        Port = {{ ydb-ports.grpcs }},
         Database = "/ru-prestable/my-table",
         UseTls = true
     };
@@ -68,7 +68,7 @@ Here is a list of parameters that can be specified in the connection string:
 | Parameter         | Description                                                                                                 | Default value |
 |-------------------|-------------------------------------------------------------------------------------------------------------|---------------|
 | `Host`            | Specifies the {{ ydb-short-name }} server host                                                              | `localhost`   |
-| `Port`            | Specifies the {{ ydb-short-name }}  server port                                                             | `{{ def-ports.grpc }}`        |
+| `Port`            | Specifies the {{ ydb-short-name }}  server port                                                             | `{{ ydb-ports.grpc }}`        |
 | `Database`        | Specifies the database name                                                                                 | `/local`      |
 | `User`            | Specifies the username                                                                                      | Not defined   |
 | `Password`        | Specifies the user password                                                                                 | Not defined   |

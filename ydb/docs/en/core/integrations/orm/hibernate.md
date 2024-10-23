@@ -259,7 +259,7 @@ Configure [Spring Data JPA](https://spring.io/projects/spring-data-jpa/) with Hi
 spring.jpa.properties.hibernate.dialect=tech.ydb.hibernate.dialect.YdbDialect
 
 spring.datasource.driver-class-name=tech.ydb.jdbc.YdbDriver
-spring.datasource.url=jdbc:ydb:<grpc/grpcs>://<host>:<{{ def-ports.grpcs }}/{{ def-ports.grpc }}>/path/to/database[?saFile=file:~/sa_key.json]
+spring.datasource.url=jdbc:ydb:<grpc/grpcs>://<host>:<{{ ydb-ports.grpcs }}/{{ ydb-ports.grpc }}>/path/to/database[?saFile=file:~/sa_key.json]
 ```
 
 Create a simple entity and repository:

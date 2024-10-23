@@ -28,7 +28,7 @@ local
 
 ```bash
 $ {{ ydb-cli }} config profile get local1
-  endpoint: grpcs://ydb.serverless.yandexcloud.net:{{ def-ports.grpcs }}
+  endpoint: grpcs://ydb.serverless.yandexcloud.net:{{ ydb-ports.grpcs }}
   database: /rul1/b1g8skp/etn02099
   sa-key-file: /Users/username/secrets/sa_key_test.json
 ```

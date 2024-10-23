@@ -18,7 +18,7 @@ $config = [
     'database'    => '/ru-central1/b1glxxxxxxxxxxxxxxxx/etn0xxxxxxxxxxxxxxxx',
 
     // Database endpoint
-    'endpoint'    => 'ydb.serverless.yandexcloud.net:{{ def-ports.grpcs }}',
+    'endpoint'    => 'ydb.serverless.yandexcloud.net:{{ ydb-ports.grpcs }}',
 
     // Auto discovery (dedicated server only)
     'discovery'   => false,

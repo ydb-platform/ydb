@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-  db, err := sql.Open("ydb", "grpcs://login:password@localohost:{{ def-ports.grpcs }}/local")
+  db, err := sql.Open("ydb", "grpcs://login:password@localohost:{{ ydb-ports.grpcs }}/local")
   if err != nil {
       panic(err)
   }

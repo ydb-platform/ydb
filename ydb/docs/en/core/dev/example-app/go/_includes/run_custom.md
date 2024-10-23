@@ -20,5 +20,5 @@ For example:
 
 ```bash
 ( export YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." && cd ydb-go-examples && \
-go run ./basic -ydb="grpcs://ydb.example.com:{{ def-ports.grpcs }}?database=/somepath/somelocation" )
+go run ./basic -ydb="grpcs://ydb.example.com:{{ ydb-ports.grpcs }}?database=/somepath/somelocation" )
 ```

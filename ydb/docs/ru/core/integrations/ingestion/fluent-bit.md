@@ -275,7 +275,7 @@ config:
 ```yaml
 env:
   - name: OUTPUT_YDB_CONNECTION_URL
-    value: grpc://ydb-endpoint:{{ def-ports.grpcs }}/path/to/database
+    value: grpc://ydb-endpoint:{{ ydb-ports.grpcs }}/path/to/database
   - name: OUTPUT_YDB_CREDENTIALS_TOKEN
     valueFrom:
       secretKeyRef:

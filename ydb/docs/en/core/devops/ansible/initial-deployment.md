@@ -217,13 +217,13 @@ The sequence of role executions and their brief descriptions:
 
 {% endcut %}
 
-As a result of executing the playbook, a {{ ydb-short-name }} cluster will be created, with a test database named `database`, a `root` user with maximum access rights created, and [Embedded UI](../../reference/embedded-ui/index.md) running on port {{ def-ports.mon }}. To connect to the Embedded UI, you can set up SSH tunneling. For this, execute the command `ssh -L {{ def-ports.mon }}:localhost:{{ def-ports.mon }} -i <ssh private key> <user>@<first-ydb-static-node-ip>` on your local machine. After successfully establishing the connection, you can navigate to the URL [localhost:{{ def-ports.mon }}](http://localhost:{{ def-ports.mon }}):
+As a result of executing the playbook, a {{ ydb-short-name }} cluster will be created, with a test database named `database`, a `root` user with maximum access rights created, and [Embedded UI](../../reference/embedded-ui/index.md) running on port {{ ydb-ports.mon }}. To connect to the Embedded UI, you can set up SSH tunneling. For this, execute the command `ssh -L {{ ydb-ports.mon }}:localhost:{{ ydb-ports.mon }} -i <ssh private key> <user>@<first-ydb-static-node-ip>` on your local machine. After successfully establishing the connection, you can navigate to the URL [localhost:{{ ydb-ports.mon }}](http://localhost:{{ ydb-ports.mon }}):
 
 ![ydb-web-ui](../../_assets/ydb-web-console.png)
 
 ## Monitoring the cluster state {#troubleshooting}
 
-After successfully creating the {{ ydb-short-name }} cluster, you can check its state using the Embedded UI – [http://localhost:{{ def-ports.mon }}/monitoring/cluster/tenants](http://localhost:{{ def-ports.mon }}/monitoring/cluster/tenants):
+After successfully creating the {{ ydb-short-name }} cluster, you can check its state using the Embedded UI – [http://localhost:{{ ydb-ports.mon }}/monitoring/cluster/tenants](http://localhost:{{ ydb-ports.mon }}/monitoring/cluster/tenants):
 
 ![ydb-cluster-check](../../_assets/ydb-cluster-check.png)
 
@@ -234,7 +234,7 @@ This section displays the following parameters of the {{ ydb-short-name }} clust
 
 The `Load` indicators (amount of RAM used) and `Storage` (amount of disk space used) should also be green.
 
-You can check the state of the storage group in the `storage` section – [http://localhost:{{ def-ports.mon }}/monitoring/cluster/storage](http://localhost:{{ def-ports.mon }}/monitoring/cluster/storage):
+You can check the state of the storage group in the `storage` section – [http://localhost:{{ ydb-ports.mon }}/monitoring/cluster/storage](http://localhost:{{ ydb-ports.mon }}/monitoring/cluster/storage):
 
 ![ydb-storage-gr-check](../../_assets/ydb-storage-gr-check.png)
 
@@ -250,7 +250,7 @@ Make the downloaded binary file executable – `chmod +x ydb` and execute the co
 ./ydb \
 config profile create <profile name> \
 -d /Root/database \
--e grpcs://< FQDN node >:{{ def-ports.grpcs }} \
+-e grpcs://< FQDN node >:{{ ydb-ports.grpcs }} \
 --ca-file <path to generated certs>/CA/certs/ca.crt \
 --user root \
 --password-file <path to vault password file>/ansible_vault_password_file
@@ -259,7 +259,7 @@ config profile create <profile name> \
 Command parameters and their values:
 
 * `config profile create` – This command is used to create a connection profile. You specify the profile name. More detailed information on how to create and modify profiles can be found in the article [{#T}](../../reference/ydb-cli/profile/create.md).
-* `-e` – Endpoint, a string in the format `protocol://host:port`. You can specify the FQDN of any cluster node and omit the port. By default, port {{ def-ports.grpcs }} is used.
+* `-e` – Endpoint, a string in the format `protocol://host:port`. You can specify the FQDN of any cluster node and omit the port. By default, port {{ ydb-ports.grpcs }} is used.
 * `--ca-file` – Path to the root certificate for connections to the database using `grpcs`. The certificate is created by the `ydb-ca-update.sh` script in the `TLS` directory and is located at the path `TLS/CA/certs/` relative to the root of the `ydb-ansible-examples` repository.
 * `--user` – The user for connecting to the database. By default, the user `root` is created when executing the `ydb_platform.ydb.initial_setup` playbook.
 * `--password-file` – Path to the password file. In each folder with a YDB cluster deployment template, there is an `ansible_vault_password_file` that contains the password for the user `root`.

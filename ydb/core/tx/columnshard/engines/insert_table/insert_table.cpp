@@ -125,7 +125,7 @@ bool TInsertTable::Load(NIceDb::TNiceDb& db, IDbWrapper& dbTable, const TInstant
     Loaded = true;
     LastWriteId = (TInsertWriteId)0;
     {
-        NColumnShard::TLoadTimeSignals::TLoadTimer timer = Summary.GetCounters().LoadCounters.StartGuard("insert_table_loading_time");
+        NColumnShard::TLoadTimeSignals::TLoadTimer timer = Summary.GetCounters().LoadCounters.StartGuard();
         if (!NColumnShard::Schema::GetSpecialValueOpt(db, NColumnShard::Schema::EValueIds::LastWriteId, LastWriteId)) {
             timer.AddLoadingFail();
             return false;

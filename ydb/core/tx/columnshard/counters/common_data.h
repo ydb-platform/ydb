@@ -85,18 +85,20 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr LoadingTimeCounter;
     NMonitoring::TDynamicCounters::TCounterPtr FailedLoadingTimeCounter;
     NMonitoring::TDynamicCounters::TCounterPtr LoadingFailCounter;
+    TString Type;
 
 public:
     TLoadTimeSignals(const TString& type)
         : TBase("Startup")
+        , Type(type)
     {
         LoadingTimeCounter = TBase::GetValue("Startup/" + type + "LoadingTime");;
         FailedLoadingTimeCounter = TBase::GetValue("Startup/" + type + "FailedLoadingTime");;
         LoadingFailCounter = TBase::GetValue("Startup/" + type + "LoadingFailCount");;
     }
 
-    TLoadTimer StartGuard(const TString& name) const {
-        return TLoadTimer(*this, name);
+    TLoadTimer StartGuard() const {
+        return TLoadTimer(*this, Type + "LoadingTime");
     }
 
 private:

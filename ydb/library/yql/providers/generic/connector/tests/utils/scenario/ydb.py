@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
 
 from ydb.library.yql.providers.generic.connector.tests.utils.comparator import assert_data_outs_equal

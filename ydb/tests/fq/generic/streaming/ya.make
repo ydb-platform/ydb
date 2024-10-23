@@ -54,6 +54,7 @@ DEPENDS(
 )
 
 PEERDIR(
+    ydb/library/yql/providers/generic/connector/api/common
     ydb/library/yql/providers/generic/connector/tests/utils/scenario
     ydb/tests/fq/generic/utils
     ydb/tests/tools/datastreams_helpers

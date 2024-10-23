@@ -23,7 +23,7 @@ class OneTimeWaiter:
         docker_compose_file_abs_path = yatest.common.source_path(docker_compose_file_path)
         self.docker_compose_helper = DockerComposeHelper(docker_compose_yml_path=docker_compose_file_abs_path)
         self.expected_tables = set(expected_tables)
-        self.dataSourceKind = data_source_kind
+        self.data_source_kind = data_source_kind
 
     def wait(self):
         if self.__launched:
@@ -34,7 +34,7 @@ class OneTimeWaiter:
 
         timeout = 600
         while (datetime.now() - start).total_seconds() < timeout:
-            self.actual_tables = set(self.docker_compose_helper.list_tables(self.dataSourceKind))
+            self.actual_tables = set(self.docker_compose_helper.list_tables(self.data_source_kind))
 
             # check if all the required tables have been created
             if self.expected_tables <= self.actual_tables:

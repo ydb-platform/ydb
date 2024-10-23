@@ -196,7 +196,8 @@ class DockerComposeHelper:
         try:
             out = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8')
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"docker cmd failed: {e.output} (code {e.returncode})")
+            LOGGER.error(f"docker cmd failed: {e.output} (code {e.returncode})")
+            return []
         else:
             return out.splitlines()[2:]
 
@@ -215,7 +216,8 @@ class DockerComposeHelper:
         try:
             out = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8')
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"docker cmd failed: {e.output} (code {e.returncode})")
+            LOGGER.error(f"docker cmd failed: {e.output} (code {e.returncode})")
+            return []
         else:
             lines = out.splitlines()
             return lines[3 : len(lines) - 3]
@@ -249,7 +251,8 @@ class DockerComposeHelper:
         try:
             out = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8')
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"docker cmd failed: {e.output} (code {e.returncode})")
+            LOGGER.error(f"docker cmd failed: {e.output} (code {e.returncode})")
+            return []
         else:
             lines = [x.strip() for x in out.splitlines()]
             return lines[3:]
@@ -275,7 +278,8 @@ class DockerComposeHelper:
         try:
             out = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8')
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"docker cmd failed: {e.output} (code {e.returncode})")
+            LOGGER.error(f"docker cmd failed: {e.output} (code {e.returncode})")
+            return []
         else:
             lines = [x.strip() for x in out.splitlines()]
             return lines

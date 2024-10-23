@@ -65,6 +65,8 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
     }
 
     void Handle(TEvYdbProxy::TEvTopicEndPartition::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
         auto& result = ev->Get()->Result;
         Send(Worker, new TEvWorker::TEvDataEnd(result.PartitionId, std::move(result.AdjacentPartitionsIds), std::move(result.ChildPartitionsIds)));
     }

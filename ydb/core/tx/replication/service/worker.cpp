@@ -212,6 +212,8 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void Handle(TEvWorker::TEvDataEnd::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
         Send(ev->Forward(Parent));
     }
 

@@ -1,6 +1,7 @@
 #pragma once
 #include "behaviour.h"
 #include "object.h"
+#include "info.h"
 
 #include <ydb/core/tx/schemeshard/olap/table/table.h>
 #include <ydb/core/tx/schemeshard/operations/abstract/context.h>
@@ -39,12 +40,15 @@ protected:
     virtual TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) = 0;
 
     static void PersistObject(const TPathId& pathId, const TMetadataObjectInfo::TPtr& object, const TUpdateStartContext& context);
+
+public:
+    NKikimrSchemeOp::EPathType GetObjectPathType() const {
+        AFL_VERIFY(Behaviour);
+        return Behaviour->GetObjectPathType();
+    }
 };
 
 class TMetadataUpdateCreate: public TMetadataUpdateBase {
-public:
-    using TFactory = NObjectFactory::TObjectFactory<TMetadataUpdateCreate, NKikimrSchemeOp::TMetadataObjectProperties::PropertiesImplCase>;
-
 private:
     TMetadataObjectInfo::TPtr Result;
 
@@ -54,17 +58,9 @@ private:
     TConclusionStatus DoFinish(const TUpdateFinishContext& /*context*/) override {
         return TConclusionStatus::Success();
     }
-
-public:
-    virtual TPathElement::EPathType GetObjectPathType() const = 0;
-    virtual TString GetStorageDirectory() const = 0;
-    virtual std::shared_ptr<TMetadataEntity> MakeEntity(const TPathId& pathId) const = 0;
 };
 
 class TMetadataUpdateAlter: public TMetadataUpdateBase {
-public:
-    using TFactory = NObjectFactory::TObjectFactory<TMetadataUpdateAlter, NKikimrSchemeOp::TMetadataObjectProperties::PropertiesImplCase>;
-
 private:
     TMetadataObjectInfo::TPtr Result;
 
@@ -77,9 +73,6 @@ private:
 };
 
 class TMetadataUpdateDrop: public TMetadataUpdateBase {
-public:
-    using TFactory = NObjectFactory::TObjectFactory<TMetadataUpdateDrop, NKikimrSchemeOp::TMetadataObjectProperties::PropertiesImplCase>;
-
 private:
     TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) override;
     TConclusionStatus DoStart(const TUpdateStartContext& context) override;

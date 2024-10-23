@@ -1,6 +1,6 @@
 #pragma once
 
-#include "operations/metadata/abstract/info.h"
+#include "operations/metadata/info.h"
 #include "schemeshard_identificators.h"
 #include "schemeshard_path_element.h"
 #include "schemeshard_info_types.h"

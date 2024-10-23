@@ -3,7 +3,7 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
-#include <ydb/core/tx/schemeshard/operations/metadata/abstract/info.h>
+#include <ydb/core/tx/schemeshard/operations/metadata/info.h>
 #include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 #include <ydb/core/util/pb.h>
 
@@ -4916,9 +4916,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto findPathElement = Self->PathsById.FindPtr(pathId);
                 Y_ABORT_UNLESS(findPathElement);
                 NKikimrSchemeOp::EPathType pathType = (*findPathElement)->PathType;
-                auto objectInfo = TMetadataObjectInfo::Create(pathType);
-                Y_ABORT_UNLESS(objectInfo->DeserializePropertiesFromProto(propertiesProto));
-                objectInfo->SetAlterVersion(alterVersion);
+                auto properties = IMetadataObjectProperties::Create(pathType);
+                Y_ABORT_UNLESS(properties->DeserializeFromProto(propertiesProto));
+                auto objectInfo = MakeIntrusive<TMetadataObjectInfo>(alterVersion, properties);
 
                 Self->MetadataObjects.emplace(pathId, objectInfo);
                 Self->IncrementPathDbRefCount(pathId);

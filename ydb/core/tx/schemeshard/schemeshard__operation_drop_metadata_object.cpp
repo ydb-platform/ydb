@@ -2,8 +2,8 @@
 #include "schemeshard__operation_common_metadata_object.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/tx/schemeshard/operations/metadata/abstract/object.h>
-#include <ydb/core/tx/schemeshard/operations/metadata/abstract/update.h>
+#include <ydb/core/tx/schemeshard/operations/metadata/object.h>
+#include <ydb/core/tx/schemeshard/operations/metadata/update.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -32,7 +32,7 @@ public:
         NOperations::TMetadataEntity entity(pathId);
         NOperations::TEntityInitializationContext initializationContext(&context);
         entity.Initialize(initializationContext).Validate();
-        NOperations::TUpdateRestoreContext restoreContext(&entity, &context, ev->Get()->TxId);
+        NOperations::TUpdateRestoreContext restoreContext(&entity, &context, OperationId);
         auto update = entity.RestoreUpdate(restoreContext).DetachResult();
         AFL_VERIFY(std::dynamic_pointer_cast<NOperations::TMetadataUpdateDrop>(update));
         
@@ -189,7 +189,7 @@ public:
 
         std::shared_ptr<NOperations::ISSEntityUpdate> update;
         {
-            NOperations::TUpdateInitializationContext initializationContext(originalEntity.get(), &context, &Transaction, OperationId.GetTxId().GetValue());
+            NOperations::TUpdateInitializationContext initializationContext(originalEntity.get(), &context, &Transaction, OperationId);
             auto conclusion = originalEntity->CreateUpdate(initializationContext);
             if (conclusion.IsFail()) {
                 result->SetError(NKikimrScheme::StatusSchemeError, conclusion.GetErrorMessage());

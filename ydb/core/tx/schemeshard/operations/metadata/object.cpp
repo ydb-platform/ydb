@@ -50,28 +50,11 @@ TConclusion<std::shared_ptr<ISSEntityUpdate>> TMetadataEntity::DoRestoreUpdate(c
     NKikimrSchemeOp::TModifyScheme request = TMetadataUpdateDrop::RestoreRequest(objectPath);
 
     TUpdateInitializationContext initializationContext(
-        &context.GetOriginalEntity(), context.GetSSOperationContext(), &request, context.GetTxId());
+        &context.GetOriginalEntity(), context.GetSSOperationContext(), &request, context.GetOperationId());
     if (auto status = update->Initialize(initializationContext); status.IsFail()) {
         return status;
     }
     return update;
 }
-
-// TConclusion<std::shared_ptr<ISSEntityUpdate>> TMetadataEntity::RestoreDropUpdate(const TUpdateRestoreContext& context) const {
-//     auto update = GetDropUpdate();
-//     AFL_VERIFY(update);
-//     NKikimrSchemeOp::TModifyScheme emptyRequest;
-//     TUpdateInitializationContext initializationContext(
-//         &context.GetOriginalEntity(), context.GetSSOperationContext(), &emptyRequest, context.GetTxId());
-//     if (auto status = update->Initialize(initializationContext); status.IsFail()) {
-//         return status;
-//     }
-//     return update;
-// }
-
-// IMetadataObjectInfo::TPtr CreateObjectInfo(const TPathId& pathId, const NKikimrSchemeOp::EPathType pathType) {
-//     auto entity = TMetadataEntity::TFactory::MakeHolder(pathType, pathId);
-//     return entity->DoCreateObjectInfo();
-// }
 
 }   // namespace NKikimr::NSchemeShard::NOperations

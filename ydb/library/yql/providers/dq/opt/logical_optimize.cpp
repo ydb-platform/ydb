@@ -277,7 +277,7 @@ protected:
             }
             std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)> providerCollect = [](auto& rels, auto label, auto node, auto stats) {
                 Y_UNUSED(node);
-                auto rel = std::make_shared<TRelOptimizerNode>(TString(label), stats);
+                auto rel = std::make_shared<TRelOptimizerNode>(TString(label), *stats);
                 rels.push_back(rel);
             };
 

@@ -295,7 +295,7 @@ inline TString GetTablesTmpFolder(const TYtSettings& settings) {
 struct TYtConfiguration : public TYtSettings, public NCommon::TSettingDispatcher {
     using TPtr = TIntrusivePtr<TYtConfiguration>;
 
-    TYtConfiguration();
+    TYtConfiguration(TTypeAnnotationContext& typeCtx);
     TYtConfiguration(const TYtConfiguration&) = delete;
 
     template <class TProtoConfig, typename TFilter>
@@ -336,7 +336,11 @@ public:
         TYtSettings::TConstPtr Snapshot;
     };
 
-    TYtVersionedConfiguration() = default;
+    TYtVersionedConfiguration(TTypeAnnotationContext& types)
+        : TYtConfiguration(types)
+    {
+    }
+    
     ~TYtVersionedConfiguration() = default;
 
     size_t FindNodeVer(const TExprNode& node);

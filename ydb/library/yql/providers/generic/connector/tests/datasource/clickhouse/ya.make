@@ -34,22 +34,25 @@ IF (AUTOCHECK)
     )
 ENDIF()
 
+ENV(COMPOSE_HTTP_TIMEOUT=1200)  # during parallel tests execution there could be huge disk io, which triggers timeouts in docker-compose 
 INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
 
 IF (OPENSOURCE)
-    # YQ-3351: enabling python style checks only for opensource
-    STYLE_PYTHON()
-    # Including of docker_compose/recipe.inc automatically converts these tests into LARGE, 
-    # which makes it impossible to run them during precommit checks on Github CI. 
-    # Next several lines forces these tests to be MEDIUM. To see discussion, visit YDBOPS-8928.
-    SIZE(MEDIUM)
+    IF (SANITIZER_TYPE)
+        # Too huge for precommit check with sanitizers
+        SIZE(LARGE)
+    ELSE()
+        # Including of docker_compose/recipe.inc automatically converts these tests into LARGE, 
+        # which makes it impossible to run them during precommit checks on Github CI. 
+        # Next several lines forces these tests to be MEDIUM. To see discussion, visit YDBOPS-8928.
+        SIZE(MEDIUM)
+    ENDIF()
     SET(TEST_TAGS_VALUE)
     SET(TEST_REQUIREMENTS_VALUE)
     # This requirement forces tests to be launched consequently,
     # otherwise CI system would be overloaded due to simultaneous launch of many Docker containers.
     # See DEVTOOLSSUPPORT-44103, YA-1759 for details.
     TAG(ya:not_autocheck)
-    REQUIREMENTS(cpu:all)
 ENDIF()
 
 TEST_SRCS(

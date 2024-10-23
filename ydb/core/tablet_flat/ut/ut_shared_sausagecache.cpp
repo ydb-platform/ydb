@@ -131,6 +131,13 @@ void RestartAndClearCache(TMyEnvBase& env) {
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 }
 
+void SwitchPolicy(TMyEnvBase& env, NKikimrSharedCache::TReplacementPolicy policy) {
+    auto configure = MakeHolder<TEvSharedPageCache::TEvConfigure>();
+    configure->Record.SetReplacementPolicy(policy);
+    env->Send(MakeSharedPageCacheId(), TActorId{}, configure.Release());
+    WaitEvent(env, TEvSharedPageCache::EvConfigure);
+}
+
 Y_UNIT_TEST(Limits) {
     TMyEnvBase env;
     auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
@@ -399,8 +406,7 @@ Y_UNIT_TEST(S3FIFO) {
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
-    env->Send(MakeSharedPageCacheId(), TActorId{}, new TEvReplacementPolicySwitch(NKikimrSharedCache::S3FIFO));
-    WaitEvent(env, NSharedCache::EvReplacementPolicySwitch);
+    SwitchPolicy(env, NKikimrSharedCache::S3FIFO);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -498,8 +504,7 @@ Y_UNIT_TEST(ClockPro) {
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
-    env->Send(MakeSharedPageCacheId(), TActorId{}, new TEvReplacementPolicySwitch(NKikimrSharedCache::ClockPro));
-    WaitEvent(env, NSharedCache::EvReplacementPolicySwitch);
+    SwitchPolicy(env, NKikimrSharedCache::ClockPro);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -630,14 +635,25 @@ Y_UNIT_TEST(ReplacementPolicySwitch) {
     }
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{3, 3, 1, 1}));
 
-    env->Send(MakeSharedPageCacheId(), TActorId{}, new TEvReplacementPolicySwitch(NKikimrSharedCache::S3FIFO));
-    WaitEvent(env, NSharedCache::EvReplacementPolicySwitch);
+    UNIT_ASSERT_GT(counters->ReplacementPolicySize(NKikimrSharedCache::ThreeLeveledLRU)->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ReplacementPolicySize(NKikimrSharedCache::S3FIFO)->Val(), 0);
+
+    SwitchPolicy(env, NKikimrSharedCache::S3FIFO);
 
     retried = {};
     for (i64 key = 0; key < 3; ++key) {
         env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
     }
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{3}));
+
+    retried = {};
+    for (i64 key = 90; key < 93; ++key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{3, 3, 2, 1}));
+
+    UNIT_ASSERT_GT(counters->ReplacementPolicySize(NKikimrSharedCache::S3FIFO)->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ReplacementPolicySize(NKikimrSharedCache::ThreeLeveledLRU)->Val(), 0);
 }
 
 } // Y_UNIT_TEST_SUITE(TSharedPageCache)

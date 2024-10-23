@@ -306,7 +306,7 @@ public:
     std::shared_ptr<arrow::Schema> GetColumnSchema(const ui32 columnId) const;
     std::shared_ptr<arrow::Schema> GetColumnsSchema(const std::set<ui32>& columnIds) const;
     TColumnSaver GetColumnSaver(const ui32 columnId) const;
-    virtual std::shared_ptr<TColumnLoader> GetColumnLoaderOptional(const ui32 columnId) const override;
+    virtual const std::shared_ptr<TColumnLoader>& GetColumnLoaderOptional(const ui32 columnId) const override;
     std::optional<std::string> GetColumnNameOptional(const ui32 columnId) const {
         auto f = GetColumnFieldOptional(columnId);
         if (!f) {

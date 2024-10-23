@@ -555,7 +555,7 @@ arrow::Status TDatumBatch::AddColumn(const std::string& name, arrow::Datum&& col
 
     auto field = arrow::field(name, column.type());
     if (!field || !field->type()->Equals(column.type())) {
-        return arrow::Status::Invalid("Cannot create field.");
+        return arrow::Status::Invalid("Cannot create field " + name + ". type:" + field->type()->ToString() + " vs " + column.type()->ToString());
     }
     if (!column.is_scalar() && column.length() != Rows) {
         return arrow::Status::Invalid("Wrong column length.");

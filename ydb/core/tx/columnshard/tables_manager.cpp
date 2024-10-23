@@ -153,7 +153,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
 
             TSchemaPreset::TSchemaPresetVersionInfo info;
             Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "load_preset")("preset_id", id)("snapshot", version)("version", info.HasSchema() ? info.GetSchema().GetVersion() : -1);
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "load_preset")("preset_id", id)("snapshot", version)("version", info.HasSchema() ? info.GetSchema().GetVersion() : -1);
             preset.AddVersion(version, info);
             if (!rowset.Next()) {
                 return false;

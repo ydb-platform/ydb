@@ -1581,6 +1581,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TScanConveyorInitializer(runConfig));
     }
 
+    if (serviceMask.EnableCompPriorities) {
+        sil->AddServiceInitializer(new TCompPrioritiesInitializer(runConfig));
+    }
+
     if (serviceMask.EnableCompConveyor) {
         sil->AddServiceInitializer(new TCompConveyorInitializer(runConfig));
     }

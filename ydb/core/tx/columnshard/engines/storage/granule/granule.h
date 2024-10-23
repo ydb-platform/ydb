@@ -132,11 +132,6 @@ public:
 };
 
 class TGranuleMeta: TNonCopyable {
-public:
-    enum class EActivity {
-        GeneralCompaction
-    };
-
 private:
     TMonotonic ModificationLastTime = TMonotonic::Now();
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
@@ -146,7 +141,6 @@ private:
     void RebuildHardMetrics() const;
     void RebuildAdditiveMetrics() const;
 
-    std::set<EActivity> Activity;
     mutable bool AllowInsertionFlag = false;
     const ui64 PathId;
     const NColumnShard::TGranuleDataCounters Counters;
@@ -167,6 +161,37 @@ public:
     void RefreshTiering(const std::optional<TTiering>& tiering) {
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
         ActualizationIndex->RefreshTiering(tiering, context);
+    }
+
+    TConclusionStatus IsInnerPortion(const std::shared_ptr<TPortionInfo>& portion) const {
+        if (!portion) {
+            return TConclusionStatus::Fail("empty portion pointer");
+        }
+        auto it = Portions.find(portion->GetPortionId());
+        if (it == Portions.end()) {
+            return TConclusionStatus::Fail("portion id is incorrect: " + ::ToString(portion->GetPortionId()));
+        }
+        if (portion->GetPathId() != GetPathId()) {
+            return TConclusionStatus::Fail("portion path_id is incorrect: " + ::ToString(portion->GetPathId()) + " != " + ::ToString(GetPathId()));
+        }
+        return TConclusionStatus::Success();
+    }
+
+    template <class TModifier>
+    void ModifyPortionOnExecute(NTable::TDatabase& db, const std::shared_ptr<TPortionInfo>& portion, const TModifier& modifier) const {
+        IsInnerPortion(portion).Validate("modify portion on execute");
+        auto copy = *portion;
+        modifier(copy);
+        TDbWrapper wrapper(db, nullptr);
+        copy.SaveToDatabase(wrapper, 0, true);
+    }
+
+    template <class TModifier>
+    void ModifyPortionOnComplete(const std::shared_ptr<TPortionInfo>& portion, const TModifier& modifier) {
+        IsInnerPortion(portion).Validate("modify portion on complete");
+        OnBeforeChangePortion(portion);
+        modifier(portion);
+        OnAfterChangePortion(portion, nullptr);
     }
 
     void InsertPortionOnExecute(
@@ -289,10 +314,6 @@ public:
         return OptimizerPlanner->GetUsefulMetric();
     }
 
-    bool IsLockedOptimizer(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
-        return OptimizerPlanner->IsLocked(dataLocksManager);
-    }
-
     void ActualizeOptimizer(const TInstant currentInstant, const TDuration recalcLag) const {
         if (OptimizerPlanner->GetActualizationInstant() + recalcLag < currentInstant) {
             OptimizerPlanner->Actualize(currentInstant);
@@ -300,7 +321,7 @@ public:
     }
 
     bool IsErasable() const {
-        return Activity.empty() && Portions.empty();
+        return Portions.empty();
     }
 
     void OnCompactionStarted();

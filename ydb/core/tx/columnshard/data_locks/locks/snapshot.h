@@ -1,7 +1,7 @@
 #pragma once
 #include "abstract.h"
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
-#include <ydb/core/tx/columnshard/engines/storage/granule.h>
+#include <ydb/core/tx/columnshard/engines/storage/granule/granule.h>
 
 namespace NKikimr::NOlap::NDataLocks {
 

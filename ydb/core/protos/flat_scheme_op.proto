@@ -534,9 +534,14 @@ message TCompactionPlannerConstructorContainer {
         optional uint32 FreshnessCheckDurationSeconds = 2 [default = 300];
     }
 
+    message TLCOptimizer {
+
+    }
+
     oneof Implementation {
         TLOptimizer LBuckets = 20;
         TSOptimizer SBuckets = 21;
+        TLCOptimizer LCBuckets = 22;
     }
 }
 

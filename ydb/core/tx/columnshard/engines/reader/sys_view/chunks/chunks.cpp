@@ -11,7 +11,7 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
         it = PortionType.emplace(portion.GetMeta().Produced, ::ToString(portion.GetMeta().Produced)).first;
     }
     const arrow::util::string_view prodView = it->second.GetView();
-    const bool activity = !portion.IsRemovedFor(ReadMetadata->GetRequestSnapshot());
+    const bool activity = !portion.HasRemoveSnapshot();
     static const TString ConstantEntityIsColumn = "COL";
     static const arrow::util::string_view ConstantEntityIsColumnView =
         arrow::util::string_view(ConstantEntityIsColumn.data(), ConstantEntityIsColumn.size());

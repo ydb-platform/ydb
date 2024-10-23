@@ -42,6 +42,7 @@ public:
     TInsertColumnEngineChanges(std::vector<NOlap::TCommittedData>&& dataToIndex, const TSaverContext& saverContext)
         : TBase(saverContext, NBlobOperations::EConsumer::INDEXATION)
         , DataToIndex(std::move(dataToIndex)) {
+        SetTargetCompactionLevel(0);
     }
 
     const std::vector<NOlap::TCommittedData>& GetDataToIndex() const {

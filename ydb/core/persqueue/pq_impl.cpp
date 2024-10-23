@@ -3929,7 +3929,7 @@ void TPersQueue::SendEvTxCommitToPartitions(const TActorContext& ctx,
 
         auto p = Partitions.find(TPartitionId(partitionId));
         Y_ABORT_UNLESS(p != Partitions.end(),
-                       "Tablet %" PRIu64 ", Partition %" PRIu32 ", TxId %" PRIu64,
+                       "PQ %" PRIu64 ", Partition %" PRIu32 ", TxId %" PRIu64,
                        TabletID(), partitionId, tx.TxId);
 
         ctx.Send(p->second.Actor, event.release());
@@ -4027,18 +4027,18 @@ bool TPersQueue::TryChangeTxState(TDistributedTransaction& tx,
 {
     auto oldState = tx.State;
     Y_ABORT_UNLESS(TxsOrder.contains(oldState) || (oldState == NKikimrPQ::TTransaction::PLANNING),
-                   "TxId %" PRIu64 " State %s",
-                   tx.TxId,
-                   NKikimrPQ::TTransaction_EState_Name(oldState).data());
+                   "PQ %" PRIu64 ", TxId %" PRIu64 ", State %s",
+                   TabletID(), tx.TxId, NKikimrPQ::TTransaction_EState_Name(oldState).data());
 
     if (oldState != NKikimrPQ::TTransaction::PLANNING) {
         Y_ABORT_UNLESS(TxsOrder.contains(oldState),
                        "State %s",
                        NKikimrPQ::TTransaction_EState_Name(oldState).data());
         Y_ABORT_UNLESS(TxsOrder[oldState].front() == tx.TxId,
-                       "State %s, TxId %" PRIu64 ", Front %" PRIu64,
+                       "PQ %" PRIu64 ", TxId %" PRIu64 ", State %s, FrontTxId %" PRIu64,
+                       TabletID(), tx.TxId,
                        NKikimrPQ::TTransaction_EState_Name(oldState).data(),
-                       tx.TxId, TxsOrder[oldState].front());
+                       TxsOrder[oldState].front());
     }
 
     tx.State = newState;
@@ -4072,8 +4072,8 @@ bool TPersQueue::CanExecute(const TDistributedTransaction& tx)
 
     auto& txQueue = TxsOrder[tx.State];
     Y_ABORT_UNLESS(!txQueue.empty(),
-                   "TxId %" PRIu64 " State %s",
-                   tx.TxId, NKikimrPQ::TTransaction_EState_Name(tx.State).data());
+                   "PQ %" PRIu64 ", TxId %" PRIu64 ", State %s",
+                   TabletID(), tx.TxId, NKikimrPQ::TTransaction_EState_Name(tx.State).data());
 
     PQ_LOG_D("TxId " << tx.TxId <<
              " State " << NKikimrPQ::TTransaction_EState_Name(tx.State) <<
@@ -4107,6 +4107,7 @@ void TPersQueue::TryExecuteTxs(const TActorContext& ctx,
         Y_ABORT_UNLESS(Txs.contains(txId));
         auto& tx = Txs.at(txId);
 
+        // TODO(abcdef): можно убрать
         if (!tx.Pending) {
             // The transaction was not postponed for execution.
             break;
@@ -4130,8 +4131,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
     if (!CanExecute(tx)) {
         Y_ABORT_UNLESS(!tx.Pending,
-                       "TxId %" PRIu64,
-                       tx.TxId);
+                       "PQ %" PRIu64 ", TxId %" PRIu64,
+                       TabletID(), tx.TxId);
         tx.Pending = true;
         PQ_LOG_D("TxId " << tx.TxId << " wait");
         return;
@@ -4613,8 +4614,8 @@ void TPersQueue::EndInitTransactions()
 
     for (const auto& [_, txId] : TxQueue) {
         Y_ABORT_UNLESS(Txs.contains(txId),
-                       "unknown TxId %" PRIu64,
-                       txId);
+                       "PQ %" PRIu64 ", unknown TxId %" PRIu64,
+                       TabletID(), txId);
         const auto& tx = Txs.at(txId);
 
         Y_ABORT_UNLESS(txId == tx.TxId);

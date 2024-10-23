@@ -63,6 +63,7 @@ private:
     TLoadTimeSignals& Signals;
     TInstant Start;
     TString Name;
+    bool Failed = false;
 
 public:
     TLoadTimer(TLoadTimeSignals& signals, const TString& name)
@@ -71,6 +72,8 @@ public:
     {
         Start = TInstant::Now();
     }
+
+    void AddLoadingFail();
 
     ~TLoadTimer();
 };
@@ -81,7 +84,6 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr LoadingTimeCounter;
     NMonitoring::TDynamicCounters::TCounterPtr FailedLoadingTimeCounter;
     NMonitoring::TDynamicCounters::TCounterPtr LoadingFailCounter;
-    bool Failed = false;
 
 public:
     TLoadTimeSignals(const TString& type)
@@ -93,16 +95,18 @@ public:
     }
 
     TLoadTimer StartGuard(const TString& name) {
-        Failed = false;
         return TLoadTimer(*this, name);
     }
 
     void AddLoadingTime(ui64 microSeconds) {
-        (Failed ? FailedLoadingTimeCounter : LoadingTimeCounter)->Add(microSeconds);
+        LoadingTimeCounter->Add(microSeconds);
+    }
+
+    void AddFailedLoadingTime(ui64 microSeconds) {
+        FailedLoadingTimeCounter->Add(microSeconds);
     }
 
     void AddLoadingFail() {
-        Failed = true;
         LoadingFailCounter->Add(1);
     }
 };

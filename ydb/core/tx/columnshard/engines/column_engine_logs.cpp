@@ -221,7 +221,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
             AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo));
             AFL_VERIFY(constructors.AddConstructorVerified(std::move(portion)));
         })) {
-            PortionsLoadingTimeCounters.AddLoadingFail();
+            timer.AddLoadingFail();
             return false;
         }
     }
@@ -235,7 +235,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
             auto* constructor = constructors.MergeConstructor(std::move(portion));
             constructor->LoadRecord(currentSchema->GetIndexInfo(), loadContext);
         })) {
-            ColumnsLoadingTimeCounters.AddLoadingFail();
+            timer.AddLoadingFail();
             return false;
         }
     }
@@ -247,7 +247,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
             auto* constructor = constructors.GetConstructorVerified(pathId, portionId);
             constructor->LoadIndex(loadContext);
         })) {
-            IndexesLoadingTimeCounters.AddLoadingFail();
+            timer.AddLoadingFail();
             return false;
         };
     }

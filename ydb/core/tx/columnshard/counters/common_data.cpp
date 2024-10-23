@@ -21,7 +21,17 @@ TDataOwnerSignals::TDataOwnerSignals(const TString& module, const TString dataNa
 
 TLoadTimer::~TLoadTimer() {
     ui64 duration = (TInstant::Now() - Start).MicroSeconds();
-    Signals.AddLoadingTime(duration);
+    if (Failed) {
+        Signals.AddFailedLoadingTime(duration);
+    } else {
+        Signals.AddLoadingTime(duration);
+    }
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)(Name, duration);
 }
+
+void TLoadTimer::AddLoadingFail() {
+    Failed = true;
+    Signals.AddLoadingFail();
+}
+
 }

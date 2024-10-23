@@ -286,6 +286,7 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
         }
         Indexes.emplace_back(std::move(parse.DetachResult()));
     }
+    Precalculate();
     return TConclusionStatus::Success();
 }
 

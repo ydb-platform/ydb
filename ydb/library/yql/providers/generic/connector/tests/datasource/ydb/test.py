@@ -3,6 +3,7 @@ import pytest
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
 from ydb.library.yql.providers.generic.connector.tests.utils.run.runners import runner_types, configure_runner
+from ydb.library.yql.providers.generic.connector.tests.utils.one_time_waiter import OneTimeWaiter
 import ydb.library.yql.providers.generic.connector.tests.utils.scenario.ydb as scenario
 import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_positive_common as select_positive_common
 
@@ -12,7 +13,8 @@ import ydb.library.yql.providers.generic.connector.tests.common_test_cases.selec
 from conftest import docker_compose_dir
 from collection import Collection
 
-one_time_waiter = scenario.OneTimeWaiter(
+one_time_waiter = OneTimeWaiter(
+    data_source_kind=EDataSourceKind.YDB,
     docker_compose_file_path=str(docker_compose_dir / 'docker-compose.yml'),
     expected_tables=[
         "column_selection_A_b_C_d_E",
@@ -29,7 +31,7 @@ one_time_waiter = scenario.OneTimeWaiter(
         "unsupported_types",
         "json",
         "dummy_table",
-    ]
+    ],
 )
 
 settings = Settings.from_env(docker_compose_dir=docker_compose_dir, data_source_kinds=[EDataSourceKind.YDB])

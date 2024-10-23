@@ -7068,14 +7068,6 @@ Y_UNIT_TEST_SUITE(TScaleRecommenderTest) {
         // Check scale recommendation for high CPU usage
         AssertScaleRecommencation(runtime, NKikimrProto::OK, 2);
     }
-
-    Y_UNIT_TEST(NodeTest) {
-        // runtime.SendToPipe(hiveTablet, sender, new TEvInterconnect::TEvNodeDisconnected(runtime.GetNodeId(0)));
-        // SendKillLocal(runtime, 0);
-        // runtime.Register(CreateTabletKiller(hiveTablet));
-        
-        // CreateLocal(runtime, 0);
-    }
 }
 
 }

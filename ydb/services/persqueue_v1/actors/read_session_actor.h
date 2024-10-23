@@ -344,6 +344,7 @@ private:
     const TString ClientDC;
     const TInstant StartTimestamp;
 
+    TString SdkBuildInfo;
     TString UserAgent = UseMigrationProtocol ? "pqv1 server" : "topic server";
 
     TActorId SchemeCache;

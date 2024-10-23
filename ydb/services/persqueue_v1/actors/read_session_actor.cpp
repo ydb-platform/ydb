@@ -66,6 +66,9 @@ TReadSessionActor<UseMigrationProtocol>::TReadSessionActor(
     if (auto values = Request->GetStreamCtx()->GetPeerMetaValues(NYdb::YDB_APPLICATION_NAME); !values.empty()) {
         UserAgent = values[0];
     }
+    if (auto values = Request->GetStreamCtx()->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER); !values.empty()) {
+        SdkBuildInfo = values[0];
+    }
 }
 
 template <bool UseMigrationProtocol>
@@ -895,6 +898,7 @@ void TReadSessionActor<UseMigrationProtocol>::SetupBytesReadByUserAgentCounter()
         ->GetSubgroup("host", "")
         ->GetSubgroup("protocol", protocol)
         ->GetSubgroup("consumer", ClientPath)
+        ->GetSubgroup("sdk_build_info", CleanupCounterValueString(SdkBuildInfo))
         ->GetSubgroup("user_agent", CleanupCounterValueString(UserAgent))
         ->GetExpiringNamedCounter("sensor", "BytesReadByUserAgent", true);
 }

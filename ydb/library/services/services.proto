@@ -396,6 +396,10 @@ enum EServiceKikimr {
     BS_REQUEST_COST = 2500;
 
     GROUPED_MEMORY_LIMITER = 2700;
+
+    DATA_INTEGRITY = 3000;
+
+    TX_PRIORITIES_QUEUE = 3100;
 };
 
 message TActivity {

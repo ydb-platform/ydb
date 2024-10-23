@@ -10,6 +10,8 @@
 namespace NKikimr::NOlap {
 
 TPortionInfo TPortionInfoConstructor::Build(const bool needChunksNormalization) {
+    AFL_VERIFY(!Constructed);
+    Constructed = true;
     TPortionInfo result(MetaConstructor.Build());
     AFL_VERIFY(PathId);
     result.PathId = PathId;
@@ -80,9 +82,10 @@ TPortionInfo TPortionInfoConstructor::Build(const bool needChunksNormalization) 
         AFL_VERIFY(itBlobIdx == BlobIdxs.end());
     }
 
-    result.Indexes = Indexes;
-    result.Records = Records;
-    result.BlobIds = BlobIds;
+    result.Indexes = std::move(Indexes);
+    result.Records = std::move(Records);
+    result.BlobIds = std::move(BlobIds);
+    result.Precalculate();
     return result;
 }
 

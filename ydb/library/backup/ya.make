@@ -2,6 +2,7 @@ LIBRARY(kikimr_backup)
 
 PEERDIR(
     library/cpp/bucket_quoter
+    library/cpp/logger
     library/cpp/regex/pcre
     library/cpp/string_utils/quote
     util

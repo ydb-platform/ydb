@@ -5116,6 +5116,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(AlterColumnTableTiering) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
+        runnerSettings.SetEnableTieringInColumnShard(true);
         TKikimrRunner kikimr(runnerSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

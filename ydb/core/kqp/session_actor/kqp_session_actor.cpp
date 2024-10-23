@@ -1780,10 +1780,12 @@ public:
             size_t trailingResultsCount = 0;
             for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
                 if (QueryState->IsStreamResult()) {
-                    auto ydbResult = QueryState->QueryData->ExtractTrailingTxResult(
-                        phyQuery.GetResultBindings(i), response->GetArena());
 
-                    if (ydbResult) {
+                    if (QueryState->QueryData->HasTrailingTxResult(phyQuery.GetResultBindings(i))) {
+                        auto ydbResult = QueryState->QueryData->GetYdbTxResult(
+                            phyQuery.GetResultBindings(i), response->GetArena(), {});
+
+                        YQL_ENSURE(ydbResult);
                         ++trailingResultsCount;
                         YQL_ENSURE(trailingResultsCount <= 1);
                         response->AddYdbResults()->Swap(ydbResult);

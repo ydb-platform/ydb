@@ -760,6 +760,15 @@ protected:
 private:
     TRuntimeNode BuildWideFilter(const std::string_view& callableName, TRuntimeNode flow, const TNarrowLambda& handler);
 
+    TRuntimeNode BuildBlockCombineAll(const std::string_view& callableName, TRuntimeNode input, std::optional<ui32> filterColumn,
+        const TArrayRef<const TAggInfo>& aggs, TType* returnType);
+    TRuntimeNode BuildBlockCombineHashed(const std::string_view& callableName, TRuntimeNode input, std::optional<ui32> filterColumn,
+        const TArrayRef<ui32>& keys, const TArrayRef<const TAggInfo>& aggs, TType* returnType);
+    TRuntimeNode BuildBlockMergeFinalizeHashed(const std::string_view& callableName, TRuntimeNode input, const TArrayRef<ui32>& keys,
+        const TArrayRef<const TAggInfo>& aggs, TType* returnType);
+    TRuntimeNode BuildBlockMergeManyFinalizeHashed(const std::string_view& callableName, TRuntimeNode input, const TArrayRef<ui32>& keys,
+        const TArrayRef<const TAggInfo>& aggs, ui32 streamIndex, const TVector<TVector<ui32>>& streams, TType* returnType);
+
     TRuntimeNode DictItems(TRuntimeNode dict, EDictItems mode);
     TRuntimeNode If(TRuntimeNode condition, TRuntimeNode thenBranch, TRuntimeNode elseBranch, TType* resultType);
 

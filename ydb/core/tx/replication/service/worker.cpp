@@ -264,7 +264,7 @@ public:
     }
 
     explicit TWorker(
-            const TActorId& parent,
+            const TActorId& parent, 
             std::function<IActor*(void)>&& createReaderFn,
             std::function<IActor*(void)>&& createWriterFn)
         : Parent(parent)

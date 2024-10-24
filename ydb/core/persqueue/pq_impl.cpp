@@ -4032,7 +4032,8 @@ bool TPersQueue::TryChangeTxState(TDistributedTransaction& tx,
 
     if (oldState != NKikimrPQ::TTransaction::PLANNING) {
         Y_ABORT_UNLESS(TxsOrder.contains(oldState),
-                       "State %s",
+                       "PQ %" PRIu64 ", TxId %" PRIu64 ", State %s",
+                       TabletID(), tx.TxId,
                        NKikimrPQ::TTransaction_EState_Name(oldState).data());
         Y_ABORT_UNLESS(TxsOrder[oldState].front() == tx.TxId,
                        "PQ %" PRIu64 ", TxId %" PRIu64 ", State %s, FrontTxId %" PRIu64,
@@ -4195,6 +4196,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         [[fallthrough]];
 
     case NKikimrPQ::TTransaction::PLANNED:
+        Y_ABORT_UNLESS(tx.TxId == TxsOrder[tx.State].front());
+
         PQ_LOG_D("TxQueue.size " << TxQueue.size());
 
         // TODO(abcdef): перенести всё из TxQueue в TxsOrder[CALCULATING]
@@ -4247,6 +4250,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         [[fallthrough]];
 
     case NKikimrPQ::TTransaction::WAIT_RS:
+        Y_ABORT_UNLESS(tx.TxId == TxsOrder[tx.State].front());
+
         PQ_LOG_D("HaveParticipantsDecision " << tx.HaveParticipantsDecision());
 
         if (tx.HaveParticipantsDecision()) {
@@ -4264,6 +4269,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         [[fallthrough]];
 
     case NKikimrPQ::TTransaction::EXECUTING:
+        Y_ABORT_UNLESS(tx.TxId == TxsOrder[tx.State].front());
+
         Y_ABORT_UNLESS(tx.PartitionRepliesCount <= tx.PartitionRepliesExpected,
                        "PQ %" PRIu64 ", TxId %" PRIu64 ", PartitionRepliesCount %" PRISZT ", PartitionRepliesExpected %" PRISZT,
                        TabletID(), tx.TxId,

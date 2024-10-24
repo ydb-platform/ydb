@@ -29,7 +29,6 @@ IF(LINUX)
     )
 
     SRCS(
-        arrow_converter.cpp
         stream_decoder.cpp
         dq_yt_rpc_reader.cpp
         dq_yt_rpc_helpers.cpp

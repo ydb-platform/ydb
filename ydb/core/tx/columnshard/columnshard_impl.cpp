@@ -688,8 +688,13 @@ void TColumnShard::SetupIndexation() {
     ui64 txBytesWrite = 0;
     std::vector<const NOlap::TCommittedData*> dataToIndex;
     dataToIndex.reserve(TLimits::MIN_SMALL_BLOBS_TO_INSERT);
+    const TMonotonic now = TMonotonic::Now();
     for (auto it = InsertTable->GetPathPriorities().rbegin(); it != InsertTable->GetPathPriorities().rend(); ++it) {
         for (auto* pathInfo : it->second) {
+            if (now < pathInfo->GetLastIndexation() + durationLimit && pathInfo->GetCommittedSize() < (i64)bytesLimit) {
+                continue;
+            }
+            pathInfo->SetLastIndexation(now);
             for (auto& data : pathInfo->GetCommitted()) {
                 Y_ABORT_UNLESS(data.BlobSize());
                 bytesToIndex += data.BlobSize();

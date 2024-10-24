@@ -12,7 +12,14 @@ Release date: July 31, 2024.
 
 ### Embedded UI
 
+* A resource consumption diagnostic dashboard has been added, which is located on the database information tab and allows you to determine the current state of consumption of the main resources: processor cores, RAM, and space in the network distributed storage.
+* Charts for monitoring the key performance indicators of the {{ ydb-short-name }} cluster have been added.
+
 ### Performance
+
+* [Sessions timeouts](https://github.com/ydb-platform/ydb/pull/1837) for the coordination service from the server to the client have been optimized. Previously, the timeout was 5 seconds, which in the worst case led to identifying an unresponsive client (and releasing the resources it was holding) within 10 seconds. In the new version, the check time depends on the session waiting time, which provides a faster response when changing the leader or acquiring distributed locks.
+* CPU consumption by [SchemeShard](./concepts/glossary.md#scheme-shard) replicas has been [optimized](https://github.com/ydb-platform/ydb/pull/2391), especially when processing fast updates for tables with a large number of partitions.
+
 
 ### Bug fixes
 

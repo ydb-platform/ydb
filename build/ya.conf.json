@@ -232,6 +232,7 @@
         "python3": {
             "executable": {
                 "python3": [
+                    "bin",
                     "python3"
                 ]
             },

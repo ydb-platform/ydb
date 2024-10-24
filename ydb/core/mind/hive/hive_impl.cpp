@@ -257,12 +257,12 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffec
                         sideEffects.Send(actorToNotify, new TEvPrivate::TEvRestartComplete(tablet->GetFullTabletId(), "boot delay"));
                     }
                     tablet->ActorsToNotifyOnRestart.clear();
+                    tablet->InWaitQueue = true;
                     if (tablet->IsFollower()) {
                         TLeaderTabletInfo& leader = tablet->GetLeader();
-                        UpdateTabletFollowersNumber(leader, db, sideEffects);
+                        UpdateTabletFollowersNumber(leader, db, sideEffects); // this may delete tablet
                     }
                     BootQueue.AddToWaitQueue(record); // waiting for new node
-                    tablet->InWaitQueue = true;
                     continue;
                 }
             }

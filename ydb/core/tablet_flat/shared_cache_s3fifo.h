@@ -138,12 +138,16 @@ template <typename TPage, typename TPageTraits>
 class TS3FIFOCache : public ICacheCache<TPage> {
     using TPageKey = typename TPageTraits::TPageKey;
 
+    static const ui32 MaxMainQueueReinserts = 20;
+
     struct TLimit {
+        ui64 TotalLimit;
         ui64 SmallQueueLimit;
         ui64 MainQueueLimit;
 
         TLimit(ui64 limit)
-            : SmallQueueLimit(limit / 10)
+            : TotalLimit(limit)
+            , SmallQueueLimit(limit / 10)
             , MainQueueLimit(limit - SmallQueueLimit)
         {}
     };
@@ -257,26 +261,33 @@ public:
 
 private:
     TPage* EvictOneIfFull() {
-        while (true) {
-            if (!SmallQueue.Queue.Empty() && SmallQueue.Size > Limit.SmallQueueLimit) {
+        ui32 mainQueueReinserts = 0;
+
+        while (GetSize() > Limit.TotalLimit) {
+            if (SmallQueue.Size > Limit.SmallQueueLimit) {
                 TPage* page = Pop(SmallQueue);
                 if (ui32 frequency = TPageTraits::GetFrequency(page); frequency > 1) { // load inserts, first read touches, second read touches
+                    TPageTraits::SetFrequency(page, 0);
                     Push(MainQueue, page);
                 } else {
-                    if (frequency) TPageTraits::SetFrequency(page, 0);
+                    if (frequency) { // the page is used only once
+                        TPageTraits::SetFrequency(page, 0);
+                    }
                     AddGhost(page);
                     return page;
                 }
-            } else if (!MainQueue.Queue.Empty() && MainQueue.Size > Limit.MainQueueLimit) {
+            } else {
                 TPage* page = Pop(MainQueue);
-                if (ui32 frequency = TPageTraits::GetFrequency(page); frequency > 0) {
+                if (ui32 frequency = TPageTraits::GetFrequency(page); frequency > 0 && mainQueueReinserts < MaxMainQueueReinserts) {
+                    mainQueueReinserts++;
                     TPageTraits::SetFrequency(page, frequency - 1);
                     Push(MainQueue, page);
                 } else {
+                    if (frequency) { // reinserts limit exceeded
+                        TPageTraits::SetFrequency(page, 0);
+                    }
                     return page;
                 }
-            } else {
-                break;
             }
         }
         

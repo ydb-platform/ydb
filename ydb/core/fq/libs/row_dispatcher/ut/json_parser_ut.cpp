@@ -208,12 +208,15 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
     Y_UNIT_TEST_F(MissingFieldsValidation, TFixture) {
         MakeParser({"a1", "a2"}, {"[DataType; String]", "[DataType; Uint64]"});
         UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": "hello1", "a2": null, "event": "event1"})"), yexception, "Failed to parse json string at offset 42, got parsing error for column 'a2' with type [DataType; Uint64], description: (yexception) found unexpected null value, expected non optional data type Uint64");
-        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a2": 105, "event": "event1"})"), yexception, "Failed to parse json string, found missing value at offset 42 in non optional column 'a1' with type [DataType; String]");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a2": 105, "event": "event1"})"), yexception, "Failed to parse json messages, found 1 missing values from offset 42 in non optional column 'a1' with type [DataType; String]");
     }
 
     Y_UNIT_TEST_F(TypeKindsValidation, TFixture) {
-        MakeParser({"a2", "a1"}, {"[OptionalType; [DataType; String]]", "[ListType; [DataType; String]]"});
-        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a2": "hello1", "a1": ["key", "value"]})"), yexception, "Failed to parse json string at offset 42, got parsing error for column 'a1' with type [ListType; [DataType; String]], description: (yexception) unsupported type kind List");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            MakeParser({"a2", "a1"}, {"[OptionalType; [DataType; String]]", "[ListType; [DataType; String]]"}),
+            yexception,
+            "Failed to create parser for column 'a1' with type [ListType; [DataType; String]], description: (yexception) unsupported type kind List"
+        );
     }
 
     Y_UNIT_TEST_F(NumbersValidation, TFixture) {

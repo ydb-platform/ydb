@@ -30,7 +30,7 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
 void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
 
-//    Y_ABORT_UNLESS(SwitchedPortions.size());
+    Y_ABORT_UNLESS(PortionsToRemove.size() + PortionsToMove.size());
     THashMap<TString, THashSet<TBlobRange>> blobRanges;
     auto& index = self.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
     for (const auto& p : SwitchedPortions) {

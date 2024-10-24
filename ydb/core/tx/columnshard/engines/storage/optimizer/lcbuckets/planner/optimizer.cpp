@@ -18,11 +18,10 @@ TOptimizerPlanner::TOptimizerPlanner(
     const ui64 maxPortionBlobBytes = (ui64)1 << 20;
     Levels.emplace_back(
         std::make_shared<TLevelPortions>(2, 0.9, maxPortionBlobBytes, nullptr, PortionsInfo, Counters->GetLevelCounters(2)));
-    Levels.emplace_back(
-        std::make_shared<TLevelPortions>(1, 0.1, maxPortionBlobBytes, Levels.back(), PortionsInfo, Counters->GetLevelCounters(1)));
 */
-    Levels.emplace_back(std::make_shared<TZeroLevelPortions>(1, nullptr, Counters->GetLevelCounters(2)));
-    Levels.emplace_back(std::make_shared<TZeroLevelPortions>(0, Levels.back(), Counters->GetLevelCounters(0)));
+    Levels.emplace_back(std::make_shared<TZeroLevelPortions>(2, nullptr, Counters->GetLevelCounters(2), TDuration::Max()));
+    Levels.emplace_back(std::make_shared<TZeroLevelPortions>(1, Levels.back(), Counters->GetLevelCounters(1), TDuration::Max()));
+    Levels.emplace_back(std::make_shared<TZeroLevelPortions>(0, Levels.back(), Counters->GetLevelCounters(0), TDuration::Seconds(180)));
     std::reverse(Levels.begin(), Levels.end());
     RefreshWeights();
 }
@@ -34,14 +33,14 @@ std::shared_ptr<NKikimr::NOlap::TColumnEngineChanges> TOptimizerPlanner::DoGetOp
     auto data = level->GetOptimizationTask();
     TSaverContext saverContext(StoragesManager);
     std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges> result;
-    if (level->GetLevelId() == 0) {
+//    if (level->GetLevelId() == 0) {
         result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(
             granule, data.GetRepackPortions(level->GetLevelId()), saverContext);
-    } else {
-        result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(
-            granule, data.GetRepackPortions(level->GetLevelId()), saverContext);
-        result->AddMovePortions(data.GetMovePortions());
-    }
+//    } else {
+//        result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(
+//            granule, data.GetRepackPortions(level->GetLevelId()), saverContext);
+//        result->AddMovePortions(data.GetMovePortions());
+//    }
     result->SetTargetCompactionLevel(data.GetTargetCompactionLevel());
     auto levelPortions = std::dynamic_pointer_cast<TLevelPortions>(Levels[data.GetTargetCompactionLevel()]);
     if (levelPortions) {

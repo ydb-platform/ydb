@@ -348,6 +348,25 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         }
     }
 
+    Y_UNIT_TEST(CreateViewIfNotExists) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        EnableViewsFeatureFlag(kikimr);
+        auto session = kikimr.GetQueryClient().GetSession().ExtractValueSync().GetSession();
+
+        constexpr const char* path = "/Root/TheView";
+        constexpr const char* queryInView = "SELECT 1";
+
+        const TString creationQuery = std::format(R"(
+                CREATE VIEW IF NOT EXISTS `{}` WITH (security_invoker = true) AS {};
+            )",
+            path,
+            queryInView
+        );
+        ExecuteQuery(session, creationQuery);
+        // an attempt to create a duplicate does not produce an error
+        ExecuteQuery(session, creationQuery);
+    }
+
     Y_UNIT_TEST(DropView) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         EnableViewsFeatureFlag(kikimr);
@@ -426,6 +445,32 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
             UNIT_ASSERT(!dropResult.IsSuccess());
             UNIT_ASSERT(dropResult.GetIssues().ToString().Contains("Error: Path does not exist"));
         }
+    }
+
+    Y_UNIT_TEST(DropViewIfExists) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        EnableViewsFeatureFlag(kikimr);
+        auto session = kikimr.GetQueryClient().GetSession().ExtractValueSync().GetSession();
+
+        constexpr const char* path = "/Root/TheView";
+        constexpr const char* queryInView = "SELECT 1";
+
+        const TString creationQuery = std::format(R"(
+                CREATE VIEW `{}` WITH (security_invoker = true) AS {};
+            )",
+            path,
+            queryInView
+        );
+        ExecuteQuery(session, creationQuery);
+
+        const TString dropQuery = std::format(R"(
+                DROP VIEW IF EXISTS `{}`;
+            )",
+            path
+        );
+        ExecuteQuery(session, dropQuery);
+        // an attempt to drop an already deleted view does not produce an error
+        ExecuteQuery(session, dropQuery);
     }
 
     Y_UNIT_TEST(DropViewInFolder) {

@@ -601,12 +601,12 @@ alter_external_data_source_action:
 
 drop_external_data_source_stmt: DROP EXTERNAL DATA SOURCE (IF EXISTS)? object_ref;
 
-create_view_stmt: CREATE VIEW object_ref
+create_view_stmt: CREATE VIEW (IF NOT EXISTS)? object_ref
     create_object_features?
     AS select_stmt
 ;
 
-drop_view_stmt: DROP VIEW object_ref;
+drop_view_stmt: DROP VIEW (IF EXISTS)? object_ref;
 
 upsert_object_stmt: UPSERT OBJECT object_ref
     LPAREN TYPE object_type_ref RPAREN

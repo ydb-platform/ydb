@@ -33,7 +33,7 @@ using NTabletFlatExecutor::TTabletExecutedFlat;
 using NTabletFlatExecutor::ITransaction;
 using NTabletFlatExecutor::TTransactionBase;
 using NTabletFlatExecutor::TTransactionContext;
-using NSchemeShard::TEvSchemeShard;
+namespace TEvSchemeShard = NSchemeShard::TEvSchemeShard;
 using NTenantSlotBroker::TEvTenantSlotBroker;
 using NTenantSlotBroker::TSlotDescription;
 using ::NMonitoring::TDynamicCounterPtr;

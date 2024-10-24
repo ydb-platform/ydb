@@ -6,7 +6,7 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-struct TEvPrivate {
+namespace TEvPrivate {
     enum EEv {
         EvProgressOperation = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
         EvOperationPlanStep,

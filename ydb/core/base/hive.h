@@ -9,7 +9,7 @@
 #include <util/stream/str.h>
 
 namespace NKikimr {
-    struct TEvHive {
+    namespace TEvHive {
         enum EEv {
             // requests
             EvBootTablet = EventSpaceBegin(TKikimrEvents::ES_HIVE),
@@ -881,7 +881,7 @@ namespace NKikimr {
 
         struct TEvRequestScaleRecommendation : TEventPB<TEvRequestScaleRecommendation,
             NKikimrHive::TEvRequestScaleRecommendation, EvRequestScaleRecommendation> {};
-        
+
         struct TEvResponseScaleRecommendation : TEventPB<TEvResponseScaleRecommendation,
             NKikimrHive::TEvResponseScaleRecommendation, EvResponseScaleRecommendation> {};
     };

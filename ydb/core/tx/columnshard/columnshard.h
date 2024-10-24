@@ -56,7 +56,7 @@ inline Ydb::StatusIds::StatusCode ConvertToYdbStatus(NKikimrTxColumnShard::EResu
 }
 }
 
-struct TEvColumnShard {
+namespace TEvColumnShard {
     enum EEv {
         EvProposeTransaction = EventSpaceBegin(TKikimrEvents::ES_TX_COLUMNSHARD),
         EvCancelTransactionProposal,

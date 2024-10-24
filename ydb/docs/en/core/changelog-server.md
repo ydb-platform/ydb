@@ -1,6 +1,6 @@
 # {{ ydb-short-name }} Server changelog
 
-## Version 23.4 {#24-1}
+## Version 24.1 {#24-1}
 
 Release date: July 31, 2024.
 

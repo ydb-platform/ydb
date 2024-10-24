@@ -95,17 +95,12 @@ bool IsOperationStarted(TStatus operationStatus) {
 
 } // anonymous
 
-TRestoreClient::TRestoreClient(
-        TLog& log,
-        TImportClient& importClient,
-        TOperationClient& operationClient,
-        TSchemeClient& schemeClient,
-        TTableClient& tableClient)
+TRestoreClient::TRestoreClient(const TDriver& driver, TLog& log)
     : Log(log)
-    , ImportClient(importClient)
-    , OperationClient(operationClient)
-    , SchemeClient(schemeClient)
-    , TableClient(tableClient)
+    , ImportClient(driver)
+    , OperationClient(driver)
+    , SchemeClient(driver)
+    , TableClient(driver)
 {
 }
 

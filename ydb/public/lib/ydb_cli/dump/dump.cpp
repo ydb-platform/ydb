@@ -24,7 +24,7 @@ class TClient::TImpl {
 public:
     explicit TImpl(const TDriver& driver, std::shared_ptr<TLog>&& log)
         : Driver(driver)
-        , Log(log)
+        , Log(std::move(log))
     {
     }
 

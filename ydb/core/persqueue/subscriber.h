@@ -81,10 +81,11 @@ struct TReadInfo {
         const ui64 endOffset,
         const TPartitionId& partition,
         TUserInfo* ui,
-        const ui64 dst, 
+        const ui64 dst,
         const ui64 sizeLag,
         const TActorId& tablet,
-        const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode
+        const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode,
+        const bool isActive
     );
 
     TReadAnswer FormAnswer(
@@ -95,10 +96,11 @@ struct TReadInfo {
         const ui64 dst,
         const ui64 sizeLag,
         const TActorId& tablet,
-        const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode
+        const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode,
+        const bool isActive
     ) {
         TEvPQ::TEvBlobResponse response(0, TVector<TRequestedBlob>());
-        return FormAnswer(ctx, response, endOffset, partition, ui, dst, sizeLag, tablet, meteringMode);
+        return FormAnswer(ctx, response, endOffset, partition, ui, dst, sizeLag, tablet, meteringMode, isActive);
     }
 };
 

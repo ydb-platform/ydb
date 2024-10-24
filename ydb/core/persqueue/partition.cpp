@@ -1245,7 +1245,7 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
     auto& userInfo = UsersInfoStorage->GetOrCreate(info.User, ctx);
     TReadAnswer answer(info.FormAnswer(
         ctx, *ev->Get(), EndOffset, Partition, &userInfo,
-        info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode()
+        info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode(), IsActive()
     ));
     const auto& resp = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get())->Response;
 

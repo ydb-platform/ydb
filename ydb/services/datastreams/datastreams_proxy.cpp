@@ -1660,7 +1660,14 @@ namespace NKikimr::NDataStreams::V1 {
         TShardIterator shardIterator(ShardIterator);
         const auto& response = record.GetPartitionResponse();
         if (response.HasCmdReadResult()) {
-            const auto& results = response.GetCmdReadResult().GetResult();
+            const auto& readResult = response.GetCmdReadResult();
+            if (readResult.GetReadingFinished()) {
+                return ReplyWithError(Ydb::StatusIds::StatusCode::StatusIds_StatusCode_NOT_FOUND,
+                        Ydb::PersQueue::ErrorCode::ErrorCode::WRONG_PARTITION_NUMBER,
+                        "Partition ended");
+            }
+
+            const auto& results = readResult.GetResult();
             for (auto& r : results) {
                 auto proto(NKikimr::GetDeserializedData(r.GetData()));
                 auto record = Result.add_records();

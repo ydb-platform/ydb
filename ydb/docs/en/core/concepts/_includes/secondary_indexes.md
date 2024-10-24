@@ -67,7 +67,8 @@ A secondary index can be:
 - Deleted from an existing table with the YQL [`ALTER TABLE`](../../yql/reference/syntax/alter_table/index.md) statement or the YDB CLI [`table index drop`](../../reference/ydb-cli/commands/secondary_index.md#drop) command.
 - Deleted together with the table using the YQL [`DROP TABLE`](../../yql/reference/syntax/drop_table.md) statement or the YDB CLI `table drop` command.
 
-## Purpose and use of secondary indexes {#best_practices}
+## Using secondary indexes {#use}
 
-For information about the purpose and use of secondary indexes for app development, see the [recommendations](../../dev/secondary-indexes.md).
+To use a secondary index in a YQL SELECT statement you must explicitly specify its name using the [VIEW clause](../../yql/reference/syntax/select/secondary_index.md).
 
+Refer to [this article about using secondary indexes in applications](../../dev/secondary-indexes.md) in the Development section of the documentation to get more information.

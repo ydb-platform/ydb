@@ -69,6 +69,8 @@
 - Удален у существующей таблицы командой YQL [ALTER TABLE](../../yql/reference/syntax/alter_table/index.md) или командой {{ ydb-short-name }} CLI [table index drop](../../reference/ydb-cli/commands/secondary_index.md#drop).
 - Удален вместе с таблицей командой YQL [DROP TABLE](../../yql/reference/syntax/drop_table.md) или командой {{ ydb-short-name }} CLI `table drop`.
 
-## Назначение и применение вторичных индексов {#best_practices}
+## Применение вторичных индексов {#use}
 
-О назначении и применении вторичных индексов при разработке приложений смотрите в [рекомендациях](../../dev/secondary-indexes.md).
+Для использования вторичного индекса в YQL-операторе SELECT необходимо явно указать его имя в [секции VIEW](../../yql/reference/syntax/select/secondary_index.md).
+
+Детальная информация о применении вторичных индексов в приложениях находится в [этой статье](../../dev/secondary-indexes.md) в разделе документации для разработчиков приложений.

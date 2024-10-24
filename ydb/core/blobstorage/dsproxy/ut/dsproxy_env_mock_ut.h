@@ -130,6 +130,7 @@ struct TDSProxyEnv {
                     .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
                     .Stats = PerDiskStatsPtr,
                     .EnableRequestMod3x3ForMinLatency = false,
+                    .LongRequestThreshold = TDuration::Seconds(1),
                 }));
     }
 

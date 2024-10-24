@@ -305,6 +305,7 @@ class TGroupMock {
     const ui32 GroupId;
     const TErasureType::EErasureSpecies ErasureSpecies;
     const ui32 FailDomains;
+    const ui32 FailRealms;
     const ui32 DrivesPerFailDomain;
 
     TVector<TVDiskMock> VDisks;
@@ -323,14 +324,16 @@ class TGroupMock {
     }
 
     void InitVDisks() {
+        for (ui64 realmIdx = 0; realmIdx < FailRealms; ++realmIdx) {
         for (ui64 domainIdx = 0; domainIdx < FailDomains; ++domainIdx) {
-            for (ui64 driveIdx = 0; driveIdx < DrivesPerFailDomain; ++driveIdx) {
+        for (ui64 driveIdx = 0; driveIdx < DrivesPerFailDomain; ++driveIdx) {
                 // Node = domainIdx
                 // PoolId = driveIdx
                 // LocalId = index in VDisks
-                TVDiskID vDiskId(GroupId, 1, 0, domainIdx, driveIdx);
+                TVDiskID vDiskId(GroupId, 1, realmIdx, domainIdx, driveIdx);
                 VDisks.emplace_back(vDiskId);
-            }
+        }
+        }
         }
     }
 
@@ -340,6 +343,7 @@ public:
         : GroupId(groupId)
         , ErasureSpecies(erasureSpecies)
         , FailDomains(failDomains)
+        , FailRealms(info->GetTopology().GetTotalFailRealmsNum())
         , DrivesPerFailDomain(drivesPerFailDomain)
         , Info(info)
     {
@@ -348,14 +352,14 @@ public:
         InitBsInfo();
     }
 
-    TGroupMock(ui32 groupId, TErasureType::EErasureSpecies erasureSpecies, ui32 failDomains, ui32 drivesPerFailDomain)
+    TGroupMock(ui32 groupId, TErasureType::EErasureSpecies erasureSpecies, ui32 failDomains, ui32 failRealms, ui32 drivesPerFailDomain)
         : TGroupMock(groupId, erasureSpecies, failDomains, drivesPerFailDomain,
-                new TBlobStorageGroupInfo(erasureSpecies, drivesPerFailDomain, failDomains))
+                new TBlobStorageGroupInfo(erasureSpecies, drivesPerFailDomain, failDomains, failRealms))
     {
     }
 
     ui32 VDiskIdx(const TVDiskID &id) {
-        ui32 idx = (ui32)id.FailDomain * DrivesPerFailDomain + (ui32)id.VDisk;
+        ui32 idx = (ui32)id.FailRealm * FailDomains * DrivesPerFailDomain + (ui32)id.FailDomain * DrivesPerFailDomain + (ui32)id.VDisk;
         return idx;
     }
 

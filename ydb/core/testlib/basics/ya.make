@@ -46,4 +46,5 @@ END()
 
 RECURSE(
     default
+    pg
 )

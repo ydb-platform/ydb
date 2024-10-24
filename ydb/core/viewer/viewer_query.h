@@ -37,6 +37,7 @@ class TJsonQuery : public TViewerPipeClient {
         Modern,
         Multi,
         Ydb,
+        Ydb2,
     };
     ESchemaType Schema = ESchemaType::Classic;
     TRequestResponse<NKqp::TEvKqp::TEvCreateSessionResponse> CreateSessionResponse;
@@ -53,6 +54,8 @@ public:
             return ESchemaType::Multi;
         } else if (schemaStr == "ydb") {
             return ESchemaType::Ydb;
+        } else if (schemaStr == "ydb2") {
+            return ESchemaType::Ydb2;
         } else {
             return ESchemaType::Classic;
         }
@@ -393,8 +396,8 @@ private:
                 return valueParser.GetDyNumber();
             case NYdb::EPrimitiveType::Uuid:
                 return valueParser.GetUuid().ToString();
-            default:
-                Y_ENSURE(false, TStringBuilder() << "Unsupported type: " << primitive);        }
+        }
+        return NJson::JSON_UNDEFINED;
     }
 
     NJson::TJsonValue ColumnValueToJsonValue(NYdb::TValueParser& valueParser) {
@@ -425,6 +428,63 @@ private:
 
             case NYdb::TTypeParser::ETypeKind::Decimal:
                 return valueParser.GetDecimal().ToString();
+
+            case NYdb::TTypeParser::ETypeKind::List:
+                {
+                    NJson::TJsonValue jsonList;
+                    jsonList.SetType(NJson::JSON_ARRAY);
+                    valueParser.OpenList();
+                    while (valueParser.TryNextListItem()) {
+                        jsonList.AppendValue(ColumnValueToJsonValue(valueParser));
+                    }
+                    return jsonList;
+                }
+
+            case NYdb::TTypeParser::ETypeKind::Tuple:
+                {
+                    NJson::TJsonValue jsonTuple;
+                    jsonTuple.SetType(NJson::JSON_ARRAY);
+                    valueParser.OpenTuple();
+                    while (valueParser.TryNextElement()) {
+                        jsonTuple.AppendValue(ColumnValueToJsonValue(valueParser));
+                    }
+                    return jsonTuple;
+                }
+
+            case NYdb::TTypeParser::ETypeKind::Struct:
+                {
+                    NJson::TJsonValue jsonStruct;
+                    jsonStruct.SetType(NJson::JSON_MAP);
+                    valueParser.OpenStruct();
+                    while (valueParser.TryNextMember()) {
+                        jsonStruct[valueParser.GetMemberName()] = ColumnValueToJsonValue(valueParser);
+                    }
+                    return jsonStruct;
+                }
+
+            case NYdb::TTypeParser::ETypeKind::Dict:
+                {
+                    NJson::TJsonValue jsonDict;
+                    jsonDict.SetType(NJson::JSON_MAP);
+                    valueParser.OpenDict();
+                    while (valueParser.TryNextDictItem()) {
+                        valueParser.DictKey();
+                        TString key = valueParser.GetString();
+                        valueParser.DictPayload();
+                        jsonDict[key] = ColumnValueToJsonValue(valueParser);
+                    }
+                    return jsonDict;
+                }
+
+            case NYdb::TTypeParser::ETypeKind::Variant:
+                valueParser.OpenVariant();
+                return ColumnValueToJsonValue(valueParser);
+
+            case NYdb::TTypeParser::ETypeKind::EmptyList:
+                return NJson::JSON_ARRAY;
+
+            case NYdb::TTypeParser::ETypeKind::EmptyDict:
+                return NJson::JSON_MAP;
 
             default:
                 return NJson::JSON_UNDEFINED;
@@ -658,6 +718,37 @@ private:
                         NYdb::TResultSetParser rsParser(resultSet);
                         while (rsParser.TryNextRow()) {
                             NJson::TJsonValue& jsonRow = jsonResults.AppendValue({});
+                            TString row = NYdb::FormatResultRowJson(rsParser, columnsMeta, IsBase64Encode ? NYdb::EBinaryStringEncoding::Base64 : NYdb::EBinaryStringEncoding::Unicode);
+                            NJson::ReadJsonTree(row, &jsonRow);
+                        }
+                    }
+                }
+            }
+
+            if (Schema == ESchemaType::Ydb2) {
+                NJson::TJsonValue& jsonResults = jsonResponse["result"];
+                jsonResults.SetType(NJson::JSON_ARRAY);
+                for (const auto& resultSets : ResultSets) {
+                    NJson::TJsonValue& jsonResult = jsonResults.AppendValue({});
+                    bool hasColumns = false;
+                    for (NYdb::TResultSet resultSet : resultSets) {
+                        if (!hasColumns) {
+                            NJson::TJsonValue& jsonColumns = jsonResult["columns"];
+                            jsonColumns.SetType(NJson::JSON_ARRAY);
+                            const auto& columnsMeta = resultSet.GetColumnsMeta();
+                            for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
+                                NJson::TJsonValue& jsonColumn = jsonColumns.AppendValue({});
+                                const NYdb::TColumn& columnMeta = columnsMeta[columnNum];
+                                jsonColumn["name"] = columnMeta.Name;
+                                jsonColumn["type"] = columnMeta.Type.ToString();
+                            }
+                            hasColumns = true;
+                        }
+                        NJson::TJsonValue& jsonRows = jsonResult["rows"];
+                        const auto& columnsMeta = resultSet.GetColumnsMeta();
+                        NYdb::TResultSetParser rsParser(resultSet);
+                        while (rsParser.TryNextRow()) {
+                            NJson::TJsonValue& jsonRow = jsonRows.AppendValue({});
                             TString row = NYdb::FormatResultRowJson(rsParser, columnsMeta, IsBase64Encode ? NYdb::EBinaryStringEncoding::Base64 : NYdb::EBinaryStringEncoding::Unicode);
                             NJson::ReadJsonTree(row, &jsonRow);
                         }

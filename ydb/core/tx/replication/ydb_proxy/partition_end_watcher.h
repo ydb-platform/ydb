@@ -38,7 +38,7 @@ public:
     }
 
     void SetCommittedOffset(ui64 offset, const TActorId& client) {
-        CommittedOffset = offset;
+        CommittedOffset = offset - 1;
         MaybeSendPartitionEnd(client);
     }
 

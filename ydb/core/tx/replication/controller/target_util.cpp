@@ -4,7 +4,7 @@
 namespace NKikimr::NReplication::NController {
 
 THolder<TEvService::TEvRunWorker> MakeTEvRunWorker(const TReplication::TPtr replication, const TReplication::ITarget& target, ui64 partitionId) {
-    return MakeTEvRunWorker(replication->GetId(), target.GetId(), partitionId, replication->GetConfig().GetSrcConnectionParams(), target.GetSrcPath(), target.GetDstPathId());
+    return MakeTEvRunWorker(replication->GetId(), target.GetId(), partitionId, replication->GetConfig().GetSrcConnectionParams(), target.GetStreamPath(), target.GetDstPathId());
 }
 
 THolder<TEvService::TEvRunWorker> MakeTEvRunWorker(ui64 replicationId, ui64 targetId, ui64 partitionId, const NKikimrReplication::TConnectionParams& connectionParams,

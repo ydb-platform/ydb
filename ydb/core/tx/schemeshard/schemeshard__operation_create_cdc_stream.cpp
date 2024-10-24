@@ -660,7 +660,7 @@ void DoCreatePqPart(
         ps->SetScaleThresholdSeconds(1);
         ps->SetScaleDownPartitionWriteSpeedThresholdPercent(1);
         ps->SetScaleUpPartitionWriteSpeedThresholdPercent(2);
-        ps->SetMaxPartitionCount(8);
+        ps->SetMaxPartitionCount(10000);
     } else if (op.GetTopicAutoPartitioning()) {
         auto * ps = pqConfig.MutablePartitionStrategy();
         ps->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);

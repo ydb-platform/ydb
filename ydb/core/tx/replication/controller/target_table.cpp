@@ -112,6 +112,10 @@ TString TTargetTable::BuildStreamPath() const {
     return CanonizePath(ChildPath(SplitPath(GetSrcPath()), GetStreamName()));
 }
 
+TString TTargetTableBase::GetStreamPath() const {
+    return BuildStreamPath();
+}
+
 TTargetIndexTable::TTargetIndexTable(TReplication* replication, ui64 id, const TString& srcPath, const TString& dstPath)
     : TTargetTableBase(replication, ETargetKind::IndexTable, id, srcPath, dstPath)
 {

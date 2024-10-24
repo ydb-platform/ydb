@@ -2533,8 +2533,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         const auto result = SqlToYql(R"(USE plato;
             CREATE TABLE table (
                 pk INT32 NOT NULL,
-                col String, 
-                INDEX idx GLOBAL USING vector_kmeans_tree 
+                col String,
+                INDEX idx GLOBAL USING vector_kmeans_tree
                     ON (col) COVER (col)
                     WITH (distance=cosine, vector_type=float, vector_dimension=1024,),
                 PRIMARY KEY (pk))
@@ -2543,11 +2543,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(AlterTableAddIndexVector) {
-        const auto result = SqlToYql(R"(USE plato; 
-            ALTER TABLE table ADD INDEX idx 
-                GLOBAL USING vector_kmeans_tree 
+        const auto result = SqlToYql(R"(USE plato;
+            ALTER TABLE table ADD INDEX idx
+                GLOBAL USING vector_kmeans_tree
                 ON (col) COVER (col)
-                WITH (distance=cosine, vector_type="float", vector_dimension=1024) 
+                WITH (distance=cosine, vector_type="float", vector_dimension=1024)
                 )");
         UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
     }
@@ -2558,11 +2558,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(AlterTableAddIndexMissedParameter) {
-        ExpectFailWithError(R"(USE plato; 
-            ALTER TABLE table ADD INDEX idx 
-                GLOBAL USING vector_kmeans_tree 
+        ExpectFailWithError(R"(USE plato;
+            ALTER TABLE table ADD INDEX idx
+                GLOBAL USING vector_kmeans_tree
                 ON (col)
-                WITH (distance=cosine, vector_type=float) 
+                WITH (distance=cosine, vector_type=float)
                 )",
             "<main>:5:52: Error: vector_dimension should be set\n");
     }
@@ -2790,7 +2790,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             auto req = Sprintf(reqTpl, key.c_str(), value.c_str());
             auto res = SqlToYql(req);
             UNIT_ASSERT(res.Root);
-            
+
             TVerifyLineFunc verifyLine = [&key, &value](const TString& word, const TString& line) {
                 if (word == "Write") {
                     UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
@@ -6835,7 +6835,7 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
     }
-    
+
     Y_UNIT_TEST(YtAlternativeSchemaSyntax) {
         NYql::TAstParseResult res = SqlToYql(R"(
             SELECT * FROM plato.Input WITH schema(y Int32, x String not null);
@@ -6904,7 +6904,7 @@ Y_UNIT_TEST_SUITE(CompactNamedExprs) {
             pragma CompactNamedExprs;
             pragma ValidateUnusedExprs;
 
-            define subquery $x() as 
+            define subquery $x() as
                 select count(1, 2);
             end define;
             select 1;
@@ -6927,7 +6927,7 @@ Y_UNIT_TEST_SUITE(CompactNamedExprs) {
             pragma CompactNamedExprs;
             pragma DisableValidateUnusedExprs;
 
-            define subquery $x() as 
+            define subquery $x() as
                 select count(1, 2);
             end define;
             select 1;

@@ -22,7 +22,11 @@ TAutoPtr<TLogBackend> TLogBackendBuildHelper::CreateLogBackendFromLogConfig(cons
     return logBackend;
 }
 
-TAutoPtr<TLogBackend> TLogBackendBuildHelper::CreateLogBackendFromUAClientConfig(const NKikimrConfig::TUAClientConfig& uaClientConfig, NMonitoring::TDynamicCounterPtr uaCounters, const TString& logName) {
+TAutoPtr<TLogBackend> TLogBackendBuildHelper::CreateLogBackendFromUAClientConfig(const NKikimrConfig::TUAClientConfig& uaClientConfig,
+                                                                                 NMonitoring::TDynamicCounterPtr uaCounters,
+                                                                                 const TString& logName, const TString& nodeType = "static",
+                                                                                 const TString& tenant = "",
+                                                                                 const TString& clusterName = "") {
     auto parameters = NUnifiedAgent::TClientParameters(uaClientConfig.GetUri())
         .SetCounters(uaCounters)
         .SetMaxInflightBytes(uaClientConfig.GetMaxInflightBytes());
@@ -49,6 +53,18 @@ TAutoPtr<TLogBackend> TLogBackendBuildHelper::CreateLogBackendFromUAClientConfig
     (*sessionParameters.Meta)["_pid"] = ToString(GetPID());
     if (logName) {
         (*sessionParameters.Meta)["_log_name"] = logName;
+    }
+
+    if (nodeType) {
+        (*sessionParameters.Meta)["node_type"] = nodeType;
+    }
+
+    if (tenant) {
+        (*sessionParameters.Meta)["database"] = tenant;
+    }
+
+    if (clusterName) {
+        (*sessionParameters.Meta)["cluster"] = clusterName;
     }
 
     TAutoPtr<TLogBackend> uaLogBackend = MakeLogBackend(parameters, sessionParameters).Release();

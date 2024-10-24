@@ -3,6 +3,7 @@ from typing import Any, Optional
 import yatest.common
 import json
 import os
+import re
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import get_external_param
 from enum import StrEnum
@@ -39,12 +40,13 @@ class YdbCliHelper:
         def __init__(self):
             self.stats: dict[str, dict[str, Any]] = {}
             self.query_out: Optional[str] = None
-            self.stdout: Optional[str] = None
-            self.stderr: Optional[str] = None
+            self.stdout: str = ''
+            self.stderr: str = ''
             self.error_message: str = ''
             self.plans: Optional[list[YdbCliHelper.QueryPlan]] = None
             self.explain_plan: Optional[YdbCliHelper.QueryPlan] = None
             self.errors_by_iter: dict[int, str] = {}
+            self.time_by_iter: dict[int, float] = {}
             self.traceback: Optional[TracebackType] = None
 
         @property
@@ -81,26 +83,26 @@ class YdbCliHelper:
                 else:
                     self.result.error_message = msg
 
-        def _process_returncode(self, returncode, stderr: str) -> None:
+        def _process_returncode(self, returncode) -> None:
             begin_str = f'{self.query_num}:'
             end_str = 'Query text:'
             iter_str = 'iteration '
-            begin_pos = stderr.find(begin_str)
+            begin_pos = self.result.stderr.find(begin_str)
             if begin_pos >= 0:
                 while True:
-                    begin_pos = stderr.find(iter_str, begin_pos)
+                    begin_pos = self.result.stderr.find(iter_str, begin_pos)
                     if begin_pos < 0:
                         break
                     begin_pos += len(iter_str)
-                    end_pos = stderr.find('\n', begin_pos)
+                    end_pos = self.result.stderr.find('\n', begin_pos)
                     if end_pos < 0:
-                        iter = int(stderr[begin_pos:])
-                        begin_pos = len(stderr) - 1
+                        iter = int(self.result.stderr[begin_pos:])
+                        begin_pos = len(self.result.stderr) - 1
                     else:
-                        iter = int(stderr[begin_pos:end_pos])
+                        iter = int(self.result.stderr[begin_pos:end_pos])
                         begin_pos = end_pos + 1
-                    end_pos = stderr.find(end_str, begin_pos)
-                    msg = (stderr[begin_pos:] if end_pos < 0 else stderr[begin_pos:end_pos]).strip()
+                    end_pos = self.result.stderr.find(end_str, begin_pos)
+                    msg = (self.result.stderr[begin_pos:] if end_pos < 0 else self.result.stderr[begin_pos:end_pos]).strip()
                     self.result.errors_by_iter[iter] = msg
                     self._add_error(f'Iteration {iter}: {msg}')
             if returncode != 0 and len(self.result.errors_by_iter) == 0:
@@ -167,6 +169,12 @@ class YdbCliHelper:
                     node_errors.append(f'Node {node} is down')
             self._add_error('\n'.join(node_errors))
 
+        def _parse_stdout(self):
+            for line in self.result.stdout.splitlines():
+                m = re.search(r'iteration ([0-9]*):\s*ok\s*([\.0-9]*)s', line)
+                if m is not None:
+                    self.result.time_by_iter[int(m.group(1))] = float(m.group(2))
+
         def _get_cmd(self) -> list[str]:
             cmd = YdbCliHelper.get_cli_command() + [
                 '-e', YdbCluster.ydb_endpoint,
@@ -192,7 +200,8 @@ class YdbCliHelper:
             process = yatest.common.process.execute(self._get_cmd(), check_exit_code=False)
             self.result.stdout = process.stdout.decode('utf-8', 'replace')
             self.result.stderr = process.stderr.decode('utf-8', 'replace')
-            self._process_returncode(process.returncode, self.result.stderr)
+            self._process_returncode(process.returncode)
+            self._parse_stdout()
 
         def process(self) -> YdbCliHelper.WorkloadRunResult:
             try:

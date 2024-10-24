@@ -364,15 +364,19 @@ public:
         return settings;
     }
 
-    static NGrpcActorClient::TGrpcClientSettings CreateGrpcClientSettings(const NConfig::TComputeDatabaseConfig& config) {
+    static NGrpcActorClient::TGrpcClientSettings CreateGrpcClientSettings(const auto& connection) {
         NGrpcActorClient::TGrpcClientSettings settings;
-        const auto& connection = config.GetControlPlaneConnection();
         settings.Endpoint = connection.GetEndpoint();
         settings.EnableSsl = connection.GetUseSsl();
         if (connection.GetCertificateFile()) {
             settings.CertificateRootCA = StripString(TFileInput(connection.GetCertificateFile()).ReadAll());
         }
+        settings.RequestTimeoutMs = 20 * 1000; // todo: read from config
         return settings;
+    }
+
+    static NGrpcActorClient::TGrpcClientSettings CreateGrpcClientSettings(const NConfig::TComputeDatabaseConfig& config) {
+        return CreateGrpcClientSettings(config.GetControlPlaneConnection());
     }
 
     void CreateSingleClientActors(const NConfig::TYdbComputeControlPlane::TSingle& singleConfig) {

@@ -161,9 +161,11 @@ public:
     TPath FindOlapStore() const;
     bool IsCommonSensePath() const;
     bool AtLocalSchemeShardPath() const;
-    bool IsInsideTableIndexPath() const;
+    bool IsInsideTableIndexPath(bool failOnUnresolved = true) const;
     bool IsInsideCdcStreamPath() const;
-    bool IsTableIndex(const TMaybe<NKikimrSchemeOp::EIndexType>& type = {}) const;
+    bool IsTableIndex(
+        const TMaybe<NKikimrSchemeOp::EIndexType>& type = {},
+        bool failOnUnresolved = true) const;
     bool IsBackupTable() const;
     bool IsAsyncReplicaTable() const;
     bool IsCdcStream() const;

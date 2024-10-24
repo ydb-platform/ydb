@@ -41,6 +41,7 @@ public:
 
     TChunkConstructionData BuildAccessorContext(const ui32 recordsCount) const;
     std::shared_ptr<IChunkedArray> ApplyVerified(const TString& data, const ui32 expectedRecordsCount) const;
+    TConclusion<std::shared_ptr<IChunkedArray>> ApplyConclusion(const TString& data, const ui32 expectedRecordsCount) const;
     std::shared_ptr<arrow::RecordBatch> ApplyRawVerified(const TString& data) const;
 };
 

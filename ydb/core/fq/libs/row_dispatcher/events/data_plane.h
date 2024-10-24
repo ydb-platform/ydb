@@ -6,6 +6,7 @@
 
 #include <ydb/core/fq/libs/row_dispatcher/protos/events.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
+#include <ydb/core/fq/libs/row_dispatcher/events/topic_session_stats.h>
 
 namespace NFq {
 
@@ -26,6 +27,7 @@ struct TEvRowDispatcher {
         EvCoordinatorChangesSubscribe,
         EvCoordinatorRequest,
         EvCoordinatorResult,
+        EvSessionStatistic,
         EvEnd,
     };
 
@@ -119,6 +121,12 @@ struct TEvRowDispatcher {
         NFq::NRowDispatcherProto::TEvSessionError, EEv::EvSessionError> {
         TEvSessionError() = default;
         NActors::TActorId ReadActorId;
+    };
+
+    struct TEvSessionStatistic : public NActors::TEventLocal<TEvSessionStatistic, EEv::EvSessionStatistic> {
+        TEvSessionStatistic(const TopicSessionStatistic& stat)
+        : Stat(stat) {}
+        TopicSessionStatistic Stat;
     };
 };
 

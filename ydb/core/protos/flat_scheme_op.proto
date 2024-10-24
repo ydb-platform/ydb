@@ -130,6 +130,7 @@ message TFamilyDescription {
     optional EColumnCache ColumnCache = 7;
     optional EColumnStorage Storage = 8; // DEPRECATED: use StorageConfig
     optional TStorageConfig StorageConfig = 9;
+    optional int32 ColumnCodecLevel = 10;
 }
 
 message TFastSplitSettings {
@@ -452,9 +453,14 @@ message TCompactionPlannerConstructorContainer {
         optional uint32 FreshnessCheckDurationSeconds = 2 [default = 300];
     }
 
+    message TLCOptimizer {
+
+    }
+
     oneof Implementation {
         TLOptimizer LBuckets = 20;
         TSOptimizer SBuckets = 21;
+        TLCOptimizer LCBuckets = 22;
     }
 }
 
@@ -973,6 +979,16 @@ message TIndexCreationConfig {
     }
 }
 
+message TGenericTxInFlyExtraData {
+    message TTxCopyTableExtraData {
+        optional NKikimrProto.TPathID CdcPathId = 1;
+    }
+
+    // we do not use oneof here as far as we want to combine some subops rarely
+    // and it can be used in this case
+    optional TTxCopyTableExtraData TxCopyTableExtraData = 1;
+}
+
 message TIndexAlteringConfig {
     optional string Name = 1;
     optional EIndexState State = 2;
@@ -1021,6 +1037,9 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
     optional bool OmitIndexes = 3 [default = false];
     optional bool OmitFollowers = 4 [default = false];
     optional bool IsBackup = 5 [default = false];
+
+    // additionally creates cdc stream on src table consistently with taking snapshot
+    optional TCreateCdcStream CreateSrcCdcStream = 6;
 }
 
 message TConsistentTableCopyingConfig {

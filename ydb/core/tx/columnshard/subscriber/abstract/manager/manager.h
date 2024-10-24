@@ -51,6 +51,17 @@ public:
         }
     }
 
+    void UnregisterSubscriber(TSharedPtrHashContainer&& s) {
+        for (auto&& evType : s->GetEventTypes()) {
+            auto it = Subscribers.find(evType);
+            AFL_VERIFY(it != Subscribers.end());
+            it->second.erase(s);
+            if (it->second.empty()) {
+                Subscribers.erase(it);
+            }
+        }
+    }
+
     void OnEvent(const std::shared_ptr<ISubscriptionEvent>& ev) {
         auto it = Subscribers.find(ev->GetType());
         if (it == Subscribers.end()) {
@@ -67,14 +78,7 @@ public:
             }
         }
         for (auto&& i : toRemove) {
-            for (auto&& evType : i->GetEventTypes()) {
-                auto it = Subscribers.find(evType);
-                AFL_VERIFY(it != Subscribers.end());
-                it->second.erase(i);
-                if (it->second.empty()) {
-                    Subscribers.erase(it);
-                }
-            }
+            UnregisterSubscriber(std::move(i));
         }
     }
 };

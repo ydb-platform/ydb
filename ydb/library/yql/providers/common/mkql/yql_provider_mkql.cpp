@@ -1709,9 +1709,9 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
         auto anyJoinSettings = EAnyJoinSettings::None;
         node.Tail().ForEachChild([&](const TExprNode& flag) {
-            if (flag.IsAtom("LeftAny"))
+            if (flag.Head().IsAtom("LeftAny"))
                anyJoinSettings = EAnyJoinSettings::Right == anyJoinSettings ? EAnyJoinSettings::Both : EAnyJoinSettings::Left;
-            else if (flag.IsAtom("RightAny"))
+            else if (flag.Head().IsAtom("RightAny"))
                anyJoinSettings = EAnyJoinSettings::Left == anyJoinSettings ? EAnyJoinSettings::Both : EAnyJoinSettings::Right;
         });
 

@@ -1609,9 +1609,9 @@
     ],
     "test.test[join-star_join_inners_vk_sorted--Debug]": [
         {
-            "checksum": "a53351dd42e2ebd68f1b82963253912c",
-            "size": 6418,
-            "uri": "https://{canondata_backend}/1931696/3b66a4b8ee9789607df97fd1b710d3ca890dd9b2/resource.tar.gz#test.test_join-star_join_inners_vk_sorted--Debug_/opt.yql_patched"
+            "checksum": "734fcb7b1b038406630e6b0f49e22895",
+            "size": 6434,
+            "uri": "https://{canondata_backend}/1925821/5261ba7747feb717cc1e79ee8face9b11724ff39/resource.tar.gz#test.test_join-star_join_inners_vk_sorted--Debug_/opt.yql_patched"
         }
     ],
     "test.test[join-star_join_inners_vk_sorted--Plan]": [

@@ -444,7 +444,8 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
         }
     }
 
-    if (!EnsureAtom(*input->Child(TDqJoin::idx_JoinType), ctx)) {
+    const auto& joinType = *input->Child(TDqJoin::idx_JoinType);
+    if (!EnsureAtom(joinType, ctx)) {
         return nullptr;
     }
 
@@ -502,10 +503,27 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
         ? join.RightLabel().Cast<TCoAtom>().Value()
         : TStringBuf("");
 
-    if (input->ChildrenSize() > 9U) {
-        for (auto i = 0U; i < input->Tail().ChildrenSize(); ++i) {
-            if (const auto& flag = *input->Tail().Child(i); !flag.IsAtom({"LeftAny", "RightAny"})) {
-                ctx.AddError(TIssue(ctx.GetPosition(flag.Pos()), TStringBuilder() << "Unsupported DQ join option: " << flag.Content()));
+    if (input->ChildrenSize() > TDqJoin::idx_JoinAlgo) {
+        const auto& joinAlgo = *input->Child(TDqJoin::idx_JoinAlgo);
+        if (input->ChildrenSize() > TDqJoin::idx_Flags) {
+            auto&& flags = input->Tail();
+            for (ui32 i = 0; i < flags.ChildrenSize(); ++i) {
+                auto&& flag = *flags.Child(i);
+                if (!EnsureTupleOfAtoms(flag, ctx) || !EnsureTupleMinSize(flag, 1, ctx))
+                    return nullptr;
+                auto&& name = *flag.Child(TCoNameValueTuple::idx_Name);
+                if (name.IsAtom({"TTL", "MaxCachedRows", "MaxDelayedRows"})) {
+                    if (joinAlgo.IsAtom("StreamLookupJoin")) {
+                       if (!EnsureTupleSize(flag, 2, ctx))
+                           return nullptr;
+                       continue;
+                    }
+                } else if (name.IsAtom({"LeftAny", "RightAny"})) {
+                    if (!EnsureTupleSize(flag, 1, ctx))
+                        return nullptr;
+                    continue;
+                }
+                ctx.AddError(TIssue(ctx.GetPosition(flag.Pos()), TStringBuilder() << "DqJoin: Unsupported DQ join option: " << name.Content()));
                 return nullptr;
             }
         }
@@ -581,6 +599,10 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
     if (!leftInputType) {
         return TStatus::Error;
     }
+    if (auto joinType = cnStreamLookup.JoinType(); joinType != TStringBuf("Left")) {
+        ctx.AddError(TIssue(ctx.GetPosition(joinType.Pos()), "Streamlookup supports only LEFT JOIN ... ANY"));
+        return TStatus::Error;
+    }
     const auto leftRowType = GetSeqItemType(leftInputType);
     const auto rightRowType = GetSeqItemType(cnStreamLookup.RightInput().Raw()->GetTypeAnn());
     const auto outputRowType = GetDqJoinResultType<true>(
@@ -593,7 +615,21 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
         cnStreamLookup.JoinKeys(),
         ctx
     );
-    //TODO (YQ-2068) verify lookup parameters
+    auto validateIntParam = [&ctx=ctx](auto&& value) {
+        ui64 val; // matches dq_tasks.proto
+        Y_UNUSED(val);
+        if (!TryIntFromString<10>(value.StringValue(), val)) {
+            ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), TStringBuilder() << "Expected integer, but got: " << value.StringValue()));
+            return false;
+        }
+        return true;
+    };
+    if (!validateIntParam(cnStreamLookup.MaxCachedRows()))
+        return TStatus::Error;
+    if (!validateIntParam(cnStreamLookup.TTL()))
+        return TStatus::Error;
+    if (!validateIntParam(cnStreamLookup.MaxDelayedRows()))
+        return TStatus::Error;
     input->SetTypeAnn(ctx.MakeType<TStreamExprType>(outputRowType));
     return TStatus::Ok;
 }

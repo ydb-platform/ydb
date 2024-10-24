@@ -53,7 +53,7 @@ TESTCASES = [
                             e.Data as data, u.id as lookup
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.{table_name} as u
+                left join {streamlookup} any ydb_conn_{table_name}.{table_name} as u
                 on(e.Data = u.data)
             ;
 
@@ -83,7 +83,7 @@ TESTCASES = [
                             e.Data as data, CAST(e.Data AS Int32) as id, u.data as lookup
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.{table_name} as u
+                left join {streamlookup} any ydb_conn_{table_name}.{table_name} as u
                 on(CAST(e.Data AS Int32) = u.id)
             ;
 
@@ -121,7 +121,7 @@ TESTCASES = [
                             u.data as lookup
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.{table_name} as u
+                left join {streamlookup} any ydb_conn_{table_name}.{table_name} as u
                 on(e.user = u.id)
             ;
 
@@ -165,7 +165,7 @@ TESTCASES = [
                             u.data as lookup
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.{table_name} as u
+                left join {streamlookup} any ydb_conn_{table_name}.{table_name} as u
                 on(e.user = u.id)
             ;
 
@@ -230,7 +230,7 @@ TESTCASES = [
                             u.age as age
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.`users` as u
+                left join {streamlookup} any ydb_conn_{table_name}.`users` as u
                 on(e.user = u.id)
             ;
 
@@ -290,7 +290,7 @@ TESTCASES = [
                             eu.id as uid
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.`users` as eu
+                left join {streamlookup} any ydb_conn_{table_name}.`users` as eu
                 on(e.user = eu.id)
             ;
 
@@ -333,7 +333,7 @@ TESTCASES = [
             $enriched = select a, b, c, d, e, f, za, yb, yc, zd
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.db as u
+                left join {streamlookup} any ydb_conn_{table_name}.db as u
                 on(e.yb = u.b AND e.za = u.a )
             ;
 
@@ -378,7 +378,7 @@ TESTCASES = [
             $enriched = select a, b, c, d, e, f, za, yb, yc, zd
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.db as u
+                left join {streamlookup} any ydb_conn_{table_name}.db as u
                 on(e.za = u.a AND e.yb = u.b)
             ;
 

@@ -252,6 +252,47 @@ protected:
         if (!left) {
             return node;
         }
+        TExprNode::TPtr ttl = nullptr;
+        TExprNode::TPtr maxCachedRows = nullptr;
+        TExprNode::TPtr maxDelayedRows = nullptr;
+        bool leftAny = false;
+        bool rightAny = false;
+        if (const auto maybeFlags = join.Flags()) {
+            for (auto&& flag: maybeFlags.Cast()) {
+                auto&& name = flag.Name().Value();
+                if (name == "TTL"sv) {
+                    ttl = flag.Ref().Child(1);
+                } else if (name == "MaxCachedRows"sv) {
+                    maxCachedRows = flag.Ref().Child(1);
+                } else if (name == "MaxDelayedRows"sv) {
+                    maxDelayedRows = flag.Ref().Child(1);
+                } else if (name == "LeftAny"sv) {
+                    leftAny = true;
+                    continue;
+                } else if (name == "RightAny"sv) {
+                    rightAny = true;
+                    continue;
+                }
+            }
+            if (leftAny) {
+                ctx.AddError(TIssue(ctx.GetPosition(maybeFlags.Cast().Pos()), "Streamlookup ANY LEFT join is not implemented"));
+                return {};
+            }
+        }
+        if (!rightAny) {
+            ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Streamlookup: must be LEFT JOIN ANY"));
+            return {};
+        }
+
+        if (!ttl) {
+            ttl = ctx.NewAtom(pos, 300);
+        }
+        if (!maxCachedRows) {
+            maxCachedRows = ctx.NewAtom(pos, 1'000'000);
+        }
+        if (!maxDelayedRows) {
+            maxDelayedRows = ctx.NewAtom(pos, 1'000'000);
+        }
         auto cn = Build<TDqCnStreamLookup>(ctx, pos)
             .Output(left.Output().Cast())
             .LeftLabel(join.LeftLabel().Cast<NNodes::TCoAtom>())
@@ -261,9 +302,9 @@ protected:
             .JoinType(join.JoinType())
             .LeftJoinKeyNames(join.LeftJoinKeyNames())
             .RightJoinKeyNames(join.RightJoinKeyNames())
-            .TTL(ctx.NewAtom(pos, 300)) //TODO configure me
-            .MaxCachedRows(ctx.NewAtom(pos, 1'000'000)) //TODO configure me
-            .MaxDelayedRows(ctx.NewAtom(pos, 1'000'000)) //Configure me
+            .TTL(ttl)
+            .MaxCachedRows(maxCachedRows)
+            .MaxDelayedRows(maxDelayedRows)
         .Done();
 
         auto lambda = Build<TCoLambda>(ctx, pos)

@@ -50,7 +50,10 @@ public:
 
             // Leave only requested columns
             auto resultBatch = NArrow::TColumnOperator().Adapt(originalBatch, ResultSchema).DetachResult();
-            NArrow::TStatusValidator::Validate(ReadMetadata->GetProgram().ApplyProgram(resultBatch));
+            auto applyConclusion = ReadMetadata->GetProgram().ApplyProgram(resultBatch);
+            if (!applyConclusion.ok()) {
+                return TConclusionStatus::Fail(applyConclusion.ToString());
+            }
             if (resultBatch->num_rows() == 0) {
                 continue;
             }

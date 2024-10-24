@@ -338,9 +338,9 @@ public:
                     // it's safe to call here, because there is no any tablets in the node yet
                     node.BecomeDisconnected();
                 }
-                if (node.CanBeDeleted()) {
+                if (Self->TryToDeleteNode(&node)) {
+                    // node is deleted from hashmap
                     db.Table<Schema::Node>().Key(nodeId).Delete();
-                    Self->Nodes.erase(nodeId);
                 } else if (node.IsUnknown() && node.LocationAcquired) {
                     Self->AddRegisteredDataCentersNode(node.Location.GetDataCenterId(), node.Id);
                 }

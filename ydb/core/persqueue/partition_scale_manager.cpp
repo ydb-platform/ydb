@@ -8,12 +8,14 @@ namespace NPQ {
 
 TPartitionScaleManager::TPartitionScaleManager(
     const TString& topicName,
+    const TString& topicPath,
     const TString& databasePath,
     ui64 pathId,
     int version,
     const NKikimrPQ::TPQTabletConfig& config
 )
     : TopicName(topicName)
+    , TopicPath(topicPath)
     , DatabasePath(databasePath)
     , BalancerConfig(pathId, version, config) {
     }
@@ -45,6 +47,7 @@ void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
         << "send split request");
     CurrentScaleRequest = ctx.Register(new TPartitionScaleRequest(
         TopicName,
+        TopicPath,
         DatabasePath,
         BalancerConfig.PathId,
         BalancerConfig.PathVersion,

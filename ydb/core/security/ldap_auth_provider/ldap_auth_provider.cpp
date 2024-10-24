@@ -257,6 +257,12 @@ private:
                             + NKikimrLdap::LdapError(*request.Ld),
                     .Retryable = false}}};
         }
+        if (request.Password.Empty()) {
+            NKikimrLdap::MemFree(dn);
+            return {{TEvLdapAuthProvider::EStatus::UNAUTHORIZED,
+                    {.Message = "LDAP login failed. Empty password",
+                    .Retryable = false}}};
+        }
         TEvLdapAuthProvider::TError error;
         int result = NKikimrLdap::Bind(*request.Ld, dn, request.Password);
         if (!NKikimrLdap::IsSuccess(result)) {

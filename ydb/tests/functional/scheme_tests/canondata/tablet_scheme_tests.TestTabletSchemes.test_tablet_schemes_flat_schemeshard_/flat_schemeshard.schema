@@ -4788,6 +4788,11 @@
                 "ColumnId": 33,
                 "ColumnName": "AlterMainTableTxDone",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 34,
+                "ColumnName": "CreationConfig",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -4826,7 +4831,8 @@
                     30,
                     31,
                     32,
-                    33
+                    33,
+                    34
                 ],
                 "RoomID": 0,
                 "Codec": 0,

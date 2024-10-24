@@ -15,7 +15,14 @@ TAutoPtr<TLogBackend> CreateLogBackendWithUnifiedAgent(
             const auto& uaClientConfig = logConfig.GetUAClientConfig();
             auto uaCounters = GetServiceCounters(counters, "utils")->GetSubgroup("subsystem", "ua_client");
             auto logName = uaClientConfig.GetLogName();
-            TAutoPtr<TLogBackend> uaLogBackend = TLogBackendBuildHelper::CreateLogBackendFromUAClientConfig(uaClientConfig, uaCounters, logName);
+            TAutoPtr<TLogBackend> uaLogBackend = TLogBackendBuildHelper::CreateLogBackendFromUAClientConfig(
+                uaClientConfig,
+                uaCounters,
+                logName,
+                runConfig.TenantName == "" ? "static" : "slot",
+                runConfig.TenantName,
+                runConfig.ClusterName
+            );
             logBackend = logBackend ? NActors::CreateCompositeLogBackend({logBackend, uaLogBackend}) : uaLogBackend;
         }
         if (logBackend) {
@@ -52,7 +59,14 @@ TAutoPtr<TLogBackend> CreateMeteringLogBackendWithUnifiedAgent(
         auto logName = meteringConfig.HasLogName()
             ? meteringConfig.GetLogName()
             : uaClientConfig.GetLogName();
-        TAutoPtr<TLogBackend> uaLogBackend = TLogBackendBuildHelper::CreateLogBackendFromUAClientConfig(uaClientConfig, uaCounters, logName);
+        TAutoPtr<TLogBackend> uaLogBackend = TLogBackendBuildHelper::CreateLogBackendFromUAClientConfig(
+            uaClientConfig,
+            uaCounters,
+            logName,
+            runConfig.TenantName == "" ? "static" : "slot",
+            runConfig.TenantName,
+            runConfig.ClusterName
+        );
         logBackend = logBackend ? NActors::CreateCompositeLogBackend({logBackend, uaLogBackend}) : uaLogBackend;
     }
 
@@ -100,7 +114,14 @@ TAutoPtr<TLogBackend> CreateAuditLogUnifiedAgentBackend(
         auto logName = runConfig.AppConfig.GetAuditConfig().GetUnifiedAgentBackend().HasLogName()
             ? runConfig.AppConfig.GetAuditConfig().GetUnifiedAgentBackend().GetLogName()
             : uaClientConfig.GetLogName();
-        logBackend = TLogBackendBuildHelper::CreateLogBackendFromUAClientConfig(uaClientConfig, uaCounters, logName);
+        logBackend = TLogBackendBuildHelper::CreateLogBackendFromUAClientConfig(
+            uaClientConfig,
+            uaCounters,
+            logName,
+            runConfig.TenantName == "" ? "static" : "slot",
+            runConfig.TenantName,
+            runConfig.ClusterName
+        );
     }
 
     return logBackend;

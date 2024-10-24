@@ -65,6 +65,10 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
             return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "Cannot move table with cdc streams")};
         }
 
+        if (srcChildPath.IsSequence()) {
+            return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "Cannot move table with sequences")};
+        }
+
         TPath dstIndexPath = dstPath.Child(name);
 
         Y_ABORT_UNLESS(srcChildPath.Base()->PathId == child.second);

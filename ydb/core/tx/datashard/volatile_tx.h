@@ -6,6 +6,7 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/hash.h>
 #include <util/generic/intrlist.h>
+#include <util/system/hp_timer.h>
 
 namespace NKikimr::NTabletFlatExecutor {
 
@@ -74,6 +75,9 @@ namespace NKikimr::NDataShard {
         // transaction is decided. These readsets will be replaced with a
         // DECISION_ABORT on abort.
         std::vector<ui64> ArbiterReadSets;
+
+        // Calculates Waiting and Total latency
+        THPTimer LatencyTimer;
 
         template<class TTag>
         bool IsInList() const {
@@ -275,6 +279,10 @@ namespace NKikimr::NDataShard {
 
         void RemoveFromCommitOrder(TVolatileTxInfo* info);
         bool ReadyToDbCommit(TVolatileTxInfo* info) const;
+
+        void UpdateCountersAdd(TVolatileTxInfo* info);
+        void UpdateCountersRemove(TVolatileTxInfo* info);
+        void ChangeState(TVolatileTxInfo* info, EVolatileTxState state);
 
     private:
         TDataShard* const Self;

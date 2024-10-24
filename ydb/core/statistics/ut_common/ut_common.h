@@ -16,15 +16,9 @@ namespace NStat {
 
 static constexpr ui32 ColumnTableRowsNumber = 1000;
 
-NKikimrSubDomains::TSubDomainSettings GetSubDomainDeclareSettings(
-    const TString &name, const TStoragePools &pools = {});
-
-NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSettings(
-    const TString &name, const TStoragePools &pools = {});
-
 class TTestEnv {
 public:
-    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 1, ui32 storagePools = 1, bool useRealThreads = false);
+    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 1, bool useRealThreads = false);
     ~TTestEnv();
 
     Tests::TServer& GetServer() const {
@@ -51,8 +45,6 @@ public:
         return Settings;
     }
 
-    TStoragePools GetPools() const;
-
     auto& GetController() {
         return CSController;
     }
@@ -71,18 +63,28 @@ private:
     NYDBTest::TControllers::TGuard<NYDBTest::NColumnShard::TController> CSController;
 };
 
-void CreateDatabase(TTestEnv& env, const TString& databaseName, size_t nodeCount = 1);
+Ydb::StatusIds::StatusCode ExecuteYqlScript(TTestEnv& env, const TString& script, bool mustSucceed = true);
 
-void CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, TPathId resourcesDomainKey);
+TString CreateDatabase(TTestEnv& env, const TString& databaseName,
+    size_t nodeCount = 1, bool isShared = false, const TString& poolName = "hdd1");
+
+TString CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, const TString& sharedName);
 
 struct TTableInfo {
     std::vector<ui64> ShardIds;
     ui64 SaTabletId;
     TPathId DomainKey;
     TPathId PathId;
+    TString Path;
 };
-std::vector<TTableInfo> CreateDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount);
-std::vector<TTableInfo> CreateServerlessDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount);
+
+struct TDatabaseInfo {
+    TString FullDatabaseName;
+    std::vector<TTableInfo> Tables;
+};
+
+TDatabaseInfo CreateDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount);
+TDatabaseInfo CreateServerlessDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount);
 
 TPathId ResolvePathId(TTestActorRuntime& runtime, const TString& path, TPathId* domainKey = nullptr, ui64* saTabletId = nullptr);
 

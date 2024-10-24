@@ -3092,6 +3092,14 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         indexInfo->IndexName = row.template GetValue<Schema::IndexBuild::IndexName>();
         indexInfo->IndexType = row.template GetValue<Schema::IndexBuild::IndexType>();
 
+        // Restore the operation details: ImplTableDescription.
+        if (row.template HaveValue<Schema::IndexBuild::CreationConfig>()) {
+            NKikimrSchemeOp::TIndexCreationConfig creationConfig;
+            Y_ABORT_UNLESS(creationConfig.ParseFromString(row.template GetValue<Schema::IndexBuild::CreationConfig>()));
+
+            indexInfo->ImplTableDescription = std::move(*creationConfig.MutableIndexImplTableDescription());
+        }
+
         indexInfo->State = TIndexBuildInfo::EState(
             row.template GetValue<Schema::IndexBuild::State>());
         indexInfo->Issue =

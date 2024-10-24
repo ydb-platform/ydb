@@ -1664,7 +1664,7 @@ namespace NKikimr::NDataStreams::V1 {
             if (readResult.GetReadingFinished()) {
                 return ReplyWithError(Ydb::StatusIds::StatusCode::StatusIds_StatusCode_NOT_FOUND,
                         Ydb::PersQueue::ErrorCode::ErrorCode::WRONG_PARTITION_NUMBER,
-                        "Partition ended", ctx);
+                        "Partition ended");
             }
 
             const auto& results = readResult.GetResult();

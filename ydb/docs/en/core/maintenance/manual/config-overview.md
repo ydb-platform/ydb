@@ -22,7 +22,7 @@ Static configuration is a YAML file stored on the cluster nodes. This file lists
 
 ## Dynamic configuration
 
-Dynamic configuration is a YAML document securely stored in the cluster in a Console [tablet](../../concepts/cluster/common_scheme_ydb.md#tablets). Unlike static configuration, uploading it to the cluster is sufficient, as {{ ydb-short-name }} will handle its distribution and maintenance in a consistent state. Dynamic configuration, using selectors, allows handling complex scenarios while remaining within a single configuration file. A description of the dynamic configuration is provided in the section [{#T}](./dynamic-config.md).
+Dynamic configuration is a YAML document securely stored in the cluster in a Console [tablet](../../concepts/glossary.md#tablet). Unlike static configuration, uploading it to the cluster is sufficient, as {{ ydb-short-name }} will handle its distribution and maintenance in a consistent state. Dynamic configuration, using selectors, allows handling complex scenarios while remaining within a single configuration file. A description of the dynamic configuration is provided in the section [{#T}](./dynamic-config.md).
 
 ![data tab](_assets/config-chart-2.png "static and dynamic configs")
 

@@ -60,6 +60,7 @@ TConclusionStatus TMetadataUpdateAlter::DoInitializeImpl(const TUpdateInitializa
     }
 
     auto properties = IMetadataObjectProperties::Create(Behaviour->GetObjectPathType());
+    properties->CopyFromVerified(originalEntity.GetObjectInfo()->GetProperties());
     if (!properties->ApplyPatch(request.GetProperties())) {
         return TConclusionStatus::Fail("Cannot parse object properties");
     }

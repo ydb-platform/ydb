@@ -62,7 +62,7 @@ public:
     }
 };
 
-class TTieringRule: public NSchemeShard::IMetadataObjectProperties, public NMetadata::NModifications::TObject<TTieringRule> {
+class TTieringRule: public NSchemeShard::TMetadataObjectPropertiesBase<TTieringRule>, public NMetadata::NModifications::TObject<TTieringRule> {
 private:
     YDB_ACCESSOR_DEF(TString, TieringRuleId);
     YDB_ACCESSOR_DEF(TString, DefaultColumn);

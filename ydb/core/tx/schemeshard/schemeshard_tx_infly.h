@@ -141,6 +141,7 @@ struct TTxState {
         item(TxCreateBackupCollection, 95) \
         item(TxDropBackupCollection, 96) \
         item(TxAlterBackupCollection, 97) \
+        item(TxMoveSequence, 98) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -207,6 +208,7 @@ struct TTxState {
         item(SyncHive, 138, "") \
         item(CopyTableBarrier, 139, "") \
         item(ProposedCopySequence, 140, "") \
+        item(ProposedMoveSequence, 141, "") \
         item(Done, 240, "") \
         item(Aborted, 250, "")
 
@@ -437,6 +439,7 @@ struct TTxState {
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
+        case TxMoveSequence:
             return true;
         case TxInvalid:
         case TxAllocatePQ:
@@ -546,6 +549,7 @@ struct TTxState {
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
+        case TxMoveSequence:
             return false;
         case TxInvalid:
         case TxAllocatePQ:
@@ -646,6 +650,7 @@ struct TTxState {
         case TxAlterCdcStreamAtTableDropSnapshot:
         case TxMoveTable:
         case TxMoveTableIndex:
+        case TxMoveSequence:
         case TxAlterSequence:
         case TxAlterReplication:
         case TxAlterBlobDepot:

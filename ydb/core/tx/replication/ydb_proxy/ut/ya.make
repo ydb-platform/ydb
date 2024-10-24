@@ -13,6 +13,7 @@ PEERDIR(
 )
 
 SRCS(
+    partition_end_watcher_ut.cpp
     ydb_proxy_ut.cpp
 )
 

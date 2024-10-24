@@ -19,6 +19,7 @@ struct TEvWorker {
         EvData,
         EvGone,
         EvStatus,
+        EvDataEnd,
 
         EvEnd,
     };
@@ -66,6 +67,15 @@ struct TEvWorker {
         TDuration Lag;
 
         explicit TEvStatus(TDuration lag);
+        TString ToString() const override;
+    };
+
+    struct TEvDataEnd: public TEventLocal<TEvDataEnd, EvDataEnd> {
+        ui64 PartitionId;
+        TVector<ui64> AdjacentPartitionsIds;
+        TVector<ui64> ChildPartitionsIds;
+
+        TEvDataEnd(ui64 partitionId, TVector<ui64>&& adjacentPartitionsIds, TVector<ui64>&& childPartitionsIds);
         TString ToString() const override;
     };
 };

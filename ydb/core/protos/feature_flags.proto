@@ -173,4 +173,5 @@ message TFeatureFlags {
     optional bool EnableTopicAutopartitioningForCDC = 148 [default = false];
     optional bool EnableWritePortionsOnInsert = 149 [default = false];
     optional bool EnableFollowerStats = 150 [default = false];
+    optional bool EnableTopicAutopartitioningForReplication = 151 [default = false];
 }

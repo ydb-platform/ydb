@@ -98,6 +98,7 @@ TTopicSdkTestSetup CreateSetup() {
     ff.SetEnablePQConfigTransactionsAtSchemeShard(true);
     ff.SetEnableTopicServiceTx(true);
     ff.SetEnableTopicAutopartitioningForCDC(true);
+    ff.SetEnableTopicAutopartitioningForReplication(true);
 
     auto settings = TTopicSdkTestSetup::MakeServerSettings();
     settings.SetFeatureFlags(ff);

@@ -75,14 +75,12 @@ target_sources(core-client-server PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_drain_node.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_fill_node.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_hive_create_tablet.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_keyvalue.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_persqueue.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_pq_metacache.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_pq_metarequest.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_pq_read_session_info.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_resolve_node.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_ic_debug.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_local_enumerate_tablets.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_local_minikql.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_local_scheme_tx.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_node_registration.cpp

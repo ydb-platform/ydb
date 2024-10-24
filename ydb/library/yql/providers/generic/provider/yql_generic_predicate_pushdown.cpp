@@ -112,6 +112,8 @@ namespace NYql {
             EXPR_NODE_TO_COMPARE_TYPE(TCoCmpLessOrEqual, LE);
             EXPR_NODE_TO_COMPARE_TYPE(TCoCmpGreater, G);
             EXPR_NODE_TO_COMPARE_TYPE(TCoCmpGreaterOrEqual, GE);
+            EXPR_NODE_TO_COMPARE_TYPE(TCoAggrEqual, IND);
+            EXPR_NODE_TO_COMPARE_TYPE(TCoAggrNotEqual, ID);
 
             if (proto->operation() == TPredicate::TComparison::COMPARISON_OPERATION_UNSPECIFIED) {
                 err << "unknown operation: " << compare.Raw()->Content();
@@ -382,6 +384,12 @@ namespace NYql {
             break;
         case TPredicate_TComparison::G:
             operation = " > ";
+            break;
+        case TPredicate_TComparison::IND:
+            operation = " IS NOT DISTINCT FROM ";
+            break;
+        case TPredicate_TComparison::ID:
+            operation = " IS DISTINCT FROM ";
             break;
         default:
             throw yexception() << "UnimplementedOperation, operation " << static_cast<ui64>(comparison.operation());

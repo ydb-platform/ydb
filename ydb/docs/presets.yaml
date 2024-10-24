@@ -64,3 +64,24 @@ default:
   ydb-finebi: false
   ydb-superset: false
   ydb-datalens: false
+
+#=== YDB default settings ===#
+
+  ydb-ports:
+    grpcs: 2135
+    grpc: 2136
+    interconnect: 19001
+    https: 8765
+    tracing: 4317
+
+#=== JDBC default settings ===#
+
+  third-party-ports:
+    fq: 2130
+    postgresql: 5432
+    mysql: 3306
+    oracle: 1521
+    db2: 5000
+    informix: 9088
+    logstash: 9876
+    kafka: 9093 

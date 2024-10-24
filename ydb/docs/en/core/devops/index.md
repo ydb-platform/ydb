@@ -6,4 +6,4 @@ This section of {{ ydb-short-name }} documentation covers everything you need to
 * **[Kubernetes](kubernetes/index.md)**: for containerized deployments.
 * **[Manual](manual/index.md)**: generic instructions.
 
-Regardless of the chosen infrastructure management method, it is recommended to familiarize yourself with [{{ ydb-short-name }} system requirements](system-requirements.md) first.
+Regardless of the chosen infrastructure management method, it is recommended to familiarize yourself with the [system requirements](system-requirements.md) and the list of main and additional [ports](../reference/ydb-ports.md) for {{ ydb-short-name }} before starting work.

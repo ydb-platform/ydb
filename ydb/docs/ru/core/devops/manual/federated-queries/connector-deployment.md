@@ -112,18 +112,18 @@
     ```bash
     docker run -d \
         --name=fq-connector-go \
-        -p 2130:2130 \
+        -p {{ third-party-ports.fq }}:{{ third-party-ports.fq }} \
         ghcr.io/ydb-platform/fq-connector-go:latest
     ```
 
-    На порту 2130 публичного сетевого интерфейса вашего хоста запустится слушающий сокет GRPC-сервиса коннектора. В дальнейшем сервер {{ ydb-short-name }} должен будет установить соединение именно с этим сетевым адресом.
+    На порту {{ third-party-ports.fq }} публичного сетевого интерфейса вашего хоста запустится слушающий сокет GRPC-сервиса коннектора. В дальнейшем сервер {{ ydb-short-name }} должен будет установить соединение именно с этим сетевым адресом.
 
 1. При необходимости изменения конфигурации подготовьте конфигурационный файл [по образцу](#fq-connector-go-config) и примонтируйте его к контейнеру:
 
     ```bash
     docker run -d \
         --name=fq-connector-go \
-        -p 2130:2130 \
+        -p {{ third-party-ports.fq }}:{{ third-party-ports.fq }} \
         -v /path/to/config.yaml:/opt/ydb/cfg/fq-connector-go.yaml
         ghcr.io/ydb-platform/fq-connector-go:latest
     ```
@@ -143,7 +143,7 @@
     ```bash
     docker run -d \
         --name=fq-connector-go \
-        -p 2130:2130 \
+        -p {{ third-party-ports.fq }}:{{ third-party-ports.fq }} \
         -v /path/to/config.yaml:/opt/ydb/cfg/fq-connector-go.yaml
         -v /path/to/keys/:/opt/ydb/certs/
         ghcr.io/ydb-platform/fq-connector-go:latest

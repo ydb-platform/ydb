@@ -7037,7 +7037,9 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"storage" '"local") '('"tag" '"test"))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"storage" (String '"local")))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"tag" (String '"test"))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('entries '()))#");
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'create"));
             }
         };
@@ -7061,9 +7063,10 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"storage" '"local") '('"tag" '"test"))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"storage" (String '"local")))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"tag" (String '"test"))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('entries '('('('type 'database)))))#");
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'create"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'('type 'database)"));
             }
         };
 
@@ -7089,10 +7092,10 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"storage" '"local") '('"tag" '"test"))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"storage" (String '"local")))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"tag" (String '"test"))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('entries '('('('type 'table) '('path '"someTable")) '('('type 'table) '('path '"prefix/anotherTable")))))#");
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'create"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('('('type 'table) '('path '"someTable")))#"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('('('type 'table) '('path '"prefix/anotherTable")))#"));
             }
         };
 
@@ -7148,7 +7151,8 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alter))#");
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('settings '('('"storage" '"remote") '('"tag1" '"123"))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"storage" (String '"remote")))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"tag1" (String '"123"))))#");
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#('('resetSettings '('"tag2" '"tag3")))#");
             }
         };
@@ -7349,7 +7353,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
-                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("'incremental"));
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("'Incremental"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'backup"));
             }
         };
@@ -7370,8 +7374,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'incremental"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'backup"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'backupIncremental"));
             }
         };
 

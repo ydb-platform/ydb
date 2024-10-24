@@ -835,6 +835,7 @@ namespace {
 
     NTopic::TReadSessionSettings TCommandTopicRead::PrepareReadSessionSettings() {
         NTopic::TReadSessionSettings settings;
+        settings.AutoPartitioningSupport(true);
         settings.ConsumerName(Consumer_);
         // settings.ReadAll(); // TODO(shmel1k@): change to read only original?
         if (Timestamp_.Defined()) {

@@ -359,7 +359,7 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
 TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId, const std::shared_ptr<NOlap::TVersionCounters>& versionCounters)
     : StoragesManager(storagesManager)
     , LoadTimeCounters(std::make_unique<TTableLoadTimeCounters>())
-    , VersionCounters(versionCounts)
+    , VersionCounters(versionCounters)
     , TabletId(tabletId)
 {
 }

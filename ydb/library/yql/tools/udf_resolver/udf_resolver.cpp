@@ -31,6 +31,7 @@
 #include <sys/resource.h>
 #include <sys/syscall.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #ifndef GRND_RANDOM
 #include <sys/random.h>
 #endif
@@ -51,6 +52,23 @@
 # define __SI_PAD_SIZE        ((__SI_MAX_SIZE / sizeof (int)) - 4)
 #else
 # define __SI_PAD_SIZE        ((__SI_MAX_SIZE / sizeof (int)) - 3)
+#endif
+#endif
+
+
+#if !defined(SYS_newfstatat)
+#if defined(__x86_64__)
+    #define SYS_newfstatat 262
+#elif defined(__i386__)
+    #error Unsupported syscall
+#elif defined(__aarch64__)
+    #define SYS_newfstatat 79
+#elif defined(__arm__)
+    #error Unsupported syscall
+#elif defined(__powerpc__)
+    #define SYS_newfstatat 291
+#else
+#error Unsupported platform
 #endif
 #endif
 
@@ -378,6 +396,7 @@ int main(int argc, char **argv) {
                 Allow(munlockall),
                 Allow(munmap),
                 Allow(nanosleep),
+                Allow(newfstatat),
 #ifndef _arm64_
                 Allow(open),
 #endif

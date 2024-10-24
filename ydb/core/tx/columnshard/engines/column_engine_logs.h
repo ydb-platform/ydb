@@ -50,9 +50,6 @@ class TColumnEngineForLogs: public IColumnEngine {
 private:
     bool ActualizationStarted = false;
     const NColumnShard::TEngineLogsCounters SignalCounters;
-    NColumnShard::TLoadTimeSignals PortionsLoadingTimeCounters;
-    NColumnShard::TLoadTimeSignals ColumnsLoadingTimeCounters;
-    NColumnShard::TLoadTimeSignals IndexesLoadingTimeCounters;
     std::shared_ptr<TGranulesStorage> GranulesStorage;
     std::shared_ptr<IStoragesManager> StoragesManager;
 

@@ -29,7 +29,7 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
         auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaMax(*TieringColumnId);
         std::shared_ptr<arrow::Scalar> max;
         if (*TieringColumnId == portionSchema->GetIndexInfo().GetPKColumnIds().front()) {
-            max = portion.GetMeta().GetFirstLastPK().GetFirst().Column(0).GetScalar(0);
+            max = NArrow::TStatusValidator::GetValid(portion.GetMeta().GetFirstLastPK().GetFirst().Column(0).GetScalar(0));
         } else if (indexMeta) {
             NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(NIndexes::TIndexMetaContainer(indexMeta));
             const std::vector<TString> data = portion.GetIndexInplaceDataVerified(indexMeta->GetIndexId());

@@ -1,5 +1,6 @@
 #include "schema.h"
 #include <ydb/core/tx/schemeshard/common/validation.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -76,7 +77,7 @@ static bool ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::
             correct = true;
         } else {
             for (auto&& [_, i] : indexes.GetIndexes()) {
-                auto meta = std::dynamic_pointer_cast<NKikimr::NOlap::NIndexes::NMax::TIndexMeta>i.GetIndexMeta();
+                auto meta = i.GetIndexMeta().GetObjectPtrOptionalAs<NOlap::NIndexes::NMax::TIndexMeta>();
                 if (!meta) {
                     continue;
                 } else if (meta->GetColumnId() == column->GetId()) {
@@ -104,7 +105,7 @@ bool TOlapSchema::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycl
                 errors.AddError("Incorrect ttl column - not found in scheme");
                 return false;
             }
-            return ValidateColumnTableTtl(ttl.GetEnabled(), {}, Indexes, Columns.GetColumns(), Columns.GetColumnsByName(), errors);
+            return ValidateColumnTableTtl(ttl.GetEnabled(), Indexes, {}, Columns.GetColumns(), Columns.GetColumnsByName(), errors);
         }
         case TTtlProto::kDisabled:
         default:

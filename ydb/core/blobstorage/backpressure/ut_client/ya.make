@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/common
     ydb/core/tx/scheme_board
     ydb/library/yql/public/udf/service/stub
+    ydb/core/util/actorsys_test
 )
 
 YQL_LAST_ABI_VERSION()

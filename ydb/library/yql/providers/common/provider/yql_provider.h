@@ -129,6 +129,17 @@ struct TWriteObjectSettings {
     }
 };
 
+struct TWriteBackupCollectionSettings {
+    NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
+    NNodes::TMaybeNode<NNodes::TCoBackupCollectionEntryList> Entries;
+    NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> BackupCollectionSettings;
+    NNodes::TCoNameValueTupleList Other;
+
+    TWriteBackupCollectionSettings(const NNodes::TCoNameValueTupleList& other)
+        : Other(other)
+    {}
+};
+
 struct TCommitSettings
 {
     TPositionHandle Pos;
@@ -170,6 +181,8 @@ TWriteReplicationSettings ParseWriteReplicationSettings(NNodes::TExprList node, 
 
 TWriteRoleSettings ParseWriteRoleSettings(NNodes::TExprList node, TExprContext& ctx);
 TWriteObjectSettings ParseWriteObjectSettings(NNodes::TExprList node, TExprContext& ctx);
+
+TWriteBackupCollectionSettings ParseWriteBackupCollectionSettings(NNodes::TExprList node, TExprContext& ctx);
 
 TWritePermissionSettings ParseWritePermissionsSettings(NNodes::TExprList node, TExprContext& ctx);
 

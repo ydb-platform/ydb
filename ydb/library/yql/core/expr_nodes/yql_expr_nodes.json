@@ -2593,6 +2593,19 @@
             "Children": [
                 {"Index": 0, "Name": "Predicate", "Type": "TExprBase"}
             ]
+        },
+        {
+            "Name": "TCoBackupCollectionEntry",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple"},
+            "Children": [
+                {"Index": 0, "Name": "Type", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Path", "Type": "TCoAtom", "Optional": true}
+            ]
+        },
+        {
+            "Name": "TCoBackupCollectionEntryList",
+            "ListBase": "TCoBackupCollectionEntry"
         }
     ]
 }

@@ -251,7 +251,11 @@ public:
     }
 
     bool CanTakeMore() const {
-        return MemoryUsage < (((ui64)512) << 20) && Portions.size() < 10000;
+        if (Portions.size() <= 1) {
+            return true;
+        }
+        return MemoryUsage < (((ui64)512) << 20) && CurrentLevelPortionsInfo.GetChunksCount() + TargetLevelPortionsInfo.GetChunksCount() < 100000
+            && Portions.size() < 10000;
     }
 
     TCompactionTaskData(const ui64 targetCompactionLevel)

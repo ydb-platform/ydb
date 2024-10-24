@@ -52,13 +52,21 @@ public:
             if (tablet->IsLeader()) {
                 TLeaderTabletInfo& leader = tablet->AsLeader();
                 if (leader.IsStartingOnNode(Local.NodeId()) || leader.IsBootingSuppressed() && External) {
-                    if (!leader.DeletedHistory.empty()) {
+                    if (leader.HasDeletedHistory()) {
                         if (!leader.WasAliveSinceCutHistory) {
-                            BLOG_ERROR("THive::TTxStartTablet::Execute Tablet " << TabletId << " failed to start after cutting history - will restore history");
-                            Self->TabletCounters->Cumulative()[NHive::COUNTER_HISTORY_RESTORED].Increment(leader.DeletedHistory.size());
-                            Self->UpdateCounterTabletChannelHistorySize();
-                            leader.RestoreDeletedHistory(txc);
+                            for (ui32 channel = 0; channel < leader.DeletedHistory.size(); ++channel) {
+                                if (!leader.DeletedHistory[channel].empty()) {
+                                    BLOG_ERROR("THive::TTxStartTablet::Execute Tablet " << TabletId << " failed to start after cutting history - will restore history for channel " << channel);
+                                    Self->TabletCounters->Cumulative()[NHive::COUNTER_HISTORY_RESTORED].Increment(leader.DeletedHistory[channel].size());
+                                    auto& histogram = Self->TabletCounters->Percentile()[NHive::COUNTER_TABLET_CHANNEL_HISTORY_SIZE];
+                                    const auto& channelInfo = leader.TabletStorageInfo->Channels[channel];
+                                    histogram.DecrementFor(channelInfo.History.size());
+                                    leader.RestoreDeletedHistory(txc, channel);
+                                    histogram.IncrementFor(channelInfo.History.size());
+                                }
+                            }
                         } else {
+                            BLOG_W("Hive::TTxStartTablet::Execute, this is the start after cutting history");
                             leader.WasAliveSinceCutHistory = false;
                         }
                     }

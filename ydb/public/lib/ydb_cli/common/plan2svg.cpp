@@ -451,7 +451,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
 
                 TStringBuilder builder;
 
-                if (name == "Iterator" || name == "Member") {
+                if (name == "Iterator" || name == "Member" || name == "ToFlow") {
                     builder << "Reference";
                 } else {
                     builder << name;
@@ -461,11 +461,25 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     if (auto* limitNode = subNode.GetValueByPath("Limit")) {
                         builder << ": " << limitNode->GetStringSafe();
                     }
+                } else if (name == "Sort") {
+                    if (auto* sortByNode = subNode.GetValueByPath("SortBy")) {
+                        auto sortBy = sortByNode->GetStringSafe();
+                        while (true) {
+                            auto p = sortBy.find("row.");
+                            if (p == sortBy.npos) {
+                                break;
+                            }
+                            sortBy.erase(p, 4);
+                        }
+                        if (sortBy) {
+                            builder << " by " << sortBy;
+                        }
+                    }
                 } else if (name == "Filter") {
                     if (auto* predicateNode = subNode.GetValueByPath("Predicate")) {
                         auto filter = predicateNode->GetStringSafe();
                         prevFilter = filter;
-                        while(true) {
+                        while (true) {
                             auto p = filter.find("item.");
                             if (p == filter.npos) {
                                 break;
@@ -482,14 +496,110 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         }
                         builder << ": " << filter;
                     }
-                } else if (name == "TopSort") {
+                } else if (name == "Aggregate") {
+                    if (auto* aggregationNode = subNode.GetValueByPath("Aggregation")) {
+                        auto aggr = aggregationNode->GetStringSafe();
+                        if (aggr) {
+                            if (aggr.StartsWith("{")) {
+                                aggr.erase(aggr.begin());
+                            }
+                            if (aggr.EndsWith("}")) {
+                                aggr.erase(aggr.end() - 1);
+                            }
+                            while (true) {
+                                auto p = aggr.find("_yql_agg_");
+                                if (p == aggr.npos) {
+                                    break;
+                                }
+                                auto l = 9;
+                                auto p1 = aggr.begin() + p + l;
+                                while (p1 != aggr.end() && *p1 >= '0' && *p1 <= '9') {
+                                    p1++;
+                                    l++;
+                                }
+                                auto yqlAgg = aggr.substr(p, l);
+                                if (p1 != aggr.end() && *p1 == ':') {
+                                    p1++;
+                                    l++;
+                                    if (p1 != aggr.end() && *p1 == ' ') {
+                                        p1++;
+                                        l++;
+                                    }
+                                }
+                                aggr.erase(p, l);
+
+                                auto extraChars = 7;
+                                p = aggr.find(",state." + yqlAgg);
+                                if (p == aggr.npos) {
+                                    p = aggr.find("state." + yqlAgg + ",");
+                                }
+                                if (p == aggr.npos) {
+                                    p = aggr.find("state." + yqlAgg);
+                                    extraChars = 6;
+                                }
+                                if (p != aggr.npos) {
+                                    aggr.erase(p, yqlAgg.size() + extraChars);
+                                }
+                            }
+                            while (true) {
+                                auto p = aggr.find("item.");
+                                if (p == aggr.npos) {
+                                    break;
+                                }
+                                aggr.erase(p, 5);
+                            }
+                            builder << " " << aggr;
+                        }
+                    }
+                    if (auto* groupByNode = subNode.GetValueByPath("GroupBy")) {
+                        auto groupBy = groupByNode->GetStringSafe();
+                        while (true) {
+                            auto p = groupBy.find("item.");
+                            if (p == groupBy.npos) {
+                                break;
+                            }
+                            groupBy.erase(p, 5);
+                        }
+                        if (groupBy) {
+                            builder << ", Group By: " << groupBy;
+                        }
+                    }
+                } else if (name == "TableFullScan") {
+                    if (auto* tableNode = subNode.GetValueByPath("Table")) {
+                        auto table = tableNode->GetStringSafe();
+                        auto n = table.find_last_of('/');
+                        if (n != table.npos) {
+                            table = table.substr(n + 1);
+                        }
+                        builder << " " << table;
+                    }
+                    builder << "(";
+                    if (auto* readColumnsNode = subNode.GetValueByPath("ReadColumns")) {
+                        bool firstColumn = true;
+                        for (const auto& subNode : readColumnsNode->GetArray()) {
+                            if (firstColumn) {
+                                firstColumn = false;
+                            } else {
+                                builder << ", ";
+                            }
+                            builder << subNode.GetStringSafe();
+                        }
+                    }
+                    builder << ")";
+                } else if (name == "TopSort" || name == "Top") {
                     if (auto* limitNode = subNode.GetValueByPath("Limit")) {
-                        builder << ", Limit: " << limitNode->GetStringSafe();
+                        auto limit = limitNode->GetStringSafe();
+                        if (limit) {
+                            builder << ", Limit: " << limit;
+                        }
                     }
                     if (auto* topSortByNode = subNode.GetValueByPath("TopSortBy")) {
-                        builder << ", TopSortBy: " << topSortByNode->GetStringSafe();
+                        auto topSortBy = topSortByNode->GetStringSafe();
+                        if (topSortBy) {
+                            builder << ", TopSortBy: " << topSortBy;
+                        }
                     }
-                } else if (name == "Iterator" || name == "Member") {
+                } else if (name == "Iterator" || name == "Member" || name == "ToFlow") {
                     if (auto* referenceNode = subNode.GetValueByPath(name)) {
                         auto referenceName = referenceNode->GetStringSafe();
                         references.insert(referenceName);
@@ -640,6 +750,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
             }
             if (planNodeType == "Connection") {
                 auto* keyColumnsNode = plan.GetValueByPath("KeyColumns");
+                auto* sortColumnsNode = plan.GetValueByPath("SortColumns");
                 if (auto* subNode = plan.GetValueByPath("Plans")) {
                     for (auto& plan : subNode->GetArray()) {
                         TString nodeType;
@@ -657,6 +768,11 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         if (keyColumnsNode) {
                             for (auto& keyColumn : keyColumnsNode->GetArray()) {
                                 stage->Connections.back()->KeyColumns.push_back(keyColumn.GetStringSafe());
+                            }
+                        }
+                        if (sortColumnsNode) {
+                            for (auto& sortColumn : sortColumnsNode->GetArray()) {
+                                stage->Connections.back()->SortColumns.push_back(sortColumn.GetStringSafe());
                             }
                         }
 
@@ -758,8 +874,9 @@ void TPlan::LoadSource(std::shared_ptr<TSource> source, const NJson::TJsonValue&
                 builder << " " << sourceTypeNode->GetStringSafe();
             }
             if (auto* nameNode = subNode.GetValueByPath("Name")) {
-                builder << " " << nameNode->GetStringSafe() << "(";
+                builder << " " << nameNode->GetStringSafe();
             }
+            builder << "(";
             if (auto* readColumnsNode = subNode.GetValueByPath("ReadColumns")) {
                 bool firstColumn = true;
                 for (const auto& subNode : readColumnsNode->GetArray()) {
@@ -1038,8 +1155,9 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
             if (!s->Info.empty()) {
                 for (auto text : s->Info) {
                     canvas
+                        << "<g><title>" << text << "</title>"
                         << "<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText << "' x='" << s->IndentX + INTERNAL_WIDTH + 2
-                        << "' y='" << y0 << "'>" << text << "</text>" << Endl;
+                        << "' y='" << y0 << "'>" << text << "</text>" << "</g>" << Endl;
                     y0 += (INTERNAL_TEXT_HEIGHT + INTERNAL_GAP_Y);
                 }
             } else {
@@ -1293,6 +1411,18 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
                         canvas << ", ";
                     }
                     canvas << k;
+                }
+            }
+            if (!c->SortColumns.empty()) {
+                canvas << " SortColumns: ";
+                bool first = true;
+                for (auto s : c->SortColumns) {
+                    if (first) {
+                        first = false;
+                    } else {
+                        canvas << ", ";
+                    }
+                    canvas << s;
                 }
             }
             canvas

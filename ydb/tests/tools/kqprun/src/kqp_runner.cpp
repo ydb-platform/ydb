@@ -322,7 +322,7 @@ private:
 
             try {
                 double cpuUsage = 0.0;
-                auto fullStat = StatProcessor_->GetQueryStat(convertedPlan, cpuUsage, nullptr, 0);
+                auto fullStat = StatProcessor_->GetQueryStat(convertedPlan, cpuUsage, nullptr);
                 auto flatStat = StatProcessor_->GetFlatStat(convertedPlan);
                 auto publicStat = StatProcessor_->GetPublicStat(fullStat);
 

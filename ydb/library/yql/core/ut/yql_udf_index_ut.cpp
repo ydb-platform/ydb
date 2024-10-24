@@ -386,12 +386,12 @@ Y_UNIT_TEST_SUITE(TUdfIndexTests) {
         index1->RegisterResource(b.Build(), TUdfIndex::EOverrideMode::RaiseError);
 
         auto checkIndex = [&](auto index) {
-            UNIT_ASSERT_EQUAL(index1->ContainsModule("M1"), TUdfIndex::EStatus::Found);
-            UNIT_ASSERT_EQUAL(index1->ContainsModule("m1"), TUdfIndex::EStatus::Found);
-            UNIT_ASSERT_EQUAL(index1->ContainsModule("mx"), TUdfIndex::EStatus::Found);
-            UNIT_ASSERT_EQUAL(index1->ContainsModule("MX"), TUdfIndex::EStatus::Found);
-            UNIT_ASSERT_EQUAL(index1->ContainsModule("mX"), TUdfIndex::EStatus::Ambigious);
-            UNIT_ASSERT_EQUAL(index1->ContainsModule("M3"), TUdfIndex::EStatus::NotFound);
+            UNIT_ASSERT_EQUAL(index->ContainsModule("M1"), TUdfIndex::EStatus::Found);
+            UNIT_ASSERT_EQUAL(index->ContainsModule("m1"), TUdfIndex::EStatus::Found);
+            UNIT_ASSERT_EQUAL(index->ContainsModule("mx"), TUdfIndex::EStatus::Found);
+            UNIT_ASSERT_EQUAL(index->ContainsModule("MX"), TUdfIndex::EStatus::Found);
+            UNIT_ASSERT_EQUAL(index->ContainsModule("mX"), TUdfIndex::EStatus::Ambigious);
+            UNIT_ASSERT_EQUAL(index->ContainsModule("M3"), TUdfIndex::EStatus::NotFound);
 
             UNIT_ASSERT(index->FindResourceByModule("M3") == nullptr);
             auto resource1 = index->FindResourceByModule("m1");

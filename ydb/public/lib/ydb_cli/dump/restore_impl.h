@@ -47,16 +47,16 @@ class TRestoreClient {
     TRestoreResult RestorePermissions(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const THashSet<TString>& oldEntries);
 
 public:
-    explicit TRestoreClient(const TDriver& driver, TLog& log);
+    explicit TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog>& log);
 
     TRestoreResult Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings = {});
 
 private:
-    TLog& Log;
     NImport::TImportClient ImportClient;
     NOperation::TOperationClient OperationClient;
     NScheme::TSchemeClient SchemeClient;
     NTable::TTableClient TableClient;
+    std::shared_ptr<TLog> Log;
 
 }; // TRestoreClient
 

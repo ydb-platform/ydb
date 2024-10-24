@@ -34,7 +34,7 @@ public:
     }
 
     TRestoreResult Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings) {
-        auto client = TRestoreClient(Driver, *Log);
+        auto client = TRestoreClient(Driver, Log);
         return client.Restore(fsPath, dbPath, settings);
     }
 

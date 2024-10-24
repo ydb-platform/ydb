@@ -140,7 +140,7 @@ public:
         StopSeparation = point;
     }
 
-    std::vector<std::shared_ptr<TPortionInfo>> GetRepackPortions(const ui32 levelIdx) const {
+    std::vector<std::shared_ptr<TPortionInfo>> GetRepackPortions(const ui32 /*levelIdx*/) const {
         std::vector<std::shared_ptr<TPortionInfo>> result;
         if (MemoryUsage > ((ui64)1 << 30)) {
             auto predictor = NCompaction::TGeneralCompactColumnEngineChanges::BuildMemoryPredictor();
@@ -154,7 +154,7 @@ public:
                 }
             }
             return result;
-        } else if (levelIdx == 0) {
+        } else {
             return Portions;
         }
         auto moveIds = GetMovePortionIds();

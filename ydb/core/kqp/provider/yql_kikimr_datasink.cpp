@@ -79,6 +79,16 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleAnalyze(TKiAnalyzeTable node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+
+        auto cluster = node.DataSink().Cluster();
+        auto table = node.Table();
+
+        SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table));
+        return TStatus::Ok;
+    }
+
     TStatus HandleCreateTopic(TKiCreateTopic node, TExprContext& ctx) override {
         Y_UNUSED(ctx);
         Y_UNUSED(node);
@@ -273,6 +283,9 @@ private:
                         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Filter option is required for table delete."));
                         return TStatus::Error;
                     }
+                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
+                    return TStatus::Ok;
+                } else if (mode == "analyze") {
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
                 } else {
@@ -546,6 +559,10 @@ public:
         }
 
         if(node.IsCallable(TPgDropObject::CallableName())) {
+            return true;
+        }
+
+        if (node.IsCallable(TKiAnalyzeTable::CallableName())) {
             return true;
         }
 
@@ -864,9 +881,14 @@ public:
             return false;
         }
 
-        if (tableDesc.Metadata->Kind == EKikimrTableKind::Olap && mode != "replace" && mode != "drop" && mode != "drop_if_exists" && mode != "insert_abort" && mode != "update" && mode != "upsert" && mode != "delete" && mode != "update_on" && mode != "delete_on") {
+        if (tableDesc.Metadata->Kind == EKikimrTableKind::Olap && mode != "replace" && mode != "drop" && mode != "drop_if_exists" && mode != "insert_abort" && mode != "update" && mode != "upsert" && mode != "delete" && mode != "update_on" && mode != "delete_on" && mode != "analyze") {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Write mode '" << static_cast<TStringBuf>(mode) << "' is not supported for olap tables."));
             return true;
+        }
+
+        if (tableDesc.Metadata->Kind == EKikimrTableKind::Datashard && mode == "analyze") {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << static_cast<TStringBuf>(mode) << " is not supported for oltp tables."));
+            return true; 
         }
 
         return false;
@@ -997,6 +1019,20 @@ public:
                             .Done()
                             .Ptr();
                     }
+                } else if (mode == "analyze") {
+                    auto columns = Build<TCoAtomList>(ctx, node->Pos());
+
+                    for (const auto& column: settings.Columns.Cast().Ptr()->Children()) {
+                        columns.Add(column);
+                    }
+
+                    return Build<TKiAnalyzeTable>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Table().Build(key.GetTablePath())
+                        .Columns(columns.Done())
+                        .Done()
+                        .Ptr();
                 } else {
                     return Build<TKiWriteTable>(ctx, node->Pos())
                         .World(node->Child(0))
@@ -1575,6 +1611,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = callable.Maybe<TKiAlterSequence>()) {
         return HandleAlterSequence(node.Cast(), ctx);
+    }
+
+    if (auto node = callable.Maybe<TKiAnalyzeTable>()) {
+        return HandleAnalyze(node.Cast(), ctx);
     }
 
     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSink) Unsupported function: "

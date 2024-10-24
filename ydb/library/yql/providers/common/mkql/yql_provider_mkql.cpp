@@ -1704,13 +1704,6 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
         const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
 
-        // TODO: use PRAGMA
-        bool IsSpillingAllowed = false;
-        if (RuntimeVersion >= 50U && IsSpillingAllowed) {
-            return selfJoin
-                ? ctx.ProgramBuilder.GraceSelfJoinWithSpilling(flowLeft, joinKind, leftKeyColumns, rightKeyColumns, leftRenames, rightRenames, returnType, anyJoinSettings)
-                : ctx.ProgramBuilder.GraceJoinWithSpilling(flowLeft, flowRight, joinKind, leftKeyColumns, rightKeyColumns, leftRenames, rightRenames, returnType, anyJoinSettings);
-        }
         return selfJoin
             ? ctx.ProgramBuilder.GraceSelfJoin(flowLeft, joinKind, leftKeyColumns, rightKeyColumns, leftRenames, rightRenames, returnType, anyJoinSettings)
             : ctx.ProgramBuilder.GraceJoin(flowLeft, flowRight, joinKind, leftKeyColumns, rightKeyColumns, leftRenames, rightRenames, returnType, anyJoinSettings);

@@ -66,6 +66,10 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
         if (descr.HasServerlessComputeResourcesMode()) {
             ServerlessComputeResourcesMode = descr.GetServerlessComputeResourcesMode();
         }
+
+        if (descr.HasSharedHive()) {
+            SharedHiveId = descr.GetSharedHive();
+        }
     }
 
     inline ui64 GetVersion() const {
@@ -80,6 +84,14 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
         }
     }
 
+    inline ui64 ExtractHive() const {
+        if (IsServerless()) {
+            return SharedHiveId;
+        } else {
+            return Params.GetHive();
+        }
+    }
+
     inline bool IsServerless() const {
         return DomainKey != ResourcesDomainKey;
     }
@@ -89,6 +101,7 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
     NKikimrSubDomains::TProcessingParams Params;
     TCoordinators Coordinators;
     TMaybeServerlessComputeResourcesMode ServerlessComputeResourcesMode;
+    ui64 SharedHiveId = 0;
 
     TString ToString() const;
 

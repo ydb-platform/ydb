@@ -262,6 +262,7 @@ PEERDIR(
     ydb/core/persqueue/events
     ydb/core/persqueue/writer
     ydb/core/protos
+    ydb/core/resource_pools
     ydb/core/scheme
     ydb/core/statistics
     ydb/core/sys_view/partition_stats

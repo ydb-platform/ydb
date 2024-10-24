@@ -86,5 +86,4 @@ namespace NActors {
         bool Stopped = false;
     };
 
-
 } // namespace NActors

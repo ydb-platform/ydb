@@ -28,11 +28,11 @@ public:
     }
 
     void UpdatePendingCommittedOffset(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
-        if (auto count = event.GetMessagesCount()) {
+        if (event.GetMessagesCount()) {
             if (event.HasCompressedMessages()) {
-                PendingCommittedOffset = event.GetCompressedMessages()[count - 1].GetOffset();
+                PendingCommittedOffset = event.GetCompressedMessages().back().GetOffset();
             } else {
-                PendingCommittedOffset = event.GetMessages()[count - 1].GetOffset();
+                PendingCommittedOffset = event.GetMessages().back().GetOffset();
             }
         }
     }

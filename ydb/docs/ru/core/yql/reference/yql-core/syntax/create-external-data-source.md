@@ -85,12 +85,12 @@ CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
 
 ### Пример
 
-Запрос ниже создает внешний источник с именем `TestDataSource`, ведущий на кластер PostgreSQL c IP-адресом `192.168.1.2` и портом `5432`, логином `admin` и именем секрета `test_secret`:
+Запрос ниже создает внешний источник с именем `TestDataSource`, ведущий на кластер PostgreSQL c IP-адресом `192.168.1.2` и портом `{{ jdbc-ports.postgresql }}`, логином `admin` и именем секрета `test_secret`:
 
 ```yql
 CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
   SOURCE_TYPE="PostgreSQL",
-  LOCATION="192.168.1.1:5432",
+  LOCATION="192.168.1.1:{{ jdbc-ports.postgresql }}",
   USE_TLS="TRUE",
   AUTH_METHOD="BASIC",
   LOGIN="admin",

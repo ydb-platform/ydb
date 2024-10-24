@@ -139,13 +139,13 @@ ALTER DATABASE dbname SET lo_compat_privileges TO on;
         -->
         <jdbc-class>driver-class-name</jdbc-class>
         <!-- URL JDBC для подключения к источнику. Примеры значений:
-              jdbc:postgresql://hostname:5432/dbname
-              jdbc:mysql://hostname:3306/dbname
-              jdbc:mariadb://hostname:3306/dbname
-              jdbc:oracle:thin:@//hostname:1521/serviceName
+              jdbc:postgresql://hostname:{{ jdbc-ports.postgresql }}/dbname
+              jdbc:mysql://hostname:{{ jdbc-ports.mysql }}/dbname
+              jdbc:mariadb://hostname:{{ jdbc-ports.mysql }}/dbname
+              jdbc:oracle:thin:@//hostname:{{ jdbc-ports.oracle }}/serviceName
               jdbc:sqlserver://localhost;encrypt=true;trustServerCertificate=true;database=AdventureWorks2022;
-              jdbc:db2://localhost:50000/SAMPLE
-              jdbc:informix-sqli://localhost:9088/stores_demo:INFORMIXSERVER=informix
+              jdbc:db2://localhost:{{ jdbc-ports.db2 }}/SAMPLE
+              jdbc:informix-sqli://localhost:{{ jdbc-ports.informix-sqli }}/stores_demo:INFORMIXSERVER=informix
         -->
         <jdbc-url>jdbc-url</jdbc-url>
         <username>username</username>
@@ -159,9 +159,9 @@ ALTER DATABASE dbname SET lo_compat_privileges TO on;
              таблиц.  -->
         <script-file>sample-database.yql.tmp</script-file>
         <!-- Строка подключения: protocol + endpoint + database. Примеры значений:
-            grpcs://ydb.serverless.yandexcloud.net:2135?database=/ru-central1/b1gfvslmokutuvt2g019/etn63999hrinbapmef6g
-            grpcs://localhost:2135?database=/local
-            grpc://localhost:2136?database=/Root/testdb
+            grpcs://ydb.serverless.yandexcloud.net:{{ ydb-ports.grpcs }}?database=/ru-central1/b1gfvslmokutuvt2g019/etn63999hrinbapmef6g
+            grpcs://localhost:{{ ydb-ports.grpcs }}?database=/local
+            grpc://localhost:{{ ydb-ports.grpc }}?database=/Root/testdb
          -->
         <connection-string>ydb-connection-string</connection-string>
         <!-- Режим аутентификации:

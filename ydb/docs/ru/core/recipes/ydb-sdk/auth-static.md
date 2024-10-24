@@ -27,7 +27,7 @@
   Передать логин и пароль можно в составе строки подключения. Например, так:
 
   ```shell
-  "grpcs://login:password@localohost:2135/local"
+  "grpcs://login:password@localohost:{{ ydb-ports.grpcs }}/local"
   ```
 
   Также можно передать логин и пароль явно через опцию `ydb.WithStaticCredentials`:
@@ -81,7 +81,7 @@
   using Ydb.Sdk;
   using Ydb.Sdk.Auth;
 
-  const string endpoint = "grpc://localhost:2136";
+  const string endpoint = "grpc://localhost:{{ ydb-ports.grpc }}";
   const string database = "/local";
 
   var config = new DriverConfig(
@@ -107,7 +107,7 @@
       'database'    => '/local',
 
       // Database endpoint
-      'endpoint'    => 'localhost:2136',
+      'endpoint'    => 'localhost:{{ ydb-ports.grpc }}',
 
       // Auto discovery (dedicated server only)
       'discovery'   => false,

@@ -31,10 +31,11 @@ public:
     }
 
     std::set<ui64> GetShardIdsSet() const {
-        return std::set<ui64>(Description.GetSharding().GetColumnShards().begin(), Description.GetSharding().GetColumnShards().end());
+        const auto& shards = Description.GetSharding().GetColumnShards();
+        return {shards.begin(), shards.end()};
     }
 
-    const auto& GetColumnShards() const {
+    const NProtoBuf::RepeatedField<ui64>& GetColumnShards() const {
         return Description.GetSharding().GetColumnShards();
     }
 

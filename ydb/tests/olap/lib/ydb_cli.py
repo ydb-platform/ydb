@@ -60,7 +60,8 @@ class YdbCliHelper:
                      query_num: int,
                      iterations: int,
                      timeout: float,
-                     check_canonical: bool):
+                     check_canonical: bool,
+                     pg_syntax: bool):
             def _get_output_path(ext: str) -> str:
                 return yatest.common.test_output_path(f'q{query_num}.{ext}')
 
@@ -71,6 +72,7 @@ class YdbCliHelper:
             self.iterations = iterations
             self.timeout = timeout
             self.check_canonical = check_canonical
+            self.pg_syntax = pg_syntax
             self._nodes_info: dict[str, dict[str, int]] = {}
             self._plan_path = _get_output_path('plan')
             self._query_output_path = _get_output_path('out')
@@ -194,6 +196,8 @@ class YdbCliHelper:
                 cmd += ['--query-settings', query_preffix]
             if self.check_canonical:
                 cmd.append('--check-canonical')
+            if self.pg_syntax:
+                cmd.append('--pg-syntax')
             return cmd
 
         def _exec_cli(self) -> None:
@@ -222,5 +226,5 @@ class YdbCliHelper:
 
     @staticmethod
     def workload_run(workload_type: WorkloadType, path: str, query_num: int, iterations: int = 5,
-                     timeout: float = 100., check_canonical: bool = False) -> YdbCliHelper.WorkloadRunResult:
-        return YdbCliHelper.WorkloadProcessor(workload_type, path, query_num, iterations, timeout, check_canonical).process()
+                     timeout: float = 100., check_canonical: bool = False, pg_syntax: bool = False) -> YdbCliHelper.WorkloadRunResult:
+        return YdbCliHelper.WorkloadProcessor(workload_type, path, query_num, iterations, timeout, check_canonical, pg_syntax).process()

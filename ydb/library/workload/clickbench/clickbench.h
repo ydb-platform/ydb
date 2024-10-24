@@ -19,6 +19,7 @@ public:
     YDB_READONLY_DEF(TFsPath, ExternalQueriesDir);
     YDB_READONLY_DEF(TFsPath, DataFiles);
     YDB_READONLY_FLAG(CheckCanonical, false);
+    YDB_READONLY_FLAG(PgSyntax, false);
 };
 
 class TClickbenchWorkloadGenerator final: public TWorkloadGeneratorBase {

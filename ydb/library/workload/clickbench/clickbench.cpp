@@ -82,7 +82,12 @@ TQueryInfoList TClickbenchWorkloadGenerator::GetWorkload(int type) {
             queries.emplace_back(fInput.ReadAll());
         }
     } else {
-        const auto resourceName = Params.IsCheckCanonical() ? "queries-deterministic.sql" : "click_bench_queries.sql";
+        TString resourceName = "click_bench_queries.sql";
+        if (Params.IsPgSyntax()) {
+            resourceName = "click_bench_queries_pg.sql";
+        } else if (Params.IsCheckCanonical()) {
+            resourceName = "queries-deterministic.sql";
+        }
         queries = StringSplitter(NResource::Find(resourceName)).Split(';').ToList<TString>();
     }
     auto strVariables = StringSplitter(Params.GetExternalVariablesString()).Split(';').SkipEmpty().ToList<TString>();
@@ -92,14 +97,18 @@ TQueryInfoList TClickbenchWorkloadGenerator::GetWorkload(int type) {
         Y_ABORT_UNLESS(v.DeserializeFromString(i));
         vars.emplace_back(v);
     }
-    vars.emplace_back("table", "`" + Params.GetPath() + "`");
+    TString quote = Params.IsPgSyntax() ? "\"" : "`";
+    vars.emplace_back("table", quote + Params.GetPath() + quote);
     ui32 resultsUsage = 0;
     for (ui32 i = 0; i < queries.size(); ++i) {
         auto& query = queries[i];
+        if (Params.IsPgSyntax()) {
+            query = "--!syntax_pg\n" + query;
+        }
         for (auto&& v : vars) {
             SubstGlobal(query, "{" + v.GetId() + "}", v.GetValue());
         }
-        SubstGlobal(query, "$data", "`" + Params.GetPath() + "`");
+        SubstGlobal(query, "$data", quote + Params.GetPath() + quote);
         result.emplace_back();
         result.back().Query = query;
         if (const auto* res = MapFindPtr(qResults, i)) {
@@ -164,6 +173,8 @@ void TClickbenchWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EC
             .StoreResult(&ExternalQueries);
         opts.AddLongOption('c', "check-canonical", "Use deterministic queries and check results with canonical ones.")
             .NoArgument().StoreTrue(&CheckCanonicalFlag);
+        opts.AddLongOption( "pg-syntax", "Use postgree syntax in queries instead YQL one.")
+            .NoArgument().StoreTrue(&PgSyntaxFlag);
         break;
     default:
         break;

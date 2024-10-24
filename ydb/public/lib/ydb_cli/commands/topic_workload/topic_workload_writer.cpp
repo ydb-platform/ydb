@@ -137,10 +137,10 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
                 TxSupport->BeginTx();
             }
             if (TxSupport) {
-                transaction.emplace(*TxSupport->Transaction);
+                transaction = *TxSupport->Transaction;
             }
 
-            producer.Send(createTimestamp, *transaction);
+            producer.Send(createTimestamp, transaction);
 
             if (TxSupport) {
                 TxSupport->AppendRow("");

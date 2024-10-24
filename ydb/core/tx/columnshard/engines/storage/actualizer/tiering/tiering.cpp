@@ -28,16 +28,16 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
         AFL_VERIFY(TieringColumnId);
         auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaMax(*TieringColumnId);
         std::shared_ptr<arrow::Scalar> max;
-        if (!indexMeta) {
-            max = portion.MaxValue(*TieringColumnId);
-            if (!max) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "scalar_less_not_max");
-                return {};
-            }
-        } else {
+        if (indexMeta) {
             NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(NIndexes::TIndexMetaContainer(indexMeta));
             const std::vector<TString> data = portion.GetIndexInplaceDataVerified(indexMeta->GetIndexId());
             max = indexMeta->GetMaxScalarVerified(data, portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type());
+        } else if (*TieringColumnId == portionSchema->GetIndexInfo().GetPKColumnIds().front()) {
+            NYDBTest::TControllers::GetColumnShardController()->OnMaxValueUsage();
+            max = NArrow::TStatusValidator::GetValid(portion.GetMeta().GetFirstLastPK().GetFirst().Column(0).GetScalar(0));
+        } else {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "no data for ttl usage (need to create index or use first pk column)");
+            return {};
         }
         auto tieringInfo = Tiering->GetTierToMove(max, now);
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("tiering_info", tieringInfo.DebugString());

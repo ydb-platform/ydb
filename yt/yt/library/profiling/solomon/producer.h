@@ -82,14 +82,14 @@ public:
 
     void Collect(IRegistryImplPtr profiler, IInvokerPtr invoker);
 
-    void Profile(const TProfiler& profiler);
+    void Profile(const TWeakProfiler& profiler);
 
     void SetCollectionBatchSize(int batchSize);
 
 private:
     THashSet<TProducerStatePtr> Producers_;
 
-    TProfiler SelfProfiler_;
+    TWeakProfiler SelfProfiler_;
     TEventTimer ProducerCollectDuration_;
 
     int BatchSize_ = DefaultProducerCollectionBatchSize;

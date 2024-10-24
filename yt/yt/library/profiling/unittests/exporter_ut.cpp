@@ -42,6 +42,19 @@ TEST(TSolomonExporter, MemoryLeak)
     exporter->Stop();
 }
 
+TEST(TSolomonExporter, MemoryLeakWithSelfProfiling)
+{
+    auto registry = New<TSolomonRegistry>();
+    auto counter = TProfiler{registry, "yt"}.Counter("/foo");
+
+    auto config = New<TSolomonExporterConfig>();
+    config->GridStep = TDuration::Seconds(1);
+    config->EnableCoreProfilingCompatibility = true;
+    config->EnableSelfProfiling = true;
+
+    auto exporter = New<TSolomonExporter>(config, registry);
+}
+
 TEST(TSolomonExporter, ReadJsonHistogram)
 {
     auto registry = New<TSolomonRegistry>();

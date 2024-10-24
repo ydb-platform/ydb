@@ -209,7 +209,7 @@ TSolomonExporter::TSolomonExporter(
         {.PollingPeriod = Config_->EncodingThreadPoolPollingPeriod}))
 {
     if (Config_->EnableSelfProfiling) {
-        Registry_->Profile(TProfiler{Registry_, ""});
+        Registry_->Profile(TWeakProfiler{Registry_, ""});
     }
 
     CollectionStartDelay_ = Registry_->GetSelfProfiler().Timer("/collection_delay");

@@ -45,7 +45,7 @@ bool TSensorSet::IsEmpty() const
         RateHistograms_.empty();
 }
 
-void TSensorSet::Profile(const TProfiler &profiler)
+void TSensorSet::Profile(const TWeakProfiler& profiler)
 {
     CubeSize_ = profiler.Gauge("/cube_size");
     SensorsEmitted_ = profiler.Gauge("/sensors_emitted");

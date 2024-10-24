@@ -190,7 +190,7 @@ public:
 
     bool IsEmpty() const;
 
-    void Profile(const TProfiler& profiler);
+    void Profile(const TWeakProfiler& profiler);
     void ValidateOptions(const TSensorOptions& options);
 
     void AddCounter(TCounterStatePtr counter);

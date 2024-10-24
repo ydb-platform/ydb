@@ -294,7 +294,7 @@ int TSolomonRegistry::IndexOf(i64 iteration) const
     return iteration % GetWindowSize();
 }
 
-void TSolomonRegistry::Profile(const TProfiler& profiler)
+void TSolomonRegistry::Profile(const TWeakProfiler& profiler)
 {
     SelfProfiler_ = profiler.WithPrefix("/solomon_registry");
 
@@ -308,7 +308,7 @@ void TSolomonRegistry::Profile(const TProfiler& profiler)
     RegistrationCount_ = SelfProfiler_.Counter("/registration_count");
 }
 
-const TProfiler& TSolomonRegistry::GetSelfProfiler() const
+const TWeakProfiler& TSolomonRegistry::GetSelfProfiler() const
 {
     return SelfProfiler_;
 }

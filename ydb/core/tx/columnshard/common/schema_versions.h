@@ -60,20 +60,12 @@ public:
         return !VersionsToErase.empty();
     }
 
-    template<class Processor>
-    void EnumerateVersionsToErase(Processor&& processor) const {
-        for (ui64 version: VersionsToErase) {
-            auto iter = VersionToKey.find(version);
-            AFL_VERIFY(iter != VersionToKey.end());
-            for (auto& key: iter->second) {
-                processor(version, key);
-            }
-        }
+    THashSet<ui64>& GetVersionsToErase() {
+        return VersionsToErase;
     }
 
-    void DeleteErasedVersion(const ui64 version) {
-        AFL_VERIFY(VersionCounters.find(version) == VersionCounters.end());
-        AFL_VERIFY(VersionsToErase.erase(version));
+    THashMap<ui64, ui32>& GetVersionCounters() {
+        return VersionCounters;
     }
 };
 

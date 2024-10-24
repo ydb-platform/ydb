@@ -7,6 +7,7 @@ class TTxSchemaVersionsCleanup: public TTransactionBase<TColumnShard> {
 public:
     TTxSchemaVersionsCleanup(TColumnShard* self)
         : TBase(self) {
+        VersionsToRemove = Self->VersionCounters->GetVersionsToErase();
     }
 
     ~TTxSchemaVersionsCleanup() {

@@ -48,7 +48,6 @@ target_link_libraries(yt-comp_nodes-dq PUBLIC
 )
 
 target_sources(yt-comp_nodes-dq PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/dq/arrow_converter.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/dq/stream_decoder.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_rpc_reader.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_rpc_helpers.cpp

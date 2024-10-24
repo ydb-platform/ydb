@@ -33,6 +33,7 @@ target_link_libraries(tx-columnshard-counters PUBLIC
   columnshard-counters-aggregation
   columnshard-counters-common
   ydb-core-base
+  library-actors-core
   tools-enum_parser-enum_serialization_runtime
 )
 

@@ -31,11 +31,14 @@ target_link_libraries(providers-yt-codec PUBLIC
   cpp-yson-node
   cpp-mapreduce-interface
   cpp-mapreduce-io
+  libs-apache-arrow
   library-yql-minikql
   yql-public-udf
   library-yql-utils
   yql-public-result_format
+  public-udf-arrow
   providers-common-codec
+  common-codec-arrow
   common-schema-mkql
   common-schema-parser
   providers-yt-common
@@ -44,6 +47,7 @@ target_link_libraries(providers-yt-codec PUBLIC
 )
 
 target_sources(providers-yt-codec PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_arrow_converter.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_codec_io.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_codec_job.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_codec.cpp

@@ -88,6 +88,8 @@ target_link_libraries(providers-yt-provider PUBLIC
 )
 
 target_sources(providers-yt-provider PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_block_input_filter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_block_input.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_datasink_constraints.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_datasink_exec.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_datasink_finalize.cpp

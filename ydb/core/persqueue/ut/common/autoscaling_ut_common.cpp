@@ -43,14 +43,14 @@ ui64 DoRequest(NActors::TTestActorRuntime& runtime, ui64& txId, NKikimrSchemeOp:
             0);
 
     auto subscriber = CreateNotificationSubscriber(runtime, SS);
-    runtime.Send(new IEventHandle(subscriber, sender, new TEvSchemeShard::TEvNotifyTxCompletion(txId)));
+    runtime.Send(new IEventHandle(subscriber, sender, new NEvSchemeShard::TEvNotifyTxCompletion(txId)));
     TAutoPtr<IEventHandle> handle;
-    auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvNotifyTxCompletionResult>(handle);
+    auto event = runtime.GrabEdgeEvent<NEvSchemeShard::TEvNotifyTxCompletionResult>(handle);
     UNIT_ASSERT(event);
     UNIT_ASSERT_EQUAL(event->Record.GetTxId(), txId);
 
-    auto e = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
-    UNIT_ASSERT_EQUAL_C(e->Record.GetStatus(), TEvSchemeShard::EStatus::StatusAccepted,
+    auto e = runtime.GrabEdgeEvent<NEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
+    UNIT_ASSERT_EQUAL_C(e->Record.GetStatus(), NEvSchemeShard::EStatus::StatusAccepted,
         "Unexpected status " << NKikimrScheme::EStatus_Name(e->Record.GetStatus()) << " " << e->Record.GetReason());
 
     Sleep(TDuration::Seconds(1));

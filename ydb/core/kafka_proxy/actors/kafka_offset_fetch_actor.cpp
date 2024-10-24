@@ -88,7 +88,7 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
     }
 
     void ApplyResponse(TTabletInfo& tabletInfo,
-                       NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev,
+                       NKikimr::NEvPersQueue::TEvStatusResponse::TPtr& ev,
                        const TActorContext& ctx) override{
         Y_UNUSED(tabletInfo);
         Y_UNUSED(ctx);
@@ -105,7 +105,7 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
 
     // Noop
     void ApplyResponse(TTabletInfo& tabletInfo,
-            NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev,
+            NKikimr::NEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev,
             const TActorContext& ctx) override {
         Y_UNUSED(ctx);
         Y_UNUSED(tabletInfo);
@@ -113,7 +113,7 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
     };
 
     // Should never be called
-    bool ApplyResponse(NKikimr::TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev,
+    bool ApplyResponse(NKikimr::NEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev,
                        const TActorContext& ctx) override {
         Y_UNUSED(ctx);
         Y_UNUSED(ev);

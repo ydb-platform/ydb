@@ -614,7 +614,7 @@ Y_UNIT_TEST_SUITE(TSequence) {
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table2"
             Columns { Name: "value1" DefaultFromSequence: "/MyRoot/seq3" }
-        )", {TEvSchemeShard::EStatus::StatusPathDoesNotExist});
+        )", {NEvSchemeShard::EStatus::StatusPathDoesNotExist});
 
         auto table1 = DescribePath(runtime, "/MyRoot/Table1")
             .GetPathDescription()

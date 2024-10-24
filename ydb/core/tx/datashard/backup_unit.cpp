@@ -10,7 +10,7 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TBackupUnit : public TBackupRestoreUnitBase<TEvDataShard::TEvCancelBackup> {
+class TBackupUnit : public TBackupRestoreUnitBase<NEvDataShard::TEvCancelBackup> {
     using IBuffer = NExportScan::IBuffer;
 
 protected:

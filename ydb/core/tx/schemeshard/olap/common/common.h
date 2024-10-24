@@ -6,12 +6,12 @@ namespace NKikimr::NSchemeShard {
 
     class IErrorCollector {
     public:
-        virtual void AddError(const TEvSchemeShard::EStatus& errorStatus, const TString& errorMsg) = 0;
+        virtual void AddError(const NEvSchemeShard::EStatus& errorStatus, const TString& errorMsg) = 0;
         virtual void AddError(const TString& errorMsg) = 0;
     };
 
     class TSimpleErrorCollector: public IErrorCollector {
-        using TResult = TConclusionSpecialStatus<TEvSchemeShard::EStatus, TEvSchemeShard::EStatus::StatusSuccess, NKikimrScheme::StatusSchemeError>;
+        using TResult = TConclusionSpecialStatus<NEvSchemeShard::EStatus, NEvSchemeShard::EStatus::StatusSuccess, NKikimrScheme::StatusSchemeError>;
         TResult Result = TResult::Success();
     public:
         TSimpleErrorCollector() = default;
@@ -20,7 +20,7 @@ namespace NKikimr::NSchemeShard {
             return &Result;
         }
 
-        void AddError(const TEvSchemeShard::EStatus& errorStatus, const TString& errorMsg) override {
+        void AddError(const NEvSchemeShard::EStatus& errorStatus, const TString& errorMsg) override {
             AFL_VERIFY(Result.Ok());
             Result = TResult::Fail(errorStatus, errorMsg);
         }
@@ -32,13 +32,13 @@ namespace NKikimr::NSchemeShard {
     };
 
     class TProposeErrorCollector : public IErrorCollector {
-        TEvSchemeShard::TEvModifySchemeTransactionResult& TxResult;
+        NEvSchemeShard::TEvModifySchemeTransactionResult& TxResult;
     public:
-        TProposeErrorCollector(TEvSchemeShard::TEvModifySchemeTransactionResult& txResult)
+        TProposeErrorCollector(NEvSchemeShard::TEvModifySchemeTransactionResult& txResult)
             : TxResult(txResult)
         {}
 
-        void AddError(const TEvSchemeShard::EStatus& errorStatus, const TString& errorMsg) override {
+        void AddError(const NEvSchemeShard::EStatus& errorStatus, const TString& errorMsg) override {
             TxResult.SetError(errorStatus, errorMsg);
         }
 

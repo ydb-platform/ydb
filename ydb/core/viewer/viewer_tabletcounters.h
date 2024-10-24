@@ -19,7 +19,7 @@ class TJsonTabletCounters : public TActorBootstrapped<TJsonTabletCounters> {
     TVector<TActorId> PipeClients;
     TVector<ui64> Tablets;
     TMap<TTabletId, THolder<TEvTablet::TEvGetCountersResponse>> Results;
-    THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
+    THolder<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
     bool Aggregate = false;
@@ -89,7 +89,7 @@ public:
 
     STFUNC(StateRequestedDescribe) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFunc(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
@@ -101,7 +101,7 @@ public:
         }
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx) {
         DescribeResult = ev->Release();
         if (DescribeResult->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
             Tablets.reserve(DescribeResult->GetRecord().GetPathDescription().TablePartitionsSize());

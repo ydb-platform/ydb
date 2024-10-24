@@ -132,8 +132,8 @@ std::pair<std::vector<std::string>, std::vector<std::string>> List(
         const std::optional<NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType> doFilter,
         ui32 status = NKikimrTxDataShard::TError::OK)
 {
-    using TEvRequest = TEvDataShard::TEvObjectStorageListingRequest;
-    using TEvResponse = TEvDataShard::TEvObjectStorageListingResponse;
+    using TEvRequest = NEvDataShard::TEvObjectStorageListingRequest;
+    using TEvResponse = NEvDataShard::TEvObjectStorageListingResponse;
 
     class TLister: public TRequestRunner<TEvResponse, TLister> {
     public:
@@ -178,7 +178,7 @@ std::pair<std::vector<std::string>, std::vector<std::string>> List(
             commonPrefixes.emplace_back(row);
         }
     }
-        
+
     if (rec.ContentsRowsSize() > 0) {
         auto& files = rec.contentsrows();
         for (auto row : files) {

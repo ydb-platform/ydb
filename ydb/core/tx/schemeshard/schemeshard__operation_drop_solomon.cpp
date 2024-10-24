@@ -15,7 +15,7 @@ public:
         : TDeletePartsAndDone(id)
     {
         IgnoreMessages(DebugHint(), {
-            TEvPrivate::TEvOperationPlan::EventType,
+            NEvPrivate::TEvOperationPlan::EventType,
         });
     }
 };
@@ -37,7 +37,7 @@ public:
         IgnoreMessages(DebugHint(), {});
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 

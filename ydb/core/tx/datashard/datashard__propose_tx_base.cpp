@@ -12,7 +12,7 @@ namespace NKikimr {
 namespace NDataShard {
 
 TDataShard::TTxProposeTransactionBase::TTxProposeTransactionBase(TDataShard *self,
-                                                                        TEvDataShard::TEvProposeTransaction::TPtr &&ev,
+                                                                        NEvDataShard::TEvProposeTransaction::TPtr &&ev,
                                                                         TInstant receivedAt, ui64 tieBreakerIndex,
                                                                         bool delayed,
                                                                         NWilson::TSpan &&datashardTransactionSpan)
@@ -49,11 +49,11 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
                 return false;
 
             if (status != NKikimrTxDataShard::TError::OK) {
-                LOG_LOG_S_THROTTLE(Self->GetLogThrottler(TDataShard::ELogThrottlerType::TxProposeTransactionBase_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, 
+                LOG_LOG_S_THROTTLE(Self->GetLogThrottler(TDataShard::ELogThrottlerType::TxProposeTransactionBase_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD,
                     "Errors while proposing transaction txid " << TxId << " at tablet " << Self->TabletID() << " status: " << status << " error: " << errMessage);
 
                 auto kind = static_cast<NKikimrTxDataShard::ETransactionKind>(Kind);
-                auto result = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(kind, Self->TabletID(), TxId, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
+                auto result = MakeHolder<NEvDataShard::TEvProposeTransactionResult>(kind, Self->TabletID(), TxId, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
                 result->AddError(status, errMessage);
 
                 TActorId target = Op ? Op->GetTarget() : Ev->Sender;
@@ -73,7 +73,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
                 Ev = nullptr;
                 return true;
             }
-            
+
             TOperation::TPtr op = Self->Pipeline.BuildOperation(Ev, ReceivedAt, TieBreakerIndex, txc, ctx, std::move(DatashardTransactionSpan));
 
             // Unsuccessful operation parse.

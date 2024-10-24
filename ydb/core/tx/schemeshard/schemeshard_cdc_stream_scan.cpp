@@ -27,7 +27,7 @@ public:
         return NKikimrServices::TActivity::SCHEMESHARD_CDC_STREAM_SCAN_FINALIZER;
     }
 
-    explicit TCdcStreamScanFinalizer(const TActorId& ssActorId, THolder<TEvSchemeShard::TEvModifySchemeTransaction>&& req)
+    explicit TCdcStreamScanFinalizer(const TActorId& ssActorId, THolder<NEvSchemeShard::TEvModifySchemeTransaction>&& req)
         : SSActorId(ssActorId)
         , Request(std::move(req)) // template without txId
     {
@@ -57,14 +57,14 @@ private:
 
 private:
     const TActorId SSActorId;
-    THolder<TEvSchemeShard::TEvModifySchemeTransaction> Request;
+    THolder<NEvSchemeShard::TEvModifySchemeTransaction> Request;
 
 }; // TCdcStreamScanFinalizer
 
 struct TSchemeShard::TCdcStreamScan::TTxProgress: public TTransactionBase<TSchemeShard> {
     // params
-    TEvPrivate::TEvRunCdcStreamScan::TPtr RunCdcStreamScan = nullptr;
-    TEvDataShard::TEvCdcStreamScanResponse::TPtr CdcStreamScanResponse = nullptr;
+    NEvPrivate::TEvRunCdcStreamScan::TPtr RunCdcStreamScan = nullptr;
+    NEvDataShard::TEvCdcStreamScanResponse::TPtr CdcStreamScanResponse = nullptr;
     struct {
         TPathId StreamPathId;
         TTabletId TabletId;
@@ -75,16 +75,16 @@ struct TSchemeShard::TCdcStreamScan::TTxProgress: public TTransactionBase<TSchem
     TDeque<std::tuple<TPathId, TTabletId, THolder<IEventBase>>> ScanRequests;
     TPathId StreamToProgress;
     THolder<NMetering::TEvMetering::TEvWriteMeteringJson> Metering;
-    THolder<TEvSchemeShard::TEvModifySchemeTransaction> Finalize;
+    THolder<NEvSchemeShard::TEvModifySchemeTransaction> Finalize;
 
 public:
-    explicit TTxProgress(TSelf* self, TEvPrivate::TEvRunCdcStreamScan::TPtr& ev)
+    explicit TTxProgress(TSelf* self, NEvPrivate::TEvRunCdcStreamScan::TPtr& ev)
         : TBase(self)
         , RunCdcStreamScan(ev)
     {
     }
 
-    explicit TTxProgress(TSelf* self, TEvDataShard::TEvCdcStreamScanResponse::TPtr& ev)
+    explicit TTxProgress(TSelf* self, NEvDataShard::TEvCdcStreamScanResponse::TPtr& ev)
         : TBase(self)
         , CdcStreamScanResponse(ev)
     {
@@ -118,7 +118,7 @@ public:
         }
 
         if (StreamToProgress) {
-            ctx.Send(ctx.SelfID, new TEvPrivate::TEvRunCdcStreamScan(StreamToProgress));
+            ctx.Send(ctx.SelfID, new NEvPrivate::TEvRunCdcStreamScan(StreamToProgress));
         }
 
         if (Metering) {
@@ -184,7 +184,7 @@ private:
             streamInfo->InProgressShards.insert(*it);
             streamInfo->PendingShards.erase(it);
 
-            auto ev = MakeHolder<TEvDataShard::TEvCdcStreamScanRequest>();
+            auto ev = MakeHolder<NEvDataShard::TEvCdcStreamScanRequest>();
             PathIdFromPathId(tablePathId, ev->Record.MutableTablePathId());
             ev->Record.SetTableSchemaVersion(table->AlterVersion);
             PathIdFromPathId(streamPathId, ev->Record.MutableStreamPathId());
@@ -196,7 +196,7 @@ private:
         if (streamInfo->DoneShards.size() == streamInfo->ScanShards.size()) {
             const auto path = TPath::Init(streamPathId, Self);
 
-            Finalize = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
+            Finalize = MakeHolder<NEvSchemeShard::TEvModifySchemeTransaction>();
             auto& tx = *Finalize->Record.AddTransaction();
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterCdcStream);
             tx.SetWorkingDir(path.Parent().Parent().PathString()); // stream -> table -> working dir
@@ -413,11 +413,11 @@ private:
     }
 };
 
-ITransaction* TSchemeShard::CreateTxProgressCdcStreamScan(TEvPrivate::TEvRunCdcStreamScan::TPtr& ev) {
+ITransaction* TSchemeShard::CreateTxProgressCdcStreamScan(NEvPrivate::TEvRunCdcStreamScan::TPtr& ev) {
     return new TCdcStreamScan::TTxProgress(this, ev);
 }
 
-ITransaction* TSchemeShard::CreateTxProgressCdcStreamScan(TEvDataShard::TEvCdcStreamScanResponse::TPtr& ev) {
+ITransaction* TSchemeShard::CreateTxProgressCdcStreamScan(NEvDataShard::TEvCdcStreamScanResponse::TPtr& ev) {
     return new TCdcStreamScan::TTxProgress(this, ev);
 }
 
@@ -425,17 +425,17 @@ ITransaction* TSchemeShard::CreatePipeRetry(const TPathId& streamPathId, TTablet
     return new TCdcStreamScan::TTxProgress(this, streamPathId, tabletId);
 }
 
-void TSchemeShard::Handle(TEvPrivate::TEvRunCdcStreamScan::TPtr& ev, const TActorContext& ctx) {
+void TSchemeShard::Handle(NEvPrivate::TEvRunCdcStreamScan::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxProgressCdcStreamScan(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvDataShard::TEvCdcStreamScanResponse::TPtr& ev, const TActorContext& ctx) {
+void TSchemeShard::Handle(NEvDataShard::TEvCdcStreamScanResponse::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxProgressCdcStreamScan(ev), ctx);
 }
 
 void TSchemeShard::ResumeCdcStreamScans(const TVector<TPathId>& ids, const TActorContext& ctx) {
     for (const auto& id : ids) {
-        Send(ctx.SelfID, new TEvPrivate::TEvRunCdcStreamScan(id));
+        Send(ctx.SelfID, new NEvPrivate::TEvRunCdcStreamScan(id));
     }
 }
 

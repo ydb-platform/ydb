@@ -441,14 +441,14 @@ void TMiniKqlExecutionActor::WaitForCompletion(bool retry) {
     clientConfig.RetryPolicy = {.RetryLimitCount = 5, .MinRetryTime = TDuration::MilliSeconds(100), .DoFirstRetryInstantly = !retry};
     TabletPipeClient_ = RegisterWithSameMailbox(NTabletPipe::CreateClient(SelfId(), schemeShardId, clientConfig));
 
-    TAutoPtr<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion> request(new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion());
+    TAutoPtr<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletion> request(new NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletion());
     request->Record.SetTxId(ResponseEvent_->Get()->Record.GetTxId());
     NTabletPipe::SendData(SelfId(), TabletPipeClient_, request.Release());
 
     RLOG_SQS_DEBUG(GetRequestType() << " Queue " << TLogQueueName(QueuePath_) << " Waiting for transaction to complete. TxId: " << ResponseEvent_->Get()->Record.GetTxId() << ". Scheme shard id: " << schemeShardId);
 }
 
-void TMiniKqlExecutionActor::HandleResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
+void TMiniKqlExecutionActor::HandleResult(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
     Y_ABORT_UNLESS(ev->Get()->Record.GetTxId() == ResponseEvent_->Get()->Record.GetTxId());
     ResponseEvent_->Get()->Record.SetStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
     RLOG_SQS_TRACE(GetRequestType() << " Queue " << TLogQueueName(QueuePath_) << " Sending mkql execution result: " << ResponseEvent_->Get()->Record);

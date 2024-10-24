@@ -35,7 +35,7 @@ public:
         return false;
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
         LOG_I(DebugHint() << " HandleReply TEvOperationPlan"

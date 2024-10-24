@@ -685,13 +685,13 @@ private:
     void Handle(TEvMediatorQueueStop::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvMediatorQueueRestart::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvMediatorQueueConfirmations::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvSubDomain::TEvConfigure::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvSubDomain::TEvConfigure::TPtr &ev, const TActorContext &ctx);
 
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx);
 
     void SendStepConfirmations(TCoordinatorStepConfirmations &confirmations, const TActorContext &ctx);
-    void DoConfiguration(const TEvSubDomain::TEvConfigure &ev, const TActorContext &ctx, const TActorId &ackTo = TActorId());
+    void DoConfiguration(const NEvSubDomain::TEvConfigure &ev, const TActorContext &ctx, const TActorId &ackTo = TActorId());
 
     void Sync(ui64 mediator, const TActorContext &ctx);
     void Sync(const TActorContext &ctx);
@@ -751,7 +751,7 @@ public:
             )
 
     STFUNC_TABLET_DEF(StateSync,
-                HFunc(TEvSubDomain::TEvConfigure, Handle);
+                HFunc(NEvSubDomain::TEvConfigure, Handle);
                 HFunc(TEvTxProxy::TEvProposeTransaction, HandleEnqueue);
                 HFunc(TEvTxProxy::TEvAcquireReadStep, Handle);
                 HFunc(TEvPrivate::TEvAcquireReadStepFlush, Handle);
@@ -770,7 +770,7 @@ public:
             )
 
     STFUNC_TABLET_DEF(StateWork,
-                HFunc(TEvSubDomain::TEvConfigure, Handle);
+                HFunc(NEvSubDomain::TEvConfigure, Handle);
                 HFunc(TEvTxProxy::TEvProposeTransaction, Handle);
                 HFunc(TEvTxProxy::TEvAcquireReadStep, Handle);
                 HFunc(TEvPrivate::TEvAcquireReadStepFlush, Handle);

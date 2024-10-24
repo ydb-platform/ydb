@@ -321,7 +321,7 @@ public:
 private:
     void SendCancelSnapshotProposal(TShardState& state, const TActorContext& ctx) {
         ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
-            new TEvDataShard::TEvCancelTransactionProposal(TxId),
+            new NEvDataShard::TEvCancelTransactionProposal(TxId),
             state.ShardId, false));
     }
 
@@ -329,7 +329,7 @@ private:
         // We send TEvCancelTransactionProposal for cases where datashard
         // decided to prepare our immediate read table transaction.
         ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
-            new TEvDataShard::TEvCancelTransactionProposal(state.ReadTxId),
+            new NEvDataShard::TEvCancelTransactionProposal(state.ReadTxId),
             state.ShardId, false));
         ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
             new TEvTxProcessing::TEvInterruptTransaction(state.ReadTxId),
@@ -394,7 +394,7 @@ private:
             if (PlanStep != 0) {
                 // If we have a known PlanStep we know snapshot Step/TxId
                 // Attempt to discard it (best effort, no retries or waiting for replies)
-                auto req = MakeHolder<TEvDataShard::TEvDiscardVolatileSnapshotRequest>();
+                auto req = MakeHolder<NEvDataShard::TEvDiscardVolatileSnapshotRequest>();
                 req->Record.SetOwnerId(TableId.PathId.OwnerId);
                 req->Record.SetPathId(TableId.PathId.LocalPathId);
                 req->Record.SetStep(PlanStep);
@@ -830,9 +830,9 @@ private:
         TRACE_EVENT(NKikimrServices::TX_PROXY)
         switch (ev->GetTypeRewrite()) {
             CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
-            HFunc(TEvDataShard::TEvGetReadTableSinkStateRequest, Handle);
-            HFunc(TEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
-            HFunc(TEvDataShard::TEvProposeTransactionResult, HandlePrepare);
+            HFunc(NEvDataShard::TEvGetReadTableSinkStateRequest, Handle);
+            HFunc(NEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
+            HFunc(NEvDataShard::TEvProposeTransactionResult, HandlePrepare);
             HFunc(TEvPipeCache::TEvDeliveryProblem, HandlePrepare);
             CFunc(TEvents::TSystem::Wakeup, HandleExecTimeout);
         }
@@ -850,7 +850,7 @@ private:
 
         TXLOG_D("Sending CreateVolatileSnapshot tx to shard " << state.ShardId);
         ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
-                new TEvDataShard::TEvProposeTransaction(
+                new NEvDataShard::TEvProposeTransaction(
                     NKikimrTxDataShard::TX_KIND_SNAPSHOT,
                     ctx.SelfID, TxId, txBody, txFlags),
                 state.ShardId, true));
@@ -870,7 +870,7 @@ private:
         IssueManager.RaiseIssue(std::move(issue));
     }
 
-    void HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
+    void HandlePrepare(NEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
         const auto* msg = ev->Get();
         const auto& record = msg->Record;
         const ui64 shardId = msg->GetOrigin();
@@ -1064,7 +1064,7 @@ private:
         TRACE_EVENT(NKikimrServices::TX_PROXY)
         switch (ev->GetTypeRewrite()) {
             CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
-            HFunc(TEvDataShard::TEvProposeTransactionResult, HandlePrepareErrors);
+            HFunc(NEvDataShard::TEvProposeTransactionResult, HandlePrepareErrors);
             HFunc(TEvPipeCache::TEvDeliveryProblem, HandlePrepareErrors);
             CFunc(TEvents::TSystem::Wakeup, HandlePrepareErrorsTimeout);
         }
@@ -1080,7 +1080,7 @@ private:
             {
                 TXLOG_T("Sending TEvCancelTransactionProposal to shard " << shardId);
                 Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
-                    new TEvDataShard::TEvCancelTransactionProposal(TxId),
+                    new NEvDataShard::TEvCancelTransactionProposal(TxId),
                     shardId, false));
             }
         }
@@ -1094,7 +1094,7 @@ private:
         ComplainingDatashards.push_back(record.GetOrigin());
     }
 
-    void HandlePrepareErrors(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
+    void HandlePrepareErrors(NEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
         const auto* msg = ev->Get();
         const ui64 shardId = msg->GetOrigin();
 
@@ -1116,7 +1116,7 @@ private:
         MarkShardPrepareError(shardId, state, NeedInvalidateDistCache(msg), ctx);
     }
 
-    bool NeedInvalidateDistCache(const TEvDataShard::TEvProposeTransactionResult* msg) {
+    bool NeedInvalidateDistCache(const NEvDataShard::TEvProposeTransactionResult* msg) {
         switch (msg->GetStatus()) {
             case NKikimrTxDataShard::TEvProposeTransactionResult::ERROR:
                 for (const auto& er : msg->Record.GetError()) {
@@ -1188,10 +1188,10 @@ private:
         TRACE_EVENT(NKikimrServices::TX_PROXY)
         switch (ev->GetTypeRewrite()) {
             CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
-            HFunc(TEvDataShard::TEvGetReadTableSinkStateRequest, Handle);
-            HFunc(TEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
+            HFunc(NEvDataShard::TEvGetReadTableSinkStateRequest, Handle);
+            HFunc(NEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
             HFunc(TEvTxProxy::TEvProposeTransactionStatus, HandleSnapshotPlan);
-            HFunc(TEvDataShard::TEvProposeTransactionResult, HandleReadTable);
+            HFunc(NEvDataShard::TEvProposeTransactionResult, HandleReadTable);
             HFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleReadTable);
             HFunc(TEvTxProcessing::TEvStreamClearanceRequest, HandleReadTable);
             HFunc(TEvTxProcessing::TEvStreamQuotaRequest, HandleReadTable);
@@ -1201,7 +1201,7 @@ private:
             CFunc(TEvents::TSystem::Wakeup, HandleExecTimeout);
             HFunc(TEvPrivate::TEvRetryShard, HandleRetryShard);
             HFunc(TEvPrivate::TEvRefreshShard, HandleRefreshShard);
-            HFunc(TEvDataShard::TEvRefreshVolatileSnapshotResponse, HandleReadTable);
+            HFunc(NEvDataShard::TEvRefreshVolatileSnapshotResponse, HandleReadTable);
             CFunc(TEvPrivate::EvResolveShards, HandleResolveShards);
             HFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, HandleReadTable);
         }
@@ -1299,7 +1299,7 @@ private:
     }
 
     // Received from each shard
-    void HandleSnapshotResult(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
+    void HandleSnapshotResult(NEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
         const auto* msg = ev->Get();
         const ui64 shardId = msg->GetOrigin();
 
@@ -1493,7 +1493,7 @@ private:
 
         // TODO: support followers?
         Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
-                new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCAN,
+                new NEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCAN,
                     ctx.SelfID, state.ReadTxId, txBody, txFlags),
                 shardId, true));
 
@@ -1596,7 +1596,7 @@ private:
         StreamingShards.insert(shardId);
     }
 
-    void HandleReadTable(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
+    void HandleReadTable(NEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
         const auto* msg = ev->Get();
         const ui64 shardId = msg->GetOrigin();
 
@@ -1650,7 +1650,7 @@ private:
         }
     }
 
-    void ProcessStreamData(TShardState& state, TEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
+    void ProcessStreamData(TShardState& state, NEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
         const ui64 shardId = state.ShardId;
 
         TXLOG_D("Received stream data from ShardId# " << shardId);
@@ -1800,7 +1800,7 @@ private:
         SentResultSet = true;
     }
 
-    void ProcessStreamComplete(TShardState& state, TEvDataShard::TEvProposeTransactionResult::TPtr&, const TActorContext& ctx) {
+    void ProcessStreamComplete(TShardState& state, NEvDataShard::TEvProposeTransactionResult::TPtr&, const TActorContext& ctx) {
         TxProxyMon->TxResultComplete->Inc();
 
         TXLOG_D("Received stream complete from ShardId# " << state.ShardId);
@@ -1843,7 +1843,7 @@ private:
         ProcessQuotaRequests(ctx);
     }
 
-    void ProcessStreamError(TShardState& state, TEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
+    void ProcessStreamError(TShardState& state, NEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
         const auto* msg = ev->Get();
         const auto& record = msg->Record;
 
@@ -1888,7 +1888,7 @@ private:
 
                 // Cancel proposal so it doesn't wait unnecessarily.
                 ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
-                    new TEvDataShard::TEvCancelTransactionProposal(state.ReadTxId),
+                    new NEvDataShard::TEvCancelTransactionProposal(state.ReadTxId),
                     state.ShardId, false));
                 break;
             }
@@ -2369,7 +2369,7 @@ private:
         state.SnapshotState = ESnapshotState::Refreshing;
 
         TXLOG_D("Sending TEvRefreshVolatileSnapshotRequest ShardId# " << shardId);
-        auto req = MakeHolder<TEvDataShard::TEvRefreshVolatileSnapshotRequest>();
+        auto req = MakeHolder<NEvDataShard::TEvRefreshVolatileSnapshotRequest>();
         req->Record.SetOwnerId(TableId.PathId.OwnerId);
         req->Record.SetPathId(TableId.PathId.LocalPathId);
         req->Record.SetStep(PlanStep);
@@ -2377,7 +2377,7 @@ private:
         Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(req.Release(), shardId, true));
     }
 
-    void HandleReadTable(TEvDataShard::TEvRefreshVolatileSnapshotResponse::TPtr& ev, const TActorContext& ctx) {
+    void HandleReadTable(NEvDataShard::TEvRefreshVolatileSnapshotResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
         const ui64 shardId = record.GetOrigin();
         auto it = ShardMap.find(shardId);
@@ -2749,8 +2749,8 @@ private:
     }
 
 private:
-    void Handle(TEvDataShard::TEvGetReadTableSinkStateRequest::TPtr& ev, const TActorContext& ctx) {
-        auto response = MakeHolder<TEvDataShard::TEvGetReadTableSinkStateResponse>();
+    void Handle(NEvDataShard::TEvGetReadTableSinkStateRequest::TPtr& ev, const TActorContext& ctx) {
+        auto response = MakeHolder<NEvDataShard::TEvGetReadTableSinkStateResponse>();
 
         auto& rec = response->Record;
         rec.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
@@ -2800,7 +2800,7 @@ private:
         ctx.Send(ev->Sender, response.Release());
     }
 
-    void Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NEvDataShard::TEvGetReadTableStreamStateRequest::TPtr& ev, const TActorContext& ctx) {
         ctx.Send(ev->Forward(Settings.Owner));
     }
 

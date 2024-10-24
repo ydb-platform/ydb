@@ -45,8 +45,8 @@ private:
         return LogPrefix.GetRef();
     }
 
-    THolder<TEvPersQueue::TEvRequest> CreateGetOffsetRequest() const {
-        THolder<TEvPersQueue::TEvRequest> request(new TEvPersQueue::TEvRequest);
+    THolder<NEvPersQueue::TEvRequest> CreateGetOffsetRequest() const {
+        THolder<NEvPersQueue::TEvRequest> request(new NEvPersQueue::TEvRequest);
 
         auto& req = *request->Record.MutablePartitionRequest();
         req.SetPartition(Partition);
@@ -68,7 +68,7 @@ private:
         Send(PQTablet, CreateGetOffsetRequest().Release());
     }
 
-    void HandleInit(TEvPersQueue::TEvResponse::TPtr& ev) {
+    void HandleInit(NEvPersQueue::TEvResponse::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
         auto& record = ev->Get()->Record;
         if (record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
@@ -87,8 +87,8 @@ private:
         Become(&TLocalPartitionReader::StateWork);
     }
 
-    THolder<TEvPersQueue::TEvRequest> CreateReadRequest() const {
-        THolder<TEvPersQueue::TEvRequest> request(new TEvPersQueue::TEvRequest);
+    THolder<NEvPersQueue::TEvRequest> CreateReadRequest() const {
+        THolder<NEvPersQueue::TEvRequest> request(new NEvPersQueue::TEvRequest);
 
         auto& req = *request->Record.MutablePartitionRequest();
         req.SetPartition(Partition);
@@ -118,7 +118,7 @@ private:
         return proto;
     }
 
-    void Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
+    void Handle(NEvPersQueue::TEvResponse::TPtr& ev) {
         auto& record = ev->Get()->Record;
         LOG_D("Handle " << ev->Get()->ToString());
 
@@ -162,7 +162,7 @@ public:
     STATEFN(StateInit) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWorker::TEvHandshake, HandleInit);
-            hFunc(TEvPersQueue::TEvResponse, HandleInit);
+            hFunc(NEvPersQueue::TEvResponse, HandleInit);
             sFunc(TEvents::TEvWakeup, HandleInit);
             sFunc(TEvents::TEvPoison, PassAway);
         default:
@@ -173,7 +173,7 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvPersQueue::TEvResponse, Handle);
+            hFunc(NEvPersQueue::TEvResponse, Handle);
             hFunc(TEvWorker::TEvPoll, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         default:

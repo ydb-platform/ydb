@@ -120,7 +120,7 @@ void CreateTopic(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, const ui
 }
 
 void ModifyTopic(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, std::function<void(::NKikimrSchemeOp::TPersQueueGroupDescription& scheme)> modificator,
-                    const TVector<TExpectedResult>& expectedResults = {{TEvSchemeShard::EStatus::StatusAccepted}}) {
+                    const TVector<TExpectedResult>& expectedResults = {{NEvSchemeShard::EStatus::StatusAccepted}}) {
     ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
     scheme.SetName("Topic1");
     scheme.MutablePQTabletConfig()->MutablePartitionConfig();
@@ -138,7 +138,7 @@ void ModifyTopic(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, std::fun
 }
 
 void SplitPartition(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, const ui32 partition, TString boundary,
-                    const TVector<TExpectedResult>& expectedResults = {{TEvSchemeShard::EStatus::StatusAccepted}}) {
+                    const TVector<TExpectedResult>& expectedResults = {{NEvSchemeShard::EStatus::StatusAccepted}}) {
 
     ModifyTopic(runtime, env, txId, [&](auto& scheme) {
         auto* split = scheme.AddSplit();
@@ -149,7 +149,7 @@ void SplitPartition(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, const
 
 void MergePartition(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, const ui32 partition,
                     const ui32 adjacentPartition,
-                    const TVector<TExpectedResult>& expectedResults = {{TEvSchemeShard::EStatus::StatusAccepted}}) {
+                    const TVector<TExpectedResult>& expectedResults = {{NEvSchemeShard::EStatus::StatusAccepted}}) {
 
     ModifyTopic(runtime, env, txId, [&](auto& scheme) {
         auto* merge = scheme.AddMerge();
@@ -436,26 +436,26 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest) {
 
         TString boundary;
         SplitPartition(runtime, env, txId, 1, boundary,
-                       {{TEvSchemeShard::EStatus::StatusInvalidParameter, "Split boundary is empty"}});
+                       {{NEvSchemeShard::EStatus::StatusInvalidParameter, "Split boundary is empty"}});
 
         boundary = "\001";
         SplitPartition(runtime, env, txId, 1, boundary,
-                       {{TEvSchemeShard::EStatus::StatusInvalidParameter,
+                       {{NEvSchemeShard::EStatus::StatusInvalidParameter,
                          "Split boundary less or equals FromBound of partition"}});
 
         boundary = TString((char*)bound_1_3, sizeof(bound_1_3));
         SplitPartition(runtime, env, txId, 1, boundary,
-                       {{TEvSchemeShard::EStatus::StatusInvalidParameter,
+                       {{NEvSchemeShard::EStatus::StatusInvalidParameter,
                          "Split boundary less or equals FromBound of partition"}});
 
         boundary = "\255";
         SplitPartition(runtime, env, txId, 1, boundary,
-                       {{TEvSchemeShard::EStatus::StatusInvalidParameter,
+                       {{NEvSchemeShard::EStatus::StatusInvalidParameter,
                          "Split boundary greate or equals ToBound of partition"}});
 
         boundary = TString((char*)bound_2_3, sizeof(bound_2_3));
         SplitPartition(runtime, env, txId, 1, boundary,
-                       {{TEvSchemeShard::EStatus::StatusInvalidParameter,
+                       {{NEvSchemeShard::EStatus::StatusInvalidParameter,
                          "Split boundary greate or equals ToBound of partition"}});
     } // Y_UNIT_TEST(SplitWithWrongBoundary)
 
@@ -471,7 +471,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest) {
         TString boundary = "\127";
         ui32 notExists = 7;
         SplitPartition(runtime, env, txId, notExists, boundary,
-                       {{TEvSchemeShard::EStatus::StatusInvalidParameter, "Splitting partition does not exists: 7"}});
+                       {{NEvSchemeShard::EStatus::StatusInvalidParameter, "Splitting partition does not exists: 7"}});
 
     } // Y_UNIT_TEST(SplitWithWrongPartition)
 
@@ -488,7 +488,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest) {
         SplitPartition(runtime, env, txId, 1, boundary);
 
         SplitPartition(runtime, env, txId, 1, boundary,
-                       {{TEvSchemeShard::EStatus::StatusInvalidParameter, "Invalid partition status"}});
+                       {{NEvSchemeShard::EStatus::StatusInvalidParameter, "Invalid partition status"}});
     } // Y_UNIT_TEST(SplitInactivePartition)
 
     Y_UNIT_TEST(MargePartitions) {
@@ -616,7 +616,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest) {
         CreateTopic(runtime, env, ++txId, 3);
 
         MergePartition(runtime, env, txId, 0, 2,
-                       {{TEvSchemeShard::EStatus::StatusInvalidParameter,
+                       {{NEvSchemeShard::EStatus::StatusInvalidParameter,
                          "You cannot merge non-contiguous partitions"}});
     } // Y_UNIT_TEST(MargeNotAdjacentRangePartitions)
 
@@ -633,9 +633,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest) {
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         MergePartition(runtime, env, txId, 0, 1,
-                       {{TEvSchemeShard::EStatus::StatusInvalidParameter, "Invalid partition status"}});
+                       {{NEvSchemeShard::EStatus::StatusInvalidParameter, "Invalid partition status"}});
         MergePartition(runtime, env, txId, 1, 0,
-                       {{TEvSchemeShard::EStatus::StatusInvalidParameter, "Invalid adjacent partition status"}});
+                       {{NEvSchemeShard::EStatus::StatusInvalidParameter, "Invalid adjacent partition status"}});
     } // Y_UNIT_TEST(MargeInactivePartitions)
 
     Y_UNIT_TEST(DisableSplitMerge) {
@@ -666,7 +666,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest) {
                 auto* partitionStrategy = scheme.MutablePQTabletConfig()->MutablePartitionStrategy();
                 partitionStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
             }
-        }, {{TEvSchemeShard::EStatus::StatusInvalidParameter}});
+        }, {{NEvSchemeShard::EStatus::StatusInvalidParameter}});
     } // Y_UNIT_TEST(DisableSplitMerge)
 
     Y_UNIT_TEST(EnableSplitMerge) {

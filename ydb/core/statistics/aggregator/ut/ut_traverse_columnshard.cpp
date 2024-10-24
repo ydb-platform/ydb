@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
 
         UNIT_ASSERT(CheckCountMinSketch(countMin, ColumnTableRowsNumber));
-    }    
+    }
 
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeResolve) {
         TTestEnv env(1, 1);
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         auto sender = runtime.AllocateEdgeActor();
 
         bool eventSeen = false;
-        auto observer = runtime.AddObserver<TEvHive::TEvRequestTabletDistribution>([&](auto& ev){
+        auto observer = runtime.AddObserver<NEvHive::TEvRequestTabletDistribution>([&](auto& ev){
             eventSeen = true;
             ev.Reset();
         });
@@ -191,8 +191,8 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         const auto& tableInfo = databaseInfo.Tables[0];
 
         bool observerFirstExec = true;
-        auto observer = runtime.AddObserver<TEvHive::TEvResponseTabletDistribution>(
-            [&](TEvHive::TEvResponseTabletDistribution::TPtr& ev)
+        auto observer = runtime.AddObserver<NEvHive::TEvResponseTabletDistribution>(
+            [&](NEvHive::TEvResponseTabletDistribution::TPtr& ev)
         {
             if (observerFirstExec) {
                 observerFirstExec = false;
@@ -237,8 +237,8 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         const auto& tableInfo = databaseInfo.Tables[0];
 
         bool observerFirstExec = true;
-        auto observer = runtime.AddObserver<TEvHive::TEvResponseTabletDistribution>(
-            [&](TEvHive::TEvResponseTabletDistribution::TPtr& ev)
+        auto observer = runtime.AddObserver<NEvHive::TEvResponseTabletDistribution>(
+            [&](NEvHive::TEvResponseTabletDistribution::TPtr& ev)
         {
             if (observerFirstExec) {
                 observerFirstExec = false;

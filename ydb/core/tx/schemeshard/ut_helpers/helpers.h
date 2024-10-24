@@ -70,12 +70,12 @@ namespace NYdb::NTable {
 namespace NSchemeShardUT_Private {
     using namespace NKikimr;
 
-    using TEvTx = TEvSchemeShard::TEvModifySchemeTransaction;
+    using TEvTx = NEvSchemeShard::TEvModifySchemeTransaction;
 
     void SetConfig(
         TTestActorRuntime &runtime,
         ui64 schemeShard,
-        THolder<NConsole::TEvConsole::TEvConfigNotificationRequest> request);
+        THolder<NConsole::NEvConsole::TEvConfigNotificationRequest> request);
 
     ////////// tablet
     NKikimrProto::EReplyStatus LocalMiniKQL(TTestActorRuntime& runtime, ui64 tabletId, const TString& query, NKikimrMiniKQL::TResult& result, TString& err);
@@ -112,25 +112,25 @@ namespace NSchemeShardUT_Private {
 
     ////////// expected results
     struct TExpectedResult {
-        TEvSchemeShard::EStatus Status;
+        NEvSchemeShard::EStatus Status;
         TString ReasonFragment;
 
-        TExpectedResult(TEvSchemeShard::EStatus status)
+        TExpectedResult(NEvSchemeShard::EStatus status)
             : Status(status)
         {}
-        TExpectedResult(TEvSchemeShard::EStatus status, TString reasonFragment)
+        TExpectedResult(NEvSchemeShard::EStatus status, TString reasonFragment)
             : Status(status)
             , ReasonFragment(reasonFragment)
         {}
     };
 
     ////////// modification results
-    void CheckExpectedResult(const TVector<TExpectedResult>& expected, TEvSchemeShard::EStatus actualStatus, const TString& actualReason);
+    void CheckExpectedResult(const TVector<TExpectedResult>& expected, NEvSchemeShard::EStatus actualStatus, const TString& actualReason);
     // CheckExpectedStatus is a deprecated version of CheckExpectedResult that can't check reasons.
     // Used by non generic test helpers. Should be replaced by CheckExpectedResult.
-    void CheckExpectedStatus(const TVector<NKikimrScheme::EStatus>& expected, TEvSchemeShard::EStatus actualStatus, const TString& actualReason);
+    void CheckExpectedStatus(const TVector<NKikimrScheme::EStatus>& expected, NEvSchemeShard::EStatus actualStatus, const TString& actualReason);
     void CheckExpectedStatusCode(const TVector<Ydb::StatusIds::StatusCode>& expected, Ydb::StatusIds::StatusCode result, const TString& reason);
-    void TestModificationResult(TTestActorRuntime& runtime, ui64 txId, TEvSchemeShard::EStatus expectedStatus = NKikimrScheme::StatusAccepted);
+    void TestModificationResult(TTestActorRuntime& runtime, ui64 txId, NEvSchemeShard::EStatus expectedStatus = NKikimrScheme::StatusAccepted);
     ui64 TestModificationResults(TTestActorRuntime& runtime, ui64 txId, const TVector<TExpectedResult>& expectedResults);
     void SkipModificationReply(TTestActorRuntime& runtime, ui32 num = 1);
 
@@ -310,7 +310,7 @@ namespace NSchemeShardUT_Private {
     ////////// non-generic
 
     // cancel tx
-    TEvSchemeShard::TEvCancelTx* CancelTxRequest(ui64 txId, ui64 targetTxId);
+    NEvSchemeShard::TEvCancelTx* CancelTxRequest(ui64 txId, ui64 targetTxId);
     void AsyncCancelTxTable(TTestActorRuntime& runtime, ui64 txId, ui64 targetTxId);
     void TestCancelTxTable(TTestActorRuntime& runtime, ui64 txId, ui64 targetTxId,
                                const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusAccepted});
@@ -319,8 +319,8 @@ namespace NSchemeShardUT_Private {
     TEvTx* CreateModifyACLRequest(ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner);
     void AsyncModifyACL(TTestActorRuntime& runtime, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner);
     void AsyncModifyACL(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner);
-    void TestModifyACL(TTestActorRuntime& runtime, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner, TEvSchemeShard::EStatus expectedResult = NKikimrScheme::StatusSuccess);
-    void TestModifyACL(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner, TEvSchemeShard::EStatus expectedResult = NKikimrScheme::StatusSuccess);
+    void TestModifyACL(TTestActorRuntime& runtime, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner, NEvSchemeShard::EStatus expectedResult = NKikimrScheme::StatusSuccess);
+    void TestModifyACL(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner, NEvSchemeShard::EStatus expectedResult = NKikimrScheme::StatusSuccess);
 
     // upgrade subdomain
     TEvTx* UpgradeSubDomainRequest(ui64 txId, const TString& parentPath, const TString& name);
@@ -337,8 +337,8 @@ namespace NSchemeShardUT_Private {
     TEvTx* CopyTableRequest(ui64 txId, const TString& dstPath, const TString& dstName, const TString& srcFullName, TApplyIf applyIf = {});
     void AsyncCopyTable(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& dstPath, const TString& dstName, const TString& srcFullName);
     void AsyncCopyTable(TTestActorRuntime& runtime, ui64 txId, const TString& dstPath, const TString& dstName, const TString& srcFullName);
-    void TestCopyTable(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& dstPath, const TString& dstName, const TString& srcFullName, TEvSchemeShard::EStatus expectedResult = NKikimrScheme::StatusAccepted);
-    void TestCopyTable(TTestActorRuntime& runtime, ui64 txId, const TString& dstPath, const TString& dstName, const TString& srcFullName, TEvSchemeShard::EStatus expectedResult = NKikimrScheme::StatusAccepted);
+    void TestCopyTable(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& dstPath, const TString& dstName, const TString& srcFullName, NEvSchemeShard::EStatus expectedResult = NKikimrScheme::StatusAccepted);
+    void TestCopyTable(TTestActorRuntime& runtime, ui64 txId, const TString& dstPath, const TString& dstName, const TString& srcFullName, NEvSchemeShard::EStatus expectedResult = NKikimrScheme::StatusAccepted);
 
     // move table
     TEvTx* MoveTableRequest(ui64 txId, const TString& srcPath, const TString& dstPath, ui64 schemeShard = TTestTxConfig::SchemeShard, const TApplyIf& applyIf = {});

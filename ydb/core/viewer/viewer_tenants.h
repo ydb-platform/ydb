@@ -44,14 +44,14 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NConsole::TEvConsole::TEvListTenantsResponse, Handle);
-            hFunc(NConsole::TEvConsole::TEvGetTenantStatusResponse, Handle);
+            hFunc(NConsole::NEvConsole::TEvListTenantsResponse, Handle);
+            hFunc(NConsole::NEvConsole::TEvGetTenantStatusResponse, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, TBase::Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
-    void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev) {
+    void Handle(NConsole::NEvConsole::TEvListTenantsResponse::TPtr& ev) {
         Ydb::Cms::ListDatabasesResult listTenantsResult;
         ev->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
         for (const TString& path : listTenantsResult.paths()) {
@@ -65,7 +65,7 @@ public:
         RequestDone();
     }
 
-    void Handle(NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr& ev) {
+    void Handle(NConsole::NEvConsole::TEvGetTenantStatusResponse::TPtr& ev) {
         Ydb::Cms::GetDatabaseStatusResult getTenantStatusResult;
         ev->Get()->Record.GetResponse().operation().result().UnpackTo(&getTenantStatusResult);
         auto itTenant = TenantIndex.find(getTenantStatusResult.path());
@@ -116,7 +116,7 @@ public:
             .Description = "timeout in ms",
             .Type = "integer",
         });
-        yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<NConsole::TEvConsole::TEvListTenantsResponse::ProtoRecordType>());
+        yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<NConsole::NEvConsole::TEvListTenantsResponse::ProtoRecordType>());
         return yaml;
     }
 };

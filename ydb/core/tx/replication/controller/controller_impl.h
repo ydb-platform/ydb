@@ -66,10 +66,10 @@ private:
     void Reset();
 
     // handlers
-    void Handle(TEvController::TEvCreateReplication::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvController::TEvAlterReplication::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvController::TEvDropReplication::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvController::TEvDescribeReplication::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvController::TEvCreateReplication::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvController::TEvAlterReplication::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvController::TEvDropReplication::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvController::TEvDescribeReplication::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDropReplication::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDiscoveryTargetsResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAssignStreamName::TPtr& ev, const TActorContext& ctx);
@@ -129,11 +129,11 @@ private:
     // tx runners
     void RunTxInitSchema(const TActorContext& ctx);
     void RunTxInit(const TActorContext& ctx);
-    void RunTxCreateReplication(TEvController::TEvCreateReplication::TPtr& ev, const TActorContext& ctx);
-    void RunTxAlterReplication(TEvController::TEvAlterReplication::TPtr& ev, const TActorContext& ctx);
-    void RunTxDropReplication(TEvController::TEvDropReplication::TPtr& ev, const TActorContext& ctx);
+    void RunTxCreateReplication(NEvController::TEvCreateReplication::TPtr& ev, const TActorContext& ctx);
+    void RunTxAlterReplication(NEvController::TEvAlterReplication::TPtr& ev, const TActorContext& ctx);
+    void RunTxDropReplication(NEvController::TEvDropReplication::TPtr& ev, const TActorContext& ctx);
     void RunTxDropReplication(TEvPrivate::TEvDropReplication::TPtr& ev, const TActorContext& ctx);
-    void RunTxDescribeReplication(TEvController::TEvDescribeReplication::TPtr& ev, const TActorContext& ctx);
+    void RunTxDescribeReplication(NEvController::TEvDescribeReplication::TPtr& ev, const TActorContext& ctx);
     void RunTxDescribeReplication(TEvPrivate::TEvDescribeTargetsResult::TPtr& ev, const TActorContext& ctx);
     void RunTxDiscoveryTargetsResult(TEvPrivate::TEvDiscoveryTargetsResult::TPtr& ev, const TActorContext& ctx);
     void RunTxAssignStreamName(TEvPrivate::TEvAssignStreamName::TPtr& ev, const TActorContext& ctx);

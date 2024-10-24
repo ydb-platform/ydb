@@ -74,7 +74,7 @@ private:
         const auto& response = ev->Get()->Record.GetResponse();
         if (response.operation().ready() == false
             && this->GetProtoRequest()->operation_params().operation_mode() == Ydb::Operations::OperationParams::SYNC) {
-            auto request = MakeHolder<TEvConsole::TEvNotifyOperationCompletionRequest>();
+            auto request = MakeHolder<NEvConsole::TEvNotifyOperationCompletionRequest>();
             request->Record.MutableRequest()->set_id(response.operation().id());
             request->Record.SetUserToken(this->Request_->GetSerializedToken());
 
@@ -85,11 +85,11 @@ private:
         }
     }
 
-    void Handle(TEvConsole::TEvCreateTenantResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NEvConsole::TEvCreateTenantResponse::TPtr& ev, const TActorContext& ctx) {
         HandleWithOperationParams(ev, ctx);
     }
 
-    void Handle(TEvConsole::TEvRemoveTenantResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NEvConsole::TEvRemoveTenantResponse::TPtr& ev, const TActorContext& ctx) {
         HandleWithOperationParams(ev, ctx);
     }
 
@@ -101,13 +101,13 @@ private:
         Die(ctx);
     }
 
-    void Handle(TEvConsole::TEvOperationCompletionNotification::TPtr& ev, const TActorContext& ctx)
+    void Handle(NEvConsole::TEvOperationCompletionNotification::TPtr& ev, const TActorContext& ctx)
     {
         this->Request_->SendOperation(ev->Get()->Record.GetResponse().operation());
         Die(ctx);
     }
 
-    void Handle(TEvConsole::TEvNotifyOperationCompletionResponse::TPtr& ev, const TActorContext& ctx)
+    void Handle(NEvConsole::TEvNotifyOperationCompletionResponse::TPtr& ev, const TActorContext& ctx)
     {
         if (ev->Get()->Record.GetResponse().operation().ready() == true) {
             this->Request_->SendOperation(ev->Get()->Record.GetResponse().operation());
@@ -132,8 +132,8 @@ private:
             HFunc(TCmsResponse, Handle);
             CFunc(TEvTabletPipe::EvClientDestroyed, Undelivered);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-            HFunc(TEvConsole::TEvOperationCompletionNotification, Handle);
-            HFunc(TEvConsole::TEvNotifyOperationCompletionResponse, Handle);
+            HFunc(NEvConsole::TEvOperationCompletionNotification, Handle);
+            HFunc(NEvConsole::TEvNotifyOperationCompletionResponse, Handle);
             default: TBase::StateFuncBase(ev);
         }
     }
@@ -150,85 +150,85 @@ private:
 void DoCreateTenantRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(
         new TCmsRPC<TEvCreateTenantRequest,
-                    TEvConsole::TEvCreateTenantRequest,
-                    TEvConsole::TEvCreateTenantResponse>(p.release()));
+                    NEvConsole::TEvCreateTenantRequest,
+                    NEvConsole::TEvCreateTenantResponse>(p.release()));
 }
 
 void DoAlterTenantRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(
         new TCmsRPC<TEvAlterTenantRequest,
-                    TEvConsole::TEvAlterTenantRequest,
-                    TEvConsole::TEvAlterTenantResponse>(p.release()));
+                    NEvConsole::TEvAlterTenantRequest,
+                    NEvConsole::TEvAlterTenantResponse>(p.release()));
 }
 
 void DoGetTenantStatusRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(
         new TCmsRPC<TEvGetTenantStatusRequest,
-                    TEvConsole::TEvGetTenantStatusRequest,
-                    TEvConsole::TEvGetTenantStatusResponse>(p.release()));
+                    NEvConsole::TEvGetTenantStatusRequest,
+                    NEvConsole::TEvGetTenantStatusResponse>(p.release()));
 }
 
 void DoListTenantsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(
         new TCmsRPC<TEvListTenantsRequest,
-                TEvConsole::TEvListTenantsRequest,
-                TEvConsole::TEvListTenantsResponse>(p.release()));
+                NEvConsole::TEvListTenantsRequest,
+                NEvConsole::TEvListTenantsResponse>(p.release()));
 }
 
 void DoRemoveTenantRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(
         new TCmsRPC<TEvRemoveTenantRequest,
-                TEvConsole::TEvRemoveTenantRequest,
-                TEvConsole::TEvRemoveTenantResponse>(p.release()));
+                NEvConsole::TEvRemoveTenantRequest,
+                NEvConsole::TEvRemoveTenantResponse>(p.release()));
 }
 
 void DoDescribeTenantOptionsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(
         new TCmsRPC<TEvDescribeTenantOptionsRequest,
-                    TEvConsole::TEvDescribeTenantOptionsRequest,
-                    TEvConsole::TEvDescribeTenantOptionsResponse>(p.release()));
+                    NEvConsole::TEvDescribeTenantOptionsRequest,
+                    NEvConsole::TEvDescribeTenantOptionsResponse>(p.release()));
 }
 
 template<>
 IActor* TEvCreateTenantRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
     return new TCmsRPC<TEvCreateTenantRequest,
-                       TEvConsole::TEvCreateTenantRequest,
-                       TEvConsole::TEvCreateTenantResponse>(msg);
+                       NEvConsole::TEvCreateTenantRequest,
+                       NEvConsole::TEvCreateTenantResponse>(msg);
 }
 
 template<>
 IActor* TEvAlterTenantRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
     return new TCmsRPC<TEvAlterTenantRequest,
-                       TEvConsole::TEvAlterTenantRequest,
-                       TEvConsole::TEvAlterTenantResponse>(msg);
+                       NEvConsole::TEvAlterTenantRequest,
+                       NEvConsole::TEvAlterTenantResponse>(msg);
 }
 
 template<>
 IActor* TEvGetTenantStatusRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
     return new TCmsRPC<TEvGetTenantStatusRequest,
-                       TEvConsole::TEvGetTenantStatusRequest,
-                       TEvConsole::TEvGetTenantStatusResponse>(msg);
+                       NEvConsole::TEvGetTenantStatusRequest,
+                       NEvConsole::TEvGetTenantStatusResponse>(msg);
 }
 
 template<>
 IActor* TEvListTenantsRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
     return new TCmsRPC<TEvListTenantsRequest,
-                       TEvConsole::TEvListTenantsRequest,
-                       TEvConsole::TEvListTenantsResponse>(msg);
+                       NEvConsole::TEvListTenantsRequest,
+                       NEvConsole::TEvListTenantsResponse>(msg);
 }
 
 template<>
 IActor* TEvRemoveTenantRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
     return new TCmsRPC<TEvRemoveTenantRequest,
-                       TEvConsole::TEvRemoveTenantRequest,
-                       TEvConsole::TEvRemoveTenantResponse>(msg);
+                       NEvConsole::TEvRemoveTenantRequest,
+                       NEvConsole::TEvRemoveTenantResponse>(msg);
 }
 
 template<>
 IActor* TEvDescribeTenantOptionsRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
     return new TCmsRPC<TEvDescribeTenantOptionsRequest,
-                       TEvConsole::TEvDescribeTenantOptionsRequest,
-                       TEvConsole::TEvDescribeTenantOptionsResponse>(msg);
+                       NEvConsole::TEvDescribeTenantOptionsRequest,
+                       NEvConsole::TEvDescribeTenantOptionsResponse>(msg);
 }
 
 } // namespace NGRpcService

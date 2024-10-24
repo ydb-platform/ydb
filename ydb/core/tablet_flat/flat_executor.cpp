@@ -325,7 +325,7 @@ void TExecutor::SendReassignYellowChannels(const TVector<ui32> &yellowChannels) 
         if (Y_LIKELY(info) && info->HiveId) {
             Send(MakePipePerNodeCacheID(false),
                 new TEvPipeCache::TEvForward(
-                    new TEvHive::TEvReassignTabletSpace(info->TabletID, yellowChannels),
+                    new NEvHive::TEvReassignTabletSpace(info->TabletID, yellowChannels),
                     info->HiveId,
                     /* subscribe */ false));
         }

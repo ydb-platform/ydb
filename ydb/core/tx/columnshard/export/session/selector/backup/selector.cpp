@@ -5,8 +5,8 @@
 
 namespace NKikimr::NOlap::NExport {
 
-std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TBackupSelector::DoBuildRequestInitiator(const TCursor& cursor) const {
-    auto ev = std::make_unique<TEvDataShard::TEvKqpScan>();
+std::unique_ptr<NKikimr::NEvDataShard::TEvKqpScan> TBackupSelector::DoBuildRequestInitiator(const TCursor& cursor) const {
+    auto ev = std::make_unique<NEvDataShard::TEvKqpScan>();
     ev->Record.SetLocalPathId(TablePathId);
 
     auto protoRanges = ev->Record.MutableRanges();

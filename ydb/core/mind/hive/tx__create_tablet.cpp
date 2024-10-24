@@ -172,7 +172,7 @@ public:
         BLOG_D("THive::TTxCreateTablet::Execute TabletId: " << TabletId <<
             " Status: " << NKikimrProto::EReplyStatus_Name(status));
         Y_ABORT_UNLESS(!!Sender);
-        THolder<TEvHive::TEvCreateTabletReply> reply = MakeHolder<TEvHive::TEvCreateTabletReply>(status, OwnerId, OwnerIdx, TabletId, Self->TabletID(), ErrorReason);
+        THolder<NEvHive::TEvCreateTabletReply> reply = MakeHolder<NEvHive::TEvCreateTabletReply>(status, OwnerId, OwnerIdx, TabletId, Self->TabletID(), ErrorReason);
         if (ForwardRequest.HasHiveTabletId()) {
             reply->Record.MutableForwardRequest()->CopyFrom(ForwardRequest);
         }
@@ -185,7 +185,7 @@ public:
         } else if (tablet.IsBootingSuppressed()) {
             // Tablet will never boot, so notify about creation right now
             for (const TActorId& actor : tablet.ActorsToNotify) {
-                SideEffects.Send(actor, new TEvHive::TEvTabletCreationResult(NKikimrProto::OK, TabletId));
+                SideEffects.Send(actor, new NEvHive::TEvTabletCreationResult(NKikimrProto::OK, TabletId));
             }
             tablet.ActorsToNotify.clear();
         } else {

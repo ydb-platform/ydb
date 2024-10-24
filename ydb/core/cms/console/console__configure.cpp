@@ -7,7 +7,7 @@ namespace NKikimr::NConsole {
 
 class TConfigsManager::TTxConfigure : public TTransactionBase<TConfigsManager> {
 public:
-    TTxConfigure(TEvConsole::TEvConfigureRequest::TPtr ev,
+    TTxConfigure(NEvConsole::TEvConfigureRequest::TPtr ev,
                  TConfigsManager *self)
         : TBase(self)
         , Request(std::move(ev))
@@ -460,7 +460,7 @@ public:
 
         Y_ABORT_UNLESS(Self->PendingConfigModifications.IsEmpty());
 
-        Response = new TEvConsole::TEvConfigureResponse;
+        Response = new NEvConsole::TEvConfigureResponse;
 
         if (!rec.ActionsSize())
             return Error(Ydb::StatusIds::BAD_REQUEST,
@@ -609,12 +609,12 @@ public:
     }
 
 private:
-    TEvConsole::TEvConfigureRequest::TPtr Request;
-    TAutoPtr<TEvConsole::TEvConfigureResponse> Response;
+    NEvConsole::TEvConfigureRequest::TPtr Request;
+    TAutoPtr<NEvConsole::TEvConfigureResponse> Response;
     TVector<TConfigItem::TPtr> OrderingQueue;
 };
 
-ITransaction *TConfigsManager::CreateTxConfigure(TEvConsole::TEvConfigureRequest::TPtr &ev)
+ITransaction *TConfigsManager::CreateTxConfigure(NEvConsole::TEvConfigureRequest::TPtr &ev)
 {
     return new TTxConfigure(ev, this);
 }

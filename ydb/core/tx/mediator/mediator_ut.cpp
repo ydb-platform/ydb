@@ -448,7 +448,7 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
             }
 
             {
-                auto msg = std::make_unique<TEvSubDomain::TEvConfigure>();
+                auto msg = std::make_unique<NEvSubDomain::TEvConfigure>();
                 msg->Record.SetVersion(1);
                 msg->Record.SetPlanResolution(500);
                 msg->Record.AddCoordinators(CoordinatorId);
@@ -456,7 +456,7 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
                 msg->Record.SetTimeCastBucketsPerMediator(1);
                 runtime.SendToPipe(MediatorId, Sender, msg.release());
 
-                auto ev = runtime.GrabEdgeEvent<TEvSubDomain::TEvConfigureStatus>(Sender);
+                auto ev = runtime.GrabEdgeEvent<NEvSubDomain::TEvConfigureStatus>(Sender);
                 UNIT_ASSERT(ev->Get()->Record.GetStatus() == NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS);
             }
 

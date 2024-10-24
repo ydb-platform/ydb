@@ -96,10 +96,10 @@ public:
     TConfigure(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
+        IgnoreMessages(DebugHint(), {NEvHive::TEvCreateTabletReply::EventType});
     }
 
-    bool HandleReply(TEvSchemeShard::TEvInitTenantSchemeShardResult::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvSchemeShard::TEvInitTenantSchemeShardResult::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint()
@@ -286,7 +286,7 @@ public:
         return descr;
     }
 
-    THolder<TEvSchemeShard::TEvMigrateSchemeShard> NextMessage(TOperationContext& context) {
+    THolder<NEvSchemeShard::TEvMigrateSchemeShard> NextMessage(TOperationContext& context) {
         if (!PathsInside) {
             return nullptr;
         }
@@ -295,7 +295,7 @@ public:
         TPath path = TPath::Init(pathId, context.SS);
 
 
-        auto event = MakeHolder<TEvSchemeShard::TEvMigrateSchemeShard>();
+        auto event = MakeHolder<NEvSchemeShard::TEvMigrateSchemeShard>();
         event->Record.SetSchemeShardGeneration(context.SS->Generation());
 
         *event->Record.MutablePath() = DescribePath(context, pathId);
@@ -371,10 +371,10 @@ public:
         return event;
     }
 
-    bool HandleReply(TEvSchemeShard::TEvMigrateSchemeShardResult::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvSchemeShard::TEvMigrateSchemeShardResult::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvSchemeShard::TEvMigrateSchemeShardResult"
+                   DebugHint() << " HandleReply NEvSchemeShard::TEvMigrateSchemeShardResult"
                                << ", at tablet" << ssId);
 
         Y_ABORT_UNLESS(ev->Get()->GetPathId().OwnerId == context.SS->TabletID());
@@ -421,7 +421,7 @@ public:
         auto storagePools = alterData->GetStoragePools();
         auto& schemeLimits = subDomain->GetSchemeLimits();
 
-        auto event = new TEvSchemeShard::TEvInitTenantSchemeShard(
+        auto event = new NEvSchemeShard::TEvInitTenantSchemeShard(
             ui64(ssId),
             pathId.LocalPathId, path.PathString(),
             path.Base()->Owner, path.GetEffectiveACL(), path.GetEffectiveACLVersion(),
@@ -464,15 +464,15 @@ public:
     TPublishTenantReadOnly(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType,
-                                     TEvSchemeShard::TEvMigrateSchemeShardResult::EventType,
-                                     TEvSchemeShard::TEvInitTenantSchemeShardResult::EventType});
+        IgnoreMessages(DebugHint(), {NEvHive::TEvCreateTabletReply::EventType,
+                                     NEvSchemeShard::TEvMigrateSchemeShardResult::EventType,
+                                     NEvSchemeShard::TEvInitTenantSchemeShardResult::EventType});
     }
 
-    bool HandleReply(TEvSchemeShard::TEvPublishTenantAsReadOnlyResult::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvSchemeShard::TEvPublishTenantAsReadOnlyResult::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvSchemeShard::TEvPublishTenantAsReadOnlyResult"
+                   DebugHint() << " HandleReply NEvSchemeShard::TEvPublishTenantAsReadOnlyResult"
                                << ", at tablet" << ssId);
 
         Y_ABORT_UNLESS(TTabletId(ev->Get()->Record.GetTenantSchemeShard()) == TenantSchemeShardId);
@@ -506,7 +506,7 @@ public:
         auto processing = alterData->GetProcessingParams();
         TenantSchemeShardId = TTabletId(processing.GetSchemeShard());
 
-        auto event = new TEvSchemeShard::TEvPublishTenantAsReadOnly(ui64(ssId));
+        auto event = new NEvSchemeShard::TEvPublishTenantAsReadOnly(ui64(ssId));
 
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     DebugHint()
@@ -537,17 +537,17 @@ public:
         : OperationId(id)
         , UpgradeDecision(nextState)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType,
-                                     TEvSchemeShard::TEvMigrateSchemeShardResult::EventType,
-                                     TEvSchemeShard::TEvInitTenantSchemeShardResult::EventType,
-                                     TEvSchemeShard::TEvPublishTenantAsReadOnlyResult::EventType});
+        IgnoreMessages(DebugHint(), {NEvHive::TEvCreateTabletReply::EventType,
+                                     NEvSchemeShard::TEvMigrateSchemeShardResult::EventType,
+                                     NEvSchemeShard::TEvInitTenantSchemeShardResult::EventType,
+                                     NEvSchemeShard::TEvPublishTenantAsReadOnlyResult::EventType});
     }
 
-    bool HandleReply(TEvPrivate::TEvCommitTenantUpdate::TPtr& /*ev*/, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvCommitTenantUpdate::TPtr& /*ev*/, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvPrivate::TEvCommitTenantUpdate"
+                   DebugHint() << " HandleReply NEvPrivate::TEvCommitTenantUpdate"
                                << ", at tablet" << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
@@ -583,11 +583,11 @@ public:
         return true;
     }
 
-    bool HandleReply(TEvPrivate::TEvUndoTenantUpdate::TPtr& /*ev*/, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvUndoTenantUpdate::TPtr& /*ev*/, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvPrivate::TEvUndoTenantUpdate"
+                   DebugHint() << " HandleReply NEvPrivate::TEvUndoTenantUpdate"
                                << ", at tablet" << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
@@ -703,12 +703,12 @@ public:
     TDeleteTenantSS(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType,
-                                     TEvSchemeShard::TEvMigrateSchemeShardResult::EventType,
-                                     TEvSchemeShard::TEvInitTenantSchemeShardResult::EventType,
-                                     TEvSchemeShard::TEvPublishTenantAsReadOnlyResult::EventType,
-                                     TEvSchemeShard::TEvRewriteOwnerResult::EventType,
-                                     TEvSchemeShard::TEvPublishTenantResult::EventType});
+        IgnoreMessages(DebugHint(), {NEvHive::TEvCreateTabletReply::EventType,
+                                     NEvSchemeShard::TEvMigrateSchemeShardResult::EventType,
+                                     NEvSchemeShard::TEvInitTenantSchemeShardResult::EventType,
+                                     NEvSchemeShard::TEvPublishTenantAsReadOnlyResult::EventType,
+                                     NEvSchemeShard::TEvRewriteOwnerResult::EventType,
+                                     NEvSchemeShard::TEvPublishTenantResult::EventType});
     }
 
     bool ProgressState(TOperationContext& context) override {
@@ -756,18 +756,18 @@ public:
     TRewriteOwner(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType,
-                                     TEvSchemeShard::TEvMigrateSchemeShardResult::EventType,
-                                     TEvSchemeShard::TEvInitTenantSchemeShardResult::EventType,
-                                     TEvSchemeShard::TEvPublishTenantAsReadOnlyResult::EventType});
+        IgnoreMessages(DebugHint(), {NEvHive::TEvCreateTabletReply::EventType,
+                                     NEvSchemeShard::TEvMigrateSchemeShardResult::EventType,
+                                     NEvSchemeShard::TEvInitTenantSchemeShardResult::EventType,
+                                     NEvSchemeShard::TEvPublishTenantAsReadOnlyResult::EventType});
     }
 
-    bool HandleReply(TEvDataShard::TEvMigrateSchemeShardResponse::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvDataShard::TEvMigrateSchemeShardResponse::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
         const NKikimrTxDataShard::TEvMigrateSchemeShardResponse& record = ev->Get()->Record;
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvDataShard::TEvMigrateSchemeShardResponse"
+                   DebugHint() << " HandleReply NEvDataShard::TEvMigrateSchemeShardResponse"
                                << ", at tablet" << ssId);
 
         auto dataShardId = TTabletId(record.GetTabletId());
@@ -805,14 +805,14 @@ public:
     }
 
 
-    THolder<TEvDataShard::TEvMigrateSchemeShardRequest> NextRequest(TOperationContext& context) {
+    THolder<NEvDataShard::TEvMigrateSchemeShardRequest> NextRequest(TOperationContext& context) {
         if (!DatashardsInside) {
             return nullptr;
         }
 
         TTabletId tabletId = *DatashardsInside.begin();
 
-        auto ev = MakeHolder<TEvDataShard::TEvMigrateSchemeShardRequest>();
+        auto ev = MakeHolder<NEvDataShard::TEvMigrateSchemeShardRequest>();
         ev->Record.SetCurrentSchemeShardId(ui64(context.SS->SelfTabletId()));
         ev->Record.SetNewSchemeShardId(ui64(TenantSchemeShardId));
         ev->Record.SetTabletId(ui64(tabletId));
@@ -907,14 +907,14 @@ public:
     TPublishTenant(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType,
-                                     TEvSchemeShard::TEvMigrateSchemeShardResult::EventType,
-                                     TEvSchemeShard::TEvInitTenantSchemeShardResult::EventType,
-                                     TEvSchemeShard::TEvPublishTenantAsReadOnlyResult::EventType,
-                                     TEvSchemeShard::TEvRewriteOwnerResult::EventType});
+        IgnoreMessages(DebugHint(), {NEvHive::TEvCreateTabletReply::EventType,
+                                     NEvSchemeShard::TEvMigrateSchemeShardResult::EventType,
+                                     NEvSchemeShard::TEvInitTenantSchemeShardResult::EventType,
+                                     NEvSchemeShard::TEvPublishTenantAsReadOnlyResult::EventType,
+                                     NEvSchemeShard::TEvRewriteOwnerResult::EventType});
     }
 
-    bool HandleReply(TEvSchemeShard::TEvPublishTenantResult::TPtr& /*ev*/, TOperationContext& context) override {
+    bool HandleReply(NEvSchemeShard::TEvPublishTenantResult::TPtr& /*ev*/, TOperationContext& context) override {
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, OperationId, TTxState::DoneMigrateTree);
         context.OnComplete.ActivateTx(OperationId);
@@ -933,7 +933,7 @@ public:
 
         TPathId pathId = txState->TargetPathId;
 
-        auto event = new TEvSchemeShard::TEvPublishTenant(ui64(ssId));
+        auto event = new NEvSchemeShard::TEvPublishTenant(ui64(ssId));
 
         auto subDomain = context.SS->SubDomains.at(pathId);
         auto tenantSchemeShardId = TTabletId(subDomain->GetProcessingParams().GetSchemeShard());
@@ -969,12 +969,12 @@ public:
     TDoneMigrateTree(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType,
-                                     TEvSchemeShard::TEvMigrateSchemeShardResult::EventType,
-                                     TEvSchemeShard::TEvInitTenantSchemeShardResult::EventType,
-                                     TEvSchemeShard::TEvPublishTenantAsReadOnlyResult::EventType,
-                                     TEvSchemeShard::TEvRewriteOwnerResult::EventType,
-                                     TEvSchemeShard::TEvPublishTenantResult::EventType});
+        IgnoreMessages(DebugHint(), {NEvHive::TEvCreateTabletReply::EventType,
+                                     NEvSchemeShard::TEvMigrateSchemeShardResult::EventType,
+                                     NEvSchemeShard::TEvInitTenantSchemeShardResult::EventType,
+                                     NEvSchemeShard::TEvPublishTenantAsReadOnlyResult::EventType,
+                                     NEvSchemeShard::TEvRewriteOwnerResult::EventType,
+                                     NEvSchemeShard::TEvPublishTenantResult::EventType});
     }
 
     void Init(TPathId pathId, TOperationContext& context) {
@@ -1282,8 +1282,8 @@ public:
             TOperation::TPtr operation = context.SS->Operations.at(OperationId.GetTxId());
             Y_ABORT_UNLESS(operation->Parts.size());
 
-            THolder<TEvPrivate::TEvUndoTenantUpdate> msg = MakeHolder<TEvPrivate::TEvUndoTenantUpdate>();
-            TEvPrivate::TEvUndoTenantUpdate::TPtr personalEv = (TEventHandle<TEvPrivate::TEvUndoTenantUpdate>*) new IEventHandle(
+            THolder<NEvPrivate::TEvUndoTenantUpdate> msg = MakeHolder<NEvPrivate::TEvUndoTenantUpdate>();
+            NEvPrivate::TEvUndoTenantUpdate::TPtr personalEv = (TEventHandle<NEvPrivate::TEvUndoTenantUpdate>*) new IEventHandle(
                 context.SS->SelfId(), context.SS->SelfId(), msg.Release());
             operation->Parts.front()->HandleReply(personalEv, context);
         }
@@ -1426,15 +1426,15 @@ public:
 
         switch (decision) {
         case NKikimrSchemeOp::TUpgradeSubDomain::Commit: {
-            THolder<TEvPrivate::TEvCommitTenantUpdate> msg = MakeHolder<TEvPrivate::TEvCommitTenantUpdate>();
-            TEvPrivate::TEvCommitTenantUpdate::TPtr personalEv = (TEventHandle<TEvPrivate::TEvCommitTenantUpdate>*) new IEventHandle(
+            THolder<NEvPrivate::TEvCommitTenantUpdate> msg = MakeHolder<NEvPrivate::TEvCommitTenantUpdate>();
+            NEvPrivate::TEvCommitTenantUpdate::TPtr personalEv = (TEventHandle<NEvPrivate::TEvCommitTenantUpdate>*) new IEventHandle(
                 context.SS->SelfId(), context.SS->SelfId(), msg.Release());
             operation->Parts.front()->HandleReply(personalEv, context);
             break;
         }
         case NKikimrSchemeOp::TUpgradeSubDomain::Undo: {
-            THolder<TEvPrivate::TEvUndoTenantUpdate> msg = MakeHolder<TEvPrivate::TEvUndoTenantUpdate>();
-            TEvPrivate::TEvUndoTenantUpdate::TPtr personalEv = (TEventHandle<TEvPrivate::TEvUndoTenantUpdate>*) new IEventHandle(
+            THolder<NEvPrivate::TEvUndoTenantUpdate> msg = MakeHolder<NEvPrivate::TEvUndoTenantUpdate>();
+            NEvPrivate::TEvUndoTenantUpdate::TPtr personalEv = (TEventHandle<NEvPrivate::TEvUndoTenantUpdate>*) new IEventHandle(
                 context.SS->SelfId(), context.SS->SelfId(), msg.Release());
             operation->Parts.front()->HandleReply(personalEv, context);
             break;

@@ -354,8 +354,8 @@ public:
     }
 
 private:
-    void Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx) {
-        auto response = MakeHolder<TEvPersQueue::TEvResponse>();
+    void Handle(NEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx) {
+        auto response = MakeHolder<NEvPersQueue::TEvResponse>();
 
         response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
         response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
@@ -380,7 +380,7 @@ private:
     STFUNC(StateMockWork) {
         TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPersQueue::TEvRequest, Handle);
+            HFunc(NEvPersQueue::TEvRequest, Handle);
             HFunc(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
         }
     }

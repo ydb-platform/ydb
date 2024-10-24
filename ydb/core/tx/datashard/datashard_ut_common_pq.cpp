@@ -49,11 +49,11 @@ namespace NKikimr {
         cmd.SetReadTimestampMs(0);
         cmd.SetExternalOperation(true);
 
-        auto req = MakeHolder<TEvPersQueue::TEvRequest>();
+        auto req = MakeHolder<NEvPersQueue::TEvRequest>();
         req->Record = std::move(request);
         ForwardToTablet(runtime, ResolvePqTablet(runtime, sender, path, partitionId), sender, req.Release());
 
-        auto resp = runtime.GrabEdgeEventRethrow<TEvPersQueue::TEvResponse>(sender);
+        auto resp = runtime.GrabEdgeEventRethrow<NEvPersQueue::TEvResponse>(sender);
         UNIT_ASSERT(resp);
 
         TVector<std::pair<TString, TString>> result;

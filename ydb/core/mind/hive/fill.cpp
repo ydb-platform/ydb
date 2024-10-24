@@ -41,7 +41,7 @@ protected:
     }
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status, const TActorContext& ctx) {
-        ctx.Send(Initiator, new TEvHive::TEvFillNodeResult(status));
+        ctx.Send(Initiator, new NEvHive::TEvFillNodeResult(status));
         Die(ctx);
     }
 
@@ -144,7 +144,7 @@ void THive::StartHiveFill(TNodeId nodeId, const TActorId& initiator) {
         RegisterWithSameMailbox(balancer);
     } else {
         BLOG_W("It's not possible to start fill on node " << nodeId << ", the node is already busy");
-        Send(initiator, new TEvHive::TEvFillNodeResult(NKikimrProto::ALREADY));
+        Send(initiator, new NEvHive::TEvFillNodeResult(NKikimrProto::ALREADY));
     }
 }
 

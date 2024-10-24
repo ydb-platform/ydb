@@ -5,7 +5,7 @@
 
 namespace NKikimr::NOlap::NDataSharing::NEvents {
 
-struct TEvCheckStatusFromInitiator: public NActors::TEventPB<TEvCheckStatusFromInitiator, NKikimrColumnShardDataSharingProto::TEvCheckStatusFromInitiator, TEvColumnShard::EvDataSharingCheckStatusFromInitiator> {
+struct TEvCheckStatusFromInitiator: public NActors::TEventPB<TEvCheckStatusFromInitiator, NKikimrColumnShardDataSharingProto::TEvCheckStatusFromInitiator, NEvColumnShard::EvDataSharingCheckStatusFromInitiator> {
     TEvCheckStatusFromInitiator() = default;
 
     TEvCheckStatusFromInitiator(const TString& sessionId) {

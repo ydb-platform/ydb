@@ -24,15 +24,15 @@ void TSchemeShard::Handle(TEvIndexBuilder::TEvListRequest::TPtr& ev, const TActo
     Execute(CreateTxList(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& ev, const TActorContext& ctx) {
+void TSchemeShard::Handle(NEvDataShard::TEvBuildIndexProgressResponse::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxReply(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvDataShard::TEvSampleKResponse::TPtr& ev, const TActorContext& ctx) {
+void TSchemeShard::Handle(NEvDataShard::TEvSampleKResponse::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxReply(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& ev, const TActorContext& ctx) {
+void TSchemeShard::Handle(NEvDataShard::TEvReshuffleKMeansResponse::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxReply(ev), ctx);
 }
 
@@ -40,7 +40,7 @@ void TSchemeShard::Handle(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& ev, c
     Execute(CreateTxReply(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const TActorContext& ctx) {
+void TSchemeShard::Handle(NEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxBilling(ev), ctx);
 }
 

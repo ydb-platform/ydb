@@ -25,7 +25,7 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), {
-            TEvHive::TEvCreateTabletReply::EventType,
+            NEvHive::TEvCreateTabletReply::EventType,
         });
     }
 
@@ -54,7 +54,7 @@ public:
                     << ": shardIdx# " << shard.Idx);
                 context.OnComplete.WaitShardCreated(shard.Idx, OperationId);
             } else {
-                auto ev = MakeHolder<NReplication::TEvController::TEvCreateReplication>();
+                auto ev = MakeHolder<NReplication::NEvController::TEvCreateReplication>();
                 PathIdFromPathId(pathId, ev->Record.MutablePathId());
                 ev->Record.MutableOperationId()->SetTxId(ui64(OperationId.GetTxId()));
                 ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
@@ -72,7 +72,7 @@ public:
         return false;
     }
 
-    bool HandleReply(NReplication::TEvController::TEvCreateReplicationResult::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NReplication::NEvController::TEvCreateReplicationResult::TPtr& ev, TOperationContext& context) override {
         LOG_I(DebugHint() << "HandleReply " << ev->Get()->ToString());
 
         const auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
@@ -130,8 +130,8 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), {
-            TEvHive::TEvCreateTabletReply::EventType,
-            NReplication::TEvController::TEvCreateReplicationResult::EventType,
+            NEvHive::TEvCreateTabletReply::EventType,
+            NReplication::NEvController::TEvCreateReplicationResult::EventType,
         });
     }
 
@@ -146,7 +146,7 @@ public:
         return false;
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
         LOG_I(DebugHint() << "HandleReply TEvOperationPlan"

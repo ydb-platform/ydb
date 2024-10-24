@@ -5567,11 +5567,11 @@ void WaitTxNotification(TServer::TPtr server, TActorId sender, ui64 txId) {
     auto& runtime = *server->GetRuntime();
     auto& settings = server->GetSettings();
 
-    auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+    auto request = MakeHolder<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletion>();
     request->Record.SetTxId(txId);
     auto tid = ChangeStateStorage(SchemeRoot, settings.Domain);
     runtime.SendToPipe(tid, sender, request.Release(), 0, GetPipeConfigWithRetries());
-    runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(sender);
+    runtime.GrabEdgeEventRethrow<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult>(sender);
 }
 
 void CreateSubdomain(TServer::TPtr server,

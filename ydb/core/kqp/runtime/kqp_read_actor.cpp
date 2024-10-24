@@ -49,14 +49,14 @@ class TKqpReadActor : public TActorBootstrapped<TKqpReadActor>, public NYql::NDq
 public:
     struct TResult {
         ui64 ShardId;
-        THolder<TEventHandle<TEvDataShard::TEvReadResult>> ReadResult;
+        THolder<TEventHandle<NEvDataShard::TEvReadResult>> ReadResult;
         TMaybe<NKikimr::NMiniKQL::TUnboxedValueVector> Batch;
         size_t ProcessedRows = 0;
         size_t PackedRows = 0;
         ui64 ReadId;
         ui64 SeqNo;
 
-        TResult(ui64 shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>> readResult, ui64 readId, ui64 seqNo)
+        TResult(ui64 shardId, THolder<TEventHandle<NEvDataShard::TEvReadResult>> readResult, ui64 readId, ui64 seqNo)
             : ShardId(shardId)
             , ReadResult(std::move(readResult))
             , ReadId(readId)
@@ -230,7 +230,7 @@ public:
             }
         }
 
-        void FillEvRead(TEvDataShard::TEvRead& ev, TConstArrayRef<NScheme::TTypeInfo> keyTypes, bool reversed) {
+        void FillEvRead(NEvDataShard::TEvRead& ev, TConstArrayRef<NScheme::TTypeInfo> keyTypes, bool reversed) {
             if (Ranges.empty()) {
                 FillUnprocessedPoints(ev.Keys, reversed);
             } else {
@@ -295,12 +295,12 @@ public:
         ui64 LastSeqNo;
         TMaybe<TString> SerializedContinuationToken;
 
-        void RegisterMessage(const TEvDataShard::TEvReadResult& result) {
+        void RegisterMessage(const NEvDataShard::TEvReadResult& result) {
             LastSeqNo = result.Record.GetSeqNo();
             Finished = result.Record.GetFinished();
         }
 
-        bool IsLastMessage(const TEvDataShard::TEvReadResult& result) {
+        bool IsLastMessage(const NEvDataShard::TEvReadResult& result) {
             return result.Record.GetFinished() || (Finished && result.Record.GetSeqNo() == LastSeqNo);
         }
 
@@ -402,7 +402,7 @@ public:
     STFUNC(ReadyState) {
         try {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvDataShard::TEvReadResult, HandleRead);
+                hFunc(NEvDataShard::TEvReadResult, HandleRead);
                 hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, HandleResolve);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandleError);
                 hFunc(TEvRetryShard, HandleRetry);
@@ -888,7 +888,7 @@ public:
         return TStringBuilder() << "first request = " << token.GetFirstUnprocessedQuery() << " lastkey = " << lastKey;
     }
 
-    void ReportNullValue(const THolder<TEventHandle<TEvDataShard::TEvReadResult>>& result, size_t columnIndex) {
+    void ReportNullValue(const THolder<TEventHandle<NEvDataShard::TEvReadResult>>& result, size_t columnIndex) {
         CA_LOG_D(TStringBuilder() << "validation failed, "
             << " seqno = " << result->Get()->Record.GetSeqNo()
             << " finished = " << result->Get()->Record.GetFinished());
@@ -901,7 +901,7 @@ public:
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::INTERNAL_ERROR));
     }
 
-    void HandleRead(TEvDataShard::TEvReadResult::TPtr ev) {
+    void HandleRead(NEvDataShard::TEvReadResult::TPtr ev) {
         const auto& record = ev->Get()->Record;
         auto id = record.GetReadId();
         if (!Reads[id] || Reads[id].Finished) {
@@ -1011,7 +1011,7 @@ public:
             << " finished = " << ev->Get()->Record.GetFinished());
         CA_LOG_T(TStringBuilder() << "read #" << id << " pushed " << DebugPrintCells(ev->Get()) << " continuation token " << DebugPrintContionuationToken(record.GetContinuationToken()));
 
-        Results.push({Reads[id].Shard->TabletId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()), id, seqNo});
+        Results.push({Reads[id].Shard->TabletId, THolder<TEventHandle<NEvDataShard::TEvReadResult>>(ev.Release()), id, seqNo});
         NotifyCA();
     }
 
@@ -1037,7 +1037,7 @@ public:
         if (Reads[id]) {
             Counters->SentIteratorCancels->Inc();
             auto* state = Reads[id].Shard;
-            auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
+            auto cancel = MakeHolder<NEvDataShard::TEvReadCancel>();
             cancel->Record.SetReadId(id);
             Send(PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state->TabletId, false));
 
@@ -1138,7 +1138,7 @@ public:
         return stats;
     }
 
-    TString DebugPrintCells(const TEvDataShard::TEvReadResult* result) {
+    TString DebugPrintCells(const NEvDataShard::TEvReadResult* result) {
         if (result->Record.GetResultFormat() == NKikimrDataEvents::FORMAT_ARROW) {
             return "{ARROW}";
         }

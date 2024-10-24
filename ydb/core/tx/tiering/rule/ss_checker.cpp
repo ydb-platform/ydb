@@ -5,7 +5,7 @@
 
 namespace NKikimr::NColumnShard::NTiers {
 
-void TSSFetchingActor::Handle(NSchemeShard::TEvSchemeShard::TEvProcessingResponse::TPtr& ev) {
+void TSSFetchingActor::Handle(NSchemeShard::NEvSchemeShard::TEvProcessingResponse::TPtr& ev) {
     auto g = PassAwayGuard();
     Controller->FetchingResult(ev->Get()->Record);
 }

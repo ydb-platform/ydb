@@ -472,7 +472,7 @@ public:
         // Subscribe for TableService config changes
         ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
+             new NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
              IEventHandle::FlagTrackDelivery);
 
         Become(&TKqpCompileService::MainState);
@@ -491,8 +491,8 @@ private:
             HFunc(TEvKqp::TEvParseResponse, Handle);
             HFunc(TEvKqp::TEvSplitResponse, Handle);
 
-            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleConfig);
-            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig);
+            hFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleConfig);
+            hFunc(NConsole::NEvConsole::TEvConfigNotificationRequest, HandleConfig);
             hFunc(TEvents::TEvUndelivered, HandleUndelivery);
 
             CFunc(TEvents::TSystem::Wakeup, HandleTtlTimer);
@@ -503,11 +503,11 @@ private:
     }
 
 private:
-    void HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
+    void HandleConfig(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Subscribed for config changes");
     }
 
-    void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    void HandleConfig(NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto &event = ev->Get()->Record;
 
         bool enableKqpDataQueryStreamLookup = TableServiceConfig.GetEnableKqpDataQueryStreamLookup();
@@ -548,7 +548,7 @@ private:
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
-        auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
+        auto responseEv = MakeHolder<NConsole::NEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
 
         if (TableServiceConfig.GetSqlVersion() != defaultSyntaxVersion ||
@@ -586,11 +586,11 @@ private:
 
     void HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) {
         switch (ev->Get()->SourceType) {
-            case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
+            case NConsole::NEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
                 LOG_CRIT(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
                     "Failed to deliver subscription request to config dispatcher");
                 break;
-            case NConsole::TEvConsole::EvConfigNotificationResponse:
+            case NConsole::NEvConsole::EvConfigNotificationResponse:
                 LOG_ERROR(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
                     "Failed to deliver config notification response");
                 break;

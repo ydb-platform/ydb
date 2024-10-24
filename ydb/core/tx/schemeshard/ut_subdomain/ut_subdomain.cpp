@@ -166,7 +166,7 @@ NLs::TCheckFunc LsCheckDiskQuotaExceeded(
                                              receivedQuotas.data_size_soft_quota()
                                  }
             );
-            
+
             TMap<TString, EDiskUsageStatus> exceeders = CheckStoragePoolsQuotas(parsedUsage, parsedQuotas);
             UNIT_ASSERT_VALUES_EQUAL_C(exceeders, expectedExceeders,
                 debugHint << ", subdomain's disk space usage:\n" << desc.GetDiskSpaceUsage().DebugString()
@@ -219,7 +219,7 @@ NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runt
     NKikimrTxDataShard::TEvPeriodicTableStats stats;
     bool captured = false;
 
-    auto observer = runtime.AddObserver<TEvDataShard::TEvPeriodicTableStats>([&](const auto& event) {
+    auto observer = runtime.AddObserver<NEvDataShard::TEvPeriodicTableStats>([&](const auto& event) {
             const auto& record = event->Get()->Record;
             if (record.GetDatashardId() == datashardId && record.GetTableStats().GetPartCount() >= minPartCount) {
                 stats = record;
@@ -3136,7 +3136,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         auto waitForTableStats = [&](ui32 shards) {
             TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvDataShard::EvPeriodicTableStats, shards));
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(NEvDataShard::EvPeriodicTableStats, shards));
             runtime.DispatchEvents(options);
         };
 
@@ -3215,13 +3215,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         auto waitForTableStats = [&](ui32 shards) {
             TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvDataShard::EvPeriodicTableStats, shards));
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(NEvDataShard::EvPeriodicTableStats, shards));
             runtime.DispatchEvents(options);
         };
 
         auto waitForSchemaChanged = [&](ui32 shards) {
             TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvDataShard::EvSchemaChanged, shards));
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(NEvDataShard::EvSchemaChanged, shards));
             runtime.DispatchEvents(options);
         };
 
@@ -3486,7 +3486,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         auto stats = NPQ::GetReadBalancerPeriodicTopicStats(runtime, balancerId);
         UNIT_ASSERT_EQUAL_C(false, stats->Record.GetSubDomainOutOfSpace(), "SubDomainOutOfSpace from ReadBalancer");
-        
+
         auto msg = TString(24_MB, '_');
 
         ui32 seqNo = 100;
@@ -3521,7 +3521,7 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
         opts.EnablePersistentPartitionStats(true);
         opts.EnableBackgroundCompaction(false);
         TTestEnv env(runtime, opts);
-        
+
         NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
         NDataShard::gDbStatsDataSizeResolution = 1;
         NDataShard::gDbStatsRowCountResolution = 1;
@@ -3614,7 +3614,7 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
         UpdateRow(runtime, "SomeTable", 1, "some_value_for_the_key", shards[0]);
         {
             const auto tableStats = WaitTableStats(runtime, shards[0]).GetTableStats();
-            // channels' usage statistics appears only after a table compaction 
+            // channels' usage statistics appears only after a table compaction
             UNIT_ASSERT_VALUES_EQUAL_C(tableStats.ChannelsSize(), 0, tableStats.DebugString());
         }
         CheckQuotaExceedance(runtime, tenantSchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
@@ -3640,7 +3640,7 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
 
         TTestEnvOptions opts;
         TTestEnv env(runtime, opts);
-        
+
         ui64 txId = 100;
 
         constexpr const char* databaseDescription = R"(
@@ -3693,7 +3693,7 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
         opts.EnableBackgroundCompaction(false);
         TTestEnv env(runtime, opts);
         bool bTreeIndex = runtime.GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
-        
+
         NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
         NDataShard::gDbStatsDataSizeResolution = 1;
         NDataShard::gDbStatsRowCountResolution = 1;

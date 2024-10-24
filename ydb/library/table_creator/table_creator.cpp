@@ -66,11 +66,11 @@ public:
 
     STRICT_STFUNC(StateFuncUpgrade,
         hFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
-        hFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
+        hFunc(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
         sFunc(NActors::TEvents::TEvWakeup, RunTableRequest);
         hFunc(TEvTabletPipe::TEvClientConnected, Handle);
         hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-        hFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
+        hFunc(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
     )
 
     void Bootstrap() {
@@ -207,7 +207,7 @@ public:
                 // In the process of creating a database, errors of the form may occur -
                 // database doesn't have storage pools at all to create tablet
                 // channels to storage pool binding by profile id
-                // Also, this status is returned when column types mismatch - 
+                // Also, this status is returned when column types mismatch -
                 // need to fallback to rebuild column diff
                 } else if (ssStatus == NKikimrScheme::EStatus::StatusInvalidParameter) {
                     FallBack(true /* long delay */);
@@ -253,7 +253,7 @@ public:
         NActors::IActor* pipeActor = NTabletPipe::CreateClient(SelfId(), ev->Get()->Record.GetSchemeShardTabletId());
         Y_ABORT_UNLESS(pipeActor);
         SchemePipeActorId = Register(pipeActor);
-        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+        auto request = MakeHolder<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(txId);
         NTabletPipe::SendData(SelfId(), SchemePipeActorId, std::move(request));
         LOG_DEBUG_S(*TlsActivationContext, LogService,
@@ -281,10 +281,10 @@ public:
         PipeClientClosedByUs = false;
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&) {
+    void Handle(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&) {
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
+    void Handle(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
         LOG_DEBUG_S(*TlsActivationContext, LogService,
             LogPrefix << "Request: " << GetOperationType() << ". Transaction completed: " << ev->Get()->Record.GetTxId() << ". Doublechecking...");
         FallBack();

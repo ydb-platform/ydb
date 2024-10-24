@@ -111,7 +111,7 @@ void CheckAlterTenantSlots(TTenantTestRuntime &runtime, const TString &path,
                            const TString &idempotencyKey = TString(),
                            const TVector<std::pair<TString, TString>> attrs = {})
 {
-    auto *event = new TEvConsole::TEvAlterTenantRequest;
+    auto *event = new NEvConsole::TEvAlterTenantRequest;
     event->Record.MutableRequest()->set_path(path);
     event->Record.MutableRequest()->set_generation(generation);
     for (auto &slot : add) {
@@ -135,7 +135,7 @@ void CheckAlterTenantSlots(TTenantTestRuntime &runtime, const TString &path,
 
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvAlterTenantResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvAlterTenantResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetResponse().operation().status(), code);
 }
 
@@ -152,7 +152,7 @@ void CheckAlterRegisteredUnits(TTenantTestRuntime &runtime, const TString &path,
                                TVector<TUnitRegistration> registerUnits,
                                TVector<TUnitRegistration> deregisterUnits)
 {
-    auto *event = new TEvConsole::TEvAlterTenantRequest;
+    auto *event = new NEvConsole::TEvAlterTenantRequest;
     event->Record.MutableRequest()->set_path(path);
     for (auto &unit : registerUnits) {
         auto &rec = *event->Record.MutableRequest()->add_computational_units_to_register();
@@ -169,7 +169,7 @@ void CheckAlterRegisteredUnits(TTenantTestRuntime &runtime, const TString &path,
 
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvAlterTenantResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvAlterTenantResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetResponse().operation().status(), code);
 }
 
@@ -180,7 +180,7 @@ void CheckAlterTenantPools(TTenantTestRuntime &runtime,
                            TVector<TPoolAllocation> add,
                            bool hasModifications = true)
 {
-    auto *event = new TEvConsole::TEvAlterTenantRequest;
+    auto *event = new NEvConsole::TEvAlterTenantRequest;
     event->Record.MutableRequest()->set_path(path);
     if (token)
         event->Record.SetUserToken(token);
@@ -199,7 +199,7 @@ void CheckAlterTenantPools(TTenantTestRuntime &runtime,
         runtime.DispatchEvents(options);
     }
 
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvAlterTenantResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvAlterTenantResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetResponse().operation().status(), code);
 }
 
@@ -218,10 +218,10 @@ void CheckListTenants(TTenantTestRuntime &runtime, TVector<TString> tenants)
     for (auto &tenant : tenants)
         paths.insert(CanonizePath(tenant));
 
-    auto *event = new TEvConsole::TEvListTenantsRequest;
+    auto *event = new NEvConsole::TEvListTenantsRequest;
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvListTenantsResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvListTenantsResponse>(handle);
     Ydb::Cms::ListDatabasesResult result;
     reply->Record.GetResponse().operation().result().UnpackTo(&result);
     for (auto &tenant : result.paths()) {
@@ -233,18 +233,18 @@ void CheckListTenants(TTenantTestRuntime &runtime, TVector<TString> tenants)
 
 NKikimrConsole::TConfig GetCurrentConfig(TTenantTestRuntime &runtime)
 {
-    runtime.SendToConsole(new TEvConsole::TEvGetConfigRequest);
+    runtime.SendToConsole(new NEvConsole::TEvGetConfigRequest);
     TAutoPtr<IEventHandle> handle;
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetConfigResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvGetConfigResponse>(handle);
     return reply->Record.GetConfig();
 }
 
 void CheckGetConfig(TTenantTestRuntime &runtime,
                     const NKikimrConsole::TConfig &config)
 {
-    runtime.SendToConsole(new TEvConsole::TEvGetConfigRequest);
+    runtime.SendToConsole(new NEvConsole::TEvGetConfigRequest);
     TAutoPtr<IEventHandle> handle;
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetConfigResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvGetConfigResponse>(handle);
     auto &rec = reply->Record.GetConfig();
     UNIT_ASSERT_VALUES_EQUAL(rec.DebugString(), config.DebugString());
 }
@@ -254,9 +254,9 @@ void CheckSetConfig(TTenantTestRuntime &runtime,
                     Ydb::StatusIds::StatusCode code,
                     NKikimrConsole::TConfigItem::EMergeStrategy merge = NKikimrConsole::TConfigItem::OVERWRITE)
 {
-    runtime.SendToConsole(new TEvConsole::TEvSetConfigRequest(config, merge));
+    runtime.SendToConsole(new NEvConsole::TEvSetConfigRequest(config, merge));
     TAutoPtr<IEventHandle> handle;
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvSetConfigResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvSetConfigResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), code);
 }
 
@@ -265,7 +265,7 @@ TString SendTenantCreationCommand(
         const TString &idempotencyKey = TString(),
         TMaybe<Ydb::StatusIds::StatusCode> expectedStatus = Nothing())
 {
-    auto *request = new TEvConsole::TEvCreateTenantRequest;
+    auto *request = new NEvConsole::TEvCreateTenantRequest;
     request->Record.MutableRequest()->set_path(name);
     auto &unit = *request->Record.MutableRequest()->mutable_resources()->add_storage_units();
     unit.set_unit_kind("hdd");
@@ -277,7 +277,7 @@ TString SendTenantCreationCommand(
 
     runtime.SendToConsole(request);
     TAutoPtr<IEventHandle> handle;
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvCreateTenantResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvCreateTenantResponse>(handle);
 
     if (expectedStatus) {
         UNIT_ASSERT(reply->Record.GetResponse().operation().ready());
@@ -291,12 +291,12 @@ TString SendTenantCreationCommand(
 
 TString SendTenantRemovalCommand(TTenantTestRuntime &runtime, const TString &name)
 {
-    auto *request = new TEvConsole::TEvRemoveTenantRequest;
+    auto *request = new NEvConsole::TEvRemoveTenantRequest;
     request->Record.MutableRequest()->set_path(name);
 
     runtime.SendToConsole(request);
     TAutoPtr<IEventHandle> handle;
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvRemoveTenantResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvRemoveTenantResponse>(handle);
 
     UNIT_ASSERT(!reply->Record.GetResponse().operation().ready());
     return reply->Record.GetResponse().operation().id();
@@ -304,25 +304,25 @@ TString SendTenantRemovalCommand(TTenantTestRuntime &runtime, const TString &nam
 
 void CheckNotificationRequest(TTenantTestRuntime &runtime, const TString &id)
 {
-    auto *request = new TEvConsole::TEvNotifyOperationCompletionRequest;
+    auto *request = new NEvConsole::TEvNotifyOperationCompletionRequest;
     request->Record.MutableRequest()->set_id(id);
 
     runtime.SendToConsole(request);
     TAutoPtr<IEventHandle> handle;
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvNotifyOperationCompletionResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvNotifyOperationCompletionResponse>(handle);
     UNIT_ASSERT(!reply->Record.GetResponse().operation().ready());
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetResponse().operation().id(), id);
 }
 
 void CheckNotificationRequest(TTenantTestRuntime &runtime, const TString &id, Ydb::StatusIds::StatusCode code)
 {
-    auto *request = new TEvConsole::TEvNotifyOperationCompletionRequest;
+    auto *request = new NEvConsole::TEvNotifyOperationCompletionRequest;
     request->Record.MutableRequest()->set_id(id);
 
     runtime.SendToConsole(request);
     TAutoPtr<IEventHandle> handle;
-    auto replies = runtime.GrabEdgeEventsRethrow<TEvConsole::TEvNotifyOperationCompletionResponse,
-                                                         TEvConsole::TEvOperationCompletionNotification>(handle);
+    auto replies = runtime.GrabEdgeEventsRethrow<NEvConsole::TEvNotifyOperationCompletionResponse,
+                                                         NEvConsole::TEvOperationCompletionNotification>(handle);
     UNIT_ASSERT(!std::get<0>(replies));
     UNIT_ASSERT(std::get<1>(replies)->Record.GetResponse().operation().ready());
     UNIT_ASSERT_VALUES_EQUAL(std::get<1>(replies)->Record.GetResponse().operation().id(), id);
@@ -353,12 +353,12 @@ void CheckTenantGeneration(TTenantTestRuntime &runtime,
                            const TString &path,
                            ui64 generation)
 {
-    auto *event = new TEvConsole::TEvGetTenantStatusRequest;
+    auto *event = new NEvConsole::TEvGetTenantStatusRequest;
     event->Record.MutableRequest()->set_path(path);
 
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetTenantStatusResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvGetTenantStatusResponse>(handle);
     auto &operation = reply->Record.GetResponse().operation();
     UNIT_ASSERT_VALUES_EQUAL(operation.status(), Ydb::StatusIds::SUCCESS);
 
@@ -1659,7 +1659,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         {
             runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
             SendCaptured(runtime, captured);
-            auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvOperationCompletionNotification>(handle);
+            auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvOperationCompletionNotification>(handle);
             auto &operation = reply->Record.GetResponse().operation();
             UNIT_ASSERT(operation.ready());
             UNIT_ASSERT_VALUES_EQUAL(operation.id(), id);
@@ -1692,7 +1692,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         {
             runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
             SendCaptured(runtime, captured);
-            auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvOperationCompletionNotification>(handle);
+            auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvOperationCompletionNotification>(handle);
             auto &operation = reply->Record.GetResponse().operation();
             UNIT_ASSERT(operation.ready());
             UNIT_ASSERT_VALUES_EQUAL(operation.id(), id);
@@ -1722,7 +1722,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         {
             runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
             SendCaptured(runtime, captured);
-            auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvOperationCompletionNotification>(handle);
+            auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvOperationCompletionNotification>(handle);
             auto &operation = reply->Record.GetResponse().operation();
             UNIT_ASSERT(operation.ready());
             UNIT_ASSERT_VALUES_EQUAL(operation.id(), id);
@@ -1799,11 +1799,11 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
 
 
     bool CheckAttrsPresent(TTenantTestRuntime& runtime, const TString& tenantName, THashMap<TString, TString> attrs, bool skipAbsent = false) {
-        auto request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>(tenantName);
+        auto request = MakeHolder<NEvSchemeShard::TEvDescribeScheme>(tenantName);
         ForwardToTablet(runtime, SCHEME_SHARD1_ID, runtime.Sender, request.Release());
 
         TAutoPtr<IEventHandle> handle;
-        auto reply = runtime.GrabEdgeEvent<TEvSchemeShard::TEvDescribeSchemeResult>(handle);
+        auto reply = runtime.GrabEdgeEvent<NEvSchemeShard::TEvDescribeSchemeResult>(handle);
         Cerr << "Reply: " << reply->GetRecord().DebugString() << "\n";
         for (auto &attr : reply->GetRecord().GetPathDescription().GetUserAttributes()) {
             if (!skipAbsent) {

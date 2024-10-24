@@ -86,12 +86,12 @@ public:
 
     STFUNC(StateRequestedTopicInfo) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPersQueue::TEvResponse, Handle);
+            HFunc(NEvPersQueue::TEvResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
-    void Handle(TEvPersQueue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NEvPersQueue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
         Result.MergeFrom(ev->Get()->Record);
         if (++Responses == Requests) {
             ReplyAndDie(ctx);

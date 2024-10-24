@@ -159,7 +159,7 @@ public:
                 bool inserted = InFlight.emplace(coordinator, &item).second;
                 if (inserted) {
                     ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
-                            new TEvSubDomain::TEvConfigure(item.Params),
+                            new NEvSubDomain::TEvConfigure(item.Params),
                             coordinator, true),
                         IEventHandle::FlagTrackDelivery);
                 }
@@ -171,7 +171,7 @@ public:
         }
     }
 
-    void Handle(TEvSubDomain::TEvConfigureStatus::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NEvSubDomain::TEvConfigureStatus::TPtr& ev, const TActorContext& ctx) {
         auto status = ev->Get()->Record.GetStatus();
         ui64 tabletId = ev->Get()->Record.GetOnTabletId();
         auto it = InFlight.find(tabletId);
@@ -216,7 +216,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvents::TEvUndelivered, Handle);
             HFunc(TEvTxUserProxy::TEvGetProxyServicesResponse, Handle);
-            HFunc(TEvSubDomain::TEvConfigureStatus, Handle);
+            HFunc(NEvSubDomain::TEvConfigureStatus, Handle);
             HFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         }
     }

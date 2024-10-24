@@ -275,7 +275,7 @@ public:
         ctx.Send(MakeTxProxyID(), request.release());
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->GetRecord();
 
         TVector<ui64> shards;
@@ -624,7 +624,7 @@ public:
         HFunc(TEvDataShardLoad::TEvTestLoadInfoResponse, Handle)
         HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle)
         HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle)
-        HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle)
+        HFunc(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult, Handle)
         HFunc(NMon::TEvHttpInfo, Handle)
         CFunc(TEvents::TSystem::PoisonPill, HandlePoison)
     )

@@ -23,18 +23,18 @@ void TTxChainActor::Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev) {
     SaveSessionState();
 }
 
-void TTxChainActor::Handle(TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr& ev) {
+void TTxChainActor::Handle(NEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr& ev) {
     AFL_VERIFY(SessionLogic->GetCurrentTxIdVerified() == ev->Get()->Record.GetTxId());
 }
 
-void TTxChainActor::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
+void TTxChainActor::Handle(NEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
     AFL_VERIFY(SessionLogic->GetCurrentTxIdVerified() == ev->Get()->Record.GetTxId());
     SessionLogic->ResetCurrentTxId();
     SessionLogic->NextStep();
     SaveSessionProgress();
 }
 
-void TTxChainActor::Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
+void TTxChainActor::Handle(NEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
     AFL_VERIFY(SessionLogic->GetCurrentTxIdVerified() == ev->Get()->Record.GetTxId());
     AFL_VERIFY(ev->Get()->IsAccepted() || ev->Get()->IsDone())("problem", ev->ToString());
 }

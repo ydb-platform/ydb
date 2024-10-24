@@ -248,9 +248,9 @@ private:
 
 
             // Balancer events
-            HFunc(TEvPersQueue::TEvLockPartition, Handle); // can be sent to itself when reading without a consumer
-            HFunc(TEvPersQueue::TEvReleasePartition, Handle);
-            HFunc(TEvPersQueue::TEvError, Handle);
+            HFunc(NEvPersQueue::TEvLockPartition, Handle); // can be sent to itself when reading without a consumer
+            HFunc(NEvPersQueue::TEvReleasePartition, Handle);
+            HFunc(NEvPersQueue::TEvError, Handle);
 
             // pipe events
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
@@ -300,9 +300,9 @@ private:
     void Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const TActorContext& ctx);
 
     // Balancer events
-    void Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext& ctx); // can be sent to itself when reading without a consumer
-    void Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvError::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext& ctx); // can be sent to itself when reading without a consumer
+    void Handle(NEvPersQueue::TEvReleasePartition::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvError::TPtr& ev, const TActorContext& ctx);
 
     // pipe events
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx);

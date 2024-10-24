@@ -232,7 +232,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
             return Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Empty data");
         }
 
-        auto ev = MakeHolder<TEvDataShard::TEvUploadRowsRequest>();
+        auto ev = MakeHolder<NEvDataShard::TEvUploadRowsRequest>();
         ev->Record.SetTableId(KeyDesc->TableId.PathId.LocalPathId);
 
         const auto timeout = request.operation_params().has_operation_timeout()
@@ -389,13 +389,13 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
 
     STATEFN(StateProcessData) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvDataShard::TEvUploadRowsResponse, Handle);
+            hFunc(NEvDataShard::TEvUploadRowsResponse, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
         }
     }
 
-    void Handle(TEvDataShard::TEvUploadRowsResponse::TPtr& ev) {
+    void Handle(NEvDataShard::TEvUploadRowsResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
         switch (record.GetStatus()) {

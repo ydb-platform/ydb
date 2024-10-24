@@ -65,7 +65,7 @@ protected:
         TSet<TActorId> toAnswer;
         toAnswer.swap(info->Subscribers);
         for (auto& actorId: toAnswer) {
-            Send(actorId, new TEvSchemeShard::TEvNotifyTxCompletionResult(info->Id));
+            Send(actorId, new NEvSchemeShard::TEvNotifyTxCompletionResult(info->Id));
         }
     }
 

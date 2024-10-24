@@ -542,7 +542,7 @@ private:
 
 class TDataShard::TTxHandleSafeKqpScan : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxHandleSafeKqpScan(TDataShard* self, TEvDataShard::TEvKqpScan::TPtr&& ev)
+    TTxHandleSafeKqpScan(TDataShard* self, NEvDataShard::TEvKqpScan::TPtr&& ev)
         : TTransactionBase(self)
         , Ev(std::move(ev))
     {}
@@ -557,14 +557,14 @@ public:
     }
 
 private:
-    TEvDataShard::TEvKqpScan::TPtr Ev;
+    NEvDataShard::TEvKqpScan::TPtr Ev;
 };
 
-void TDataShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext&) {
+void TDataShard::Handle(NEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext&) {
     Execute(new TTxHandleSafeKqpScan(this, std::move(ev)));
 }
 
-void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext&) {
+void TDataShard::HandleSafe(NEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext&) {
     auto& request = ev->Get()->Record;
     auto scanComputeActor = ev->Sender;
     auto generation = request.GetGeneration();

@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         AsyncDropResourcePool(runtime, ++txId, "/MyRoot/.metadata/workload_manager/pools", "MyResourcePool");
         TestModificationResult(runtime, txId - 1);
 
-        auto ev = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>();
+        auto ev = runtime.GrabEdgeEvent<NEvSchemeShard::TEvModifySchemeTransactionResult>();
         UNIT_ASSERT(ev);
 
         const auto& record = ev->Record;

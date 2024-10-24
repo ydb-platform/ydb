@@ -50,14 +50,14 @@ using namespace NKikimrWhiteboard;
 using namespace NKikimrCms;
 using namespace NKikimrBlobStorage;
 
-void TFakeNodeWhiteboardService::Handle(TEvConfigsDispatcher::TEvGetConfigRequest::TPtr &ev,
+void TFakeNodeWhiteboardService::Handle(NEvConfigsDispatcher::TEvGetConfigRequest::TPtr &ev,
                                         const TActorContext &ctx)
 {
     TGuard<TMutex> guard(Mutex);
     Y_UNUSED(ev);
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableBootstrapConfig()->CopyFrom(BootstrapConfig);
-    auto resp = MakeHolder<TEvConfigsDispatcher::TEvGetConfigResponse>();
+    auto resp = MakeHolder<NEvConfigsDispatcher::TEvGetConfigResponse>();
     resp->Config = std::make_shared<NKikimrConfig::TAppConfig>(appConfig);
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
@@ -566,7 +566,7 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
     SetObserverFunc([](TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigRequest
             || event->Type == TEvBlobStorage::EvControllerConfigRequest
-            || event->GetTypeRewrite() == TEvConfigsDispatcher::EvGetConfigRequest) {
+            || event->GetTypeRewrite() == NEvConfigsDispatcher::EvGetConfigRequest) {
             auto fakeId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(event->Recipient.NodeId());
             if (event->Recipient != fakeId)
                 event = IEventHandle::Forward(std::move(event), fakeId);

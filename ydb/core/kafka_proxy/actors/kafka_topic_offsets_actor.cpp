@@ -6,7 +6,7 @@
 
 namespace NKafka {
 
-TTopicOffsetsActor::TTopicOffsetsActor(const TEvKafka::TGetOffsetsRequest& request, const TActorId& requester) 
+TTopicOffsetsActor::TTopicOffsetsActor(const TEvKafka::TGetOffsetsRequest& request, const TActorId& requester)
     : TBase(request, requester)
     , TDescribeTopicActorImpl(NKikimr::NGRpcProxy::V1::TDescribeTopicActorSettings::DescribeTopic(
             true,
@@ -41,20 +41,20 @@ void TTopicOffsetsActor::HandleCacheNavigateResponse(
         auto part = PQGroupInfo->Description.GetPartitions(i).GetPartitionId();
         partititons.insert(part);
     }
-    
+
     for (auto requestedPartition: Settings.Partitions) {
         if (partititons.find(requestedPartition) == partititons.end()) {
             return RaiseError(
                 TStringBuilder() << "No partition " << requestedPartition << " in topic",
                 Ydb::PersQueue::ErrorCode::BAD_REQUEST, Ydb::StatusIds::SCHEME_ERROR, ActorContext()
-            ); 
+            );
         }
     }
 
     ProcessTablets(PQGroupInfo->Description, this->ActorContext());
 }
 
-void TTopicOffsetsActor::ApplyResponse(TTabletInfo& tablet, NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext&) {
+void TTopicOffsetsActor::ApplyResponse(TTabletInfo& tablet, NKikimr::NEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext&) {
     const auto& record = ev->Get()->Record;
     for (auto i = 0u; i < record.PartResultSize(); i++) {
         const auto& part = record.GetPartResult(i);

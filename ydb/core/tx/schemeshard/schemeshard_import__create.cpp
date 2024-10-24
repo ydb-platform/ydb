@@ -236,9 +236,9 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
 
     ui64 Id;
     TMaybe<ui32> ItemIdx;
-    TEvPrivate::TEvImportSchemeReady::TPtr SchemeResult = nullptr;
+    NEvPrivate::TEvImportSchemeReady::TPtr SchemeResult = nullptr;
     TEvTxAllocatorClient::TEvAllocateResult::TPtr AllocateResult = nullptr;
-    TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult = nullptr;
+    NEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult = nullptr;
     TEvIndexBuilder::TEvCreateResponse::TPtr CreateIndexResult = nullptr;
     TTxId CompletedTxId = InvalidTxId;
 
@@ -249,7 +249,7 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     {
     }
 
-    explicit TTxProgress(TSelf* self, TEvPrivate::TEvImportSchemeReady::TPtr& ev)
+    explicit TTxProgress(TSelf* self, NEvPrivate::TEvImportSchemeReady::TPtr& ev)
         : TXxport::TTxBase(self)
         , SchemeResult(ev)
     {
@@ -261,7 +261,7 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     {
     }
 
-    explicit TTxProgress(TSelf* self, TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev)
+    explicit TTxProgress(TSelf* self, NEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev)
         : TXxport::TTxBase(self)
         , ModifyResult(ev)
     {
@@ -437,7 +437,7 @@ private:
             << ", item# " << item.ToString(itemIdx));
 
         Y_ABORT_UNLESS(item.WaitTxId != InvalidTxId);
-        Send(Self->SelfId(), new TEvSchemeShard::TEvNotifyTxCompletion(ui64(item.WaitTxId)));
+        Send(Self->SelfId(), new NEvSchemeShard::TEvNotifyTxCompletion(ui64(item.WaitTxId)));
     }
 
     TTxId GetActiveRestoreTxId(TImportInfo::TPtr importInfo, ui32 itemIdx) {
@@ -1030,7 +1030,7 @@ ITransaction* TSchemeShard::CreateTxProgressImport(ui64 id, const TMaybe<ui32>& 
     return new TImport::TTxProgress(this, id, itemIdx);
 }
 
-ITransaction* TSchemeShard::CreateTxProgressImport(TEvPrivate::TEvImportSchemeReady::TPtr& ev) {
+ITransaction* TSchemeShard::CreateTxProgressImport(NEvPrivate::TEvImportSchemeReady::TPtr& ev) {
     return new TImport::TTxProgress(this, ev);
 }
 
@@ -1038,7 +1038,7 @@ ITransaction* TSchemeShard::CreateTxProgressImport(TEvTxAllocatorClient::TEvAllo
     return new TImport::TTxProgress(this, ev);
 }
 
-ITransaction* TSchemeShard::CreateTxProgressImport(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
+ITransaction* TSchemeShard::CreateTxProgressImport(NEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
     return new TImport::TTxProgress(this, ev);
 }
 

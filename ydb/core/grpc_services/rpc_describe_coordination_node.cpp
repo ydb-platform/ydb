@@ -36,12 +36,12 @@ public:
 private:
     void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFunc(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult, Handle);
             default: TBase::StateWork(ev);
         }
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->GetRecord();
         const auto status = record.GetStatus();
         switch (status) {

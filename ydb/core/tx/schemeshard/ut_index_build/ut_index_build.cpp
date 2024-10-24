@@ -473,8 +473,8 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         NDataShard::gDbStatsDataSizeResolution = 80000;
 
         auto upgradeEvent = [&](TAutoPtr<IEventHandle>& ev) -> auto {
-            if (ev->Type == TEvSchemeShard::EvModifySchemeTransaction) {
-                auto *msg = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>();
+            if (ev->Type == NEvSchemeShard::EvModifySchemeTransaction) {
+                auto *msg = ev->Get<NEvSchemeShard::TEvModifySchemeTransaction>();
                 if (msg->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexBuild) {
                     auto& tx = *msg->Record.MutableTransaction(0);
                     auto& config = *tx.MutableInitiateIndexBuild();
@@ -823,13 +823,13 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
             }
         )", &settings));
 
-        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> indexApplicationBlocker(runtime, [](const auto& ev) {
+        TBlockEvents<NEvSchemeShard::TEvModifySchemeTransaction> indexApplicationBlocker(runtime, [](const auto& ev) {
             const auto& modifyScheme = ev->Get()->Record.GetTransaction(0);
             return modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpApplyIndexBuild;
         });
 
         ui64 indexInitializationTx = 0;
-        TWaitForFirstEvent<TEvSchemeShard::TEvModifySchemeTransaction> indexInitializationWaiter(runtime,
+        TWaitForFirstEvent<NEvSchemeShard::TEvModifySchemeTransaction> indexInitializationWaiter(runtime,
             [&indexInitializationTx](const auto& ev){
                 const auto& record = ev->Get()->Record;
                 if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexBuild) {
@@ -874,7 +874,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
 
         {
             // make sure no shards are merged
-            TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> mergeBlocker(runtime, [](const auto& ev) {
+            TBlockEvents<NEvSchemeShard::TEvModifySchemeTransaction> mergeBlocker(runtime, [](const auto& ev) {
                 const auto& modifyScheme = ev->Get()->Record.GetTransaction(0);
                 return modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions;
             });
@@ -882,7 +882,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
             {
                 // wait for all index shards to send statistics
                 THashSet<ui64> shardsWithStats;
-                using TEvType = TEvDataShard::TEvPeriodicTableStats;
+                using TEvType = NEvDataShard::TEvPeriodicTableStats;
                 auto statsObserver = runtime.AddObserver<TEvType>([&shardsWithStats](const TEvType::TPtr& ev) {
                     shardsWithStats.emplace(ev->Get()->Record.GetDatashardId());
                 });
@@ -965,7 +965,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
             }
         )", &settings));
 
-        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> indexCreationBlocker(runtime, [](const auto& ev) {
+        TBlockEvents<NEvSchemeShard::TEvModifySchemeTransaction> indexCreationBlocker(runtime, [](const auto& ev) {
             const auto& modifyScheme = ev->Get()->Record.GetTransaction(0);
             return modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexBuild;
         });

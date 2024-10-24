@@ -144,10 +144,10 @@ private:
         }
     }
 
-    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    void Handle(NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         ApplyConfig(record.GetConfig().GetMetadataCacheConfig(), record.GetConfig().GetFeatureFlags());
-        Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
+        Send(ev->Sender, new NConsole::NEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
     }
 
 public:
@@ -204,7 +204,7 @@ public:
         Become(&TThis::StateInactive);
         ApplyConfig(AppData()->MetadataCacheConfig, AppData()->FeatureFlags);
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({NKikimrConsole::TConfigItem::FeatureFlagsItem,
+             new NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({NKikimrConsole::TConfigItem::FeatureFlagsItem,
                                                                                   NKikimrConsole::TConfigItem::MetadataCacheConfigItem}));
     }
 
@@ -225,8 +225,8 @@ public:
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             hFunc(NHealthCheck::TEvSelfCheckResult, Handle);
             hFunc(NHealthCheck::TEvSelfCheckRequestProto, Handle);
-            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
-            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+            IgnoreFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            hFunc(NConsole::NEvConsole::TEvConfigNotificationRequest, Handle);
             default: Y_ABORT("Unexpected event: %s", ev->ToString().c_str());
         }
     }
@@ -239,8 +239,8 @@ public:
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(TEvStateStorage::TEvBoardInfoUpdate, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
-            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
-            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+            IgnoreFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            hFunc(NConsole::NEvConsole::TEvConfigNotificationRequest, Handle);
             default: Y_ABORT("Unexpected event: %s", ev->ToString().c_str());
         }
     }
@@ -253,8 +253,8 @@ public:
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(TEvStateStorage::TEvBoardInfoUpdate, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
-            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
-            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+            IgnoreFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            hFunc(NConsole::NEvConsole::TEvConfigNotificationRequest, Handle);
             default: Y_ABORT("Unexpected event: %s", ev->ToString().c_str());
         }
     }
@@ -262,7 +262,7 @@ public:
     STATEFN(StateDisabled) {
         switch (ev->GetTypeRewrite()) {
             cFunc(TEvents::TEvPoison::EventType, PassAway);
-            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+            hFunc(NConsole::NEvConsole::TEvConfigNotificationRequest, Handle);
             // Ignore everything else
         }
     }

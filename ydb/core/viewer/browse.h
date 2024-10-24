@@ -27,7 +27,7 @@ class TBrowse : public TActorBootstrapped<TBrowse> {
     NKikimrViewer::TMetaInfo MetaInfo;
     TString CurrentPath; // TStringBuf?
     NKikimrViewer::EObjectType CurrentType;
-    THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
+    THolder<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
     THashSet<TActorId> Handlers;
     TActorId TxProxy = MakeTxProxyID();
 
@@ -279,7 +279,7 @@ public:
         return HandleBadRequest(ctx, "The path is not found");
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx) {
         DescribeResult.Reset(ev->Release());
         ++Responses;
         ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestCompleted(TxProxy, TEvTxUserProxy::EvNavigate));
@@ -342,7 +342,7 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFunc(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult, Handle);
             HFunc(NViewerEvents::TEvBrowseResponse, Handle);
             CFunc(TEvents::TSystem::PoisonPill, HandlePoisonPill);
             HFunc(TEvents::TEvUndelivered, HandleUndelivered);
@@ -386,7 +386,7 @@ protected:
     TVector<ui64> Tablets;
     ui32 Requests = 0;
     ui32 Responses = 0;
-    THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
+    THolder<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
     TString Path;
     IViewer::TBrowseContext BrowseContext;
     TMap<TTabletId, THolder<TEvTablet::TEvGetCountersResponse>> TabletCountersResults;
@@ -439,8 +439,8 @@ public:
         }
     }
 
-    void Handle(TEvHive::TEvChannelInfo::TPtr &ev, const TActorContext &ctx) {
-        THolder<TEvHive::TEvChannelInfo> lookupResult = ev->Release();
+    void Handle(NEvHive::TEvChannelInfo::TPtr &ev, const TActorContext &ctx) {
+        THolder<NEvHive::TEvChannelInfo> lookupResult = ev->Release();
         for (const auto& channelInfo : lookupResult->Record.GetChannelInfo()) {
             for (const auto& historyInfo : channelInfo.GetHistory()) {
                 ui32 groupId = historyInfo.GetGroupID();
@@ -454,7 +454,7 @@ public:
             }
         }
         ++Responses;
-        ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestCompleted(ev->Sender, TEvHive::EvLookupChannelInfo));
+        ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestCompleted(ev->Sender, NEvHive::EvLookupChannelInfo));
         if (Responses == Requests) {
             ReplyAndDie(ctx);
         }

@@ -178,7 +178,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         // Capture all upload rows requests
         TVector<THolder<IEventHandle>> uploadRequests;
 
-        auto observerHolder = runtime.AddObserver<TEvDataShard::TEvUploadRowsRequest>([&uploadRequests](auto& ev) {
+        auto observerHolder = runtime.AddObserver<NEvDataShard::TEvUploadRowsRequest>([&uploadRequests](auto& ev) {
             Cerr << "... captured TEvUploadRowsRequest" << Endl;
             uploadRequests.emplace_back(ev.Release());
         });
@@ -763,13 +763,13 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         TVector<ui32> observedUploadStatus;
         TVector<THolder<IEventHandle>> blockedEnqueueRecords;
 
-        auto observerRequestHandler = runtime.AddObserver<TEvDataShard::TEvUploadRowsRequest>([&overloadSubscribe](auto& ev) {
+        auto observerRequestHandler = runtime.AddObserver<NEvDataShard::TEvUploadRowsRequest>([&overloadSubscribe](auto& ev) {
             if (!overloadSubscribe) {
                 ev->Get()->Record.ClearOverloadSubscribe();
             }
         });
 
-        auto observerResponseHandler = runtime.AddObserver<TEvDataShard::TEvUploadRowsResponse>([&observedUploadStatus](auto& ev) {
+        auto observerResponseHandler = runtime.AddObserver<NEvDataShard::TEvUploadRowsResponse>([&observedUploadStatus](auto& ev) {
             observedUploadStatus.push_back(ev->Get()->Record.GetStatus());
         });
 
@@ -868,8 +868,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 2), (3, 4);");
 
         std::vector<std::unique_ptr<IEventHandle>> bulkUpserts;
-        auto captureBulkUpserts = runtime.AddObserver<TEvDataShard::TEvUploadRowsRequest>(
-            [&](TEvDataShard::TEvUploadRowsRequest::TPtr& ev) {
+        auto captureBulkUpserts = runtime.AddObserver<NEvDataShard::TEvUploadRowsRequest>(
+            [&](NEvDataShard::TEvUploadRowsRequest::TPtr& ev) {
                 bulkUpserts.emplace_back(ev.Release());
             });
 

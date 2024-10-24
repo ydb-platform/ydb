@@ -62,7 +62,7 @@ public:
             hFunc(TEvents::TEvPoisonPill, HandlePoisonPill);
             hFunc(TEvTabletPipe::TEvClientConnected, HandleConnect);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigate);
-            hFunc(TEvSchemeShard::TEvLoginResult, HandleResult);
+            hFunc(NEvSchemeShard::TEvLoginResult, HandleResult);
             hFunc(TEvLdapAuthProvider::TEvAuthenticateResponse, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
@@ -131,7 +131,7 @@ public:
         ALOG_DEBUG(NActorsServices::HTTP, "Login: Requesting schemeshard " << schemeShardTabletId << " for user " << AuthCredentials.Login);
         IActor* pipe = NTabletPipe::CreateClient(SelfId(), schemeShardTabletId, GetPipeClientConfig());
         PipeClient = RegisterWithSameMailbox(pipe);
-        THolder<TEvSchemeShard::TEvLogin> request = MakeHolder<TEvSchemeShard::TEvLogin>();
+        THolder<NEvSchemeShard::TEvLogin> request = MakeHolder<NEvSchemeShard::TEvLogin>();
         request.Get()->Record = CreateLoginRequest(AuthCredentials, AppData()->AuthConfig);
         request.Get()->Record.SetPeerName(Request->Address->ToString());
         NTabletPipe::SendData(SelfId(), PipeClient, request.Release());
@@ -177,7 +177,7 @@ public:
         }
     }
 
-    void HandleResult(TEvSchemeShard::TEvLoginResult::TPtr& ev) {
+    void HandleResult(NEvSchemeShard::TEvLoginResult::TPtr& ev) {
         if (ev->Get()->Record.GetError()) {
             ReplyErrorAndPassAway("403", "Forbidden", ev->Get()->Record.GetError());
         } else {

@@ -7,7 +7,7 @@ struct TKesusTablet::TTxConfigGet : public TTxBase {
     const TActorId Sender;
     const ui64 Cookie;
 
-    THolder<TEvKesus::TEvGetConfigResult> Reply;
+    THolder<NEvKesus::TEvGetConfigResult> Reply;
 
     TTxConfigGet(TSelf* self, const TActorId& sender, ui64 cookie)
         : TTxBase(self)
@@ -25,7 +25,7 @@ struct TKesusTablet::TTxConfigGet : public TTxBase {
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistStrictMarker(db);
 
-        Reply.Reset(new TEvKesus::TEvGetConfigResult());
+        Reply.Reset(new NEvKesus::TEvGetConfigResult());
         auto* config = Reply->Record.MutableConfig();
         config->set_path(Self->KesusPath); // TODO: remove legacy field eventually
         config->set_self_check_period_millis(Self->SelfCheckPeriod.MilliSeconds());
@@ -47,7 +47,7 @@ struct TKesusTablet::TTxConfigGet : public TTxBase {
     }
 };
 
-void TKesusTablet::Handle(TEvKesus::TEvGetConfig::TPtr& ev) {
+void TKesusTablet::Handle(NEvKesus::TEvGetConfig::TPtr& ev) {
     Execute(new TTxConfigGet(this, ev->Sender, ev->Cookie), TActivationContext::AsActorContext());
 }
 

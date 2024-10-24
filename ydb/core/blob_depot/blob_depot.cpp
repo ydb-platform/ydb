@@ -30,15 +30,15 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::HandleFromAgent(STATEFN_SIG) {
         switch (const ui32 type = ev->GetTypeRewrite()) {
-            hFunc(TEvBlobDepot::TEvRegisterAgent, Handle);
-            hFunc(TEvBlobDepot::TEvAllocateIds, Handle);
-            hFunc(TEvBlobDepot::TEvCommitBlobSeq, Handle);
-            hFunc(TEvBlobDepot::TEvDiscardSpoiledBlobSeq, Handle);
-            hFunc(TEvBlobDepot::TEvResolve, Data->Handle);
-            hFunc(TEvBlobDepot::TEvBlock, BlocksManager->Handle);
-            hFunc(TEvBlobDepot::TEvQueryBlocks, BlocksManager->Handle);
-            hFunc(TEvBlobDepot::TEvCollectGarbage, BarrierServer->Handle);
-            hFunc(TEvBlobDepot::TEvPushNotifyResult, Handle);
+            hFunc(NEvBlobDepot::TEvRegisterAgent, Handle);
+            hFunc(NEvBlobDepot::TEvAllocateIds, Handle);
+            hFunc(NEvBlobDepot::TEvCommitBlobSeq, Handle);
+            hFunc(NEvBlobDepot::TEvDiscardSpoiledBlobSeq, Handle);
+            hFunc(NEvBlobDepot::TEvResolve, Data->Handle);
+            hFunc(NEvBlobDepot::TEvBlock, BlocksManager->Handle);
+            hFunc(NEvBlobDepot::TEvQueryBlocks, BlocksManager->Handle);
+            hFunc(NEvBlobDepot::TEvCollectGarbage, BarrierServer->Handle);
+            hFunc(NEvBlobDepot::TEvPushNotifyResult, Handle);
 
             default:
                 Y_ABORT();
@@ -99,21 +99,21 @@ namespace NKikimr::NBlobDepot {
             };
 
             switch (const ui32 type = ev->GetTypeRewrite()) {
-                hFunc(TEvBlobDepot::TEvApplyConfig, Handle);
+                hFunc(NEvBlobDepot::TEvApplyConfig, Handle);
 
-                fFunc(TEvBlobDepot::EvRegisterAgent, handleFromAgentPipe);
-                fFunc(TEvBlobDepot::EvAllocateIds, handleFromAgentPipe);
-                fFunc(TEvBlobDepot::EvCommitBlobSeq, handleFromAgentPipe);
-                fFunc(TEvBlobDepot::EvDiscardSpoiledBlobSeq, handleFromAgentPipe);
-                fFunc(TEvBlobDepot::EvResolve, handleFromAgentPipe);
-                fFunc(TEvBlobDepot::EvBlock, handleFromAgentPipe);
-                fFunc(TEvBlobDepot::EvQueryBlocks, handleFromAgentPipe);
-                fFunc(TEvBlobDepot::EvPushNotifyResult, handleFromAgentPipe);
-                fFunc(TEvBlobDepot::EvCollectGarbage, handleFromAgentPipe);
+                fFunc(NEvBlobDepot::EvRegisterAgent, handleFromAgentPipe);
+                fFunc(NEvBlobDepot::EvAllocateIds, handleFromAgentPipe);
+                fFunc(NEvBlobDepot::EvCommitBlobSeq, handleFromAgentPipe);
+                fFunc(NEvBlobDepot::EvDiscardSpoiledBlobSeq, handleFromAgentPipe);
+                fFunc(NEvBlobDepot::EvResolve, handleFromAgentPipe);
+                fFunc(NEvBlobDepot::EvBlock, handleFromAgentPipe);
+                fFunc(NEvBlobDepot::EvQueryBlocks, handleFromAgentPipe);
+                fFunc(NEvBlobDepot::EvPushNotifyResult, handleFromAgentPipe);
+                fFunc(NEvBlobDepot::EvCollectGarbage, handleFromAgentPipe);
 
                 fFunc(TEvPrivate::EvDeliver, handleDelivery);
 
-                hFunc(TEvBlobDepot::TEvPushMetrics, Handle);
+                hFunc(NEvBlobDepot::TEvPushMetrics, Handle);
 
                 hFunc(TEvBlobStorage::TEvCollectGarbageResult, Data->Handle);
                 hFunc(TEvBlobStorage::TEvGetResult, Data->UncertaintyResolver->Handle);

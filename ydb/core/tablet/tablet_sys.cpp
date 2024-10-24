@@ -1740,7 +1740,7 @@ void TTablet::ReassignYellowChannels(TVector<ui32> &&yellowMoveChannels) {
 
     Send(MakePipePerNodeCacheID(false),
         new TEvPipeCache::TEvForward(
-            new TEvHive::TEvReassignTabletSpace(Info->TabletID, std::move(yellowMoveChannels)),
+            new NEvHive::TEvReassignTabletSpace(Info->TabletID, std::move(yellowMoveChannels)),
             Info->HiveId,
             /* subscribe */ false));
 }

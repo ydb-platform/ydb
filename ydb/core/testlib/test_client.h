@@ -525,7 +525,7 @@ namespace Tests {
         Ydb::StatusIds::StatusCode AddQuoterResource(TTestActorRuntime* runtime, const TString& kesusPath, const TString& resourcePath, const NKikimrKesus::THierarchicalDRRResourceConfig& props);
         Ydb::StatusIds::StatusCode AddQuoterResource(TTestActorRuntime* runtime, const TString& kesusPath, const TString& resourcePath, const TMaybe<double> maxUnitsPerSecond = Nothing());
 
-        THolder<NKesus::TEvKesus::TEvGetConfigResult> GetKesusConfig(TTestActorRuntime* runtime, const TString& kesusPath);
+        THolder<NKesus::NEvKesus::TEvGetConfigResult> GetKesusConfig(TTestActorRuntime* runtime, const TString& kesusPath);
 
     protected:
         TString PrintToString(const ::google::protobuf::Message& msg, size_t maxSz = 1000) {

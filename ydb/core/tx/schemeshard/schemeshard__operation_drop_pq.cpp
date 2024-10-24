@@ -26,11 +26,11 @@ public:
         IgnoreMessages(DebugHint(), {});
     }
 
-    bool HandleReply(TEvPersQueue::TEvDropTabletReply::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPersQueue::TEvDropTabletReply::TPtr& ev, TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
 
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                 "TDropParts HandleReply TEvPersQueue::TEvDropTabletReply"
+                 "TDropParts HandleReply NEvPersQueue::TEvDropTabletReply"
                  << " operationId# " << OperationId
                  << " at tabletId# " << ssId
                  << " message# " << ev->Get()->Record.ShortDebugString());
@@ -98,7 +98,7 @@ public:
             auto idx = shard.Idx;
             auto tabletId = context.SS->ShardInfos[idx].TabletID;
 
-            TAutoPtr<TEvPersQueue::TEvDropTablet> event(new TEvPersQueue::TEvDropTablet());
+            TAutoPtr<NEvPersQueue::TEvDropTablet> event(new NEvPersQueue::TEvDropTablet());
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.SetRequestedState(NKikimrPQ::EDropped);
 
@@ -124,7 +124,7 @@ public:
         : ::NKikimr::NSchemeShard::TDeleteParts(id)
     {
         IgnoreMessages(DebugHint(), {
-            TEvPersQueue::TEvDropTabletReply::EventType,
+            NEvPersQueue::TEvDropTabletReply::EventType,
         });
     }
 };
@@ -143,10 +143,10 @@ public:
     TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvPersQueue::TEvDropTabletReply::EventType});
+        IgnoreMessages(DebugHint(), {NEvPersQueue::TEvDropTabletReply::EventType});
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         auto step = TStepId(ev->Get()->StepId);
         auto ssId = context.SS->SelfTabletId();
 
@@ -377,7 +377,7 @@ public:
                     checks
                         .IsCdcStream()
                         .IsInsideCdcStreamPath()
-                        .IsUnderDeleting(TEvSchemeShard::EStatus::StatusNameConflict)
+                        .IsUnderDeleting(NEvSchemeShard::EStatus::StatusNameConflict)
                         .IsUnderTheSameOperation(OperationId.GetTxId());
                 } else {
                     checks

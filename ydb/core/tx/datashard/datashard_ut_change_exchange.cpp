@@ -383,7 +383,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
                 delayed.emplace_back(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
 
-            case TEvDataShard::EvBuildIndexCreateRequest:
+            case NEvDataShard::EvBuildIndexCreateRequest:
                 inited = true;
                 return TTestActorRuntime::EEventAction::DROP;
 
@@ -506,8 +506,8 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
                 }
                 break;
 
-            case TEvDataShard::EvSplitAck:
-                ++splitAcks[ev->Get<TEvDataShard::TEvSplitAck>()->Record.GetOperationCookie()];
+            case NEvDataShard::EvSplitAck:
+                ++splitAcks[ev->Get<NEvDataShard::TEvSplitAck>()->Record.GetOperationCookie()];
                 break;
             }
 
@@ -752,8 +752,8 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
 
         // start split
         THashMap<ui64, ui32> splitAcks;
-        auto countSplitAcks = runtime.AddObserver<TEvDataShard::TEvSplitAck>(
-            [&](TEvDataShard::TEvSplitAck::TPtr& ev) {
+        auto countSplitAcks = runtime.AddObserver<NEvDataShard::TEvSplitAck>(
+            [&](NEvDataShard::TEvSplitAck::TPtr& ev) {
                 ++splitAcks[ev->Get()->Record.GetOperationCookie()];
             }
         );
@@ -2113,11 +2113,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
         cmd.SetReadTimestampMs(0);
         cmd.SetExternalOperation(true);
 
-        auto req = MakeHolder<TEvPersQueue::TEvRequest>();
+        auto req = MakeHolder<NEvPersQueue::TEvRequest>();
         req->Record = std::move(request);
         ForwardToTablet(runtime, ResolvePqTablet(runtime, sender, path, partitionId), sender, req.Release());
 
-        auto resp = runtime.GrabEdgeEventRethrow<TEvPersQueue::TEvResponse>(sender);
+        auto resp = runtime.GrabEdgeEventRethrow<NEvPersQueue::TEvResponse>(sender);
         UNIT_ASSERT(resp);
 
         TVector<std::pair<TString, TString>> result;
@@ -2398,8 +2398,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvPersQueue::EvRequest:
-                if (auto* msg = ev->Get<TEvPersQueue::TEvRequest>()) {
+            case NEvPersQueue::EvRequest:
+                if (auto* msg = ev->Get<NEvPersQueue::TEvRequest>()) {
                     if (msg->Record.GetPartitionRequest().HasCmdGetOwnership()) {
                         getOwnership.Reset(ev.Release());
                         return TTestActorRuntime::EEventAction::DROP;
@@ -2409,8 +2409,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 }
                 return TTestActorRuntime::EEventAction::PROCESS;
 
-            case TEvDataShard::EvProposeTransactionResult:
-                if (auto* msg = ev->Get<TEvDataShard::TEvProposeTransactionResult>()) {
+            case NEvDataShard::EvProposeTransactionResult:
+                if (auto* msg = ev->Get<NEvDataShard::TEvProposeTransactionResult>()) {
                     if (msg->GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE) {
                         txCompleted = true;
                     }
@@ -2471,8 +2471,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     return TTestActorRuntime::EEventAction::PROCESS;
                 }
 
-            case TEvDataShard::EvSplitAck:
-                ++splitAcks[ev->Get<TEvDataShard::TEvSplitAck>()->Record.GetOperationCookie()];
+            case NEvDataShard::EvSplitAck:
+                ++splitAcks[ev->Get<NEvDataShard::TEvSplitAck>()->Record.GetOperationCookie()];
                 break;
             }
 
@@ -2577,8 +2577,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     return TTestActorRuntime::EEventAction::PROCESS;
                 }
 
-            case TEvDataShard::EvSplitAck:
-                ++splitAcks[ev->Get<TEvDataShard::TEvSplitAck>()->Record.GetOperationCookie()];
+            case NEvDataShard::EvSplitAck:
+                ++splitAcks[ev->Get<NEvDataShard::TEvSplitAck>()->Record.GetOperationCookie()];
                 break;
             }
 
@@ -2981,8 +2981,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
         CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
 
         std::unique_ptr<IEventHandle> doneResponse;
-        auto blockDone = runtime.AddObserver<TEvDataShard::TEvCdcStreamScanResponse>(
-            [&](TEvDataShard::TEvCdcStreamScanResponse::TPtr& ev) {
+        auto blockDone = runtime.AddObserver<NEvDataShard::TEvCdcStreamScanResponse>(
+            [&](NEvDataShard::TEvCdcStreamScanResponse::TPtr& ev) {
                 if (ev->Get()->Record.GetStatus() == NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE) {
                     doneResponse.reset(ev.Release());
                 }
@@ -2995,15 +2995,15 @@ Y_UNIT_TEST_SUITE(Cdc) {
         blockDone.Remove();
 
         bool done = false;
-        auto waitDone = runtime.AddObserver<TEvDataShard::TEvCdcStreamScanResponse>(
-            [&](TEvDataShard::TEvCdcStreamScanResponse::TPtr& ev) {
+        auto waitDone = runtime.AddObserver<NEvDataShard::TEvCdcStreamScanResponse>(
+            [&](NEvDataShard::TEvCdcStreamScanResponse::TPtr& ev) {
                 if (ev->Get()->Record.GetStatus() == NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE) {
                     done = true;
                 }
             }
         );
 
-        const auto& record = doneResponse->Get<TEvDataShard::TEvCdcStreamScanResponse>()->Record;
+        const auto& record = doneResponse->Get<NEvDataShard::TEvCdcStreamScanResponse>()->Record;
         RebootTablet(runtime, record.GetTablePathId().GetOwnerId(), edgeActor);
         WaitFor(runtime, [&]{ return done; }, "done");
     }
@@ -3032,7 +3032,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         TVector<THolder<IEventHandle>> delayed;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::EvCdcStreamScanRequest) {
+            if (ev->GetTypeRewrite() == NEvDataShard::EvCdcStreamScanRequest) {
                 delayed.emplace_back(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
             }
@@ -3114,8 +3114,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
             static constexpr ui32 EvCdcStreamScanProgress = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 24;
 
             switch (ev->GetTypeRewrite()) {
-            case TEvDataShard::EvCdcStreamScanRequest:
-                if (auto* msg = ev->Get<TEvDataShard::TEvCdcStreamScanRequest>()) {
+            case NEvDataShard::EvCdcStreamScanRequest:
+                if (auto* msg = ev->Get<NEvDataShard::TEvCdcStreamScanRequest>()) {
                     msg->Record.MutableLimits()->SetBatchMaxRows(1);
                 } else {
                     UNIT_ASSERT(false);
@@ -3180,8 +3180,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         THolder<IEventHandle> delayed;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == NSchemeShard::TEvSchemeShard::EvModifySchemeTransaction) {
-                auto* msg = ev->Get<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>();
+            if (ev->GetTypeRewrite() == NSchemeShard::NEvSchemeShard::EvModifySchemeTransaction) {
+                auto* msg = ev->Get<NSchemeShard::NEvSchemeShard::TEvModifySchemeTransaction>();
                 const auto& tx = msg->Record.GetTransaction(0);
                 if (tx.HasAlterCdcStream() && tx.GetAlterCdcStream().HasGetReady()) {
                     delayed.Reset(ev.Release());
@@ -3244,7 +3244,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (4, 40);
         )");
 
-        TBlockEvents<TEvDataShard::TEvCdcStreamScanRequest> blockScanRequest(runtime, [&](auto& ev) {
+        TBlockEvents<NEvDataShard::TEvCdcStreamScanRequest> blockScanRequest(runtime, [&](auto& ev) {
             ev->Get()->Record.MutableLimits()->SetBatchMaxRows(1);
             return true;
         });
@@ -3253,7 +3253,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
 
         runtime.WaitFor("Scan request", [&]{ return blockScanRequest.size(); });
-        runtime.AddObserver<TEvDataShard::TEvCdcStreamScanRequest>([&](auto& ev) {
+        runtime.AddObserver<NEvDataShard::TEvCdcStreamScanRequest>([&](auto& ev) {
             ev->Get()->Record.MutableLimits()->SetBatchMaxRows(1);
         });
 
@@ -3605,7 +3605,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         THolder<IEventHandle> delayed;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::EvCdcStreamScanRequest) {
+            if (ev->GetTypeRewrite() == NEvDataShard::EvCdcStreamScanRequest) {
                 delayed.Reset(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
             }
@@ -3906,7 +3906,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         UNIT_ASSERT_VALUES_EQUAL(initialTabletIds.size(), 2);
 
         std::vector<std::unique_ptr<IEventHandle>> blockedSplitRequests;
-        auto blockSplitRequests = runtime.AddObserver<TEvPersQueue::TEvRequest>([&](auto& ev) {
+        auto blockSplitRequests = runtime.AddObserver<NEvPersQueue::TEvRequest>([&](auto& ev) {
             if (ev->Get()->Record.GetPartitionRequest().HasCmdSplitMessageGroup()) {
                 blockedSplitRequests.emplace_back(ev.Release());
             }
@@ -3918,14 +3918,14 @@ Y_UNIT_TEST_SUITE(Cdc) {
         blockSplitRequests.Remove();
 
         std::vector<std::unique_ptr<IEventHandle>> blockedRegisterRequests;
-        auto blockRegisterRequests = runtime.AddObserver<TEvPersQueue::TEvRequest>([&](auto& ev) {
+        auto blockRegisterRequests = runtime.AddObserver<NEvPersQueue::TEvRequest>([&](auto& ev) {
             if (ev->Get()->Record.GetPartitionRequest().HasCmdRegisterMessageGroup()) {
                 blockedRegisterRequests.emplace_back(ev.Release());
             }
         });
 
         ui32 splitResponses = 0;
-        auto countSplitResponses = runtime.AddObserver<TEvPersQueue::TEvResponse>([&](auto&) {
+        auto countSplitResponses = runtime.AddObserver<NEvPersQueue::TEvResponse>([&](auto&) {
             ++splitResponses;
         });
 
@@ -4015,7 +4015,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         Cerr << "... performing a read from snapshot just before the next heartbeat" << Endl;
         {
-            auto req = std::make_unique<TEvDataShard::TEvRead>();
+            auto req = std::make_unique<NEvDataShard::TEvRead>();
             {
                 auto& record = req->Record;
                 record.SetReadId(1);
@@ -4032,7 +4032,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 record.MutableSnapshot()->SetTxId(Max<ui64>());
             }
             ForwardToTablet(runtime, shards.at(0), edgeActor, req.release());
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(edgeActor);
+            auto ev = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvReadResult>(edgeActor);
             auto* res = ev->Get();
             UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(res->Record.GetFinished(), true);

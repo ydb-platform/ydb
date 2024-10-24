@@ -16,7 +16,7 @@ class ISelector {
 protected:
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrColumnShardExportProto::TSelectorContainer& proto) = 0;
     virtual void DoSerializeToProto(NKikimrColumnShardExportProto::TSelectorContainer& proto) const = 0;
-    virtual std::unique_ptr<TEvDataShard::TEvKqpScan> DoBuildRequestInitiator(const TCursor& cursor) const = 0;
+    virtual std::unique_ptr<NEvDataShard::TEvKqpScan> DoBuildRequestInitiator(const TCursor& cursor) const = 0;
 
 public:
     using TProto = NKikimrColumnShardExportProto::TSelectorContainer;
@@ -27,7 +27,7 @@ public:
         return DoDeserializeFromProto(proto);
     }
 
-    std::unique_ptr<TEvDataShard::TEvKqpScan> BuildRequestInitiator(const TCursor& cursor) const {
+    std::unique_ptr<NEvDataShard::TEvKqpScan> BuildRequestInitiator(const TCursor& cursor) const {
         return DoBuildRequestInitiator(cursor);
     }
 

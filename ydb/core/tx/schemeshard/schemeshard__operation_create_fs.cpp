@@ -27,12 +27,12 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), {
-            TEvHive::TEvCreateTabletReply::EventType
+            NEvHive::TEvCreateTabletReply::EventType
         });
     }
 
     bool HandleReply(
-        TEvFileStore::TEvUpdateConfigResponse::TPtr& ev,
+        NEvFileStore::TEvUpdateConfigResponse::TPtr& ev,
         TOperationContext& context) override
     {
         const auto ssId = context.SS->SelfTabletId();
@@ -106,7 +106,7 @@ public:
             fs->IndexShardIdx = shardIdx;
             fs->IndexTabletId = tabletId;
 
-            TAutoPtr<TEvFileStore::TEvUpdateConfig> event(new TEvFileStore::TEvUpdateConfig());
+            TAutoPtr<NEvFileStore::TEvUpdateConfig> event(new NEvFileStore::TEvUpdateConfig());
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.MutableConfig()->CopyFrom(fs->Config);
             event->Record.MutableConfig()->SetVersion(fs->Version);
@@ -138,12 +138,12 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), {
-            TEvHive::TEvCreateTabletReply::EventType,
-            TEvFileStore::TEvUpdateConfigResponse::EventType
+            NEvHive::TEvCreateTabletReply::EventType,
+            NEvFileStore::TEvUpdateConfigResponse::EventType
         });
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
         const auto ssId = context.SS->SelfTabletId();
 
@@ -256,7 +256,7 @@ private:
 
     TFileStoreInfo::TPtr CreateFileStoreInfo(
         const NKikimrSchemeOp::TFileStoreDescription& op,
-        TEvSchemeShard::EStatus& status,
+        NEvSchemeShard::EStatus& status,
         TString& errStr);
 
     TTxState& PrepareChanges(
@@ -437,7 +437,7 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
 
 TFileStoreInfo::TPtr TCreateFileStore::CreateFileStoreInfo(
     const NKikimrSchemeOp::TFileStoreDescription& op,
-    TEvSchemeShard::EStatus& status,
+    NEvSchemeShard::EStatus& status,
     TString& errStr)
 {
     TFileStoreInfo::TPtr fs = new TFileStoreInfo();

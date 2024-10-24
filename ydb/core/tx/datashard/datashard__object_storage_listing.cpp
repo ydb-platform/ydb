@@ -8,8 +8,8 @@ using namespace NTabletFlatExecutor;
 
 class TDataShard::TTxObjectStorageListing : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
-    TEvDataShard::TEvObjectStorageListingRequest::TPtr Ev;
-    TAutoPtr<TEvDataShard::TEvObjectStorageListingResponse> Result;
+    NEvDataShard::TEvObjectStorageListingRequest::TPtr Ev;
+    TAutoPtr<NEvDataShard::TEvObjectStorageListingResponse> Result;
 
     // Used to continue iteration from last known position instead of restarting from the beginning
     // This greatly improves performance for the cases with many deletion markers but sacrifices
@@ -19,7 +19,7 @@ private:
     ui32 RestartCount;
 
 public:
-    TTxObjectStorageListing(TDataShard* ds, TEvDataShard::TEvObjectStorageListingRequest::TPtr ev)
+    TTxObjectStorageListing(TDataShard* ds, NEvDataShard::TEvObjectStorageListingRequest::TPtr ev)
         : TBase(ds)
         , Ev(ev)
         , RestartCount(0)
@@ -31,7 +31,7 @@ public:
         ++RestartCount;
 
         if (!Result) {
-            Result = new TEvDataShard::TEvObjectStorageListingResponse(Self->TabletID());
+            Result = new NEvDataShard::TEvObjectStorageListingResponse(Self->TabletID());
         }
 
         if (Self->State != TShardState::Ready &&
@@ -101,14 +101,14 @@ public:
 
             if (Ev->Get()->Record.HasLastPath()) {
                 TString reqLastPath = Ev->Get()->Record.GetLastPath();
-                
+
                 key.emplace_back(reqLastPath, tableInfo.KeyColumnTypes[prefixSize].GetTypeId());
 
                 for (size_t i = 1; i < suffixColumns.GetCells().size(); ++i) {
                     size_t ki = prefixSize + i;
                     key.emplace_back(suffixColumns.GetCells()[i].Data(), suffixColumns.GetCells()[i].Size(), tableInfo.KeyColumnTypes[ki].GetTypeId());
                 }
-                
+
                 startAfterPath = reqLastPath;
             } else {
                 for (size_t i = 0; i < suffixColumns.GetCells().size(); ++i) {
@@ -184,7 +184,7 @@ public:
             for (const auto& colId : filter.columns()) {
                 filterColumnIds.push_back(colId);
             }
-            
+
             for (const auto& matchType : filter.matchtypes()) {
                 if (!NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_IsValid(matchType)) {
                     SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT, Sprintf("Unknown match type %" PRIu32, matchType));
@@ -285,7 +285,7 @@ public:
                             continue;
                         }
                     }
-                    
+
                     // Add a row with path column and all columns requested by user
                     Result->Record.AddContentsRows(newContentsRow);
                     if (++foundKeys >= maxKeys) {
@@ -302,7 +302,7 @@ public:
                         Y_VERIFY(columnId < value.Cells().size());
 
                         NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType matchType;
-                        
+
                         if (matchTypes.size() == filterColumnIds.size()) {
                             matchType = matchTypes[i];
                         } else {
@@ -335,7 +335,7 @@ public:
                         continue;
                     }
                 }
-                
+
                 // For prefix save only path
                 if (path > startAfterPath && path != lastCommonPath) {
                     LastCommonPath = path;
@@ -377,7 +377,7 @@ public:
 
 private:
     void SetError(ui32 status, TString descr) {
-        Result = new TEvDataShard::TEvObjectStorageListingResponse(Self->TabletID());
+        Result = new NEvDataShard::TEvObjectStorageListingResponse(Self->TabletID());
 
         Result->Record.SetStatus(status);
         Result->Record.SetErrorDescription(descr);
@@ -419,7 +419,7 @@ private:
     }
 };
 
-void TDataShard::Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx) {
     Executor()->Execute(new TTxObjectStorageListing(this, ev), ctx);
 }
 

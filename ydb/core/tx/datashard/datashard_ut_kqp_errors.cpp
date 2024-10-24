@@ -122,10 +122,10 @@ Y_UNIT_TEST(ProposeError) {
 
         bool done = false;
         auto mitm = [&](TAutoPtr<IEventHandle> &ev) {
-            if (!done && ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransactionResult::EventType &&
+            if (!done && ev->GetTypeRewrite() == NEvDataShard::TEvProposeTransactionResult::EventType &&
                 !knownExecuters.contains(ev->Recipient))
             {
-                auto event = ev.Get()->Get<TEvDataShard::TEvProposeTransactionResult>();
+                auto event = ev.Get()->Get<NEvDataShard::TEvProposeTransactionResult>();
                 event->Record.SetStatus(proposeStatus);
                 if (mod) {
                     mod(event->Record);
@@ -236,15 +236,15 @@ void TestProposeResultLost(TTestActorRuntime& runtime, TActorId client, const TS
     runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
         if (ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
             auto* fe = ev.Get()->Get<TEvPipeCache::TEvForward>();
-            if (fe->Ev->Type() == TEvDataShard::TEvProposeTransaction::EventType) {
+            if (fe->Ev->Type() == NEvDataShard::TEvProposeTransaction::EventType) {
                 executer = ev->Sender;
                 // Cerr << "-- executer: " << executer << Endl;
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
         }
 
-        if (ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransactionResult::EventType) {
-            auto* msg = ev.Get()->Get<TEvDataShard::TEvProposeTransactionResult>();
+        if (ev->GetTypeRewrite() == NEvDataShard::TEvProposeTransactionResult::EventType) {
+            auto* msg = ev.Get()->Get<NEvDataShard::TEvProposeTransactionResult>();
             if (msg->Record.GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED) {
                 if (ev->Sender.NodeId() == executer.NodeId()) {
                     ++droppedEvents;

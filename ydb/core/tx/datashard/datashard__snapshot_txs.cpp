@@ -9,7 +9,7 @@ using namespace NTabletFlatExecutor;
 
 TDataShard::TTxRefreshVolatileSnapshot::TTxRefreshVolatileSnapshot(
         TDataShard* ds,
-        TEvDataShard::TEvRefreshVolatileSnapshotRequest::TPtr ev)
+        NEvDataShard::TEvRefreshVolatileSnapshotRequest::TPtr ev)
     : TBase(ds)
     , Ev(std::move(ev))
 { }
@@ -25,7 +25,7 @@ bool TDataShard::TTxRefreshVolatileSnapshot::Execute(TTransactionContext&, const
             record.GetStep(),
             record.GetTxId());
 
-    Reply.Reset(new TEvDataShard::TEvRefreshVolatileSnapshotResponse);
+    Reply.Reset(new NEvDataShard::TEvRefreshVolatileSnapshotResponse);
     Reply->Record.SetOrigin(Self->TabletID());
     Reply->Record.SetOwnerId(key.OwnerId);
     Reply->Record.SetPathId(key.PathId);
@@ -78,7 +78,7 @@ void TDataShard::TTxRefreshVolatileSnapshot::Complete(const TActorContext& ctx) 
 
 TDataShard::TTxDiscardVolatileSnapshot::TTxDiscardVolatileSnapshot(
         TDataShard* ds,
-        TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr ev)
+        NEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr ev)
     : TBase(ds)
     , Ev(std::move(ev))
 { }
@@ -94,7 +94,7 @@ bool TDataShard::TTxDiscardVolatileSnapshot::Execute(TTransactionContext& txc, c
             record.GetStep(),
             record.GetTxId());
 
-    Reply.Reset(new TEvDataShard::TEvDiscardVolatileSnapshotResponse);
+    Reply.Reset(new NEvDataShard::TEvDiscardVolatileSnapshotResponse);
     Reply->Record.SetOrigin(Self->TabletID());
     Reply->Record.SetOwnerId(key.OwnerId);
     Reply->Record.SetPathId(key.PathId);

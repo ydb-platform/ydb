@@ -104,7 +104,7 @@ TPersQueueGetPartitionOffsetsTopicWorker::TPersQueueGetPartitionOffsetsTopicWork
         const std::shared_ptr<THashSet<ui64>>& partitionsToRequest,
         const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto
 )
-    : TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvPersQueue::TEvOffsetsResponse>>(parent, topicEntry, name)
+    : TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, NEvPersQueue::TEvOffsetsResponse>>(parent, topicEntry, name)
     , PartitionsToRequest(partitionsToRequest)
     , RequestProto(requestProto)
 {
@@ -127,7 +127,7 @@ void TPersQueueGetPartitionOffsetsTopicWorker::BootstrapImpl(const TActorContext
             if (HasTabletPipe(tabletId)) { // Take all partitions for tablet from one TEvOffsetsResponse event
                 continue;
             }
-            THolder<TEvPersQueue::TEvOffsets> ev(new TEvPersQueue::TEvOffsets());
+            THolder<NEvPersQueue::TEvOffsets> ev(new NEvPersQueue::TEvOffsets());
             const TString& clientId = RequestProto->GetMetaRequest().GetCmdGetPartitionOffsets().GetClientId();
             if (!clientId.empty()) {
                 ev->Record.SetClientId(clientId);
@@ -217,7 +217,7 @@ TPersQueueGetPartitionStatusTopicWorker::TPersQueueGetPartitionStatusTopicWorker
         const std::shared_ptr<THashSet<ui64>>& partitionsToRequest,
         const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto
 )
-    : TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvPersQueue::TEvStatusResponse>>(parent, topicEntry, name)
+    : TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, NEvPersQueue::TEvStatusResponse>>(parent, topicEntry, name)
     , PartitionsToRequest(partitionsToRequest)
     , RequestProto(requestProto)
 {
@@ -240,7 +240,7 @@ void TPersQueueGetPartitionStatusTopicWorker::BootstrapImpl(const TActorContext 
             if (HasTabletPipe(tabletId)) { // Take all partitions for tablet from one TEvStatusResponse event
                 continue;
             }
-            THolder<TEvPersQueue::TEvStatus> ev(new TEvPersQueue::TEvStatus());
+            THolder<NEvPersQueue::TEvStatus> ev(new NEvPersQueue::TEvStatus());
             if (RequestProto->GetMetaRequest().GetCmdGetPartitionStatus().HasClientId())
                 ev->Record.SetClientId(RequestProto->GetMetaRequest().GetCmdGetPartitionStatus().GetClientId());
             CreatePipeAndSend(tabletId, ctx, std::move(ev));
@@ -493,7 +493,7 @@ TPersQueueGetReadSessionsInfoTopicWorker::TPersQueueGetReadSessionsInfoTopicWork
         const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto,
         std::shared_ptr<const TPersQueueBaseRequestProcessor::TNodesInfo> nodesInfo
 )
-    : TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvPersQueue::TEvOffsetsResponse>>(parent, topicEntry, name)
+    : TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, NEvPersQueue::TEvOffsetsResponse>>(parent, topicEntry, name)
     , RequestProto(requestProto)
     , NodesInfo(nodesInfo)
 {
@@ -516,7 +516,7 @@ void TPersQueueGetReadSessionsInfoTopicWorker::SendReadSessionsInfoToBalancer(co
             NTabletPipe::CreateClient(ctx.SelfID, SchemeEntry.PQGroupInfo->Description.GetBalancerTabletID(), clientConfig)
     );
 
-    THolder<TEvPersQueue::TEvGetReadSessionsInfo> ev(new TEvPersQueue::TEvGetReadSessionsInfo());
+    THolder<NEvPersQueue::TEvGetReadSessionsInfo> ev(new NEvPersQueue::TEvGetReadSessionsInfo());
     ev->Record.SetClientId(RequestProto->GetMetaRequest().GetCmdGetReadSessionsInfo().GetClientId());
     NTabletPipe::SendData(ctx, BalancerPipe, ev.Release());
 }
@@ -534,7 +534,7 @@ void TPersQueueGetReadSessionsInfoTopicWorker::BootstrapImpl(const TActorContext
                 continue;
             }
 
-            THolder<TEvPersQueue::TEvOffsets> ev(new TEvPersQueue::TEvOffsets());
+            THolder<NEvPersQueue::TEvOffsets> ev(new NEvPersQueue::TEvOffsets());
             const TString& clientId = RequestProto->GetMetaRequest().GetCmdGetReadSessionsInfo().GetClientId();
             if (!clientId.empty()) {
                 ev->Record.SetClientId(clientId);
@@ -570,7 +570,7 @@ THolder<IActor> TPersQueueGetReadSessionsInfoProcessor::CreateSessionsSubactor(
 STFUNC(TPersQueueGetReadSessionsInfoTopicWorker::WaitAllPipeEventsStateFunc) {
     auto ctx(this->ActorContext());
     switch (ev->GetTypeRewrite()) {
-        HFunc(TEvPersQueue::TEvReadSessionsInfoResponse, Handle);
+        HFunc(NEvPersQueue::TEvReadSessionsInfoResponse, Handle);
     case TEvTabletPipe::TEvClientDestroyed::EventType:
         if (!HandleDestroy(ev->Get<TEvTabletPipe::TEvClientDestroyed>(), ctx)) {
             TPipesWaiterActor::WaitAllPipeEventsStateFunc(ev);
@@ -612,7 +612,7 @@ bool TPersQueueGetReadSessionsInfoTopicWorker::HandleDestroy(TEvTabletPipe::TEvC
     return true;
 }
 
-void TPersQueueGetReadSessionsInfoTopicWorker::Handle(TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) {
+void TPersQueueGetReadSessionsInfoTopicWorker::Handle(NEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) {
     BalancerReplied = true;
     BalancerResponse = ev;
     if (ReadyToAnswer()) {
@@ -668,7 +668,7 @@ void TPersQueueGetReadSessionsInfoTopicWorker::Answer(const TActorContext& ctx, 
                 res->SetErrorCode(NPersQueue::NErrorCode::INITIALIZING);
                 res->SetErrorReason("Getting of session info failed");
             }
-            THolder<TEvPersQueue::TEvReadSessionsInfoResponse> request = MakeHolder<TEvPersQueue::TEvReadSessionsInfoResponse>();
+            THolder<NEvPersQueue::TEvReadSessionsInfoResponse> request = MakeHolder<NEvPersQueue::TEvReadSessionsInfoResponse>();
             request->Record.Swap(&(BalancerResponse->Get()->Record));
             request->Record.ClearPartitionInfo();
 

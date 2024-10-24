@@ -6,7 +6,7 @@
 namespace NKikimr::NBlobDepot {
 
     class TBlobDepot::TBarrierServer::TTxCollectGarbage : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
-        std::unique_ptr<TEvBlobDepot::TEvCollectGarbage::THandle> Request;
+        std::unique_ptr<NEvBlobDepot::TEvCollectGarbage::THandle> Request;
         int KeepIndex = 0;
         int DoNotKeepIndex = 0;
 
@@ -18,7 +18,7 @@ namespace NKikimr::NBlobDepot {
     public:
         TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_COLLECT_GARBAGE; }
 
-        TTxCollectGarbage(TBlobDepot *self, std::unique_ptr<TEvBlobDepot::TEvCollectGarbage::THandle> request)
+        TTxCollectGarbage(TBlobDepot *self, std::unique_ptr<NEvBlobDepot::TEvCollectGarbage::THandle> request)
             : TTransactionBase(self)
             , Request(std::move(request))
         {}
@@ -173,7 +173,7 @@ namespace NKikimr::NBlobDepot {
 
         void Finish(std::optional<TString> error, std::optional<NKikimrProto::EReplyStatus> status = {}) {
             Y_ABORT_UNLESS(!Finished);
-            auto [response, _] = TEvBlobDepot::MakeResponseFor(*Request, status.value_or(error ? NKikimrProto::ERROR :
+            auto [response, _] = NEvBlobDepot::MakeResponseFor(*Request, status.value_or(error ? NKikimrProto::ERROR :
                 NKikimrProto::OK), std::move(error));
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT82, "TTxCollectGarbage::Finish", (Id, Self->GetLogId()),
                 (Sender, Request->Sender), (Cookie, Request->Cookie), (Error, error));
@@ -240,13 +240,13 @@ namespace NKikimr::NBlobDepot {
         return true;
     }
 
-    void TBlobDepot::TBarrierServer::Handle(TEvBlobDepot::TEvCollectGarbage::TPtr ev) {
+    void TBlobDepot::TBarrierServer::Handle(NEvBlobDepot::TEvCollectGarbage::TPtr ev) {
         const auto& record = ev->Get()->Record;
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT74, "TBarrierServer::Handle(TEvCollectGarbage)", (Id, Self->GetLogId()),
             (Sender, ev->Sender), (Cookie, ev->Cookie), (Msg, record));
         if (Self->Data->IsLoaded()) {
             Self->Execute(std::make_unique<TTxCollectGarbage>(Self,
-                std::unique_ptr<TEvBlobDepot::TEvCollectGarbage::THandle>(ev.Release())));
+                std::unique_ptr<NEvBlobDepot::TEvCollectGarbage::THandle>(ev.Release())));
         } else {
             const auto key = std::make_tuple(record.GetTabletId(), record.GetChannel());
             Barriers[key].ProcessingQ.emplace_back(ev.Release());

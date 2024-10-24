@@ -64,10 +64,10 @@ private:
     bool Modify;
 };
 
-ITransaction *TCms::CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev) {
+ITransaction *TCms::CreateTxUpdateConfig(NEvConsole::TEvConfigNotificationRequest::TPtr &ev) {
     auto &rec = ev->Get()->Record;
 
-    auto response = MakeHolder<TEvConsole::TEvConfigNotificationResponse>();
+    auto response = MakeHolder<NEvConsole::TEvConfigNotificationResponse>();
     response->Record.MutableConfigId()->CopyFrom(rec.GetConfigId());
 
     return new TTxUpdateConfig(this, rec.GetConfig().GetCmsConfig(),

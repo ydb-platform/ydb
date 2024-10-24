@@ -243,10 +243,10 @@ struct TTestContext {
     TDescribeSemaphoreChanges ExpectDescribeSemaphoreChanged(ui64 reqId, const TActorId& proxy, ui64 generation);
 
     // Quoter
-    THolder<TEvKesus::TEvDescribeQuoterResourcesResult> VerifyDescribeQuoterResources(
+    THolder<NEvKesus::TEvDescribeQuoterResourcesResult> VerifyDescribeQuoterResources(
         const NKikimrKesus::TEvDescribeQuoterResources& req,
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
-    THolder<TEvKesus::TEvDescribeQuoterResourcesResult> VerifyDescribeQuoterResources(
+    THolder<NEvKesus::TEvDescribeQuoterResourcesResult> VerifyDescribeQuoterResources(
         const std::vector<ui64>& resourceIds,
         const std::vector<TString>& resourcePaths,
         bool recursive,

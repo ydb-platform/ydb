@@ -20,7 +20,7 @@ static constexpr const char* kPostingTable = "/Root/table-posting";
 
 Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
     static void DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
-                             std::unique_ptr<TEvDataShard::TEvReshuffleKMeansRequest> & ev, size_t dims = 2,
+                             std::unique_ptr<NEvDataShard::TEvReshuffleKMeansRequest> & ev, size_t dims = 2,
                              VectorIndexSettings::VectorType type = VectorIndexSettings::VECTOR_TYPE_FLOAT,
                              VectorIndexSettings::Metric metric = VectorIndexSettings::DISTANCE_COSINE)
     {
@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
             runtime.SendToPipe(tid, sender, ev.release(), 0, GetPipeConfigWithRetries());
 
             TAutoPtr<IEventHandle> handle;
-            auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReshuffleKMeansResponse>(handle);
+            auto reply = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvReshuffleKMeansResponse>(handle);
             UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
         }
     }
@@ -98,9 +98,9 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         TString err;
 
         for (auto tid : datashards) {
-            auto ev1 = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
-            auto ev2 = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
-            auto fill = [&](std::unique_ptr<TEvDataShard::TEvReshuffleKMeansRequest>& ev) {
+            auto ev1 = std::make_unique<NEvDataShard::TEvReshuffleKMeansRequest>();
+            auto ev2 = std::make_unique<NEvDataShard::TEvReshuffleKMeansRequest>();
+            auto fill = [&](std::unique_ptr<NEvDataShard::TEvReshuffleKMeansRequest>& ev) {
                 auto& rec = ev->Record;
                 rec.SetId(1);
 
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
             runtime.SendToPipe(tid, sender, ev2.release(), 0, GetPipeConfigWithRetries());
 
             TAutoPtr<IEventHandle> handle;
-            auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReshuffleKMeansResponse>(handle);
+            auto reply = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvReshuffleKMeansResponse>(handle);
 
             NYql::TIssues issues;
             NYql::IssuesFromMessage(reply->Record.GetIssues(), issues);
@@ -207,64 +207,64 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         CreateShardedTable(server, sender, "/Root", "table-main", 1);
 
         {
-            auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
+            auto ev = std::make_unique<NEvDataShard::TEvReshuffleKMeansRequest>();
             auto& rec = ev->Record;
 
             rec.AddClusters("to make it empty");
             DoBadRequest(server, sender, ev);
         }
         {
-            auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
+            auto ev = std::make_unique<NEvDataShard::TEvReshuffleKMeansRequest>();
             auto& rec = ev->Record;
 
             rec.SetEmbeddingColumn("to make it empty");
             DoBadRequest(server, sender, ev);
         }
         {
-            auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
+            auto ev = std::make_unique<NEvDataShard::TEvReshuffleKMeansRequest>();
             auto& rec = ev->Record;
 
             rec.SetTabletId(0);
             DoBadRequest(server, sender, ev);
         }
         {
-            auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
+            auto ev = std::make_unique<NEvDataShard::TEvReshuffleKMeansRequest>();
             auto& rec = ev->Record;
 
             PathIdFromPathId({0, 0}, rec.MutablePathId());
             DoBadRequest(server, sender, ev);
         }
         {
-            auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
+            auto ev = std::make_unique<NEvDataShard::TEvReshuffleKMeansRequest>();
 
             DoBadRequest(server, sender, ev, 0);
         }
         {
-            auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
+            auto ev = std::make_unique<NEvDataShard::TEvReshuffleKMeansRequest>();
 
             // TODO(mbkkt) bit vector not supported for now
             DoBadRequest(server, sender, ev, 2, VectorIndexSettings::VECTOR_TYPE_BIT);
         }
         {
-            auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
+            auto ev = std::make_unique<NEvDataShard::TEvReshuffleKMeansRequest>();
 
             DoBadRequest(server, sender, ev, 2, VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED);
         }
         {
-            auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
+            auto ev = std::make_unique<NEvDataShard::TEvReshuffleKMeansRequest>();
 
             DoBadRequest(server, sender, ev, 2, VectorIndexSettings::VECTOR_TYPE_FLOAT,
                          VectorIndexSettings::METRIC_UNSPECIFIED);
         }
         // TODO(mbkkt) For now all build_index, sample_k, build_columns, local_kmeans doesn't really check this
         // {
-        //     auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
+        //     auto ev = std::make_unique<NEvDataShard::TEvReshuffleKMeansRequest>();
         //     auto snapshotCopy = snapshot;
         //     snapshotCopy.Step++;
         //     DoBadRequest(server, sender, ev);
         // }
         // {
-        //     auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
+        //     auto ev = std::make_unique<NEvDataShard::TEvReshuffleKMeansRequest>();
         //     auto snapshotCopy = snapshot;
         //     snapshotCopy.TxId++;
         //     DoBadRequest(server, sender, ev);
@@ -292,8 +292,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         // Upsert some initial values
         ExecSQL(server, sender,
                 R"(
-        UPSERT INTO `/Root/table-main` 
-            (key, embedding, data) 
+        UPSERT INTO `/Root/table-main`
+            (key, embedding, data)
         VALUES )"
                 "(1, \"\x30\x30\3\", \"one\"),"
                 "(2, \"\x31\x31\3\", \"two\"),"
@@ -377,8 +377,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         // Upsert some initial values
         ExecSQL(server, sender,
                 R"(
-        UPSERT INTO `/Root/table-main` 
-            (key, embedding, data) 
+        UPSERT INTO `/Root/table-main`
+            (key, embedding, data)
         VALUES )"
                 "(1, \"\x30\x30\3\", \"one\"),"
                 "(2, \"\x31\x31\3\", \"two\"),"
@@ -462,8 +462,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         // Upsert some initial values
         ExecSQL(server, sender,
                 R"(
-        UPSERT INTO `/Root/table-main` 
-            (__ydb_parent, key, embedding, data) 
+        UPSERT INTO `/Root/table-main`
+            (__ydb_parent, key, embedding, data)
         VALUES )"
                 "(39, 1, \"\x30\x30\3\", \"one\"),"
                 "(40, 1, \"\x30\x30\3\", \"one\"),"
@@ -549,8 +549,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         // Upsert some initial values
         ExecSQL(server, sender,
                 R"(
-        UPSERT INTO `/Root/table-main` 
-            (__ydb_parent, key, embedding, data) 
+        UPSERT INTO `/Root/table-main`
+            (__ydb_parent, key, embedding, data)
         VALUES )"
                 "(39, 1, \"\x30\x30\3\", \"one\"),"
                 "(40, 1, \"\x30\x30\3\", \"one\"),"

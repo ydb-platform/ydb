@@ -37,13 +37,13 @@ std::tuple<TMaybe<NACLib::TUserToken>, bool> ParseUserToken(const TString& token
 }
 
 struct TSchemeShard::TTxOperationProposeCancelTx: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
-    TEvSchemeShard::TEvCancelTx::TPtr Ev;
+    NEvSchemeShard::TEvCancelTx::TPtr Ev;
 
     TSideEffects OnComplete;
     TMemoryChanges MemChanges;
     TStorageChanges DbChanges;
 
-    TTxOperationProposeCancelTx(TSchemeShard* self, TEvSchemeShard::TEvCancelTx::TPtr ev)
+    TTxOperationProposeCancelTx(TSchemeShard* self, NEvSchemeShard::TEvCancelTx::TPtr ev)
         : TBase(self)
         , Ev(ev)
     {}
@@ -456,7 +456,7 @@ struct TSchemeShard::TTxOperationProgress: public NTabletFlatExecutor::TTransact
 // from schemeshard (ack or reply) unconditionally, no matter what, possibly out-of-scope
 // of any (sub)operation that initiated communication in the first place.
 //
-// Right now there is the case with DataShard's TEvDataShard::TEvSchemaChanged event.
+// Right now there is the case with DataShard's NEvDataShard::TEvSchemaChanged event.
 // See below.
 //
 template <class TEvType>
@@ -464,15 +464,15 @@ void OutOfScopeEventHandler(const typename TEvType::TPtr&, TOperationContext&) {
     // Do nothing by default
 }
 
-// DataShard should receive reply on any single TEvDataShard::TEvSchemaChanged it will send
+// DataShard should receive reply on any single NEvDataShard::TEvSchemaChanged it will send
 // to schemeshard even if that particular DataShard goes offline and back online right at
 // perfect peculiar moments during (sub)operations.
-// Not serving reply to a TEvDataShard::TEvSchemaChanged will leave Datashard
+// Not serving reply to a NEvDataShard::TEvSchemaChanged will leave Datashard
 // in some transitional state which, for example, will prevent it from being stopped
 // and deleted until schemeshard or datashard restart.
 //
 template <>
-void OutOfScopeEventHandler<TEvDataShard::TEvSchemaChanged>(const TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) {
+void OutOfScopeEventHandler<NEvDataShard::TEvSchemaChanged>(const NEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) {
     const auto txId = ev->Get()->Record.GetTxId();
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "TTxOperationReply<" <<  ev->GetTypeName() << "> execute"
@@ -481,7 +481,7 @@ void OutOfScopeEventHandler<TEvDataShard::TEvSchemaChanged>(const TEvDataShard::
     );
     const TActorId ackTo = ev->Get()->GetSource();
 
-    auto event = MakeHolder<TEvDataShard::TEvSchemaChangedResult>(txId);
+    auto event = MakeHolder<NEvDataShard::TEvSchemaChangedResult>(txId);
     context.OnComplete.Send(ackTo, event.Release());
 }
 
@@ -515,7 +515,7 @@ struct TTxOperationReply : public NTabletFlatExecutor::TTransactionBase<TSchemeS
         , OperationId(id)
         , EvReply(ev)
     {
-        Y_ABORT_UNLESS(TEvType::EventType != TEvPrivate::TEvOperationPlan::EventType);
+        Y_ABORT_UNLESS(TEvType::EventType != NEvPrivate::TEvOperationPlan::EventType);
         Y_ABORT_UNLESS(TEvType::EventType != TEvTxProcessing::TEvPlanStep::EventType);
     }
 
@@ -630,8 +630,8 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
                 }
 
                 TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
-                THolder<TEvPrivate::TEvOperationPlan> msg = MakeHolder<TEvPrivate::TEvOperationPlan>(ui64(step), ui64(txId));
-                TEvPrivate::TEvOperationPlan::TPtr personalEv = (TEventHandle<TEvPrivate::TEvOperationPlan>*) new IEventHandle(
+                THolder<NEvPrivate::TEvOperationPlan> msg = MakeHolder<NEvPrivate::TEvOperationPlan>(ui64(step), ui64(txId));
+                NEvPrivate::TEvOperationPlan::TPtr personalEv = (TEventHandle<NEvPrivate::TEvOperationPlan>*) new IEventHandle(
                             context.SS->SelfId(), context.SS->SelfId(), msg.Release());
 
                 operation->Parts.at(partIdx)->HandleReply(personalEv, context);
@@ -655,11 +655,11 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
 };
 
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxOperationPropose(TEvSchemeShard::TEvCancelTx::TPtr& ev) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxOperationPropose(NEvSchemeShard::TEvCancelTx::TPtr& ev) {
     return new TTxOperationProposeCancelTx(this, ev);
 }
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxOperationPropose(TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxOperationPropose(NEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
     return new TTxOperationPropose(this, ev);
 }
 
@@ -1510,7 +1510,7 @@ void TOperation::DoNotify(TSchemeShard*, TSideEffects& sideEffects, const TActor
     Y_ABORT_UNLESS(IsReadyToNotify());
 
     for (auto& subscriber: Subscribers) {
-        THolder<TEvSchemeShard::TEvNotifyTxCompletionResult> msg = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletionResult>(ui64(TxId));
+        THolder<NEvSchemeShard::TEvNotifyTxCompletionResult> msg = MakeHolder<NEvSchemeShard::TEvNotifyTxCompletionResult>(ui64(TxId));
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "TOperation DoNotify"
                         << " send TEvNotifyTxCompletionResult"

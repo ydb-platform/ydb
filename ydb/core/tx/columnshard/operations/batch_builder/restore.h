@@ -18,7 +18,7 @@ private:
     const TSnapshot Snapshot;
     std::shared_ptr<arrow::RecordBatch> IncomingData;
     const TWritingContext Context;
-    virtual std::unique_ptr<TEvColumnShard::TEvInternalScan> DoBuildRequestInitiator() const override;
+    virtual std::unique_ptr<NEvColumnShard::TEvInternalScan> DoBuildRequestInitiator() const override;
 
     virtual TConclusionStatus DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) override;
     virtual TConclusionStatus DoOnFinished() override;

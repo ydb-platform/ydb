@@ -208,7 +208,7 @@ private:
         Y_ABORT_UNLESS(!AttachSessionSent);
         const auto& source = StartRequest->Record.session_start();
         Send(ProxyActor,
-            new TEvKesus::TEvAttachSession(
+            new NEvKesus::TEvAttachSession(
                 KesusPath,
                 0,
                 source.session_id(),
@@ -234,7 +234,7 @@ private:
     }
 
 private:
-    void HandleAttach(const TEvKesus::TEvAttachSessionResult::TPtr& ev) {
+    void HandleAttach(const NEvKesus::TEvAttachSessionResult::TPtr& ev) {
         Y_ABORT_UNLESS(AttachSessionSent);
         const auto& record = ev->Get()->Record;
         if (record.GetError().GetStatus() != Ydb::StatusIds::SUCCESS) {
@@ -259,7 +259,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             cFunc(IContext::TEvNotifiedWhenDone::EventType, PassAway);
             hFunc(TEvKesusProxy::TEvProxyError, Handle);
-            hFunc(TEvKesus::TEvAttachSessionResult, HandleAttach);
+            hFunc(NEvKesus::TEvAttachSessionResult, HandleAttach);
 
             default:
                 Y_ABORT("Unexpected event 0x%x for TGRpcSessionActor", ev->GetTypeRewrite());
@@ -312,7 +312,7 @@ private:
                 return ReplyError(Ydb::StatusIds::BAD_REQUEST, "Session cannot be started twice");
             }
             case TRequest::kSessionStop: {
-                Send(ProxyActor, new TEvKesus::TEvDestroySession(KesusPath, 0, SessionId));
+                Send(ProxyActor, new NEvKesus::TEvDestroySession(KesusPath, 0, SessionId));
                 return;
             }
             case TRequest::kAcquireSemaphore: {
@@ -325,7 +325,7 @@ private:
                     result->add_issues()->set_message("Write permission denied");
                     return Reply(std::move(response));
                 }
-                auto event = MakeHolder<TEvKesus::TEvAcquireSemaphore>();
+                auto event = MakeHolder<NEvKesus::TEvAcquireSemaphore>();
                 event->Record.SetKesusPath(KesusPath);
                 event->Record.SetName(source.name());
                 event->Record.SetTimeoutMillis(source.timeout_millis());
@@ -345,7 +345,7 @@ private:
                     result->add_issues()->set_message("Write permission denied");
                     return Reply(std::move(response));
                 }
-                auto event = MakeHolder<TEvKesus::TEvReleaseSemaphore>();
+                auto event = MakeHolder<NEvKesus::TEvReleaseSemaphore>();
                 event->Record.SetKesusPath(KesusPath);
                 event->Record.SetName(source.name());
                 Send(ProxyActor, event.Release(), 0, source.req_id());
@@ -361,7 +361,7 @@ private:
                     result->add_issues()->set_message("Read permission denied");
                     return Reply(std::move(response));
                 }
-                auto event = MakeHolder<TEvKesus::TEvDescribeSemaphore>();
+                auto event = MakeHolder<NEvKesus::TEvDescribeSemaphore>();
                 event->Record.SetKesusPath(KesusPath);
                 event->Record.SetName(source.name());
                 event->Record.SetIncludeOwners(source.include_owners());
@@ -382,7 +382,7 @@ private:
                     result->add_issues()->set_message("Create permission denied");
                     return Reply(std::move(response));
                 }
-                auto event = MakeHolder<TEvKesus::TEvCreateSemaphore>();
+                auto event = MakeHolder<NEvKesus::TEvCreateSemaphore>();
                 event->Record.SetKesusPath(KesusPath);
                 event->Record.SetName(source.name());
                 event->Record.SetLimit(source.limit());
@@ -401,7 +401,7 @@ private:
                     result->add_issues()->set_message("Update permission denied");
                     return Reply(std::move(response));
                 }
-                auto event = MakeHolder<TEvKesus::TEvUpdateSemaphore>();
+                auto event = MakeHolder<NEvKesus::TEvUpdateSemaphore>();
                 event->Record.SetKesusPath(KesusPath);
                 event->Record.SetName(source.name());
                 event->Record.SetData(source.data());
@@ -419,7 +419,7 @@ private:
                     result->add_issues()->set_message("Delete permission denied");
                     return Reply(std::move(response));
                 }
-                auto event = MakeHolder<TEvKesus::TEvDeleteSemaphore>();
+                auto event = MakeHolder<NEvKesus::TEvDeleteSemaphore>();
                 event->Record.SetKesusPath(KesusPath);
                 event->Record.SetName(source.name());
                 event->Record.SetForce(source.force());
@@ -438,7 +438,7 @@ private:
         return ReplyError(Ydb::StatusIds::BAD_REQUEST, "Unimplemented request");
     }
 
-    void Handle(const TEvKesus::TEvDestroySessionResult::TPtr& ev) {
+    void Handle(const NEvKesus::TEvDestroySessionResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         if (record.GetError().GetStatus() != Ydb::StatusIds::SUCCESS) {
             ReplyError(record.GetError());
@@ -451,7 +451,7 @@ private:
         ReplyLast(std::move(response));
     }
 
-    void Handle(const TEvKesus::TEvAcquireSemaphorePending::TPtr& ev) {
+    void Handle(const NEvKesus::TEvAcquireSemaphorePending::TPtr& ev) {
         Y_UNUSED(ev);
 
         TResponse response;
@@ -460,7 +460,7 @@ private:
         Reply(std::move(response));
     }
 
-    void Handle(const TEvKesus::TEvAcquireSemaphoreResult::TPtr& ev) {
+    void Handle(const NEvKesus::TEvAcquireSemaphoreResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
         TResponse response;
@@ -472,7 +472,7 @@ private:
         Reply(std::move(response));
     }
 
-    void Handle(const TEvKesus::TEvReleaseSemaphoreResult::TPtr& ev) {
+    void Handle(const NEvKesus::TEvReleaseSemaphoreResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
         TResponse response;
@@ -484,7 +484,7 @@ private:
         Reply(std::move(response));
     }
 
-    void Handle(const TEvKesus::TEvDescribeSemaphoreResult::TPtr& ev) {
+    void Handle(const NEvKesus::TEvDescribeSemaphoreResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
         TResponse response;
@@ -499,7 +499,7 @@ private:
         Reply(std::move(response));
     }
 
-    void Handle(const TEvKesus::TEvDescribeSemaphoreChanged::TPtr& ev) {
+    void Handle(const NEvKesus::TEvDescribeSemaphoreChanged::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
         TResponse response;
@@ -510,7 +510,7 @@ private:
         Reply(std::move(response));
     }
 
-    void Handle(const TEvKesus::TEvCreateSemaphoreResult::TPtr& ev) {
+    void Handle(const NEvKesus::TEvCreateSemaphoreResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
         TResponse response;
@@ -521,7 +521,7 @@ private:
         Reply(std::move(response));
     }
 
-    void Handle(const TEvKesus::TEvUpdateSemaphoreResult::TPtr& ev) {
+    void Handle(const NEvKesus::TEvUpdateSemaphoreResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
         TResponse response;
@@ -532,7 +532,7 @@ private:
         Reply(std::move(response));
     }
 
-    void Handle(const TEvKesus::TEvDeleteSemaphoreResult::TPtr& ev) {
+    void Handle(const NEvKesus::TEvDeleteSemaphoreResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
         TResponse response;
@@ -575,15 +575,15 @@ private:
             cFunc(IContext::TEvNotifiedWhenDone::EventType, PassAway);
 
             hFunc(TEvKesusProxy::TEvProxyError, Handle);
-            hFunc(TEvKesus::TEvDestroySessionResult, Handle);
-            hFunc(TEvKesus::TEvAcquireSemaphorePending, Handle);
-            hFunc(TEvKesus::TEvAcquireSemaphoreResult, Handle);
-            hFunc(TEvKesus::TEvReleaseSemaphoreResult, Handle);
-            hFunc(TEvKesus::TEvDescribeSemaphoreResult, Handle);
-            hFunc(TEvKesus::TEvDescribeSemaphoreChanged, Handle);
-            hFunc(TEvKesus::TEvCreateSemaphoreResult, Handle);
-            hFunc(TEvKesus::TEvUpdateSemaphoreResult, Handle);
-            hFunc(TEvKesus::TEvDeleteSemaphoreResult, Handle);
+            hFunc(NEvKesus::TEvDestroySessionResult, Handle);
+            hFunc(NEvKesus::TEvAcquireSemaphorePending, Handle);
+            hFunc(NEvKesus::TEvAcquireSemaphoreResult, Handle);
+            hFunc(NEvKesus::TEvReleaseSemaphoreResult, Handle);
+            hFunc(NEvKesus::TEvDescribeSemaphoreResult, Handle);
+            hFunc(NEvKesus::TEvDescribeSemaphoreChanged, Handle);
+            hFunc(NEvKesus::TEvCreateSemaphoreResult, Handle);
+            hFunc(NEvKesus::TEvUpdateSemaphoreResult, Handle);
+            hFunc(NEvKesus::TEvDeleteSemaphoreResult, Handle);
             hFunc(TEvPrivate::TEvPingScheduled, Handle);
 
             default:

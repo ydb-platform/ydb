@@ -18,7 +18,7 @@
 
 namespace NKikimr::NDataShardLoad {
 
-using TUploadRowsRequestPtr = std::unique_ptr<TEvDataShard::TEvUploadRowsRequest>;
+using TUploadRowsRequestPtr = std::unique_ptr<NEvDataShard::TEvUploadRowsRequest>;
 
 namespace {
 
@@ -30,7 +30,7 @@ enum class ERequestType {
 };
 
 TUploadRequest GenerateBulkRowRequest(ui64 tableId, ui64 keyStart, ui64 n) {
-    TUploadRowsRequestPtr request(new TEvDataShard::TEvUploadRowsRequest());
+    TUploadRowsRequestPtr request(new NEvDataShard::TEvUploadRowsRequest());
     auto& record = request->Record;
     record.SetTableId(tableId);
 
@@ -257,12 +257,12 @@ private:
         }
     }
 
-    void Handle(TEvDataShard::TEvUploadRowsResponse::TPtr ev, const TActorContext& ctx) {
+    void Handle(NEvDataShard::TEvUploadRowsResponse::TPtr ev, const TActorContext& ctx) {
         LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Id# " << Id
             << " TUpsertActor received from " << ev->Sender << ": " << ev->Get()->Record);
         --Inflight;
 
-        TEvDataShard::TEvUploadRowsResponse *msg = ev->Get();
+        NEvDataShard::TEvUploadRowsResponse *msg = ev->Get();
         if (msg->Record.GetStatus() != 0) {
             ++Errors;
             LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "Id# " << Id
@@ -323,7 +323,7 @@ private:
         CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
         HFunc(TEvDataShardLoad::TEvTestLoadInfoRequest, Handle)
         HFunc(TEvents::TEvUndelivered, Handle);
-        HFunc(TEvDataShard::TEvUploadRowsResponse, Handle);
+        HFunc(NEvDataShard::TEvUploadRowsResponse, Handle);
         HFunc(TEvTablet::TEvLocalMKQLResponse, Handle);
         HFunc(TEvTabletPipe::TEvClientConnected, Handle);
         HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);

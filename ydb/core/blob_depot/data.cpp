@@ -428,7 +428,7 @@ namespace NKikimr::NBlobDepot {
         });
     }
 
-    void TData::OnPushNotifyResult(TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
+    void TData::OnPushNotifyResult(NEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
         TAgent& agent = Self->GetAgent(ev->Recipient);
 
         const auto it = agent.InvalidateStepRequests.find(ev->Get()->Record.GetId());

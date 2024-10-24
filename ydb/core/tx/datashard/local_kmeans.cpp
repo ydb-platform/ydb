@@ -103,7 +103,7 @@ protected:
 
     // Response
     TActorId ResponseActorId;
-    TAutoPtr<TEvDataShard::TEvLocalKMeansResponse> Response;
+    TAutoPtr<NEvDataShard::TEvLocalKMeansResponse> Response;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType()
@@ -113,7 +113,7 @@ public:
 
     TLocalKMeansScanBase(const TUserTable& table, TLead&& lead,
                          const NKikimrTxDataShard::TEvLocalKMeansRequest& request, const TActorId& responseActorId,
-                         TAutoPtr<TEvDataShard::TEvLocalKMeansResponse>&& response)
+                         TAutoPtr<NEvDataShard::TEvLocalKMeansResponse>&& response)
         : TActor{&TThis::StateWork}
         , Parent{request.GetParent()}
         , Child{request.GetChild()}
@@ -332,7 +332,7 @@ class TLocalKMeansScan final: public TLocalKMeansScanBase, private TCalculation<
 
 public:
     TLocalKMeansScan(const TUserTable& table, TLead&& lead, NKikimrTxDataShard::TEvLocalKMeansRequest& request,
-                     const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvLocalKMeansResponse>&& response)
+                     const TActorId& responseActorId, TAutoPtr<NEvDataShard::TEvLocalKMeansResponse>&& response)
         : TLocalKMeansScanBase{table, std::move(lead), request, responseActorId, std::move(response)}
     {
         this->Dimensions = request.GetSettings().vector_dimension();
@@ -543,7 +543,7 @@ private:
 
 class TDataShard::TTxHandleSafeLocalKMeansScan final: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxHandleSafeLocalKMeansScan(TDataShard* self, TEvDataShard::TEvLocalKMeansRequest::TPtr&& ev)
+    TTxHandleSafeLocalKMeansScan(TDataShard* self, NEvDataShard::TEvLocalKMeansRequest::TPtr&& ev)
         : TTransactionBase(self)
         , Ev(std::move(ev))
     {
@@ -560,15 +560,15 @@ public:
     }
 
 private:
-    TEvDataShard::TEvLocalKMeansRequest::TPtr Ev;
+    NEvDataShard::TEvLocalKMeansRequest::TPtr Ev;
 };
 
-void TDataShard::Handle(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext&)
+void TDataShard::Handle(NEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext&)
 {
     Execute(new TTxHandleSafeLocalKMeansScan(this, std::move(ev)));
 }
 
-void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx)
+void TDataShard::HandleSafe(NEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx)
 {
     auto& record = ev->Get()->Record;
     TRowVersion rowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
@@ -580,7 +580,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
     }
     const ui64 id = record.GetId();
 
-    auto response = MakeHolder<TEvDataShard::TEvLocalKMeansResponse>();
+    auto response = MakeHolder<NEvDataShard::TEvLocalKMeansResponse>();
     response->Record.SetId(id);
     response->Record.SetTabletId(TabletID());
 

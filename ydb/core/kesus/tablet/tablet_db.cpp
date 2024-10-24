@@ -71,7 +71,7 @@ void TKesusTablet::DoDeleteSemaphore(
                 events.emplace_back(
                     proxy->ActorID,
                     cookie,
-                    new TEvKesus::TEvAcquireSemaphoreResult(
+                    new NEvKesus::TEvAcquireSemaphoreResult(
                         proxy->Generation,
                         Ydb::StatusIds::ABORTED,
                         "Semaphore destroyed"));
@@ -174,7 +174,7 @@ void TKesusTablet::DoProcessSemaphoreQueue(
                 events.emplace_back(
                     proxy->ActorID,
                     cookie,
-                    new TEvKesus::TEvAcquireSemaphoreResult(proxy->Generation));
+                    new NEvKesus::TEvAcquireSemaphoreResult(proxy->Generation));
             });
         }
 
@@ -201,7 +201,7 @@ void TKesusTablet::TSemaphoreInfo::NotifyWatchers(TVector<TDelayedEvent>& events
             events.emplace_back(
                 session->OwnerProxy->ActorID,
                 session->RemoveSemaphoreWatchCookie(this),
-                new TEvKesus::TEvDescribeSemaphoreChanged(
+                new NEvKesus::TEvDescribeSemaphoreChanged(
                     session->OwnerProxy->Generation, dataChanged, ownersChanged));
         }
         DataWatchers.clear();
@@ -215,7 +215,7 @@ void TKesusTablet::TSemaphoreInfo::NotifyWatchers(TVector<TDelayedEvent>& events
             events.emplace_back(
                 session->OwnerProxy->ActorID,
                 session->RemoveSemaphoreWatchCookie(this),
-                new TEvKesus::TEvDescribeSemaphoreChanged(
+                new NEvKesus::TEvDescribeSemaphoreChanged(
                     session->OwnerProxy->Generation, dataChanged, ownersChanged));
         }
         OwnersWatchers.clear();

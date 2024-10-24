@@ -527,7 +527,7 @@ namespace NKikimr::NBsController {
         }
 
         void HiveCreateTablet(TGroupInfo *group) {
-            auto ev = std::make_unique<TEvHive::TEvCreateTablet>();
+            auto ev = std::make_unique<NEvHive::TEvCreateTablet>();
 
             auto& config = GetConfig(group);
 			if (config.HasHiveParams()) {
@@ -560,7 +560,7 @@ namespace NKikimr::NBsController {
             auto& config = GetConfig(group);
             Y_ABORT_UNLESS(config.GetIsDecommittingGroup());
 
-            auto invalidateEv = std::make_unique<TEvHive::TEvInvalidateStoragePools>();
+            auto invalidateEv = std::make_unique<NEvHive::TEvInvalidateStoragePools>();
             auto& record = invalidateEv->Record;
             std::unordered_set<TString> names;
             for (const auto& item : config.GetChannelProfiles()) {
@@ -571,7 +571,7 @@ namespace NKikimr::NBsController {
             }
             NTabletPipe::SendData(SelfId(), pipeId, invalidateEv.release());
 
-            NTabletPipe::SendData(SelfId(), pipeId, new TEvHive::TEvReassignOnDecommitGroup(GroupId.GetRawId()));
+            NTabletPipe::SendData(SelfId(), pipeId, new NEvHive::TEvReassignOnDecommitGroup(GroupId.GetRawId()));
         }
 
         void HiveDelete(TGroupInfo *group) {
@@ -591,8 +591,8 @@ namespace NKikimr::NBsController {
             HivePipeId = Register(NTabletPipe::CreateClient(SelfId(), hiveId, NTabletPipe::TClientRetryPolicy::WithRetries()));
 
             auto ev = tabletId
-                ? std::make_unique<TEvHive::TEvDeleteTablet>(Self->TabletID(), GroupId.GetRawId(), *tabletId, 0)
-                : std::make_unique<TEvHive::TEvDeleteTablet>(Self->TabletID(), GroupId.GetRawId(), 0);
+                ? std::make_unique<NEvHive::TEvDeleteTablet>(Self->TabletID(), GroupId.GetRawId(), *tabletId, 0)
+                : std::make_unique<NEvHive::TEvDeleteTablet>(Self->TabletID(), GroupId.GetRawId(), 0);
 
             STLOG(PRI_INFO, BS_CONTROLLER, BSCVG12, "sending TEvDeleteTablet", (GroupId.GetRawId(), GroupId.GetRawId()),
                 (HiveId, hiveId), (Msg, ev->Record));
@@ -639,12 +639,12 @@ namespace NKikimr::NBsController {
             }
         }
 
-        void Handle(TEvHive::TEvInvalidateStoragePoolsReply::TPtr ev) {
+        void Handle(NEvHive::TEvInvalidateStoragePoolsReply::TPtr ev) {
             STLOG(PRI_INFO, BS_CONTROLLER, BSCVG06, "received TEvInvalidateStoragePoolsReply", (GroupId.GetRawId(), GroupId.GetRawId()),
                 (Msg, ev->Get()->Record));
         }
 
-        void Handle(TEvHive::TEvReassignOnDecommitGroupReply::TPtr ev) {
+        void Handle(NEvHive::TEvReassignOnDecommitGroupReply::TPtr ev) {
             STLOG(PRI_INFO, BS_CONTROLLER, BSCVG07, "received TEvReassignOnDecommitGroupReply", (GroupId.GetRawId(), GroupId.GetRawId()),
                 (Msg, ev->Get()->Record));
             if (TenantHiveInvalidateInProgress) {
@@ -655,7 +655,7 @@ namespace NKikimr::NBsController {
             }
         }
 
-        void Handle(TEvHive::TEvCreateTabletReply::TPtr ev) {
+        void Handle(NEvHive::TEvCreateTabletReply::TPtr ev) {
             STLOG(PRI_INFO, BS_CONTROLLER, BSCVG04, "received TEvCreateTabletReply", (GroupId.GetRawId(), GroupId.GetRawId()),
                 (Msg, ev->Get()->Record));
 
@@ -687,12 +687,12 @@ namespace NKikimr::NBsController {
             }));
         }
 
-        void Handle(TEvHive::TEvTabletCreationResult::TPtr ev) {
+        void Handle(NEvHive::TEvTabletCreationResult::TPtr ev) {
             STLOG(PRI_INFO, BS_CONTROLLER, BSCVG05, "received TEvTabletCreationResult", (GroupId.GetRawId(), GroupId.GetRawId()),
                 (Msg, ev->Get()->Record));
         }
 
-        void Handle(TEvHive::TEvDeleteTabletReply::TPtr ev) {
+        void Handle(NEvHive::TEvDeleteTabletReply::TPtr ev) {
             STLOG(PRI_INFO, BS_CONTROLLER, BSCVG13, "received TEvDeleteTabletReply", (GroupId.GetRawId(), GroupId.GetRawId()),
                 (Msg, ev->Get()->Record));
             if (DeleteInfo) {
@@ -711,7 +711,7 @@ namespace NKikimr::NBsController {
             const ui64 tabletId = config.GetTabletId();
             BlobDepotPipeId = Register(NTabletPipe::CreateClient(SelfId(), tabletId,
                 NTabletPipe::TClientRetryPolicy::WithRetries()));
-            auto ev = std::make_unique<TEvBlobDepot::TEvApplyConfig>();
+            auto ev = std::make_unique<NEvBlobDepot::TEvApplyConfig>();
             ev->Record.MutableConfig()->CopyFrom(config);
             NTabletPipe::SendData(SelfId(), BlobDepotPipeId, ev.release());
         }
@@ -740,7 +740,7 @@ namespace NKikimr::NBsController {
             Self->Execute(std::make_unique<TTxDeleteBlobDepot>(this));
         }
 
-        void Handle(TEvBlobDepot::TEvApplyConfigResult::TPtr /*ev*/) {
+        void Handle(NEvBlobDepot::TEvApplyConfigResult::TPtr /*ev*/) {
             NTabletPipe::CloseAndForgetClient(SelfId(), BlobDepotPipeId);
 
             Self->Execute(std::make_unique<TTxUpdateGroup>(this, [&](TGroupInfo& group, TConfigState& state) {
@@ -795,12 +795,12 @@ namespace NKikimr::NBsController {
                 hFunc(TEvTabletPipe::TEvClientConnected, Handle);
                 hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-                hFunc(TEvHive::TEvCreateTabletReply, Handle);
-                hFunc(TEvHive::TEvTabletCreationResult, Handle);
-                hFunc(TEvHive::TEvInvalidateStoragePoolsReply, Handle);
-                hFunc(TEvHive::TEvReassignOnDecommitGroupReply, Handle);
-                hFunc(TEvHive::TEvDeleteTabletReply, Handle);
-                hFunc(TEvBlobDepot::TEvApplyConfigResult, Handle);
+                hFunc(NEvHive::TEvCreateTabletReply, Handle);
+                hFunc(NEvHive::TEvTabletCreationResult, Handle);
+                hFunc(NEvHive::TEvInvalidateStoragePoolsReply, Handle);
+                hFunc(NEvHive::TEvReassignOnDecommitGroupReply, Handle);
+                hFunc(NEvHive::TEvDeleteTabletReply, Handle);
+                hFunc(NEvBlobDepot::TEvApplyConfigResult, Handle);
 
                 default:
                     Y_DEBUG_ABORT("unexpected event Type# %08" PRIx32, type);

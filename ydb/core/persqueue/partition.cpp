@@ -813,7 +813,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorC
 
 
 void TPartition::Handle(TEvPQ::TEvGetPartitionClientInfo::TPtr& ev, const TActorContext& ctx) {
-    THolder<TEvPersQueue::TEvPartitionClientInfoResponse> response = MakeHolder<TEvPersQueue::TEvPartitionClientInfoResponse>();
+    THolder<NEvPersQueue::TEvPartitionClientInfoResponse> response = MakeHolder<NEvPersQueue::TEvPartitionClientInfoResponse>();
     NKikimrPQ::TClientInfoResponse& result(response->Record);
     result.SetPartition(Partition.InternalPartitionId);
     result.SetStartOffset(StartOffset);
@@ -838,7 +838,7 @@ void TPartition::Handle(TEvPQ::TEvGetPartitionClientInfo::TPtr& ev, const TActor
     ctx.Send(ev->Get()->Sender, response.Release(), 0, ev->Cookie);
 }
 
-void TPartition::Handle(TEvPersQueue::TEvReportPartitionError::TPtr& ev, const TActorContext& ctx) {
+void TPartition::Handle(NEvPersQueue::TEvReportPartitionError::TPtr& ev, const TActorContext& ctx) {
     LogAndCollectError(ev->Get()->Record, ctx);
 }
 
@@ -897,7 +897,7 @@ void TPartition::Handle(TEvPQ::TEvUpdateWriteTimestamp::TPtr& ev, const TActorCo
     ReplyOk(ctx, ev->Get()->Cookie);
 }
 
-void TPartition::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx)
+void TPartition::Handle(NEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx)
 {
     const NKikimrPQ::TEvProposeTransaction& event = ev->Get()->GetRecord();
     Y_ABORT_UNLESS(event.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
@@ -1705,7 +1705,7 @@ void TPartition::PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvProposePartitionConf
     UserActionAndTransactionEvents.emplace_back(MakeSimpleShared<TTransaction>(std::move(event)));
 }
 
-void TPartition::AddImmediateTx(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> tx)
+void TPartition::AddImmediateTx(TSimpleSharedPtr<NEvPersQueue::TEvProposeTransaction> tx)
 {
     UserActionAndTransactionEvents.emplace_back(MakeSimpleShared<TTransaction>(std::move(tx)));
     ++ImmediateTxCount;
@@ -2979,7 +2979,7 @@ void TPartition::ScheduleReplyPropose(const NKikimrPQ::TEvProposeTransaction& ev
                                       NKikimrPQ::TError::EKind kind,
                                       const TString& reason)
 {
-    PQ_LOG_D("schedule TEvPersQueue::TEvProposeTransactionResult(" <<
+    PQ_LOG_D("schedule NEvPersQueue::TEvProposeTransactionResult(" <<
              NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(statusCode) <<
              ")" <<
              ", reason=" << reason);
@@ -3218,12 +3218,12 @@ THolder<TEvPQ::TEvError> TPartition::MakeReplyError(const ui64 dst,
     return MakeHolder<TEvPQ::TEvError>(errorCode, error, dst);
 }
 
-THolder<TEvPersQueue::TEvProposeTransactionResult> TPartition::MakeReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
+THolder<NEvPersQueue::TEvProposeTransactionResult> TPartition::MakeReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
                                                                                 NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
                                                                                 NKikimrPQ::TError::EKind kind,
                                                                                 const TString& reason)
 {
-    auto response = MakeHolder<TEvPersQueue::TEvProposeTransactionResult>();
+    auto response = MakeHolder<NEvPersQueue::TEvProposeTransactionResult>();
 
     response->Record.SetOrigin(TabletID);
     response->Record.SetStatus(statusCode);
@@ -3458,7 +3458,7 @@ void TPartition::ScheduleNegativeReply(const TEvPQ::TEvSetClientInfo&)
     Y_ABORT("The supportive partition does not accept read operations");
 }
 
-void TPartition::ScheduleNegativeReply(const TEvPersQueue::TEvProposeTransaction&)
+void TPartition::ScheduleNegativeReply(const NEvPersQueue::TEvProposeTransaction&)
 {
     Y_ABORT("The supportive partition does not accept immediate transactions");
 }

@@ -110,7 +110,7 @@ bool TTxWrite::DoExecute(TTransactionContext& txc, const TActorContext&) {
             }
         } else {
             Y_ABORT_UNLESS(aggr->GetInsertWriteIds().size() == 1);
-            auto ev = std::make_unique<TEvColumnShard::TEvWriteResult>(
+            auto ev = std::make_unique<NEvColumnShard::TEvWriteResult>(
                 Self->TabletID(), writeMeta, (ui64)aggr->GetInsertWriteIds().front(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
             Results.emplace_back(std::move(ev), writeMeta.GetSource(), 0);
         }

@@ -59,17 +59,17 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvBlockStore::TEvUpdateVolumeConfig, Handle);
+            HFunc(NEvBlockStore::TEvUpdateVolumeConfig, Handle);
         default:
             HandleDefaultEvents(ev, SelfId());
         }
     }
 
 private:
-    void Handle(TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev, const TActorContext& ctx) {
         const auto& request = ev->Get()->Record;
-        TAutoPtr<TEvBlockStore::TEvUpdateVolumeConfigResponse> response =
-            new TEvBlockStore::TEvUpdateVolumeConfigResponse();
+        TAutoPtr<NEvBlockStore::TEvUpdateVolumeConfigResponse> response =
+            new NEvBlockStore::TEvUpdateVolumeConfigResponse();
         response->Record.SetTxId(request.GetTxId());
         response->Record.SetOrigin(TabletID());
         response->Record.SetStatus(NKikimrBlockStore::OK);
@@ -108,17 +108,17 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvFileStore::TEvUpdateConfig, Handle);
+            HFunc(NEvFileStore::TEvUpdateConfig, Handle);
         default:
             HandleDefaultEvents(ev, SelfId());
         }
     }
 
 private:
-    void Handle(TEvFileStore::TEvUpdateConfig::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NEvFileStore::TEvUpdateConfig::TPtr& ev, const TActorContext& ctx) {
         const auto& request = ev->Get()->Record;
-        TAutoPtr<TEvFileStore::TEvUpdateConfigResponse> response =
-            new TEvFileStore::TEvUpdateConfigResponse();
+        TAutoPtr<NEvFileStore::TEvUpdateConfigResponse> response =
+            new NEvFileStore::TEvUpdateConfigResponse();
         response->Record.SetTxId(request.GetTxId());
         response->Record.SetOrigin(TabletID());
         response->Record.SetStatus(NKikimrFileStore::OK);
@@ -135,13 +135,13 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest, Handle);
+            HFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest, Handle);
         }
     }
 
-    void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
-        ctx.Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationRequest(), 0, ev->Cookie);
+        ctx.Send(ev->Sender, new NConsole::NEvConsole::TEvConfigNotificationRequest(), 0, ev->Cookie);
     }
 };
 
@@ -158,8 +158,8 @@ private:
         switch (ev->GetTypeRewrite()) {
         HFunc(TEvTabletPipe::TEvClientConnected, Handle);
         HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-        HFunc(TEvSchemeShard::TEvNotifyTxCompletion, Handle);
-        HFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
+        HFunc(NEvSchemeShard::TEvNotifyTxCompletion, Handle);
+        HFunc(NEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
         };
     }
 
@@ -193,7 +193,7 @@ private:
         }
     }
 
-    void Handle(TEvSchemeShard::TEvNotifyTxCompletion::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NEvSchemeShard::TEvNotifyTxCompletion::TPtr &ev, const TActorContext &ctx) {
         ui64 txId = ev->Get()->Record.GetTxId();
 
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -210,7 +210,7 @@ private:
         SendToSchemeshard(txId, ctx);
     }
 
-    void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NEvSchemeShard::TEvNotifyTxCompletionResult::TPtr &ev, const TActorContext &ctx) {
         ui64 txId = ev->Get()->Record.GetTxId();
 
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -224,7 +224,7 @@ private:
         for (TActorId waiter : SchemeTxWaiters[txId]) {
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "tests -- TTxNotificationSubscriber for txId " << txId <<": satisfy waiter " << waiter);
-            ctx.Send(waiter, new TEvSchemeShard::TEvNotifyTxCompletionResult(txId));
+            ctx.Send(waiter, new NEvSchemeShard::TEvNotifyTxCompletionResult(txId));
         }
         SchemeTxWaiters.erase(txId);
 
@@ -261,7 +261,7 @@ private:
         // Pipe creation also uses TabletResolver. Hence: new pipe for every NotifyTxCompletion.
 
         auto pipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, SchemeshardTabletId, GetPipeConfigWithRetries()));
-        NTabletPipe::SendData(ctx, pipe, new TEvSchemeShard::TEvNotifyTxCompletion(txId));
+        NTabletPipe::SendData(ctx, pipe, new NEvSchemeShard::TEvNotifyTxCompletion(txId));
 
         // Add entry to the tx-pipe mapping
         TxToPipe[txId] = pipe;
@@ -358,11 +358,11 @@ private:
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
 
-            HFunc(TEvSchemeShard::TEvModifySchemeTransaction, Handle);
-            HFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
+            HFunc(NEvSchemeShard::TEvModifySchemeTransaction, Handle);
+            HFunc(NEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
 
-            HFunc(TEvSchemeShard::TEvCancelTx, Handle);
-            HFunc(TEvSchemeShard::TEvCancelTxResult, Handle);
+            HFunc(NEvSchemeShard::TEvCancelTx, Handle);
+            HFunc(NEvSchemeShard::TEvCancelTxResult, Handle);
 
             HFunc(TEvExport::TEvCancelExportRequest, Handle);
             HFunc(TEvExport::TEvCancelExportResponse, Handle);
@@ -409,11 +409,11 @@ private:
         SendToSchemeshard(txId, ctx);
     }
 
-    void Handle(TEvSchemeShard::TEvModifySchemeTransaction::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NEvSchemeShard::TEvModifySchemeTransaction::TPtr &ev, const TActorContext &ctx) {
         HandleRequest(ev, ctx);
     }
 
-    void Handle(TEvSchemeShard::TEvCancelTx::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NEvSchemeShard::TEvCancelTx::TPtr &ev, const TActorContext &ctx) {
         HandleRequest(ev, ctx);
     }
 
@@ -441,11 +441,11 @@ private:
         OnlineRequests.erase(txId);
     }
 
-    void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NEvSchemeShard::TEvModifySchemeTransactionResult::TPtr &ev, const TActorContext &ctx) {
         HandleResponse(ev, ctx);
     }
 
-    void Handle(TEvSchemeShard::TEvCancelTxResult::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NEvSchemeShard::TEvCancelTxResult::TPtr &ev, const TActorContext &ctx) {
         HandleResponse(ev, ctx);
     }
 
@@ -761,13 +761,13 @@ void NSchemeShardUT_Private::TestWaitNotification(NActors::TTestActorRuntime &ru
 
     for (ui64 txId : txIds) {
         Cerr << Endl << "TestWaitNotification wait txId: " << txId << Endl;
-        auto ev = new TEvSchemeShard::TEvNotifyTxCompletion(txId);
+        auto ev = new NEvSchemeShard::TEvNotifyTxCompletion(txId);
         runtime.Send(new IEventHandle(subscriberActorId, sender, ev));
     }
 
     TAutoPtr<IEventHandle> handle;
     while (txIds.size()) {
-        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvNotifyTxCompletionResult>(handle);
+        auto event = runtime.GrabEdgeEvent<NEvSchemeShard::TEvNotifyTxCompletionResult>(handle);
         UNIT_ASSERT(event);
         ui64 eventTxId = event->Record.GetTxId();
         Cerr << Endl << "TestWaitNotification: OK eventTxId " << eventTxId << Endl;
@@ -805,7 +805,7 @@ void NSchemeShardUT_Private::TTestEnv::TestWaitTabletDeletion(NActors::TTestActo
 
     TAutoPtr<IEventHandle> handle;
     while (tabletIds.size()) {
-        auto event = runtime.GrabEdgeEvent<TEvHive::TEvResponseHiveInfo>(handle);
+        auto event = runtime.GrabEdgeEvent<NEvHive::TEvResponseHiveInfo>(handle);
         UNIT_ASSERT(event);
         UNIT_ASSERT_VALUES_EQUAL(event->Record.TabletsSize(), 1);
 
@@ -825,12 +825,12 @@ void NSchemeShardUT_Private::TTestEnv::TestWaitShardDeletion(NActors::TTestActor
 
     for (auto shardIdx : shardIds) {
         Cerr << "Waiting until shard idx " << shardIdx << " is deleted" << Endl;
-        auto ev = new TEvPrivate::TEvSubscribeToShardDeletion(shardIdx);
+        auto ev = new NEvPrivate::TEvSubscribeToShardDeletion(shardIdx);
         ForwardToTablet(runtime, schemeShard, sender, ev);
     }
 
     while (!shardIds.empty()) {
-        auto ev = runtime.GrabEdgeEvent<TEvPrivate::TEvNotifyShardDeleted>(sender);
+        auto ev = runtime.GrabEdgeEvent<NEvPrivate::TEvNotifyShardDeleted>(sender);
         auto shardIdx = ev->Get()->ShardIdx;
         Cerr << "Deleted shard idx " << shardIdx << Endl;
         shardIds.erase(shardIdx);
@@ -886,8 +886,8 @@ void NSchemeShardUT_Private::TTestEnv::TestServerlessComputeResourcesModeInHive(
     UNIT_ASSERT_VALUES_EQUAL(event->Get()->DomainInfo.ServerlessComputeResourcesMode, serverlessComputeResourcesMode);
 }
 
-TEvSchemeShard::TEvInitRootShardResult::EStatus NSchemeShardUT_Private::TTestEnv::InitRoot(NActors::TTestActorRuntime &runtime, ui64 schemeRoot, const NActors::TActorId &sender, const TString& domainName, const TDomainsInfo::TDomain::TStoragePoolKinds& StoragePoolTypes, const TString& owner) {
-    auto ev = new TEvSchemeShard::TEvInitRootShard(sender, 32, domainName);
+NEvSchemeShard::TEvInitRootShardResult::EStatus NSchemeShardUT_Private::TTestEnv::InitRoot(NActors::TTestActorRuntime &runtime, ui64 schemeRoot, const NActors::TActorId &sender, const TString& domainName, const TDomainsInfo::TDomain::TStoragePoolKinds& StoragePoolTypes, const TString& owner) {
+    auto ev = new NEvSchemeShard::TEvInitRootShard(sender, 32, domainName);
     for (const auto& [kind, pool] : StoragePoolTypes) {
         auto* p = ev->Record.AddStoragePools();
         p->SetKind(kind);
@@ -900,17 +900,17 @@ TEvSchemeShard::TEvInitRootShardResult::EStatus NSchemeShardUT_Private::TTestEnv
     runtime.SendToPipe(schemeRoot, sender, ev, 0, GetPipeConfigWithRetries());
 
     TAutoPtr<IEventHandle> handle;
-    auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvInitRootShardResult>(handle);
+    auto event = runtime.GrabEdgeEvent<NEvSchemeShard::TEvInitRootShardResult>(handle);
     UNIT_ASSERT_VALUES_EQUAL(event->Record.GetOrigin(), schemeRoot);
     UNIT_ASSERT_VALUES_EQUAL(event->Record.GetOrigin(), schemeRoot);
 
-    return (TEvSchemeShard::TEvInitRootShardResult::EStatus)event->Record.GetStatus();
+    return (NEvSchemeShard::TEvInitRootShardResult::EStatus)event->Record.GetStatus();
 }
 
 void NSchemeShardUT_Private::TTestEnv::InitRootStoragePools(NActors::TTestActorRuntime &runtime, ui64 schemeRoot, const NActors::TActorId &sender, ui64 domainUid) {
     const TDomainsInfo::TDomain& domain = runtime.GetAppData().DomainsInfo->GetDomain(domainUid);
 
-    auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(1, TTestTxConfig::SchemeShard);
+    auto evTx = new NEvSchemeShard::TEvModifySchemeTransaction(1, TTestTxConfig::SchemeShard);
     auto transaction = evTx->Record.AddTransaction();
     transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain);
     transaction->SetWorkingDir("/");
@@ -927,17 +927,17 @@ void NSchemeShardUT_Private::TTestEnv::InitRootStoragePools(NActors::TTestActorR
 
     {
         TAutoPtr<IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
+        auto event = runtime.GrabEdgeEvent<NEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSchemeshardId(), schemeRoot);
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
     }
 
-    auto evSubscribe = new TEvSchemeShard::TEvNotifyTxCompletion(1);
+    auto evSubscribe = new NEvSchemeShard::TEvNotifyTxCompletion(1);
     runtime.SendToPipe(schemeRoot, sender, evSubscribe, 0, GetPipeConfigWithRetries());
 
     {
         TAutoPtr<IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvNotifyTxCompletionResult>(handle);
+        auto event = runtime.GrabEdgeEvent<NEvSchemeShard::TEvNotifyTxCompletionResult>(handle);
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), 1);
     }
 }
@@ -1093,14 +1093,14 @@ void NSchemeShardUT_Private::TTestWithReboots::Finalize() {
 
 bool NSchemeShardUT_Private::TTestWithReboots::PassUserRequests(TTestActorRuntimeBase &runtime, TAutoPtr<IEventHandle> &event) {
     Y_UNUSED(runtime);
-    return event->Type == TEvSchemeShard::EvModifySchemeTransaction ||
-           event->Type == TEvSchemeShard::EvDescribeScheme ||
-           event->Type == TEvSchemeShard::EvNotifyTxCompletion ||
-           event->Type == TEvSchemeShard::EvMeasureSelfResponseTime ||
-           event->Type == TEvSchemeShard::EvWakeupToMeasureSelfResponseTime ||
+    return event->Type == NEvSchemeShard::EvModifySchemeTransaction ||
+           event->Type == NEvSchemeShard::EvDescribeScheme ||
+           event->Type == NEvSchemeShard::EvNotifyTxCompletion ||
+           event->Type == NEvSchemeShard::EvMeasureSelfResponseTime ||
+           event->Type == NEvSchemeShard::EvWakeupToMeasureSelfResponseTime ||
            event->Type == TEvTablet::EvLocalMKQL ||
            event->Type == TEvFakeHive::EvSubscribeToTabletDeletion ||
-           event->Type == TEvSchemeShard::EvCancelTx ||
+           event->Type == NEvSchemeShard::EvCancelTx ||
            event->Type == TEvExport::EvCreateExportRequest ||
            event->Type == TEvIndexBuilder::EvCreateRequest ||
            event->Type == TEvIndexBuilder::EvGetRequest ||

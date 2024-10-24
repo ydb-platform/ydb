@@ -24,10 +24,10 @@ namespace NKikimr::NConsole {
 
             ui32 item = (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem;
             Send(MakeConfigsDispatcherID(SelfId().NodeId()),
-                    new TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(item));
+                    new NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(item));
         }
 
-        void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+        void Handle(NEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
             const auto& record = ev->Get()->Record;
             LOG_INFO_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,
                 "TFeatureFlagsConfigurator: new config: " << record.GetConfig().ShortDebugString());
@@ -36,7 +36,7 @@ namespace NKikimr::NConsole {
             AppDataVerified().UpdateRuntimeFlags(record.GetConfig().GetFeatureFlags());
             Updated = true;
 
-            Send(ev->Sender, new TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
+            Send(ev->Sender, new NEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
 
             // Notify all subscribers about feature flags potentially changing
             for (auto& pr : Subscribers) {
@@ -65,8 +65,8 @@ namespace NKikimr::NConsole {
     private:
         STFUNC(StateWork) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvConsole::TEvConfigNotificationRequest, Handle);
-                IgnoreFunc(TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+                hFunc(NEvConsole::TEvConfigNotificationRequest, Handle);
+                IgnoreFunc(NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
                 hFunc(TEvFeatureFlags::TEvSubscribe, Handle);
                 hFunc(TEvFeatureFlags::TEvUnsubscribe, Handle);
             }

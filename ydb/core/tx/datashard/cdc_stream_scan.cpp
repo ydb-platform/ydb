@@ -398,12 +398,12 @@ class TCdcStreamScan: public IActorCallback, public IScan {
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvDataShard::TEvCdcStreamScanRequest, Handle);
+            hFunc(NEvDataShard::TEvCdcStreamScanRequest, Handle);
             hFunc(TDataShard::TEvPrivate::TEvCdcStreamScanContinue, Handle);
         }
     }
 
-    void Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev) {
+    void Handle(NEvDataShard::TEvCdcStreamScanRequest::TPtr& ev) {
         ReplyTo = ev->Sender;
         Reply(NKikimrTxDataShard::TEvCdcStreamScanResponse::IN_PROGRESS);
     }
@@ -422,7 +422,7 @@ class TCdcStreamScan: public IActorCallback, public IScan {
     }
 
     void Reply(NKikimrTxDataShard::TEvCdcStreamScanResponse::EStatus status, const TString& error = {}) {
-        auto response = MakeHolder<TEvDataShard::TEvCdcStreamScanResponse>();
+        auto response = MakeHolder<NEvDataShard::TEvCdcStreamScanResponse>();
 
         response->Record.SetTabletId(DataShard.TabletId);
         PathIdFromPathId(TablePathId, response->Record.MutableTablePathId());
@@ -541,12 +541,12 @@ private:
 }; // TCdcStreamScan
 
 class TDataShard::TTxCdcStreamScanRun: public TTransactionBase<TDataShard> {
-    TEvDataShard::TEvCdcStreamScanRequest::TPtr Request;
+    NEvDataShard::TEvCdcStreamScanRequest::TPtr Request;
     THolder<IEventHandle> Response; // response to sender or forward to scanner
 
     template <typename... Args>
     THolder<IEventHandle> MakeResponse(const TActorContext& ctx, Args&&... args) const {
-        return MakeHolder<IEventHandle>(Request->Sender, ctx.SelfID, new TEvDataShard::TEvCdcStreamScanResponse(
+        return MakeHolder<IEventHandle>(Request->Sender, ctx.SelfID, new NEvDataShard::TEvCdcStreamScanResponse(
             Request->Get()->Record, Self->TabletID(), std::forward<Args>(args)...
         ));
     }
@@ -556,7 +556,7 @@ class TDataShard::TTxCdcStreamScanRun: public TTransactionBase<TDataShard> {
     }
 
 public:
-    explicit TTxCdcStreamScanRun(TDataShard* self, TEvDataShard::TEvCdcStreamScanRequest::TPtr ev)
+    explicit TTxCdcStreamScanRun(TDataShard* self, NEvDataShard::TEvCdcStreamScanRequest::TPtr ev)
         : TBase(self)
         , Request(ev)
     {
@@ -617,7 +617,7 @@ public:
         } else if (Self->CdcStreamScanManager.IsCompleted(streamPathId)) {
             Response = MakeResponse(ctx, NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE);
             Self->CdcStreamScanManager.GetCompletedStats(streamPathId).Serialize(
-                *Response->Get<TEvDataShard::TEvCdcStreamScanResponse>()->Record.MutableStats());
+                *Response->Get<NEvDataShard::TEvCdcStreamScanResponse>()->Record.MutableStats());
             return true;
         } else if (Self->CdcStreamScanManager.Size()) {
             Response = MakeResponse(ctx, NKikimrTxDataShard::TEvCdcStreamScanResponse::OVERLOADED);
@@ -703,7 +703,7 @@ public:
 
 }; // TTxCdcStreamScanRun
 
-void TDataShard::Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxCdcStreamScanRun(this, ev), ctx);
 }
 

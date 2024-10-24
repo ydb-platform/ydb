@@ -9,7 +9,7 @@ namespace NKikimr::NConsole {
 
 class TConsole::TTxSetConfig : public TTransactionBase<TConsole> {
 public:
-    TTxSetConfig(TEvConsole::TEvSetConfigRequest::TPtr ev, TConsole *self)
+    TTxSetConfig(NEvConsole::TEvSetConfigRequest::TPtr ev, TConsole *self)
         : TBase(self)
         , Request(std::move(ev))
         , ModifyConfig(false)
@@ -32,7 +32,7 @@ public:
         auto &rec = Request->Get()->Record;
         LOG_DEBUG_S(ctx, NKikimrServices::CMS, "TConsole::TTxSetConfig: " << rec.ShortDebugString());
 
-        Response = new TEvConsole::TEvSetConfigResponse;
+        Response = new NEvConsole::TEvSetConfigResponse;
 
         if (rec.GetMerge() == NKikimrConsole::TConfigItem::OVERWRITE) {
             NewConfig = rec.GetConfig();
@@ -83,13 +83,13 @@ public:
     }
 
 private:
-    TEvConsole::TEvSetConfigRequest::TPtr Request;
-    TAutoPtr<TEvConsole::TEvSetConfigResponse> Response;
+    NEvConsole::TEvSetConfigRequest::TPtr Request;
+    TAutoPtr<NEvConsole::TEvSetConfigResponse> Response;
     NKikimrConsole::TConfig NewConfig;
     bool ModifyConfig;
 };
 
-ITransaction *TConsole::CreateTxSetConfig(TEvConsole::TEvSetConfigRequest::TPtr &ev)
+ITransaction *TConsole::CreateTxSetConfig(NEvConsole::TEvSetConfigRequest::TPtr &ev)
 {
     return new TTxSetConfig(ev, this);
 }

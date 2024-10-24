@@ -56,11 +56,11 @@ private:
     STATEFN(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWakeup, HandleWakeup);
-            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleDescribeSchemeResult);
+            hFunc(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult, HandleDescribeSchemeResult);
         }
     }
 
-    void HandleDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+    void HandleDescribeSchemeResult(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         const auto& record = ev->Get()->GetRecord();
         const auto& desc = record.GetPathDescription();
 

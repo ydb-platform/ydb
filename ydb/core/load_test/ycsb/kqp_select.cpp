@@ -333,7 +333,7 @@ private:
         ctx.Send(MakeTxProxyID(), request.release());
     }
 
-    void Handle(const NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
+    void Handle(const NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->GetRecord();
         OwnerId = record.GetPathOwnerId();
         TableId = record.GetPathId();
@@ -369,7 +369,7 @@ private:
     }
 
     void RunFullScan(const TActorContext& ctx, ui64 sampleKeys) {
-        auto request = std::make_unique<TEvDataShard::TEvRead>();
+        auto request = std::make_unique<NEvDataShard::TEvRead>();
         auto& record = request->Record;
 
         record.SetReadId(++LastReadId);
@@ -517,7 +517,7 @@ private:
         CFunc(TEvents::TSystem::PoisonPill, HandlePoison)
         HFunc(TEvDataShardLoad::TEvTestLoadInfoRequest, Handle)
         HFunc(TEvDataShardLoad::TEvTestLoadFinished, Handle);
-        HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle)
+        HFunc(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult, Handle)
         HFunc(TEvPrivate::TEvKeys, Handle)
     )
 };

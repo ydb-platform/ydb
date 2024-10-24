@@ -110,10 +110,10 @@ struct TSchemeShard::TImport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
 }; // TTxCancel
 
 struct TSchemeShard::TImport::TTxCancelAck: public TSchemeShard::TXxport::TTxBase {
-    TEvSchemeShard::TEvCancelTxResult::TPtr CancelTxResult = nullptr;
+    NEvSchemeShard::TEvCancelTxResult::TPtr CancelTxResult = nullptr;
     TEvIndexBuilder::TEvCancelResponse::TPtr CancelIndexBuildResult = nullptr;
 
-    explicit TTxCancelAck(TSelf *self, TEvSchemeShard::TEvCancelTxResult::TPtr& ev)
+    explicit TTxCancelAck(TSelf *self, NEvSchemeShard::TEvCancelTxResult::TPtr& ev)
         : TXxport::TTxBase(self)
         , CancelTxResult(ev)
     {
@@ -214,7 +214,7 @@ ITransaction* TSchemeShard::CreateTxCancelImport(TEvImport::TEvCancelImportReque
     return new TImport::TTxCancel(this, ev);
 }
 
-ITransaction* TSchemeShard::CreateTxCancelImportAck(TEvSchemeShard::TEvCancelTxResult::TPtr& ev) {
+ITransaction* TSchemeShard::CreateTxCancelImportAck(NEvSchemeShard::TEvCancelTxResult::TPtr& ev) {
     return new TImport::TTxCancelAck(this, ev);
 }
 

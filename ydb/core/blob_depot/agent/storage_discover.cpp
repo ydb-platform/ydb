@@ -69,7 +69,7 @@ namespace NKikimr::NBlobDepot {
                     STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA50, "TEvGetResult", (AgentId, Agent.LogId),
                         (QueryId, GetQueryId()), (Response, *p));
                     TQuery::HandleGetResult(context, **p);
-                } else if (auto *p = std::get_if<TEvBlobDepot::TEvResolveResult*>(&response)) {
+                } else if (auto *p = std::get_if<NEvBlobDepot::TEvResolveResult*>(&response)) {
                     STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA51, "TEvResolveResult", (AgentId, Agent.LogId),
                         (QueryId, GetQueryId()), (Response, (*p)->Record));
                     if (context) {
@@ -97,7 +97,7 @@ namespace NKikimr::NBlobDepot {
                 }
             }
 
-            void HandleResolveResult(ui64 id, TRequestContext::TPtr context, TEvBlobDepot::TEvResolveResult& msg) {
+            void HandleResolveResult(ui64 id, TRequestContext::TPtr context, NEvBlobDepot::TEvResolveResult& msg) {
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA19, "HandleResolveResult", (AgentId, Agent.LogId),
                     (QueryId, GetQueryId()), (Msg, msg.Record));
 
@@ -190,7 +190,7 @@ namespace NKikimr::NBlobDepot {
                 BDEV_QUERY(BDEV18, "TEvDiscover_end", (Status, status), (ErrorReason, errorReason));
                 TBlobStorageQuery::EndWithError(status, errorReason);
             }
-            
+
             ui64 GetTabletId() const override {
                 return Request.TabletId;
             }

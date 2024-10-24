@@ -10,10 +10,10 @@ namespace NSchemeShard {
 using namespace NTabletFlatExecutor;
 
 struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
-    TEvDataShard::TEvStateChanged::TPtr Ev;
+    NEvDataShard::TEvStateChanged::TPtr Ev;
     TSideEffects SideEffects;
 
-    TTxShardStateChanged(TSelf *self, TEvDataShard::TEvStateChanged::TPtr& ev)
+    TTxShardStateChanged(TSelf *self, NEvDataShard::TEvStateChanged::TPtr& ev)
         : TRwTxBase(self)
         , Ev(ev)
     {}
@@ -78,7 +78,7 @@ struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
                        << ", at schemeshard: " << Self->TabletID());
 
         // Ack state change notification
-        auto event = MakeHolder<TEvDataShard::TEvStateChangedResult>(Self->TabletID(), state);
+        auto event = MakeHolder<NEvDataShard::TEvStateChangedResult>(Self->TabletID(), state);
         SideEffects.Send(Ev->Get()->GetSource(), std::move(event));
 
         if (state == NDataShard::TShardState::Offline) {
@@ -95,7 +95,7 @@ struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
 };
 
 NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxShardStateChanged(
-    TEvDataShard::TEvStateChanged::TPtr& ev)
+    NEvDataShard::TEvStateChanged::TPtr& ev)
 {
     return new TTxShardStateChanged(this, ev);
 }

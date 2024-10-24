@@ -123,7 +123,7 @@ struct TEvBusProxy {
     typedef TEvMsgBusRequest<EvNavigate> TEvNavigate;
     typedef TEvMsgBusRequest<EvFlatTxRequest> TEvFlatTxRequest;
     typedef TEvMsgBusRequest<EvFlatDescribeRequest> TEvFlatDescribeRequest;
-    typedef TEvMsgBusRequest<EvPersQueue> TEvPersQueue;
+    typedef TEvMsgBusRequest<EvPersQueue> NEvPersQueue;
     typedef TEvMsgBusRequest<EvChooseProxy> TEvChooseProxy;
     typedef TEvMsgBusRequest<EvInitRoot> TEvInitRoot;
 };

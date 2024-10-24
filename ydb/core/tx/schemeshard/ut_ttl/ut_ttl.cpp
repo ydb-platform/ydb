@@ -188,7 +188,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
               }
             }
         )", {NKikimrScheme::StatusSchemeError});
-    }    
+    }
 
     void CreateTableOnIndexedTable(NKikimrSchemeOp::EIndexType indexType) {
         TTestBasicRuntime runtime;
@@ -409,8 +409,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         BuildIndex(NKikimrSchemeOp::EIndexTypeGlobalAsync);
     }
 
-    using TEvCondEraseReq = TEvDataShard::TEvConditionalEraseRowsRequest;
-    using TEvCondEraseResp = TEvDataShard::TEvConditionalEraseRowsResponse;
+    using TEvCondEraseReq = NEvDataShard::TEvConditionalEraseRowsRequest;
+    using TEvCondEraseResp = NEvDataShard::TEvConditionalEraseRowsResponse;
 
     void WaitForCondErase(TTestActorRuntimeBase& runtime, TEvCondEraseResp::ProtoRecordType::EStatus status = TEvCondEraseResp::ProtoRecordType::OK) {
         TDispatchOptions opts;
@@ -470,7 +470,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
         auto waitForScheduleCondErase = [&]() {
             TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvPrivate::EvRunConditionalErase));
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(NEvPrivate::EvRunConditionalErase));
             runtime.DispatchEvents(options);
         };
 
@@ -929,7 +929,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
     void WaitForStats(TTestActorRuntimeBase& runtime, ui32 count) {
         TDispatchOptions opts;
-        opts.FinalEvents.emplace_back(TEvDataShard::EvPeriodicTableStats, count);
+        opts.FinalEvents.emplace_back(NEvDataShard::EvPeriodicTableStats, count);
         runtime.DispatchEvents(opts);
     }
 

@@ -337,11 +337,11 @@ private:
     STATEFN(PrepareState) {
         try {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvColumnShard::TEvProposeTransactionResult, HandlePrepare);
-                hFunc(TEvDataShard::TEvProposeTransactionResult, HandlePrepare);
-                hFunc(TEvDataShard::TEvProposeTransactionRestart, HandleExecute);
-                hFunc(TEvDataShard::TEvProposeTransactionAttachResult, HandlePrepare);
-                hFunc(TEvPersQueue::TEvProposeTransactionResult, HandlePrepare);
+                hFunc(NEvColumnShard::TEvProposeTransactionResult, HandlePrepare);
+                hFunc(NEvDataShard::TEvProposeTransactionResult, HandlePrepare);
+                hFunc(NEvDataShard::TEvProposeTransactionRestart, HandleExecute);
+                hFunc(NEvDataShard::TEvProposeTransactionAttachResult, HandlePrepare);
+                hFunc(NEvPersQueue::TEvProposeTransactionResult, HandlePrepare);
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandlePrepare);
                 hFunc(TEvPrivate::TEvReattachToShard, HandleExecute);
                 hFunc(TEvDqCompute::TEvState, HandlePrepare); // from CA
@@ -369,7 +369,7 @@ private:
         ReportEventElapsedTime();
     }
 
-    void HandlePrepare(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
+    void HandlePrepare(NEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
         auto& event = ev->Get()->Record;
         const ui64 tabletId = event.GetOrigin();
 
@@ -394,8 +394,8 @@ private:
         }
     }
 
-    void HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr& ev) {
-        TEvDataShard::TEvProposeTransactionResult* res = ev->Get();
+    void HandlePrepare(NEvDataShard::TEvProposeTransactionResult::TPtr& ev) {
+        NEvDataShard::TEvProposeTransactionResult* res = ev->Get();
         ResponseEv->Orbit.Join(res->Orbit);
         const ui64 shardId = res->GetOrigin();
         TShardState* shardState = ShardStates.FindPtr(shardId);
@@ -426,8 +426,8 @@ private:
         }
     }
 
-    void HandlePrepare(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev) {
-        TEvColumnShard::TEvProposeTransactionResult* res = ev->Get();
+    void HandlePrepare(NEvColumnShard::TEvProposeTransactionResult::TPtr& ev) {
+        NEvColumnShard::TEvProposeTransactionResult* res = ev->Get();
         const ui64 shardId = res->Record.GetOrigin();
         TShardState* shardState = ShardStates.FindPtr(shardId);
         YQL_ENSURE(shardState, "Unexpected propose result from unknown tabletId " << shardId);
@@ -521,7 +521,7 @@ private:
         }
     }
 
-    void HandlePrepare(TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev) {
+    void HandlePrepare(NEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         const ui64 tabletId = record.GetTabletId();
 
@@ -651,7 +651,7 @@ private:
                 //nothing to cancel on follower
                 if (!state.DatashardState->Follower) {
                     Send(MakePipePerNodeCacheID(/* allowFollowers */ false), new TEvPipeCache::TEvForward(
-                        new TEvDataShard::TEvCancelTransactionProposal(TxId), shardId, /* subscribe */ false));
+                        new NEvDataShard::TEvCancelTransactionProposal(TxId), shardId, /* subscribe */ false));
                 }
             }
         }
@@ -1007,11 +1007,11 @@ private:
     STATEFN(ExecuteState) {
         try {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvColumnShard::TEvProposeTransactionResult, HandleExecute);
-                hFunc(TEvDataShard::TEvProposeTransactionResult, HandleExecute);
-                hFunc(TEvDataShard::TEvProposeTransactionRestart, HandleExecute);
-                hFunc(TEvDataShard::TEvProposeTransactionAttachResult, HandleExecute);
-                hFunc(TEvPersQueue::TEvProposeTransactionResult, HandleExecute);
+                hFunc(NEvColumnShard::TEvProposeTransactionResult, HandleExecute);
+                hFunc(NEvDataShard::TEvProposeTransactionResult, HandleExecute);
+                hFunc(NEvDataShard::TEvProposeTransactionRestart, HandleExecute);
+                hFunc(NEvDataShard::TEvProposeTransactionAttachResult, HandleExecute);
+                hFunc(NEvPersQueue::TEvProposeTransactionResult, HandleExecute);
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandleExecute);
                 hFunc(TEvPrivate::TEvReattachToShard, HandleExecute);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandleExecute);
@@ -1040,7 +1040,7 @@ private:
         ReportEventElapsedTime();
     }
 
-    void HandleExecute(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
+    void HandleExecute(NEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
         NKikimrPQ::TEvProposeTransactionResult& event = ev->Get()->Record;
 
         LOG_D("Got propose result" <<
@@ -1080,8 +1080,8 @@ private:
         }
     }
 
-    void HandleExecute(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev) {
-        TEvColumnShard::TEvProposeTransactionResult* res = ev->Get();
+    void HandleExecute(NEvColumnShard::TEvProposeTransactionResult::TPtr& ev) {
+        NEvColumnShard::TEvProposeTransactionResult* res = ev->Get();
         const ui64 shardId = res->Record.GetOrigin();
         LastShard = shardId;
 
@@ -1196,8 +1196,8 @@ private:
         }
     }
 
-    void HandleExecute(TEvDataShard::TEvProposeTransactionResult::TPtr& ev) {
-        TEvDataShard::TEvProposeTransactionResult* res = ev->Get();
+    void HandleExecute(NEvDataShard::TEvProposeTransactionResult::TPtr& ev) {
+        NEvDataShard::TEvProposeTransactionResult* res = ev->Get();
         ResponseEv->Orbit.Join(res->Orbit);
         const ui64 shardId = res->GetOrigin();
         LastShard = shardId;
@@ -1263,7 +1263,7 @@ private:
         }
     }
 
-    void HandleExecute(TEvDataShard::TEvProposeTransactionRestart::TPtr& ev) {
+    void HandleExecute(NEvDataShard::TEvProposeTransactionRestart::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         const ui64 shardId = record.GetTabletId();
 
@@ -1289,7 +1289,7 @@ private:
         }
     }
 
-    void HandleExecute(TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev) {
+    void HandleExecute(NEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         const ui64 tabletId = record.GetTabletId();
 
@@ -1332,7 +1332,7 @@ private:
         LOG_I("Reattach to shard " << tabletId);
 
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(
-            new TEvDataShard::TEvProposeTransactionAttach(tabletId, TxId),
+            new NEvDataShard::TEvProposeTransactionAttach(tabletId, TxId),
             tabletId, /* subscribe */ true), 0, ++shardState->ReattachState.Cookie);
     }
 
@@ -1653,7 +1653,7 @@ private:
         if (isOlap) {
             const ui32 flags =
                 (ImmediateTx ? NKikimrTxColumnShard::ETransactionFlag::TX_FLAG_IMMEDIATE: 0);
-            ev.reset(new TEvColumnShard::TEvProposeTransaction(
+            ev.reset(new NEvColumnShard::TEvProposeTransaction(
                 NKikimrTxColumnShard::TX_KIND_DATA,
                 SelfId(),
                 TxId,
@@ -1663,9 +1663,9 @@ private:
             const ui32 flags =
                 (ImmediateTx ? NTxDataShard::TTxFlags::Immediate : 0) |
                 (VolatileTx ? NTxDataShard::TTxFlags::VolatilePrepare : 0);
-            std::unique_ptr<TEvDataShard::TEvProposeTransaction> evData;
+            std::unique_ptr<NEvDataShard::TEvProposeTransaction> evData;
             if (GetSnapshot().IsValid() && (ReadOnlyTx || Request.UseImmediateEffects)) {
-                evData.reset(new TEvDataShard::TEvProposeTransaction(
+                evData.reset(new NEvDataShard::TEvProposeTransaction(
                     NKikimrTxDataShard::TX_KIND_DATA,
                     SelfId(),
                     TxId,
@@ -1674,7 +1674,7 @@ private:
                     GetSnapshot().TxId,
                     flags));
             } else {
-                evData.reset(new TEvDataShard::TEvProposeTransaction(
+                evData.reset(new NEvDataShard::TEvProposeTransaction(
                     NKikimrTxDataShard::TX_KIND_DATA,
                     SelfId(),
                     TxId,
@@ -2676,7 +2676,7 @@ private:
         for (auto& [tabletId, t] : topicTxs) {
             auto& transaction = t.tx;
 
-            auto ev = std::make_unique<TEvPersQueue::TEvProposeTransactionBuilder>();
+            auto ev = std::make_unique<NEvPersQueue::TEvProposeTransactionBuilder>();
 
             if (t.hasWrite && writeId.Defined()) {
                 auto* w = transaction.MutableWriteId();

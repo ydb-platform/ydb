@@ -121,13 +121,13 @@ namespace NKikimr::NBlobDepot {
             TKeyResolved,
 
             // tablet responses
-            TEvBlobDepot::TEvRegisterAgentResult*,
-            TEvBlobDepot::TEvAllocateIdsResult*,
-            TEvBlobDepot::TEvBlockResult*,
-            TEvBlobDepot::TEvQueryBlocksResult*,
-            TEvBlobDepot::TEvCollectGarbageResult*,
-            TEvBlobDepot::TEvCommitBlobSeqResult*,
-            TEvBlobDepot::TEvResolveResult*,
+            NEvBlobDepot::TEvRegisterAgentResult*,
+            NEvBlobDepot::TEvAllocateIdsResult*,
+            NEvBlobDepot::TEvBlockResult*,
+            NEvBlobDepot::TEvQueryBlocksResult*,
+            NEvBlobDepot::TEvCollectGarbageResult*,
+            NEvBlobDepot::TEvCommitBlobSeqResult*,
+            NEvBlobDepot::TEvResolveResult*,
 
             // underlying DS proxy responses
             TEvBlobStorage::TEvGetResult*,
@@ -223,15 +223,15 @@ namespace NKikimr::NBlobDepot {
                 hFunc(TEvTabletPipe::TEvClientConnected, Handle);
                 hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
 
-                hFunc(TEvBlobDepot::TEvPushNotify, Handle);
+                hFunc(NEvBlobDepot::TEvPushNotify, Handle);
 
-                hFunc(TEvBlobDepot::TEvRegisterAgentResult, HandleTabletResponse);
-                hFunc(TEvBlobDepot::TEvAllocateIdsResult, HandleTabletResponse);
-                hFunc(TEvBlobDepot::TEvBlockResult, HandleTabletResponse);
-                hFunc(TEvBlobDepot::TEvQueryBlocksResult, HandleTabletResponse);
-                hFunc(TEvBlobDepot::TEvCollectGarbageResult, HandleTabletResponse);
-                hFunc(TEvBlobDepot::TEvCommitBlobSeqResult, HandleTabletResponse);
-                hFunc(TEvBlobDepot::TEvResolveResult, HandleTabletResponse);
+                hFunc(NEvBlobDepot::TEvRegisterAgentResult, HandleTabletResponse);
+                hFunc(NEvBlobDepot::TEvAllocateIdsResult, HandleTabletResponse);
+                hFunc(NEvBlobDepot::TEvBlockResult, HandleTabletResponse);
+                hFunc(NEvBlobDepot::TEvQueryBlocksResult, HandleTabletResponse);
+                hFunc(NEvBlobDepot::TEvCollectGarbageResult, HandleTabletResponse);
+                hFunc(NEvBlobDepot::TEvCommitBlobSeqResult, HandleTabletResponse);
+                hFunc(NEvBlobDepot::TEvResolveResult, HandleTabletResponse);
 
                 hFunc(TEvBlobStorage::TEvGetResult, HandleOtherResponse);
                 hFunc(TEvBlobStorage::TEvPutResult, HandleOtherResponse);
@@ -327,12 +327,12 @@ namespace NKikimr::NBlobDepot {
         void Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvRegisterAgentResult& msg);
         void Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvAllocateIdsResult& msg);
 
-        template<typename T, typename = typename TEvBlobDepot::TEventFor<T>::Type>
+        template<typename T, typename = typename NEvBlobDepot::TEventFor<T>::Type>
         ui64 Issue(T msg, TRequestSender *sender, TRequestContext::TPtr context);
 
         ui64 Issue(std::unique_ptr<IEventBase> ev, TRequestSender *sender, TRequestContext::TPtr context);
 
-        void Handle(TEvBlobDepot::TEvPushNotify::TPtr ev);
+        void Handle(NEvBlobDepot::TEvPushNotify::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -391,7 +391,7 @@ namespace NKikimr::NBlobDepot {
 
             bool IssueRead(TReadArg&& arg, TString& error);
             void HandleGetResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvGetResult& msg);
-            void HandleResolveResult(const TRequestContext::TPtr& context, TEvBlobDepot::TEvResolveResult& msg);
+            void HandleResolveResult(const TRequestContext::TPtr& context, NEvBlobDepot::TEvResolveResult& msg);
 
         public:
             struct TDeleter {

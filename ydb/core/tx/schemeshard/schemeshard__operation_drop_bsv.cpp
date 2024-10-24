@@ -29,7 +29,7 @@ public:
         IgnoreMessages(DebugHint(), {});
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
@@ -218,7 +218,7 @@ public:
             double rate = 0;
             double capacity = 0;
             auto& attrs = domainDir->UserAttrs->Attrs;
-            if (TryFromString(attrs[RateLimiterRateAttrName], rate) && 
+            if (TryFromString(attrs[RateLimiterRateAttrName], rate) &&
                 TryFromString(attrs[RateLimiterCapacityAttrName], capacity))
             {
                 rateLimiter.SetRate(rate);

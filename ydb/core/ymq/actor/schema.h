@@ -70,13 +70,13 @@ private:
     STATEFN(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
-            hFunc(NKesus::TEvKesus::TEvAddQuoterResourceResult, HandleAddQuoterResource);
+            hFunc(NKesus::NEvKesus::TEvAddQuoterResourceResult, HandleAddQuoterResource);
             cFunc(TEvPoisonPill::EventType, PassAway);
         }
     }
 
     void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev);
-    void HandleAddQuoterResource(NKesus::TEvKesus::TEvAddQuoterResourceResult::TPtr& ev);
+    void HandleAddQuoterResource(NKesus::NEvKesus::TEvAddQuoterResourceResult::TPtr& ev);
 
     THolder<TEvTxUserProxy::TEvProposeTransaction> MakeMkDirRequest(const TString& root, const TString& dirName);
 

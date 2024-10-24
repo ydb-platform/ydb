@@ -49,7 +49,7 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
                 return false;
 
             if (status != NKikimrTxDataShard::TError::OK) {
-                LOG_LOG_S_THROTTLE(Self->GetLogThrottler(TDataShard::ELogThrottlerType::TxProposeTransactionBase_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, 
+                LOG_LOG_S_THROTTLE(Self->GetLogThrottler(TDataShard::ELogThrottlerType::TxProposeTransactionBase_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD,
                     "TTxWrite:: errors while proposing transaction txid " << TxId << " at tablet " << Self->TabletID() << " status: " << status << " error: " << errMessage);
 
                 auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), TxId, NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED, errMessage);
@@ -236,8 +236,8 @@ void TDataShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorCo
 
 ui64 NEvWrite::TConvertor::GetTxId(const TAutoPtr<IEventHandle>& ev) {
     switch (ev->GetTypeRewrite()) {
-        case TEvDataShard::TEvProposeTransaction::EventType:
-            return ev->Get<TEvDataShard::TEvProposeTransaction>()->GetTxId();
+        case NEvDataShard::TEvProposeTransaction::EventType:
+            return ev->Get<NEvDataShard::TEvProposeTransaction>()->GetTxId();
         case NEvents::TDataEvents::TEvWrite::EventType:
             return ev->Get<NEvents::TDataEvents::TEvWrite>()->GetTxId();
         default:

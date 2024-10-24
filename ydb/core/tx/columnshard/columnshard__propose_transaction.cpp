@@ -15,7 +15,7 @@ private:
     std::optional<TTxController::TTxInfo> TxInfo;
 
 public:
-    TTxProposeTransaction(TColumnShard* self, TEvColumnShard::TEvProposeTransaction::TPtr& ev)
+    TTxProposeTransaction(TColumnShard* self, NEvColumnShard::TEvProposeTransaction::TPtr& ev)
         : TBase(self)
         , Ev(ev) {
         AFL_VERIFY(!!Ev);
@@ -36,7 +36,7 @@ public:
 
         if (txKind == NKikimrTxColumnShard::TX_KIND_TTL) {
             auto proposeResult = ProposeTtlDeprecated(txBody);
-            auto reply = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(
+            auto reply = std::make_unique<NEvColumnShard::TEvProposeTransactionResult>(
                 Self->TabletID(), txKind, txId, proposeResult.GetStatus(), proposeResult.GetStatusMessage());
             ctx.Send(Ev->Sender, reply.release());
             return true;
@@ -115,7 +115,7 @@ public:
     }
 
 private:
-    TEvColumnShard::TEvProposeTransaction::TPtr Ev;
+    NEvColumnShard::TEvProposeTransaction::TPtr Ev;
     std::shared_ptr<TTxController::ITransactionOperator> TxOperator;
 
     TTxController::TProposeResult ProposeTtlDeprecated(const TString& txBody) {
@@ -170,7 +170,7 @@ private:
     }
 };
 
-void TColumnShard::Handle(TEvColumnShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx) {
+void TColumnShard::Handle(NEvColumnShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxProposeTransaction(this, ev), ctx);
 }
 

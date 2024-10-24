@@ -1123,7 +1123,7 @@ static bool ConsiderAsDropped(const TPath& path) {
     return true;
 }
 
-THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe(const TActorContext& ctx) {
+THolder<NEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe(const TActorContext& ctx) {
     TPathId pathId = Params.HasPathId() ? TPathId(Params.GetSchemeshardId(), Params.GetPathId()) : InvalidPathId;
     TString pathStr = Params.GetPath();
 
@@ -1164,7 +1164,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
                 pathStr = path.PathString();
             }
 
-            Result.Reset(new TEvSchemeShard::TEvDescribeSchemeResultBuilder(pathStr, pathId));
+            Result.Reset(new NEvSchemeShard::TEvDescribeSchemeResultBuilder(pathStr, pathId));
             Result->Record.SetStatus(checks.GetStatus());
             Result->Record.SetReason(checks.GetError());
 
@@ -1179,7 +1179,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
         }
     }
 
-    Result = MakeHolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder>(pathStr, pathId);
+    Result = MakeHolder<NEvSchemeShard::TEvDescribeSchemeResultBuilder>(pathStr, pathId);
 
     auto descr = Result->Record.MutablePathDescription()->MutableSelf();
     FillPathDescr(descr, path);
@@ -1275,7 +1275,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
     return std::move(Result);
 }
 
-THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
+THolder<NEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     TSchemeShard* self,
     const TActorContext& ctx,
     TPathId pathId,
@@ -1289,7 +1289,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     return TPathDescriber(self, std::move(params)).Describe(ctx);
 }
 
-THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
+THolder<NEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     TSchemeShard* self,
     const TActorContext& ctx,
     TPathId pathId

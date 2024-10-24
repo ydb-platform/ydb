@@ -6,10 +6,10 @@ namespace NKikimr::NCms {
 
 using namespace NConsole;
 
-class TJsonProxyConsoleLog : public TJsonProxyConsole<TEvConsole::TEvGetLogTailRequest, TEvConsole::TEvGetLogTailResponse> {
+class TJsonProxyConsoleLog : public TJsonProxyConsole<NEvConsole::TEvGetLogTailRequest, NEvConsole::TEvGetLogTailResponse> {
 public:
     TJsonProxyConsoleLog(NMon::TEvHttpInfo::TPtr &event)
-        : TJsonProxyConsole<TEvConsole::TEvGetLogTailRequest, TEvConsole::TEvGetLogTailResponse>(event)
+        : TJsonProxyConsole<NEvConsole::TEvGetLogTailRequest, NEvConsole::TEvGetLogTailResponse>(event)
     {
     }
 

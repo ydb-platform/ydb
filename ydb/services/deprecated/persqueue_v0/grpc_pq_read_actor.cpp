@@ -169,8 +169,8 @@ private:
 
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-            HFunc(TEvPersQueue::TEvResponse, Handle);
-            HFunc(TEvPersQueue::TEvHasDataInfoResponse, Handle);
+            HFunc(NEvPersQueue::TEvResponse, Handle);
+            HFunc(NEvPersQueue::TEvHasDataInfoResponse, Handle);
         default:
             break;
         };
@@ -189,8 +189,8 @@ private:
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const NActors::TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const NActors::TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvResponse::TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, const NActors::TActorContext& ctx);
 
     void HandlePoison(NActors::TEvents::TEvPoisonPill::TPtr& ev, const NActors::TActorContext& ctx);
     void HandleWakeup(const NActors::TActorContext& ctx);
@@ -813,8 +813,8 @@ void TReadSessionActor::Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& 
 void TReadSessionActor::RegisterSession(const TActorId& pipe, const TString& topic, const TActorContext& ctx) {
 
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " register session to " << topic);
-    THolder<TEvPersQueue::TEvRegisterReadSession> request;
-    request.Reset(new TEvPersQueue::TEvRegisterReadSession);
+    THolder<NEvPersQueue::TEvRegisterReadSession> request;
+    request.Reset(new NEvPersQueue::TEvRegisterReadSession);
     auto& req = request->Record;
     req.SetSession(Session);
     req.SetClientNode(PeerName);
@@ -1002,7 +1002,7 @@ void TReadSessionActor::Handle(V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const 
 }
 
 
-void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext& ctx) {
+void TReadSessionActor::Handle(NEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext& ctx) {
 
     auto& record = ev->Get()->Record;
     Y_ABORT_UNLESS(record.GetSession() == Session);
@@ -1141,12 +1141,12 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& ev, const T
     }
 }
 
-void TReadSessionActor::Handle(TEvPersQueue::TEvError::TPtr& ev, const TActorContext& ctx) {
+void TReadSessionActor::Handle(NEvPersQueue::TEvError::TPtr& ev, const TActorContext& ctx) {
     CloseSession(ev->Get()->Record.GetDescription(), ev->Get()->Record.GetCode(), ctx);
 }
 
 
-void TReadSessionActor::Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, const TActorContext& ctx) {
+void TReadSessionActor::Handle(NEvPersQueue::TEvReleasePartition::TPtr& ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
     Y_ABORT_UNLESS(record.GetSession() == Session);
     Y_ABORT_UNLESS(record.GetClientId() == InternalClientId);
@@ -1240,8 +1240,8 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvPartitionReleased::TPtr& ev, const
 
 void TReadSessionActor::InformBalancerAboutRelease(const THashMap<std::pair<TString, ui32>, TPartitionActorInfo>::iterator& it, const TActorContext& ctx) {
 
-    THolder<TEvPersQueue::TEvPartitionReleased> request;
-    request.Reset(new TEvPersQueue::TEvPartitionReleased);
+    THolder<NEvPersQueue::TEvPartitionReleased> request;
+    request.Reset(new NEvPersQueue::TEvPartitionReleased);
     auto& req = request->Record;
 
     auto jt = Topics.find(it->second.Converter->GetInternalName());
@@ -1795,7 +1795,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadingStarted::TPtr& ev, const TA
     }
 
     auto& topic = it->second;
-    NTabletPipe::SendData(ctx, topic.PipeClient, new TEvPersQueue::TEvReadingPartitionStartedRequest(InternalClientId, msg->PartitionId));
+    NTabletPipe::SendData(ctx, topic.PipeClient, new NEvPersQueue::TEvReadingPartitionStartedRequest(InternalClientId, msg->PartitionId));
 }
 
 void TReadSessionActor::Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const TActorContext& ctx) {
@@ -1807,7 +1807,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const T
     }
 
     auto& topic = it->second;
-    NTabletPipe::SendData(ctx, topic.PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(InternalClientId, msg->PartitionId, false, msg->FirstMessage));
+    NTabletPipe::SendData(ctx, topic.PipeClient, new NEvPersQueue::TEvReadingPartitionFinishedRequest(InternalClientId, msg->PartitionId, false, msg->FirstMessage));
 }
 
 
@@ -1902,7 +1902,7 @@ void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TAc
                         << Partition << " committing to position " << offset << " prev " << CommittedOffset
                         << " end " << EndOffset << " by cookie " << readId);
 
-    TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+    TAutoPtr<NEvPersQueue::TEvRequest> req(new NEvPersQueue::TEvRequest);
     req->Record.Swap(&request);
 
     NTabletPipe::SendData(ctx, PipeClient, req.Release());
@@ -1966,7 +1966,7 @@ void TPartitionActor::Handle(const TEvPQProxy::TEvRestartPipe::TPtr&, const TAct
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Topic->GetPrintableString() << " partition:" << Partition
                             << " resend " << CurrentRequest);
 
-        TAutoPtr<TEvPersQueue::TEvRequest> event(new TEvPersQueue::TEvRequest);
+        TAutoPtr<NEvPersQueue::TEvRequest> event(new NEvPersQueue::TEvRequest);
         event->Record = CurrentRequest;
 
         ActorIdToProto(PipeClient, event->Record.MutablePartitionRequest()->MutablePipeClient());
@@ -1985,7 +1985,7 @@ void TPartitionActor::Handle(const TEvPQProxy::TEvRestartPipe::TPtr&, const TAct
     }
 }
 
-void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+void TPartitionActor::Handle(NEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
 
     if (ev->Get()->Record.HasErrorCode() && ev->Get()->Record.GetErrorCode() != NPersQueue::NErrorCode::OK) {
         const auto errorCode = ev->Get()->Record.GetErrorCode();
@@ -2411,7 +2411,7 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
                 ctx, NKikimrServices::PQ_READ_PROXY,
                 PQ_LOG_PREFIX << " INITING " << Topic->GetPrintableString() << " partition:" << Partition);
 
-        TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+        TAutoPtr<NEvPersQueue::TEvRequest> req(new NEvPersQueue::TEvRequest);
         Y_ABORT_UNLESS(!RequestInfly);
         CurrentRequest = request;
         RequestInfly = true;
@@ -2443,7 +2443,7 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
 
     Y_ABORT_UNLESS(ReadOffset >= EndOffset);
 
-    TAutoPtr<TEvPersQueue::TEvHasDataInfo> event(new TEvPersQueue::TEvHasDataInfo());
+    TAutoPtr<NEvPersQueue::TEvHasDataInfo> event(new NEvPersQueue::TEvHasDataInfo());
     event->Record.SetPartition(Partition);
     event->Record.SetOffset(ReadOffset);
     event->Record.SetCookie(++WaitDataCookie);
@@ -2466,7 +2466,7 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     WaitDataInfly.insert(WaitDataCookie);
 }
 
-void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, const TActorContext& ctx) {
+void TPartitionActor::Handle(NEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
 
     WriteTimestampEstimateMs = Max(WriteTimestampEstimateMs, record.GetWriteTimestampEstimateMS());
@@ -2576,7 +2576,7 @@ void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext&
     if (!PipeClient) //Pipe will be recreated soon
         return;
 
-    TAutoPtr<TEvPersQueue::TEvRequest> event(new TEvPersQueue::TEvRequest);
+    TAutoPtr<NEvPersQueue::TEvRequest> event(new NEvPersQueue::TEvRequest);
     event->Record.Swap(&request);
 
     NTabletPipe::SendData(ctx, PipeClient, event.Release());

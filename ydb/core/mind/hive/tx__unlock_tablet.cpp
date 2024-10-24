@@ -41,20 +41,20 @@ public:
         SideEffects.Reset(Self->SelfId());
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId);
         if (tablet == nullptr) {
-            SideEffects.Send(Sender, new TEvHive::TEvUnlockTabletExecutionResult(TabletId, NKikimrProto::ERROR,
+            SideEffects.Send(Sender, new NEvHive::TEvUnlockTabletExecutionResult(TabletId, NKikimrProto::ERROR,
                 TStringBuilder() << "Trying to unlock tablet " << TabletId << ", which doesn't exist"), 0, Cookie);
             return true;
         }
 
         if (OwnerActor && tablet->LockedToActor != OwnerActor) {
-            SideEffects.Send(Sender, new TEvHive::TEvUnlockTabletExecutionResult(TabletId, NKikimrProto::ERROR,
+            SideEffects.Send(Sender, new NEvHive::TEvUnlockTabletExecutionResult(TabletId, NKikimrProto::ERROR,
                 TStringBuilder() << "Trying to unlock tablet " << TabletId
                 << ", which is locked to " << tablet->LockedToActor << ", not " << OwnerActor), 0, Cookie);
             return true;
         }
 
         if (SeqNo && tablet->PendingUnlockSeqNo != SeqNo) {
-            SideEffects.Send(Sender, new TEvHive::TEvUnlockTabletExecutionResult(TabletId, NKikimrProto::ERROR,
+            SideEffects.Send(Sender, new NEvHive::TEvUnlockTabletExecutionResult(TabletId, NKikimrProto::ERROR,
                 TStringBuilder() << "Trying to unlock tablet " << TabletId << ", which is out of sequence"), 0, Cookie);
             return true;
         }
@@ -70,14 +70,14 @@ public:
 
         if (PreviousOwner) {
             // Notify previous owner that its lock ownership has been lost
-            SideEffects.Send(PreviousOwner, new TEvHive::TEvLockTabletExecutionLost(TabletId));
+            SideEffects.Send(PreviousOwner, new NEvHive::TEvLockTabletExecutionLost(TabletId));
         }
 
         if (!tablet->IsLockedToActor()) {
             // Try to boot it if possible
             tablet->TryToBoot();
         }
-        SideEffects.Send(Sender, new TEvHive::TEvUnlockTabletExecutionResult(TabletId, NKikimrProto::OK, {}), 0, Cookie);
+        SideEffects.Send(Sender, new NEvHive::TEvUnlockTabletExecutionResult(TabletId, NKikimrProto::OK, {}), 0, Cookie);
         return true;
     }
 
@@ -145,7 +145,7 @@ void THive::Handle(TEvPrivate::TEvUnlockTabletReconnectTimeout::TPtr& ev) {
     }
 }
 
-void THive::Handle(TEvHive::TEvUnlockTabletExecution::TPtr& ev) {
+void THive::Handle(NEvHive::TEvUnlockTabletExecution::TPtr& ev) {
     Execute(CreateUnlockTabletExecution(ev->Get()->Record, ev->Sender, ev->Cookie));
 }
 

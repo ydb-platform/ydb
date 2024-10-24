@@ -40,8 +40,8 @@ Y_UNIT_TEST_SUITE(KqpStreamLookup) {
 
         bool readReceived = false;
         auto captureEvents = [&](TTestActorRuntimeBase &, TAutoPtr <IEventHandle> &ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType) {
-                Cerr << "Captured TEvDataShard::TEvRead from " << runtime->FindActorName(ev->Sender) << " to " << runtime->FindActorName(ev->GetRecipientRewrite()) << Endl;
+            if (ev->GetTypeRewrite() == NEvDataShard::TEvRead::EventType) {
+                Cerr << "Captured NEvDataShard::TEvRead from " << runtime->FindActorName(ev->Sender) << " to " << runtime->FindActorName(ev->GetRecipientRewrite()) << Endl;
                 if (runtime->FindActorName(ev->Sender) == "KQP_STREAM_LOOKUP_ACTOR") {
                     if (!readReceived) {
                         auto senderSplit = runtime->AllocateEdgeActor();
@@ -107,8 +107,8 @@ Y_UNIT_TEST_SUITE(KqpStreamLookup) {
 
         bool readReceived = false;
         auto captureEvents = [&](TTestActorRuntimeBase &, TAutoPtr <IEventHandle> &ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType) {
-                Cerr << "Captured TEvDataShard::TEvRead from " << runtime->FindActorName(ev->Sender) << " to " << runtime->FindActorName(ev->GetRecipientRewrite()) << Endl;
+            if (ev->GetTypeRewrite() == NEvDataShard::TEvRead::EventType) {
+                Cerr << "Captured NEvDataShard::TEvRead from " << runtime->FindActorName(ev->Sender) << " to " << runtime->FindActorName(ev->GetRecipientRewrite()) << Endl;
                 if (runtime->FindActorName(ev->Sender) == "KQP_STREAM_LOOKUP_ACTOR") {
                     if (!readReceived) {
                         auto senderSplit = runtime->AllocateEdgeActor();

@@ -85,7 +85,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         LOG_T("Get table profiles");
 
         using namespace NKikimrConsole;
-        auto ev = MakeHolder<TEvConfigsDispatcher::TEvGetConfigRequest>((ui32)TConfigItem::TableProfilesConfigItem);
+        auto ev = MakeHolder<NEvConfigsDispatcher::TEvGetConfigRequest>((ui32)TConfigItem::TableProfilesConfigItem);
         Send(MakeConfigsDispatcherID(SelfId().NodeId()), std::move(ev), IEventHandle::FlagTrackDelivery);
 
         Become(&TThis::StateGetTableProfiles);
@@ -93,14 +93,14 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     STATEFN(StateGetTableProfiles) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvConfigsDispatcher::TEvGetConfigResponse, Handle);
+            hFunc(NEvConfigsDispatcher::TEvGetConfigResponse, Handle);
             sFunc(TEvents::TEvUndelivered, DescribeSrcPath);
         default:
             return StateBase(ev);
         }
     }
 
-    void Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev) {
+    void Handle(NEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev) {
         LOG_T("Handle " << ev->Get()->ToString());
         TableProfiles.Load(ev->Get()->Config->GetTableProfilesConfig());
         DescribeSrcPath();
@@ -253,7 +253,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void CreateDst() {
-        auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
+        auto ev = MakeHolder<NEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
         *ev->Record.AddTransaction() = TxBody;
 
         if (Owner) {
@@ -266,15 +266,15 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     STATEFN(StateCreateDst) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
-            hFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
+            hFunc(NEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
+            hFunc(NEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
             sFunc(TEvents::TEvWakeup, AllocateTxId);
         default:
             return StateBase(ev);
         }
     }
 
-    void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
+    void Handle(NEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
         LOG_T("Handle " << ev->Get()->ToString());
         const auto& record = ev->Get()->Record;
 
@@ -303,10 +303,10 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     void SubscribeTx(ui64 txId) {
         LOG_D("Subscribe tx"
             << ": txId# " << txId);
-        Send(PipeCache, new TEvPipeCache::TEvForward(new TEvSchemeShard::TEvNotifyTxCompletion(txId), SchemeShardId));
+        Send(PipeCache, new TEvPipeCache::TEvForward(new NEvSchemeShard::TEvNotifyTxCompletion(txId), SchemeShardId));
     }
 
-    void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
+    void Handle(NEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
         LOG_T("Handle " << ev->Get()->ToString());
 
         if (NeedToCheck) {
@@ -317,20 +317,20 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void DescribeDstPath() {
-        Send(PipeCache, new TEvPipeCache::TEvForward(new TEvSchemeShard::TEvDescribeScheme(DstPath), SchemeShardId));
+        Send(PipeCache, new TEvPipeCache::TEvForward(new NEvSchemeShard::TEvDescribeScheme(DstPath), SchemeShardId));
         Become(&TThis::StateDescribeDstPath);
     }
 
     STATEFN(StateDescribeDstPath) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            hFunc(NEvSchemeShard::TEvDescribeSchemeResult, Handle);
             sFunc(TEvents::TEvWakeup, DescribeDstPath);
         default:
             return StateBase(ev);
         }
     }
 
-    void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+    void Handle(NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         LOG_T("Handle " << ev->Get()->ToString());
         const auto& record = ev->Get()->GetRecord();
 

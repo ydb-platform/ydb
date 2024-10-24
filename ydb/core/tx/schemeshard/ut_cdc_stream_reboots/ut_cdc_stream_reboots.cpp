@@ -590,7 +590,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
             const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TPersQueueGroupDescription::TPartition>& topicPartitions)
     {
         for (const auto& topicPartition : topicPartitions) {
-            auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+            auto request = MakeHolder<NEvPersQueue::TEvRequest>();
             {
                 auto& record = *request->Record.MutablePartitionRequest();
                 record.SetPartition(topicPartition.GetPartitionId());
@@ -603,7 +603,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
             const auto& sender = runtime.AllocateEdgeActor();
             ForwardToTablet(runtime, topicPartition.GetTabletId(), sender, request.Release());
 
-            auto response = runtime.GrabEdgeEvent<TEvPersQueue::TEvResponse>(sender);
+            auto response = runtime.GrabEdgeEvent<NEvPersQueue::TEvResponse>(sender);
             {
                 const auto& record = response->Get()->Record.GetPartitionResponse();
                 const auto& result = record.GetCmdGetMaxSeqNoResult().GetSourceIdInfo();

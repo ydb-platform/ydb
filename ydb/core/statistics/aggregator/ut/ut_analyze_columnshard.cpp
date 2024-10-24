@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         UNIT_ASSERT_VALUES_EQUAL(analyzeResonse->Get()->Record.GetOperationId(), operationId);
 
         AnalyzeStatus(runtime, sender, tableInfo.SaTabletId, operationId, NKikimrStat::TEvAnalyzeStatusResponse::STATUS_NO_OPERATION);
-    }    
+    }
 
     Y_UNIT_TEST(AnalyzeSameOperationId) {
         TTestEnv env(1, 1);
@@ -114,7 +114,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
 
         block.Unblock();
         block.Stop();
-        
+
         auto response1 = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
         UNIT_ASSERT(response1);
         UNIT_ASSERT_VALUES_EQUAL(response1->Get()->Record.GetOperationId(), operationId);
@@ -152,8 +152,8 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
             auto response = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
             UNIT_ASSERT(response);
             UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetOperationId(), GetOperationId(i));
-        }        
-    }    
+        }
+    }
 
     Y_UNIT_TEST(AnalyzeRebootSaBeforeAnalyzeTableResponse) {
         TTestEnv env(1, 1);
@@ -192,15 +192,15 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
 
         auto analyzeRequest1 = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest1.release());
-        
+
         runtime.WaitFor("1st TEvResolveKeySetResult", [&]{ return block.size() >= 1; });
         block.Unblock(1);
         runtime.WaitFor("2nd TEvResolveKeySetResult", [&]{ return block.size() >= 1; });
         block.Unblock(1);
         runtime.WaitFor("3rd TEvResolveKeySetResult", [&]{ return block.size() >= 1; });
-        
+
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
-        
+
         block.Unblock();
         block.Stop();
 
@@ -218,9 +218,9 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         auto sender = runtime.AllocateEdgeActor();
 
         bool eventSeen = false;
-        auto observer = runtime.AddObserver<TEvHive::TEvRequestTabletDistribution>([&](auto& ev) {
+        auto observer = runtime.AddObserver<NEvHive::TEvRequestTabletDistribution>([&](auto& ev) {
             eventSeen = true;
-            ev.Reset();            
+            ev.Reset();
         });
 
         auto analyzeRequest1 = MakeAnalyzeRequest({tableInfo.PathId});
@@ -279,7 +279,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest1.release());
 
         runtime.WaitFor("TEvAggregateStatisticsResponse", [&]{ return eventSeen; });
-        observer.Remove();        
+        observer.Remove();
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
 
         auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId});
@@ -294,7 +294,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
         const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
-        
+
         int observerCount = 0;
         auto observer = runtime.AddObserver<TEvStatistics::TEvStatisticsRequest>([&](auto& ev) {
             if (++observerCount >= 5) {
@@ -313,7 +313,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());
 
         runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
-    }    
+    }
 
     Y_UNIT_TEST(AnalyzeRebootColumnShard) {
         TTestEnv env(1, 1);
@@ -353,7 +353,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         const auto& record = analyzeResponse->Get()->Record;
         UNIT_ASSERT_VALUES_EQUAL(record.GetOperationId(), "operationId");
         UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
-    }    
+    }
 }
 
 } // NStat

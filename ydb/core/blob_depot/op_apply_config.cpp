@@ -3,7 +3,7 @@
 
 namespace NKikimr::NBlobDepot {
 
-    void TBlobDepot::Handle(TEvBlobDepot::TEvApplyConfig::TPtr ev) {
+    void TBlobDepot::Handle(NEvBlobDepot::TEvApplyConfig::TPtr ev) {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT15, "TEvApplyConfig", (Id, GetLogId()), (Msg, ev->Get()->Record));
 
         class TTxApplyConfig : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
@@ -13,7 +13,7 @@ namespace NKikimr::NBlobDepot {
         public:
             TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_APPLY_CONFIG; }
 
-            TTxApplyConfig(TBlobDepot *self, TEvBlobDepot::TEvApplyConfig& ev, std::unique_ptr<IEventHandle> response,
+            TTxApplyConfig(TBlobDepot *self, NEvBlobDepot::TEvApplyConfig& ev, std::unique_ptr<IEventHandle> response,
                     TActorId interconnectSession)
                 : TTransactionBase(self)
                 , Response(std::move(response))
@@ -56,7 +56,7 @@ namespace NKikimr::NBlobDepot {
             }
         };
 
-        auto responseEvent = std::make_unique<TEvBlobDepot::TEvApplyConfigResult>(TabletID(), ev->Get()->Record.GetTxId());
+        auto responseEvent = std::make_unique<NEvBlobDepot::TEvApplyConfigResult>(TabletID(), ev->Get()->Record.GetTxId());
         auto response = std::make_unique<IEventHandle>(ev->Sender, SelfId(), responseEvent.release(), 0, ev->Cookie);
         Execute(std::make_unique<TTxApplyConfig>(this, *ev->Get(), std::move(response), ev->InterconnectSession));
     }

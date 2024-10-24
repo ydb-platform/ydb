@@ -576,7 +576,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
     void Handle(TEvPrivate::TEvSendTabletMetrics::TPtr&, const TActorContext& ctx) {
         if (Connected) {
-            TAutoPtr<TEvHive::TEvTabletMetrics> event = new TEvHive::TEvTabletMetrics;
+            TAutoPtr<NEvHive::TEvTabletMetrics> event = new NEvHive::TEvTabletMetrics;
             NKikimrHive::TEvTabletMetrics& record = event->Record;
             for (const auto& prTabletId : UpdatedTabletMetrics) {
                 AddTabletMetrics(prTabletId.first, record);
@@ -840,7 +840,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         Die(ctx);
     }
 
-    void HandleDrainNodeResult(TEvHive::TEvDrainNodeResult::TPtr &ev, const TActorContext &ctx) {
+    void HandleDrainNodeResult(NEvHive::TEvDrainNodeResult::TPtr &ev, const TActorContext &ctx) {
         LOG_NOTICE_S(ctx, NKikimrServices::LOCAL, "Drain node result received. Online tablets: " << OnlineTablets.size());
         Y_ABORT_UNLESS(SentDrainNode);
         Y_UNUSED(ev);
@@ -881,7 +881,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             ev->Get()->DrainProgress->OnSend();
             LastDrainRequest = ev->Get()->DrainProgress;
             UpdateEstimate();
-            NTabletPipe::SendData(ctx, HivePipeClient, new TEvHive::TEvDrainNode(SelfId().NodeId()));
+            NTabletPipe::SendData(ctx, HivePipeClient, new NEvHive::TEvDrainNode(SelfId().NodeId()));
             ctx.Schedule(DRAIN_NODE_TIMEOUT, new TEvPrivate::TEvLocalDrainTimeout());
             ev->Get()->DrainProgress->OnReceive();
         } else {
@@ -968,7 +968,7 @@ public:
             HFunc(TEvPrivate::TEvUpdateSystemUsage, Handle);
             HFunc(TEvPrivate::TEvLocalDrainTimeout, HandleDrainTimeout);
             HFunc(TEvLocal::TEvLocalDrainNode, HandleDrain);
-            HFunc(TEvHive::TEvDrainNodeResult, HandleDrainNodeResult);
+            HFunc(NEvHive::TEvDrainNodeResult, HandleDrainNodeResult);
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
             CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
             default:
@@ -1033,7 +1033,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
                     LogPrefix << "Send resolve request for " << info.TenantName
                     << " to schemeshard " << SchemeRoot);
 
-        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeScheme>(info.TenantName);
+        auto request = MakeHolder<NSchemeShard::NEvSchemeShard::TEvDescribeScheme>(info.TenantName);
         NTabletPipe::SendData(ctx.SelfID, SchemeShardPipe, request.Release());
     }
 
@@ -1193,7 +1193,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         OpenPipe(ctx);
     }
 
-    void HandleResolve(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr ev, const TActorContext &ctx)
+    void HandleResolve(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr ev, const TActorContext &ctx)
     {
         const NKikimrScheme::TEvDescribeSchemeResult &rec = ev->Get()->GetRecord();
 
@@ -1418,7 +1418,7 @@ public:
             HFunc(TEvTabletPipe::TEvClientConnected, HandlePipe);
             HFunc(TEvTabletPipe::TEvClientDestroyed, HandlePipe);
 
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleResolve);
+            HFunc(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult, HandleResolve);
 
             HFunc(TEvLocal::TEvAddTenant, HandleTenant);
             HFunc(TEvLocal::TEvRemoveTenant, HandleTenant);

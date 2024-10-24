@@ -94,7 +94,7 @@ private:
     void RequestCurrentConfigViaCookie() {
         BLOG_D("NetClassifierUpdater requested distributable config item via cookie");
 
-        auto event = MakeHolder<TEvConsole::TEvGetConfigItemsRequest>();
+        auto event = MakeHolder<NEvConsole::TEvGetConfigItemsRequest>();
 
         event->Record.AddItemKinds(static_cast<ui32>(NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem));
         event->Record.MutableCookieFilter()->AddCookies(COOKIE);
@@ -106,7 +106,7 @@ private:
         LOG_INFO_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,
                         "NetClassifierUpdate is adding distributable config item with cookie");
 
-        auto event = MakeHolder<TEvConsole::TEvConfigureRequest>();
+        auto event = MakeHolder<NEvConsole::TEvConfigureRequest>();
 
         auto& configItem = *event->Record.AddActions()->MutableAddConfigItem()->MutableConfigItem();
         configItem.MutableConfig()->MutableNetClassifierDistributableConfig(); // just initialize the field
@@ -119,7 +119,7 @@ private:
         Send(LocalConsole, event.Release());
     }
 
-    void HandleWhileIniting(TEvConsole::TEvConfigureResponse::TPtr& ev) {
+    void HandleWhileIniting(NEvConsole::TEvConfigureResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         if (record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS) {
             BLOG_D("NetClassifierUpdater created a new distributable config item");
@@ -130,7 +130,7 @@ private:
         }
     }
 
-    void HandleWhileIniting(TEvConsole::TEvGetConfigItemsResponse::TPtr& ev) {
+    void HandleWhileIniting(NEvConsole::TEvGetConfigItemsResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         if (record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS) {
             if (record.ConfigItemsSize() == 0) {
@@ -151,8 +151,8 @@ private:
 
     STATEFN(Initing) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvConsole::TEvConfigureResponse, HandleWhileIniting);
-            hFunc(TEvConsole::TEvGetConfigItemsResponse, HandleWhileIniting);
+            hFunc(NEvConsole::TEvConfigureResponse, HandleWhileIniting);
+            hFunc(NEvConsole::TEvGetConfigItemsResponse, HandleWhileIniting);
             hFunc(TEvents::TEvWakeup, HandleWhileIniting);
             hFunc(TEvents::TEvPoisonPill, HandlePoison);
         }
@@ -168,8 +168,8 @@ private:
     STATEFN(Working) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, HandleWhileWorking);
-            hFunc(TEvConsole::TEvConfigureResponse, HandleWhileWorking);
-            hFunc(TEvConsole::TEvGetConfigItemsResponse, HandleWhileWorking);
+            hFunc(NEvConsole::TEvConfigureResponse, HandleWhileWorking);
+            hFunc(NEvConsole::TEvGetConfigItemsResponse, HandleWhileWorking);
             hFunc(TEvents::TEvWakeup, HandleWhileWorking);
             hFunc(TEvents::TEvPoisonPill, HandlePoison);
         }
@@ -280,7 +280,7 @@ private:
         InitializeAgain();
     }
 
-    void HandleWhileWorking(TEvConsole::TEvConfigureResponse::TPtr& ev) {
+    void HandleWhileWorking(NEvConsole::TEvConfigureResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         if (record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS) {
             // hurray! the update is finished
@@ -291,12 +291,12 @@ private:
         }
     }
 
-    void HandleWhileWorking(TEvConsole::TEvGetConfigItemsResponse::TPtr& ev) {
+    void HandleWhileWorking(NEvConsole::TEvGetConfigItemsResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         if (record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS) {
             Y_ABORT_UNLESS(record.ConfigItemsSize() == 1); // only one config item should have the cookie
 
-            auto event = MakeHolder<TEvConsole::TEvConfigureRequest>();
+            auto event = MakeHolder<NEvConsole::TEvConfigureRequest>();
 
             auto& configItem = *event->Record.AddActions()->MutableModifyConfigItem()->MutableConfigItem();
 

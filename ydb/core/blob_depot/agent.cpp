@@ -32,7 +32,7 @@ namespace NKikimr::NBlobDepot {
         agent.PushCallbacks.clear();
     }
 
-    void TBlobDepot::Handle(TEvBlobDepot::TEvRegisterAgent::TPtr ev) {
+    void TBlobDepot::Handle(NEvBlobDepot::TEvRegisterAgent::TPtr ev) {
         const ui32 nodeId = ev->Sender.NodeId();
         const TActorId& pipeServerId = ev->Recipient;
         const auto& req = ev->Get()->Record;
@@ -61,7 +61,7 @@ namespace NKikimr::NBlobDepot {
 
         OnAgentConnect(agent);
 
-        auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, Executor()->Generation());
+        auto [response, record] = NEvBlobDepot::MakeResponseFor(*ev, Executor()->Generation());
         record->SetSpaceColor(agent.LastPushedSpaceColor);
         record->SetApproximateFreeSpaceShare(agent.LastPushedApproximateFreeSpaceShare);
 
@@ -85,7 +85,7 @@ namespace NKikimr::NBlobDepot {
             const ui32 generation = Executor()->Generation();
             const ui64 id = ++agent.LastRequestId;
 
-            auto reply = std::make_unique<TEvBlobDepot::TEvPushNotify>();
+            auto reply = std::make_unique<NEvBlobDepot::TEvPushNotify>();
             auto& request = agent.InvalidateStepRequests[id];
             for (const auto& [channel, invalidatedStep] : agent.InvalidatedStepInFlight) {
                 auto *item = reply->Record.AddInvalidatedSteps();
@@ -113,9 +113,9 @@ namespace NKikimr::NBlobDepot {
             TActivationContext::Send(r.release());
 
             agent.PushCallbacks.emplace(id, [this, sender = ev->Sender, m = std::move(blockActorsPending)](
-                    TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
+                    NEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
                 for (const TActorId& actorId : m) {
-                    auto clone = std::make_unique<TEvBlobDepot::TEvPushNotifyResult>();
+                    auto clone = std::make_unique<NEvBlobDepot::TEvPushNotifyResult>();
                     clone->Record.CopyFrom(ev->Get()->Record);
                     TActivationContext::Send(new IEventHandle(actorId, sender, clone.release()));
                 }
@@ -127,12 +127,12 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepot::OnAgentConnect(TAgent& /*agent*/) {
     }
 
-    void TBlobDepot::Handle(TEvBlobDepot::TEvAllocateIds::TPtr ev) {
+    void TBlobDepot::Handle(NEvBlobDepot::TEvAllocateIds::TPtr ev) {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT04, "TEvAllocateIds", (Id, GetLogId()), (Msg, ev->Get()->Record),
             (PipeServerId, ev->Recipient));
 
         const ui32 generation = Executor()->Generation();
-        auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, ev->Get()->Record.GetChannelKind(), generation);
+        auto [response, record] = NEvBlobDepot::MakeResponseFor(*ev, ev->Get()->Record.GetChannelKind(), generation);
 
         std::vector<ui8> channels(ev->Get()->Record.GetCount());
         if (PickChannels(record->GetChannelKind(), channels)) {
@@ -207,7 +207,7 @@ namespace NKikimr::NBlobDepot {
         agent.InvalidatedStepInFlight.clear();
     }
 
-    void TBlobDepot::Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
+    void TBlobDepot::Handle(NEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
         TAgent& agent = GetAgent(ev->Recipient);
         if (const auto it = agent.PushCallbacks.find(ev->Get()->Record.GetId()); it != agent.PushCallbacks.end()) {
             auto callback = std::move(it->second);
@@ -233,8 +233,8 @@ namespace NKikimr::NBlobDepot {
             if (agent.Connection && (agent.LastPushedSpaceColor != spaceColor || agent.LastPushedApproximateFreeSpaceShare != approximateFreeSpaceShare)) {
                 Y_ABORT_UNLESS(agent.Connection->NodeId == nodeId);
                 const ui64 id = ++agent.LastRequestId;
-                agent.PushCallbacks.emplace(id, [](TEvBlobDepot::TEvPushNotifyResult::TPtr) {});
-                auto ev = std::make_unique<TEvBlobDepot::TEvPushNotify>();
+                agent.PushCallbacks.emplace(id, [](NEvBlobDepot::TEvPushNotifyResult::TPtr) {});
+                auto ev = std::make_unique<NEvBlobDepot::TEvPushNotify>();
                 ev->Record.SetSpaceColor(spaceColor);
                 ev->Record.SetApproximateFreeSpaceShare(approximateFreeSpaceShare);
                 Send(agent.Connection->AgentId, ev.release(), 0, id);

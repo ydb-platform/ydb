@@ -108,7 +108,7 @@ public:
         return false;
     }
 
-    bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply " << ev->Get()->ToString()
                                << ", at schemeshard: " << context.SS->TabletID());
@@ -145,7 +145,7 @@ public:
     explicit TProposeAtTable(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvDataShard::TEvProposeTransactionResult::EventType});
+        IgnoreMessages(DebugHint(), {NEvDataShard::TEvProposeTransactionResult::EventType});
     }
 
     bool ProgressState(TOperationContext& context) override {
@@ -167,9 +167,9 @@ public:
         return false;
     }
 
-    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " TEvDataShard::TEvSchemaChanged"
+                   DebugHint() << " NEvDataShard::TEvSchemaChanged"
                                << " triggers early, save it"
                                << ", at schemeshard: " << context.SS->TabletID());
 
@@ -177,7 +177,7 @@ public:
         return false;
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvOperationPlan"
                                << ", step: " << ev->Get()->StepId

@@ -19,7 +19,7 @@ class TMessageBusHiveCreateTablet
 using TBase = TActorBootstrapped<TMessageBusHiveCreateTablet<ResponseType>>;
 
     struct TRequest {
-        TEvHive::EEv Event;
+        NEvHive::EEv Event;
         ui64 OwnerId;
         ui64 OwnerIdx;
         TTabletTypes::EType TabletType;
@@ -34,7 +34,7 @@ using TBase = TActorBootstrapped<TMessageBusHiveCreateTablet<ResponseType>>;
                  TVector<ui32> allowedNodeIDs,
                  TVector<TSubDomainKey> allowedDomains,
                  TChannelsBindings bindedChannels)
-            : Event(TEvHive::EvCreateTablet)
+            : Event(NEvHive::EvCreateTablet)
             , OwnerId(ownerId)
             , OwnerIdx(ownerIdx)
             , TabletType(tabletType)
@@ -46,7 +46,7 @@ using TBase = TActorBootstrapped<TMessageBusHiveCreateTablet<ResponseType>>;
         {}
 
         TRequest(ui64 ownerId, ui64 ownerIdx)
-            : Event(TEvHive::EvLookupTablet)
+            : Event(NEvHive::EvLookupTablet)
             , OwnerId(ownerId)
             , OwnerIdx(ownerIdx)
             , TabletType()
@@ -117,7 +117,7 @@ public:
         Timeout = TDuration::MilliSeconds(DefaultTimeout);
     }
 
-    void Handle(TEvHive::TEvCreateTabletReply::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NEvHive::TEvCreateTabletReply::TPtr &ev, const TActorContext &ctx) {
         const NKikimrHive::TEvCreateTabletReply &record = ev->Get()->Record;
 
         ++ResponsesReceived;
@@ -174,13 +174,13 @@ public:
                     for (ui32 i = 0; i < Requests.size(); ++i) {
                         TRequest &request = Requests[i];
                         switch (request.Event) {
-                            case TEvHive::EvCreateTablet: {
+                            case NEvHive::EvCreateTablet: {
                                 auto* item = rec.AddCreateTabletResult();
                                 item->SetStatus(request.Status);
                                 item->SetTabletId(request.TabletId);
                                 break;
                             }
-                            case TEvHive::EvLookupTablet: {
+                            case NEvHive::EvLookupTablet: {
                                 auto* item = rec.AddLookupTabletResult();
                                 item->SetStatus(request.Status);
                                 item->SetTabletId(request.TabletId);
@@ -277,8 +277,8 @@ public:
             for (ui64 i = 0; i < Requests.size(); ++i) {
                 const TRequest &cmd = Requests[i];
                 switch (cmd.Event) {
-                    case TEvHive::EvCreateTablet: {
-                        THolder<TEvHive::TEvCreateTablet> x(new TEvHive::TEvCreateTablet(cmd.OwnerId,
+                    case NEvHive::EvCreateTablet: {
+                        THolder<NEvHive::TEvCreateTablet> x(new NEvHive::TEvCreateTablet(cmd.OwnerId,
                                                                                          cmd.OwnerIdx,
                                                                                          cmd.TabletType,
                                                                                          cmd.BindedChannels,
@@ -291,8 +291,8 @@ public:
                         NTabletPipe::SendData(ctx, PipeClient, x.Release(), i);
                         break;
                     }
-                    case TEvHive::EvLookupTablet: {
-                        THolder<TEvHive::TEvLookupTablet> x(new TEvHive::TEvLookupTablet(cmd.OwnerId, cmd.OwnerIdx));
+                    case NEvHive::EvLookupTablet: {
+                        THolder<NEvHive::TEvLookupTablet> x(new NEvHive::TEvLookupTablet(cmd.OwnerId, cmd.OwnerIdx));
                         NTabletPipe::SendData(ctx, PipeClient, x.Release(), i);
                         break;
                     }
@@ -312,7 +312,7 @@ public:
 
     STFUNC(StateWaiting) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvHive::TEvCreateTabletReply, Handle);
+            HFunc(NEvHive::TEvCreateTabletReply, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);

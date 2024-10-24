@@ -184,8 +184,8 @@ void EraseRows(
         const TTableId& tableId, TVector<ui32> keyTags, TVector<TString> keys,
         ui32 status = TProto::TEvEraseResponse::OK, const TString& error = "")
 {
-    using TEvRequest = TEvDataShard::TEvEraseRowsRequest;
-    using TEvResponse = TEvDataShard::TEvEraseRowsResponse;
+    using TEvRequest = NEvDataShard::TEvEraseRowsRequest;
+    using TEvResponse = NEvDataShard::TEvEraseRowsResponse;
 
     class TEraser: public TRequestRunner<TEvResponse, TEraser> {
     public:
@@ -227,8 +227,8 @@ void ConditionalEraseRows(
         const TTableId& tableId, ui32 columnId, ui64 threshold, EUnit unit = TUnit::AUTO,
         const NDataShard::TIndexes& indexes = {}, const TProto::TLimits& limits = {},
         ui32 status = TProto::TEvCondEraseResponse::ACCEPTED, const TString& error = "") {
-    using TEvRequest = TEvDataShard::TEvConditionalEraseRowsRequest;
-    using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
+    using TEvRequest = NEvDataShard::TEvConditionalEraseRowsRequest;
+    using TEvResponse = NEvDataShard::TEvConditionalEraseRowsResponse;
 
     class TEraser: public TRequestRunner<TEvResponse, TEraser> {
     protected:
@@ -318,8 +318,8 @@ void DistributedEraseTx(
         TServer::TPtr server, const TActorId& sender, const TString& path,
         ui64 txId, const TProto::TDistributedEraseTx& tx,
         ui32 status = TProto::TEvProposeTxResult::PREPARED, const TString& error = "") {
-    using TEvRequest = TEvDataShard::TEvProposeTransaction;
-    using TEvResponse = TEvDataShard::TEvProposeTransactionResult;
+    using TEvRequest = NEvDataShard::TEvProposeTransaction;
+    using TEvResponse = NEvDataShard::TEvProposeTransactionResult;
 
     class TEraser: public TRequestRunner<TEvResponse, TEraser> {
     public:
@@ -429,7 +429,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
     }
 
     void ConditionalEraseShouldSuccess(const TString& ttlColType, EUnit unit, const TString& toUpload, const TString& afterErase, const bool enableDatetime64 = false) {
-        using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
+        using TEvResponse = NEvDataShard::TEvConditionalEraseRowsResponse;
 
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableTableDatetime64(enableDatetime64);
@@ -648,7 +648,7 @@ key = 4, value = 1902441600
 key = 5, value = (empty maybe)
         )", true);
     }
-    
+
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnTimestamp64) {
         ConditionalEraseShouldSuccess("Timestamp64", TUnit::AUTO, R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
@@ -744,7 +744,7 @@ key = 5, value = (pg null)
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldFailOnVariousErrors) {
-        using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
+        using TEvResponse = NEvDataShard::TEvConditionalEraseRowsResponse;
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -789,7 +789,7 @@ key = 5, value = (pg null)
     }
 
     Y_UNIT_TEST_TWIN(ConditionalEraseRowsShouldBreakLocks, StreamLookup) {
-        using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
+        using TEvResponse = NEvDataShard::TEvConditionalEraseRowsResponse;
 
         TPortManager pm;
         NKikimrConfig::TAppConfig appConfig;
@@ -844,7 +844,7 @@ key = 5, value = (pg null)
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldNotEraseModifiedRows) {
-        using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
+        using TEvResponse = NEvDataShard::TEvConditionalEraseRowsResponse;
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -870,7 +870,7 @@ key = 5, value = (pg null)
         THolder<IEventHandle> delayed;
         auto prevObserver = server->GetRuntime()->SetObserverFunc([&delayed](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvDataShard::TEvEraseRowsRequest::EventType:
+            case NEvDataShard::TEvEraseRowsRequest::EventType:
                 delayed.Reset(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
             default:
@@ -1065,7 +1065,7 @@ Y_UNIT_TEST_SUITE(DistributedEraseTests) {
         auto& runtime = *server->GetRuntime();
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvDataShard::TEvEraseRowsRequest::EventType:
+            case NEvDataShard::TEvEraseRowsRequest::EventType:
                 delayed.emplace_back(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
             case TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType:
@@ -1106,7 +1106,7 @@ Y_UNIT_TEST_SUITE(DistributedEraseTests) {
             const TString& ttlColType, EUnit unit,
             const TString& toUpload, const THashMap<TString, TString>& afterErase,
             const THashMap<TString, ui32>& shardsConfig = {}) {
-        using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
+        using TEvResponse = NEvDataShard::TEvConditionalEraseRowsResponse;
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -1241,7 +1241,7 @@ tkey = 100, key = 4
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldNotEraseModifiedRows) {
-        using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
+        using TEvResponse = NEvDataShard::TEvConditionalEraseRowsResponse;
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -1353,7 +1353,7 @@ tkey = 100, key = 4
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldNotFailOnMissingRows) {
-        using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
+        using TEvResponse = NEvDataShard::TEvConditionalEraseRowsResponse;
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -1406,8 +1406,8 @@ tkey = 100, key = 4
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldFailOnVariousErrors) {
-        using TEvRequest = TEvDataShard::TEvEraseRowsRequest;
-        using TEvResponse = TEvDataShard::TEvEraseRowsResponse;
+        using TEvRequest = NEvDataShard::TEvEraseRowsRequest;
+        using TEvResponse = NEvDataShard::TEvEraseRowsResponse;
         using TEvNavigate = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
         using TEvResolve = TEvTxProxySchemeCache::TEvResolveKeySetResult;
 
@@ -1582,7 +1582,7 @@ tkey = 100, key = 4
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldFailOnSplit) {
-        using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
+        using TEvResponse = NEvDataShard::TEvConditionalEraseRowsResponse;
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -1626,7 +1626,7 @@ tkey = 100, key = 4
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldFailOnSchemeTx) {
-        using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
+        using TEvResponse = NEvDataShard::TEvConditionalEraseRowsResponse;
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -1666,7 +1666,7 @@ tkey = 100, key = 4
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldFailOnDeadShard) {
-        using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
+        using TEvResponse = NEvDataShard::TEvConditionalEraseRowsResponse;
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -1765,7 +1765,7 @@ tkey = 100, key = 4
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsCheckLimits) {
-        using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
+        using TEvResponse = NEvDataShard::TEvConditionalEraseRowsResponse;
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -1822,7 +1822,7 @@ tkey = 100, key = 4
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsAsyncIndex) {
-        using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
+        using TEvResponse = NEvDataShard::TEvConditionalEraseRowsResponse;
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));

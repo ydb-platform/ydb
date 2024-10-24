@@ -12,7 +12,7 @@ struct TKesusTablet::TTxSessionAttach : public TTxBase {
     TActorId PreviousOwner;
     ui64 PreviousGeneration = 0;
     ui64 PreviousCookie = 0;
-    THolder<TEvKesus::TEvAttachSessionResult> Reply;
+    THolder<NEvKesus::TEvAttachSessionResult> Reply;
 
     explicit TTxSessionAttach(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvAttachSession& record)
         : TTxBase(self)
@@ -37,7 +37,7 @@ struct TKesusTablet::TTxSessionAttach : public TTxBase {
         auto* proxy = Self->Proxies.FindPtr(Sender);
         if (!proxy || proxy->Generation != Record.GetProxyGeneration()) {
             // World has changed by the time we executed
-            Reply.Reset(new TEvKesus::TEvAttachSessionResult(
+            Reply.Reset(new NEvKesus::TEvAttachSessionResult(
                 Record.GetProxyGeneration(),
                 Record.GetSessionId(),
                 Ydb::StatusIds::BAD_SESSION,
@@ -54,7 +54,7 @@ struct TKesusTablet::TTxSessionAttach : public TTxBase {
         if (SessionId != 0) {
             session = Self->Sessions.FindPtr(SessionId);
             if (!session) {
-                Reply.Reset(new TEvKesus::TEvAttachSessionResult(
+                Reply.Reset(new NEvKesus::TEvAttachSessionResult(
                     Record.GetProxyGeneration(),
                     Record.GetSessionId(),
                     Ydb::StatusIds::SESSION_EXPIRED,
@@ -63,7 +63,7 @@ struct TKesusTablet::TTxSessionAttach : public TTxBase {
             }
 
             if (Record.GetSeqNo() < session->LastOwnerSeqNo) {
-                Reply.Reset(new TEvKesus::TEvAttachSessionResult(
+                Reply.Reset(new NEvKesus::TEvAttachSessionResult(
                     Record.GetProxyGeneration(),
                     Record.GetSessionId(),
                     Ydb::StatusIds::BAD_SESSION,
@@ -72,7 +72,7 @@ struct TKesusTablet::TTxSessionAttach : public TTxBase {
             }
 
             if (session->ProtectionKey && session->ProtectionKey != Record.GetProtectionKey()) {
-                Reply.Reset(new TEvKesus::TEvAttachSessionResult(
+                Reply.Reset(new NEvKesus::TEvAttachSessionResult(
                     Record.GetProxyGeneration(),
                     Record.GetSessionId(),
                     Ydb::StatusIds::BAD_SESSION,
@@ -91,7 +91,7 @@ struct TKesusTablet::TTxSessionAttach : public TTxBase {
             }
         } else {
             if (Self->Sessions.size() >= MAX_SESSIONS_LIMIT) {
-                Reply.Reset(new TEvKesus::TEvAttachSessionResult(
+                Reply.Reset(new NEvKesus::TEvAttachSessionResult(
                     Record.GetProxyGeneration(),
                     Record.GetSessionId(),
                     Ydb::StatusIds::PRECONDITION_FAILED,
@@ -130,7 +130,7 @@ struct TKesusTablet::TTxSessionAttach : public TTxBase {
         }
         session->AttachProxy(proxy, Cookie, Record.GetSeqNo());
 
-        Reply.Reset(new TEvKesus::TEvAttachSessionResult(proxy->Generation, SessionId));
+        Reply.Reset(new NEvKesus::TEvAttachSessionResult(proxy->Generation, SessionId));
         return true;
     }
 
@@ -144,7 +144,7 @@ struct TKesusTablet::TTxSessionAttach : public TTxBase {
         }
 
         if (PreviousOwner) {
-            ctx.Send(PreviousOwner, new TEvKesus::TEvSessionStolen(PreviousGeneration, SessionId), 0, PreviousCookie);
+            ctx.Send(PreviousOwner, new NEvKesus::TEvSessionStolen(PreviousGeneration, SessionId), 0, PreviousCookie);
         }
 
         Y_ABORT_UNLESS(Reply);
@@ -154,7 +154,7 @@ struct TKesusTablet::TTxSessionAttach : public TTxBase {
     }
 };
 
-void TKesusTablet::Handle(TEvKesus::TEvAttachSession::TPtr& ev) {
+void TKesusTablet::Handle(NEvKesus::TEvAttachSession::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     VerifyKesusPath(record.GetKesusPath());
     TabletCounters->Cumulative()[COUNTER_REQS_SESSION_ATTACH].Increment(1);
@@ -162,7 +162,7 @@ void TKesusTablet::Handle(TEvKesus::TEvAttachSession::TPtr& ev) {
     auto* proxy = Proxies.FindPtr(ev->Sender);
     if (!proxy || proxy->Generation != record.GetProxyGeneration()) {
         Send(ev->Sender,
-            new TEvKesus::TEvAttachSessionResult(
+            new NEvKesus::TEvAttachSessionResult(
                 record.GetProxyGeneration(),
                 record.GetSessionId(),
                 Ydb::StatusIds::BAD_SESSION,
@@ -173,7 +173,7 @@ void TKesusTablet::Handle(TEvKesus::TEvAttachSession::TPtr& ev) {
 
     if (record.GetTimeoutMillis() > MAX_SESSION_TIMEOUT.MilliSeconds()) {
         Send(ev->Sender,
-            new TEvKesus::TEvAttachSessionResult(
+            new NEvKesus::TEvAttachSessionResult(
                 record.GetProxyGeneration(),
                 record.GetSessionId(),
                 Ydb::StatusIds::BAD_REQUEST,
@@ -184,7 +184,7 @@ void TKesusTablet::Handle(TEvKesus::TEvAttachSession::TPtr& ev) {
 
     if (record.GetDescription().size() > MAX_DESCRIPTION_SIZE) {
         Send(ev->Sender,
-            new TEvKesus::TEvAttachSessionResult(
+            new NEvKesus::TEvAttachSessionResult(
                 record.GetProxyGeneration(),
                 record.GetSessionId(),
                 Ydb::StatusIds::BAD_REQUEST,
@@ -195,7 +195,7 @@ void TKesusTablet::Handle(TEvKesus::TEvAttachSession::TPtr& ev) {
 
     if (record.GetProtectionKey().size() > MAX_PROTECTION_KEY_SIZE) {
         Send(ev->Sender,
-            new TEvKesus::TEvAttachSessionResult(
+            new NEvKesus::TEvAttachSessionResult(
                 record.GetProxyGeneration(),
                 record.GetSessionId(),
                 Ydb::StatusIds::BAD_REQUEST,
@@ -210,7 +210,7 @@ void TKesusTablet::Handle(TEvKesus::TEvAttachSession::TPtr& ev) {
         auto* session = Sessions.FindPtr(sessionId);
         if (!session) {
             Send(ev->Sender,
-                new TEvKesus::TEvAttachSessionResult(
+                new NEvKesus::TEvAttachSessionResult(
                     record.GetProxyGeneration(),
                     record.GetSessionId(),
                     Ydb::StatusIds::SESSION_EXPIRED,
@@ -221,7 +221,7 @@ void TKesusTablet::Handle(TEvKesus::TEvAttachSession::TPtr& ev) {
 
         if (record.GetSeqNo() < session->LastOwnerSeqNo) {
             Send(ev->Sender,
-                new TEvKesus::TEvAttachSessionResult(
+                new NEvKesus::TEvAttachSessionResult(
                     record.GetProxyGeneration(),
                     record.GetSessionId(),
                     Ydb::StatusIds::BAD_SESSION,
@@ -232,7 +232,7 @@ void TKesusTablet::Handle(TEvKesus::TEvAttachSession::TPtr& ev) {
 
         if (session->ProtectionKey && session->ProtectionKey != record.GetProtectionKey()) {
             Send(ev->Sender,
-                new TEvKesus::TEvAttachSessionResult(
+                new NEvKesus::TEvAttachSessionResult(
                     record.GetProxyGeneration(),
                     record.GetSessionId(),
                     Ydb::StatusIds::BAD_SESSION,
@@ -264,7 +264,7 @@ void TKesusTablet::Handle(TEvKesus::TEvAttachSession::TPtr& ev) {
             if (session->OwnerProxy && session->OwnerProxy != proxy) {
                 // Notify old proxy that its session has been stolen
                 Send(session->OwnerProxy->ActorID,
-                    new TEvKesus::TEvSessionStolen(session->OwnerProxy->Generation, sessionId),
+                    new NEvKesus::TEvSessionStolen(session->OwnerProxy->Generation, sessionId),
                     0, session->OwnerCookie);
                 TabletCounters->Cumulative()[COUNTER_SESSION_STOLEN].Increment(1);
             }
@@ -273,7 +273,7 @@ void TKesusTablet::Handle(TEvKesus::TEvAttachSession::TPtr& ev) {
             }
             session->AttachProxy(proxy, ev->Cookie, record.GetSeqNo());
             Send(ev->Sender,
-                new TEvKesus::TEvAttachSessionResult(proxy->Generation, sessionId),
+                new NEvKesus::TEvAttachSessionResult(proxy->Generation, sessionId),
                 0, ev->Cookie);
             return;
         }

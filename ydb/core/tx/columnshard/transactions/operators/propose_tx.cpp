@@ -13,10 +13,10 @@ void IProposeTxOperator::DoSendReply(TColumnShard& owner, const TActorContext& c
     }
 }
 
-std::unique_ptr<NKikimr::TEvColumnShard::TEvProposeTransactionResult> IProposeTxOperator::BuildProposeResultEvent(const TColumnShard& owner) const {
+std::unique_ptr<NKikimr::NEvColumnShard::TEvProposeTransactionResult> IProposeTxOperator::BuildProposeResultEvent(const TColumnShard& owner) const {
     const auto& txInfo = GetTxInfo();
-    std::unique_ptr<TEvColumnShard::TEvProposeTransactionResult> evResult =
-        std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(owner.TabletID(), txInfo.TxKind, txInfo.TxId,
+    std::unique_ptr<NEvColumnShard::TEvProposeTransactionResult> evResult =
+        std::make_unique<NEvColumnShard::TEvProposeTransactionResult>(owner.TabletID(), txInfo.TxKind, txInfo.TxId,
             GetProposeStartInfoVerified().GetStatus(), GetProposeStartInfoVerified().GetStatusMessage());
     if (IsFail()) {
         owner.Counters.GetTabletCounters()->IncCounter(COUNTER_PREPARE_ERROR);

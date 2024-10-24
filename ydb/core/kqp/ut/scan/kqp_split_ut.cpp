@@ -68,11 +68,11 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         auto &runtime = *server->GetRuntime();
         auto &settings = server->GetSettings();
 
-        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+        auto request = MakeHolder<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(txId);
         auto tid = NKikimr::Tests::ChangeStateStorage(NKikimr::Tests::SchemeRoot, settings.Domain);
         runtime.SendToPipe(tid, sender, request.Release(), 0, GetPipeConfigWithRetries());
-        runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(sender);
+        runtime.GrabEdgeEventRethrow<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult>(sender);
     }
 
     i64 SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val) {
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvPipeCache::TEvForward, Handle);
                 hFunc(TEvPipeCache::TEvUnlink, Handle);
-                hFunc(TEvDataShard::TEvReadResult, Handle);
+                hFunc(NEvDataShard::TEvReadResult, Handle);
                 default:
                     Handle(ev);
             }
@@ -104,7 +104,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
             Forward(ev, Client);
         }
 
-        void Handle(TEvDataShard::TEvReadResult::TPtr& ev) {
+        void Handle(NEvDataShard::TEvReadResult::TPtr& ev) {
             if (ToSkip.fetch_sub(1) <= 0 && ToCapture.fetch_sub(1) > 0) {
                 Cerr << "captured evreadresult -----------------------------------------------------------" << Endl;
                 with_lock(CaptureLock) {
@@ -190,8 +190,8 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         void State(TAutoPtr<::NActors::IEventHandle> &ev) {
             if (ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
                 auto* forw = reinterpret_cast<TEvPipeCache::TEvForward::TPtr*>(&ev);
-                auto readtype = TEvDataShard::TEvRead::EventType;
-                auto acktype = TEvDataShard::TEvReadAck::EventType;
+                auto readtype = NEvDataShard::TEvRead::EventType;
+                auto acktype = NEvDataShard::TEvReadAck::EventType;
                 auto actual = forw->Get()->Get()->Ev->Type();
                 bool isRead = actual == readtype || acktype;
                 if (isRead && ToSkip.fetch_sub(1) <= 0 && ToCapture.fetch_sub(1) > 0) {
@@ -401,7 +401,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
             } else if (testActorType == ETestActorType::StreamLookup) {
                 InterceptStreamLookupActorPipeCache(MakePipePerNodeCacheID(false));
             }
-            
+
             if (providedServer) {
                 Server = providedServer;
             } else {
@@ -890,7 +890,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         );
 
         shim->ReadsReceived.WaitI();
-        
+
         UNIT_ASSERT_EQUAL(shards.size(), 1);
         auto undelivery = MakeHolder<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
 
@@ -937,7 +937,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         );
 
         shim->ReadsReceived.WaitI();
-        
+
         UNIT_ASSERT_EQUAL(shards.size(), 1);
         auto undelivery = MakeHolder<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
 

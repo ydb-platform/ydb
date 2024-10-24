@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
 
         auto result = env.InitRoot(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), "MyRoot");
-        UNIT_ASSERT_VALUES_EQUAL((ui32)result, (ui32)TEvSchemeShard::TEvInitRootShardResult::StatusAlreadyInitialized);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)result, (ui32)NEvSchemeShard::TEvInitRootShardResult::StatusAlreadyInitialized);
     }
 
     Y_UNIT_TEST(InitRootWithOwner) {
@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TString newOwner = "something@builtin";
 
         auto result = env.InitRoot(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), "MyRoot", {}, newOwner);
-        UNIT_ASSERT_VALUES_EQUAL((ui32)result, (ui32)TEvSchemeShard::TEvInitRootShardResult::StatusSuccess);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)result, (ui32)NEvSchemeShard::TEvInitRootShardResult::StatusSuccess);
 
         auto checkOwner = [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
             const auto& self = record.GetPathDescription().GetSelf();
@@ -179,7 +179,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         dropFn(runtime, ++txId);
         TestModificationResult(runtime, txId - 1);
 
-        auto ev = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>();
+        auto ev = runtime.GrabEdgeEvent<NEvSchemeShard::TEvModifySchemeTransactionResult>();
         UNIT_ASSERT(ev);
 
         const auto& record = ev->Record;
@@ -1966,7 +1966,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               Name: "UserDefinedIndexByValue1"
               KeyColumnNames: ["value1"]
             }
-        )", {TEvSchemeShard::EStatus::StatusAlreadyExists});
+        )", {NEvSchemeShard::EStatus::StatusAlreadyExists});
 
         //the same index name
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"(
@@ -1985,7 +1985,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               Name: "UserDefinedIndexByValue0"
               KeyColumnNames: ["value1"]
             }
-        )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
+        )", {NEvSchemeShard::EStatus::StatusInvalidParameter});
 
         //value_not_exist
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"(
@@ -2000,7 +2000,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               Name: "UserDefinedIndexByValue0"
               KeyColumnNames: ["value_not_exist"]
             }
-        )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
+        )", {NEvSchemeShard::EStatus::StatusInvalidParameter});
 
         //no directory
         TestCreateIndexedTable(runtime, txId++, "/MyRoot/USER_0", R"(
@@ -2041,7 +2041,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               Name: "UserDefinedIndexByValue0"
               KeyColumnNames: ["value0", "value1", "value0"]
             }
-        )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
+        )", {NEvSchemeShard::EStatus::StatusInvalidParameter});
 
         //too many keys in index table
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"(
@@ -2077,7 +2077,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               Name: "UserDefinedIndexByValue0"
               KeyColumnNames: ["value0"]
             }
-        )", {TEvSchemeShard::EStatus::StatusSchemeError});
+        )", {NEvSchemeShard::EStatus::StatusSchemeError});
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"(
             TableDescription {
@@ -2090,7 +2090,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               Name: "UserDefinedIndexByValue0"
               KeyColumnNames: ["value0", "value0"]
             }
-        )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
+        )", {NEvSchemeShard::EStatus::StatusInvalidParameter});
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"(
             TableDescription {
@@ -2105,7 +2105,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               KeyColumnNames: ["value0"]
               DataColumnNames: ["value0"]
             }
-        )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
+        )", {NEvSchemeShard::EStatus::StatusInvalidParameter});
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"(
             TableDescription {
@@ -2120,7 +2120,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               KeyColumnNames: ["value0"]
               DataColumnNames: ["value0", "value1"]
             }
-        )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
+        )", {NEvSchemeShard::EStatus::StatusInvalidParameter});
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"(
             TableDescription {
@@ -2135,7 +2135,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               KeyColumnNames: ["value0"]
               DataColumnNames: ["key"]
             }
-        )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
+        )", {NEvSchemeShard::EStatus::StatusInvalidParameter});
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"(
             TableDescription {
@@ -2150,7 +2150,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               KeyColumnNames: ["value0"]
               DataColumnNames: ["key", "value1"]
             }
-        )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
+        )", {NEvSchemeShard::EStatus::StatusInvalidParameter});
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"(
             TableDescription {
@@ -2165,45 +2165,45 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               KeyColumnNames: ["value0"]
               DataColumnNames: ["blabla"]
             }
-        )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
+        )", {NEvSchemeShard::EStatus::StatusInvalidParameter});
 
         TestCreateTable(runtime, ++txId, "/MyRoot/DirA/Table1", R"(
               Name: "inside_table"
               Columns { Name: "key"   Type: "Uint64" }
               Columns { Name: "value0" Type: "Utf8" }
               KeyColumnNames: ["key"]
-        )", {TEvSchemeShard::EStatus::StatusPathIsNotDirectory});
+        )", {NEvSchemeShard::EStatus::StatusPathIsNotDirectory});
 
         TestCreateTable(runtime, ++txId, "/MyRoot/DirA/Table1/UserDefinedIndexByValue0", R"(
               Name: "inside_index"
               Columns { Name: "key"   Type: "Uint64" }
               Columns { Name: "value0" Type: "Utf8" }
               KeyColumnNames: ["key"]
-        )", {TEvSchemeShard::EStatus::StatusNameConflict});
+        )", {NEvSchemeShard::EStatus::StatusNameConflict});
 
         TestCreateTable(runtime, ++txId, "/MyRoot/DirA/Table1/UserDefinedIndexByValue0/indexImplTable", R"(
               Name: "inside_impl_table"
               Columns { Name: "key"   Type: "Uint64" }
               Columns { Name: "value0" Type: "Utf8" }
               KeyColumnNames: ["key"]
-        )", {TEvSchemeShard::EStatus::StatusNameConflict});
+        )", {NEvSchemeShard::EStatus::StatusNameConflict});
 
         TestAlterTable(runtime, ++txId, "/MyRoot/DirA/Table1/UserDefinedIndexByValue0", R"(
               Name: "indexImplTable"
               Columns { Name: "add_1"  Type: "Uint32"}
               Columns { Name: "add_2"  Type: "Uint64"}
-        )", {TEvSchemeShard::EStatus::StatusNameConflict});
+        )", {NEvSchemeShard::EStatus::StatusNameConflict});
 
         TestAlterTable(runtime, ++txId, "/MyRoot/DirA/Table1/UserDefinedIndexByValue0", R"(
               Name: "indexImplTable"
               DropColumns { Name: "key"  Type: "Uint64"}
-        )", {TEvSchemeShard::EStatus::StatusNameConflict});
+        )", {NEvSchemeShard::EStatus::StatusNameConflict});
 
         TestCopyTable(runtime, ++txId, "/MyRoot/DirA", "copy_is_ok", "/MyRoot/DirA/Table1");
         env.TestWaitNotification(runtime, txId);
 
-        TestCopyTable(runtime, ++txId, "/MyRoot/DirA", "copy", "/MyRoot/DirA/Table1/UserDefinedIndexByValue0", TEvSchemeShard::EStatus::StatusNameConflict);
-        TestCopyTable(runtime, ++txId, "/MyRoot/DirA", "copy", "/MyRoot/DirA/Table1/UserDefinedIndexByValue0/indexImplTable", TEvSchemeShard::EStatus::StatusNameConflict);
+        TestCopyTable(runtime, ++txId, "/MyRoot/DirA", "copy", "/MyRoot/DirA/Table1/UserDefinedIndexByValue0", NEvSchemeShard::EStatus::StatusNameConflict);
+        TestCopyTable(runtime, ++txId, "/MyRoot/DirA", "copy", "/MyRoot/DirA/Table1/UserDefinedIndexByValue0/indexImplTable", NEvSchemeShard::EStatus::StatusNameConflict);
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"(
             TableDescription {
@@ -2264,13 +2264,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               PartitionConfig {
                 CrossDataCenterFollowerCount: 1
               }
-        )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
+        )", {NEvSchemeShard::EStatus::StatusInvalidParameter});
         TestAlterTable(runtime, ++txId, "/MyRoot/DirA", R"(
               Name: "WithNoFollowers"
               PartitionConfig {
                 FollowerCount: 1
               }
-        )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
+        )", {NEvSchemeShard::EStatus::StatusInvalidParameter});
         TestAlterTable(runtime, ++txId, "/MyRoot/DirA", R"(
               Name: "WithNoFollowers"
               PartitionConfig {
@@ -2286,21 +2286,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDropTable(runtime, ++txId, "/MyRoot/DirA", "WithNoFollowers");
         env.TestWaitNotification(runtime, {txId, txId-1, txId-2});
 
-        TestDropTable(runtime, ++txId, "/", "Table1", {TEvSchemeShard::EStatus::StatusPathDoesNotExist});
-        TestDropTable(runtime, ++txId, "", "Table1", {TEvSchemeShard::EStatus::StatusPathDoesNotExist});
-        TestDropTable(runtime, ++txId, "", "", {TEvSchemeShard::EStatus::StatusPathDoesNotExist});
-        TestDropTable(runtime, ++txId, "/MyRoot/DirA", "", {TEvSchemeShard::EStatus::StatusPathDoesNotExist});
-        TestDropTable(runtime, ++txId, "/MyRoot/DirA/Table", "", {TEvSchemeShard::EStatus::StatusPathDoesNotExist});
+        TestDropTable(runtime, ++txId, "/", "Table1", {NEvSchemeShard::EStatus::StatusPathDoesNotExist});
+        TestDropTable(runtime, ++txId, "", "Table1", {NEvSchemeShard::EStatus::StatusPathDoesNotExist});
+        TestDropTable(runtime, ++txId, "", "", {NEvSchemeShard::EStatus::StatusPathDoesNotExist});
+        TestDropTable(runtime, ++txId, "/MyRoot/DirA", "", {NEvSchemeShard::EStatus::StatusPathDoesNotExist});
+        TestDropTable(runtime, ++txId, "/MyRoot/DirA/Table", "", {NEvSchemeShard::EStatus::StatusPathDoesNotExist});
 
-        TestDropTable(runtime, ++txId, "/MyRoot/not_exist", "Table1", {TEvSchemeShard::EStatus::StatusPathDoesNotExist});
-        TestDropTable(runtime, ++txId, "/not_exist/DirA", "Table1", {TEvSchemeShard::EStatus::StatusPathDoesNotExist});
-        TestDropTable(runtime, ++txId, "/MyRoot/DirA", "not_exist", {TEvSchemeShard::EStatus::StatusPathDoesNotExist});
+        TestDropTable(runtime, ++txId, "/MyRoot/not_exist", "Table1", {NEvSchemeShard::EStatus::StatusPathDoesNotExist});
+        TestDropTable(runtime, ++txId, "/not_exist/DirA", "Table1", {NEvSchemeShard::EStatus::StatusPathDoesNotExist});
+        TestDropTable(runtime, ++txId, "/MyRoot/DirA", "not_exist", {NEvSchemeShard::EStatus::StatusPathDoesNotExist});
 
-        TestDropTable(runtime, ++txId, "/MyRoot/DirA/Table_not_exist", "UserDefinedIndexByValue0", {TEvSchemeShard::EStatus::StatusPathDoesNotExist});
-        TestDropTable(runtime, ++txId, "/MyRoot/DirA/Table1", "UserDefinedIndexByValue0_not_exist", {TEvSchemeShard::EStatus::StatusPathDoesNotExist});
-        TestDropTable(runtime, ++txId, "/MyRoot/DirA/Table1", "UserDefinedIndexByValue0", {TEvSchemeShard::EStatus::StatusNameConflict});
-        TestDropTable(runtime, ++txId, "/MyRoot/DirA/Table1/UserDefinedIndexByValue0", "indexImplTable_not_exist", {TEvSchemeShard::EStatus::StatusPathDoesNotExist});
-        TestDropTable(runtime, ++txId, "/MyRoot/DirA/Table1/UserDefinedIndexByValue0", "indexImplTable", {TEvSchemeShard::EStatus::StatusNameConflict});
+        TestDropTable(runtime, ++txId, "/MyRoot/DirA/Table_not_exist", "UserDefinedIndexByValue0", {NEvSchemeShard::EStatus::StatusPathDoesNotExist});
+        TestDropTable(runtime, ++txId, "/MyRoot/DirA/Table1", "UserDefinedIndexByValue0_not_exist", {NEvSchemeShard::EStatus::StatusPathDoesNotExist});
+        TestDropTable(runtime, ++txId, "/MyRoot/DirA/Table1", "UserDefinedIndexByValue0", {NEvSchemeShard::EStatus::StatusNameConflict});
+        TestDropTable(runtime, ++txId, "/MyRoot/DirA/Table1/UserDefinedIndexByValue0", "indexImplTable_not_exist", {NEvSchemeShard::EStatus::StatusPathDoesNotExist});
+        TestDropTable(runtime, ++txId, "/MyRoot/DirA/Table1/UserDefinedIndexByValue0", "indexImplTable", {NEvSchemeShard::EStatus::StatusNameConflict});
 
         AsyncDropTable(runtime, ++txId, "/MyRoot/DirA", "Table1");
         AsyncDropTable(runtime, ++txId, "/MyRoot/DirA", "copy_is_ok");
@@ -2310,7 +2310,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestModificationResult(runtime, txId-1, NKikimrScheme::StatusAccepted);
 
         {
-            auto ev = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>();
+            auto ev = runtime.GrabEdgeEvent<NEvSchemeShard::TEvModifySchemeTransactionResult>();
             UNIT_ASSERT(ev);
             const auto& record = ev->Record;
             UNIT_ASSERT_VALUES_EQUAL(record.GetTxId(), txId);
@@ -2320,7 +2320,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         env.TestWaitNotification(runtime, {txId-1, txId-2});
 
-        TestDropTable(runtime, ++txId, "/MyRoot/DirA", "Table1", {TEvSchemeShard::EStatus::StatusPathDoesNotExist});
+        TestDropTable(runtime, ++txId, "/MyRoot/DirA", "Table1", {NEvSchemeShard::EStatus::StatusPathDoesNotExist});
 
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 20));
     }
@@ -3545,13 +3545,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvHive::EvDeleteTabletReply:
-                for (const ui64 shardIdx : ev->Get<TEvHive::TEvDeleteTabletReply>()->Record.GetShardLocalIdx()) {
+            case NEvHive::EvDeleteTabletReply:
+                for (const ui64 shardIdx : ev->Get<NEvHive::TEvDeleteTabletReply>()->Record.GetShardLocalIdx()) {
                     deletedShardIdxs.insert(shardIdx);
                 }
                 return TTestActorRuntime::EEventAction::PROCESS;
 
-            case TEvDataShard::EvGetTableStats:
+            case NEvDataShard::EvGetTableStats:
                 splitStarted = true;
                 return TTestActorRuntime::EEventAction::DROP; // prevent splitting
 
@@ -3918,8 +3918,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         THolder<IEventHandle> delayed;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
-                const auto& record = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record;
+            if (ev->GetTypeRewrite() == NEvSchemeShard::EvModifySchemeTransaction) {
+                const auto& record = ev->Get<NEvSchemeShard::TEvModifySchemeTransaction>()->Record;
                 if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexBuild) {
                     delayed.Reset(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
@@ -8233,7 +8233,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         AsyncDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume");
         TestModificationResult(runtime, txId-1);
 
-        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>();
+        auto event = runtime.GrabEdgeEvent<NEvSchemeShard::TEvModifySchemeTransactionResult>();
         UNIT_ASSERT(event);
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), txId);
         CheckExpectedStatus(
@@ -10495,7 +10495,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         {
             TVector<THolder<IEventHandle>> suppressed;
-            auto defObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::EvInitSplitMergeDestination);
+            auto defObserver = SetSuppressObserver(runtime, suppressed, NEvDataShard::EvInitSplitMergeDestination);
 
             ++txId;
             TestSplitTable(runtime, 103, "/MyRoot/Table", R"(
@@ -10668,7 +10668,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                     }
                 }
             )",
-            {TEvSchemeShard::EStatus::StatusNameConflict}
+            {NEvSchemeShard::EStatus::StatusNameConflict}
         );
         env.TestWaitNotification(runtime, txId);
 
@@ -10692,7 +10692,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         while (true) {
             TVector<THolder<IEventHandle>> suppressed;
-            auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvPeriodicTableStats::EventType);
+            auto prevObserver = SetSuppressObserver(runtime, suppressed, NEvDataShard::TEvPeriodicTableStats::EventType);
 
             WaitForSuppressed(runtime, suppressed, 10, prevObserver);
             for (auto &msg : suppressed) {
@@ -10718,7 +10718,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
             for (const auto& tPart: descr.GetPathDescription().GetTablePartitions()) {
                 TActorId sender = runtime.AllocateEdgeActor();
-                auto evTx = new TEvDataShard::TEvCompactBorrowed(pathVersion.PathId);
+                auto evTx = new NEvDataShard::TEvCompactBorrowed(pathVersion.PathId);
                 ForwardToTablet(runtime, tPart.GetDatashardId(), sender, evTx);
             }
         }
@@ -11201,10 +11201,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         auto topicTabletId = DescribePath(runtime, "/MyRoot/SubDomenA/Topic1", true, true, true)
                 .GetPathDescription().GetPersQueueGroup().GetPartitions()[0].GetTabletId();
 
-        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), new TEvSchemeShard::TEvFindTabletSubDomainPathId(topicTabletId));
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), new NEvSchemeShard::TEvFindTabletSubDomainPathId(topicTabletId));
 
         TAutoPtr<IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(handle, TDuration::Seconds(1));
+        auto event = runtime.GrabEdgeEvent<NEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(handle, TDuration::Seconds(1));
         UNIT_ASSERT(event);
 
         UNIT_ASSERT_VALUES_EQUAL(subDomainPathId, event->Record.GetSubDomainPathId());
@@ -11242,7 +11242,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         runtime.Register(CreateFindSubDomainPathIdActor(runtime.AllocateEdgeActor(), topicTabletId, TTestTxConfig::SchemeShard, false));
 
         TAutoPtr<IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvSubDomainPathIdFound>(handle, TDuration::Seconds(1));
+        auto event = runtime.GrabEdgeEvent<NEvSchemeShard::TEvSubDomainPathIdFound>(handle, TDuration::Seconds(1));
         UNIT_ASSERT(event);
 
         UNIT_ASSERT_VALUES_EQUAL(subDomainPathId, event->LocalPathId);
@@ -11280,7 +11280,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         runtime.Register(CreateFindSubDomainPathIdActor(runtime.AllocateEdgeActor(), topicTabletId, TTestTxConfig::SchemeShard, true, TDuration::Seconds(2)));
 
         TAutoPtr<IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvSubDomainPathIdFound>(handle, TDuration::Seconds(2));
+        auto event = runtime.GrabEdgeEvent<NEvSchemeShard::TEvSubDomainPathIdFound>(handle, TDuration::Seconds(2));
         UNIT_ASSERT(event);
 
         UNIT_ASSERT_VALUES_EQUAL(subDomainPathId, event->LocalPathId);
@@ -11330,7 +11330,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 }
                 MeteringMode: METERING_MODE_RESERVED_CAPACITY
             }
-        )", {{TEvSchemeShard::EStatus::StatusResourceExhausted, "database size limit exceeded"}});
+        )", {{NEvSchemeShard::EStatus::StatusResourceExhausted, "database size limit exceeded"}});
         env.TestWaitNotification(runtime, txId);
     }
 

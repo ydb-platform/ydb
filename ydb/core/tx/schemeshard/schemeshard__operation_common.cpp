@@ -3,7 +3,7 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TOperationContext& context)
+THolder<NEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TOperationContext& context)
 {
     auto tablePartitionConfig = context.SS->GetTablePartitionConfigWithAlterData(targetPath->PathId);
     const auto& shard = context.SS->ShardInfos[shardIdx];
@@ -20,7 +20,7 @@ THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr target
         }*/
     }
 
-    THolder<TEvHive::TEvCreateTablet> ev = MakeHolder<TEvHive::TEvCreateTablet>(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()), shard.TabletType, shard.BindedChannels);
+    THolder<NEvHive::TEvCreateTablet> ev = MakeHolder<NEvHive::TEvCreateTablet>(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()), shard.TabletType, shard.BindedChannels);
 
     TPathId domainId = context.SS->ResolvePathIdForDomain(targetPath);
 
@@ -90,7 +90,7 @@ TCreateParts::TCreateParts(const TOperationId& id)
     IgnoreMessages(DebugHint(), {});
 }
 
-bool TCreateParts::HandleReply(TEvHive::TEvAdoptTabletReply::TPtr& ev, TOperationContext& context) {
+bool TCreateParts::HandleReply(NEvHive::TEvAdoptTabletReply::TPtr& ev, TOperationContext& context) {
     LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 DebugHint() << " HandleReply TEvAdoptTablet"
                 << ", at tabletId: " << context.SS->SelfTabletId());
@@ -157,7 +157,7 @@ bool TCreateParts::HandleReply(TEvHive::TEvAdoptTabletReply::TPtr& ev, TOperatio
     return false;
 }
 
-bool TCreateParts::HandleReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TOperationContext& context) {
+bool TCreateParts::HandleReply(NEvHive::TEvCreateTabletReply::TPtr& ev, TOperationContext& context) {
     LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 DebugHint() << " HandleReply TEvCreateTabletReply"
                 << ", at tabletId: " << context.SS->SelfTabletId());
@@ -271,12 +271,12 @@ bool TCreateParts::HandleReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TOperati
     return false;
 }
 
-THolder<TEvHive::TEvAdoptTablet> TCreateParts::AdoptRequest(TShardIdx shardIdx, TOperationContext& context) {
+THolder<NEvHive::TEvAdoptTablet> TCreateParts::AdoptRequest(TShardIdx shardIdx, TOperationContext& context) {
     Y_ABORT_UNLESS(context.SS->AdoptedShards.contains(shardIdx));
     auto& adoptedShard = context.SS->AdoptedShards[shardIdx];
     auto& shard = context.SS->ShardInfos[shardIdx];
 
-    THolder<TEvHive::TEvAdoptTablet> ev = MakeHolder<TEvHive::TEvAdoptTablet>(
+    THolder<NEvHive::TEvAdoptTablet> ev = MakeHolder<NEvHive::TEvAdoptTablet>(
         ui64(shard.TabletID),
         adoptedShard.PrevOwner, ui64(adoptedShard.PrevShardIdx),
         shard.TabletType,
@@ -546,7 +546,7 @@ namespace NTableState {
 
 bool CollectProposeTransactionResults(
         const NKikimr::NSchemeShard::TOperationId &operationId,
-        const TEvDataShard::TEvProposeTransactionResult::TPtr &ev,
+        const NEvDataShard::TEvProposeTransactionResult::TPtr &ev,
         NKikimr::NSchemeShard::TOperationContext &context)
 {
     auto prepared = [](NKikimrTxDataShard::TEvProposeTransactionResult::EStatus status) -> bool {
@@ -562,7 +562,7 @@ bool CollectProposeTransactionResults(
 
 bool CollectProposeTransactionResults(
         const NKikimr::NSchemeShard::TOperationId& operationId,
-        const TEvColumnShard::TEvProposeTransactionResult::TPtr& ev,
+        const NEvColumnShard::TEvProposeTransactionResult::TPtr& ev,
         NKikimr::NSchemeShard::TOperationContext& context)
 {
     auto prepared = [](NKikimrTxColumnShard::EResultStatus status) -> bool {
@@ -578,7 +578,7 @@ bool CollectProposeTransactionResults(
 
 bool CollectSchemaChanged(
         const TOperationId& operationId,
-        const TEvDataShard::TEvSchemaChanged::TPtr& ev,
+        const NEvDataShard::TEvSchemaChanged::TPtr& ev,
         TOperationContext& context)
 {
     auto ssId = context.SS->SelfTabletId();
@@ -599,7 +599,7 @@ bool CollectSchemaChanged(
     auto pTablet = txState.SchemeChangeNotificationReceived.FindPtr(shardIdx);
     if (pTablet && pTablet->second >= generation) {
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "CollectSchemaChanged Ignore TEvDataShard::TEvSchemaChanged as outdated"
+                    "CollectSchemaChanged Ignore NEvDataShard::TEvSchemaChanged as outdated"
                         << ", operationId: " << operationId
                         << ", shardIdx: " << shardIdx
                         << ", datashard " << datashardId
@@ -629,7 +629,7 @@ bool CollectSchemaChanged(
     txState.ShardsInProgress.erase(shardIdx);
 
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "CollectSchemaChanged accept TEvDataShard::TEvSchemaChanged"
+                "CollectSchemaChanged accept NEvDataShard::TEvSchemaChanged"
                     << ", operationId: " << operationId
                     << ", shardIdx: " << shardIdx
                     << ", datashard: " << datashardId
@@ -669,7 +669,7 @@ void AckAllSchemaChanges(const TOperationId &operationId, TTxState &txState, TOp
                         << ", datashard: " << tabletId
                         << ", at schemeshard: " << ssId);
 
-        auto event = MakeHolder<TEvDataShard::TEvSchemaChangedResult>();
+        auto event = MakeHolder<NEvDataShard::TEvSchemaChangedResult>();
         event->Record.SetTxId(ui64(operationId.GetTxId()));
 
         context.OnComplete.Send(ackTo, std::move(event), ui64(shardIdx.GetLocalId()));
@@ -973,13 +973,13 @@ TProposedWaitParts::TProposedWaitParts(TOperationId id, TTxState::ETxState nextS
     , NextState(nextState)
 {
     IgnoreMessages(DebugHint(),
-        { TEvHive::TEvCreateTabletReply::EventType
-        , TEvDataShard::TEvProposeTransactionResult::EventType
-        , TEvPrivate::TEvOperationPlan::EventType }
+        { NEvHive::TEvCreateTabletReply::EventType
+        , NEvDataShard::TEvProposeTransactionResult::EventType
+        , NEvPrivate::TEvOperationPlan::EventType }
     );
 }
 
-bool TProposedWaitParts::HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) {
+bool TProposedWaitParts::HandleReply(NEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) {
     TTabletId ssId = context.SS->SelfTabletId();
     const auto& evRecord = ev->Get()->Record;
 
@@ -1054,7 +1054,7 @@ bool TProposedWaitParts::ProgressState(TOperationContext& context) {
 namespace NPQState {
 
 bool CollectProposeTransactionResults(const TOperationId& operationId,
-                                      const TEvPersQueue::TEvProposeTransactionResult::TPtr& ev,
+                                      const NEvPersQueue::TEvProposeTransactionResult::TPtr& ev,
                                       TOperationContext& context)
 {
     auto prepared = [](NKikimrPQ::TEvProposeTransactionResult::EStatus status) -> bool {

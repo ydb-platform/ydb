@@ -5,13 +5,13 @@
 namespace NKikimr {
 namespace NDataShard {
 
-TDirectTransaction::TDirectTransaction(TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvUploadRowsRequest::TPtr& ev)
+TDirectTransaction::TDirectTransaction(TInstant receivedAt, ui64 tieBreakerIndex, NEvDataShard::TEvUploadRowsRequest::TPtr& ev)
     : TOperation(TBasicOpInfo(EOperationKind::DirectTx, Flags, 0, receivedAt, tieBreakerIndex))
     , Impl(new TDirectTxUpload(ev))
 {
 }
 
-TDirectTransaction::TDirectTransaction(TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvEraseRowsRequest::TPtr& ev)
+TDirectTransaction::TDirectTransaction(TInstant receivedAt, ui64 tieBreakerIndex, NEvDataShard::TEvEraseRowsRequest::TPtr& ev)
     : TOperation(TBasicOpInfo(EOperationKind::DirectTx, Flags, 0, receivedAt, tieBreakerIndex))
     , Impl(new TDirectTxErase(ev))
 {

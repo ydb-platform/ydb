@@ -437,7 +437,7 @@ public:
     {
         auto kind = (ui32)NKikimrConsole::TConfigItem::MonitoringConfigItem;
         ctx.Send(MakeConfigsDispatcherID(ctx.SelfID.NodeId()),
-                 new TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(kind));
+                 new NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(kind));
     }
 
     void ApplyConfig(const NKikimrConfig::TMonitoringConfig &config,
@@ -476,7 +476,7 @@ public:
         StatusSubscribers.erase(ev->Sender);
     }
 
-    void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
+    void Handle(NEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                 const TActorContext &ctx)
     {
         auto &rec = ev->Get()->Record;
@@ -487,7 +487,7 @@ public:
 
         ApplyConfig(rec.GetConfig().GetMonitoringConfig(), ctx);
 
-        auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
+        auto resp = MakeHolder<NEvConsole::TEvConfigNotificationResponse>(rec);
 
         LOG_TRACE_S(ctx, NKikimrServices::TENANT_POOL,
                     LogPrefix << "Send TEvConfigNotificationResponse: "
@@ -721,7 +721,7 @@ public:
             CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
             HFuncTraced(TEvents::TEvSubscribe, Handle);
             HFuncTraced(TEvents::TEvUnsubscribe, Handle);
-            HFuncTraced(TEvConsole::TEvConfigNotificationRequest, Handle);
+            HFuncTraced(NEvConsole::TEvConfigNotificationRequest, Handle);
             HFuncTraced(TEvLocal::TEvTenantStatus, Handle);
             HFuncTraced(TEvTabletPipe::TEvClientConnected, Handle);
             HFuncTraced(TEvTabletPipe::TEvClientDestroyed, Handle);
@@ -729,7 +729,7 @@ public:
             HFuncTraced(TEvTenantPool::TEvConfigureSlot, Handle);
             HFuncTraced(TEvTenantPool::TEvTakeOwnership, Handle);
             HFuncTraced(NMon::TEvHttpInfo, Handle);
-            IgnoreFunc(TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            IgnoreFunc(NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
 
         default:
             Y_ABORT("unexpected event type: %" PRIx32 " event: %s",

@@ -73,7 +73,7 @@ private:
     STATEFN(WaitSchemeShardResponse) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWakeup, HandleWakeup);
-            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleSchemeShardResponse);
+            hFunc(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult, HandleSchemeShardResponse);
         }
     }
 
@@ -112,7 +112,7 @@ private:
         }
     }
 
-    void HandleSchemeShardResponse(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+    void HandleSchemeShardResponse(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         const auto& record = ev->Get()->GetRecord();
         const auto status = record.GetStatus();
         switch (status) {

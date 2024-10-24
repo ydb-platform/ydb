@@ -125,7 +125,7 @@ class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, T
     void Handle(NSchemeShard::NBackground::TEvListResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvSchemeShard::TEvBGTasksListResponse: record# " << record.ShortDebugString());
+        LOG_D("Handle NEvSchemeShard::TEvBGTasksListResponse: record# " << record.ShortDebugString());
 
         TResponse response;
 

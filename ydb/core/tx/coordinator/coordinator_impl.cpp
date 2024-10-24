@@ -437,8 +437,8 @@ void TTxCoordinator::SendStepConfirmations(TCoordinatorStepConfirmations &confir
     }
 }
 
-void TTxCoordinator::DoConfiguration(const TEvSubDomain::TEvConfigure &ev, const TActorContext &ctx, const TActorId &ackTo) {
-    const TEvSubDomain::TEvConfigure::ProtoRecordType &record = ev.Record;
+void TTxCoordinator::DoConfiguration(const NEvSubDomain::TEvConfigure &ev, const TActorContext &ctx, const TActorId &ackTo) {
+    const NEvSubDomain::TEvConfigure::ProtoRecordType &record = ev.Record;
 
     if(0 == record.MediatorsSize()) {
         LOG_ERROR_S(ctx, NKikimrServices::TX_COORDINATOR
@@ -460,8 +460,8 @@ void TTxCoordinator::DoConfiguration(const TEvSubDomain::TEvConfigure &ev, const
     Execute(CreateTxConfigure(ackTo, record.GetVersion(), record.GetPlanResolution(), mediators, record), ctx);
 }
 
-void TTxCoordinator::Handle(TEvSubDomain::TEvConfigure::TPtr &ev, const TActorContext &ctx) {
-    const TEvSubDomain::TEvConfigure::ProtoRecordType &record = ev->Get()->Record;
+void TTxCoordinator::Handle(NEvSubDomain::TEvConfigure::TPtr &ev, const TActorContext &ctx) {
+    const NEvSubDomain::TEvConfigure::ProtoRecordType &record = ev->Get()->Record;
     LOG_NOTICE_S(ctx, NKikimrServices::TX_COORDINATOR
                  , "tablet# " << TabletID()
                 << " HANDLE TEvConfigure Version# " << record.GetVersion());

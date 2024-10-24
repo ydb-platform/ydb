@@ -74,49 +74,49 @@ public:
                   Request.ShortDebugString().data());
 
         if (Request.HasCreateTenantRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvCreateTenantRequest>();
+            auto request = MakeHolder<NEvConsole::TEvCreateTenantRequest>();
             request->Record.CopyFrom(Request.GetCreateTenantRequest());
             request->Record.SetUserToken(TBase::GetSerializedToken());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasGetConfigRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvGetConfigRequest>();
+            auto request = MakeHolder<NEvConsole::TEvGetConfigRequest>();
             request->Record.CopyFrom(Request.GetGetConfigRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasGetTenantStatusRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvGetTenantStatusRequest>();
+            auto request = MakeHolder<NEvConsole::TEvGetTenantStatusRequest>();
             request->Record.CopyFrom(Request.GetGetTenantStatusRequest());
             request->Record.SetUserToken(TBase::GetSerializedToken());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasAlterTenantRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvAlterTenantRequest>();
+            auto request = MakeHolder<NEvConsole::TEvAlterTenantRequest>();
             request->Record.CopyFrom(Request.GetAlterTenantRequest());
             request->Record.SetUserToken(TBase::GetSerializedToken());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasListTenantsRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvListTenantsRequest>();
+            auto request = MakeHolder<NEvConsole::TEvListTenantsRequest>();
             request->Record.CopyFrom(Request.GetListTenantsRequest());
             request->Record.SetUserToken(TBase::GetSerializedToken());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasRemoveTenantRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvRemoveTenantRequest>();
+            auto request = MakeHolder<NEvConsole::TEvRemoveTenantRequest>();
             request->Record.CopyFrom(Request.GetRemoveTenantRequest());
             request->Record.SetUserToken(TBase::GetSerializedToken());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasSetConfigRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvSetConfigRequest>();
+            auto request = MakeHolder<NEvConsole::TEvSetConfigRequest>();
             request->Record.CopyFrom(Request.GetSetConfigRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasConfigureRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvConfigureRequest>();
+            auto request = MakeHolder<NEvConsole::TEvConfigureRequest>();
             request->Record.CopyFrom(Request.GetConfigureRequest());
             request->Record.SetUserToken(TBase::GetSerializedToken());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasGetConfigItemsRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvGetConfigItemsRequest>();
+            auto request = MakeHolder<NEvConsole::TEvGetConfigItemsRequest>();
             request->Record.CopyFrom(Request.GetGetConfigItemsRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasGetNodeConfigItemsRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvGetNodeConfigItemsRequest>();
+            auto request = MakeHolder<NEvConsole::TEvGetNodeConfigItemsRequest>();
             request->Record.CopyFrom(Request.GetGetNodeConfigItemsRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasGetNodeConfigRequest()) {
@@ -124,27 +124,27 @@ public:
                 ReplyWithErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, "Cannot get node config. Access denied. Node is not authorized", ctx);
                 return;
             }
-            auto request = MakeHolder<TEvConsole::TEvGetNodeConfigRequest>();
+            auto request = MakeHolder<NEvConsole::TEvGetNodeConfigRequest>();
             request->Record.CopyFrom(Request.GetGetNodeConfigRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasGetOperationRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvGetOperationRequest>();
+            auto request = MakeHolder<NEvConsole::TEvGetOperationRequest>();
             request->Record.MutableRequest()->CopyFrom(Request.GetGetOperationRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasCheckConfigUpdatesRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvCheckConfigUpdatesRequest>();
+            auto request = MakeHolder<NEvConsole::TEvCheckConfigUpdatesRequest>();
             request->Record.CopyFrom(Request.GetCheckConfigUpdatesRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasListConfigValidatorsRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvListConfigValidatorsRequest>();
+            auto request = MakeHolder<NEvConsole::TEvListConfigValidatorsRequest>();
             request->Record.CopyFrom(Request.GetListConfigValidatorsRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasToggleConfigValidatorRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvToggleConfigValidatorRequest>();
+            auto request = MakeHolder<NEvConsole::TEvToggleConfigValidatorRequest>();
             request->Record.CopyFrom(Request.GetToggleConfigValidatorRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasUpdateTenantPoolConfig()) {
-            auto request = MakeHolder<TEvConsole::TEvUpdateTenantPoolConfig>();
+            auto request = MakeHolder<NEvConsole::TEvUpdateTenantPoolConfig>();
             request->Record.CopyFrom(Request.GetUpdateTenantPoolConfig());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else {
@@ -152,7 +152,7 @@ public:
         }
     }
 
-    void Handle(TEvConsole::TEvAlterTenantResponse::TPtr &ev, const TActorContext &ctx) noexcept
+    void Handle(NEvConsole::TEvAlterTenantResponse::TPtr &ev, const TActorContext &ctx) noexcept
     {
         auto &rec = ev->Get()->Record;
         auto &resp = rec.GetResponse();
@@ -163,7 +163,7 @@ public:
         SendReplyAndDie(ctx);
     }
 
-    void Handle(TEvConsole::TEvCheckConfigUpdatesResponse::TPtr &ev, const TActorContext &ctx) noexcept
+    void Handle(NEvConsole::TEvCheckConfigUpdatesResponse::TPtr &ev, const TActorContext &ctx) noexcept
     {
         auto &rec = ev->Get()->Record;
         Response.MutableStatus()->CopyFrom(rec.GetStatus());
@@ -171,7 +171,7 @@ public:
         SendReplyAndDie(ctx);
     }
 
-    void Handle(TEvConsole::TEvConfigureResponse::TPtr &ev, const TActorContext &ctx) noexcept
+    void Handle(NEvConsole::TEvConfigureResponse::TPtr &ev, const TActorContext &ctx) noexcept
     {
         auto &rec = ev->Get()->Record;
         Response.MutableStatus()->CopyFrom(rec.GetStatus());
@@ -179,7 +179,7 @@ public:
         SendReplyAndDie(ctx);
     }
 
-    void Handle(TEvConsole::TEvCreateTenantResponse::TPtr &ev, const TActorContext &ctx) noexcept
+    void Handle(NEvConsole::TEvCreateTenantResponse::TPtr &ev, const TActorContext &ctx) noexcept
     {
         auto &rec = ev->Get()->Record;
         auto &resp = rec.GetResponse();
@@ -190,7 +190,7 @@ public:
         SendReplyAndDie(ctx);
     }
 
-    void Handle(TEvConsole::TEvGetConfigItemsResponse::TPtr &ev, const TActorContext &ctx) noexcept
+    void Handle(NEvConsole::TEvGetConfigItemsResponse::TPtr &ev, const TActorContext &ctx) noexcept
     {
         auto &rec = ev->Get()->Record;
         Response.MutableStatus()->CopyFrom(rec.GetStatus());
@@ -198,7 +198,7 @@ public:
         SendReplyAndDie(ctx);
     }
 
-    void Handle(TEvConsole::TEvGetConfigResponse::TPtr &ev, const TActorContext &ctx) noexcept
+    void Handle(NEvConsole::TEvGetConfigResponse::TPtr &ev, const TActorContext &ctx) noexcept
     {
         auto &rec = ev->Get()->Record;
         Response.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
@@ -206,7 +206,7 @@ public:
         SendReplyAndDie(ctx);
     }
 
-    void Handle(TEvConsole::TEvGetOperationResponse::TPtr &ev, const TActorContext &ctx) noexcept
+    void Handle(NEvConsole::TEvGetOperationResponse::TPtr &ev, const TActorContext &ctx) noexcept
     {
         auto &rec = ev->Get()->Record;
         auto &resp = rec.GetResponse();
@@ -217,7 +217,7 @@ public:
         SendReplyAndDie(ctx);
     }
 
-    void Handle(TEvConsole::TEvGetTenantStatusResponse::TPtr &ev, const TActorContext &ctx) noexcept
+    void Handle(NEvConsole::TEvGetTenantStatusResponse::TPtr &ev, const TActorContext &ctx) noexcept
     {
         auto &rec = ev->Get()->Record;
         auto &resp = rec.GetResponse();
@@ -228,7 +228,7 @@ public:
         SendReplyAndDie(ctx);
     }
 
-    void Handle(TEvConsole::TEvListConfigValidatorsResponse::TPtr &ev, const TActorContext &ctx) noexcept
+    void Handle(NEvConsole::TEvListConfigValidatorsResponse::TPtr &ev, const TActorContext &ctx) noexcept
     {
         auto &rec = ev->Get()->Record;
         Response.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
@@ -236,7 +236,7 @@ public:
         SendReplyAndDie(ctx);
     }
 
-    void Handle(TEvConsole::TEvListTenantsResponse::TPtr &ev, const TActorContext &ctx) noexcept
+    void Handle(NEvConsole::TEvListTenantsResponse::TPtr &ev, const TActorContext &ctx) noexcept
     {
         auto &rec = ev->Get()->Record;
         Response.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
@@ -244,7 +244,7 @@ public:
         SendReplyAndDie(ctx);
     }
 
-    void Handle(TEvConsole::TEvGetNodeConfigItemsResponse::TPtr &ev, const TActorContext &ctx) noexcept
+    void Handle(NEvConsole::TEvGetNodeConfigItemsResponse::TPtr &ev, const TActorContext &ctx) noexcept
     {
         auto &rec = ev->Get()->Record;
         Response.MutableStatus()->CopyFrom(rec.GetStatus());
@@ -252,7 +252,7 @@ public:
         SendReplyAndDie(ctx);
     }
 
-    void Handle(TEvConsole::TEvGetNodeConfigResponse::TPtr &ev, const TActorContext &ctx) noexcept
+    void Handle(NEvConsole::TEvGetNodeConfigResponse::TPtr &ev, const TActorContext &ctx) noexcept
     {
         auto &rec = ev->Get()->Record;
         Response.MutableStatus()->CopyFrom(rec.GetStatus());
@@ -260,7 +260,7 @@ public:
         SendReplyAndDie(ctx);
     }
 
-    void Handle(TEvConsole::TEvRemoveTenantResponse::TPtr &ev, const TActorContext &ctx) noexcept
+    void Handle(NEvConsole::TEvRemoveTenantResponse::TPtr &ev, const TActorContext &ctx) noexcept
     {
         auto &rec = ev->Get()->Record;
         auto &resp = rec.GetResponse();
@@ -271,7 +271,7 @@ public:
         SendReplyAndDie(ctx);
     }
 
-    void Handle(TEvConsole::TEvSetConfigResponse::TPtr &ev, const TActorContext &ctx) noexcept
+    void Handle(NEvConsole::TEvSetConfigResponse::TPtr &ev, const TActorContext &ctx) noexcept
     {
         auto &rec = ev->Get()->Record;
         Response.MutableStatus()->CopyFrom(rec.GetStatus());
@@ -279,7 +279,7 @@ public:
         SendReplyAndDie(ctx);
     }
 
-    void Handle(TEvConsole::TEvToggleConfigValidatorResponse::TPtr &ev, const TActorContext &ctx) noexcept
+    void Handle(NEvConsole::TEvToggleConfigValidatorResponse::TPtr &ev, const TActorContext &ctx) noexcept
     {
         auto &rec = ev->Get()->Record;
         Response.MutableStatus()->CopyFrom(rec.GetStatus());
@@ -329,20 +329,20 @@ public:
     STFUNC(MainState) {
         switch (ev->GetTypeRewrite()) {
             CFunc(TEvents::TEvUndelivered::EventType, Undelivered);
-            HFunc(TEvConsole::TEvAlterTenantResponse, Handle);
-            HFunc(TEvConsole::TEvConfigureResponse, Handle);
-            HFunc(TEvConsole::TEvCreateTenantResponse, Handle);
-            HFunc(TEvConsole::TEvGetConfigItemsResponse, Handle);
-            HFunc(TEvConsole::TEvGetConfigResponse, Handle);
-            HFunc(TEvConsole::TEvGetOperationResponse, Handle);
-            HFunc(TEvConsole::TEvGetTenantStatusResponse, Handle);
-            HFunc(TEvConsole::TEvListConfigValidatorsResponse, Handle);
-            HFunc(TEvConsole::TEvListTenantsResponse, Handle);
-            HFunc(TEvConsole::TEvGetNodeConfigItemsResponse, Handle);
-            HFunc(TEvConsole::TEvGetNodeConfigResponse, Handle);
-            HFunc(TEvConsole::TEvRemoveTenantResponse, Handle);
-            HFunc(TEvConsole::TEvSetConfigResponse, Handle);
-            HFunc(TEvConsole::TEvToggleConfigValidatorResponse, Handle);
+            HFunc(NEvConsole::TEvAlterTenantResponse, Handle);
+            HFunc(NEvConsole::TEvConfigureResponse, Handle);
+            HFunc(NEvConsole::TEvCreateTenantResponse, Handle);
+            HFunc(NEvConsole::TEvGetConfigItemsResponse, Handle);
+            HFunc(NEvConsole::TEvGetConfigResponse, Handle);
+            HFunc(NEvConsole::TEvGetOperationResponse, Handle);
+            HFunc(NEvConsole::TEvGetTenantStatusResponse, Handle);
+            HFunc(NEvConsole::TEvListConfigValidatorsResponse, Handle);
+            HFunc(NEvConsole::TEvListTenantsResponse, Handle);
+            HFunc(NEvConsole::TEvGetNodeConfigItemsResponse, Handle);
+            HFunc(NEvConsole::TEvGetNodeConfigResponse, Handle);
+            HFunc(NEvConsole::TEvRemoveTenantResponse, Handle);
+            HFunc(NEvConsole::TEvSetConfigResponse, Handle);
+            HFunc(NEvConsole::TEvToggleConfigValidatorResponse, Handle);
             CFunc(TEvTabletPipe::EvClientDestroyed, Undelivered);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
         default:

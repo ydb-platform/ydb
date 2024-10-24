@@ -65,11 +65,11 @@ public:
             HFunc(TEvWhiteboard::TEvPDiskStateRequest, Handle);
             HFunc(TEvWhiteboard::TEvVDiskStateRequest, Handle);
             HFunc(TEvWhiteboard::TEvSystemStateRequest, Handle);
-            HFunc(NConsole::TEvConfigsDispatcher::TEvGetConfigRequest, Handle);
+            HFunc(NConsole::NEvConfigsDispatcher::TEvGetConfigRequest, Handle);
         }
     }
 
-    void Handle(NConsole::TEvConfigsDispatcher::TEvGetConfigRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(NConsole::NEvConfigsDispatcher::TEvGetConfigRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvBlobStorage::TEvControllerConfigRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvWhiteboard::TEvTabletStateRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvWhiteboard::TEvNodeStateRequest::TPtr &ev, const TActorContext &ctx);
@@ -97,7 +97,7 @@ struct TTestEnvOpts {
 
     TTestEnvOpts() = default;
 
-    TTestEnvOpts(ui32 nodeCount, 
+    TTestEnvOpts(ui32 nodeCount,
             ui32 vdisks = 1,
             const TNodeTenantsMap &tenants = TNodeTenantsMap())
         : NodeCount(nodeCount)
@@ -159,9 +159,9 @@ public:
     void SetCmsConfig(const NKikimrCms::TCmsConfig &config);
     void SetLimits(ui32 tenantLimit, ui32 tenantRatioLimit, ui32 clusterLimit, ui32 clusterRatioLimit);
 
-    void EnableSysNodeChecking(); 
+    void EnableSysNodeChecking();
     TIntrusiveConstPtr<NKikimr::TStateStorageInfo> GetStateStorageInfo();
-    
+
     void UpdateNodeStartTime(ui32 nodeIndex, TInstant startTime) {
         TFakeNodeWhiteboardService::Info[GetNodeId(nodeIndex)].SystemStateInfo.SetStartTime(startTime.GetValue());
     }
@@ -411,7 +411,7 @@ public:
     Ydb::Maintenance::MaintenanceTaskResult CheckMaintenanceTaskCreate(
             const TString &taskUid,
             Ydb::StatusIds::StatusCode code,
-            const Ts&... actionGroups) 
+            const Ts&... actionGroups)
     {
         auto ev = std::make_unique<NCms::TEvCms::TEvCreateMaintenanceTaskRequest>();
         ev->Record.SetUserSID("test-user");

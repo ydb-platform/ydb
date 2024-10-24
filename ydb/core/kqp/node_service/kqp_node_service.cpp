@@ -100,7 +100,7 @@ public:
         // Subscribe for TableService config changes
         ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
+             new NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
              IEventHandle::FlagTrackDelivery);
 
         NActors::TMon* mon = AppData()->Mon;
@@ -126,8 +126,8 @@ private:
             hFunc(TEvKqpNode::TEvCancelKqpTasksRequest, HandleWork);
             hFunc(TEvents::TEvWakeup, HandleWork);
             // misc
-            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleWork);
-            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleWork);
+            hFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleWork);
+            hFunc(NConsole::NEvConsole::TEvConfigNotificationRequest, HandleWork);
             hFunc(TEvents::TEvUndelivered, HandleWork);
             hFunc(TEvents::TEvPoison, HandleWork);
             hFunc(NMon::TEvHttpInfo, HandleWork);
@@ -212,7 +212,7 @@ private:
             } else {
                 schedulerGroup = "";
             }
-        } 
+        }
 
         std::optional<ui64> querySchedulerGroup;
         if (msg.HasQueryCpuShare() && schedulerGroup) {
@@ -373,11 +373,11 @@ private:
     }
 
 private:
-    static void HandleWork(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
+    static void HandleWork(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
         LOG_D("Subscribed for config changes");
     }
 
-    void HandleWork(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    void HandleWork(NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto &event = ev->Get()->Record;
 
         if (event.GetConfig().GetTableServiceConfig().GetResourceManager().IsInitialized()) {
@@ -409,7 +409,7 @@ private:
             SetIteratorReadsQuotaSettings(event.GetConfig().GetTableServiceConfig().GetIteratorReadQuotaSettings());
         }
 
-        auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
+        auto responseEv = MakeHolder<NConsole::NEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
     }
 
@@ -462,11 +462,11 @@ private:
                 break;
             }
 
-            case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
+            case NConsole::NEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
                 LOG_C("Failed to deliver subscription request to config dispatcher");
                 break;
 
-            case NConsole::TEvConsole::EvConfigNotificationResponse:
+            case NConsole::NEvConsole::EvConfigNotificationResponse:
                 LOG_E("Failed to deliver config notification response");
                 break;
 

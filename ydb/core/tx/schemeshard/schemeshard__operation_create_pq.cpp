@@ -19,7 +19,7 @@ using namespace NSchemeShard;
 
 TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
                                                const NKikimrSchemeOp::TPersQueueGroupDescription& op,
-                                               TEvSchemeShard::EStatus& status, TString& errStr)
+                                               NEvSchemeShard::EStatus& status, TString& errStr)
 {
     TTopicInfo::TPtr pqGroupInfo = new TTopicInfo;
 
@@ -303,7 +303,7 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
+        NEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
 
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);

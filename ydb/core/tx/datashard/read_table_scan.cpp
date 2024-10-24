@@ -163,7 +163,7 @@ Y_FORCE_INLINE bool AddCell(TOutValue& row, NScheme::TTypeInfo type, const TCell
         val.set_int32_value(value);
         break;
     }
-    case NUdf::TDataType<NUdf::TDatetime64>::Id: 
+    case NUdf::TDataType<NUdf::TDatetime64>::Id:
     case NUdf::TDataType<NUdf::TTimestamp64>::Id:
     case NUdf::TDataType<NUdf::TInterval64>::Id: {
         i64 value;
@@ -171,7 +171,7 @@ Y_FORCE_INLINE bool AddCell(TOutValue& row, NScheme::TTypeInfo type, const TCell
             return false;
         val.set_int64_value(value);
         break;
-    }    
+    }
     case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
         const auto json = NBinaryJson::SerializeToJson(TStringBuf(cell.Data(), cell.Size()));
         val.set_text_value(json);
@@ -411,7 +411,7 @@ public:
             } else if (tx.GetApiVersion() == NKikimrTxUserProxy::TReadTableTransaction::YDB_V2) {
                 Writer = MakeHolder<TRowsToYdbResult>(tx, true);
             } else {
-                Writer = MakeHolder<TRowsToOldResult>(tx); 
+                Writer = MakeHolder<TRowsToOldResult>(tx);
             }
         } else {
             Writer = MakeHolder<TRowsToOldResult>(tx);
@@ -435,7 +435,7 @@ public:
             HFunc(TEvTxProcessing::TEvStreamQuotaResponse, Handle);
             HFunc(TEvents::TEvUndelivered, Undelivered);
             HFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
-            HFunc(TEvDataShard::TEvGetReadTableScanStateRequest, Handle);
+            HFunc(NEvDataShard::TEvGetReadTableScanStateRequest, Handle);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
         default:
             LOG_ERROR(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
@@ -518,10 +518,10 @@ private:
             Driver->Touch(EScan::Feed);
     }
 
-    void Handle(TEvDataShard::TEvGetReadTableScanStateRequest::TPtr &ev,
+    void Handle(NEvDataShard::TEvGetReadTableScanStateRequest::TPtr &ev,
                 const TActorContext &ctx)
     {
-        auto *response = new TEvDataShard::TEvGetReadTableScanStateResponse;
+        auto *response = new NEvDataShard::TEvGetReadTableScanStateResponse;
         response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
         response->Record.SetTxId(TxId);
@@ -633,7 +633,7 @@ private:
             return EScan::Feed;
 
         auto ctx = TActivationContext::AsActorContext().MakeFor(SelfId());
-        auto result = new TEvDataShard::TEvProposeTransactionResult(
+        auto result = new NEvDataShard::TEvProposeTransactionResult(
                           NKikimrTxDataShard::TX_KIND_SCAN,
                           ShardId,
                           TxId,

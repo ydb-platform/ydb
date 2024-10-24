@@ -66,7 +66,7 @@ bool TConfigurePartsAtTable::ProgressState(TOperationContext& context) {
     return false;
 }
 
-bool TConfigurePartsAtTable::HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) {
+bool TConfigurePartsAtTable::HandleReply(NEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) {
     LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 DebugHint() << " HandleReply " << ev->Get()->ToString()
                             << ", at schemeshard: " << context.SS->SelfTabletId());
@@ -84,7 +84,7 @@ bool TConfigurePartsAtTable::HandleReply(TEvDataShard::TEvProposeTransactionResu
 TProposeAtTable::TProposeAtTable(TOperationId id)
     : OperationId(id)
 {
-    IgnoreMessages(DebugHint(), {TEvDataShard::TEvProposeTransactionResult::EventType});
+    IgnoreMessages(DebugHint(), {NEvDataShard::TEvProposeTransactionResult::EventType});
 }
 
 bool TProposeAtTable::ProgressState(TOperationContext& context) {
@@ -106,7 +106,7 @@ bool TProposeAtTable::ProgressState(TOperationContext& context) {
     return false;
 }
 
-bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) {
+bool TProposeAtTable::HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) {
     LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 DebugHint() << " HandleReply TEvOperationPlan"
                             << ", step: " << ev->Get()->StepId
@@ -135,9 +135,9 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
     return true;
 }
 
-bool TProposeAtTable::HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) {
+bool TProposeAtTable::HandleReply(NEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) {
     LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " TEvDataShard::TEvSchemaChanged"
+                DebugHint() << " NEvDataShard::TEvSchemaChanged"
                             << " triggers early, save it"
                             << ", at schemeshard: " << context.SS->SelfTabletId());
 
@@ -148,7 +148,7 @@ bool TProposeAtTable::HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOpe
 
 // NCdcStreamState::TProposeAtTableDropSnapshot
 //
-bool TProposeAtTableDropSnapshot::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) {
+bool TProposeAtTableDropSnapshot::HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) {
     TProposeAtTable::HandleReply(ev, context);
 
     const auto* txState = context.SS->FindTx(OperationId);

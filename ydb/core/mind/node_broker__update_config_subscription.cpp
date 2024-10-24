@@ -9,7 +9,7 @@ namespace NNodeBroker {
 class TNodeBroker::TTxUpdateConfigSubscription : public TTransactionBase<TNodeBroker> {
 public:
     TTxUpdateConfigSubscription(TNodeBroker *self,
-                                TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr event)
+                                NEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr event)
         : TBase(self)
         , Event(std::move(event))
         , SubscriptionId(0)
@@ -45,11 +45,11 @@ public:
     }
 
 private:
-    TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr Event;
+    NEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr Event;
     ui64 SubscriptionId;
 };
 
-ITransaction *TNodeBroker::CreateTxUpdateConfigSubscription(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev)
+ITransaction *TNodeBroker::CreateTxUpdateConfigSubscription(NEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev)
 {
     return new TTxUpdateConfigSubscription(this, std::move(ev));
 }

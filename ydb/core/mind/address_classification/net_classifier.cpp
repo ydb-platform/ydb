@@ -73,7 +73,7 @@ private:
 
     void SubscribeForConfigUpdates() {
         const auto kind = static_cast<ui32>(NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem);
-        Send(MakeConfigsDispatcherID(Ctx().SelfID.NodeId()), new TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(kind));
+        Send(MakeConfigsDispatcherID(Ctx().SelfID.NodeId()), new NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(kind));
     }
 
     void HandleWhileWaiting(TEvNetClassifier::TEvSubscribe::TPtr& ev) {
@@ -96,8 +96,8 @@ private:
     STATEFN(Initing) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvNetClassifier::TEvSubscribe, HandleWhileIniting);
-            hFunc(TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleWhileIniting);
-            hFunc(TEvConfigsDispatcher::TEvGetConfigResponse, HandleWhileIniting);
+            hFunc(NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleWhileIniting);
+            hFunc(NEvConfigsDispatcher::TEvGetConfigResponse, HandleWhileIniting);
             hFunc(TEvents::TEvWakeup, HandleWhileIniting);
             hFunc(TEvNetClassifier::TEvUpdateTimedCounters, UpdateTimedCounters);
         default:
@@ -126,10 +126,10 @@ private:
 
     void RequestDistributableConfig() {
         const auto kind = static_cast<ui32>(NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem);
-        Send(MakeConfigsDispatcherID(Ctx().SelfID.NodeId()), new TEvConfigsDispatcher::TEvGetConfigRequest(kind));
+        Send(MakeConfigsDispatcherID(Ctx().SelfID.NodeId()), new NEvConfigsDispatcher::TEvGetConfigRequest(kind));
     }
 
-    void HandleWhileIniting(TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
+    void HandleWhileIniting(NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
         LOG_INFO_S(Ctx(), NKikimrServices::NET_CLASSIFIER, "subscribed to ConfigsDispatcher for NetData updates");
 
         // Subscription is set but the console tablet may still be unavailable hence it's a good idea to schedule a timeout event
@@ -169,7 +169,7 @@ private:
     }
 
     // Case 2: GetConfig request succeeded
-    void HandleWhileIniting(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev) {
+    void HandleWhileIniting(NEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev) {
         if (ShouldUseDistributableConfigOnInit(ev->Get()->Config)) {
             LOG_INFO_S(Ctx(), NKikimrServices::NET_CLASSIFIER, "will initialize from distributable config");
 
@@ -247,7 +247,7 @@ private:
 
     STATEFN(Working) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvConsole::TEvConfigNotificationRequest, HandleWhileWorking);
+            hFunc(NEvConsole::TEvConfigNotificationRequest, HandleWhileWorking);
             hFunc(TEvNetClassifier::TEvSubscribe, HandleWhileWorking);
             hFunc(NMon::TEvHttpInfo, HandleHttpRequest);
             hFunc(TEvNetClassifier::TEvUpdateTimedCounters, UpdateTimedCounters);
@@ -280,7 +280,7 @@ private:
                                                   NMon::IEvHttpInfoRes::EContentType::Custom));
     }
 
-    void HandleWhileWorking(TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    void HandleWhileWorking(NEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         const auto& rec = ev->Get()->Record;
 
         if (UpdateFromDistributableConfig(rec.GetConfig().GetNetClassifierDistributableConfig())) {
@@ -293,7 +293,7 @@ private:
         }
 
         // report success
-        auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
+        auto resp = MakeHolder<NEvConsole::TEvConfigNotificationResponse>(rec);
         Send(ev->Sender, resp.Release(), 0, ev->Cookie);
     }
 

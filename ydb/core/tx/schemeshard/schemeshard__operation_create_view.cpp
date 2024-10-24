@@ -36,10 +36,10 @@ public:
         return false;
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << " HandleReply TEvPrivate::TEvOperationPlan"
+        LOG_I(DebugHint() << " HandleReply NEvPrivate::TEvOperationPlan"
                 << ", step: " << step
         );
 

@@ -99,8 +99,8 @@ namespace NSchemeShardUT_Private {
 
         TFakeHiveState::TPtr GetHiveState() const;
         TAutoPtr<ITabletScheduledEventsGuard> EnableSchemeshardPipeRetries(TTestActorRuntime& runtime);
-        ui32 ReliablePropose(TTestActorRuntime& runtime, TEvSchemeShard::TEvModifySchemeTransaction* evTx, const TVector<TEvSchemeShard::EStatus>& expectedResults = {NKikimrScheme::StatusAccepted});
-        ui32 ReliablePropose(TTestActorRuntime& runtime, TEvSchemeShard::TEvCancelTx* evTx, const TVector<TEvSchemeShard::EStatus>& expectedResults = {NKikimrScheme::StatusAccepted});
+        ui32 ReliablePropose(TTestActorRuntime& runtime, NEvSchemeShard::TEvModifySchemeTransaction* evTx, const TVector<NEvSchemeShard::EStatus>& expectedResults = {NKikimrScheme::StatusAccepted});
+        ui32 ReliablePropose(TTestActorRuntime& runtime, NEvSchemeShard::TEvCancelTx* evTx, const TVector<NEvSchemeShard::EStatus>& expectedResults = {NKikimrScheme::StatusAccepted});
         ui32 ReliablePropose(TTestActorRuntime& runtime, TEvExport::TEvCancelExportRequest* ev, const TVector<Ydb::StatusIds::StatusCode>& expectedStatuses = {Ydb::StatusIds::SUCCESS});
         ui32 ReliablePropose(TTestActorRuntime& runtime, TEvExport::TEvForgetExportRequest* ev, const TVector<Ydb::StatusIds::StatusCode>& expectedStatuses = {Ydb::StatusIds::SUCCESS});
         ui32 ReliablePropose(TTestActorRuntime& runtime, TEvImport::TEvCancelImportRequest* ev, const TVector<Ydb::StatusIds::StatusCode>& expectedStatuses = {Ydb::StatusIds::SUCCESS});
@@ -131,7 +131,7 @@ namespace NSchemeShardUT_Private {
                                                       NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode,
                                                       ui64 hive = TTestTxConfig::Hive);
 
-        TEvSchemeShard::TEvInitRootShardResult::EStatus InitRoot(TTestActorRuntime& runtime, ui64 schemeRoot, const TActorId& sender, const TString& domainName, const TDomainsInfo::TDomain::TStoragePoolKinds& StoragePoolTypes = {}, const TString& owner = {});
+        NEvSchemeShard::TEvInitRootShardResult::EStatus InitRoot(TTestActorRuntime& runtime, ui64 schemeRoot, const TActorId& sender, const TString& domainName, const TDomainsInfo::TDomain::TStoragePoolKinds& StoragePoolTypes = {}, const TString& owner = {});
         void InitRootStoragePools(TTestActorRuntime& runtime, ui64 schemeRoot, const TActorId& sender, ui64 domainUid);
 
         void SetupLogging(TTestActorRuntime& runtime);

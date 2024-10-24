@@ -34,7 +34,7 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
     TTableInfo::TPtr TableInfo;
     THashMap<TTabletId, NKikimrTxDataShard::TEvConditionalEraseRowsRequest> RunOnTablets;
 
-    TTxRunConditionalErase(TSelf *self, TEvPrivate::TEvRunConditionalErase::TPtr& ev)
+    TTxRunConditionalErase(TSelf *self, NEvPrivate::TEvRunConditionalErase::TPtr& ev)
         : TRwTxBase(self)
         , TableInfo(nullptr)
     {
@@ -196,7 +196,7 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
                 continue;
             }
 
-            auto ev = MakeHolder<TEvDataShard::TEvConditionalEraseRowsRequest>();
+            auto ev = MakeHolder<NEvDataShard::TEvConditionalEraseRowsRequest>();
             ev->Record = std::move(request);
 
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Run conditional erase"
@@ -314,11 +314,11 @@ private:
 }; // TTxRunConditionalErase
 
 struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSchemeShard> {
-    TEvDataShard::TEvConditionalEraseRowsResponse::TPtr Ev;
+    NEvDataShard::TEvConditionalEraseRowsResponse::TPtr Ev;
     THolder<NSysView::TEvSysView::TEvUpdateTtlStats> StatsCollectorEv;
     TTableInfo::TPtr TableInfo;
 
-    TTxScheduleConditionalErase(TSelf* self, TEvDataShard::TEvConditionalEraseRowsResponse::TPtr& ev)
+    TTxScheduleConditionalErase(TSelf* self, NEvDataShard::TEvConditionalEraseRowsResponse::TPtr& ev)
         : TBase(self)
         , Ev(ev)
         , TableInfo(nullptr)
@@ -452,11 +452,11 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
 
 }; // TTxScheduleConditionalErase
 
-ITransaction* TSchemeShard::CreateTxRunConditionalErase(TEvPrivate::TEvRunConditionalErase::TPtr& ev) {
+ITransaction* TSchemeShard::CreateTxRunConditionalErase(NEvPrivate::TEvRunConditionalErase::TPtr& ev) {
     return new TTxRunConditionalErase(this, ev);
 }
 
-ITransaction* TSchemeShard::CreateTxScheduleConditionalErase(TEvDataShard::TEvConditionalEraseRowsResponse::TPtr& ev) {
+ITransaction* TSchemeShard::CreateTxScheduleConditionalErase(NEvDataShard::TEvConditionalEraseRowsResponse::TPtr& ev) {
     return new TTxScheduleConditionalErase(this, ev);
 }
 

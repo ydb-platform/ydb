@@ -11,7 +11,7 @@ class TJsonHiveStats : public TViewerPipeClient {
     using TBase = TViewerPipeClient;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
-    TAutoPtr<TEvHive::TEvResponseHiveDomainStats> HiveStats;
+    TAutoPtr<NEvHive::TEvResponseHiveDomainStats> HiveStats;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
 
@@ -29,7 +29,7 @@ public:
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         InitConfig(params);
         if (hiveId != 0 ) {
-            THolder<TEvHive::TEvRequestHiveDomainStats> request = MakeHolder<TEvHive::TEvRequestHiveDomainStats>();
+            THolder<NEvHive::TEvRequestHiveDomainStats> request = MakeHolder<NEvHive::TEvRequestHiveDomainStats>();
             request->Record.SetReturnFollowers(FromStringWithDefault(params.Get("followers"), false));
             request->Record.SetReturnMetrics(FromStringWithDefault(params.Get("metrics"), true));
             SendRequestToPipe(ConnectTabletPipe(hiveId), request.Release());
@@ -41,12 +41,12 @@ public:
 
     STATEFN(StateRequestedInfo) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvHive::TEvResponseHiveDomainStats, Handle);
+            hFunc(NEvHive::TEvResponseHiveDomainStats, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
-    void Handle(TEvHive::TEvResponseHiveDomainStats::TPtr& ev) {
+    void Handle(NEvHive::TEvResponseHiveDomainStats::TPtr& ev) {
         HiveStats = ev->Release();
         RequestDone();
     }
@@ -104,7 +104,7 @@ public:
             .Description = "timeout in ms",
             .Type = "integer",
         });
-        yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<TEvHive::TEvResponseHiveDomainStats::ProtoRecordType>());
+        yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<NEvHive::TEvResponseHiveDomainStats::ProtoRecordType>());
         return yaml;
     }
 };

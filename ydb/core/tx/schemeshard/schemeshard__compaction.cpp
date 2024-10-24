@@ -30,7 +30,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCompaction(const TSha
         << ", running# " << CompactionQueue->RunningSize() << " shards"
         << " at schemeshard " << TabletID());
 
-    std::unique_ptr<TEvDataShard::TEvCompactTable> request(new TEvDataShard::TEvCompactTable(pathId.OwnerId, pathId.LocalPathId));
+    std::unique_ptr<NEvDataShard::TEvCompactTable> request(new NEvDataShard::TEvCompactTable(pathId.OwnerId, pathId.LocalPathId));
     if (CompactionQueue->GetReadyQueue().GetConfig().CompactSinglePartedShards) {
         request->Record.SetCompactSinglePartedShards(true);
     }
@@ -72,7 +72,7 @@ void TSchemeShard::OnBackgroundCompactionTimeout(const TShardCompactionInfo& inf
         << " at schemeshard " << TabletID());
 }
 
-void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx) {
+void TSchemeShard::Handle(NEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx) {
     const auto& record = ev->Get()->Record;
 
     const TTabletId tabletId(record.GetTabletId());

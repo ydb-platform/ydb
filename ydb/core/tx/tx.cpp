@@ -21,21 +21,21 @@ TEvTxProxy::TEvProposeTransactionStatus::TEvProposeTransactionStatus(TEvTxProxy:
         Record.SetStepId(stepId);
 }
 
-TEvSubDomain::TEvConfigure::TEvConfigure(const NKikimrSubDomains::TProcessingParams &processing) {
+NEvSubDomain::TEvConfigure::TEvConfigure(const NKikimrSubDomains::TProcessingParams &processing) {
     Record.CopyFrom(processing);
 }
 
-TEvSubDomain::TEvConfigure::TEvConfigure(NKikimrSubDomains::TProcessingParams &&processing) {
+NEvSubDomain::TEvConfigure::TEvConfigure(NKikimrSubDomains::TProcessingParams &&processing) {
     Record.Swap(&processing);
 }
 
-TEvSubDomain::TEvConfigureStatus::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::EStatus status, ui64 tabletId) {
+NEvSubDomain::TEvConfigureStatus::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::EStatus status, ui64 tabletId) {
     Record.SetStatus(status);
     Record.SetOnTabletId(tabletId);
 }
 
-TAutoPtr<TEvSubDomain::TEvConfigure> CreateDomainConfigurationFromStatic(const TAppData *appdata) {
-    return new TEvSubDomain::TEvConfigure(ExtractProcessingParams(*appdata->DomainsInfo->GetDomain()));
+TAutoPtr<NEvSubDomain::TEvConfigure> CreateDomainConfigurationFromStatic(const TAppData *appdata) {
+    return new NEvSubDomain::TEvConfigure(ExtractProcessingParams(*appdata->DomainsInfo->GetDomain()));
 }
 
 }

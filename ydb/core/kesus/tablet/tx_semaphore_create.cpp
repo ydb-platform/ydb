@@ -8,7 +8,7 @@ struct TKesusTablet::TTxSemaphoreCreate : public TTxBase {
     const ui64 Cookie;
     const NKikimrKesus::TEvCreateSemaphore Record;
 
-    THolder<TEvKesus::TEvCreateSemaphoreResult> Reply;
+    THolder<NEvKesus::TEvCreateSemaphoreResult> Reply;
 
     TTxSemaphoreCreate(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvCreateSemaphore& record)
         : TTxBase(self)
@@ -22,7 +22,7 @@ struct TKesusTablet::TTxSemaphoreCreate : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_SEMAPHORE_CREATE; }
 
     void ReplyOk() {
-        Reply.Reset(new TEvKesus::TEvCreateSemaphoreResult(Record.GetProxyGeneration()));
+        Reply.Reset(new NEvKesus::TEvCreateSemaphoreResult(Record.GetProxyGeneration()));
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -36,7 +36,7 @@ struct TKesusTablet::TTxSemaphoreCreate : public TTxBase {
         if (Record.GetProxyGeneration() != 0 || Record.GetSessionId() != 0) {
             auto* proxy = Self->Proxies.FindPtr(Sender);
             if (!proxy || proxy->Generation != Record.GetProxyGeneration()) {
-                Reply.Reset(new TEvKesus::TEvCreateSemaphoreResult(
+                Reply.Reset(new NEvKesus::TEvCreateSemaphoreResult(
                     Record.GetProxyGeneration(),
                     Ydb::StatusIds::BAD_SESSION,
                     proxy ? "ProxyGeneration mismatch" : "Proxy is not registered"));
@@ -47,7 +47,7 @@ struct TKesusTablet::TTxSemaphoreCreate : public TTxBase {
 
             auto* session = Self->Sessions.FindPtr(Record.GetSessionId());
             if (!session || session->OwnerProxy != proxy) {
-                Reply.Reset(new TEvKesus::TEvCreateSemaphoreResult(
+                Reply.Reset(new NEvKesus::TEvCreateSemaphoreResult(
                     Record.GetProxyGeneration(),
                     session ? Ydb::StatusIds::BAD_SESSION : Ydb::StatusIds::SESSION_EXPIRED,
                     session ? "Session not attached" : "Session does not exist"));
@@ -60,12 +60,12 @@ struct TKesusTablet::TTxSemaphoreCreate : public TTxBase {
         auto* semaphore = Self->SemaphoresByName.Value(Record.GetName(), nullptr);
         if (semaphore) {
             if (semaphore->Ephemeral) {
-                Reply.Reset(new TEvKesus::TEvCreateSemaphoreResult(
+                Reply.Reset(new NEvKesus::TEvCreateSemaphoreResult(
                     Record.GetProxyGeneration(),
                     Ydb::StatusIds::PRECONDITION_FAILED,
                     "Cannot create semaphore due to ephemeral locks"));
             } else {
-                Reply.Reset(new TEvKesus::TEvCreateSemaphoreResult(
+                Reply.Reset(new NEvKesus::TEvCreateSemaphoreResult(
                     Record.GetProxyGeneration(),
                     Ydb::StatusIds::ALREADY_EXISTS,
                     "Semaphore already exists"));
@@ -74,7 +74,7 @@ struct TKesusTablet::TTxSemaphoreCreate : public TTxBase {
         }
 
         if (Self->Semaphores.size() >= MAX_SEMAPHORES_LIMIT) {
-            Reply.Reset(new TEvKesus::TEvCreateSemaphoreResult(
+            Reply.Reset(new NEvKesus::TEvCreateSemaphoreResult(
                 Record.GetProxyGeneration(),
                 Ydb::StatusIds::PRECONDITION_FAILED,
                 "Too many semaphores already exist"));
@@ -117,14 +117,14 @@ struct TKesusTablet::TTxSemaphoreCreate : public TTxBase {
     }
 };
 
-void TKesusTablet::Handle(TEvKesus::TEvCreateSemaphore::TPtr& ev) {
+void TKesusTablet::Handle(NEvKesus::TEvCreateSemaphore::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     VerifyKesusPath(record.GetKesusPath());
     TabletCounters->Cumulative()[COUNTER_REQS_SEMAPHORE_CREATE].Increment(1);
 
     if (record.GetLimit() <= 0) {
         Send(ev->Sender,
-            new TEvKesus::TEvCreateSemaphoreResult(
+            new NEvKesus::TEvCreateSemaphoreResult(
                 record.GetProxyGeneration(),
                 Ydb::StatusIds::BAD_REQUEST,
                 "Semaphores must have limit > 0"),
@@ -134,7 +134,7 @@ void TKesusTablet::Handle(TEvKesus::TEvCreateSemaphore::TPtr& ev) {
 
     if (record.GetName().size() > MAX_SEMAPHORE_NAME) {
         Send(ev->Sender,
-            new TEvKesus::TEvCreateSemaphoreResult(
+            new NEvKesus::TEvCreateSemaphoreResult(
                 record.GetProxyGeneration(),
                 Ydb::StatusIds::BAD_REQUEST,
                 "Semaphore name is too long"),
@@ -144,7 +144,7 @@ void TKesusTablet::Handle(TEvKesus::TEvCreateSemaphore::TPtr& ev) {
 
     if (record.GetData().size() > MAX_SEMAPHORE_DATA) {
         Send(ev->Sender,
-            new TEvKesus::TEvCreateSemaphoreResult(
+            new NEvKesus::TEvCreateSemaphoreResult(
                 record.GetProxyGeneration(),
                 Ydb::StatusIds::BAD_REQUEST,
                 "Semaphore data is too large"),

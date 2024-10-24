@@ -180,8 +180,8 @@ public:
     bool Reverse = false;
 
     // The original event handle
-    TEvDataShard::TEvRead::TPtr Ev;
-    TEvDataShard::TEvRead* Request = nullptr;
+    NEvDataShard::TEvRead::TPtr Ev;
+    NEvDataShard::TEvRead* Request = nullptr;
 
     // parallel to Request->Keys, but real data only in indices,
     // where in Request->Keys we have key prefix (here we have properly extended one).

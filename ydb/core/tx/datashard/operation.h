@@ -486,7 +486,7 @@ struct TInputOpData {
 };
 
 struct TOutputOpData {
-    using TResultPtr = THolder<TEvDataShard::TEvProposeTransactionResult>;
+    using TResultPtr = THolder<NEvDataShard::TEvProposeTransactionResult>;
     using TDelayedAcks = TVector<THolder<IEventHandle>>;
     using TOutReadSets = TMap<std::pair<ui64, ui64>, TString>; // source:target -> body
     using TChangeRecord = IDataShardChangeCollector::TChange;
@@ -531,9 +531,9 @@ public:
 
     virtual ~TValidatedTx() = default;
 
-    enum class EType { 
+    enum class EType {
         DataTx,
-        WriteTx 
+        WriteTx
     };
 
 public:
@@ -970,7 +970,7 @@ public:
 public:
     // Orbit used for tracking operation progress
     NLWTrace::TOrbit Orbit;
-    
+
     NWilson::TSpan OperationSpan;
 };
 

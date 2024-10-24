@@ -33,7 +33,7 @@ struct TKesusTablet::TTxSemaphoreDelete : public TTxBase {
             auto* proxy = Self->Proxies.FindPtr(Sender);
             if (!proxy || proxy->Generation != Record.GetProxyGeneration()) {
                 Events.emplace_back(Sender, Cookie,
-                    new TEvKesus::TEvDeleteSemaphoreResult(
+                    new NEvKesus::TEvDeleteSemaphoreResult(
                         Record.GetProxyGeneration(),
                         Ydb::StatusIds::BAD_SESSION,
                         proxy ? "ProxyGeneration mismatch" : "Proxy is not registered"));
@@ -45,7 +45,7 @@ struct TKesusTablet::TTxSemaphoreDelete : public TTxBase {
             auto* session = Self->Sessions.FindPtr(Record.GetSessionId());
             if (!session || session->OwnerProxy != proxy) {
                 Events.emplace_back(Sender, Cookie,
-                    new TEvKesus::TEvDeleteSemaphoreResult(
+                    new NEvKesus::TEvDeleteSemaphoreResult(
                         Record.GetProxyGeneration(),
                         session ? Ydb::StatusIds::BAD_SESSION : Ydb::StatusIds::SESSION_EXPIRED,
                         session ? "Session not attached" : "Session does not exist"));
@@ -58,7 +58,7 @@ struct TKesusTablet::TTxSemaphoreDelete : public TTxBase {
         auto* semaphore = Self->SemaphoresByName.Value(Record.GetName(), nullptr);
         if (!semaphore) {
             Events.emplace_back(Sender, Cookie,
-                new TEvKesus::TEvDeleteSemaphoreResult(
+                new NEvKesus::TEvDeleteSemaphoreResult(
                     Record.GetProxyGeneration(),
                     Ydb::StatusIds::NOT_FOUND,
                     "Semaphore does not exist"));
@@ -67,7 +67,7 @@ struct TKesusTablet::TTxSemaphoreDelete : public TTxBase {
 
         if (semaphore->Ephemeral) {
             Events.emplace_back(Sender, Cookie,
-                new TEvKesus::TEvDeleteSemaphoreResult(
+                new NEvKesus::TEvDeleteSemaphoreResult(
                     Record.GetProxyGeneration(),
                     Ydb::StatusIds::PRECONDITION_FAILED,
                     "Cannot delete ephemeral semaphores"));
@@ -76,7 +76,7 @@ struct TKesusTablet::TTxSemaphoreDelete : public TTxBase {
 
         if (!semaphore->IsEmpty() && !Record.GetForce()) {
             Events.emplace_back(Sender, Cookie,
-                new TEvKesus::TEvDeleteSemaphoreResult(
+                new NEvKesus::TEvDeleteSemaphoreResult(
                     Record.GetProxyGeneration(),
                     Ydb::StatusIds::PRECONDITION_FAILED,
                     "Semaphore not empty"));
@@ -85,7 +85,7 @@ struct TKesusTablet::TTxSemaphoreDelete : public TTxBase {
 
         Self->DoDeleteSemaphore(db, semaphore, Events);
         Events.emplace_back(Sender, Cookie,
-            new TEvKesus::TEvDeleteSemaphoreResult(Record.GetProxyGeneration()));
+            new NEvKesus::TEvDeleteSemaphoreResult(Record.GetProxyGeneration()));
         return true;
     }
 
@@ -101,7 +101,7 @@ struct TKesusTablet::TTxSemaphoreDelete : public TTxBase {
     }
 };
 
-void TKesusTablet::Handle(TEvKesus::TEvDeleteSemaphore::TPtr& ev) {
+void TKesusTablet::Handle(NEvKesus::TEvDeleteSemaphore::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     VerifyKesusPath(record.GetKesusPath());
     TabletCounters->Cumulative()[COUNTER_REQS_SEMAPHORE_DELETE].Increment(1);

@@ -72,7 +72,7 @@ namespace NKikimr::NBlobDepot {
 
             THashMap<ui64, std::tuple<ui32, ui64, TActorId>> BlockToDeliver; // TabletId -> (BlockedGeneration, IssuerGuid, ActorId)
 
-            THashMap<ui64, std::function<void(TEvBlobDepot::TEvPushNotifyResult::TPtr)>> PushCallbacks;
+            THashMap<ui64, std::function<void(NEvBlobDepot::TEvPushNotifyResult::TPtr)>> PushCallbacks;
             ui64 LastRequestId = 0;
 
             NKikimrBlobStorage::TPDiskSpaceColor::E LastPushedSpaceColor = {};
@@ -136,13 +136,13 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvTabletPipe::TEvServerConnected::TPtr ev);
         void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr ev);
         void OnAgentDisconnect(TAgent& agent);
-        void Handle(TEvBlobDepot::TEvRegisterAgent::TPtr ev);
+        void Handle(NEvBlobDepot::TEvRegisterAgent::TPtr ev);
         void OnAgentConnect(TAgent& agent);
-        void Handle(TEvBlobDepot::TEvAllocateIds::TPtr ev);
+        void Handle(NEvBlobDepot::TEvAllocateIds::TPtr ev);
         TAgent& GetAgent(const TActorId& pipeServerId);
         TAgent& GetAgent(ui32 nodeId);
         void ResetAgent(TAgent& agent);
-        void Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev);
+        void Handle(NEvBlobDepot::TEvPushNotifyResult::TPtr ev);
         void OnSpaceColorChange(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor, float approximateFreeSpaceShare);
 
         void ProcessRegisterAgentQ();
@@ -247,7 +247,7 @@ namespace NKikimr::NBlobDepot {
         bool Configured = false;
         NKikimrBlobDepot::TBlobDepotConfig Config;
 
-        void Handle(TEvBlobDepot::TEvApplyConfig::TPtr ev);
+        void Handle(NEvBlobDepot::TEvApplyConfig::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Blocks
@@ -267,8 +267,8 @@ namespace NKikimr::NBlobDepot {
         class TData;
         std::unique_ptr<TData> Data;
 
-        void Handle(TEvBlobDepot::TEvCommitBlobSeq::TPtr ev);
-        void Handle(TEvBlobDepot::TEvDiscardSpoiledBlobSeq::TPtr ev);
+        void Handle(NEvBlobDepot::TEvCommitBlobSeq::TPtr ev);
+        void Handle(NEvBlobDepot::TEvDiscardSpoiledBlobSeq::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Space monitoring
@@ -335,7 +335,7 @@ namespace NKikimr::NBlobDepot {
 
         void DoGroupMetricsExchange();
         void Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev);
-        void Handle(TEvBlobDepot::TEvPushMetrics::TPtr ev);
+        void Handle(NEvBlobDepot::TEvPushMetrics::TPtr ev);
         void UpdateThroughputs(bool reschedule = true);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

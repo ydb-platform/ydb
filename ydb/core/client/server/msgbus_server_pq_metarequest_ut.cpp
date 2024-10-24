@@ -112,11 +112,11 @@ protected:
         }
     }
 
-    THolder<TEvPersQueue::TEvUpdateBalancerConfig> MakeUpdateBalancerConfigRequest(const TString& topic, const TVector<std::pair<ui32, ui64>>& partitionsToTablets, const ui64 schemeShardId = 123) {
+    THolder<NEvPersQueue::TEvUpdateBalancerConfig> MakeUpdateBalancerConfigRequest(const TString& topic, const TVector<std::pair<ui32, ui64>>& partitionsToTablets, const ui64 schemeShardId = 123) {
         static int version = 0;
         ++version;
 
-        THolder<TEvPersQueue::TEvUpdateBalancerConfig> request = MakeHolder<TEvPersQueue::TEvUpdateBalancerConfig>();
+        THolder<NEvPersQueue::TEvUpdateBalancerConfig> request = MakeHolder<NEvPersQueue::TEvUpdateBalancerConfig>();
         for (const auto& p : partitionsToTablets) {
             auto* part = request->Record.AddPartitions();
             part->SetPartition(p.first);
@@ -146,11 +146,11 @@ protected:
         EnsureHasFakeSchemeShard();
         TActorId id = StartBalancer(balancerTabletId);
 
-        THolder<TEvPersQueue::TEvUpdateBalancerConfig> request = MakeUpdateBalancerConfigRequest(topic, partitionsToTablets, schemeShardId);
+        THolder<NEvPersQueue::TEvUpdateBalancerConfig> request = MakeUpdateBalancerConfigRequest(topic, partitionsToTablets, schemeShardId);
 
         Runtime->SendToPipe(balancerTabletId, EdgeActorId, request.Release(), 0, GetPipeConfigWithRetries());
         TAutoPtr<IEventHandle> handle;
-        TEvPersQueue::TEvUpdateConfigResponse* result = Runtime->GrabEdgeEvent<TEvPersQueue::TEvUpdateConfigResponse>(handle);
+        NEvPersQueue::TEvUpdateConfigResponse* result = Runtime->GrabEdgeEvent<NEvPersQueue::TEvUpdateConfigResponse>(handle);
 
         UNIT_ASSERT(result != nullptr);
         const auto& rec = result->Record;
@@ -165,11 +165,11 @@ protected:
         return id;
     }
 
-    THolder<TEvPersQueue::TEvUpdateConfig> MakeUpdatePQRequest(const TString& topic, const TVector<size_t>& partitions) {
+    THolder<NEvPersQueue::TEvUpdateConfig> MakeUpdatePQRequest(const TString& topic, const TVector<size_t>& partitions) {
         static int version = 0;
         ++version;
 
-        auto request = MakeHolder<TEvPersQueue::TEvUpdateConfigBuilder>();
+        auto request = MakeHolder<NEvPersQueue::TEvUpdateConfigBuilder>();
         for (size_t i : partitions) {
             request->Record.MutableTabletConfig()->AddPartitionIds(i);
         }
@@ -206,9 +206,9 @@ protected:
 
         TAutoPtr<IEventHandle> handle;
         {
-            THolder<TEvPersQueue::TEvUpdateConfig> request = MakeUpdatePQRequest(topic, partitions);
+            THolder<NEvPersQueue::TEvUpdateConfig> request = MakeUpdatePQRequest(topic, partitions);
             Runtime->SendToPipe(tabletId, EdgeActorId, request.Release(), 0, GetPipeConfigWithRetries());
-            TEvPersQueue::TEvUpdateConfigResponse* result = Runtime->GrabEdgeEvent<TEvPersQueue::TEvUpdateConfigResponse>(handle);
+            NEvPersQueue::TEvUpdateConfigResponse* result = Runtime->GrabEdgeEvent<NEvPersQueue::TEvUpdateConfigResponse>(handle);
 
             UNIT_ASSERT(result);
             auto& rec = result->Record;
@@ -244,20 +244,20 @@ protected:
         TestActors.insert(TestMainActorId);
     }
 
-    TEvPersQueue::TEvResponse* GrabResponseEvent() {
-        TEvPersQueue::TEvResponse* responseEvent = Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(EdgeEventHandle);
+    NEvPersQueue::TEvResponse* GrabResponseEvent() {
+        NEvPersQueue::TEvResponse* responseEvent = Runtime->GrabEdgeEvent<NEvPersQueue::TEvResponse>(EdgeEventHandle);
         UNIT_ASSERT(responseEvent);
         TestMainActorHasAnswered = true;
         return responseEvent;
     }
 
-    const TEvPersQueue::TEvResponse* GetResponse() {
+    const NEvPersQueue::TEvResponse* GetResponse() {
         UNIT_ASSERT(EdgeEventHandle.Get() != nullptr);
-        return EdgeEventHandle->Get<TEvPersQueue::TEvResponse>();
+        return EdgeEventHandle->Get<NEvPersQueue::TEvResponse>();
     }
 
     size_t ResponseFieldsCount() {
-        const TEvPersQueue::TEvResponse* resp = GetResponse();
+        const NEvPersQueue::TEvResponse* resp = GetResponse();
         UNIT_ASSERT(resp != nullptr);
         const auto& r = resp->Record;
         const auto& m = r.GetMetaResponse();
@@ -293,7 +293,7 @@ protected:
 
 
     void AssertTopicResponses(const TString& topic, NPersQueue::NErrorCode::EErrorCode code, ui32 numParts) {
-        const TEvPersQueue::TEvResponse* resp = GetResponse();
+        const NEvPersQueue::TEvResponse* resp = GetResponse();
         UNIT_ASSERT(resp != nullptr);
         for (auto& r : resp->Record.GetMetaResponse().GetCmdGetReadSessionsInfoResult().GetTopicResult()) {
             if (AssertTopicResponsesImpl(r, topic, code, numParts))
@@ -322,7 +322,7 @@ protected:
 
 
     void AssertFailedResponse(NPersQueue::NErrorCode::EErrorCode code, const THashSet<TString>& markers = {}, EResponseStatus status = MSTATUS_ERROR) {
-        const TEvPersQueue::TEvResponse* resp = GetResponse();
+        const NEvPersQueue::TEvResponse* resp = GetResponse();
         Cerr << "Assert failed: Check response: " << resp->Record << Endl;
         UNIT_ASSERT(resp != nullptr);
         UNIT_ASSERT_C(resp->Record.HasStatus(), "Response: " << resp->Record);
@@ -346,7 +346,7 @@ protected:
     }
 
     void AssertSucceededResponse() {
-        const TEvPersQueue::TEvResponse* resp = GetResponse();
+        const NEvPersQueue::TEvResponse* resp = GetResponse();
         UNIT_ASSERT(resp != nullptr);
         UNIT_ASSERT_VALUES_EQUAL_C(resp->Record.GetStatus(), 1, "Response: " << resp->Record);
         UNIT_ASSERT_C(resp->Record.HasErrorCode(), "Response: " << resp->Record);
@@ -357,7 +357,7 @@ protected:
 
     TTestActorRuntime::EEventAction EventsObserver(TAutoPtr<IEventHandle>& event) {
         switch (event->Type) {
-        case NKikimr::TEvPersQueue::EvResponse:
+        case NKikimr::NEvPersQueue::EvResponse:
             {
                 if (event->Sender == TestMainActorId) {
                     TestMainActorHasAnswered = true;
@@ -768,7 +768,7 @@ public:
         GrabResponseEvent();
         AssertSucceededResponse();
 
-        const TEvPersQueue::TEvResponse* resp = GetResponse(); // not nullptr is already asserted
+        const NEvPersQueue::TEvResponse* resp = GetResponse(); // not nullptr is already asserted
         UNIT_ASSERT_C(resp->Record.GetMetaResponse().HasCmdGetTopicMetadataResult(), "Response: " << resp->Record);
 
         const auto& res = resp->Record.GetMetaResponse().GetCmdGetTopicMetadataResult();
@@ -887,7 +887,7 @@ public:
         AssertSucceededResponse();
 
         // Check response
-        const TEvPersQueue::TEvResponse* resp = GetResponse(); // not nullptr is already asserted
+        const NEvPersQueue::TEvResponse* resp = GetResponse(); // not nullptr is already asserted
         UNIT_ASSERT(resp->Record.GetMetaResponse().HasCmdGetPartitionLocationsResult());
         auto perTopicResults = resp->Record.GetMetaResponse().GetCmdGetPartitionLocationsResult().GetTopicResult();
         UNIT_ASSERT_VALUES_EQUAL(perTopicResults.size(), 2);
@@ -940,7 +940,7 @@ public:
             AssertSucceededResponse();
 
             // Check response
-            const TEvPersQueue::TEvResponse* resp = GetResponse(); // not nullptr is already asserted
+            const NEvPersQueue::TEvResponse* resp = GetResponse(); // not nullptr is already asserted
             UNIT_ASSERT(resp->Record.GetMetaResponse().HasCmdGetPartitionLocationsResult());
             auto perTopicResults = resp->Record.GetMetaResponse().GetCmdGetPartitionLocationsResult().GetTopicResult();
             UNIT_ASSERT_VALUES_EQUAL(perTopicResults.size(), 2);
@@ -1052,7 +1052,7 @@ public:
         AssertSucceededResponse();
 
         // Check response
-        const TEvPersQueue::TEvResponse* resp = GetResponse(); // not nullptr is already asserted
+        const NEvPersQueue::TEvResponse* resp = GetResponse(); // not nullptr is already asserted
         UNIT_ASSERT(resp->Record.GetMetaResponse().HasCmdGetPartitionOffsetsResult());
         auto perTopicResults = resp->Record.GetMetaResponse().GetCmdGetPartitionOffsetsResult().GetTopicResult();
         UNIT_ASSERT_VALUES_EQUAL(perTopicResults.size(), 2);
@@ -1104,7 +1104,7 @@ public:
             AssertSucceededResponse();
 
             // Check response
-            const TEvPersQueue::TEvResponse* resp = GetResponse(); // not nullptr is already asserted
+            const NEvPersQueue::TEvResponse* resp = GetResponse(); // not nullptr is already asserted
             UNIT_ASSERT(resp->Record.GetMetaResponse().HasCmdGetPartitionOffsetsResult());
             auto perTopicResults = resp->Record.GetMetaResponse().GetCmdGetPartitionOffsetsResult().GetTopicResult();
             UNIT_ASSERT_VALUES_EQUAL(perTopicResults.size(), 2);
@@ -1146,7 +1146,7 @@ public:
                 }
             }
         };
-        TMessageBusServerPersQueueRequestCommonTest::HandlesPipeDisconnectionImpl<TEvPersQueue::TEvOffsetsResponse>(disconnectionMode, validation);
+        TMessageBusServerPersQueueRequestCommonTest::HandlesPipeDisconnectionImpl<NEvPersQueue::TEvOffsetsResponse>(disconnectionMode, validation);
     }
 };
 
@@ -1216,7 +1216,7 @@ public:
         AssertSucceededResponse();
 
         // Check response
-        const TEvPersQueue::TEvResponse* resp = GetResponse(); // not nullptr is already asserted
+        const NEvPersQueue::TEvResponse* resp = GetResponse(); // not nullptr is already asserted
         UNIT_ASSERT(resp->Record.GetMetaResponse().HasCmdGetPartitionStatusResult());
         auto perTopicResults = resp->Record.GetMetaResponse().GetCmdGetPartitionStatusResult().GetTopicResult();
         UNIT_ASSERT_VALUES_EQUAL(perTopicResults.size(), 2);
@@ -1263,7 +1263,7 @@ public:
             AssertSucceededResponse();
 
             // Check response
-            const TEvPersQueue::TEvResponse* resp = GetResponse(); // not nullptr is already asserted
+            const NEvPersQueue::TEvResponse* resp = GetResponse(); // not nullptr is already asserted
             UNIT_ASSERT(resp->Record.GetMetaResponse().HasCmdGetPartitionStatusResult());
             auto perTopicResults = resp->Record.GetMetaResponse().GetCmdGetPartitionStatusResult().GetTopicResult();
             UNIT_ASSERT_VALUES_EQUAL(perTopicResults.size(), 2);
@@ -1300,7 +1300,7 @@ public:
                 }
             }
         };
-        TMessageBusServerPersQueueRequestCommonTest::HandlesPipeDisconnectionImpl<TEvPersQueue::TEvStatusResponse>(disconnectionMode, validation);
+        TMessageBusServerPersQueueRequestCommonTest::HandlesPipeDisconnectionImpl<NEvPersQueue::TEvStatusResponse>(disconnectionMode, validation);
     }
 };
 
@@ -1364,7 +1364,7 @@ public:
         AssertSucceededResponse();
 
         // Check response
-        const TEvPersQueue::TEvResponse* resp = GetResponse(); // not nullptr is already asserted
+        const NEvPersQueue::TEvResponse* resp = GetResponse(); // not nullptr is already asserted
         UNIT_ASSERT(resp->Record.GetMetaResponse().HasCmdGetReadSessionsInfoResult());
         auto perTopicResults = resp->Record.GetMetaResponse().GetCmdGetReadSessionsInfoResult().GetTopicResult();
         UNIT_ASSERT_VALUES_EQUAL(perTopicResults.size(), 2);
@@ -1418,11 +1418,11 @@ public:
             AssertSucceededResponse();
 
             // Check response
-            const TEvPersQueue::TEvResponse* resp = GetResponse(); // not nullptr is already asserted
+            const NEvPersQueue::TEvResponse* resp = GetResponse(); // not nullptr is already asserted
             UNIT_ASSERT(resp->Record.GetMetaResponse().HasCmdGetReadSessionsInfoResult());
             auto perTopicResults = resp->Record.GetMetaResponse().GetCmdGetReadSessionsInfoResult().GetTopicResult();
             UNIT_ASSERT_VALUES_EQUAL(perTopicResults.size(), 2);
-            Cerr << "RESPONSE " << resp->Record.DebugString() << "\n"; 
+            Cerr << "RESPONSE " << resp->Record.DebugString() << "\n";
 
             {
                 const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1 ? perTopicResults.Get(0) : perTopicResults.Get(1);
@@ -1463,7 +1463,7 @@ public:
                 Y_UNUSED(disconnectionMode);
             }
         };
-        TMessageBusServerPersQueueRequestCommonTest::HandlesPipeDisconnectionImpl<TEvPersQueue::TEvOffsetsResponse>(disconnectionMode, validation, true);
+        TMessageBusServerPersQueueRequestCommonTest::HandlesPipeDisconnectionImpl<NEvPersQueue::TEvOffsetsResponse>(disconnectionMode, validation, true);
     }
 };
 

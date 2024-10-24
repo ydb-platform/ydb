@@ -33,13 +33,13 @@ std::pair<TTableInfoMap, ui64> GetTables(
     ui64 tabletId)
 {
     auto sender = runtime.AllocateEdgeActor();
-    auto request = MakeHolder<TEvDataShard::TEvGetInfoRequest>();
+    auto request = MakeHolder<NEvDataShard::TEvGetInfoRequest>();
     runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
     TTableInfoMap result;
 
     TAutoPtr<IEventHandle> handle;
-    auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetInfoResponse>(handle);
+    auto response = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvGetInfoResponse>(handle);
     for (auto& table: response->Record.GetUserTables()) {
         result[table.GetName()] = table;
     }
@@ -154,8 +154,8 @@ void CreateTableWithData(
     WriteData(runtime, name, 0, 100);
 }
 
-THolder<NConsole::TEvConsole::TEvConfigNotificationRequest> GetTestCompactionConfig() {
-    auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+THolder<NConsole::NEvConsole::TEvConfigNotificationRequest> GetTestCompactionConfig() {
+    auto request = MakeHolder<NConsole::NEvConsole::TEvConfigNotificationRequest>();
 
     // little hacks to simplify life
     auto* compactionConfig = request->Record.MutableConfig()->MutableCompactionConfig();
@@ -289,11 +289,11 @@ TCompactionStats GetCompactionStats(
 {
     auto sender = runtime.AllocateEdgeActor();
 
-    auto request = MakeHolder<TEvDataShard::TEvGetCompactTableStats>(ownerId, userTable.GetPathId());
+    auto request = MakeHolder<NEvDataShard::TEvGetCompactTableStats>(ownerId, userTable.GetPathId());
     runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
     TAutoPtr<IEventHandle> handle;
-    auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetCompactTableStatsResult>(handle);
+    auto response = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvGetCompactTableStatsResult>(handle);
     UNIT_ASSERT(response->Record.HasBackgroundCompactionRequests());
 
     return TCompactionStats(response->Record);
@@ -692,7 +692,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
         // now set our observer backed up by original
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvDataShard::EvCompactBorrowed:
+            case NEvDataShard::EvCompactBorrowed:
                 // we should not compact borrowed to check that background compaction
                 // will not compact shard with borrowed parts as well
                 ev.Reset();
@@ -743,7 +743,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
         // now set our observer backed up by original
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvDataShard::EvCompactTableResult: {
+            case NEvDataShard::EvCompactTableResult: {
                 ev.Reset();
                 ++compactionResultCount;
                 return TTestActorRuntime::EEventAction::DROP;
@@ -1069,7 +1069,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBorrowedCompactionTest) {
         // now set our observer backed up by original
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvDataShard::EvCompactBorrowed: {
+            case NEvDataShard::EvCompactBorrowed: {
                 ev.Reset();
                 ++borrowedRequests;
                 return TTestActorRuntime::EEventAction::DROP;
@@ -1138,7 +1138,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBorrowedCompactionTest) {
         // now set our observer backed up by original
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvDataShard::EvCompactBorrowed: {
+            case NEvDataShard::EvCompactBorrowed: {
                 ev.Reset();
                 ++borrowedRequests;
                 return TTestActorRuntime::EEventAction::DROP;
@@ -1221,7 +1221,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBorrowedCompactionTest) {
         // now set our observer backed up by original
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvDataShard::EvCompactBorrowed: {
+            case NEvDataShard::EvCompactBorrowed: {
                 ev.Reset();
                 ++borrowedRequests;
                 return TTestActorRuntime::EEventAction::DROP;

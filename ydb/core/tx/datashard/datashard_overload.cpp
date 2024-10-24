@@ -66,7 +66,7 @@ void TDataShard::NotifyOverloadSubscribers(ERejectReason reason) {
                     pipeServer->InterconnectSession,
                     actorId,
                     SelfId(),
-                    new TEvDataShard::TEvOverloadReady(TabletID(), entry.SeqNo));
+                    new NEvDataShard::TEvOverloadReady(TabletID(), entry.SeqNo));
                 pipeServer->OverloadSubscribers.erase(current);
             }
         }
@@ -88,7 +88,7 @@ void TDataShard::NotifyAllOverloadSubscribers() {
                 pipeServer->InterconnectSession,
                 actorId,
                 SelfId(),
-                new TEvDataShard::TEvOverloadReady(TabletID(), entry.SeqNo));
+                new NEvDataShard::TEvOverloadReady(TabletID(), entry.SeqNo));
         }
         pipeServer->OverloadSubscribers.clear();
         clearedSubscribers = true;
@@ -112,7 +112,7 @@ void TDataShard::DiscardOverloadSubscribers(TPipeServerInfo& pipeServer) {
     PipeServersWithOverloadSubscribers.Remove(&pipeServer);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx) {
     Y_UNUSED(ctx);
     auto* msg = ev->Get();
     if (auto* pipeServer = PipeServers.FindPtr(ev->Recipient)) {

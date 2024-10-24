@@ -56,7 +56,7 @@ public:
         BLOG_D("THive::TTxSwitchDrainOn::Complete NodeId: " << NodeId << " Status: " << Status);
         if (Status != NKikimrProto::OK) {
             if (Initiator) {
-                Self->Send(Initiator, new TEvHive::TEvDrainNodeResult(Status));
+                Self->Send(Initiator, new NEvHive::TEvDrainNodeResult(Status));
             }
         }
     }
@@ -101,7 +101,7 @@ public:
         BLOG_D("THive::TTxSwitchDrainOff::Complete NodeId: " << NodeId
             << " Status: " << NKikimrProto::EReplyStatus_Name(Status) << " Movements: " << Movements);
         for (const TActorId& initiator : Initiators) {
-            Self->Send(initiator, new TEvHive::TEvDrainNodeResult(Status, Movements));
+            Self->Send(initiator, new NEvHive::TEvDrainNodeResult(Status, Movements));
         }
     }
 };

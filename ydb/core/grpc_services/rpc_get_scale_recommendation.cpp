@@ -25,7 +25,7 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            hFunc(TEvHive::TEvResponseScaleRecommendation, Handle);
+            hFunc(NEvHive::TEvResponseScaleRecommendation, Handle);
 
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
@@ -88,13 +88,13 @@ public:
             PipeClient = this->RegisterWithSameMailbox(NTabletPipe::CreateClient(this->SelfId(), hiveId, config));
         }
 
-        auto ev = std::make_unique<TEvHive::TEvRequestScaleRecommendation>();
+        auto ev = std::make_unique<NEvHive::TEvRequestScaleRecommendation>();
         ev->Record.MutableDomainKey()->SetSchemeShard(domainKey.OwnerId);
         ev->Record.MutableDomainKey()->SetPathId(domainKey.LocalPathId);
         NTabletPipe::SendData(this->SelfId(), PipeClient, ev.release());
     }
 
-    void Handle(TEvHive::TEvResponseScaleRecommendation::TPtr& ev) {
+    void Handle(NEvHive::TEvResponseScaleRecommendation::TPtr& ev) {
         TResponse response;
         ui32 recommendedNodes = ev->Get()->Record.GetRecommendedNodes();
         response.mutable_recommended_resources()->add_computational_units()->set_count(recommendedNodes);

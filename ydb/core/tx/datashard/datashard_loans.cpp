@@ -59,11 +59,11 @@ void TDataShard::CompletedLoansChanged(const TActorContext &ctx) {
 // Accept returned part on the source datashard
 class TDataShard::TTxReturnBorrowedPart : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
-    TEvDataShard::TEvReturnBorrowedPart::TPtr Ev;
+    NEvDataShard::TEvReturnBorrowedPart::TPtr Ev;
     TVector<TLogoBlobID> PartMetaVec;
     ui64 FromTabletId;
 public:
-    TTxReturnBorrowedPart(TDataShard* ds, TEvDataShard::TEvReturnBorrowedPart::TPtr& ev)
+    TTxReturnBorrowedPart(TDataShard* ds, NEvDataShard::TEvReturnBorrowedPart::TPtr& ev)
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
         , Ev(ev)
     {}
@@ -90,7 +90,7 @@ public:
         TActorId ackTo = Ev->Sender;
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack parts " << PartMetaVec << " return to tablet " << FromTabletId);
 
-        ctx.Send(ackTo, new TEvDataShard::TEvReturnBorrowedPartAck(PartMetaVec), 0, Ev->Cookie);
+        ctx.Send(ackTo, new NEvDataShard::TEvReturnBorrowedPartAck(PartMetaVec), 0, Ev->Cookie);
         Self->CheckStateChange(ctx);
     }
 };
@@ -98,11 +98,11 @@ public:
 // Forget the returned part on the target after source Ack from the source
 class TDataShard::TTxReturnBorrowedPartAck : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
-    TEvDataShard::TEvReturnBorrowedPartAck::TPtr Ev;
+    NEvDataShard::TEvReturnBorrowedPartAck::TPtr Ev;
     TVector<TLogoBlobID> PartMetaVec;
 
 public:
-    TTxReturnBorrowedPartAck(TDataShard* ds, TEvDataShard::TEvReturnBorrowedPartAck::TPtr& ev)
+    TTxReturnBorrowedPartAck(TDataShard* ds, NEvDataShard::TEvReturnBorrowedPartAck::TPtr& ev)
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
         , Ev(ev)
     {}
@@ -133,11 +133,11 @@ public:
     }
 };
 
-void TDataShard::Handle(TEvDataShard::TEvReturnBorrowedPart::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvReturnBorrowedPart::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxReturnBorrowedPart(this, ev), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvReturnBorrowedPartAck::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvReturnBorrowedPartAck::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxReturnBorrowedPartAck(this, ev), ctx);
 }
 

@@ -174,12 +174,12 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCleanDroppedPaths() {
 
 void TSchemeShard::ScheduleCleanDroppedPaths() {
     if (!CleanDroppedPathsCandidates.empty() && !CleanDroppedPathsInFly && !CleanDroppedPathsDisabled) {
-        Send(SelfId(), new TEvPrivate::TEvCleanDroppedPaths);
+        Send(SelfId(), new NEvPrivate::TEvCleanDroppedPaths);
         CleanDroppedPathsInFly = true;
     }
 }
 
-void TSchemeShard::Handle(TEvPrivate::TEvCleanDroppedPaths::TPtr&, const TActorContext& ctx) {
+void TSchemeShard::Handle(NEvPrivate::TEvCleanDroppedPaths::TPtr&, const TActorContext& ctx) {
     Y_ABORT_UNLESS(CleanDroppedPathsInFly);
     Execute(CreateTxCleanDroppedPaths(), ctx);
 }
@@ -259,12 +259,12 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCleanDroppedSubDomains(
 
 void TSchemeShard::ScheduleCleanDroppedSubDomains() {
     if (!CleanDroppedSubDomainsCandidates.empty() && !CleanDroppedSubDomainsInFly && !CleanDroppedPathsDisabled) {
-        Send(SelfId(), new TEvPrivate::TEvCleanDroppedSubDomains);
+        Send(SelfId(), new NEvPrivate::TEvCleanDroppedSubDomains);
         CleanDroppedSubDomainsInFly = true;
     }
 }
 
-void TSchemeShard::Handle(TEvPrivate::TEvCleanDroppedSubDomains::TPtr&, const TActorContext& ctx) {
+void TSchemeShard::Handle(NEvPrivate::TEvCleanDroppedSubDomains::TPtr&, const TActorContext& ctx) {
     Y_ABORT_UNLESS(CleanDroppedSubDomainsInFly);
     Execute(CreateTxCleanDroppedSubDomains(), ctx);
 }

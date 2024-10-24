@@ -27,10 +27,10 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
     NKikimrTableStats::TTableStats GetTableStats(TTestActorRuntime& runtime, ui64 tabletId, ui64 tableId) {
         auto sender = runtime.AllocateEdgeActor();
-        auto request = MakeHolder<TEvDataShard::TEvGetTableStats>(tableId);
+        auto request = MakeHolder<NEvDataShard::TEvGetTableStats>(tableId);
         runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
-        auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetTableStatsResult>(sender);
+        auto ev = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvGetTableStatsResult>(sender);
         return ev->Get()->Record.GetTableStats();
     }
 
@@ -249,12 +249,12 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         auto opts = TShardedTableOptions()
             .Columns({
-                {"key", "Uint32", true, false}, 
-                {"value", "String", false, false}, 
+                {"key", "Uint32", true, false},
+                {"value", "String", false, false},
                 {"value2", "String", false, false, "hdd"}})
             .Families({
-                {.Name = "default", .LogPoolKind = "ssd", .SysLogPoolKind = "ssd", .DataPoolKind = "ssd", 
-                    .ExternalPoolKind = "ext", .DataThreshold = 100u, .ExternalThreshold = 200u}, 
+                {.Name = "default", .LogPoolKind = "ssd", .SysLogPoolKind = "ssd", .DataPoolKind = "ssd",
+                    .ExternalPoolKind = "ext", .DataThreshold = 100u, .ExternalThreshold = 200u},
                 {.Name = "hdd", .DataPoolKind = "hdd"}});
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
         const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
@@ -262,11 +262,11 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         TString smallValue(150, 'S');
         TString largeValue(1500, 'L');
-        ExecSQL(server, sender, (TString)"UPSERT INTO `/Root/table-1` (key, value, value2) VALUES " + 
-            "(1, \"AAA\", \"AAA\"), " + 
-            "(2, \"" + smallValue + "\", \"BBB\"), " + 
-            "(3, \"CCC\", \"" + smallValue + "\"), " + 
-            "(4, \"" + largeValue + "\", \"BBB\"), " + 
+        ExecSQL(server, sender, (TString)"UPSERT INTO `/Root/table-1` (key, value, value2) VALUES " +
+            "(1, \"AAA\", \"AAA\"), " +
+            "(2, \"" + smallValue + "\", \"BBB\"), " +
+            "(3, \"CCC\", \"" + smallValue + "\"), " +
+            "(4, \"" + largeValue + "\", \"BBB\"), " +
             "(5, \"CCC\", \"" + largeValue + "\")");
 
         {
@@ -320,7 +320,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         auto opts = TShardedTableOptions()
             .Columns({
-                {"key", "Uint32", true, false}, 
+                {"key", "Uint32", true, false},
                 {"value", "String", true, false}});
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
         const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
@@ -382,7 +382,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         auto opts = TShardedTableOptions()
             .Columns({
-                {"key", "Uint32", true, false}, 
+                {"key", "Uint32", true, false},
                 {"value", "Uint32", true, false}})
             .Policy(policy.Get());
 
@@ -478,7 +478,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
-        
+
         //runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
@@ -496,11 +496,11 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowUpdates(), 2);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 2);
-        }        
-        
+        }
+
         {
             auto selectResult = KqpSimpleStaleRoExec(runtime, "SELECT * FROM `/Root/table-1`", "/Root");
-            TString expectedSelectResult = 
+            TString expectedSelectResult =
                 "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
                 "{ items { uint32_value: 2 } items { uint32_value: 2 } }";
             UNIT_ASSERT_VALUES_EQUAL(selectResult, expectedSelectResult);
@@ -514,7 +514,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             UNIT_ASSERT_LE(stats.GetFollowerId(), 3);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRangeReadRows(), 2);
         }
-    }    
+    }
 
 } // Y_UNIT_TEST_SUITE(DataShardStats)
 

@@ -65,7 +65,7 @@ protected:
 
     // Response
     TActorId ResponseActorId;
-    TAutoPtr<TEvDataShard::TEvReshuffleKMeansResponse> Response;
+    TAutoPtr<NEvDataShard::TEvReshuffleKMeansResponse> Response;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType()
@@ -76,7 +76,7 @@ public:
     TReshuffleKMeansScanBase(const TUserTable& table, TLead&& lead,
                              const NKikimrTxDataShard::TEvReshuffleKMeansRequest& request,
                              const TActorId& responseActorId,
-                             TAutoPtr<TEvDataShard::TEvReshuffleKMeansResponse>&& response)
+                             TAutoPtr<NEvDataShard::TEvReshuffleKMeansResponse>&& response)
         : TActor{&TThis::StateWork}
         , Parent{request.GetParent()}
         , Child{request.GetChild()}
@@ -273,7 +273,7 @@ template <typename TMetric>
 class TReshuffleKMeansScan final: public TReshuffleKMeansScanBase, private TCalculation<TMetric> {
 public:
     TReshuffleKMeansScan(const TUserTable& table, TLead&& lead, NKikimrTxDataShard::TEvReshuffleKMeansRequest& request,
-                         const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvReshuffleKMeansResponse>&& response)
+                         const TActorId& responseActorId, TAutoPtr<NEvDataShard::TEvReshuffleKMeansResponse>&& response)
         : TReshuffleKMeansScanBase{table, std::move(lead), request, responseActorId, std::move(response)}
     {
         this->Dimensions = request.GetSettings().vector_dimension();
@@ -340,7 +340,7 @@ private:
 
 class TDataShard::TTxHandleSafeReshuffleKMeansScan final: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxHandleSafeReshuffleKMeansScan(TDataShard* self, TEvDataShard::TEvReshuffleKMeansRequest::TPtr&& ev)
+    TTxHandleSafeReshuffleKMeansScan(TDataShard* self, NEvDataShard::TEvReshuffleKMeansRequest::TPtr&& ev)
         : TTransactionBase(self)
         , Ev(std::move(ev))
     {
@@ -357,15 +357,15 @@ public:
     }
 
 private:
-    TEvDataShard::TEvReshuffleKMeansRequest::TPtr Ev;
+    NEvDataShard::TEvReshuffleKMeansRequest::TPtr Ev;
 };
 
-void TDataShard::Handle(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, const TActorContext&)
+void TDataShard::Handle(NEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, const TActorContext&)
 {
     Execute(new TTxHandleSafeReshuffleKMeansScan(this, std::move(ev)));
 }
 
-void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, const TActorContext& ctx)
+void TDataShard::HandleSafe(NEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, const TActorContext& ctx)
 {
     auto& record = ev->Get()->Record;
     TRowVersion rowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
@@ -377,7 +377,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
     }
     const ui64 id = record.GetId();
 
-    auto response = MakeHolder<TEvDataShard::TEvReshuffleKMeansResponse>();
+    auto response = MakeHolder<NEvDataShard::TEvReshuffleKMeansResponse>();
     response->Record.SetId(id);
     response->Record.SetTabletId(TabletID());
 

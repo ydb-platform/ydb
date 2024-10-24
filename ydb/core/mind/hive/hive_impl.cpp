@@ -28,14 +28,14 @@ Y_DECLARE_OUT_SPEC(inline, TArrayRef<const NKikimr::TSubDomainKey>, out, vec) {
 namespace NKikimr {
 namespace NHive {
 
-void THive::Handle(TEvHive::TEvCreateTablet::TPtr& ev) {
+void THive::Handle(NEvHive::TEvCreateTablet::TPtr& ev) {
     NKikimrHive::TEvCreateTablet& rec = ev->Get()->Record;
     if (rec.HasOwner() && rec.HasOwnerIdx() && rec.HasTabletType() && rec.BindedChannelsSize() != 0) {
-        BLOG_D("Handle TEvHive::TEvCreateTablet(" << rec.GetTabletType() << '(' << rec.GetOwner() << ',' << rec.GetOwnerIdx() << "))");
+        BLOG_D("Handle NEvHive::TEvCreateTablet(" << rec.GetTabletType() << '(' << rec.GetOwner() << ',' << rec.GetOwnerIdx() << "))");
         Execute(CreateCreateTablet(std::move(rec), ev->Sender, ev->Cookie));
     } else {
         BLOG_ERROR("Invalid arguments specified to TEvCreateTablet: " << rec.DebugString());
-        THolder<TEvHive::TEvCreateTabletReply> reply = MakeHolder<TEvHive::TEvCreateTabletReply>();
+        THolder<NEvHive::TEvCreateTabletReply> reply = MakeHolder<NEvHive::TEvCreateTabletReply>();
         reply->Record.SetStatus(NKikimrProto::EReplyStatus::ERROR);
         reply->Record.SetErrorReason(NKikimrHive::EErrorReason::ERROR_REASON_INVALID_ARGUMENTS);
         if (rec.HasOwner()) {
@@ -48,8 +48,8 @@ void THive::Handle(TEvHive::TEvCreateTablet::TPtr& ev) {
     }
 }
 
-void THive::Handle(TEvHive::TEvAdoptTablet::TPtr& ev) {
-    BLOG_D("Handle TEvHive::TEvAdoptTablet");
+void THive::Handle(NEvHive::TEvAdoptTablet::TPtr& ev) {
+    BLOG_D("Handle NEvHive::TEvAdoptTablet");
     NKikimrHive::TEvAdoptTablet& rec = ev->Get()->Record;
     Y_ABORT_UNLESS(rec.HasOwner() && rec.HasOwnerIdx() && rec.HasTabletType());
     Execute(CreateAdoptTablet(rec, ev->Sender, ev->Cookie));
@@ -157,7 +157,7 @@ bool THive::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorCo
     return true;
 }
 
-void THive::Handle(TEvHive::TEvStopTablet::TPtr& ev) {
+void THive::Handle(NEvHive::TEvStopTablet::TPtr& ev) {
     BLOG_D("Handle StopTablet");
     NKikimrHive::TEvStopTablet& rec = ev->Get()->Record;
     const TActorId actorToNotify = rec.HasActorToNotify() ? ActorIdFromProto(rec.GetActorToNotify()) : ev->Sender;
@@ -165,15 +165,15 @@ void THive::Handle(TEvHive::TEvStopTablet::TPtr& ev) {
 
     } else {
         Y_ENSURE_LOG(rec.HasTabletID(), rec.ShortDebugString());
-        Send(actorToNotify, new TEvHive::TEvStopTabletResult(NKikimrProto::ERROR, 0), 0, ev->Cookie);
+        Send(actorToNotify, new NEvHive::TEvStopTabletResult(NKikimrProto::ERROR, 0), 0, ev->Cookie);
     }
 }
 
-void THive::Handle(TEvHive::TEvDeleteTablet::TPtr& ev) {
+void THive::Handle(NEvHive::TEvDeleteTablet::TPtr& ev) {
     Execute(CreateDeleteTablet(ev));
 }
 
-void THive::Handle(TEvHive::TEvDeleteOwnerTablets::TPtr& ev) {
+void THive::Handle(NEvHive::TEvDeleteOwnerTablets::TPtr& ev) {
     Execute(CreateDeleteOwnerTablets(ev));
 }
 
@@ -374,7 +374,7 @@ void THive::Handle(TEvPrivate::TEvStartStorageBalancer::TPtr& ev) {
     StartHiveStorageBalancer(std::move(ev->Get()->Settings));
 }
 
-void THive::Handle(TEvHive::TEvBootTablet::TPtr& ev) {
+void THive::Handle(NEvHive::TEvBootTablet::TPtr& ev) {
     TTabletId tabletId = ev->Get()->Record.GetTabletID();
     TTabletInfo* tablet = FindTablet(tabletId);
     Y_ABORT_UNLESS(tablet != nullptr);
@@ -553,8 +553,8 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
             // -- this is first time boot or incomplete configuration.
             BLOG_I("Primary(Sub)DomainKey is not set, setting it from TTabletStorageInfo::TenantPathId to " << Info()->TenantPathId);
 
-            auto msg = MakeHolder<TEvHive::TEvConfigureHive>(TSubDomainKey(Info()->TenantPathId.OwnerId, Info()->TenantPathId.LocalPathId));
-            TEvHive::TEvConfigureHive::TPtr event((TEventHandle<TEvHive::TEvConfigureHive>*) new IEventHandle(
+            auto msg = MakeHolder<NEvHive::TEvConfigureHive>(TSubDomainKey(Info()->TenantPathId.OwnerId, Info()->TenantPathId.LocalPathId));
+            NEvHive::TEvConfigureHive::TPtr event((TEventHandle<NEvHive::TEvConfigureHive>*) new IEventHandle(
                 TActorId(), TActorId(), msg.Release()
             ));
             Execute(CreateConfigureSubdomain(event));
@@ -562,7 +562,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
 
         if (!TabletOwnersSynced) {
             // this code should be removed later
-            THolder<TEvHive::TEvRequestTabletOwners> request(new TEvHive::TEvRequestTabletOwners());
+            THolder<NEvHive::TEvRequestTabletOwners> request(new NEvHive::TEvRequestTabletOwners());
             request->Record.SetOwnerID(TabletID());
             BLOG_D("Requesting TabletOwners from the Root");
             SendToRootHivePipe(request.Release());
@@ -570,7 +570,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         }
     }
     if (!tabletsToReleaseFromParent.empty()) {
-        THolder<TEvHive::TEvReleaseTablets> request(new TEvHive::TEvReleaseTablets());
+        THolder<NEvHive::TEvReleaseTablets> request(new NEvHive::TEvReleaseTablets());
         request->Record.SetNewOwnerID(TabletID());
         for (TTabletId tabletId : tabletsToReleaseFromParent) {
             request->Record.AddTabletIDs(tabletId);
@@ -580,12 +580,12 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
     ProcessPendingOperations();
 }
 
-void THive::Handle(TEvHive::TEvInitMigration::TPtr& ev) {
+void THive::Handle(NEvHive::TEvInitMigration::TPtr& ev) {
     BLOG_D("Handle InitMigration " << ev->Get()->Record);
     if (MigrationState == NKikimrHive::EMigrationState::MIGRATION_READY || MigrationState == NKikimrHive::EMigrationState::MIGRATION_COMPLETE) {
         if (ev->Get()->Record.GetMigrationFilter().GetFilterDomain().GetSchemeShard() == 0 && GetMySubDomainKey().GetSchemeShard() == 0) {
             BLOG_ERROR("Migration ignored - unknown domain");
-            Send(ev->Sender, new TEvHive::TEvInitMigrationReply(NKikimrProto::ERROR));
+            Send(ev->Sender, new NEvHive::TEvInitMigrationReply(NKikimrProto::ERROR));
             return;
         }
         MigrationFilter = ev->Get()->Record.GetMigrationFilter();
@@ -600,17 +600,17 @@ void THive::Handle(TEvHive::TEvInitMigration::TPtr& ev) {
         }
         MigrationFilter.SetNewOwnerID(TabletID());
         BLOG_D("Requesting migration " << MigrationFilter.ShortDebugString());
-        SendToRootHivePipe(new TEvHive::TEvSeizeTablets(MigrationFilter));
-        Send(ev->Sender, new TEvHive::TEvInitMigrationReply(NKikimrProto::OK));
+        SendToRootHivePipe(new NEvHive::TEvSeizeTablets(MigrationFilter));
+        Send(ev->Sender, new NEvHive::TEvInitMigrationReply(NKikimrProto::OK));
     } else {
         BLOG_D("Migration already in progress " << MigrationProgress);
-        Send(ev->Sender, new TEvHive::TEvInitMigrationReply(NKikimrProto::ALREADY));
+        Send(ev->Sender, new NEvHive::TEvInitMigrationReply(NKikimrProto::ALREADY));
     }
 }
 
-void THive::Handle(TEvHive::TEvQueryMigration::TPtr& ev) {
+void THive::Handle(NEvHive::TEvQueryMigration::TPtr& ev) {
     BLOG_D("Handle QueryMigration");
-    Send(ev->Sender, new TEvHive::TEvQueryMigrationReply(MigrationState, MigrationProgress));
+    Send(ev->Sender, new NEvHive::TEvQueryMigrationReply(MigrationState, MigrationProgress));
 }
 
 void THive::OnDetach(const TActorContext&) {
@@ -679,7 +679,7 @@ void THive::Cleanup() {
     BLOG_D("THive::Cleanup");
 
     Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-        new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest());
+        new NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest());
 
     while (!SubActors.empty()) {
         SubActors.front()->Cleanup();
@@ -736,7 +736,7 @@ void THive::Handle(TEvPrivate::TEvProcessDisconnectNode::TPtr& ev) {
     }
 }
 
-void THive::Handle(TEvHive::TEvTabletMetrics::TPtr& ev) {
+void THive::Handle(NEvHive::TEvTabletMetrics::TPtr& ev) {
     TNodeId nodeId = ev->Sender.NodeId();
     BLOG_TRACE("THive::Handle::TEvTabletMetrics, NodeId " << nodeId << " " << ev->Get()->Record.ShortDebugString());
     if (UpdateTabletMetricsInProgress < MAX_UPDATE_TABLET_METRICS_IN_PROGRESS) {
@@ -846,7 +846,7 @@ void THive::Handle(TEvPrivate::TEvKickTablet::TPtr &ev) {
     }
 }
 
-void THive::Handle(TEvHive::TEvInitiateBlockStorage::TPtr& ev) {
+void THive::Handle(NEvHive::TEvInitiateBlockStorage::TPtr& ev) {
     TTabletId tabletId = ev->Get()->TabletId;
     BLOG_D("THive::Handle::TEvInitiateBlockStorage TabletId=" << tabletId);
     TSideEffects sideEffects;
@@ -865,7 +865,7 @@ void THive::Handle(TEvHive::TEvInitiateBlockStorage::TPtr& ev) {
     sideEffects.Complete(DEPRECATED_CTX);
 }
 
-void THive::Handle(TEvHive::TEvInitiateDeleteStorage::TPtr &ev) {
+void THive::Handle(NEvHive::TEvInitiateDeleteStorage::TPtr &ev) {
     TTabletId tabletId = ev->Get()->TabletId;
     BLOG_D("THive::Handle::TEvInitiateDeleteStorage TabletId=" << tabletId);
     TSideEffects sideEffects;
@@ -877,7 +877,7 @@ void THive::Handle(TEvHive::TEvInitiateDeleteStorage::TPtr &ev) {
     sideEffects.Complete(DEPRECATED_CTX);
 }
 
-void THive::Handle(TEvHive::TEvGetTabletStorageInfo::TPtr& ev) {
+void THive::Handle(NEvHive::TEvGetTabletStorageInfo::TPtr& ev) {
     TTabletId tabletId = ev->Get()->Record.GetTabletID();
     BLOG_D("THive::Handle::TEvGetTabletStorageInfo TabletId=" << tabletId);
 
@@ -886,7 +886,7 @@ void THive::Handle(TEvHive::TEvGetTabletStorageInfo::TPtr& ev) {
         // Tablet doesn't exist
         Send(
             ev->Sender,
-            new TEvHive::TEvGetTabletStorageInfoResult(tabletId, NKikimrProto::ERROR, "Tablet doesn't exist"),
+            new NEvHive::TEvGetTabletStorageInfoResult(tabletId, NKikimrProto::ERROR, "Tablet doesn't exist"),
             0, ev->Cookie);
         return;
     }
@@ -899,20 +899,20 @@ void THive::Handle(TEvHive::TEvGetTabletStorageInfo::TPtr& ev) {
                 << ETabletStateName(tablet->State));
         Send(
             ev->Sender,
-            new TEvHive::TEvGetTabletStorageInfoResult(tabletId, NKikimrProto::ERROR, "Tablet is in an unexpected state"),
+            new NEvHive::TEvGetTabletStorageInfoResult(tabletId, NKikimrProto::ERROR, "Tablet is in an unexpected state"),
             0, ev->Cookie);
         break;
     case ETabletState::Deleting:
     case ETabletState::GroupAssignment:
         // We need to subscribe until group assignment or deletion is finished
         tablet->StorageInfoSubscribers.emplace_back(ev->Sender);
-        Send(ev->Sender, new TEvHive::TEvGetTabletStorageInfoRegistered(tabletId), 0, ev->Cookie);
+        Send(ev->Sender, new NEvHive::TEvGetTabletStorageInfoRegistered(tabletId), 0, ev->Cookie);
         break;
     default:
         // Return what we have right now
         Send(
             ev->Sender,
-            new TEvHive::TEvGetTabletStorageInfoResult(tabletId, *tablet->TabletStorageInfo),
+            new NEvHive::TEvGetTabletStorageInfoResult(tabletId, *tablet->TabletStorageInfo),
             0, ev->Cookie);
         break;
     }
@@ -948,7 +948,7 @@ void THive::Handle(TEvents::TEvUndelivered::TPtr &ev) {
     };
 }
 
-void THive::Handle(TEvHive::TEvReassignTablet::TPtr &ev) {
+void THive::Handle(NEvHive::TEvReassignTablet::TPtr &ev) {
     BLOG_D("THive::TEvReassignTablet " << ev->Get()->Record.ShortUtf8DebugString());
     TLeaderTabletInfo* tablet = FindTablet(ev->Get()->Record.GetTabletID());
     if (tablet != nullptr) {
@@ -1003,7 +1003,7 @@ void THive::OnActivateExecutor(const TActorContext&) {
     SpreadNeighbours = ClusterConfig.GetSpreadNeighbours();
     NodeBrokerEpoch = TDuration::MicroSeconds(NKikimrNodeBroker::TConfig().GetEpochDuration());
     Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-        new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({NKikimrConsole::TConfigItem::HiveConfigItem, NKikimrConsole::TConfigItem::NodeBrokerConfigItem}));
+        new NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({NKikimrConsole::TConfigItem::HiveConfigItem, NKikimrConsole::TConfigItem::NodeBrokerConfigItem}));
     Execute(CreateInitScheme());
     if (!ResponsivenessPinger) {
         ResponsivenessPinger = new TTabletResponsivenessPinger(TabletCounters->Simple()[NHive::COUNTER_RESPONSE_TIME_USEC], TDuration::Seconds(1));
@@ -1108,7 +1108,7 @@ void THive::RestartRootHivePipe() {
     }
     // trying to restart migration
     if (MigrationState == NKikimrHive::EMigrationState::MIGRATION_ACTIVE) {
-        SendToRootHivePipe(new TEvHive::TEvSeizeTablets(MigrationFilter));
+        SendToRootHivePipe(new NEvHive::TEvSeizeTablets(MigrationFilter));
     }
 }
 
@@ -1922,9 +1922,9 @@ void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabl
     }
 }
 
-void THive::Handle(TEvHive::TEvRequestHiveInfo::TPtr& ev) {
+void THive::Handle(NEvHive::TEvRequestHiveInfo::TPtr& ev) {
     const auto& record = ev->Get()->Record;
-    TAutoPtr<TEvHive::TEvResponseHiveInfo> response = new TEvHive::TEvResponseHiveInfo();
+    TAutoPtr<NEvHive::TEvResponseHiveInfo> response = new NEvHive::TEvResponseHiveInfo();
     if (record.HasTabletID()) {
         TTabletId tabletId = record.GetTabletID();
         NKikimrHive::TForwardRequest forwardRequest;
@@ -1977,7 +1977,7 @@ NKikimrTabletBase::TMetrics& operator +=(NKikimrTabletBase::TMetrics& metrics, c
     return metrics;
 }
 
-void THive::Handle(TEvHive::TEvRequestHiveDomainStats::TPtr& ev) {
+void THive::Handle(NEvHive::TEvRequestHiveDomainStats::TPtr& ev) {
     struct TSubDomainStats {
         THashMap<TTabletInfo::EVolatileState, ui32> StateCounter;
         THashSet<TNodeId> NodeIds;
@@ -2008,7 +2008,7 @@ void THive::Handle(TEvHive::TEvRequestHiveDomainStats::TPtr& ev) {
         }
     }
 
-    THolder<TEvHive::TEvResponseHiveDomainStats> response = MakeHolder<TEvHive::TEvResponseHiveDomainStats>();
+    THolder<NEvHive::TEvResponseHiveDomainStats> response = MakeHolder<NEvHive::TEvResponseHiveDomainStats>();
     auto& record = response->Record;
 
     for (const auto& pr1 : subDomainStats) {
@@ -2032,11 +2032,11 @@ void THive::Handle(TEvHive::TEvRequestHiveDomainStats::TPtr& ev) {
     Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
 
-void THive::Handle(TEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
+void THive::Handle(NEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
     const auto& request(ev->Get()->Record);
     TInstant now = TActivationContext::Now();
     TInstant restartsBarrierTime = now - GetNodeRestartWatchPeriod();
-    THolder<TEvHive::TEvResponseHiveNodeStats> response = MakeHolder<TEvHive::TEvResponseHiveNodeStats>();
+    THolder<NEvHive::TEvResponseHiveNodeStats> response = MakeHolder<NEvHive::TEvResponseHiveNodeStats>();
     auto& record = response->Record;
     if (request.GetReturnExtendedTabletInfo()) {
         record.SetExtendedTabletInfo(true);
@@ -2124,8 +2124,8 @@ void THive::Handle(TEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
     Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
 
-void THive::Handle(TEvHive::TEvRequestHiveStorageStats::TPtr& ev) {
-    THolder<TEvHive::TEvResponseHiveStorageStats> response = MakeHolder<TEvHive::TEvResponseHiveStorageStats>();
+void THive::Handle(NEvHive::TEvRequestHiveStorageStats::TPtr& ev) {
+    THolder<NEvHive::TEvResponseHiveStorageStats> response = MakeHolder<NEvHive::TEvResponseHiveStorageStats>();
     auto& record = response->Record;
     for (const auto& [name, pool] : StoragePools) {
         auto& pbPool = *record.AddPools();
@@ -2147,25 +2147,25 @@ void THive::Handle(TEvHive::TEvRequestHiveStorageStats::TPtr& ev) {
     Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
 
-void THive::Handle(TEvHive::TEvLookupTablet::TPtr& ev) {
+void THive::Handle(NEvHive::TEvLookupTablet::TPtr& ev) {
     const auto& request(ev->Get()->Record);
     TOwnerIdxType::TValueType ownerIdx(request.GetOwner(), request.GetOwnerIdx());
     auto itOwner = OwnerToTablet.find(ownerIdx);
     if (itOwner == OwnerToTablet.end()) {
-        Send(ev->Sender, new TEvHive::TEvCreateTabletReply(NKikimrProto::NODATA, ownerIdx.first, ownerIdx.second), 0, ev->Cookie);
+        Send(ev->Sender, new NEvHive::TEvCreateTabletReply(NKikimrProto::NODATA, ownerIdx.first, ownerIdx.second), 0, ev->Cookie);
     } else {
-        Send(ev->Sender, new TEvHive::TEvCreateTabletReply(NKikimrProto::OK, ownerIdx.first, ownerIdx.second, itOwner->second), 0, ev->Cookie);
+        Send(ev->Sender, new NEvHive::TEvCreateTabletReply(NKikimrProto::OK, ownerIdx.first, ownerIdx.second, itOwner->second), 0, ev->Cookie);
     }
 }
 
-void THive::Handle(TEvHive::TEvLookupChannelInfo::TPtr& ev) {
+void THive::Handle(NEvHive::TEvLookupChannelInfo::TPtr& ev) {
     const auto& request(ev->Get()->Record);
     const TLeaderTabletInfo* tablet = FindTablet(request.GetTabletID());
     if (tablet == nullptr) {
-        Send(ev->Sender, new TEvHive::TEvChannelInfo(NKikimrProto::ERROR, request.GetTabletID()));
+        Send(ev->Sender, new NEvHive::TEvChannelInfo(NKikimrProto::ERROR, request.GetTabletID()));
         return;
     }
-    TAutoPtr<TEvHive::TEvChannelInfo> response = new TEvHive::TEvChannelInfo(NKikimrProto::OK, tablet->Id);
+    TAutoPtr<NEvHive::TEvChannelInfo> response = new NEvHive::TEvChannelInfo(NKikimrProto::OK, tablet->Id);
     for (const TTabletChannelInfo& channelInfo : tablet->TabletStorageInfo->Channels) {
         if (request.ChannelsSize() > 0 ) {
             const auto& channels(request.GetChannels());
@@ -2187,11 +2187,11 @@ void THive::Handle(TEvHive::TEvLookupChannelInfo::TPtr& ev) {
     Send(ev->Sender, response.Release());
 }
 
-void THive::Handle(TEvHive::TEvCutTabletHistory::TPtr& ev) {
+void THive::Handle(NEvHive::TEvCutTabletHistory::TPtr& ev) {
     Execute(CreateCutTabletHistory(ev));
 }
 
-void THive::Handle(TEvHive::TEvDrainNode::TPtr& ev) {
+void THive::Handle(NEvHive::TEvDrainNode::TPtr& ev) {
     NKikimrHive::EDrainDownPolicy policy;
     if (!ev->Get()->Record.HasDownPolicy() && ev->Get()->Record.HasKeepDown()) {
         if (ev->Get()->Record.GetKeepDown()) {
@@ -2210,16 +2210,16 @@ void THive::Handle(TEvHive::TEvDrainNode::TPtr& ev) {
     }, ev->Sender));
 }
 
-void THive::Handle(TEvHive::TEvFillNode::TPtr& ev) {
+void THive::Handle(NEvHive::TEvFillNode::TPtr& ev) {
     StartHiveFill(ev->Get()->Record.GetNodeID(), ev->Sender);
 }
 
-void THive::Handle(TEvHive::TEvInitiateTabletExternalBoot::TPtr& ev) {
+void THive::Handle(NEvHive::TEvInitiateTabletExternalBoot::TPtr& ev) {
     TTabletId tabletId = ev->Get()->Record.GetTabletID();
     TLeaderTabletInfo* tablet = FindTablet(tabletId);
 
     if (!tablet) {
-        Send(ev->Sender, new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::ERROR), 0, ev->Cookie);
+        Send(ev->Sender, new NEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::ERROR), 0, ev->Cookie);
         BLOG_ERROR("Tablet not found " << tabletId);
         return;
     }
@@ -2227,13 +2227,13 @@ void THive::Handle(TEvHive::TEvInitiateTabletExternalBoot::TPtr& ev) {
     if (tablet->State == ETabletState::GroupAssignment ||
         tablet->State == ETabletState::BlockStorage)
     {
-        Send(ev->Sender, new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::TRYLATER), 0, ev->Cookie);
+        Send(ev->Sender, new NEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::TRYLATER), 0, ev->Cookie);
         BLOG_W("Tablet waiting for group assignment " << tabletId);
         return;
     }
 
     if (!tablet->IsBootingSuppressed()) {
-        Send(ev->Sender, new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::ERROR), 0, ev->Cookie);
+        Send(ev->Sender, new NEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::ERROR), 0, ev->Cookie);
         BLOG_ERROR("Tablet " << tabletId << " is not expected to boot externally");
         return;
     }
@@ -2241,16 +2241,16 @@ void THive::Handle(TEvHive::TEvInitiateTabletExternalBoot::TPtr& ev) {
     Execute(CreateStartTablet(TFullTabletId(tabletId, 0), ev->Sender, ev->Cookie, /* external */ true));
 }
 
-void THive::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+void THive::Handle(NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
     const NKikimrConsole::TConfigNotificationRequest& record = ev->Get()->Record;
     ClusterConfig = record.GetConfig().GetHiveConfig();
     NodeBrokerEpoch = TDuration::MicroSeconds(record.GetConfig().GetNodeBrokerConfig().GetEpochDuration());
     BuildCurrentConfig();
     BLOG_D("Merged config: " << CurrentConfig);
-    Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
+    Send(ev->Sender, new NConsole::NEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
 }
 
-void THive::Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
+void THive::Handle(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
     // dummy
 }
 
@@ -2896,7 +2896,7 @@ THive::THive(TTabletStorageInfo *info, const TActorId &tablet)
     TabletCounters = TabletCountersPtr.Get();
 }
 
-void THive::Handle(TEvHive::TEvInvalidateStoragePools::TPtr& ev) {
+void THive::Handle(NEvHive::TEvInvalidateStoragePools::TPtr& ev) {
     auto& record = ev->Get()->Record;
     if (record.StoragePoolNameSize()) {
         for (const auto& name : record.GetStoragePoolName()) {
@@ -2910,17 +2910,17 @@ void THive::Handle(TEvHive::TEvInvalidateStoragePools::TPtr& ev) {
         }
     }
 
-    auto reply = std::make_unique<IEventHandle>(TEvHive::EvInvalidateStoragePoolsReply, 0, ev->Sender, SelfId(), nullptr, ev->Cookie);
+    auto reply = std::make_unique<IEventHandle>(NEvHive::EvInvalidateStoragePoolsReply, 0, ev->Sender, SelfId(), nullptr, ev->Cookie);
     if (ev->InterconnectSession) {
         reply->Rewrite(TEvInterconnect::EvForward, ev->InterconnectSession);
     }
     TActivationContext::Send(reply.release());
 }
 
-void THive::Handle(TEvHive::TEvReassignOnDecommitGroup::TPtr& ev) {
+void THive::Handle(NEvHive::TEvReassignOnDecommitGroup::TPtr& ev) {
     const ui32 groupId = ev->Get()->Record.GetGroupId();
     BLOG_D("THive::Handle(TEvReassignOnDecommitGroup) GroupId# " << groupId);
-    auto reply = std::make_unique<IEventHandle>(TEvHive::EvReassignOnDecommitGroupReply, 0, ev->Sender, SelfId(), nullptr, ev->Cookie);
+    auto reply = std::make_unique<IEventHandle>(NEvHive::EvReassignOnDecommitGroupReply, 0, ev->Sender, SelfId(), nullptr, ev->Cookie);
     if (ev->InterconnectSession) {
         reply->Rewrite(TEvInterconnect::EvForward, ev->InterconnectSession);
     }
@@ -2969,10 +2969,10 @@ void THive::RequestPoolsInformation() {
 
 ui32 THive::GetEventPriority(IEventHandle* ev) {
     switch (ev->GetTypeRewrite()) {
-        case TEvHive::EvRequestHiveInfo:
-        case TEvHive::EvRequestHiveDomainStats:
-        case TEvHive::EvRequestHiveNodeStats:
-        case TEvHive::EvRequestHiveStorageStats:
+        case NEvHive::EvRequestHiveInfo:
+        case NEvHive::EvRequestHiveDomainStats:
+        case NEvHive::EvRequestHiveNodeStats:
+        case NEvHive::EvRequestHiveStorageStats:
             return 10;
         default:
             return 50;
@@ -2986,10 +2986,10 @@ void THive::PushProcessIncomingEvent() {
 void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
     TAutoPtr ev = event.release();
     switch (ev->GetTypeRewrite()) {
-        hFunc(TEvHive::TEvCreateTablet, Handle);
-        hFunc(TEvHive::TEvAdoptTablet, Handle);
-        hFunc(TEvHive::TEvStopTablet, Handle);
-        hFunc(TEvHive::TEvBootTablet, Handle);
+        hFunc(NEvHive::TEvCreateTablet, Handle);
+        hFunc(NEvHive::TEvAdoptTablet, Handle);
+        hFunc(NEvHive::TEvStopTablet, Handle);
+        hFunc(NEvHive::TEvBootTablet, Handle);
         hFunc(TEvLocal::TEvStatus, Handle);
         hFunc(TEvLocal::TEvTabletStatus, Handle); // from bootqueue
         hFunc(TEvLocal::TEvRegisterNode, Handle); // from local
@@ -2999,8 +2999,8 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvTabletPipe::TEvServerConnected, Handle);
         hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
         hFunc(TEvPrivate::TEvBootTablets, Handle);
-        hFunc(TEvHive::TEvInitMigration, Handle);
-        hFunc(TEvHive::TEvQueryMigration, Handle);
+        hFunc(NEvHive::TEvInitMigration, Handle);
+        hFunc(NEvHive::TEvQueryMigration, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, Handle);
         hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
         hFunc(TEvInterconnect::TEvNodeInfo, Handle);
@@ -3012,57 +3012,57 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvPrivate::TEvProcessDisconnectNode, Handle);
         hFunc(TEvLocal::TEvSyncTablets, Handle);
         hFunc(TEvPrivate::TEvKickTablet, Handle);
-        hFunc(TEvHive::TEvTabletMetrics, Handle);
+        hFunc(NEvHive::TEvTabletMetrics, Handle);
         hFunc(TEvTabletBase::TEvBlockBlobStorageResult, Handle);
         hFunc(TEvTabletBase::TEvDeleteTabletResult, Handle);
-        hFunc(TEvHive::TEvReassignTablet, Handle);
-        hFunc(TEvHive::TEvInitiateBlockStorage, Handle);
-        hFunc(TEvHive::TEvDeleteTablet, Handle);
-        hFunc(TEvHive::TEvDeleteOwnerTablets, Handle);
-        hFunc(TEvHive::TEvRequestHiveInfo, Handle);
-        hFunc(TEvHive::TEvLookupTablet, Handle);
-        hFunc(TEvHive::TEvLookupChannelInfo, Handle);
-        hFunc(TEvHive::TEvCutTabletHistory, Handle);
-        hFunc(TEvHive::TEvDrainNode, Handle);
-        hFunc(TEvHive::TEvFillNode, Handle);
-        hFunc(TEvHive::TEvInitiateDeleteStorage, Handle);
-        hFunc(TEvHive::TEvGetTabletStorageInfo, Handle);
-        hFunc(TEvHive::TEvLockTabletExecution, Handle);
-        hFunc(TEvHive::TEvUnlockTabletExecution, Handle);
+        hFunc(NEvHive::TEvReassignTablet, Handle);
+        hFunc(NEvHive::TEvInitiateBlockStorage, Handle);
+        hFunc(NEvHive::TEvDeleteTablet, Handle);
+        hFunc(NEvHive::TEvDeleteOwnerTablets, Handle);
+        hFunc(NEvHive::TEvRequestHiveInfo, Handle);
+        hFunc(NEvHive::TEvLookupTablet, Handle);
+        hFunc(NEvHive::TEvLookupChannelInfo, Handle);
+        hFunc(NEvHive::TEvCutTabletHistory, Handle);
+        hFunc(NEvHive::TEvDrainNode, Handle);
+        hFunc(NEvHive::TEvFillNode, Handle);
+        hFunc(NEvHive::TEvInitiateDeleteStorage, Handle);
+        hFunc(NEvHive::TEvGetTabletStorageInfo, Handle);
+        hFunc(NEvHive::TEvLockTabletExecution, Handle);
+        hFunc(NEvHive::TEvUnlockTabletExecution, Handle);
         hFunc(TEvPrivate::TEvProcessTabletBalancer, Handle);
         hFunc(TEvPrivate::TEvUnlockTabletReconnectTimeout, Handle);
-        hFunc(TEvHive::TEvInitiateTabletExternalBoot, Handle);
-        hFunc(TEvHive::TEvRequestHiveDomainStats, Handle);
-        hFunc(TEvHive::TEvRequestHiveNodeStats, Handle);
-        hFunc(TEvHive::TEvRequestHiveStorageStats, Handle);
-        hFunc(TEvHive::TEvInvalidateStoragePools, Handle);
-        hFunc(TEvHive::TEvReassignOnDecommitGroup, Handle);
-        hFunc(TEvHive::TEvRequestTabletIdSequence, Handle);
-        hFunc(TEvHive::TEvResponseTabletIdSequence, Handle);
-        hFunc(TEvHive::TEvSeizeTablets, Handle);
-        hFunc(TEvHive::TEvSeizeTabletsReply, Handle);
-        hFunc(TEvHive::TEvReleaseTablets, Handle);
-        hFunc(TEvHive::TEvReleaseTabletsReply, Handle);
-        hFunc(TEvSubDomain::TEvConfigure, Handle);
-        hFunc(TEvHive::TEvConfigureHive, Handle);
+        hFunc(NEvHive::TEvInitiateTabletExternalBoot, Handle);
+        hFunc(NEvHive::TEvRequestHiveDomainStats, Handle);
+        hFunc(NEvHive::TEvRequestHiveNodeStats, Handle);
+        hFunc(NEvHive::TEvRequestHiveStorageStats, Handle);
+        hFunc(NEvHive::TEvInvalidateStoragePools, Handle);
+        hFunc(NEvHive::TEvReassignOnDecommitGroup, Handle);
+        hFunc(NEvHive::TEvRequestTabletIdSequence, Handle);
+        hFunc(NEvHive::TEvResponseTabletIdSequence, Handle);
+        hFunc(NEvHive::TEvSeizeTablets, Handle);
+        hFunc(NEvHive::TEvSeizeTabletsReply, Handle);
+        hFunc(NEvHive::TEvReleaseTablets, Handle);
+        hFunc(NEvHive::TEvReleaseTabletsReply, Handle);
+        hFunc(NEvSubDomain::TEvConfigure, Handle);
+        hFunc(NEvHive::TEvConfigureHive, Handle);
         hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-        hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
-        hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
+        hFunc(NConsole::NEvConsole::TEvConfigNotificationRequest, Handle);
+        hFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
         hFunc(NSysView::TEvSysView::TEvGetTabletIdsRequest, Handle);
         hFunc(NSysView::TEvSysView::TEvGetTabletsRequest, Handle);
-        hFunc(TEvHive::TEvRequestTabletOwners, Handle);
-        hFunc(TEvHive::TEvTabletOwnersReply, Handle);
+        hFunc(NEvHive::TEvRequestTabletOwners, Handle);
+        hFunc(NEvHive::TEvTabletOwnersReply, Handle);
         hFunc(TEvPrivate::TEvBalancerOut, Handle);
-        hFunc(TEvHive::TEvUpdateTabletsObject, Handle);
+        hFunc(NEvHive::TEvUpdateTabletsObject, Handle);
         hFunc(TEvPrivate::TEvRefreshStorageInfo, Handle);
         hFunc(TEvPrivate::TEvLogTabletMoves, Handle);
         hFunc(TEvPrivate::TEvStartStorageBalancer, Handle);
         hFunc(TEvPrivate::TEvProcessStorageBalancer, Handle);
-        hFunc(TEvHive::TEvUpdateDomain, Handle);
+        hFunc(NEvHive::TEvUpdateDomain, Handle);
         hFunc(TEvPrivate::TEvDeleteNode, Handle);
-        hFunc(TEvHive::TEvRequestTabletDistribution, Handle);
+        hFunc(NEvHive::TEvRequestTabletDistribution, Handle);
         hFunc(TEvPrivate::TEvUpdateDataCenterFollowers, Handle);
-        hFunc(TEvHive::TEvRequestScaleRecommendation, Handle);
+        hFunc(NEvHive::TEvRequestScaleRecommendation, Handle);
     }
 }
 
@@ -3078,8 +3078,8 @@ STFUNC(THive::StateInit) {
         hFunc(TEvPrivate::TEvProcessTabletBalancer, HandleInit);
         // We subscribe to config updates before hive is fully loaded
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
-        fFunc(NConsole::TEvConsole::TEvConfigNotificationRequest::EventType, EnqueueIncomingEvent);
-        fFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::EventType, EnqueueIncomingEvent);
+        fFunc(NConsole::NEvConsole::TEvConfigNotificationRequest::EventType, EnqueueIncomingEvent);
+        fFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::EventType, EnqueueIncomingEvent);
     default:
         StateInitImpl(ev, SelfId());
     }
@@ -3090,10 +3090,10 @@ STFUNC(THive::StateWork) {
         ResponsivenessPinger->OnAnyEvent();
 
     switch (ev->GetTypeRewrite()) {
-        fFunc(TEvHive::TEvCreateTablet::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvAdoptTablet::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvStopTablet::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvBootTablet::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvCreateTablet::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvAdoptTablet::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvStopTablet::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvBootTablet::EventType, EnqueueIncomingEvent);
         fFunc(TEvLocal::TEvStatus::EventType, EnqueueIncomingEvent);
         fFunc(TEvLocal::TEvTabletStatus::EventType, EnqueueIncomingEvent); // from bootqueue
         fFunc(TEvLocal::TEvRegisterNode::EventType, EnqueueIncomingEvent); // from local
@@ -3103,8 +3103,8 @@ STFUNC(THive::StateWork) {
         fFunc(TEvTabletPipe::TEvServerConnected::EventType, EnqueueIncomingEvent);
         fFunc(TEvTabletPipe::TEvServerDisconnected::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvBootTablets::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvInitMigration::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvQueryMigration::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvInitMigration::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvQueryMigration::EventType, EnqueueIncomingEvent);
         fFunc(TEvInterconnect::TEvNodeConnected::EventType, EnqueueIncomingEvent);
         fFunc(TEvInterconnect::TEvNodeDisconnected::EventType, EnqueueIncomingEvent);
         fFunc(TEvInterconnect::TEvNodeInfo::EventType, EnqueueIncomingEvent);
@@ -3116,57 +3116,57 @@ STFUNC(THive::StateWork) {
         fFunc(TEvPrivate::TEvProcessDisconnectNode::EventType, EnqueueIncomingEvent);
         fFunc(TEvLocal::TEvSyncTablets::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvKickTablet::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvTabletMetrics::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvTabletMetrics::EventType, EnqueueIncomingEvent);
         fFunc(TEvTabletBase::TEvBlockBlobStorageResult::EventType, EnqueueIncomingEvent);
         fFunc(TEvTabletBase::TEvDeleteTabletResult::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvReassignTablet::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvInitiateBlockStorage::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvDeleteTablet::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvDeleteOwnerTablets::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvRequestHiveInfo::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvLookupTablet::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvLookupChannelInfo::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvCutTabletHistory::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvDrainNode::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvFillNode::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvInitiateDeleteStorage::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvGetTabletStorageInfo::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvLockTabletExecution::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvUnlockTabletExecution::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvReassignTablet::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvInitiateBlockStorage::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvDeleteTablet::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvDeleteOwnerTablets::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvRequestHiveInfo::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvLookupTablet::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvLookupChannelInfo::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvCutTabletHistory::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvDrainNode::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvFillNode::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvInitiateDeleteStorage::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvGetTabletStorageInfo::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvLockTabletExecution::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvUnlockTabletExecution::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvProcessTabletBalancer::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvUnlockTabletReconnectTimeout::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvInitiateTabletExternalBoot::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvRequestHiveDomainStats::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvRequestHiveNodeStats::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvRequestHiveStorageStats::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvInvalidateStoragePools::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvReassignOnDecommitGroup::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvRequestTabletIdSequence::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvResponseTabletIdSequence::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvSeizeTablets::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvSeizeTabletsReply::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvReleaseTablets::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvReleaseTabletsReply::EventType, EnqueueIncomingEvent);
-        fFunc(TEvSubDomain::TEvConfigure::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvConfigureHive::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvInitiateTabletExternalBoot::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvRequestHiveDomainStats::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvRequestHiveNodeStats::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvRequestHiveStorageStats::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvInvalidateStoragePools::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvReassignOnDecommitGroup::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvRequestTabletIdSequence::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvResponseTabletIdSequence::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvSeizeTablets::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvSeizeTabletsReply::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvReleaseTablets::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvReleaseTabletsReply::EventType, EnqueueIncomingEvent);
+        fFunc(NEvSubDomain::TEvConfigure::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvConfigureHive::EventType, EnqueueIncomingEvent);
         fFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType, EnqueueIncomingEvent);
-        fFunc(NConsole::TEvConsole::TEvConfigNotificationRequest::EventType, EnqueueIncomingEvent);
-        fFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::EventType, EnqueueIncomingEvent);
+        fFunc(NConsole::NEvConsole::TEvConfigNotificationRequest::EventType, EnqueueIncomingEvent);
+        fFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::EventType, EnqueueIncomingEvent);
         fFunc(NSysView::TEvSysView::TEvGetTabletIdsRequest::EventType, EnqueueIncomingEvent);
         fFunc(NSysView::TEvSysView::TEvGetTabletsRequest::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvRequestTabletOwners::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvTabletOwnersReply::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvRequestTabletOwners::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvTabletOwnersReply::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvBalancerOut::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvUpdateTabletsObject::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvUpdateTabletsObject::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvRefreshStorageInfo::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvLogTabletMoves::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvStartStorageBalancer::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvUpdateDomain::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvUpdateDomain::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvProcessStorageBalancer::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvDeleteNode::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvRequestTabletDistribution::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvRequestTabletDistribution::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvUpdateDataCenterFollowers::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvRequestScaleRecommendation::EventType, EnqueueIncomingEvent);
+        fFunc(NEvHive::TEvRequestScaleRecommendation::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3181,11 +3181,11 @@ void THive::KickTablet(const TTabletInfo& tablet) {
     Send(SelfId(), new TEvPrivate::TEvKickTablet(tablet));
 }
 
-void THive::Handle(TEvHive::TEvRequestTabletIdSequence::TPtr& ev) {
+void THive::Handle(NEvHive::TEvRequestTabletIdSequence::TPtr& ev) {
     Execute(CreateRequestTabletSequence(std::move(ev)));
 }
 
-void THive::Handle(TEvHive::TEvResponseTabletIdSequence::TPtr& ev) {
+void THive::Handle(NEvHive::TEvResponseTabletIdSequence::TPtr& ev) {
     Execute(CreateResponseTabletSequence(std::move(ev)));
 }
 
@@ -3202,7 +3202,7 @@ void THive::RequestFreeSequence() {
         }
 
         BLOG_D("Requesting free sequence #" << sequenceIndex << " of " << sequenceSize << " from root hive");
-        SendToRootHivePipe(new TEvHive::TEvRequestTabletIdSequence(TabletID(), sequenceIndex, sequenceSize));
+        SendToRootHivePipe(new NEvHive::TEvRequestTabletIdSequence(TabletID(), sequenceIndex, sequenceSize));
         RequestingSequenceNow = true;
         RequestingSequenceIndex = sequenceIndex;
     } else {
@@ -3214,13 +3214,13 @@ void THive::ProcessPendingOperations() {
     Execute(CreateProcessPendingOperations());
 }
 
-void THive::Handle(TEvSubDomain::TEvConfigure::TPtr& ev) {
-    BLOG_D("Handle TEvSubDomain::TEvConfigure(" << ev->Get()->Record.ShortDebugString() << ")");
-    Send(ev->Sender, new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, TabletID()));
+void THive::Handle(NEvSubDomain::TEvConfigure::TPtr& ev) {
+    BLOG_D("Handle NEvSubDomain::TEvConfigure(" << ev->Get()->Record.ShortDebugString() << ")");
+    Send(ev->Sender, new NEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, TabletID()));
 }
 
-void THive::Handle(TEvHive::TEvConfigureHive::TPtr& ev) {
-    BLOG_D("Handle TEvHive::TEvConfigureHive(" << ev->Get()->Record.ShortDebugString() << ")");
+void THive::Handle(NEvHive::TEvConfigureHive::TPtr& ev) {
+    BLOG_D("Handle NEvHive::TEvConfigureHive(" << ev->Get()->Record.ShortDebugString() << ")");
     Execute(CreateConfigureSubdomain(std::move(ev)));
 }
 
@@ -3358,38 +3358,38 @@ TSubDomainKey THive::GetMySubDomainKey() const {
     return {};
 }
 
-void THive::Handle(TEvHive::TEvSeizeTablets::TPtr& ev) {
-    BLOG_D("Handle TEvHive::TEvSeizeTablets(" << ev->Get()->Record.ShortDebugString() << ")");
+void THive::Handle(NEvHive::TEvSeizeTablets::TPtr& ev) {
+    BLOG_D("Handle NEvHive::TEvSeizeTablets(" << ev->Get()->Record.ShortDebugString() << ")");
     Execute(CreateSeizeTablets(ev));
 }
 
-void THive::Handle(TEvHive::TEvSeizeTabletsReply::TPtr& ev) {
-    BLOG_D("Handle TEvHive::TEvSeizeTabletsReply(" << ev->Get()->Record.ShortDebugString() << ")");
+void THive::Handle(NEvHive::TEvSeizeTabletsReply::TPtr& ev) {
+    BLOG_D("Handle NEvHive::TEvSeizeTabletsReply(" << ev->Get()->Record.ShortDebugString() << ")");
     Execute(CreateSeizeTabletsReply(ev));
 }
 
-void THive::Handle(TEvHive::TEvReleaseTablets::TPtr& ev) {
-    BLOG_D("Handle TEvHive::TEvReleaseTablets(" << ev->Get()->Record.ShortDebugString() << ")");
+void THive::Handle(NEvHive::TEvReleaseTablets::TPtr& ev) {
+    BLOG_D("Handle NEvHive::TEvReleaseTablets(" << ev->Get()->Record.ShortDebugString() << ")");
     Execute(CreateReleaseTablets(ev));
 }
 
-void THive::Handle(TEvHive::TEvReleaseTabletsReply::TPtr& ev) {
-    BLOG_D("Handle TEvHive::TEvReleaseTabletsReply(" << ev->Get()->Record.ShortDebugString() << ")");
+void THive::Handle(NEvHive::TEvReleaseTabletsReply::TPtr& ev) {
+    BLOG_D("Handle NEvHive::TEvReleaseTabletsReply(" << ev->Get()->Record.ShortDebugString() << ")");
     Execute(CreateReleaseTabletsReply(ev));
 }
 
-void THive::Handle(TEvHive::TEvRequestTabletOwners::TPtr& ev) {
-    BLOG_D("Handle TEvHive::TEvRequestTabletOwners(" << ev->Get()->Record.ShortDebugString() << ")");
+void THive::Handle(NEvHive::TEvRequestTabletOwners::TPtr& ev) {
+    BLOG_D("Handle NEvHive::TEvRequestTabletOwners(" << ev->Get()->Record.ShortDebugString() << ")");
     Execute(CreateRequestTabletOwners(std::move(ev)));
 }
 
-void THive::Handle(TEvHive::TEvTabletOwnersReply::TPtr& ev) {
-    BLOG_D("Handle TEvHive::TEvTabletOwnersReply()");
+void THive::Handle(NEvHive::TEvTabletOwnersReply::TPtr& ev) {
+    BLOG_D("Handle NEvHive::TEvTabletOwnersReply()");
     Execute(CreateTabletOwnersReply(std::move(ev)));
 }
 
-void THive::Handle(TEvHive::TEvUpdateTabletsObject::TPtr& ev) {
-    BLOG_D("Handle TEvHive::TEvUpdateTabletsObject");
+void THive::Handle(NEvHive::TEvUpdateTabletsObject::TPtr& ev) {
+    BLOG_D("Handle NEvHive::TEvUpdateTabletsObject");
     Execute(CreateUpdateTabletsObject(std::move(ev)));
 }
 
@@ -3443,7 +3443,7 @@ void THive::Handle(TEvPrivate::TEvDeleteNode::TPtr& ev) {
     }
 }
 
-void THive::Handle(TEvHive::TEvRequestTabletDistribution::TPtr& ev) {
+void THive::Handle(NEvHive::TEvRequestTabletDistribution::TPtr& ev) {
     std::unordered_map<TNodeId, std::unordered_set<TTabletId>> distribution;
     auto& tabletIds = ev->Get()->Record.GetTabletIds();
     for (auto& tabletId : tabletIds) {
@@ -3454,7 +3454,7 @@ void THive::Handle(TEvHive::TEvRequestTabletDistribution::TPtr& ev) {
         auto nodeId = tablet->NodeId;
         distribution[nodeId].insert(tabletId);
     }
-    auto response = std::make_unique<TEvHive::TEvResponseTabletDistribution>();
+    auto response = std::make_unique<NEvHive::TEvResponseTabletDistribution>();
     auto& record = response->Record;
     for (auto& [nodeId, tabletIds] : distribution) {
         auto* node = record.AddNodes();
@@ -3471,8 +3471,8 @@ void THive::Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev) {
     Execute(CreateUpdateDcFollowers(ev->Get()->DataCenter));
 }
 
-void THive::Handle(TEvHive::TEvRequestScaleRecommendation::TPtr& ev) {
-    auto response = std::make_unique<TEvHive::TEvResponseScaleRecommendation>();
+void THive::Handle(NEvHive::TEvRequestScaleRecommendation::TPtr& ev) {
+    auto response = std::make_unique<NEvHive::TEvResponseScaleRecommendation>();
     Send(ev->Sender, response.release());
 }
 

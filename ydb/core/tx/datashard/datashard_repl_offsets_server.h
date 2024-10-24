@@ -99,9 +99,9 @@ public:
 
     STFUNC(StateWork);
 
-    void Handle(TEvDataShard::TEvGetReplicationSourceOffsets::TPtr& ev);
-    void Handle(TEvDataShard::TEvReplicationSourceOffsetsAck::TPtr& ev);
-    void Handle(TEvDataShard::TEvReplicationSourceOffsetsCancel::TPtr& ev);
+    void Handle(NEvDataShard::TEvGetReplicationSourceOffsets::TPtr& ev);
+    void Handle(NEvDataShard::TEvReplicationSourceOffsetsAck::TPtr& ev);
+    void Handle(NEvDataShard::TEvReplicationSourceOffsetsCancel::TPtr& ev);
     void ProcessRead(const TReadId& readId, TReadState& state);
     void ProcessNode(TNodeState& node);
     void SendViaSession(const TActorId& sessionId, const TActorId& target, IEventBase* event, ui32 flags = 0, ui64 cookie = 0);

@@ -43,7 +43,7 @@ public:
         return false;
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
         LOG_I(DebugHint() << "HandleReply TEvOperationPlan"
@@ -360,7 +360,7 @@ class TProposeAtTableWithInitialScan: public NCdcStreamState::TProposeAtTable {
 public:
     using NCdcStreamState::TProposeAtTable::TProposeAtTable;
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         if (!NCdcStreamState::TProposeAtTable::HandleReply(ev, context)) {
             return false;
         }
@@ -418,7 +418,7 @@ public:
         }
 
         Y_ABORT_UNLESS(streamPathId);
-        context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvRunCdcStreamScan(*streamPathId));
+        context.OnComplete.Send(context.SS->SelfId(), new NEvPrivate::TEvRunCdcStreamScan(*streamPathId));
 
         return true;
     }

@@ -11,7 +11,7 @@ struct TKesusTablet::TTxConfigSet : public TTxBase {
     const ui64 Cookie;
     const NKikimrKesus::TEvSetConfig Record;
 
-    THolder<TEvKesus::TEvSetConfigResult> Reply;
+    THolder<NEvKesus::TEvSetConfigResult> Reply;
 
     TTxConfigSet(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvSetConfig& record)
         : TTxBase(self)
@@ -27,7 +27,7 @@ struct TKesusTablet::TTxConfigSet : public TTxBase {
             "[" << Self->TabletID() << "] TTxConfigSet::Execute (sender=" << Sender
                 << ", cookie=" << Cookie << ", path=" << Record.GetConfig().path().Quote() << ")");
 
-        Reply = MakeHolder<TEvKesus::TEvSetConfigResult>(Record.GetTxId(), Self->TabletID());
+        Reply = MakeHolder<NEvKesus::TEvSetConfigResult>(Record.GetTxId(), Self->TabletID());
 
         ui64 newVersion = Record.GetVersion();
         if (newVersion == 0) {
@@ -97,7 +97,7 @@ struct TKesusTablet::TTxConfigSet : public TTxBase {
     }
 };
 
-void TKesusTablet::Handle(TEvKesus::TEvSetConfig::TPtr& ev) {
+void TKesusTablet::Handle(NEvKesus::TEvSetConfig::TPtr& ev) {
     Execute(new TTxConfigSet(this, ev->Sender, ev->Cookie, ev->Get()->Record), TActivationContext::AsActorContext());
 }
 

@@ -361,7 +361,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvTxProxySchemeCache::TEvResolveKeySet
 
 void TKqpScanFetcherActor::HandleExecute(TEvents::TEvUndelivered::TPtr& ev) {
     switch (ev->Get()->SourceType) {
-        case TEvDataShard::TEvKqpScan::EventType:
+        case NEvDataShard::TEvKqpScan::EventType:
             // Handled by TEvPipeCache::TEvDeliveryProblem event.
             return;
         case TEvKqpCompute::TEvScanDataAck::EventType: {
@@ -409,8 +409,8 @@ bool TKqpScanFetcherActor::SendScanFinished() {
     return true;
 }
 
-std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEvKqpScan(const ui32 scanId, const ui32 gen, const TSmallVec<TSerializedTableRange>& ranges) const {
-    auto ev = std::make_unique<TEvDataShard::TEvKqpScan>();
+std::unique_ptr<NKikimr::NEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEvKqpScan(const ui32 scanId, const ui32 gen, const TSmallVec<TSerializedTableRange>& ranges) const {
+    auto ev = std::make_unique<NEvDataShard::TEvKqpScan>();
     ev->Record.SetLocalPathId(ScanDataMeta.TableId.PathId.LocalPathId);
     for (auto& column : ScanDataMeta.GetColumns()) {
         ev->Record.AddColumnTags(column.Tag);

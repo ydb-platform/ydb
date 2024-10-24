@@ -5,10 +5,10 @@ namespace NKikimr {
 namespace NHive {
 
 class TTxUpdateTabletMetrics : public TTransactionBase<THive> {
-    TEvHive::TEvTabletMetrics::TPtr Event;
+    NEvHive::TEvTabletMetrics::TPtr Event;
     TAutoPtr<TEvLocal::TEvTabletMetricsAck> Reply;
 public:
-    TTxUpdateTabletMetrics(TEvHive::TEvTabletMetrics::TPtr& ev, THive* hive)
+    TTxUpdateTabletMetrics(NEvHive::TEvTabletMetrics::TPtr& ev, THive* hive)
         : TBase(hive)
         , Event(ev)
     {}
@@ -38,7 +38,7 @@ public:
 
                 tablet->Statistics.SetLastAliveTimestamp(now.MilliSeconds());
                 tablet->ActualizeTabletStatistics(now);
-                    
+
                 if (tablet->IsLeader()) {
                     db.Table<Schema::Tablet>()
                         .Key(tabletId)
@@ -75,7 +75,7 @@ public:
     }
 };
 
-ITransaction* THive::CreateUpdateTabletMetrics(TEvHive::TEvTabletMetrics::TPtr& ev) {
+ITransaction* THive::CreateUpdateTabletMetrics(NEvHive::TEvTabletMetrics::TPtr& ev) {
     return new TTxUpdateTabletMetrics(ev, this);
 }
 

@@ -312,7 +312,7 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
             }));
 
         setup.SendProxyStats({TEvQuota::TProxyStat(43, 1, 0, {}, 3, 5.0, 0, 0)});
-        setup.WaitEvent<NKesus::TEvKesus::TEvUpdateConsumptionState>();
+        setup.WaitEvent<NKesus::NEvKesus::TEvUpdateConsumptionState>();
 
         // Disconnected
         setup.SendDestroyed(pipe);
@@ -335,7 +335,7 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
                 pipe2->SendSubscribeOnResourceResult(ans, cookie);
             }));
 
-        setup.WaitEvent<NKesus::TEvKesus::TEvSubscribeOnResources>();
+        setup.WaitEvent<NKesus::NEvKesus::TEvSubscribeOnResources>();
     }
 
     Y_UNIT_TEST(ProxyRequestDuringDisconnection) {
@@ -357,7 +357,7 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         // Connected
         setup.SendConnected(pipe);
 
-        setup.WaitEvent<NKesus::TEvKesus::TEvSubscribeOnResources>();
+        setup.WaitEvent<NKesus::NEvKesus::TEvSubscribeOnResources>();
     }
 
     Y_UNIT_TEST(DeactivateSessionWhenResourceClosed) {
@@ -394,7 +394,7 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
                 UNIT_ASSERT(!record.GetResourcesInfo(0).GetConsumeResource());
             }));
 
-        setup.WaitEvent<NKesus::TEvKesus::TEvUpdateConsumptionState>();
+        setup.WaitEvent<NKesus::NEvKesus::TEvUpdateConsumptionState>();
         setup.SendCloseSession("res", 42);
         setup.WaitEvent<TEvQuota::TEvProxyCloseSession>();
 
@@ -426,7 +426,7 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
             }));
 
         setup.SendProxyStats({TEvQuota::TProxyStat(42, 1, 0, {}, 3, 5.0, 0, 0)});
-        setup.WaitEvent<NKesus::TEvKesus::TEvUpdateConsumptionState>();
+        setup.WaitEvent<NKesus::NEvKesus::TEvUpdateConsumptionState>();
 
         // Disconnected
         setup.SendDestroyed(pipe);

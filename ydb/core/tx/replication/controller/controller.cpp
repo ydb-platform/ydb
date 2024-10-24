@@ -43,10 +43,10 @@ STFUNC(TController::StateInit) {
 
 STFUNC(TController::StateWork) {
     switch (ev->GetTypeRewrite()) {
-        HFunc(TEvController::TEvCreateReplication, Handle);
-        HFunc(TEvController::TEvAlterReplication, Handle);
-        HFunc(TEvController::TEvDropReplication, Handle);
-        HFunc(TEvController::TEvDescribeReplication, Handle);
+        HFunc(NEvController::TEvCreateReplication, Handle);
+        HFunc(NEvController::TEvAlterReplication, Handle);
+        HFunc(NEvController::TEvDropReplication, Handle);
+        HFunc(NEvController::TEvDescribeReplication, Handle);
         HFunc(TEvPrivate::TEvDropReplication, Handle);
         HFunc(TEvPrivate::TEvDiscoveryTargetsResult, Handle);
         HFunc(TEvPrivate::TEvAssignStreamName, Handle);
@@ -111,17 +111,17 @@ void TController::Reset() {
     ReplicationsByPathId.clear();
 }
 
-void TController::Handle(TEvController::TEvCreateReplication::TPtr& ev, const TActorContext& ctx) {
+void TController::Handle(NEvController::TEvCreateReplication::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
     RunTxCreateReplication(ev, ctx);
 }
 
-void TController::Handle(TEvController::TEvAlterReplication::TPtr& ev, const TActorContext& ctx) {
+void TController::Handle(NEvController::TEvAlterReplication::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
     RunTxAlterReplication(ev, ctx);
 }
 
-void TController::Handle(TEvController::TEvDropReplication::TPtr& ev, const TActorContext& ctx) {
+void TController::Handle(NEvController::TEvDropReplication::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
     RunTxDropReplication(ev, ctx);
 }
@@ -131,7 +131,7 @@ void TController::Handle(TEvPrivate::TEvDropReplication::TPtr& ev, const TActorC
     RunTxDropReplication(ev, ctx);
 }
 
-void TController::Handle(TEvController::TEvDescribeReplication::TPtr& ev, const TActorContext& ctx) {
+void TController::Handle(NEvController::TEvDescribeReplication::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
     RunTxDescribeReplication(ev, ctx);
 }

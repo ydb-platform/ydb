@@ -10,7 +10,7 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-bool ValidateConfig(const Ydb::Coordination::Config& config, TEvSchemeShard::EStatus& status, TString& errStr) {
+bool ValidateConfig(const Ydb::Coordination::Config& config, NEvSchemeShard::EStatus& status, TString& errStr) {
     if (!config.path().empty()) {
         status = NKikimrScheme::StatusInvalidParameter;
         errStr = "Setting path is not allowed";
@@ -83,10 +83,10 @@ public:
     TConfigureParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
+        IgnoreMessages(DebugHint(), {NEvHive::TEvCreateTabletReply::EventType});
     }
 
-    bool HandleReply(NKesus::TEvKesus::TEvSetConfigResult::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NKesus::NEvKesus::TEvSetConfigResult::TPtr& ev, TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
 
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -153,7 +153,7 @@ public:
             kesus->KesusShardIdx = shardIdx;
             kesus->KesusTabletId = tabletId;
 
-            auto event = MakeHolder<NKesus::TEvKesus::TEvSetConfig>(ui64(OperationId.GetTxId()), kesus->Config, kesus->Version);
+            auto event = MakeHolder<NKesus::NEvKesus::TEvSetConfig>(ui64(OperationId.GetTxId()), kesus->Config, kesus->Version);
             event->Record.MutableConfig()->set_path(kesusPath.PathString()); // TODO: remove legacy field eventually
             event->Record.SetPath(kesusPath.PathString());
 
@@ -182,10 +182,10 @@ public:
     TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
+        IgnoreMessages(DebugHint(), {NEvHive::TEvCreateTabletReply::EventType});
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         auto step = TStepId(ev->Get()->StepId);
         auto ssId = context.SS->SelfTabletId();
 
@@ -301,7 +301,7 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
+        NEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
 
         TString errStr;

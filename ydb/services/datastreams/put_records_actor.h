@@ -75,7 +75,7 @@ namespace NKikimr::NDataStreams::V1 {
     private:
         STFUNC(PartitionWriteFunc) {
             switch (ev->GetTypeRewrite()) {
-                HFunc(TEvPersQueue::TEvResponse, HandlePartitionWriteResult);
+                HFunc(NEvPersQueue::TEvResponse, HandlePartitionWriteResult);
                 HFunc(TEvTabletPipe::TEvClientConnected, Handle);
                 HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             };
@@ -119,13 +119,13 @@ namespace NKikimr::NDataStreams::V1 {
                 request.MutablePartitionRequest()->SetPutUnitsSize(NPQ::PutUnitsSize(totalSize));
             }
 
-            TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+            TAutoPtr<NEvPersQueue::TEvRequest> req(new NEvPersQueue::TEvRequest);
             req->Record.Swap(&request);
 
             NTabletPipe::SendData(ctx, PipeClient, req.Release());
         }
 
-        void HandlePartitionWriteResult(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+        void HandlePartitionWriteResult(NEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
             if (CheckForError(ev, ctx)) {
                 return;
             }
@@ -145,7 +145,7 @@ namespace NKikimr::NDataStreams::V1 {
             Die(ctx);
         }
 
-        bool CheckForError(TEvPersQueue::TEvResponse::TPtr& ev, const NActors::TActorContext& ctx) {
+        bool CheckForError(NEvPersQueue::TEvResponse::TPtr& ev, const NActors::TActorContext& ctx) {
             const auto& record = ev->Get()->Record;
             if (record.HasErrorCode() && record.GetErrorCode() != NPersQueue::NErrorCode::OK) {
                 ReplyWithError(ctx, record.GetErrorReason(), record.GetErrorCode());

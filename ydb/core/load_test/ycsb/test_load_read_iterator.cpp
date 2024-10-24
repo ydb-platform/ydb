@@ -30,7 +30,7 @@ const ui64 RECONNECT_LIMIT = 10;
 // TReadIteratorPoints
 
 class TReadIteratorPoints : public TActorBootstrapped<TReadIteratorPoints> {
-    const std::unique_ptr<const TEvDataShard::TEvRead> BaseRequest;
+    const std::unique_ptr<const NEvDataShard::TEvRead> BaseRequest;
     const NKikimrDataEvents::EDataFormat Format;
     const ui64 TabletId;
     const TActorId Parent;
@@ -55,7 +55,7 @@ class TReadIteratorPoints : public TActorBootstrapped<TReadIteratorPoints> {
     TVector<TDuration> RequestTimes;
 
 public:
-    TReadIteratorPoints(TEvDataShard::TEvRead* request,
+    TReadIteratorPoints(NEvDataShard::TEvRead* request,
                         ui64 tablet,
                         const TActorId& parent,
                         const TSubLoadId& id,
@@ -148,7 +148,7 @@ private:
             return StopWithError(ctx, ss.Str());
         }
 
-        auto request = std::make_unique<TEvDataShard::TEvRead>();
+        auto request = std::make_unique<NEvDataShard::TEvRead>();
         request->Record = BaseRequest->Record;
         AddKeyQuery(*request, currentKeyCells);
 
@@ -161,7 +161,7 @@ private:
         ++PointsRead;
     }
 
-    void Handle(const TEvDataShard::TEvReadResult::TPtr& ev, const TActorContext& ctx) {
+    void Handle(const NEvDataShard::TEvReadResult::TPtr& ev, const TActorContext& ctx) {
         const auto* msg = ev->Get();
         const auto& record = msg->Record;
 
@@ -229,7 +229,7 @@ private:
         HFunc(TEvents::TEvUndelivered, Handle)
         HFunc(TEvTabletPipe::TEvClientConnected, Handle)
         HFunc(TEvTabletPipe::TEvClientDestroyed, Handle)
-        HFunc(TEvDataShard::TEvReadResult, Handle)
+        HFunc(NEvDataShard::TEvReadResult, Handle)
     )
 };
 
@@ -363,7 +363,7 @@ private:
         ctx.Send(MakeTxProxyID(), request.release());
     }
 
-    void Handle(const NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
+    void Handle(const NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->GetRecord();
         OwnerId = record.GetPathOwnerId();
         TableId = record.GetPathId();
@@ -404,7 +404,7 @@ private:
     }
 
     void RunFullScan(const TActorContext& ctx, ui64 sampleKeys) {
-        auto request = std::make_unique<TEvDataShard::TEvRead>();
+        auto request = std::make_unique<NEvDataShard::TEvRead>();
         auto& record = request->Record;
 
         record.SetReadId(++LastReadId);
@@ -522,7 +522,7 @@ private:
     }
 
     void RunSingleHeadRead(const TActorContext& ctx) {
-        auto request = std::make_unique<TEvDataShard::TEvRead>();
+        auto request = std::make_unique<NEvDataShard::TEvRead>();
         auto& record = request->Record;
 
         record.SetReadId(++LastReadId);
@@ -652,7 +652,7 @@ private:
     STRICT_STFUNC(StateFunc,
         CFunc(TEvents::TSystem::PoisonPill, HandlePoison)
         HFunc(TEvDataShardLoad::TEvTestLoadInfoRequest, Handle)
-        HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle)
+        HFunc(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult, Handle)
         HFunc(TEvDataShardLoad::TEvTestLoadFinished, Handle)
         HFunc(TEvPrivate::TEvKeys, Handle)
         HFunc(TEvPrivate::TEvPointTimes, Handle)

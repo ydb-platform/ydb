@@ -172,7 +172,7 @@ namespace NKikimr::NBlobDepot {
                     CheckAndFinish();
                 } else if (auto *p = std::get_if<TEvBlobStorage::TEvGetResult*>(&response)) {
                     TQuery::HandleGetResult(context, **p);
-                } else if (auto *p = std::get_if<TEvBlobDepot::TEvResolveResult*>(&response)) {
+                } else if (auto *p = std::get_if<NEvBlobDepot::TEvResolveResult*>(&response)) {
                     TQuery::HandleResolveResult(context, **p);
                 } else if (std::holds_alternative<TTabletDisconnected>(response)) {
                     if (auto *resolveContext = dynamic_cast<TResolveKeyContext*>(context.get())) {

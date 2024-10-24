@@ -41,7 +41,7 @@ struct TKesusTablet::TTxSessionTimeout : public TTxBase {
 
         if (session->LastOwnerProxy) {
             Events.emplace_back(session->LastOwnerProxy, 0,
-                new TEvKesus::TEvSessionExpired(SessionId));
+                new NEvKesus::TEvSessionExpired(SessionId));
         }
 
         NIceDb::TNiceDb db(txc.DB);

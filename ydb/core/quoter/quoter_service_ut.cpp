@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
         TTestActorRuntime* const runtime = server.GetRuntime();
 
         // request
-        TAutoPtr<NKesus::TEvKesus::TEvAddQuoterResource> request(new NKesus::TEvKesus::TEvAddQuoterResource());
+        TAutoPtr<NKesus::NEvKesus::TEvAddQuoterResource> request(new NKesus::NEvKesus::TEvAddQuoterResource());
         request->Record.MutableResource()->SetResourcePath("/Res");
         request->Record.MutableResource()->MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(rate);
 
@@ -163,8 +163,8 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
         ForwardToTablet(*runtime, tabletId, sender, request.Release(), 0);
 
         TAutoPtr<IEventHandle> handle;
-        runtime->GrabEdgeEvent<NKesus::TEvKesus::TEvAddQuoterResourceResult>(handle);
-        const NKikimrKesus::TEvAddQuoterResourceResult& record = handle->Get<NKesus::TEvKesus::TEvAddQuoterResourceResult>()->Record;
+        runtime->GrabEdgeEvent<NKesus::NEvKesus::TEvAddQuoterResourceResult>(handle);
+        const NKikimrKesus::TEvAddQuoterResourceResult& record = handle->Get<NKesus::NEvKesus::TEvAddQuoterResourceResult>()->Record;
         UNIT_ASSERT_VALUES_EQUAL(record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
     }
 

@@ -13,9 +13,9 @@ struct TSchemeShard::TTxDescribeScheme : public TSchemeShard::TRwTxBase {
     const ui64 Cookie;
     TPathDescriber PathDescriber;
 
-    THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> Result;
+    THolder<NEvSchemeShard::TEvDescribeSchemeResultBuilder> Result;
 
-    TTxDescribeScheme(TSelf *self, TEvSchemeShard::TEvDescribeScheme::TPtr &ev)
+    TTxDescribeScheme(TSelf *self, NEvSchemeShard::TEvDescribeScheme::TPtr &ev)
         : TRwTxBase(self)
         , Sender(ev->Sender)
         , Cookie(ev->Cookie)
@@ -60,7 +60,7 @@ struct TSchemeShard::TTxDescribeScheme : public TSchemeShard::TRwTxBase {
 
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxDescribeScheme(TEvSchemeShard::TEvDescribeScheme::TPtr &ev) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxDescribeScheme(NEvSchemeShard::TEvDescribeScheme::TPtr &ev) {
     return new TTxDescribeScheme(this, ev);
 }
 

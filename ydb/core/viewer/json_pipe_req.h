@@ -235,15 +235,15 @@ protected:
     static bool IsSuccess(const std::unique_ptr<TEvStateStorage::TEvBoardInfo>& ev);
     static TString GetError(const std::unique_ptr<TEvStateStorage::TEvBoardInfo>& ev);
 
-    TRequestResponse<TEvHive::TEvResponseHiveDomainStats> MakeRequestHiveDomainStats(TTabletId hiveId);
-    TRequestResponse<TEvHive::TEvResponseHiveStorageStats> MakeRequestHiveStorageStats(TTabletId hiveId);
-    TRequestResponse<TEvHive::TEvResponseHiveNodeStats> MakeRequestHiveNodeStats(TTabletId hiveId, TEvHive::TEvRequestHiveNodeStats* request);
+    TRequestResponse<NEvHive::TEvResponseHiveDomainStats> MakeRequestHiveDomainStats(TTabletId hiveId);
+    TRequestResponse<NEvHive::TEvResponseHiveStorageStats> MakeRequestHiveStorageStats(TTabletId hiveId);
+    TRequestResponse<NEvHive::TEvResponseHiveNodeStats> MakeRequestHiveNodeStats(TTabletId hiveId, NEvHive::TEvRequestHiveNodeStats* request);
     void RequestConsoleListTenants();
-    TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse> MakeRequestConsoleListTenants();
-    TRequestResponse<NConsole::TEvConsole::TEvGetNodeConfigResponse> MakeRequestConsoleNodeConfigByTenant(TString tenant, ui64 cookie = 0);
-    TRequestResponse<NConsole::TEvConsole::TEvGetAllConfigsResponse> MakeRequestConsoleGetAllConfigs();
+    TRequestResponse<NConsole::NEvConsole::TEvListTenantsResponse> MakeRequestConsoleListTenants();
+    TRequestResponse<NConsole::NEvConsole::TEvGetNodeConfigResponse> MakeRequestConsoleNodeConfigByTenant(TString tenant, ui64 cookie = 0);
+    TRequestResponse<NConsole::NEvConsole::TEvGetAllConfigsResponse> MakeRequestConsoleGetAllConfigs();
     void RequestConsoleGetTenantStatus(const TString& path);
-    TRequestResponse<NConsole::TEvConsole::TEvGetTenantStatusResponse> MakeRequestConsoleGetTenantStatus(const TString& path);
+    TRequestResponse<NConsole::NEvConsole::TEvGetTenantStatusResponse> MakeRequestConsoleGetTenantStatus(const TString& path);
     void RequestBSControllerConfig();
     void RequestBSControllerConfigWithStoragePools();
     TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> MakeRequestBSControllerConfigWithStoragePools();

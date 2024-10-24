@@ -26,7 +26,7 @@ public:
 
     void Bootstrap(const TActorContext &ctx);
 
-    void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
+    void Handle(NEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                 const TActorContext &ctx);
 
     void ApplyLogConfig(const NKikimrConfig::TLogConfig &config,
@@ -39,8 +39,8 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvConsole::TEvConfigNotificationRequest, Handle);
-            IgnoreFunc(TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            HFunc(NEvConsole::TEvConfigNotificationRequest, Handle);
+            IgnoreFunc(NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
 
         default:
             Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
@@ -73,10 +73,10 @@ void TLogSettingsConfigurator::Bootstrap(const TActorContext &ctx)
 
     ui32 item = (ui32)NKikimrConsole::TConfigItem::LogConfigItem;
     ctx.Send(MakeConfigsDispatcherID(SelfId().NodeId()),
-             new TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(item));
+             new NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(item));
 }
 
-void TLogSettingsConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
+void TLogSettingsConfigurator::Handle(NEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                                       const TActorContext &ctx)
 {
     auto &rec = ev->Get()->Record;
@@ -93,7 +93,7 @@ void TLogSettingsConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest::
     if (PathToConfigCacheFile)
         SaveLogSettingsConfigToCache(logConfig, ctx);
 
-    auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
+    auto resp = MakeHolder<NEvConsole::TEvConfigNotificationResponse>(rec);
 
     LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
                 "TLogSettingsConfigurator: Send TEvConfigNotificationResponse: "

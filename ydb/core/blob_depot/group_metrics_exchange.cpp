@@ -103,7 +103,7 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
-    void TBlobDepot::Handle(TEvBlobDepot::TEvPushMetrics::TPtr ev) {
+    void TBlobDepot::Handle(NEvBlobDepot::TEvPushMetrics::TPtr ev) {
         const auto& record = ev->Get()->Record;
         BytesRead += record.GetBytesRead();
         BytesWritten += record.GetBytesWritten();

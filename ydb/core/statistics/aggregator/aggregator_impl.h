@@ -108,8 +108,8 @@ private:
     NTabletFlatExecutor::ITransaction* CreateTxInitSchema();
     NTabletFlatExecutor::ITransaction* CreateTxInit();
 
-    void HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev);
-    void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
+    void HandleConfig(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev);
+    void HandleConfig(NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr& ev);
 
     void Handle(TEvStatistics::TEvConfigureAggregator::TPtr& ev);
     void Handle(TEvStatistics::TEvSchemeShardStats::TPtr& ev);
@@ -142,7 +142,7 @@ private:
     void Handle(TEvStatistics::TEvDeleteStatisticsQueryResponse::TPtr& ev);
     void Handle(TEvPrivate::TEvScheduleTraversal::TPtr& ev);
     void Handle(TEvStatistics::TEvAnalyzeStatus::TPtr& ev);
-    void Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev);
+    void Handle(NEvHive::TEvResponseTabletDistribution::TPtr& ev);
     void Handle(TEvStatistics::TEvAggregateStatisticsResponse::TPtr& ev);
     void Handle(TEvPrivate::TEvResolve::TPtr& ev);
     void Handle(TEvPrivate::TEvRequestDistribution::TPtr& ev);
@@ -180,8 +180,8 @@ private:
 
     STFUNC(StateWork) {
         switch(ev->GetTypeRewrite()) {
-            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleConfig)
-            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig)
+            hFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleConfig)
+            hFunc(NConsole::NEvConsole::TEvConfigNotificationRequest, HandleConfig)
             hFunc(TEvStatistics::TEvConfigureAggregator, Handle);
             hFunc(TEvStatistics::TEvSchemeShardStats, Handle);
             hFunc(TEvPrivate::TEvPropagate, Handle);
@@ -206,7 +206,7 @@ private:
             hFunc(TEvStatistics::TEvDeleteStatisticsQueryResponse, Handle);
             hFunc(TEvPrivate::TEvScheduleTraversal, Handle);
             hFunc(TEvStatistics::TEvAnalyzeStatus, Handle);
-            hFunc(TEvHive::TEvResponseTabletDistribution, Handle);
+            hFunc(NEvHive::TEvResponseTabletDistribution, Handle);
             hFunc(TEvStatistics::TEvAggregateStatisticsResponse, Handle);
             hFunc(TEvPrivate::TEvResolve, Handle);
             hFunc(TEvPrivate::TEvRequestDistribution, Handle);
@@ -344,7 +344,7 @@ private:
     bool LastTraversalWasForce = false;
 
 private: // stored in local db
-    
+
     TString ForceTraversalOperationId;
 
     TPathId TraversalPathId;
@@ -352,11 +352,11 @@ private: // stored in local db
     TSerializedCellVec TraversalStartKey;
     TInstant TraversalStartTime;
 
-    size_t GlobalTraversalRound = 1; 
+    size_t GlobalTraversalRound = 1;
 
-    std::unordered_map<ui32, std::unique_ptr<TCountMinSketch>> CountMinSketches;   
+    std::unordered_map<ui32, std::unique_ptr<TCountMinSketch>> CountMinSketches;
 
-    std::unordered_map<TPathId, TScheduleTraversal> ScheduleTraversals; 
+    std::unordered_map<TPathId, TScheduleTraversal> ScheduleTraversals;
     std::unordered_map<ui64, std::unordered_set<TPathId>> ScheduleTraversalsBySchemeShard;
     typedef TIntrusiveHeap<TScheduleTraversal, TScheduleTraversal::THeapIndexByTime, TScheduleTraversal::TLessByTime>
         TTraversalsByTime;

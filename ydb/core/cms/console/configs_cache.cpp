@@ -102,7 +102,7 @@ void TConfigsCache::Bootstrap(const TActorContext &ctx) {
     Become(&TThis::StateWork);
 }
 
-void TConfigsCache::Handle(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev) {
+void TConfigsCache::Handle(NEvConsole::TEvConfigSubscriptionNotification::TPtr &ev) {
     auto &rec = ev->Get()->Record;
 
     if (rec.AffectedKindsSize() == 0) {
@@ -127,7 +127,7 @@ void TConfigsCache::Handle(TEvConsole::TEvConfigSubscriptionNotification::TPtr &
     }
 }
 
-void TConfigsCache::Handle(TEvConsole::TEvConfigSubscriptionError::TPtr &ev, const TActorContext &ctx) {
+void TConfigsCache::Handle(NEvConsole::TEvConfigSubscriptionError::TPtr &ev, const TActorContext &ctx) {
     auto &rec = ev->Get()->Record;
 
     BLOG_ERROR("Failed to create subscription " << rec.GetCode() << " " << rec.GetReason() << " will die");

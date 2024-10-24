@@ -67,11 +67,11 @@ void WaitTxNotification(Tests::TServer::TPtr server, TActorId sender, ui64 txId)
     auto &runtime = *server->GetRuntime();
     auto &settings = server->GetSettings();
 
-    auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+    auto request = MakeHolder<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletion>();
     request->Record.SetTxId(txId);
     auto tid = ChangeStateStorage(SchemeRoot, settings.Domain);
     runtime.SendToPipe(tid, sender, request.Release(), 0, GetPipeConfigWithRetries());
-    runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvNotifyTxCompletionResult>(sender);
+    runtime.GrabEdgeEventRethrow<NEvSchemeShard::TEvNotifyTxCompletionResult>(sender);
 }
 
 void CreateTable(Tests::TServer::TPtr server,
@@ -120,7 +120,7 @@ NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer::TPtr server
     request->Record.MutableDescribePath()->SetPath(path);
     request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
     runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
-    auto reply = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDescribeSchemeResult>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvSchemeShard::TEvDescribeSchemeResult>(handle);
 
     return *reply->MutableRecord();
 }
@@ -146,13 +146,13 @@ std::pair<TTableInfoMap, ui64> GetTables(
     auto &runtime = *server->GetRuntime();
 
     auto sender = runtime.AllocateEdgeActor();
-    auto request = MakeHolder<TEvDataShard::TEvGetInfoRequest>();
+    auto request = MakeHolder<NEvDataShard::TEvGetInfoRequest>();
     runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
     TTableInfoMap result;
 
     TAutoPtr<IEventHandle> handle;
-    auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetInfoResponse>(handle);
+    auto response = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvGetInfoResponse>(handle);
     for (auto& table: response->Record.GetUserTables()) {
         result[table.GetName()] = table;
     }
@@ -171,7 +171,7 @@ TVector<TCell> ToCells(const std::vector<TString>& keys) {
 }
 
 void AddRangeQuery(
-    TEvDataShard::TEvRead& request,
+    NEvDataShard::TEvRead& request,
     const std::vector<TString>& from,
     bool fromInclusive,
     const std::vector<TString>& to,
@@ -252,8 +252,8 @@ struct TTestHelper {
         Table.ClientId = runtime.ConnectToPipe(Table.TabletId, Sender, 0, GetPipeConfigWithRetries());
     }
 
-    std::unique_ptr<TEvDataShard::TEvRead> GetBaseReadRequest() {
-        std::unique_ptr<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
+    std::unique_ptr<NEvDataShard::TEvRead> GetBaseReadRequest() {
+        std::unique_ptr<NEvDataShard::TEvRead> request(new NEvDataShard::TEvRead());
         auto& record = request->Record;
 
         record.SetReadId(ReadId++);
@@ -274,17 +274,17 @@ struct TTestHelper {
         return request;
     }
 
-    std::unique_ptr<TEvDataShard::TEvReadResult> WaitReadResult(TDuration timeout = TDuration::Max()) {
+    std::unique_ptr<NEvDataShard::TEvReadResult> WaitReadResult(TDuration timeout = TDuration::Max()) {
         auto &runtime = *Server->GetRuntime();
         TAutoPtr<IEventHandle> handle;
-        runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(handle, timeout);
+        runtime.GrabEdgeEventRethrow<NEvDataShard::TEvReadResult>(handle, timeout);
         if (!handle) {
             return nullptr;
         }
-        return std::unique_ptr<TEvDataShard::TEvReadResult>(handle->Release<TEvDataShard::TEvReadResult>().Release());
+        return std::unique_ptr<NEvDataShard::TEvReadResult>(handle->Release<NEvDataShard::TEvReadResult>().Release());
     }
 
-    std::unique_ptr<TEvDataShard::TEvReadResult> SendRead(TEvDataShard::TEvRead* request)
+    std::unique_ptr<NEvDataShard::TEvReadResult> SendRead(NEvDataShard::TEvRead* request)
     {
         auto &runtime = *Server->GetRuntime();
         runtime.SendToPipe(

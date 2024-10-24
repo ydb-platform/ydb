@@ -40,7 +40,7 @@ private:
             HFunc(TEvPQProxy::TEvAuthResultOk, Handle); // form auth actor
             HFunc(TEvPQProxy::TEvCloseSession, Handle) //from auth actor
 
-            HFunc(TEvPersQueue::TEvResponse, Handle);
+            HFunc(NEvPersQueue::TEvResponse, Handle);
         default:
             break;
         };
@@ -49,7 +49,7 @@ private:
     void Handle(TEvPQProxy::TEvCloseSession::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const NActors::TActorContext& ctx);
 
-    void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
 
     void AnswerError(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx);
     void ProcessAnswers(const TActorContext& ctx);

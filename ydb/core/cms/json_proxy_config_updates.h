@@ -6,13 +6,13 @@
 
 namespace NKikimr::NCms {
 
-class TJsonProxyConfigUpdates : public TJsonProxyConsole<NConsole::TEvConsole::TEvCheckConfigUpdatesRequest,
-                                                         NConsole::TEvConsole::TEvCheckConfigUpdatesResponse>
+class TJsonProxyConfigUpdates : public TJsonProxyConsole<NConsole::NEvConsole::TEvCheckConfigUpdatesRequest,
+                                                         NConsole::NEvConsole::TEvCheckConfigUpdatesResponse>
 {
 public:
     TJsonProxyConfigUpdates(NMon::TEvHttpInfo::TPtr &event)
-        : TJsonProxyConsole<NConsole::TEvConsole::TEvCheckConfigUpdatesRequest,
-                            NConsole::TEvConsole::TEvCheckConfigUpdatesResponse>(event)
+        : TJsonProxyConsole<NConsole::NEvConsole::TEvCheckConfigUpdatesRequest,
+                            NConsole::NEvConsole::TEvCheckConfigUpdatesResponse>(event)
     {
     }
 

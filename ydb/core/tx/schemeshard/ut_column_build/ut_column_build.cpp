@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         defaultValue.mutable_value()->set_text_value("1111");
 
         TestBuildColumn(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "ColumnValue", defaultValue, Ydb::StatusIds::SUCCESS);
-    
+
         auto listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
         Y_ASSERT(listing.EntriesSize() == 1);
 
@@ -346,7 +346,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         bool enabledCapture = true;
         TVector<TAutoPtr<IEventHandle>> delayedUpsertRows;
         auto grab = [&delayedUpsertRows, &enabledCapture](TAutoPtr<IEventHandle>& ev) -> auto {
-            if (enabledCapture && ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvUploadRowsRequest::EventType) {
+            if (enabledCapture && ev->GetTypeRewrite() == NKikimr::NEvDataShard::TEvUploadRowsRequest::EventType) {
                 delayedUpsertRows.emplace_back(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
             }
@@ -378,7 +378,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         for (const auto& ev: delayedUpsertRows) {
             runtime.Send(ev);
         }
-    
+
         enabledCapture = false;
 
         auto listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
@@ -387,7 +387,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", txId);
-        Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE); 
+        Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE);
 
         for (ui32 delta = 50; delta < 101; ++delta) {
             UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::FakeHiveTablets + 6, "__user__Table", "key", 1 + delta));

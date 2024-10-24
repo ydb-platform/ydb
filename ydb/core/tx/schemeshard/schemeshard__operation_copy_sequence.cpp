@@ -27,11 +27,11 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), {
-            TEvHive::TEvCreateTabletReply::EventType,
+            NEvHive::TEvCreateTabletReply::EventType,
         });
     }
 
-    bool HandleReply(NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NSequenceShard::NEvSequenceShard::TEvCreateSequenceResult::TPtr& ev, TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
         auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         auto status = ev->Get()->Record.GetStatus();
@@ -109,7 +109,7 @@ public:
             Y_ABORT_UNLESS(shard.TabletType == ETabletType::SequenceShard);
             Y_ABORT_UNLESS(tabletId != InvalidTabletId);
 
-            auto event = MakeHolder<NSequenceShard::TEvSequenceShard::TEvCreateSequence>(txState->TargetPathId);
+            auto event = MakeHolder<NSequenceShard::NEvSequenceShard::TEvCreateSequence>(txState->TargetPathId);
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.SetTxPartId(OperationId.GetSubTxId());
             event->Record.SetFrozen(true);
@@ -146,11 +146,11 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), {
-            NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::EventType,
+            NSequenceShard::NEvSequenceShard::TEvCreateSequenceResult::EventType,
         });
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         auto step = TStepId(ev->Get()->StepId);
         auto ssId = context.SS->SelfTabletId();
 
@@ -228,16 +228,16 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), {
-            TEvPrivate::TEvOperationPlan::EventType,
-            NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::EventType,
+            NEvPrivate::TEvOperationPlan::EventType,
+            NSequenceShard::NEvSequenceShard::TEvCreateSequenceResult::EventType,
         });
     }
 
-    bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvPrivate::TEvCompleteBarrier"
+                   DebugHint() << " HandleReply NEvPrivate::TEvCompleteBarrier"
                                << ", msg: " << ev->Get()->ToString()
                                << ", at tablet" << ssId);
 
@@ -291,13 +291,13 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), {
-            TEvPrivate::TEvOperationPlan::EventType,
-            TEvPrivate::TEvCompleteBarrier::EventType,
-            NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::EventType,
+            NEvPrivate::TEvOperationPlan::EventType,
+            NEvPrivate::TEvCompleteBarrier::EventType,
+            NSequenceShard::NEvSequenceShard::TEvCreateSequenceResult::EventType,
         });
     }
 
-    bool HandleReply(NSequenceShard::TEvSequenceShard::TEvRestoreSequenceResult::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NSequenceShard::NEvSequenceShard::TEvRestoreSequenceResult::TPtr& ev, TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
         auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         auto status = ev->Get()->Record.GetStatus();
@@ -359,7 +359,7 @@ public:
         return true;
     }
 
-    bool HandleReply(NSequenceShard::TEvSequenceShard::TEvGetSequenceResult::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NSequenceShard::NEvSequenceShard::TEvGetSequenceResult::TPtr& ev, TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
         auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         auto status = ev->Get()->Record.GetStatus();
@@ -416,7 +416,7 @@ public:
 
             Y_ABORT_UNLESS(currentTabletId != InvalidTabletId);
 
-            auto event = MakeHolder<NSequenceShard::TEvSequenceShard::TEvRestoreSequence>(
+            auto event = MakeHolder<NSequenceShard::NEvSequenceShard::TEvRestoreSequence>(
                 txState->TargetPathId, GetSequenceResult);
 
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
@@ -455,7 +455,7 @@ public:
             auto shardIdx = shard.Idx;
             auto tabletId = context.SS->ShardInfos.at(shardIdx).TabletID;
 
-            auto event = MakeHolder<NSequenceShard::TEvSequenceShard::TEvGetSequence>(txState->SourcePathId);
+            auto event = MakeHolder<NSequenceShard::NEvSequenceShard::TEvGetSequence>(txState->SourcePathId);
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.SetTxPartId(OperationId.GetSubTxId());
 
@@ -539,7 +539,7 @@ public:
                         << ", opId: " << OperationId
                         << ", at schemeshard: " << ssId);
 
-        TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
+        NEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
 
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);

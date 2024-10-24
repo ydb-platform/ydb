@@ -137,7 +137,7 @@ private:
 
     void AlterStateGetConfig(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvConfigsDispatcher::TEvGetConfigResponse, Handle);
+            HFunc(NEvConfigsDispatcher::TEvGetConfigResponse, Handle);
             HFunc(TEvents::TEvUndelivered, Handle);
             HFunc(TEvents::TEvWakeup, HandleWakeup);
         default: TBase::StateFuncBase(ev);
@@ -153,7 +153,7 @@ private:
         Become(&TAlterTableRPC::AlterStateWork);
     }
 
-    void Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NEvConfigsDispatcher::TEvGetConfigResponse::TPtr &ev, const TActorContext &ctx) {
         auto &config = ev->Get()->Config->GetTableProfilesConfig();
         Profiles.Load(config);
 
@@ -177,7 +177,7 @@ private:
     void SendConfigRequest(const TActorContext &ctx) {
         ui32 configKind = (ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem;
         ctx.Send(MakeConfigsDispatcherID(ctx.SelfID.NodeId()),
-            new TEvConfigsDispatcher::TEvGetConfigRequest(configKind),
+            new NEvConfigsDispatcher::TEvGetConfigRequest(configKind),
             IEventHandle::FlagTrackDelivery);
     }
 
@@ -384,11 +384,11 @@ private:
     }
 
     void DoSubscribe(const TActorContext& ctx) {
-        auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(TxId);
+        auto request = std::make_unique<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletion>(TxId);
         ForwardToSchemeShard(ctx, std::move(request));
     }
 
-    void OnNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) override {
+    void OnNotifyTxCompletionResult(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) override {
         if (OpType == EOp::AddIndex) {
             GetIndexStatus(ctx);
         } else {
@@ -411,7 +411,7 @@ private:
         Die(ctx);
     }
 
-    void AlterTable(const TActorContext &ctx, const TMaybe<TString>& overridePath = {}) { 
+    void AlterTable(const TActorContext &ctx, const TMaybe<TString>& overridePath = {}) {
         const auto req = GetProtoRequest();
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
         auto modifyScheme = proposeRequest->Record.MutableTransaction()->MutableModifyScheme();

@@ -25,7 +25,7 @@ class TMessageBusServerFlatDescribeRequest : public TMessageBusSecureRequest<TMe
     THolder<TBusSchemeDescribe> Request;
     NYql::TIssueManager IssueManager;
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
         auto &mutableRecord = *ev->Get()->MutableRecord();
         TAutoPtr<ResponseType> response(new ResponseType());
         response->Record.SetSchemeStatus(mutableRecord.GetStatus());
@@ -73,7 +73,7 @@ public:
     //STFUNC(StateWork)
     void StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFunc(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult, Handle);
         }
     }
 
@@ -149,7 +149,7 @@ TBusResponse* ProposeTransactionStatusToResponse(EResponseStatus status,
 
 //void TMessageBusServerProxy::Handle(TEvBusProxy::TEvRequest::TPtr& ev, const TActorContext& ctx); // see msgbus_server_request.cpp
 
-//void TMessageBusServerProxy::Handle(TEvBusProxy::TEvPersQueue::TPtr& ev, const TActorContext& ctx); // see msgbus_server_scheme_request.cpp
+//void TMessageBusServerProxy::Handle(TEvBusProxy::NEvPersQueue::TPtr& ev, const TActorContext& ctx); // see msgbus_server_scheme_request.cpp
 //void TMessageBusServerProxy::Handle(TEvBusProxy::TEvFlatTxRequest::TPtr& ev, const TActorContext& ctx); // see msgbus_server_scheme_request.cpp
 
 void TMessageBusServerProxy::Handle(TEvBusProxy::TEvFlatDescribeRequest::TPtr& ev, const TActorContext& ctx) {

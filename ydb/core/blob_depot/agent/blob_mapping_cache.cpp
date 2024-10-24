@@ -141,7 +141,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::TBlobMappingCache::ProcessResponse(ui64 tag, TRequestContext::TPtr context, TResponse response) {
-        if (auto *p = std::get_if<TEvBlobDepot::TEvResolveResult*>(&response)) {
+        if (auto *p = std::get_if<NEvBlobDepot::TEvResolveResult*>(&response)) {
             HandleResolveResult(tag, (*p)->Record, std::move(context));
         } else if (std::holds_alternative<TTabletDisconnected>(response)) {
             STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA38, "TBlobMappingCache::TTabletDisconnected",

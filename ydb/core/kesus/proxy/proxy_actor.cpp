@@ -51,7 +51,7 @@ class TKesusProxyActor : public TActorBootstrapped<TKesusProxyActor> {
         TActorId Owner;
         ui64 OwnerCookie;
         ESessionState State = ESessionState::ATTACHING;
-        THolder<TEvKesus::TEvAttachSession> AttachEvent;
+        THolder<NEvKesus::TEvAttachSession> AttachEvent;
         bool Destroy = false;
 
         // Request SeqNo -> Cookie
@@ -205,7 +205,7 @@ private:
 
         ++ProxyGeneration;
         KPROXY_LOG_DEBUG_S("Registering with ProxyGeneration=" << ProxyGeneration);
-        NTabletPipe::SendData(SelfId(), TabletPipe, new TEvKesus::TEvRegisterProxy(KesusPath, ProxyGeneration));
+        NTabletPipe::SendData(SelfId(), TabletPipe, new NEvKesus::TEvRegisterProxy(KesusPath, ProxyGeneration));
         return false;
     }
 
@@ -350,7 +350,7 @@ private:
         }
     }
 
-    void Handle(const TEvKesus::TEvRegisterProxyResult::TPtr& ev) {
+    void Handle(const NEvKesus::TEvRegisterProxyResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         if (record.GetProxyGeneration() != ProxyGeneration) {
             // Ignore outdated responses
@@ -399,7 +399,7 @@ private:
         NTabletPipe::SendData(
             SelfId(),
             TabletPipe,
-            new TEvKesus::TEvDetachSession(KesusPath, ProxyGeneration, data->SessionId),
+            new NEvKesus::TEvDetachSession(KesusPath, ProxyGeneration, data->SessionId),
             data->SeqNo);
     }
 
@@ -410,7 +410,7 @@ private:
         NTabletPipe::SendData(
             SelfId(),
             TabletPipe,
-            new TEvKesus::TEvDestroySession(KesusPath, ProxyGeneration, data->SessionId),
+            new NEvKesus::TEvDestroySession(KesusPath, ProxyGeneration, data->SessionId),
             data->SeqNo);
     }
 
@@ -453,7 +453,7 @@ private:
         }
     }
 
-    void Handle(TEvKesus::TEvDescribeSemaphore::TPtr& ev) {
+    void Handle(NEvKesus::TEvDescribeSemaphore::TPtr& ev) {
         auto msg = ev->Release();
         if (msg->Record.GetProxyGeneration() == 0 && msg->Record.GetSessionId() == 0) {
             HandleDirectRequest(ev->Sender, ev->Cookie, std::move(msg));
@@ -462,7 +462,7 @@ private:
         }
     }
 
-    void Handle(TEvKesus::TEvDescribeSemaphoreResult::TPtr& ev) {
+    void Handle(NEvKesus::TEvDescribeSemaphoreResult::TPtr& ev) {
         auto msg = ev->Release();
         if (msg->Record.GetProxyGeneration() == 0) {
             HandleDirectResponse(ev->Cookie, std::move(msg));
@@ -472,11 +472,11 @@ private:
         }
     }
 
-    void Handle(TEvKesus::TEvDescribeSemaphoreChanged::TPtr& ev) {
+    void Handle(NEvKesus::TEvDescribeSemaphoreChanged::TPtr& ev) {
         HandleSessionResponse(ev->Cookie, ev->Release());
     }
 
-    void Handle(TEvKesus::TEvCreateSemaphore::TPtr& ev) {
+    void Handle(NEvKesus::TEvCreateSemaphore::TPtr& ev) {
         auto msg = ev->Release();
         if (msg->Record.GetProxyGeneration() == 0 && msg->Record.GetSessionId() == 0) {
             HandleDirectRequest(ev->Sender, ev->Cookie, std::move(msg));
@@ -485,7 +485,7 @@ private:
         }
     }
 
-    void Handle(TEvKesus::TEvCreateSemaphoreResult::TPtr& ev) {
+    void Handle(NEvKesus::TEvCreateSemaphoreResult::TPtr& ev) {
         auto msg = ev->Release();
         if (msg->Record.GetProxyGeneration() == 0) {
             HandleDirectResponse(ev->Cookie, std::move(msg));
@@ -494,7 +494,7 @@ private:
         }
     }
 
-    void Handle(TEvKesus::TEvUpdateSemaphore::TPtr& ev) {
+    void Handle(NEvKesus::TEvUpdateSemaphore::TPtr& ev) {
         auto msg = ev->Release();
         if (msg->Record.GetProxyGeneration() == 0 && msg->Record.GetSessionId() == 0) {
             HandleDirectRequest(ev->Sender, ev->Cookie, std::move(msg));
@@ -503,7 +503,7 @@ private:
         }
     }
 
-    void Handle(TEvKesus::TEvUpdateSemaphoreResult::TPtr& ev) {
+    void Handle(NEvKesus::TEvUpdateSemaphoreResult::TPtr& ev) {
         auto msg = ev->Release();
         if (msg->Record.GetProxyGeneration() == 0) {
             HandleDirectResponse(ev->Cookie, std::move(msg));
@@ -512,7 +512,7 @@ private:
         }
     }
 
-    void Handle(TEvKesus::TEvDeleteSemaphore::TPtr& ev) {
+    void Handle(NEvKesus::TEvDeleteSemaphore::TPtr& ev) {
         auto msg = ev->Release();
         if (msg->Record.GetProxyGeneration() == 0 && msg->Record.GetSessionId() == 0) {
             HandleDirectRequest(ev->Sender, ev->Cookie, std::move(msg));
@@ -521,7 +521,7 @@ private:
         }
     }
 
-    void Handle(TEvKesus::TEvDeleteSemaphoreResult::TPtr& ev) {
+    void Handle(NEvKesus::TEvDeleteSemaphoreResult::TPtr& ev) {
         auto msg = ev->Release();
         if (msg->Record.GetProxyGeneration() == 0) {
             HandleDirectResponse(ev->Cookie, std::move(msg));
@@ -530,7 +530,7 @@ private:
         }
     }
 
-    void Handle(TEvKesus::TEvAttachSession::TPtr& ev) {
+    void Handle(NEvKesus::TEvAttachSession::TPtr& ev) {
         KPROXY_LOG_TRACE_S("Received TEvAttachSession from " << ev->Sender);
         Y_ABORT_UNLESS(ev->Sender);
         Y_ABORT_UNLESS(!SessionByOwner.contains(ev->Sender), "Only one outgoing request per sender is allowed");
@@ -542,7 +542,7 @@ private:
             if (record.GetSeqNo() < data->ClientSeqNo) {
                 KPROXY_LOG_TRACE_S("Replying with BAD_SESSION to " << ev->Sender);
                 Send(ev->Sender,
-                    new TEvKesus::TEvAttachSessionResult(
+                    new NEvKesus::TEvAttachSessionResult(
                         ProxyGeneration,
                         record.GetSessionId(),
                         Ydb::StatusIds::BAD_SESSION,
@@ -553,7 +553,7 @@ private:
             if (data->Destroy) {
                 KPROXY_LOG_TRACE_S("Replying with SESSION_EXPIRED to " << ev->Sender);
                 Send(ev->Sender,
-                    new TEvKesus::TEvAttachSessionResult(
+                    new NEvKesus::TEvAttachSessionResult(
                         ProxyGeneration,
                         record.GetSessionId(),
                         Ydb::StatusIds::SESSION_EXPIRED,
@@ -592,7 +592,7 @@ private:
         }
     }
 
-    void Handle(const TEvKesus::TEvAttachSessionResult::TPtr& ev) {
+    void Handle(const NEvKesus::TEvAttachSessionResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         if (record.GetProxyGeneration() != ProxyGeneration) {
             // Ignore outdated responses
@@ -640,7 +640,7 @@ private:
         }
     }
 
-    void Handle(const TEvKesus::TEvProxyExpired::TPtr& ev) {
+    void Handle(const NEvKesus::TEvProxyExpired::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         if (record.GetProxyGeneration() != ProxyGeneration) {
             // Ignore outdated notifications
@@ -659,7 +659,7 @@ private:
         }
     }
 
-    void Handle(const TEvKesus::TEvSessionExpired::TPtr& ev) {
+    void Handle(const NEvKesus::TEvSessionExpired::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         const ui64 sessionId = record.GetSessionId();
         KPROXY_LOG_TRACE_S("Received TEvSessionExpired with SessionId=" << sessionId);
@@ -677,7 +677,7 @@ private:
         }
     }
 
-    void Handle(const TEvKesus::TEvSessionStolen::TPtr& ev) {
+    void Handle(const NEvKesus::TEvSessionStolen::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         if (record.GetProxyGeneration() != ProxyGeneration) {
             // Ignore outdated notifications
@@ -698,7 +698,7 @@ private:
         }
     }
 
-    void Handle(const TEvKesus::TEvDetachSessionResult::TPtr& ev) {
+    void Handle(const NEvKesus::TEvDetachSessionResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         if (record.GetProxyGeneration() != ProxyGeneration) {
             // Ignore outdated notifications
@@ -708,7 +708,7 @@ private:
         // We actually don't care if detach is successful or not
     }
 
-    void Handle(const TEvKesus::TEvDestroySession::TPtr& ev) {
+    void Handle(const NEvKesus::TEvDestroySession::TPtr& ev) {
         KPROXY_LOG_TRACE_S("Received TEvDestroySession from " << ev->Sender);
         Y_ABORT_UNLESS(ev->Sender);
 
@@ -729,7 +729,7 @@ private:
             0, ev->Cookie);
     }
 
-    void Handle(const TEvKesus::TEvDestroySessionResult::TPtr& ev) {
+    void Handle(const NEvKesus::TEvDestroySessionResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         if (record.GetProxyGeneration() != ProxyGeneration) {
             // Ignore responses from the wrong generation
@@ -787,23 +787,23 @@ private:
         }
     }
 
-    void Handle(const TEvKesus::TEvAcquireSemaphore::TPtr& ev) {
+    void Handle(const NEvKesus::TEvAcquireSemaphore::TPtr& ev) {
         HandleSessionRequest(ev->Sender, ev->Cookie, ev->Release());
     }
 
-    void Handle(const TEvKesus::TEvAcquireSemaphorePending::TPtr& ev) {
+    void Handle(const NEvKesus::TEvAcquireSemaphorePending::TPtr& ev) {
         HandleSessionResponse(ev->Cookie, ev->Release(), false);
     }
 
-    void Handle(const TEvKesus::TEvAcquireSemaphoreResult::TPtr& ev) {
+    void Handle(const NEvKesus::TEvAcquireSemaphoreResult::TPtr& ev) {
         HandleSessionResponse(ev->Cookie, ev->Release());
     }
 
-    void Handle(const TEvKesus::TEvReleaseSemaphore::TPtr& ev) {
+    void Handle(const NEvKesus::TEvReleaseSemaphore::TPtr& ev) {
         HandleSessionRequest(ev->Sender, ev->Cookie, ev->Release());
     }
 
-    void Handle(const TEvKesus::TEvReleaseSemaphoreResult::TPtr& ev) {
+    void Handle(const NEvKesus::TEvReleaseSemaphoreResult::TPtr& ev) {
         HandleSessionResponse(ev->Cookie, ev->Release());
     }
 
@@ -813,29 +813,29 @@ private:
             hFunc(TEvKesusProxy::TEvCancelRequest, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            hFunc(TEvKesus::TEvRegisterProxyResult, Handle);
-            hFunc(TEvKesus::TEvDescribeSemaphore, Handle);
-            hFunc(TEvKesus::TEvDescribeSemaphoreResult, Handle);
-            hFunc(TEvKesus::TEvDescribeSemaphoreChanged, Handle);
-            hFunc(TEvKesus::TEvCreateSemaphore, Handle);
-            hFunc(TEvKesus::TEvCreateSemaphoreResult, Handle);
-            hFunc(TEvKesus::TEvUpdateSemaphore, Handle);
-            hFunc(TEvKesus::TEvUpdateSemaphoreResult, Handle);
-            hFunc(TEvKesus::TEvDeleteSemaphore, Handle);
-            hFunc(TEvKesus::TEvDeleteSemaphoreResult, Handle);
-            hFunc(TEvKesus::TEvAttachSession, Handle);
-            hFunc(TEvKesus::TEvAttachSessionResult, Handle);
-            hFunc(TEvKesus::TEvProxyExpired, Handle);
-            hFunc(TEvKesus::TEvSessionExpired, Handle);
-            hFunc(TEvKesus::TEvSessionStolen, Handle);
-            hFunc(TEvKesus::TEvDetachSessionResult, Handle);
-            hFunc(TEvKesus::TEvDestroySession, Handle);
-            hFunc(TEvKesus::TEvDestroySessionResult, Handle);
-            hFunc(TEvKesus::TEvAcquireSemaphore, Handle);
-            hFunc(TEvKesus::TEvAcquireSemaphorePending, Handle);
-            hFunc(TEvKesus::TEvAcquireSemaphoreResult, Handle);
-            hFunc(TEvKesus::TEvReleaseSemaphore, Handle);
-            hFunc(TEvKesus::TEvReleaseSemaphoreResult, Handle);
+            hFunc(NEvKesus::TEvRegisterProxyResult, Handle);
+            hFunc(NEvKesus::TEvDescribeSemaphore, Handle);
+            hFunc(NEvKesus::TEvDescribeSemaphoreResult, Handle);
+            hFunc(NEvKesus::TEvDescribeSemaphoreChanged, Handle);
+            hFunc(NEvKesus::TEvCreateSemaphore, Handle);
+            hFunc(NEvKesus::TEvCreateSemaphoreResult, Handle);
+            hFunc(NEvKesus::TEvUpdateSemaphore, Handle);
+            hFunc(NEvKesus::TEvUpdateSemaphoreResult, Handle);
+            hFunc(NEvKesus::TEvDeleteSemaphore, Handle);
+            hFunc(NEvKesus::TEvDeleteSemaphoreResult, Handle);
+            hFunc(NEvKesus::TEvAttachSession, Handle);
+            hFunc(NEvKesus::TEvAttachSessionResult, Handle);
+            hFunc(NEvKesus::TEvProxyExpired, Handle);
+            hFunc(NEvKesus::TEvSessionExpired, Handle);
+            hFunc(NEvKesus::TEvSessionStolen, Handle);
+            hFunc(NEvKesus::TEvDetachSessionResult, Handle);
+            hFunc(NEvKesus::TEvDestroySession, Handle);
+            hFunc(NEvKesus::TEvDestroySessionResult, Handle);
+            hFunc(NEvKesus::TEvAcquireSemaphore, Handle);
+            hFunc(NEvKesus::TEvAcquireSemaphorePending, Handle);
+            hFunc(NEvKesus::TEvAcquireSemaphoreResult, Handle);
+            hFunc(NEvKesus::TEvReleaseSemaphore, Handle);
+            hFunc(NEvKesus::TEvReleaseSemaphoreResult, Handle);
 
             default:
                 Y_ABORT("Unexpected event 0x%x for TKesusProxyActor", ev->GetTypeRewrite());

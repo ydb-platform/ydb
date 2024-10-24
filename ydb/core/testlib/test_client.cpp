@@ -473,7 +473,7 @@ namespace Tests {
         auto tid = ChangeStateStorage(SchemeRoot, settings.Domain);
         const TDomainsInfo::TDomain& domain = runtime.GetAppData().DomainsInfo->GetDomain(settings.Domain);
 
-        auto evTx = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(1, tid);
+        auto evTx = MakeHolder<NSchemeShard::NEvSchemeShard::TEvModifySchemeTransaction>(1, tid);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain);
         transaction->SetWorkingDir("/");
@@ -490,17 +490,17 @@ namespace Tests {
 
         {
             TAutoPtr<IEventHandle> handle;
-            auto event = runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
+            auto event = runtime.GrabEdgeEvent<NSchemeShard::NEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
             UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSchemeshardId(), tid);
             UNIT_ASSERT_VALUES_EQUAL(event->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
         }
 
-        auto evSubscribe = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(1);
+        auto evSubscribe = MakeHolder<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletion>(1);
         runtime.SendToPipe(tid, sender, evSubscribe.Release(), 0, GetPipeConfigWithRetries());
 
         {
             TAutoPtr<IEventHandle> handle;
-            auto event = runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(handle);
+            auto event = runtime.GrabEdgeEvent<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult>(handle);
             UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), 1);
         }
     }
@@ -545,13 +545,13 @@ namespace Tests {
 
             ui32 nodeIndex = 0;
             auto ev =
-                MakeHolder<TEvHive::TEvCreateTablet>(tabletId, 0, TTabletTypes::PersQueue, BINDED_CHANNELS);
+                MakeHolder<NEvHive::TEvCreateTablet>(tabletId, 0, TTabletTypes::PersQueue, BINDED_CHANNELS);
 
             TActorId senderB = Runtime->AllocateEdgeActor(nodeIndex);
             ui64 hive = ChangeStateStorage(Tests::Hive, Settings->Domain);
             Runtime->SendToPipe(hive, senderB, ev.Release(), 0, GetPipeConfigWithRetries());
             TAutoPtr<IEventHandle> handle;
-            auto createTabletReply = Runtime->GrabEdgeEventRethrow<TEvHive::TEvCreateTabletReply>(handle);
+            auto createTabletReply = Runtime->GrabEdgeEventRethrow<NEvHive::TEvCreateTabletReply>(handle);
             UNIT_ASSERT(createTabletReply);
             auto expectedStatus = NKikimrProto::OK;
             UNIT_ASSERT_EQUAL_C(createTabletReply->Record.GetStatus(), expectedStatus,
@@ -561,7 +561,7 @@ namespace Tests {
             ui64 id = createTabletReply->Record.GetTabletID();
             while (wait) {
                 auto tabletCreationResult =
-                    Runtime->GrabEdgeEventRethrow<TEvHive::TEvTabletCreationResult>(handle);
+                    Runtime->GrabEdgeEventRethrow<NEvHive::TEvTabletCreationResult>(handle);
                 UNIT_ASSERT(tabletCreationResult);
                 if (id == tabletCreationResult->Record.GetTabletID()) {
                     UNIT_ASSERT_EQUAL_C(tabletCreationResult->Record.GetStatus(), NKikimrProto::OK,
@@ -2013,15 +2013,15 @@ namespace Tests {
     }
 
     NMsgBusProxy::EResponseStatus TClient::WaitCreateTx(TTestActorRuntime* runtime, const TString& path, TDuration timeout) {
-        TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> request(new NSchemeShard::TEvSchemeShard::TEvDescribeScheme());
+        TAutoPtr<NSchemeShard::NEvSchemeShard::TEvDescribeScheme> request(new NSchemeShard::NEvSchemeShard::TEvDescribeScheme());
         request->Record.SetPath(path);
         const ui64 schemeRoot = GetPatchedSchemeRoot(SchemeRoot, Domain, SupportsRedirect);
         TActorId sender = runtime->AllocateEdgeActor(0);
         ForwardToTablet(*runtime, schemeRoot, sender, request.Release(), 0);
 
         TAutoPtr<IEventHandle> handle;
-        runtime->GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle);
-        auto& record = handle->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->GetRecord();
+        runtime->GrabEdgeEvent<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult>(handle);
+        auto& record = handle->Get<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult>()->GetRecord();
         //Cerr << record.DebugString() << Endl;
 
         UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
@@ -2504,7 +2504,7 @@ namespace Tests {
     }
 
     void TClient::GetTabletInfoFromHive(TTestActorRuntime* runtime, ui64 tabletId, bool returnFollowers, NKikimrHive::TEvResponseHiveInfo& res) {
-        TAutoPtr<TEvHive::TEvRequestHiveInfo> ev(new TEvHive::TEvRequestHiveInfo);
+        TAutoPtr<NEvHive::TEvRequestHiveInfo> ev(new NEvHive::TEvRequestHiveInfo);
         ev->Record.SetTabletID(tabletId);
         ev->Record.SetReturnFollowers(returnFollowers);
 
@@ -2512,7 +2512,7 @@ namespace Tests {
         TActorId edge = runtime->AllocateEdgeActor();
         runtime->SendToPipe(hive, edge, ev.Release());
         TAutoPtr<IEventHandle> handle;
-        TEvHive::TEvResponseHiveInfo* response = runtime->GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+        NEvHive::TEvResponseHiveInfo* response = runtime->GrabEdgeEventRethrow<NEvHive::TEvResponseHiveInfo>(handle);
         res.Swap(&response->Record);
     }
 
@@ -2545,13 +2545,13 @@ namespace Tests {
     }
 
     void TClient::GetTabletStorageInfoFromHive(TTestActorRuntime* runtime, ui64 tabletId, NKikimrHive::TEvGetTabletStorageInfoResult& res) {
-        TAutoPtr<TEvHive::TEvGetTabletStorageInfo> ev(new TEvHive::TEvGetTabletStorageInfo(tabletId));
+        TAutoPtr<NEvHive::TEvGetTabletStorageInfo> ev(new NEvHive::TEvGetTabletStorageInfo(tabletId));
 
         ui64 hive = ChangeStateStorage(Tests::Hive, Domain);
         TActorId edge = runtime->AllocateEdgeActor();
         runtime->SendToPipe(hive, edge, ev.Release());
         TAutoPtr<IEventHandle> handle;
-        TEvHive::TEvGetTabletStorageInfoResult* response = runtime->GrabEdgeEventRethrow<TEvHive::TEvGetTabletStorageInfoResult>(handle);
+        NEvHive::TEvGetTabletStorageInfoResult* response = runtime->GrabEdgeEventRethrow<NEvHive::TEvGetTabletStorageInfoResult>(handle);
 
         res.Swap(&response->Record);
         Cerr << response->Record.DebugString() << "\n";
@@ -2597,7 +2597,7 @@ namespace Tests {
     }
 
     Ydb::StatusIds::StatusCode TClient::AddQuoterResource(TTestActorRuntime* runtime, const TString& kesusPath, const TString& resourcePath, const NKikimrKesus::THierarchicalDRRResourceConfig& props) {
-        THolder<NKesus::TEvKesus::TEvAddQuoterResource> request = MakeHolder<NKesus::TEvKesus::TEvAddQuoterResource>();
+        THolder<NKesus::NEvKesus::TEvAddQuoterResource> request = MakeHolder<NKesus::NEvKesus::TEvAddQuoterResource>();
         request->Record.MutableResource()->SetResourcePath(resourcePath);
         *request->Record.MutableResource()->MutableHierarchicalDRRResourceConfig() = props;
 
@@ -2605,20 +2605,20 @@ namespace Tests {
         ForwardToTablet(*runtime, GetKesusTabletId(kesusPath), sender, request.Release(), 0);
 
         TAutoPtr<IEventHandle> handle;
-        runtime->GrabEdgeEvent<NKesus::TEvKesus::TEvAddQuoterResourceResult>(handle);
-        auto& record = handle->Get<NKesus::TEvKesus::TEvAddQuoterResourceResult>()->Record;
+        runtime->GrabEdgeEvent<NKesus::NEvKesus::TEvAddQuoterResourceResult>(handle);
+        auto& record = handle->Get<NKesus::NEvKesus::TEvAddQuoterResourceResult>()->Record;
         return record.GetError().GetStatus();
     }
 
-    THolder<NKesus::TEvKesus::TEvGetConfigResult> TClient::GetKesusConfig(TTestActorRuntime* runtime, const TString& kesusPath) {
-        THolder<NKesus::TEvKesus::TEvGetConfig> request = MakeHolder<NKesus::TEvKesus::TEvGetConfig>();
+    THolder<NKesus::NEvKesus::TEvGetConfigResult> TClient::GetKesusConfig(TTestActorRuntime* runtime, const TString& kesusPath) {
+        THolder<NKesus::NEvKesus::TEvGetConfig> request = MakeHolder<NKesus::NEvKesus::TEvGetConfig>();
 
         TActorId sender = runtime->AllocateEdgeActor(0);
         ForwardToTablet(*runtime, GetKesusTabletId(kesusPath), sender, request.Release(), 0);
 
         TAutoPtr<IEventHandle> handle;
-        runtime->GrabEdgeEvent<NKesus::TEvKesus::TEvGetConfigResult>(handle);
-        return THolder<NKesus::TEvKesus::TEvGetConfigResult>(handle->Release<NKesus::TEvKesus::TEvGetConfigResult>());
+        runtime->GrabEdgeEvent<NKesus::NEvKesus::TEvGetConfigResult>(handle);
+        return THolder<NKesus::NEvKesus::TEvGetConfigResult>(handle->Release<NKesus::NEvKesus::TEvGetConfigResult>());
     }
 
     bool IsServerRedirected() {
@@ -2765,11 +2765,11 @@ namespace Tests {
         const TActorId edgeActor = runtime.AllocateEdgeActor();
         const TInstant start = TInstant::Now();
         while (TInstant::Now() - start <= timeout) {
-            auto getTenantRequest = std::make_unique<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
+            auto getTenantRequest = std::make_unique<NConsole::NEvConsole::TEvGetTenantStatusRequest>();
             getTenantRequest->Record.MutableRequest()->set_path(path);
             runtime.SendToPipe(MakeConsoleID(), edgeActor, getTenantRequest.release(), 0, GetPipeConfigWithRetries());
 
-            auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvGetTenantStatusResponse>(edgeActor, timeout);
+            auto response = runtime.GrabEdgeEvent<NConsole::NEvConsole::TEvGetTenantStatusResponse>(edgeActor, timeout);
             if (!response) {
                 ythrow yexception() << "Waiting CMS get tenant response timeout. Last tenant description:\n" << getTenantResult.DebugString();
             }

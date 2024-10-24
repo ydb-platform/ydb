@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     using TVDisks = TVector<TTestVSlotInfo>;
 
-    void ChangeDescribeSchemeResult(TEvSchemeShard::TEvDescribeSchemeResult::TPtr* ev, ui64 size = 20000000, ui64 quota = 90000000) {
+    void ChangeDescribeSchemeResult(NEvSchemeShard::TEvDescribeSchemeResult::TPtr* ev, ui64 size = 20000000, ui64 quota = 90000000) {
         auto record = (*ev)->Get()->MutableRecord();
         auto pool = record->mutable_pathdescription()->mutable_domaindescription()->add_storagepools();
         pool->set_name("/Root:test");
@@ -362,8 +362,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                case TEvSchemeShard::EvDescribeSchemeResult: {
-                    auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
+                case NEvSchemeShard::EvDescribeSchemeResult: {
+                    auto *x = reinterpret_cast<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
                     ChangeDescribeSchemeResult(x);
                     break;
                 }
@@ -464,8 +464,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                case TEvSchemeShard::EvDescribeSchemeResult: {
-                    auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
+                case NEvSchemeShard::EvDescribeSchemeResult: {
+                    auto *x = reinterpret_cast<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
                     ChangeDescribeSchemeResult(x);
                     break;
                 }
@@ -559,8 +559,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                case TEvSchemeShard::EvDescribeSchemeResult: {
-                    auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
+                case NEvSchemeShard::EvDescribeSchemeResult: {
+                    auto *x = reinterpret_cast<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
                     ChangeDescribeSchemeResult(x, usage, quota);
                     break;
                 }
@@ -602,8 +602,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                case TEvSchemeShard::EvDescribeSchemeResult: {
-                    auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
+                case NEvSchemeShard::EvDescribeSchemeResult: {
+                    auto *x = reinterpret_cast<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
                     ChangeDescribeSchemeResult(x, usage, quota);
                     break;
                 }
@@ -814,7 +814,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
     }
 
-    void ChangeDescribeSchemeResultServerless(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr* ev) {
+    void ChangeDescribeSchemeResultServerless(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr* ev) {
         auto record = (*ev)->Get()->MutableRecord();
         if (record->path() == "/Root/serverless" || record->path() == "/Root/shared") {
             record->set_status(NKikimrScheme::StatusSuccess);
@@ -824,7 +824,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
     }
 
-    void ChangeGetTenantStatusResponse(NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr* ev, const TString &path) {
+    void ChangeGetTenantStatusResponse(NConsole::NEvConsole::TEvGetTenantStatusResponse::TPtr* ev, const TString &path) {
         auto *operation = (*ev)->Get()->Record.MutableResponse()->mutable_operation();
         Ydb::Cms::GetDatabaseStatusResult getTenantStatusResult;
         getTenantStatusResult.set_path(path);
@@ -832,7 +832,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         operation->set_status(Ydb::StatusIds::SUCCESS);
     }
 
-    void AddPathsToListTenantsResponse(NConsole::TEvConsole::TEvListTenantsResponse::TPtr* ev, const TVector<TString> &paths) {
+    void AddPathsToListTenantsResponse(NConsole::NEvConsole::TEvListTenantsResponse::TPtr* ev, const TVector<TString> &paths) {
         Ydb::Cms::ListDatabasesResult listTenantsResult;
         (*ev)->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
         for (const auto &path : paths) {
@@ -841,7 +841,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         (*ev)->Get()->Record.MutableResponse()->mutable_operation()->mutable_result()->PackFrom(listTenantsResult);
     }
 
-    void ChangeResponseHiveNodeStats(TEvHive::TEvResponseHiveNodeStats::TPtr* ev, ui32 sharedDynNodeId = 0,
+    void ChangeResponseHiveNodeStats(NEvHive::TEvResponseHiveNodeStats::TPtr* ev, ui32 sharedDynNodeId = 0,
         ui32 exclusiveDynNodeId = 0)
     {
         auto &record = (*ev)->Get()->Record;
@@ -883,8 +883,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                case NConsole::TEvConsole::EvGetTenantStatusResponse: {
-                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr*>(&ev);
+                case NConsole::NEvConsole::EvGetTenantStatusResponse: {
+                    auto *x = reinterpret_cast<NConsole::NEvConsole::TEvGetTenantStatusResponse::TPtr*>(&ev);
                     ChangeGetTenantStatusResponse(x, "/Root/serverless");
                     break;
                 }
@@ -893,13 +893,13 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     ChangeNavigateKeyResultServerless(x, NKikimrSubDomains::EServerlessComputeResourcesModeShared, runtime);
                     break;
                 }
-                case TEvHive::EvResponseHiveNodeStats: {
-                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
+                case NEvHive::EvResponseHiveNodeStats: {
+                    auto *x = reinterpret_cast<NEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
                     ChangeResponseHiveNodeStats(x, sharedDynNodeId);
                     break;
                 }
-                case TEvSchemeShard::EvDescribeSchemeResult: {
-                    auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
+                case NEvSchemeShard::EvDescribeSchemeResult: {
+                    auto *x = reinterpret_cast<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
                     ChangeDescribeSchemeResultServerless(x);
                     break;
                 }
@@ -983,8 +983,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                case NConsole::TEvConsole::EvGetTenantStatusResponse: {
-                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr*>(&ev);
+                case NConsole::NEvConsole::EvGetTenantStatusResponse: {
+                    auto *x = reinterpret_cast<NConsole::NEvConsole::TEvGetTenantStatusResponse::TPtr*>(&ev);
                     ChangeGetTenantStatusResponse(x, "/Root/serverless");
                     break;
                 }
@@ -993,13 +993,13 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     ChangeNavigateKeyResultServerless(x, NKikimrSubDomains::EServerlessComputeResourcesModeExclusive, runtime);
                     break;
                 }
-                case TEvHive::EvResponseHiveNodeStats: {
-                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
+                case NEvHive::EvResponseHiveNodeStats: {
+                    auto *x = reinterpret_cast<NEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
                     ChangeResponseHiveNodeStats(x, sharedDynNodeId, exclusiveDynNodeId);
                     break;
                 }
-                case TEvSchemeShard::EvDescribeSchemeResult: {
-                    auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
+                case NEvSchemeShard::EvDescribeSchemeResult: {
+                    auto *x = reinterpret_cast<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
                     ChangeDescribeSchemeResultServerless(x);
                     break;
                 }
@@ -1084,13 +1084,13 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         bool firstConsoleResponse = true;
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                 case NConsole::TEvConsole::EvListTenantsResponse: {
-                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
+                 case NConsole::NEvConsole::EvListTenantsResponse: {
+                    auto *x = reinterpret_cast<NConsole::NEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
                     AddPathsToListTenantsResponse(x, { "/Root/serverless", "/Root/shared" });
                     break;
                 }
-                case NConsole::TEvConsole::EvGetTenantStatusResponse: {
-                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr*>(&ev);
+                case NConsole::NEvConsole::EvGetTenantStatusResponse: {
+                    auto *x = reinterpret_cast<NConsole::NEvConsole::TEvGetTenantStatusResponse::TPtr*>(&ev);
                     if (!firstConsoleResponse) {
                         ChangeGetTenantStatusResponse(x, "/Root/serverless");
                     } else {
@@ -1104,13 +1104,13 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     ChangeNavigateKeyResultServerless(x, NKikimrSubDomains::EServerlessComputeResourcesModeShared, runtime);
                     break;
                 }
-                case TEvHive::EvResponseHiveNodeStats: {
-                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
+                case NEvHive::EvResponseHiveNodeStats: {
+                    auto *x = reinterpret_cast<NEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
                     ChangeResponseHiveNodeStats(x, sharedDynNodeId);
                     break;
                 }
-                case TEvSchemeShard::EvDescribeSchemeResult: {
-                    auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
+                case NEvSchemeShard::EvDescribeSchemeResult: {
+                    auto *x = reinterpret_cast<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
                     ChangeDescribeSchemeResultServerless(x);
                     break;
                 }
@@ -1184,13 +1184,13 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         bool firstConsoleResponse = true;
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                case NConsole::TEvConsole::EvListTenantsResponse: {
-                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
+                case NConsole::NEvConsole::EvListTenantsResponse: {
+                    auto *x = reinterpret_cast<NConsole::NEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
                     AddPathsToListTenantsResponse(x, { "/Root/serverless", "/Root/shared" });
                     break;
                 }
-                case NConsole::TEvConsole::EvGetTenantStatusResponse: {
-                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr*>(&ev);
+                case NConsole::NEvConsole::EvGetTenantStatusResponse: {
+                    auto *x = reinterpret_cast<NConsole::NEvConsole::TEvGetTenantStatusResponse::TPtr*>(&ev);
                     if (firstConsoleResponse) {
                         firstConsoleResponse = false;
                         ChangeGetTenantStatusResponse(x, "/Root/serverless");
@@ -1204,13 +1204,13 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     ChangeNavigateKeyResultServerless(x, NKikimrSubDomains::EServerlessComputeResourcesModeExclusive, runtime);
                     break;
                 }
-                case TEvHive::EvResponseHiveNodeStats: {
-                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
+                case NEvHive::EvResponseHiveNodeStats: {
+                    auto *x = reinterpret_cast<NEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
                     ChangeResponseHiveNodeStats(x, sharedDynNodeId, exclusiveDynNodeId);
                     break;
                 }
-                case TEvSchemeShard::EvDescribeSchemeResult: {
-                    auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
+                case NEvSchemeShard::EvDescribeSchemeResult: {
+                    auto *x = reinterpret_cast<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
                     ChangeDescribeSchemeResultServerless(x);
                     break;
                 }
@@ -1292,8 +1292,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                case NConsole::TEvConsole::EvGetTenantStatusResponse: {
-                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr*>(&ev);
+                case NConsole::NEvConsole::EvGetTenantStatusResponse: {
+                    auto *x = reinterpret_cast<NConsole::NEvConsole::TEvGetTenantStatusResponse::TPtr*>(&ev);
                     ChangeGetTenantStatusResponse(x, "/Root/serverless");
                     break;
                 }
@@ -1302,8 +1302,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     ChangeNavigateKeyResultServerless(x, NKikimrSubDomains::EServerlessComputeResourcesModeShared, runtime);
                     break;
                 }
-                case TEvSchemeShard::EvDescribeSchemeResult: {
-                    auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
+                case NEvSchemeShard::EvDescribeSchemeResult: {
+                    auto *x = reinterpret_cast<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
                     ChangeDescribeSchemeResultServerless(x);
                     break;
                 }
@@ -1388,13 +1388,13 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         bool firstConsoleResponse = true;
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                case NConsole::TEvConsole::EvListTenantsResponse: {
-                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
+                case NConsole::NEvConsole::EvListTenantsResponse: {
+                    auto *x = reinterpret_cast<NConsole::NEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
                     AddPathsToListTenantsResponse(x, { "/Root/serverless", "/Root/shared" });
                     break;
                 }
-                case NConsole::TEvConsole::EvGetTenantStatusResponse: {
-                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr*>(&ev);
+                case NConsole::NEvConsole::EvGetTenantStatusResponse: {
+                    auto *x = reinterpret_cast<NConsole::NEvConsole::TEvGetTenantStatusResponse::TPtr*>(&ev);
                     if (firstConsoleResponse) {
                         firstConsoleResponse = false;
                         ChangeGetTenantStatusResponse(x, "/Root/serverless");
@@ -1408,13 +1408,13 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     ChangeNavigateKeyResultServerless(x, NKikimrSubDomains::EServerlessComputeResourcesModeExclusive, runtime);
                     break;
                 }
-                case TEvHive::EvResponseHiveNodeStats: {
-                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
+                case NEvHive::EvResponseHiveNodeStats: {
+                    auto *x = reinterpret_cast<NEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
                     ChangeResponseHiveNodeStats(x, 0, exclusiveDynNodeId);
                     break;
                 }
-                case TEvSchemeShard::EvDescribeSchemeResult: {
-                    auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
+                case NEvSchemeShard::EvDescribeSchemeResult: {
+                    auto *x = reinterpret_cast<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
                     ChangeDescribeSchemeResultServerless(x);
                     break;
                 }
@@ -1532,13 +1532,13 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         bool firstConsoleResponse = true;
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                case NConsole::TEvConsole::EvListTenantsResponse: {
-                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
+                case NConsole::NEvConsole::EvListTenantsResponse: {
+                    auto *x = reinterpret_cast<NConsole::NEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
                     AddPathsToListTenantsResponse(x, { "/Root/serverless", "/Root/shared" });
                     break;
                 }
-                case NConsole::TEvConsole::EvGetTenantStatusResponse: {
-                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr*>(&ev);
+                case NConsole::NEvConsole::EvGetTenantStatusResponse: {
+                    auto *x = reinterpret_cast<NConsole::NEvConsole::TEvGetTenantStatusResponse::TPtr*>(&ev);
                     if (firstConsoleResponse) {
                         firstConsoleResponse = false;
                         ChangeGetTenantStatusResponse(x, "/Root/serverless");
@@ -1552,13 +1552,13 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     ChangeNavigateKeyResultServerless(x, NKikimrSubDomains::EServerlessComputeResourcesModeExclusive, runtime);
                     break;
                 }
-                case TEvHive::EvResponseHiveNodeStats: {
-                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
+                case NEvHive::EvResponseHiveNodeStats: {
+                    auto *x = reinterpret_cast<NEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
                     ChangeResponseHiveNodeStats(x, sharedDynNodeId);
                     break;
                 }
-                case TEvSchemeShard::EvDescribeSchemeResult: {
-                    auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
+                case NEvSchemeShard::EvDescribeSchemeResult: {
+                    auto *x = reinterpret_cast<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
                     ChangeDescribeSchemeResultServerless(x);
                     break;
                 }
@@ -1675,8 +1675,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                case NConsole::TEvConsole::EvGetTenantStatusResponse: {
-                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr*>(&ev);
+                case NConsole::NEvConsole::EvGetTenantStatusResponse: {
+                    auto *x = reinterpret_cast<NConsole::NEvConsole::TEvGetTenantStatusResponse::TPtr*>(&ev);
                     ChangeGetTenantStatusResponse(x, "/Root/database");
                     break;
                 }
@@ -1695,8 +1695,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     }
                     break;
                 }
-                case TEvHive::EvResponseHiveNodeStats: {
-                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
+                case NEvHive::EvResponseHiveNodeStats: {
+                    auto *x = reinterpret_cast<NEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
                     auto &record = (*x)->Get()->Record;
                     auto *nodeStats = record.MutableNodeStats()->Add();
                     nodeStats->SetNodeId(dynNodeId);
@@ -1704,8 +1704,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     nodeStats->MutableNodeDomain()->SetPathId(SUBDOMAIN_KEY.LocalPathId);
                     break;
                 }
-                case TEvSchemeShard::EvDescribeSchemeResult: {
-                    auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
+                case NEvSchemeShard::EvDescribeSchemeResult: {
+                    auto *x = reinterpret_cast<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
                     auto record = (*x)->Get()->MutableRecord();
                     if (record->path() == "/Root/database") {
                         record->set_status(NKikimrScheme::StatusSuccess);

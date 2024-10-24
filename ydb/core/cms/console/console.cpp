@@ -171,12 +171,12 @@ void TConsole::ForwardToTenantsManager(TAutoPtr<IEventHandle> &ev, const TActorC
     ctx.Forward(ev, TenantsManager->SelfId());
 }
 
-void TConsole::Handle(TEvConsole::TEvGetConfigRequest::TPtr &ev, const TActorContext &ctx)
+void TConsole::Handle(NEvConsole::TEvGetConfigRequest::TPtr &ev, const TActorContext &ctx)
 {
-    ctx.Send(ev->Sender, new TEvConsole::TEvGetConfigResponse(Config));
+    ctx.Send(ev->Sender, new NEvConsole::TEvGetConfigResponse(Config));
 }
 
-void TConsole::Handle(TEvConsole::TEvSetConfigRequest::TPtr &ev, const TActorContext &ctx)
+void TConsole::Handle(NEvConsole::TEvSetConfigRequest::TPtr &ev, const TActorContext &ctx)
 {
     TxProcessor->ProcessTx(CreateTxSetConfig(ev), ctx);
 }

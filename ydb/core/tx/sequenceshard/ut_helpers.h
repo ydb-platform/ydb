@@ -50,61 +50,61 @@ namespace NSequenceShard {
 
         void SendCreateSequence(
             ui64 cookie, const TActorId& edge,
-            THolder<TEvSequenceShard::TEvCreateSequence> msg);
-        THolder<TEvSequenceShard::TEvCreateSequenceResult> NextCreateSequenceResult(
+            THolder<NEvSequenceShard::TEvCreateSequence> msg);
+        THolder<NEvSequenceShard::TEvCreateSequenceResult> NextCreateSequenceResult(
             ui64 cookie, const TActorId& edge);
-        THolder<TEvSequenceShard::TEvCreateSequenceResult> CreateSequence(
-            THolder<TEvSequenceShard::TEvCreateSequence> msg);
+        THolder<NEvSequenceShard::TEvCreateSequenceResult> CreateSequence(
+            THolder<NEvSequenceShard::TEvCreateSequence> msg);
 
         void SendAllocateSequence(
             ui64 cookie, const TActorId& edge,
             const TPathId& pathId, ui64 cache = 0);
-        THolder<TEvSequenceShard::TEvAllocateSequenceResult> NextAllocateSequenceResult(
+        THolder<NEvSequenceShard::TEvAllocateSequenceResult> NextAllocateSequenceResult(
             ui64 cookie, const TActorId& edge);
-        THolder<TEvSequenceShard::TEvAllocateSequenceResult> AllocateSequence(
+        THolder<NEvSequenceShard::TEvAllocateSequenceResult> AllocateSequence(
             const TPathId& pathId, ui64 cache = 0);
 
         void SendDropSequence(
             ui64 cookie, const TActorId& edge, const TPathId& pathId);
-        THolder<TEvSequenceShard::TEvDropSequenceResult> NextDropSequenceResult(
+        THolder<NEvSequenceShard::TEvDropSequenceResult> NextDropSequenceResult(
             ui64 cookie, const TActorId& edge);
-        THolder<TEvSequenceShard::TEvDropSequenceResult> DropSequence(
+        THolder<NEvSequenceShard::TEvDropSequenceResult> DropSequence(
             const TPathId& pathId);
 
         void SendUpdateSequence(
             ui64 cookie, const TActorId& edge,
-            THolder<TEvSequenceShard::TEvUpdateSequence> msg);
-        THolder<TEvSequenceShard::TEvUpdateSequenceResult> NextUpdateSequenceResult(
+            THolder<NEvSequenceShard::TEvUpdateSequence> msg);
+        THolder<NEvSequenceShard::TEvUpdateSequenceResult> NextUpdateSequenceResult(
             ui64 cookie, const TActorId& edge);
-        THolder<TEvSequenceShard::TEvUpdateSequenceResult> UpdateSequence(
-            THolder<TEvSequenceShard::TEvUpdateSequence> msg);
+        THolder<NEvSequenceShard::TEvUpdateSequenceResult> UpdateSequence(
+            THolder<NEvSequenceShard::TEvUpdateSequence> msg);
 
         void SendFreezeSequence(
             ui64 cookie, const TActorId& edge, const TPathId& pathId);
-        THolder<TEvSequenceShard::TEvFreezeSequenceResult> NextFreezeSequenceResult(
+        THolder<NEvSequenceShard::TEvFreezeSequenceResult> NextFreezeSequenceResult(
             ui64 cookie, const TActorId& edge);
-        THolder<TEvSequenceShard::TEvFreezeSequenceResult> FreezeSequence(
+        THolder<NEvSequenceShard::TEvFreezeSequenceResult> FreezeSequence(
             const TPathId& pathId);
 
         void SendRestoreSequence(
             ui64 cookie, const TActorId& edge,
-            THolder<TEvSequenceShard::TEvRestoreSequence> msg);
-        THolder<TEvSequenceShard::TEvRestoreSequenceResult> NextRestoreSequenceResult(
+            THolder<NEvSequenceShard::TEvRestoreSequence> msg);
+        THolder<NEvSequenceShard::TEvRestoreSequenceResult> NextRestoreSequenceResult(
             ui64 cookie, const TActorId& edge);
-        THolder<TEvSequenceShard::TEvRestoreSequenceResult> RestoreSequence(
-            THolder<TEvSequenceShard::TEvRestoreSequence> msg);
+        THolder<NEvSequenceShard::TEvRestoreSequenceResult> RestoreSequence(
+            THolder<NEvSequenceShard::TEvRestoreSequence> msg);
 
         void SendRedirectSequence(
             ui64 cookie, const TActorId& edge,
             const TPathId& pathId, ui64 redirectTo);
-        THolder<TEvSequenceShard::TEvRedirectSequenceResult> NextRedirectSequenceResult(
+        THolder<NEvSequenceShard::TEvRedirectSequenceResult> NextRedirectSequenceResult(
             ui64 cookie, const TActorId& edge);
-        THolder<TEvSequenceShard::TEvRedirectSequenceResult> RedirectSequence(
+        THolder<NEvSequenceShard::TEvRedirectSequenceResult> RedirectSequence(
             const TPathId& pathId, ui64 redirectTo);
 
         void SendGetSequence(ui64 cookie, const TActorId& edge, const TPathId& pathId);
-        THolder<TEvSequenceShard::TEvGetSequenceResult> NextGetSequenceResult(ui64 cookie, const TActorId& edge);
-        THolder<TEvSequenceShard::TEvGetSequenceResult> GetSequence(const TPathId& pathId);
+        THolder<NEvSequenceShard::TEvGetSequenceResult> NextGetSequenceResult(ui64 cookie, const TActorId& edge);
+        THolder<NEvSequenceShard::TEvGetSequenceResult> GetSequence(const TPathId& pathId);
     };
 
 } // namespace NSequenceShard

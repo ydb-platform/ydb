@@ -5,7 +5,7 @@ namespace NKikimr::NConsole {
 
 class TTenantsManager::TTxAlterTenant : public TTransactionBase<TTenantsManager> {
 public:
-    TTxAlterTenant(TEvConsole::TEvAlterTenantRequest::TPtr ev, TTenantsManager *self)
+    TTxAlterTenant(NEvConsole::TEvAlterTenantRequest::TPtr ev, TTenantsManager *self)
         : TBase(self)
         , Path(CanonizePath(ev->Get()->Record.GetRequest().path()))
         , Request(std::move(ev))
@@ -41,7 +41,7 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "TTxAlterTenant: "
                     << Request->Get()->Record.ShortDebugString());
 
-        Response = new TEvConsole::TEvAlterTenantResponse;
+        Response = new NEvConsole::TEvAlterTenantResponse;
 
         if (!Self->CheckAccess(token, code, error, ctx))
             return Error(code, error, ctx);
@@ -201,7 +201,7 @@ public:
                 return Error(Ydb::StatusIds::BAD_REQUEST, "Data size soft quota cannot be larger than hard quota", ctx);
             }
         }
-        
+
         // Check attributes.
         THashSet<TString> attrNames;
         for (const auto& [key, value] : rec.alter_attributes()) {
@@ -381,8 +381,8 @@ public:
 
 private:
     TString Path;
-    TEvConsole::TEvAlterTenantRequest::TPtr Request;
-    TAutoPtr<TEvConsole::TEvAlterTenantResponse> Response;
+    NEvConsole::TEvAlterTenantRequest::TPtr Request;
+    TAutoPtr<NEvConsole::TEvAlterTenantResponse> Response;
     THashMap<std::pair<TString, TString>, ui64> NewComputationalUnits;
     THashMap<std::pair<TString, ui32>, TAllocatedComputationalUnit> UnitsToRegister;
     THashSet<std::pair<TString, ui32>> UnitsToDeregister;
@@ -394,7 +394,7 @@ private:
     TTenant::TPtr Tenant;
 };
 
-ITransaction *TTenantsManager::CreateTxAlterTenant(TEvConsole::TEvAlterTenantRequest::TPtr &ev)
+ITransaction *TTenantsManager::CreateTxAlterTenant(NEvConsole::TEvAlterTenantRequest::TPtr &ev)
 {
     return new TTxAlterTenant(ev, this);
 }

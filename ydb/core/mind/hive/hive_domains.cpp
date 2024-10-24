@@ -62,8 +62,8 @@ void THive::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     }
 }
 
-void THive::Handle(TEvHive::TEvUpdateDomain::TPtr& ev) {
-    BLOG_D("Handle TEvHive::TEvUpdateDomain(" << ev->Get()->Record.ShortDebugString() << ")");
+void THive::Handle(NEvHive::TEvUpdateDomain::TPtr& ev) {
+    BLOG_D("Handle NEvHive::TEvUpdateDomain(" << ev->Get()->Record.ShortDebugString() << ")");
     const TSubDomainKey subdomainKey(ev->Get()->Record.GetDomainKey());
     TDomainInfo& domainInfo = Domains[subdomainKey];
     if (ev->Get()->Record.HasServerlessComputeResourcesMode()) {

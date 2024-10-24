@@ -43,11 +43,11 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxSyncTenant(TPathId path
 }
 
 struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
-    TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr Ev;
-    THolder<TEvSchemeShard::TEvSyncTenantSchemeShard> SyncEv;
+    NEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr Ev;
+    THolder<NEvSchemeShard::TEvSyncTenantSchemeShard> SyncEv;
     TSideEffects SideEffects;
 
-    TTxUpdateTenant(TSelf *self, TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr &ev)
+    TTxUpdateTenant(TSelf *self, NEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr &ev)
         : TRwTxBase(self)
           , Ev(ev)
     {}
@@ -64,7 +64,7 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
         }
     }
 
-    TEvSchemeShard::TEvSyncTenantSchemeShard* ReleaseSync() {
+    NEvSchemeShard::TEvSyncTenantSchemeShard* ReleaseSync() {
         Y_ABORT_UNLESS(HasSync());
         return SyncEv.Release();
     }
@@ -248,7 +248,7 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
     }
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxUpdateTenant(TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr& ev) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxUpdateTenant(NEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr& ev) {
     return new TTxUpdateTenant(this, ev);
 }
 

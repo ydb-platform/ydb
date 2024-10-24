@@ -133,7 +133,7 @@ void SetStatsObserver(TTestActorRuntime& runtime, const std::function<TTestActor
     // now set a custom observer backed up by the original
     runtime.SetObserverFunc([originalObserver, statsObserver](TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-        case TEvDataShard::EvPeriodicTableStats:
+        case NEvDataShard::EvPeriodicTableStats:
             return statsObserver();
         default:
             return originalObserver(ev);

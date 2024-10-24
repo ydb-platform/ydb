@@ -6,7 +6,7 @@ namespace NKikimr::NConsole {
 
 class TConfigsManager::TTxAddConfigSubscription : public TTransactionBase<TConfigsManager> {
 public:
-    TTxAddConfigSubscription(TEvConsole::TEvAddConfigSubscriptionRequest::TPtr ev,
+    TTxAddConfigSubscription(NEvConsole::TEvAddConfigSubscriptionRequest::TPtr ev,
                              TConfigsManager *self)
         : TBase(self)
         , Request(std::move(ev))
@@ -36,7 +36,7 @@ public:
 
         Y_ABORT_UNLESS(Self->PendingSubscriptionModifications.IsEmpty());
 
-        Response = new TEvConsole::TEvAddConfigSubscriptionResponse;
+        Response = new NEvConsole::TEvAddConfigSubscriptionResponse;
 
         TSubscription::TPtr subscription = new TSubscription(rec.GetSubscription());
         Ydb::StatusIds::StatusCode code;
@@ -93,11 +93,11 @@ public:
     }
 
 private:
-    TEvConsole::TEvAddConfigSubscriptionRequest::TPtr Request;
-    TAutoPtr<TEvConsole::TEvAddConfigSubscriptionResponse> Response;
+    NEvConsole::TEvAddConfigSubscriptionRequest::TPtr Request;
+    TAutoPtr<NEvConsole::TEvAddConfigSubscriptionResponse> Response;
 };
 
-ITransaction *TConfigsManager::CreateTxAddConfigSubscription(TEvConsole::TEvAddConfigSubscriptionRequest::TPtr &ev)
+ITransaction *TConfigsManager::CreateTxAddConfigSubscription(NEvConsole::TEvAddConfigSubscriptionRequest::TPtr &ev)
 {
     return new TTxAddConfigSubscription(ev, this);
 }

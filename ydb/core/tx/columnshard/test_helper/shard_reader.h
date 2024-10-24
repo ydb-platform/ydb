@@ -28,7 +28,7 @@ private:
     std::vector<TString> ReplyColumns;
     std::vector<TSerializedTableRange> Ranges;
 
-    std::unique_ptr<TEvDataShard::TEvKqpScan> BuildStartEvent() const;
+    std::unique_ptr<NEvDataShard::TEvKqpScan> BuildStartEvent() const;
 
     std::vector<std::shared_ptr<arrow::RecordBatch>> ResultBatches;
     YDB_READONLY(ui32, IterationsCount, 0);

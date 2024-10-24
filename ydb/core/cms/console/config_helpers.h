@@ -9,7 +9,7 @@ namespace NKikimr::NConsole {
  * not specified then current tenant is received from Tenant Pool.
  * Node type is always received from Tenant Pool.
  *
- * Courier forwards TEvConsole::TEvGetNodeConfigResponse event to the
+ * Courier forwards NEvConsole::TEvGetNodeConfigResponse event to the
  * owner.
  */
 IActor *CreateNodeConfigCourier(TActorId owner,
@@ -34,18 +34,18 @@ IActor *CreateNodeConfigCourier(const TVector<ui32> &configItemKinds,
 
 /*
  * Config subscriber is used to add/refresh config subscription in Console
- * using TEvConsole::TEvReplaceSubscriptionsRequest. This helper actor
+ * using NEvConsole::TEvReplaceSubscriptionsRequest. This helper actor
  * should be used by tablets and services which use only single config
  * subscription.
  * You can pass subscription tenant to subscriber or let subscriber get it
  * from Tenant Pool. Node type is always received from Tenant Pool.
- * If replace option is set TEvConsole::TEvReplaceConfigSubscriptionsRequest
+ * If replace option is set NEvConsole::TEvReplaceConfigSubscriptionsRequest
  * is used for subscription and all existing subscriber's subscriptions
- * are removed. Otherwise TEvConsole::TEvAddConfigSubscriptionRequest
+ * are removed. Otherwise NEvConsole::TEvAddConfigSubscriptionRequest
  * is used.
  *
- * Subscriber forwards TEvConsole::TEvAddConfigSubscriptionResponse and
- * TEvConsole::TEvReplaceConfigSubscriptionsResponse event to the owner.
+ * Subscriber forwards NEvConsole::TEvAddConfigSubscriptionResponse and
+ * NEvConsole::TEvReplaceConfigSubscriptionsResponse event to the owner.
  */
 IActor *CreateConfigSubscriber(ui64 tabletId,
                                const TVector<ui32> &configItemKinds,
@@ -86,7 +86,7 @@ void UnsubscribeViaConfigDispatcher(const TActorContext &ctx,
 
 /**
  * Subscription eraser is used to remove config subscriptions by ID. If owner is
- * specified then TEvConsole::TEvRemoveConfigSubscriptionRepsonse event is
+ * specified then NEvConsole::TEvRemoveConfigSubscriptionRepsonse event is
  * forwared to it.
  */
 IActor *CreateSubscriptionEraser(ui64 subscriptionId,

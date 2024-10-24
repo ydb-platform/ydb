@@ -42,12 +42,12 @@ namespace NKikimr::NDataShard {
             switch (ev->GetTypeRewrite()) {
                 sFunc(TEvents::TEvPoison, PassAway);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-                hFunc(TEvDataShard::TEvReplicationSourceOffsets, Handle);
+                hFunc(NEvDataShard::TEvReplicationSourceOffsets, Handle);
             }
         }
 
         void StartNewRead() {
-            auto req = MakeHolder<TEvDataShard::TEvGetReplicationSourceOffsets>(++CurrentReadId, PathId);
+            auto req = MakeHolder<NEvDataShard::TEvGetReplicationSourceOffsets>(++CurrentReadId, PathId);
             req->Record.SetFromSourceId(NextSourceId);
             req->Record.SetFromSplitKeyId(NextSplitKeyId);
             Send(PipeCache, new TEvPipeCache::TEvForward(req.Release(), SrcTabletId, /* subscribe */ true));
@@ -55,7 +55,7 @@ namespace NKikimr::NDataShard {
         }
 
         void CancelRead(ui64 readId) {
-            auto req = MakeHolder<TEvDataShard::TEvReplicationSourceOffsetsCancel>(readId);
+            auto req = MakeHolder<NEvDataShard::TEvReplicationSourceOffsetsCancel>(readId);
             Send(PipeCache, new TEvPipeCache::TEvForward(req.Release(), SrcTabletId, /* subscribe */ false));
         }
 
@@ -69,7 +69,7 @@ namespace NKikimr::NDataShard {
             StartNewRead();
         }
 
-        void Handle(TEvDataShard::TEvReplicationSourceOffsets::TPtr& ev) {
+        void Handle(NEvDataShard::TEvReplicationSourceOffsets::TPtr& ev) {
             auto* msg = ev->Get();
 
             if (msg->Record.GetReadId() != CurrentReadId) {
@@ -99,7 +99,7 @@ namespace NKikimr::NDataShard {
                 }
             }
 
-            Send(ev->Sender, new TEvDataShard::TEvReplicationSourceOffsetsAck(CurrentReadId, ExpectedSeqNo));
+            Send(ev->Sender, new NEvDataShard::TEvReplicationSourceOffsetsAck(CurrentReadId, ExpectedSeqNo));
             ++ExpectedSeqNo;
 
             if (msg->Record.GetEndOfStream()) {

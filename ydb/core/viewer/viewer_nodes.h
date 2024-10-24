@@ -67,7 +67,7 @@ class TJsonNodes : public TViewerPipeClient {
     std::optional<TRequestResponse<TEvStateStorage::TEvBoardInfo>> DatabaseBoardInfoResponse;
     std::optional<TRequestResponse<TEvStateStorage::TEvBoardInfo>> ResourceBoardInfoResponse;
     std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> PathNavigateResponse;
-    std::unordered_map<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStats;
+    std::unordered_map<TTabletId, TRequestResponse<NEvHive::TEvResponseHiveNodeStats>> HiveNodeStats;
 
     std::vector<TTabletId> HivesToAsk;
     bool AskHiveAboutPaths = false;
@@ -1558,7 +1558,7 @@ public:
             std::sort(HivesToAsk.begin(), HivesToAsk.end());
             HivesToAsk.erase(std::unique(HivesToAsk.begin(), HivesToAsk.end()), HivesToAsk.end());
             for (TTabletId hiveId : HivesToAsk) {
-                auto request = std::make_unique<TEvHive::TEvRequestHiveNodeStats>();
+                auto request = std::make_unique<NEvHive::TEvRequestHiveNodeStats>();
                 request->Record.SetReturnMetrics(true);
                 if (Database) { // it's better to ask hive about tablets only if we're filtering by database
                     request->Record.SetReturnExtendedTabletInfo(true);
@@ -1994,7 +1994,7 @@ public:
         RequestDone();
     }
 
-    void Handle(TEvHive::TEvResponseHiveNodeStats::TPtr& ev) {
+    void Handle(NEvHive::TEvResponseHiveNodeStats::TPtr& ev) {
         HiveNodeStats[ev->Cookie].Set(std::move(ev));
         ProcessResponses();
         RequestDone();
@@ -2304,7 +2304,7 @@ public:
             hFunc(TEvWhiteboard::TEvTabletStateResponse, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
-            hFunc(TEvHive::TEvResponseHiveNodeStats, Handle);
+            hFunc(NEvHive::TEvResponseHiveNodeStats, Handle);
             hFunc(NSysView::TEvSysView::TEvGetGroupsResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetStoragePoolsResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetVSlotsResponse, Handle);

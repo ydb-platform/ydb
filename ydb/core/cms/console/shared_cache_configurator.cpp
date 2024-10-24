@@ -25,11 +25,11 @@ public:
         ui32 item1 = (ui32)NKikimrConsole::TConfigItem::BootstrapConfigItem;
         ui32 item2 = (ui32)NKikimrConsole::TConfigItem::SharedCacheConfigItem;
         ctx.Send(MakeConfigsDispatcherID(SelfId().NodeId()),
-                new TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({ item1, item2 }));
+                new NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({ item1, item2 }));
         Become(&TThis::StateWork);
     }
 
-    void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NEvConsole::TEvConfigNotificationRequest::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
         LOG_INFO_S(ctx, NKikimrServices::CMS_CONFIGS,
@@ -53,7 +53,7 @@ public:
 
         ApplyConfig(std::move(cfg), ctx);
 
-        auto response = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(record);
+        auto response = MakeHolder<NEvConsole::TEvConfigNotificationResponse>(record);
         ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
 
@@ -69,8 +69,8 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvConsole::TEvConfigNotificationRequest, Handle);
-            IgnoreFunc(TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            HFunc(NEvConsole::TEvConfigNotificationRequest, Handle);
+            IgnoreFunc(NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
 
         default:
             Y_ABORT("unexpected event type: %" PRIx32 " event: %s",

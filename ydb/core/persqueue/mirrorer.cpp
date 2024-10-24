@@ -139,7 +139,7 @@ void TMirrorer::ProcessError(const TActorContext& ctx, const TString& msg) {
         MirrorerErrors.Inc(1);
     }
 
-    THolder<TEvPersQueue::TEvReportPartitionError> request = MakeHolder<TEvPersQueue::TEvReportPartitionError>();
+    THolder<NEvPersQueue::TEvReportPartitionError> request = MakeHolder<NEvPersQueue::TEvReportPartitionError>();
     auto& record = request->Record;
     record.SetTimestamp(ctx.Now().Seconds());
     record.SetService(NKikimrServices::PQ_MIRRORER);
@@ -217,7 +217,7 @@ void TMirrorer::ProcessWriteResponse(
     AfterSuccesWrite(ctx);
 }
 
-void TMirrorer::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+void TMirrorer::Handle(NEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     auto& response = ev->Get()->Record;
     if (response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
         ProcessError(ctx, "status is not ok: " + response.GetErrorReason(), response);
@@ -347,7 +347,7 @@ void TMirrorer::TryToWrite(const TActorContext& ctx) {
         return;
     }
 
-    THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
+    THolder<NEvPersQueue::TEvRequest> request = MakeHolder<NEvPersQueue::TEvRequest>();
     auto req = request->Record.MutablePartitionRequest();
     //ToDo
     req->SetTopic(TopicConverter->GetClientsideName());
@@ -425,7 +425,7 @@ void TMirrorer::HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev,
 void TMirrorer::RetryWrite(const TActorContext& ctx) {
     Y_ABORT_UNLESS(WriteRequestInFlight);
 
-    THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
+    THolder<NEvPersQueue::TEvRequest> request = MakeHolder<NEvPersQueue::TEvRequest>();
     auto req = request->Record.MutablePartitionRequest();
     req->CopyFrom(WriteRequestInFlight.value());
 
@@ -506,7 +506,7 @@ void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
     if (Config.GetSyncWriteTime() && !WriteRequestInFlight && StreamStatus && EndOffset == StreamStatus->GetEndOffset()) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription()
             << " update write timestamp from original topic: " << StreamStatus->DebugString());
-        THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
+        THolder<NEvPersQueue::TEvRequest> request = MakeHolder<NEvPersQueue::TEvRequest>();
         auto req = request->Record.MutablePartitionRequest();
         req->SetTopic(TopicConverter->GetClientsideName());
         req->SetPartition(Partition);

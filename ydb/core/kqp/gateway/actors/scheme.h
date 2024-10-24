@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include "kqp_ic_gateway_actors.h"
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
@@ -59,7 +59,7 @@ public:
                 Y_ABORT_UNLESS(pipeActor);
                 ShemePipeActorId = ctx.ExecutorThread.RegisterActor(pipeActor);
 
-                auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+                auto request = MakeHolder<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletion>();
                 request->Record.SetTxId(response.GetTxId());
                 NTabletPipe::SendData(ctx, ShemePipeActorId, request.Release());
 
@@ -187,7 +187,7 @@ public:
         this->Die(ctx);
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
         auto& response = ev->Get()->Record;
 
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Received TEvNotifyTxCompletionResult for scheme request"
@@ -204,15 +204,15 @@ public:
         this->Die(ctx);
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&, const TActorContext&) {}
+    void Handle(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&, const TActorContext&) {}
 
     STFUNC(AwaitState) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TResponse, HandleResponse);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
+            HFunc(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
+            HFunc(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
         default:
             TBase::HandleUnexpectedEvent("TSchemeOpRequestHandler", ev->GetTypeRewrite());
         }

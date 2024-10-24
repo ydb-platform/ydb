@@ -33,7 +33,7 @@ public:
         : OperationId(id)
     {
         TSet<ui32> toIgnore = AllIncomingEvents();
-        toIgnore.erase(TEvHive::TEvDeleteOwnerTabletsReply::EventType);
+        toIgnore.erase(NEvHive::TEvDeleteOwnerTabletsReply::EventType);
 
         IgnoreMessages(DebugHint(), toIgnore);
     }
@@ -60,7 +60,7 @@ public:
         context.SS->ChangeTxState(db, OperationId, TTxState::DeletePrivateShards);
     }
 
-    bool HandleReply(TEvHive::TEvDeleteOwnerTabletsReply::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvHive::TEvDeleteOwnerTabletsReply::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
         NKikimrHive::TEvDeleteOwnerTabletsReply record = ev->Get()->Record;
 
@@ -120,7 +120,7 @@ public:
 
         TTabletId hiveToRequest = context.SS->ResolveHive(txState->TargetPathId, context.Ctx, TSchemeShard::EHiveSelection::IGNORE_TENANT);
 
-        auto event = MakeHolder<TEvHive::TEvDeleteOwnerTablets>(ui64(tenantSchemeshard), ui64(OperationId.GetTxId()));
+        auto event = MakeHolder<NEvHive::TEvDeleteOwnerTablets>(ui64(tenantSchemeshard), ui64(OperationId.GetTxId()));
         context.OnComplete.BindMsgToPipe(OperationId, hiveToRequest, TPipeMessageId(0, 0), event.Release());
 
         return false;
@@ -141,12 +141,12 @@ public:
         : OperationId(id)
     {
         TSet<ui32> toIgnore = AllIncomingEvents();
-        toIgnore.erase(TEvPrivate::TEvOperationPlan::EventType);
+        toIgnore.erase(NEvPrivate::TEvOperationPlan::EventType);
 
         IgnoreMessages(DebugHint(), toIgnore);
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 

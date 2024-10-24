@@ -212,10 +212,10 @@ void TMessageBusServerSchemeRequest<TBusSchemeOperation>::ReplyWithResult(ERespo
     Die(ctx);
 }
 
-void TMessageBusServerProxy::Handle(TEvBusProxy::TEvPersQueue::TPtr& ev, const TActorContext& ctx) {
+void TMessageBusServerProxy::Handle(TEvBusProxy::NEvPersQueue::TPtr& ev, const TActorContext& ctx) {
     LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "TMessageBusServerProxy::Handle");
 
-    TEvBusProxy::TEvPersQueue *msg = ev->Get();
+    TEvBusProxy::NEvPersQueue *msg = ev->Get();
     const auto& rec = static_cast<TBusPersQueue *>(msg->MsgContext.GetMessage())->Record;
     if (rec.HasMetaRequest() && (rec.GetMetaRequest().HasCmdCreateTopic()
                                  || rec.GetMetaRequest().HasCmdChangeTopic()

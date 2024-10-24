@@ -74,7 +74,7 @@ private:
         }
     }
 
-    void Handle(TEvPersQueue::TEvGetPartitionIdForWriteResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NEvPersQueue::TEvGetPartitionIdForWriteResponse::TPtr& ev, const TActorContext& ctx) {
         PartitionId = PQRBHelper.Handle(ev, ctx);
         DEBUG("Received partition " << PartitionId << " from PQRB for SourceId=" << TThis::SourceId);
         TThis::Partition = TThis::Chooser->GetPartition(PQRBHelper.PartitionId().value());
@@ -99,7 +99,7 @@ private:
     STATEFN(StatePQRB) {
         TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPersQueue::TEvGetPartitionIdForWriteResponse, Handle);
+            HFunc(NEvPersQueue::TEvGetPartitionIdForWriteResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             SFunc(TEvents::TEvPoison, TThis::Die);

@@ -7,7 +7,7 @@ namespace NKikimr::NBlobDepot {
 
     using TData = TBlobDepot::TData;
 
-    TData::TResolveResultAccumulator::TResolveResultAccumulator(TEventHandle<TEvBlobDepot::TEvResolve>& ev)
+    TData::TResolveResultAccumulator::TResolveResultAccumulator(TEventHandle<NEvBlobDepot::TEvResolve>& ev)
         : Sender(ev.Sender)
         , Recipient(ev.Recipient)
         , Cookie(ev.Cookie)
@@ -22,7 +22,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::TResolveResultAccumulator::Send(NKikimrProto::EReplyStatus status, std::optional<TString> errorReason) {
-        auto sendResult = [&](std::unique_ptr<TEvBlobDepot::TEvResolveResult> ev) {
+        auto sendResult = [&](std::unique_ptr<NEvBlobDepot::TEvResolveResult> ev) {
             auto handle = std::make_unique<IEventHandle>(Sender, Recipient, ev.release(), 0, Cookie);
             if (InterconnectSession) {
                 handle->Rewrite(TEvInterconnect::EvForward, InterconnectSession);
@@ -31,11 +31,11 @@ namespace NKikimr::NBlobDepot {
         };
 
         if (status != NKikimrProto::OK) {
-            return sendResult(std::make_unique<TEvBlobDepot::TEvResolveResult>(status, std::move(errorReason)));
+            return sendResult(std::make_unique<NEvBlobDepot::TEvResolveResult>(status, std::move(errorReason)));
         }
 
         size_t lastResponseSize = 0;
-        std::unique_ptr<TEvBlobDepot::TEvResolveResult> ev;
+        std::unique_ptr<NEvBlobDepot::TEvResolveResult> ev;
 
         size_t index = 0;
         for (auto it = Items.begin(); it != Items.end(); ++it, ++index) {
@@ -49,7 +49,7 @@ namespace NKikimr::NBlobDepot {
                 if (ev) {
                     sendResult(std::move(ev));
                 }
-                ev = std::make_unique<TEvBlobDepot::TEvResolveResult>(NKikimrProto::OVERRUN, std::nullopt);
+                ev = std::make_unique<NEvBlobDepot::TEvResolveResult>(NKikimrProto::OVERRUN, std::nullopt);
                 lastResponseSize = ev->CalculateSerializedSize();
             }
             item.Swap(ev->Record.AddResolvedKeys());
@@ -60,7 +60,7 @@ namespace NKikimr::NBlobDepot {
             ev->Record.SetStatus(NKikimrProto::OK);
             sendResult(std::move(ev));
         } else { // no items in response -- all got filtered out
-            sendResult(std::make_unique<TEvBlobDepot::TEvResolveResult>(NKikimrProto::OK, std::nullopt));
+            sendResult(std::make_unique<NEvBlobDepot::TEvResolveResult>(NKikimrProto::OK, std::nullopt));
         }
     }
 
@@ -82,7 +82,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     class TData::TTxResolve : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
-        std::unique_ptr<TEvBlobDepot::TEvResolve::THandle> Request;
+        std::unique_ptr<NEvBlobDepot::TEvResolve::THandle> Request;
         THashSet<TLogoBlobID> ResolutionErrors;
         size_t ItemIndex = 0;
         std::optional<TScanRange> Range;
@@ -94,7 +94,7 @@ namespace NKikimr::NBlobDepot {
     public:
         TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_RESOLVE; }
 
-        TTxResolve(TBlobDepot *self, TEvBlobDepot::TEvResolve::TPtr request, THashSet<TLogoBlobID>&& resolutionErrors)
+        TTxResolve(TBlobDepot *self, NEvBlobDepot::TEvResolve::TPtr request, THashSet<TLogoBlobID>&& resolutionErrors)
             : TTransactionBase(self)
             , Request(request.Release())
             , ResolutionErrors(std::move(resolutionErrors))
@@ -254,7 +254,7 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
-    void TData::Handle(TEvBlobDepot::TEvResolve::TPtr ev) {
+    void TData::Handle(NEvBlobDepot::TEvResolve::TPtr ev) {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT21, "TEvResolve", (Id, Self->GetLogId()), (Msg, ev->Get()->ToString()),
             (Sender, ev->Sender), (Cookie, ev->Cookie), (LastAssimilatedBlobId, LastAssimilatedBlobId));
 
@@ -265,7 +265,7 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
-    void TData::ExecuteTxResolve(TEvBlobDepot::TEvResolve::TPtr ev, THashSet<TLogoBlobID>&& resolutionErrors) {
+    void TData::ExecuteTxResolve(NEvBlobDepot::TEvResolve::TPtr ev, THashSet<TLogoBlobID>&& resolutionErrors) {
         Self->Execute(std::make_unique<TTxResolve>(Self, ev, std::move(resolutionErrors)));
     }
 

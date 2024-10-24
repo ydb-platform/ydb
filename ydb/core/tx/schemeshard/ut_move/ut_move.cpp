@@ -12,7 +12,7 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 void SetEnableMoveIndex(TTestActorRuntime &runtime, TTestEnv&, ui64 schemeShard, bool value) {
-    auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+    auto request = MakeHolder<NConsole::NEvConsole::TEvConfigNotificationRequest>();
 
     NKikimrConfig::TFeatureFlags features;
     features.SetEnableMoveIndex(value);
@@ -994,7 +994,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TVector<THolder<IEventHandle>> suppressed;
         auto id = txId;
 
-        auto observer = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvBuildIndexCreateRequest::EventType);
+        auto observer = SetSuppressObserver(runtime, suppressed, NEvDataShard::TEvBuildIndexCreateRequest::EventType);
 
         WaitForSuppressed(runtime, suppressed, 1, observer);
 

@@ -30,7 +30,7 @@ public:
         // Subscribe for Logger config changes
         ui32 logConfigKind = (ui32)NKikimrConsole::TConfigItem::LogConfigItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-            new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
+            new NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
                 {logConfigKind}),
             IEventHandle::FlagTrackDelivery);
 
@@ -41,8 +41,8 @@ private:
     STATEFN(MainState) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvUndelivered, Handle);
-            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
-            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+            hFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
+            hFunc(NConsole::NEvConsole::TEvConfigNotificationRequest, Handle);
         default:
             Y_ABORT("TYqlLogsUpdater: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->ToString().data());
@@ -51,11 +51,11 @@ private:
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         switch (ev->Get()->SourceType) {
-            case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
+            case NConsole::NEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
                 LOG_C("Failed to deliver subscription request to config dispatcher.");
                 break;
 
-            case NConsole::TEvConsole::EvConfigNotificationResponse:
+            case NConsole::NEvConsole::EvConfigNotificationResponse:
                 LOG_E("Failed to deliver config notification response.");
                 break;
 
@@ -65,13 +65,13 @@ private:
         }
     }
 
-    void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev) {
+    void Handle(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev) {
         Y_UNUSED(ev);
 
         LOG_D("Subscribed for config changes.");
     }
 
-    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    void Handle(NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto& event = ev->Get()->Record;
 
         LOG_D("Updated table service config.");
@@ -79,7 +79,7 @@ private:
         LogConfig.Swap(event.MutableConfig()->MutableLogConfig());
         UpdateYqlLogLevels();
 
-        auto resp = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
+        auto resp = MakeHolder<NConsole::NEvConsole::TEvConfigNotificationResponse>(event);
 
         Send(ev->Sender, resp.Release(), 0, ev->Cookie);
     }

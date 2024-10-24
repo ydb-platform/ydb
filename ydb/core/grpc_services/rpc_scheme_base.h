@@ -23,8 +23,8 @@ protected:
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
+            HFunc(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
+            HFunc(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
             default: TBase::StateFuncBase(ev);
         }
     }
@@ -64,20 +64,20 @@ protected:
         }
 
         ui64 schemeShardTabletId = msg->Record.GetSchemeShardTabletId();
-        auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(msg->Record.GetTxId());
+        auto request = std::make_unique<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletion>(msg->Record.GetTxId());
         SetSchemeShardId(schemeShardTabletId);
         ForwardToSchemeShard(ctx, std::move(request));
         return;
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
         return this->OnNotifyTxCompletionResult(ev, ctx);
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&, const TActorContext&) {
+    void Handle(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&, const TActorContext&) {
     }
 
-    virtual void OnNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
+    virtual void OnNotifyTxCompletionResult(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
         return this->Reply(Ydb::StatusIds::SUCCESS, ctx);
     }

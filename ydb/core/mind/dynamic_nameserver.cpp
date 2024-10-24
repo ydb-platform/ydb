@@ -150,7 +150,7 @@ void TDynamicNameserver::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
             }
         }
     } else if (!SubscribedToConsole) {
-        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
             NKikimrConsole::TConfigItem::NameserviceConfigItem,
             SelfId()
         ));
@@ -445,10 +445,10 @@ void TDynamicNameserver::Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev, const TAct
         RequestEpochUpdate(domain, epoch, ctx);
 }
 
-void TDynamicNameserver::Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr /*ev*/)
+void TDynamicNameserver::Handle(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr /*ev*/)
 {}
 
-void TDynamicNameserver::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr ev) {
+void TDynamicNameserver::Handle(NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr ev) {
     auto& record = ev->Get()->Record;
     if (record.HasConfig()) {
         if (const auto& config = record.GetConfig(); config.HasNameserviceConfig()) {
@@ -461,7 +461,7 @@ void TDynamicNameserver::Handle(NConsole::TEvConsole::TEvConfigNotificationReque
             }
         }
     }
-    Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
+    Send(ev->Sender, new NConsole::NEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
 }
 
 void TDynamicNameserver::Handle(TEvents::TEvUnsubscribe::TPtr ev) {

@@ -76,7 +76,7 @@ public:
 
     void Bootstrap(const TActorContext &ctx) {
         if (!AppData()->DomainsInfo->Domain) {
-            Send(OwnerId, new NConsole::TEvConsole::TEvConfigSubscriptionError(Ydb::StatusIds::GENERIC_ERROR, "Ambiguous domain (use --domain option)"), 0, Cookie);
+            Send(OwnerId, new NConsole::NEvConsole::TEvConfigSubscriptionError(Ydb::StatusIds::GENERIC_ERROR, "Ambiguous domain (use --domain option)"), 0, Cookie);
 
             Die(ctx);
 
@@ -93,11 +93,11 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvPrivate::TEvRetryPoolStatus, Handle);
             HFuncTraced(TEvTenantPool::TEvTenantPoolStatus, Handle);
-            HFuncTraced(TEvConsole::TEvGetNodeConfigResponse, Handle);
-            HFuncTraced(TEvConsole::TEvConfigSubscriptionResponse, Handle);
-            HFuncTraced(TEvConsole::TEvConfigSubscriptionError, Handle);
-            HFuncTraced(TEvConsole::TEvConfigSubscriptionNotification, Handle);
-            HFuncTraced(TEvConsole::TEvConfigSubscriptionCanceled, Handle);
+            HFuncTraced(NEvConsole::TEvGetNodeConfigResponse, Handle);
+            HFuncTraced(NEvConsole::TEvConfigSubscriptionResponse, Handle);
+            HFuncTraced(NEvConsole::TEvConfigSubscriptionError, Handle);
+            HFuncTraced(NEvConsole::TEvConfigSubscriptionNotification, Handle);
+            HFuncTraced(NEvConsole::TEvConfigSubscriptionCanceled, Handle);
             HFuncTraced(TEvTabletPipe::TEvClientConnected, Handle);
             HFuncTraced(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFuncTraced(TEvents::TEvUndelivered, Handle);
@@ -134,7 +134,7 @@ public:
         Subscribe(ctx);
     }
 
-    void Handle(TEvConsole::TEvConfigSubscriptionResponse::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NEvConsole::TEvConfigSubscriptionResponse::TPtr &ev, const TActorContext &ctx) {
         auto &rec = ev->Get()->Record;
 
         if (rec.GetGeneration() != Generation) {
@@ -144,14 +144,14 @@ public:
         }
 
         if (rec.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
-            Send(OwnerId, new TEvConsole::TEvConfigSubscriptionError(rec.GetStatus().GetCode(), rec.GetStatus().GetReason()), 0, Cookie);
+            Send(OwnerId, new NEvConsole::TEvConfigSubscriptionError(rec.GetStatus().GetCode(), rec.GetStatus().GetReason()), 0, Cookie);
 
             Generation = 0;
             Die(ctx);
         }
 
         if (!FirstUpdateSent) {
-            auto request = MakeHolder<TEvConsole::TEvGetNodeConfigRequest>();
+            auto request = MakeHolder<NEvConsole::TEvGetNodeConfigRequest>();
             request->Record.MutableNode()->SetNodeId(SelfId().NodeId());
             request->Record.MutableNode()->SetHost(FQDNHostName());
             request->Record.MutableNode()->SetTenant(Tenant);
@@ -164,27 +164,27 @@ public:
         }
     }
 
-    void Handle(TEvConsole::TEvGetNodeConfigResponse::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NEvConsole::TEvGetNodeConfigResponse::TPtr &ev, const TActorContext &ctx) {
         if (!FirstUpdateSent) {
             ctx.ExecutorThread.Send(
                 new NActors::IEventHandle(
                     SelfId(),
                     ev->Sender,
-                    new NConsole::TEvConsole::TEvConfigSubscriptionNotification(
+                    new NConsole::NEvConsole::TEvConfigSubscriptionNotification(
                         Generation,
                         ev->Get()->Record.GetConfig(),
                         THashSet<ui32>(Kinds.begin(), Kinds.end()))));
         }
     }
 
-    void Handle(TEvConsole::TEvConfigSubscriptionError::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NEvConsole::TEvConfigSubscriptionError::TPtr &ev, const TActorContext &ctx) {
         NActors::TActivationContext::Send(ev->Forward(OwnerId));
 
         Generation = 0;
         Die(ctx);
     }
 
-    void Handle(NConsole::TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NConsole::NEvConsole::TEvConfigSubscriptionNotification::TPtr &ev, const TActorContext &ctx) {
         auto &rec = ev->Get()->Record;
 
         if (rec.GetGeneration() != Generation) {
@@ -265,7 +265,7 @@ public:
         notChanged &= changes.empty();
 
         if (!notChanged || !FirstUpdateSent) {
-            Send(OwnerId, new TEvConsole::TEvConfigSubscriptionNotification(
+            Send(OwnerId, new NEvConsole::TEvConfigSubscriptionNotification(
                      Generation,
                      CurrentConfig,
                      changes,
@@ -280,7 +280,7 @@ public:
         LastOrder++;
     }
 
-    void Handle(NConsole::TEvConsole::TEvConfigSubscriptionCanceled::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NConsole::NEvConsole::TEvConfigSubscriptionCanceled::TPtr &ev, const TActorContext &ctx) {
         auto &rec = ev->Get()->Record;
 
         if (rec.GetGeneration() != Generation) {
@@ -323,7 +323,7 @@ protected:
     void Die(const TActorContext &ctx) override {
         if (Pipe) {
             if (Generation != 0)
-                NTabletPipe::SendData(ctx, Pipe, new NConsole::TEvConsole::TEvConfigSubscriptionCanceled(Generation));
+                NTabletPipe::SendData(ctx, Pipe, new NConsole::NEvConsole::TEvConfigSubscriptionCanceled(Generation));
 
             NTabletPipe::CloseClient(ctx, Pipe);
         }
@@ -339,7 +339,7 @@ private:
         if (!Pipe)
             OpenPipe(ctx);
 
-        auto request = MakeHolder<TEvConsole::TEvConfigSubscriptionRequest>();
+        auto request = MakeHolder<NEvConsole::TEvConfigSubscriptionRequest>();
 
         request->Record.SetGeneration(Generation = NextGeneration++);
         request->Record.MutableOptions()->SetNodeId(SelfId().NodeId());

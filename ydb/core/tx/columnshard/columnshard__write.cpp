@@ -124,7 +124,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
             ACFL_ERROR("event", "absent_pathId")("path_id", writeMeta.GetTableId())("has_index", TablesManager.HasPrimaryIndex());
             Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
 
-            auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(TabletID(), writeMeta, NKikimrTxColumnShard::EResultStatus::ERROR);
+            auto result = std::make_unique<NEvColumnShard::TEvWriteResult>(TabletID(), writeMeta, NKikimrTxColumnShard::EResultStatus::ERROR);
             ctx.Send(writeMeta.GetSource(), result.release());
             Counters.GetCSCounters().OnFailedWriteResponse(EWriteFailReason::NoTable);
             wBuffer.RemoveData(aggr, StoragesManager->GetInsertOperator());
@@ -145,7 +145,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
             }
 
             if (writeMeta.HasLongTxId()) {
-                auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(TabletID(), writeMeta, errCode);
+                auto result = std::make_unique<NEvColumnShard::TEvWriteResult>(TabletID(), writeMeta, errCode);
                 ctx.Send(writeMeta.GetSource(), result.release());
             } else {
                 auto operation = OperationsManager->GetOperation((TOperationWriteId)writeMeta.GetWriteId());
@@ -177,7 +177,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteDraft::TPtr& ev, const TActorConte
     Execute(new TTxWriteDraft(this, ev->Get()->WriteController), ctx);
 }
 
-void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx) {
+void TColumnShard::Handle(NEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx) {
     Counters.GetCSCounters().OnStartWriteRequest();
 
     const auto& record = Proto(ev->Get());
@@ -206,7 +206,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     const auto returnFail = [&](const NColumnShard::ECumulativeCounters signalIndex, const EWriteFailReason reason) {
         Counters.GetTabletCounters()->IncCounter(signalIndex);
 
-        ctx.Send(source, std::make_unique<TEvColumnShard::TEvWriteResult>(TabletID(), writeMeta, NKikimrTxColumnShard::EResultStatus::ERROR));
+        ctx.Send(source, std::make_unique<NEvColumnShard::TEvWriteResult>(TabletID(), writeMeta, NKikimrTxColumnShard::EResultStatus::ERROR));
         Counters.GetCSCounters().OnFailedWriteResponse(reason);
         return;
     };
@@ -257,7 +257,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
         StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING), false);
     auto overloadStatus = CheckOverloaded(pathId);
     if (overloadStatus != EOverloadStatus::None) {
-        std::unique_ptr<NActors::IEventBase> result = std::make_unique<TEvColumnShard::TEvWriteResult>(
+        std::unique_ptr<NActors::IEventBase> result = std::make_unique<NEvColumnShard::TEvWriteResult>(
             TabletID(), writeData.GetWriteMeta(), NKikimrTxColumnShard::EResultStatus::OVERLOADED);
         OverloadWriteFail(overloadStatus, writeData.GetWriteMeta(), writeData.GetSize(), cookie, std::move(result), ctx);
         Counters.GetCSCounters().OnFailedWriteResponse(EWriteFailReason::Overload);
@@ -269,7 +269,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
             Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_DUPLICATE);
 
             auto result =
-                std::make_unique<TEvColumnShard::TEvWriteResult>(TabletID(), writeMeta, writeId, NKikimrTxColumnShard::EResultStatus::SUCCESS);
+                std::make_unique<NEvColumnShard::TEvWriteResult>(TabletID(), writeMeta, writeId, NKikimrTxColumnShard::EResultStatus::SUCCESS);
             ctx.Send(writeMeta.GetSource(), result.release());
             Counters.GetCSCounters().OnFailedWriteResponse(EWriteFailReason::LongTxDuplication);
             return;

@@ -36,7 +36,7 @@ class TMessageBusServerRequest : public TMessageBusSecureRequest<TMessageBusServ
 
     void Handle(TMiniKQLCompileServiceEvents::TEvCompileStatus::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev, const TActorContext &ctx);
 
     bool AllRequestsCompleted(const TActorContext& ctx);
     bool AllRequestsCompletedMKQL(const TActorContext& ctx);
@@ -63,7 +63,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TMiniKQLCompileServiceEvents::TEvCompileStatus, Handle);
             HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
-            HFunc(TEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
+            HFunc(NEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
         }
     }
 
@@ -329,8 +329,8 @@ void TMessageBusServerRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatu
     }
 }
 
-void TMessageBusServerRequest::Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev, const TActorContext &ctx) {
-    auto *response = new TEvDataShard::TEvGetReadTableStreamStateResponse;
+void TMessageBusServerRequest::Handle(NEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev, const TActorContext &ctx) {
+    auto *response = new NEvDataShard::TEvGetReadTableStreamStateResponse;
 
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::GENERIC_ERROR);
     auto *issue = response->Record.MutableStatus()->AddIssues();

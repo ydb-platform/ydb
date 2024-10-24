@@ -48,7 +48,7 @@ struct TTopicInfo {
     THashSet<ui32> PartitionsToRequest;
 
     //fetchRequest part
-    THashMap<ui32, TAutoPtr<TEvPersQueue::TEvHasDataInfo>> FetchInfo;
+    THashMap<ui32, TAutoPtr<NEvPersQueue::TEvHasDataInfo>> FetchInfo;
 };
 
 
@@ -130,7 +130,7 @@ public:
                 Response = CreateErrorReply(Ydb::StatusIds::BAD_REQUEST, "Some partition specified multiple times in fetch request");
                 return;
             }
-            TAutoPtr<TEvPersQueue::TEvHasDataInfo> fetchInfo(new TEvPersQueue::TEvHasDataInfo());
+            TAutoPtr<NEvPersQueue::TEvHasDataInfo> fetchInfo(new NEvPersQueue::TEvHasDataInfo());
             fetchInfo->Record.SetPartition(p.Partition);
             fetchInfo->Record.SetOffset(p.Offset);
             fetchInfo->Record.SetDeadline(deadline);
@@ -165,7 +165,7 @@ public:
             return SendReplyAndDie(std::move(Response), ctx);
         }
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "scheduling HasDataInfoResponse in " << Settings.MaxWaitTimeMs);
-        ctx.Schedule(TDuration::MilliSeconds(Min<ui32>(Settings.MaxWaitTimeMs, 30000)), new TEvPersQueue::TEvHasDataInfoResponse);
+        ctx.Schedule(TDuration::MilliSeconds(Min<ui32>(Settings.MaxWaitTimeMs, 30000)), new NEvPersQueue::TEvHasDataInfoResponse);
 
         SendSchemeCacheRequest(ctx);
         Schedule(DefaultTimeout, new TEvPrivate::TEvTimeout());
@@ -290,11 +290,11 @@ public:
 
     }
 
-    void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
         return ProcessFetchRequestResult(ev, ctx);
     }
 
-    void Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr&, const TActorContext& ctx) {
+    void Handle(NEvPersQueue::TEvHasDataInfoResponse::TPtr&, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "got HasDatainfoResponse");
         ProceedFetchRequest(ctx);
     }
@@ -402,8 +402,8 @@ public:
         TActorBootstrapped<TPQFetchRequestActor>::Die(ctx);
     }
 
-    TAutoPtr<TEvPersQueue::TEvResponse> FormEmptyCurrentRead(ui64 cookie) {
-        TAutoPtr<TEvPersQueue::TEvResponse> req(new TEvPersQueue::TEvResponse);
+    TAutoPtr<NEvPersQueue::TEvResponse> FormEmptyCurrentRead(ui64 cookie) {
+        TAutoPtr<NEvPersQueue::TEvResponse> req(new NEvPersQueue::TEvResponse);
         auto read = req->Record.MutablePartitionResponse()->MutableCmdReadResult();
         req->Record.MutablePartitionResponse()->SetCookie(cookie);
         read->SetErrorCode(NPersQueue::NErrorCode::READ_NOT_DONE);
@@ -452,7 +452,7 @@ public:
         }
 
         //Form read request
-        TAutoPtr<TEvPersQueue::TEvRequest> preq(new TEvPersQueue::TEvRequest);
+        TAutoPtr<NEvPersQueue::TEvRequest> preq(new NEvPersQueue::TEvRequest);
         TStringBuilder reqId;
         reqId << "request" << "-id-" << FetchRequestReadsDone << "-" << Settings.Partitions.size();
         preq->Record.SetRequestId(reqId);
@@ -472,7 +472,7 @@ public:
         NTabletPipe::SendData(ctx, jt->second.PipeClient, preq.Release());
     }
 
-    void ProcessFetchRequestResult(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+    void ProcessFetchRequestResult(NEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
         Y_ABORT_UNLESS(record.HasPartitionResponse());
         if (record.GetPartitionResponse().GetCookie() != CurrentCookie || FetchRequestCurrentReadTablet == 0) {
@@ -572,10 +572,10 @@ public:
     STRICT_STFUNC(StateFunc,
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-            HFunc(TEvPersQueue::TEvResponse, Handle);
+            HFunc(NEvPersQueue::TEvResponse, Handle);
             HFunc(TEvents::TEvWakeup, Handle);
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleSchemeCacheResponse);
-            HFunc(TEvPersQueue::TEvHasDataInfoResponse, Handle);
+            HFunc(NEvPersQueue::TEvHasDataInfoResponse, Handle);
             CFunc(TEvPrivate::EvTimeout, HandleTimeout);
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
     )

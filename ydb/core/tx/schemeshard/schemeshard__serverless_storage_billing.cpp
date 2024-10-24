@@ -195,7 +195,7 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
         if (TimeToNextBill) {
             ctx.Schedule(
                 TimeToNextBill,
-                new TEvPrivate::TEvServerlessStorageBilling());
+                new NEvPrivate::TEvServerlessStorageBilling());
         }
 
         SideEffects.ApplyOnComplete(Self, ctx);

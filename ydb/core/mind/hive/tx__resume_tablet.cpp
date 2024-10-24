@@ -67,7 +67,7 @@ public:
                 }
             }
             if (status != NKikimrProto::UNKNOWN) {
-                SideEffects.Send(ActorToNotify, new TEvHive::TEvResumeTabletResult(status, TabletId), 0, 0);
+                SideEffects.Send(ActorToNotify, new NEvHive::TEvResumeTabletResult(status, TabletId), 0, 0);
             }
             Self->ProcessBootQueue();
         }

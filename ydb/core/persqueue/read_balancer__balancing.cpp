@@ -563,8 +563,8 @@ void TPartitionFamily::LockPartition(ui32 partitionId, const TActorContext& ctx)
     ctx.Send(Session->Sender, MakeEvLockPartition(partitionId, step).release());
 }
 
-std::unique_ptr<TEvPersQueue::TEvReleasePartition> TPartitionFamily::MakeEvReleasePartition(ui32 partitionId) const {
-    auto res = std::make_unique<TEvPersQueue::TEvReleasePartition>();
+std::unique_ptr<NEvPersQueue::TEvReleasePartition> TPartitionFamily::MakeEvReleasePartition(ui32 partitionId) const {
+    auto res = std::make_unique<NEvPersQueue::TEvReleasePartition>();
     auto& r = res->Record;
 
     r.SetSession(Session->SessionName);
@@ -578,8 +578,8 @@ std::unique_ptr<TEvPersQueue::TEvReleasePartition> TPartitionFamily::MakeEvRelea
     return res;
 }
 
-std::unique_ptr<TEvPersQueue::TEvLockPartition> TPartitionFamily::MakeEvLockPartition(ui32 partitionId, ui32 step) const {
-    auto res = std::make_unique<TEvPersQueue::TEvLockPartition>();
+std::unique_ptr<NEvPersQueue::TEvLockPartition> TPartitionFamily::MakeEvLockPartition(ui32 partitionId, ui32 step) const {
+    auto res = std::make_unique<NEvPersQueue::TEvLockPartition>();
     auto& r = res->Record;
 
     r.SetSession(Session->SessionName);
@@ -1155,7 +1155,7 @@ TString GetSdkDebugString0(bool scaleAwareSDK) {
     return scaleAwareSDK ? "ScaleAwareSDK" : "old SDK";
 }
 
-void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx) {
+void TConsumer::FinishReading(NEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx) {
     auto& r = ev->Get()->Record;
     auto partitionId = r.GetPartitionId();
 
@@ -1610,7 +1610,7 @@ void TBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const 
     SetCommittedState(r.GetConsumer(), r.GetPartitionId(), r.GetGeneration(), r.GetCookie(), ctx);
 }
 
-void TBalancer::Handle(TEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev, const TActorContext& ctx) {
+void TBalancer::Handle(NEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev, const TActorContext& ctx) {
     auto& r = ev->Get()->Record;
     auto partitionId = r.GetPartitionId();
 
@@ -1624,7 +1624,7 @@ void TBalancer::Handle(TEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev
     consumer->StartReading(partitionId, ctx);
 }
 
-void TBalancer::Handle(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx) {
+void TBalancer::Handle(NEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx) {
     auto& r = ev->Get()->Record;
 
     auto consumer = GetConsumer(r.GetConsumer());
@@ -1637,7 +1637,7 @@ void TBalancer::Handle(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& e
     consumer->FinishReading(ev, ctx);
 }
 
-void TBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActorContext& ctx) {
+void TBalancer::Handle(NEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActorContext& ctx) {
     const auto& r = ev->Get()->Record;
     const TString& consumerName = r.GetClientId();
     auto partitionId = r.GetPartition();
@@ -1749,7 +1749,7 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TAc
     }
 }
 
-void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TActorContext& ctx) {
+void TBalancer::Handle(NEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TActorContext& ctx) {
     const auto& r = ev->Get()->Record;
     auto& consumerName = r.GetClientId();
 
@@ -1788,7 +1788,7 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
     for (auto& group : r.GetGroups()) {
         auto partitionId = group - 1;
         if (group == 0 || !GetPartitionInfo(partitionId)) {
-            THolder<TEvPersQueue::TEvError> response(new TEvPersQueue::TEvError);
+            THolder<NEvPersQueue::TEvError> response(new NEvPersQueue::TEvError);
             response->Record.SetCode(NPersQueue::NErrorCode::BAD_REQUEST);
             response->Record.SetDescription(TStringBuilder() << "no group " << group << " in topic " << Topic());
             ctx.Send(ev->Sender, response.Release());
@@ -1818,13 +1818,13 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
     consumer->ScheduleBalance(ctx);
 }
 
-void TBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TActorContext& ctx) {
+void TBalancer::Handle(NEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TActorContext& ctx) {
     const auto& r = ev->Get()->Record;
 
     std::unordered_set<ui32> partitionsRequested;
     partitionsRequested.insert(r.GetPartitions().begin(), r.GetPartitions().end());
 
-    auto response = std::make_unique<TEvPersQueue::TEvReadSessionsInfoResponse>();
+    auto response = std::make_unique<NEvPersQueue::TEvReadSessionsInfoResponse>();
     response->Record.SetTabletId(TopicActor.TabletID());
 
     auto consumer = GetConsumer(r.GetClientId());
@@ -1873,7 +1873,7 @@ void TBalancer::Handle(TEvPQ::TEvBalanceConsumer::TPtr& ev, const TActorContext&
     }
 }
 
-void TBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& /*ctx*/) {
+void TBalancer::Handle(NEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& /*ctx*/) {
     const auto& record = ev->Get()->Record;
     for (const auto& partResult : record.GetPartResult()) {
         for (const auto& consumerResult : partResult.GetConsumerResult()) {

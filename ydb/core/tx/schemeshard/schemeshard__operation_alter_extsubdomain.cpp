@@ -448,7 +448,7 @@ public:
         return false;
     }
 
-    bool HandleReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvHive::TEvCreateTabletReply::TPtr& ev, TOperationContext& context) override {
         LOG_I(DebugHint() << "HandleReply TEvCreateTabletReply");
         LOG_D(DebugHint() << "HandleReply TEvCreateTabletReply, msg: " << DebugReply(ev));
 
@@ -526,7 +526,7 @@ public:
         return false;
     }
 
-    bool HandleReply(TEvPrivate::TEvCompletePublication::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvCompletePublication::TPtr& ev, TOperationContext& context) override {
         LOG_I(DebugHint() << "HandleReply TEvCompletePublication");
         LOG_D(DebugHint() << "HandleReply TEvCompletePublication" << ", msg: " << DebugReply(ev));
 
@@ -545,7 +545,7 @@ public:
         return false;
     }
 
-    bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
         LOG_I(DebugHint() << "HandleReply TEvPrivate:TEvCompleteBarrier, msg: " << ev->Get()->ToString());
 
         TTxState* txState = context.SS->FindTx(OperationId);
@@ -747,7 +747,7 @@ public:
         return false;
     }
 
-    bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
         LOG_I(DebugHint() << "HandleReply TEvPrivate:TEvCompleteBarrier, msg: " << ev->Get()->ToString());
 
         TTxState* txState = context.SS->FindTx(OperationId);
@@ -774,7 +774,7 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), {
-            TEvPrivate::TEvOperationPlan::EventType
+            NEvPrivate::TEvOperationPlan::EventType
         });
     }
 
@@ -791,7 +791,7 @@ public:
 
             const TTabletId hiveToSync = context.SS->ResolveHive(pathId, context.Ctx);
 
-            auto event = MakeHolder<TEvHive::TEvUpdateDomain>();
+            auto event = MakeHolder<NEvHive::TEvUpdateDomain>();
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.MutableDomainKey()->SetSchemeShard(pathId.OwnerId);
             event->Record.MutableDomainKey()->SetPathId(pathId.LocalPathId);
@@ -813,7 +813,7 @@ public:
         }
     }
 
-    bool HandleReply(TEvHive::TEvUpdateDomainReply::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvHive::TEvUpdateDomainReply::TPtr& ev, TOperationContext& context) override {
         const TTabletId hive = TTabletId(ev->Get()->Record.GetOrigin());
 
         LOG_I(DebugHint() << "HandleReply TEvUpdateDomainReply"

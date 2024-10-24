@@ -20,7 +20,7 @@ public:
     TReject(TOperationId id, NKikimrScheme::EStatus status, const TString& explain)
         : OperationId(id)
         , Response(
-            new TEvSchemeShard::TEvModifySchemeTransactionResult(
+            new NEvSchemeShard::TEvModifySchemeTransactionResult(
                 NKikimrScheme::StatusAccepted, 0, 0))
     {
         Response->SetError(status, explain);

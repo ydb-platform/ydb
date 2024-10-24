@@ -104,7 +104,7 @@ namespace NPQ {
 
 struct TEvPQ {
     enum EEv {
-        EvWrite = TEvPersQueue::EvInternalEvents,
+        EvWrite = NEvPersQueue::EvInternalEvents,
         EvRead,
         EvDie,
         EvMonRequest,

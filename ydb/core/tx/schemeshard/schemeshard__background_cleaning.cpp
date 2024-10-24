@@ -97,7 +97,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
         BackgroundCleaningTxToDirPathId[txId] = pathId;
         state.TxIds.insert(txId);
 
-        auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), TabletID());
+        auto propose = MakeHolder<NEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), TabletID());
         auto& record = propose->Record;
 
         auto objectPath = TPath::Init(objectPathId, this);
@@ -180,7 +180,7 @@ bool TSchemeShard::ContinueBackgroundCleaning(const TPathId& pathId) {
         const auto nextDirPathId = state.DirsToRemove.back();
         state.DirsToRemove.pop_back();
 
-        auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), TabletID());
+        auto propose = MakeHolder<NEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), TabletID());
         auto& record = propose->Record;
 
         auto dirPath = TPath::Init(nextDirPathId, this);
@@ -248,7 +248,7 @@ void TSchemeShard::OnBackgroundCleaningTimeout(const TPathId& pathId) {
         << " at schemeshard " << TabletID());
 }
 
-void TSchemeShard::Handle(TEvPrivate::TEvRetryNodeSubscribe::TPtr& ev, const TActorContext&) {
+void TSchemeShard::Handle(NEvPrivate::TEvRetryNodeSubscribe::TPtr& ev, const TActorContext&) {
     auto& nodeStates = TempDirsState.NodeStates;
     auto nodeId = ev->Get()->NodeId;
 
@@ -336,13 +336,13 @@ void TSchemeShard::RetryNodeSubscribe(ui32 nodeId) {
     if (now - retryState.LastRetryAt < GetCurrentDelay(BackgroundCleaningRetrySettings, retryState)) {
         auto at = retryState.LastRetryAt + GetDelay(BackgroundCleaningRetrySettings, retryState);
         retryState.IsScheduled = true;
-        Schedule(at - now, new TEvPrivate::TEvRetryNodeSubscribe(nodeId));
+        Schedule(at - now, new NEvPrivate::TEvRetryNodeSubscribe(nodeId));
         return;
     }
 
     for (const auto& ownerActorId: nodeState.Owners) {
         Send(new IEventHandle(ownerActorId, SelfId(),
-            new TEvSchemeShard::TEvOwnerActorAck(),
+            new NEvSchemeShard::TEvOwnerActorAck(),
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession));
     }
     retryState.LastRetryAt = now;
@@ -397,7 +397,7 @@ void TSchemeShard::RemoveBackgroundCleaning(const TPathId& pathId) {
 }
 
 void TSchemeShard::HandleBackgroundCleaningTransactionResult(
-        TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& result) {
+        NEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& result) {
     const auto txId = TTxId(result->Get()->Record.GetTxId());
     const auto pathId = BackgroundCleaningTxToDirPathId.at(txId);
     Y_ABORT_UNLESS(BackgroundCleaningState.at(pathId).TxIds.contains(txId));
@@ -419,7 +419,7 @@ void TSchemeShard::HandleBackgroundCleaningTransactionResult(
         break;
     }
     case NKikimrScheme::EStatus::StatusAccepted:
-        Send(SelfId(), new TEvSchemeShard::TEvNotifyTxCompletion(record.GetTxId()));
+        Send(SelfId(), new NEvSchemeShard::TEvNotifyTxCompletion(record.GetTxId()));
         break;
     default: {
         CleanBackgroundCleaningState(pathId);

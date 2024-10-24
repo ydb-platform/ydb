@@ -47,7 +47,7 @@ protected:
     static constexpr TDuration TIMEOUT = TDuration::Minutes(10);
     THive* Hive;
     TStorageBalancerSettings Settings;
-    using TOperations = std::unordered_map<TTabletId, std::unique_ptr<TEvHive::TEvReassignTablet>>;
+    using TOperations = std::unordered_map<TTabletId, std::unique_ptr<NEvHive::TEvReassignTablet>>;
     TOperations Operations;
     TOperations::iterator NextReassign;
     ui64 ReassignInFlight = 0;
@@ -175,7 +175,7 @@ public:
             const auto& channel = channels[i];
             auto& ev = Operations[channel.TabletId];
             if (!ev) {
-                ev = std::make_unique<TEvHive::TEvReassignTablet>(channel.TabletId);
+                ev = std::make_unique<NEvHive::TEvReassignTablet>(channel.TabletId);
                 ev->Record.SetReassignReason(NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_BALANCE);
             }
             ev->Record.AddChannels(channel.ChannelId);

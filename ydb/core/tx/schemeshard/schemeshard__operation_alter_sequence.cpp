@@ -23,10 +23,10 @@ public:
     TConfigureParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
+        IgnoreMessages(DebugHint(), {NEvHive::TEvCreateTabletReply::EventType});
     }
 
-    bool HandleReply(NSequenceShard::TEvSequenceShard::TEvUpdateSequenceResult::TPtr& ev,
+    bool HandleReply(NSequenceShard::NEvSequenceShard::TEvUpdateSequenceResult::TPtr& ev,
             TOperationContext& context) override {
 
         auto ssId = context.SS->SelfTabletId();
@@ -109,7 +109,7 @@ public:
             Y_ABORT_UNLESS(shard.TabletType == ETabletType::SequenceShard);
             Y_ABORT_UNLESS(tabletId != InvalidTabletId);
 
-            auto event = MakeHolder<NSequenceShard::TEvSequenceShard::TEvUpdateSequence>(txState->TargetPathId);
+            auto event = MakeHolder<NSequenceShard::NEvSequenceShard::TEvUpdateSequence>(txState->TargetPathId);
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.SetTxPartId(OperationId.GetSubTxId());
             if (alterData->Description.HasMinValue()) {
@@ -161,10 +161,10 @@ public:
     TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {NSequenceShard::TEvSequenceShard::TEvUpdateSequenceResult::EventType});
+        IgnoreMessages(DebugHint(), {NSequenceShard::NEvSequenceShard::TEvUpdateSequenceResult::EventType});
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         auto step = TStepId(ev->Get()->StepId);
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -376,7 +376,7 @@ public:
                          << ", transaction: " << Transaction.ShortDebugString()
                          << ", at schemeshard: " << ssId);
 
-        TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
+        NEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
 
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);

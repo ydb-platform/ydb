@@ -17,10 +17,10 @@ class TJsonCluster : public TViewerPipeClient {
     using TBase = TViewerPipeClient;
     std::optional<TRequestResponse<TEvInterconnect::TEvNodesInfo>> NodesInfoResponse;
     std::optional<TRequestResponse<TEvWhiteboard::TEvNodeStateResponse>> NodeStateResponse;
-    std::optional<TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse>> ListTenantsResponse;
+    std::optional<TRequestResponse<NConsole::NEvConsole::TEvListTenantsResponse>> ListTenantsResponse;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse>> PDisksResponse;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetStorageStatsResponse>> StorageStatsResponse;
-    std::optional<TRequestResponse<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStatsResponse;
+    std::optional<TRequestResponse<NEvHive::TEvResponseHiveNodeStats>> HiveNodeStatsResponse;
 
     int WhiteboardStateRequestsInFlight = 0;
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvSystemStateResponse>> SystemStateResponse;
@@ -127,7 +127,7 @@ public:
                 FilterTablets.insert(domain->SchemeRoot);
                 RootHiveId = domains->GetHive();
                 FilterTablets.insert(RootHiveId);
-                HiveNodeStatsResponse = MakeRequestHiveNodeStats(RootHiveId, new TEvHive::TEvRequestHiveNodeStats());
+                HiveNodeStatsResponse = MakeRequestHiveNodeStats(RootHiveId, new NEvHive::TEvRequestHiveNodeStats());
             }
             FilterTablets.insert(MakeBSControllerID());
             FilterTablets.insert(MakeDefaultHiveID());
@@ -540,7 +540,7 @@ private:
         RequestDone();
     }
 
-    void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev) {
+    void Handle(NConsole::NEvConsole::TEvListTenantsResponse::TPtr& ev) {
         ListTenantsResponse->Set(std::move(ev));
         ProcessResponses();
         RequestDone();
@@ -558,7 +558,7 @@ private:
         RequestDone();
     }
 
-    void Handle(TEvHive::TEvResponseHiveNodeStats::TPtr& ev) {
+    void Handle(NEvHive::TEvResponseHiveNodeStats::TPtr& ev) {
         HiveNodeStatsResponse->Set(std::move(ev));
         ProcessResponses();
         RequestDone();
@@ -746,10 +746,10 @@ private:
             hFunc(TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(TEvWhiteboard::TEvTabletStateResponse, Handle);
             hFunc(TEvViewer::TEvViewerResponse, Handle);
-            hFunc(NConsole::TEvConsole::TEvListTenantsResponse, Handle);
+            hFunc(NConsole::NEvConsole::TEvListTenantsResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetPDisksResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetStorageStatsResponse, Handle);
-            hFunc(TEvHive::TEvResponseHiveNodeStats, Handle);
+            hFunc(NEvHive::TEvResponseHiveNodeStats, Handle);
             hFunc(TEvents::TEvUndelivered, Undelivered);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);

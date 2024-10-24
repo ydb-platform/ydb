@@ -827,8 +827,8 @@ public:
     }
 
     TFuture<TKqpTableProfilesResult> GetTableProfiles() override {
-        using TConfigRequest = NConsole::TEvConfigsDispatcher::TEvGetConfigRequest;
-        using TConfigResponse = NConsole::TEvConfigsDispatcher::TEvGetConfigResponse;
+        using TConfigRequest = NConsole::NEvConfigsDispatcher::TEvGetConfigRequest;
+        using TConfigResponse = NConsole::NEvConfigsDispatcher::TEvGetConfigResponse;
 
         ui32 configKind = (ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem;
         auto ev = MakeHolder<TConfigRequest>(configKind);
@@ -2149,7 +2149,7 @@ public:
     }
 
 private:
-    using TDescribeSchemeResponse = TEvSchemeShard::TEvDescribeSchemeResult;
+    using TDescribeSchemeResponse = NEvSchemeShard::TEvDescribeSchemeResult;
     using TTransactionResponse = TEvTxUserProxy::TEvProposeTransactionStatus;
 
 private:

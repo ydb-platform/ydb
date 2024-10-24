@@ -104,8 +104,8 @@ void TTxMediator::HandleEnqueueWatch(TAutoPtr<IEventHandle> &ev, const TActorCon
     EnqueuedWatch.push_back(std::move(ev));
 }
 
-void TTxMediator::DoConfigure(const TEvSubDomain::TEvConfigure &ev, const TActorContext &ctx, const TActorId &ackTo) {
-    const TEvSubDomain::TEvConfigure::ProtoRecordType &record = ev.Record;
+void TTxMediator::DoConfigure(const NEvSubDomain::TEvConfigure &ev, const TActorContext &ctx, const TActorId &ackTo) {
+    const NEvSubDomain::TEvConfigure::ProtoRecordType &record = ev.Record;
     if (0 == record.CoordinatorsSize() || 0 == record.GetTimeCastBucketsPerMediator()) {
         LOG_ERROR_S(ctx, NKikimrServices::TX_MEDIATOR
                      , "tablet# " << TabletID() << " actor# " << SelfId()
@@ -126,8 +126,8 @@ void TTxMediator::DoConfigure(const TEvSubDomain::TEvConfigure &ev, const TActor
     Execute(CreateTxConfigure(ackTo, record.GetVersion(), coordinators, record.GetTimeCastBucketsPerMediator()), ctx);
 }
 
-void TTxMediator::Handle(TEvSubDomain::TEvConfigure::TPtr &ev, const TActorContext &ctx) {
-    const TEvSubDomain::TEvConfigure::ProtoRecordType &record = ev->Get()->Record;
+void TTxMediator::Handle(NEvSubDomain::TEvConfigure::TPtr &ev, const TActorContext &ctx) {
+    const NEvSubDomain::TEvConfigure::ProtoRecordType &record = ev->Get()->Record;
     LOG_NOTICE_S(ctx, NKikimrServices::TX_MEDIATOR
                  , "tablet# " << TabletID() << " actor# " << SelfId()
                 << " HANDLE TEvMediatorConfiguration Version# " << record.GetVersion());

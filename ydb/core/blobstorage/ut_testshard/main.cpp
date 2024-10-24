@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(BlobDepotWithTestShard) {
 
         for (ui32 i = 0; i < 2; ++i) {
             env.Runtime->WrapInActorContext(edge, [&] {
-                auto ev = std::make_unique<TEvHive::TEvCreateTablet>();
+                auto ev = std::make_unique<NEvHive::TEvCreateTablet>();
                 auto& record = ev->Record;
                 record.SetOwner(1);
                 record.SetOwnerIdx(1 + i);
@@ -44,14 +44,14 @@ Y_UNIT_TEST_SUITE(BlobDepotWithTestShard) {
 
             ui64 tabletId;
             {
-                auto res = env.Runtime->WaitForEdgeActorEvent<TEvHive::TEvCreateTabletReply>(edge, false);
+                auto res = env.Runtime->WaitForEdgeActorEvent<NEvHive::TEvCreateTabletReply>(edge, false);
                 auto& record = res->Get()->Record;
                 UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);
                 tabletId = record.GetTabletID();
             }
 
             {
-                auto res = env.Runtime->WaitForEdgeActorEvent<TEvHive::TEvTabletCreationResult>(edge, false);
+                auto res = env.Runtime->WaitForEdgeActorEvent<NEvHive::TEvTabletCreationResult>(edge, false);
                 auto& record = res->Get()->Record;
                 UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);
             }

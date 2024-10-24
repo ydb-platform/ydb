@@ -50,13 +50,13 @@ private:
 
     STATEFN(StateDescribeScheme) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFunc(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult, Handle);
         default:
             return TBase::StateWork(ev);
         }
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->GetRecord();
         const auto& desc = record.GetPathDescription();
 
@@ -102,7 +102,7 @@ private:
             ControllerPipeClient = Register(NTabletPipe::CreateClient(SelfId(), tabletId, config));
         }
 
-        auto ev = std::make_unique<NReplication::TEvController::TEvDescribeReplication>();
+        auto ev = std::make_unique<NReplication::NEvController::TEvDescribeReplication>();
         PathIdFromPathId(pathId, ev->Record.MutablePathId());
         ev->Record.SetIncludeStats(GetProtoRequest()->include_stats());
 
@@ -112,13 +112,13 @@ private:
 
     STATEFN(StateDescribeReplication) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NReplication::TEvController::TEvDescribeReplicationResult, Handle);
+            HFunc(NReplication::NEvController::TEvDescribeReplicationResult, Handle);
         default:
             return TBase::StateWork(ev);
         }
     }
 
-    void Handle(NReplication::TEvController::TEvDescribeReplicationResult::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NReplication::NEvController::TEvDescribeReplicationResult::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
 
         switch (record.GetStatus()) {

@@ -114,8 +114,8 @@ public:
         , SelfPingWakeupScheduled(false)
     {}
 
-    void Handle(TEvSchemeShard::TEvMeasureSelfResponseTime::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvSchemeShard::TEvWakeupToMeasureSelfResponseTime::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvSchemeShard::TEvMeasureSelfResponseTime::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvSchemeShard::TEvWakeupToMeasureSelfResponseTime::TPtr &ev, const TActorContext &ctx);
     void OnAnyEvent(const TActorContext &ctx);
     void DoSelfPing(const TActorContext &ctx);
     void ScheduleSelfPingWakeup(const TActorContext &ctx);
@@ -229,7 +229,7 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
 
         if (typeInfo.GetTypeId() != NScheme::NTypeIds::String) {
             status = NKikimrScheme::EStatus::StatusInvalidParameter;
-            error = TStringBuilder() << "Index column '" << indexColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo); 
+            error = TStringBuilder() << "Index column '" << indexColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo);
             return false;
         }
     } else if (!IsCompatibleKeyTypes(baseColumnTypes, implTableColumns, uniformTable, error)) {

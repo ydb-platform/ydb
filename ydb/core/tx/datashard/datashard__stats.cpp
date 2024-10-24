@@ -116,7 +116,7 @@ public:
 
         ObtainResources();
         Spent->Alter(true); // resume measurement
-        
+
         for (auto& loaded : msg->Loaded) {
             partPages.emplace(pageId, TPinnedPageRef(loaded.Page).GetData());
         }
@@ -146,21 +146,21 @@ private:
 
         BuildStats(*Subset, ev->Stats, RowCountResolution, DataSizeResolution, HistogramBucketsCount, this, [this](){
             const auto now = GetCycleCountFast();
-    
+
             if (now > CoroutineDeadline) {
                 Spent->Alter(false); // pause measurement
                 ReleaseResources();
 
                 Send(new IEventHandle(EvResume, 0, SelfActorId, {}, nullptr, 0));
-                WaitForSpecificEvent([](IEventHandle& ev) { 
-                    return ev.Type == EvResume; 
+                WaitForSpecificEvent([](IEventHandle& ev) {
+                    return ev.Type == EvResume;
                 }, &TTableStatsCoroBuilder::ProcessUnexpectedEvent);
 
                 ObtainResources();
                 Spent->Alter(true); // resume measurement
             }
         });
-        
+
         Y_DEBUG_ABORT_UNLESS(IndexSize == ev->Stats.IndexSize.Size);
 
         LOG_DEBUG_S(GetActorContext(), NKikimrServices::TX_DATASHARD, "BuildStats result at datashard " << TabletId << ", for tableId " << TableId
@@ -244,11 +244,11 @@ private:
 
 class TDataShard::TTxGetTableStats : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
-    TEvDataShard::TEvGetTableStats::TPtr Ev;
-    TAutoPtr<TEvDataShard::TEvGetTableStatsResult> Result;
+    NEvDataShard::TEvGetTableStats::TPtr Ev;
+    TAutoPtr<NEvDataShard::TEvGetTableStatsResult> Result;
 
 public:
-    TTxGetTableStats(TDataShard* ds, TEvDataShard::TEvGetTableStats::TPtr ev)
+    TTxGetTableStats(TDataShard* ds, NEvDataShard::TEvGetTableStats::TPtr ev)
         : TBase(ds)
         , Ev(ev)
     {}
@@ -260,7 +260,7 @@ public:
 
         ui64 tableId = Ev->Get()->Record.GetTableId();
 
-        Result = new TEvDataShard::TEvGetTableStatsResult(Self->TabletID(), Self->PathOwnerId, tableId);
+        Result = new NEvDataShard::TEvGetTableStatsResult(Self->TabletID(), Self->PathOwnerId, tableId);
 
         if (!Self->TableInfos.contains(tableId))
             return true;
@@ -345,7 +345,7 @@ private:
     }
 };
 
-void TDataShard::Handle(TEvDataShard::TEvGetTableStats::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvGetTableStats::TPtr& ev, const TActorContext& ctx) {
     Executor()->Execute(new TTxGetTableStats(this, ev), ctx);
 }
 
@@ -418,7 +418,7 @@ void TDataShard::Handle(TEvPrivate::TEvTableStatsError::TPtr& ev, const TActorCo
 
     auto msg = ev->Get();
 
-    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Stats rebuilt error '" << msg->Message 
+    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Stats rebuilt error '" << msg->Message
         << "', code: " << ui32(msg->Code) << ", datashard " << TabletID() << ", tableId " << msg->TableId);
 
     auto it = TableInfos.find(msg->TableId);
@@ -430,8 +430,8 @@ void TDataShard::Handle(TEvPrivate::TEvTableStatsError::TPtr& ev, const TActorCo
 
 class TDataShard::TTxInitiateStatsUpdate : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
-    TEvDataShard::TEvGetTableStats::TPtr Ev;
-    TAutoPtr<TEvDataShard::TEvGetTableStatsResult> Result;
+    NEvDataShard::TEvGetTableStats::TPtr Ev;
+    TAutoPtr<NEvDataShard::TEvGetTableStatsResult> Result;
 
 public:
     TTxInitiateStatsUpdate(TDataShard* ds)

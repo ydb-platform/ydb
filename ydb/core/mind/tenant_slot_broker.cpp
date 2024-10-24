@@ -1610,20 +1610,20 @@ void TTenantSlotBroker::ProcessNextTx(const TActorContext &ctx)
     Execute(ActiveTx, ctx);
 }
 
-void TTenantSlotBroker::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
+void TTenantSlotBroker::Handle(NEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                                const TActorContext &ctx)
 {
     if (ev->Get()->Record.HasLocal() && ev->Get()->Record.GetLocal()) {
         ProcessTx(CreateTxUpdateConfig(ev), ctx);
     } else {
         // ignore and immediately ack messages from old persistent console subscriptions
-        auto response = MakeHolder<TEvConsole::TEvConfigNotificationResponse>();
+        auto response = MakeHolder<NEvConsole::TEvConfigNotificationResponse>();
         response->Record.MutableConfigId()->CopyFrom(ev->Get()->Record.GetConfigId());
         ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
 }
 
-void TTenantSlotBroker::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
+void TTenantSlotBroker::Handle(NEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
                                const TActorContext &ctx)
 {
     auto &rec = ev->Get()->Record;

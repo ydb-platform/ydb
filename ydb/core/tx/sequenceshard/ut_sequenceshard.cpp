@@ -12,7 +12,7 @@ namespace NSequenceShard {
             // first time creation must succeed
             {
                 auto createResult = ctx.CreateSequence(
-                    MakeHolder<TEvSequenceShard::TEvCreateSequence>(TPathId(123, 42)));
+                    MakeHolder<NEvSequenceShard::TEvCreateSequence>(TPathId(123, 42)));
                 UNIT_ASSERT_VALUES_EQUAL(createResult->Record.GetStatus(),
                     NKikimrTxSequenceShard::TEvCreateSequenceResult::SUCCESS);
             }
@@ -20,7 +20,7 @@ namespace NSequenceShard {
             // second time we must get an expected error
             {
                 auto createResult = ctx.CreateSequence(
-                    MakeHolder<TEvSequenceShard::TEvCreateSequence>(TPathId(123, 42)));
+                    MakeHolder<NEvSequenceShard::TEvCreateSequence>(TPathId(123, 42)));
                 UNIT_ASSERT_VALUES_EQUAL(createResult->Record.GetStatus(),
                     NKikimrTxSequenceShard::TEvCreateSequenceResult::SEQUENCE_ALREADY_EXISTS);
             }
@@ -28,7 +28,7 @@ namespace NSequenceShard {
             // creating a different path id should succeed
             {
                 auto createResult = ctx.CreateSequence(
-                    TEvSequenceShard::TEvCreateSequence::Build(TPathId(123, 51))
+                    NEvSequenceShard::TEvCreateSequence::Build(TPathId(123, 51))
                         .SetStartValue(100001)
                         .SetCache(10)
                         .Done());
@@ -130,7 +130,7 @@ namespace NSequenceShard {
             // update sequence to a new initial value
             {
                 auto updateResult = ctx.UpdateSequence(
-                    TEvSequenceShard::TEvUpdateSequence::Build(TPathId(123, 51))
+                    NEvSequenceShard::TEvUpdateSequence::Build(TPathId(123, 51))
                         .SetNextValue(200000)
                         .SetNextUsed(true)
                         .Done());
@@ -150,7 +150,7 @@ namespace NSequenceShard {
             // update sequence to a new default granularity
             {
                 auto updateResult = ctx.UpdateSequence(
-                    TEvSequenceShard::TEvUpdateSequence::Build(TPathId(123, 51))
+                    NEvSequenceShard::TEvUpdateSequence::Build(TPathId(123, 51))
                         .SetCache(5u)
                         .Done());
                 UNIT_ASSERT_VALUES_EQUAL(updateResult->Record.GetStatus(),
@@ -185,7 +185,7 @@ namespace NSequenceShard {
             // create a sequence
             {
                 auto createResult = ctx.CreateSequence(
-                    MakeHolder<TEvSequenceShard::TEvCreateSequence>(TPathId(123, 42)));
+                    MakeHolder<NEvSequenceShard::TEvCreateSequence>(TPathId(123, 42)));
                 UNIT_ASSERT_VALUES_EQUAL(createResult->Record.GetStatus(),
                     NKikimrTxSequenceShard::TEvCreateSequenceResult::SUCCESS);
             }
@@ -204,7 +204,7 @@ namespace NSequenceShard {
             // retry creating a sequence
             {
                 auto createResult = ctx.CreateSequence(
-                    MakeHolder<TEvSequenceShard::TEvCreateSequence>(TPathId(123, 42)));
+                    MakeHolder<NEvSequenceShard::TEvCreateSequence>(TPathId(123, 42)));
                 UNIT_ASSERT_VALUES_EQUAL(createResult->Record.GetStatus(),
                     NKikimrTxSequenceShard::TEvCreateSequenceResult::PIPE_OUTDATED);
             }
@@ -233,7 +233,7 @@ namespace NSequenceShard {
             // retry of create sequence must fail even after reboot
             {
                 auto createResult = ctx.CreateSequence(
-                    MakeHolder<TEvSequenceShard::TEvCreateSequence>(TPathId(123, 42)));
+                    MakeHolder<NEvSequenceShard::TEvCreateSequence>(TPathId(123, 42)));
                 UNIT_ASSERT_VALUES_EQUAL(createResult->Record.GetStatus(),
                     NKikimrTxSequenceShard::TEvCreateSequenceResult::PIPE_OUTDATED);
             }
@@ -246,7 +246,7 @@ namespace NSequenceShard {
             // create a sequence
             {
                 auto createResult = ctx.CreateSequence(
-                    TEvSequenceShard::TEvCreateSequence::Build(TPathId(123, 42))
+                    NEvSequenceShard::TEvCreateSequence::Build(TPathId(123, 42))
                         .SetMinValue(1)
                         .SetStartValue(1)
                         .SetCache(100)
@@ -289,7 +289,7 @@ namespace NSequenceShard {
             // we would use the same path id and different tablets
             {
                 auto restoreResult = ctx.RestoreSequence(
-                    MakeHolder<TEvSequenceShard::TEvRestoreSequence>(TPathId(123, 43), freezeRecord));
+                    MakeHolder<NEvSequenceShard::TEvRestoreSequence>(TPathId(123, 43), freezeRecord));
                 UNIT_ASSERT_VALUES_EQUAL(restoreResult->Record.GetStatus(),
                     NKikimrTxSequenceShard::TEvRestoreSequenceResult::SUCCESS);
             }
@@ -306,7 +306,7 @@ namespace NSequenceShard {
             // restoring again must fail, since sequence was active and may have changed its values
             {
                 auto restoreResult = ctx.RestoreSequence(
-                    MakeHolder<TEvSequenceShard::TEvRestoreSequence>(TPathId(123, 43), freezeRecord));
+                    MakeHolder<NEvSequenceShard::TEvRestoreSequence>(TPathId(123, 43), freezeRecord));
                 UNIT_ASSERT_VALUES_EQUAL(restoreResult->Record.GetStatus(),
                     NKikimrTxSequenceShard::TEvRestoreSequenceResult::SEQUENCE_ALREADY_ACTIVE);
             }
@@ -339,7 +339,7 @@ namespace NSequenceShard {
             // restore over redirected sequence
             {
                 auto restoreResult = ctx.RestoreSequence(
-                    MakeHolder<TEvSequenceShard::TEvRestoreSequence>(TPathId(123, 42), freezeRecord));
+                    MakeHolder<NEvSequenceShard::TEvRestoreSequence>(TPathId(123, 42), freezeRecord));
                 UNIT_ASSERT_VALUES_EQUAL(restoreResult->Record.GetStatus(),
                     NKikimrTxSequenceShard::TEvRestoreSequenceResult::SUCCESS);
             }
@@ -376,7 +376,7 @@ namespace NSequenceShard {
             // creating a sequence with negative increment
             {
                 auto createResult = ctx.CreateSequence(
-                    TEvSequenceShard::TEvCreateSequence::Build(TPathId(123, 42))
+                    NEvSequenceShard::TEvCreateSequence::Build(TPathId(123, 42))
                         .SetIncrement(-1)
                         .SetCache(10)
                         .Done());
@@ -421,7 +421,7 @@ namespace NSequenceShard {
             // update sequence to enable cycling
             {
                 auto updateResult = ctx.UpdateSequence(
-                    TEvSequenceShard::TEvUpdateSequence::Build(TPathId(123, 42))
+                    NEvSequenceShard::TEvUpdateSequence::Build(TPathId(123, 42))
                         .SetCycle(true)
                         .Done());
                 UNIT_ASSERT_VALUES_EQUAL(updateResult->Record.GetStatus(),

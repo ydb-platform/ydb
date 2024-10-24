@@ -18,11 +18,11 @@ using namespace NTxUT;
 Y_UNIT_TEST_SUITE(Backup) {
 
     bool ProposeTx(TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, const TString& txBody, const ui64 txId) {
-        auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
+        auto event = std::make_unique<NEvColumnShard::TEvProposeTransaction>(
             txKind, sender, txId, txBody);
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
-        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
+        auto ev = runtime.GrabEdgeEvent<NEvColumnShard::TEvProposeTransactionResult>(sender);
         const auto& res = ev->Get()->Record;
         UNIT_ASSERT_EQUAL(res.GetTxId(), txId);
         UNIT_ASSERT_EQUAL(res.GetTxKind(), txKind);
@@ -38,7 +38,7 @@ Y_UNIT_TEST_SUITE(Backup) {
 
         UNIT_ASSERT(runtime.GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAck>(sender));
         if (waitResult) {
-            auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
+            auto ev = runtime.GrabEdgeEvent<NEvColumnShard::TEvProposeTransactionResult>(sender);
             const auto& res = ev->Get()->Record;
             UNIT_ASSERT_EQUAL(res.GetTxId(), snap.GetTxId());
             UNIT_ASSERT_EQUAL(res.GetTxKind(), txKind);

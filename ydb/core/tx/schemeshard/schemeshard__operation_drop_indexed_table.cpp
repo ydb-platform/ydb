@@ -71,7 +71,7 @@ public:
         IgnoreMessages(DebugHint(), {});
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -129,14 +129,14 @@ public:
     TWaitRenamedPathPublication(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvPrivate::TEvOperationPlan::EventType});
+        IgnoreMessages(DebugHint(), {NEvPrivate::TEvOperationPlan::EventType});
     }
 
-    bool HandleReply(TEvPrivate::TEvCompletePublication::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvCompletePublication::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvPrivate::TEvCompletePublication"
+                   DebugHint() << " HandleReply NEvPrivate::TEvCompletePublication"
                                << ", msg: " << ev->Get()->ToString()
                                << ", at tablet" << ssId);
 
@@ -198,14 +198,14 @@ public:
     TDeletePathBarrier(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType, TEvPrivate::TEvOperationPlan::EventType});
+        IgnoreMessages(DebugHint(), {NEvHive::TEvCreateTabletReply::EventType, NEvDataShard::TEvProposeTransactionResult::EventType, NEvPrivate::TEvOperationPlan::EventType});
     }
 
-    bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvPrivate::TEvCompleteBarrier"
+                   DebugHint() << " HandleReply NEvPrivate::TEvCompleteBarrier"
                                << ", msg: " << ev->Get()->ToString()
                                << ", at tablet" << ssId);
 
@@ -426,7 +426,7 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
                     .NotUnderDeleting()
                     .NotUnderOperation();
                 if (!table.Parent()->IsTableIndex() || !NTableIndex::IsBuildImplTable(table.LeafName())) {
-                    checks.IsCommonSensePath();                    
+                    checks.IsCommonSensePath();
                 }
             }
         }

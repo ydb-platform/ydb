@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(LocalPartitionReader) {
 
     void GrabInitialPQRequest(TTestActorRuntime& runtime) {
         TAutoPtr<IEventHandle> handle;
-        auto getOffset = runtime.GrabEdgeEventRethrow<TEvPersQueue::TEvRequest>(handle);
+        auto getOffset = runtime.GrabEdgeEventRethrow<NEvPersQueue::TEvRequest>(handle);
         UNIT_ASSERT(getOffset->Record.HasPartitionRequest());
         UNIT_ASSERT_VALUES_EQUAL(getOffset->Record.GetPartitionRequest().GetPartition(), PARTITION);
         UNIT_ASSERT(getOffset->Record.GetPartitionRequest().HasCmdGetClientOffset());
@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(LocalPartitionReader) {
 
     void GrabReadPQRequest(TTestActorRuntime& runtime, ui32 expectedOffset) {
         TAutoPtr<IEventHandle> handle;
-        auto read = runtime.GrabEdgeEventRethrow<TEvPersQueue::TEvRequest>(handle);
+        auto read = runtime.GrabEdgeEventRethrow<NEvPersQueue::TEvRequest>(handle);
         UNIT_ASSERT(read->Record.HasPartitionRequest());
         UNIT_ASSERT_VALUES_EQUAL(read->Record.GetPartitionRequest().GetPartition(), PARTITION);
         UNIT_ASSERT(read->Record.GetPartitionRequest().HasCmdRead());
@@ -52,8 +52,8 @@ Y_UNIT_TEST_SUITE(LocalPartitionReader) {
         UNIT_ASSERT_VALUES_EQUAL(data->Records[1].Data, Sprintf("2-%d", dataPatternCookie));
     }
 
-    TEvPersQueue::TEvResponse* GenerateData(ui32 dataPatternCookie) {
-        auto* readResponse = new TEvPersQueue::TEvResponse;
+    NEvPersQueue::TEvResponse* GenerateData(ui32 dataPatternCookie) {
+        auto* readResponse = new NEvPersQueue::TEvResponse;
         readResponse->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
         auto& cmdReadResult = *readResponse->Record.MutablePartitionResponse()->MutableCmdReadResult();
         auto& readResult1 = *cmdReadResult.AddResult();
@@ -74,8 +74,8 @@ Y_UNIT_TEST_SUITE(LocalPartitionReader) {
         return readResponse;
     }
 
-    TEvPersQueue::TEvResponse* GenerateEmptyData() {
-        auto* readResponse = new TEvPersQueue::TEvResponse;
+    NEvPersQueue::TEvResponse* GenerateEmptyData() {
+        auto* readResponse = new NEvPersQueue::TEvResponse;
         readResponse->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
         readResponse->Record.MutablePartitionResponse()->MutableCmdReadResult();
 
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(LocalPartitionReader) {
 
         GrabInitialPQRequest(runtime);
 
-        auto* getOffsetResponse = new TEvPersQueue::TEvResponse;
+        auto* getOffsetResponse = new NEvPersQueue::TEvResponse;
         getOffsetResponse->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
         getOffsetResponse->Record.MutablePartitionResponse()->MutableCmdGetClientOffsetResult()->SetOffset(INITIAL_OFFSET);
         runtime.Send(new IEventHandle(reader, pqtablet, getOffsetResponse));
@@ -132,14 +132,14 @@ Y_UNIT_TEST_SUITE(LocalPartitionReader) {
         for (int i = 0; i < 5; ++i) {
             GrabInitialPQRequest(runtime);
 
-            auto* getOffsetResponse = new TEvPersQueue::TEvResponse;
+            auto* getOffsetResponse = new NEvPersQueue::TEvResponse;
             getOffsetResponse->Record.SetErrorCode(NPersQueue::NErrorCode::INITIALIZING);
             runtime.Send(new IEventHandle(reader, pqtablet, getOffsetResponse));
         }
 
         GrabInitialPQRequest(runtime);
 
-        auto* getOffsetResponse = new TEvPersQueue::TEvResponse;
+        auto* getOffsetResponse = new NEvPersQueue::TEvResponse;
         getOffsetResponse->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
         getOffsetResponse->Record.MutablePartitionResponse()->MutableCmdGetClientOffsetResult()->SetOffset(INITIAL_OFFSET);
         runtime.Send(new IEventHandle(reader, pqtablet, getOffsetResponse));
@@ -162,7 +162,7 @@ Y_UNIT_TEST_SUITE(LocalPartitionReader) {
 
         GrabInitialPQRequest(runtime);
 
-        auto* getOffsetResponse = new TEvPersQueue::TEvResponse;
+        auto* getOffsetResponse = new NEvPersQueue::TEvResponse;
         getOffsetResponse->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
         getOffsetResponse->Record.MutablePartitionResponse()->MutableCmdGetClientOffsetResult()->SetOffset(INITIAL_OFFSET);
         runtime.Send(new IEventHandle(reader, pqtablet, getOffsetResponse));

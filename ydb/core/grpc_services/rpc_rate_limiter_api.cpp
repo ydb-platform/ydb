@@ -393,7 +393,7 @@ public:
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvKesus::TEvAddQuoterResourceResult, Handle);
+            hFunc(NEvKesus::TEvAddQuoterResourceResult, Handle);
         default:
             return TBase::StateFunc(ev);
         }
@@ -406,12 +406,12 @@ public:
     void SendRequest() override {
         UnsafeBecome(&TCreateRateLimiterResourceRPC::StateFunc);
 
-        THolder<TEvKesus::TEvAddQuoterResource> req = MakeHolder<TEvKesus::TEvAddQuoterResource>();
+        THolder<NEvKesus::TEvAddQuoterResource> req = MakeHolder<NEvKesus::TEvAddQuoterResource>();
         CopyProps(GetProtoRequest()->resource(), *req->Record.MutableResource());
         NTabletPipe::SendData(SelfId(), KesusPipeClient, req.Release(), 0);
     }
 
-    void Handle(TEvKesus::TEvAddQuoterResourceResult::TPtr& ev) {
+    void Handle(NEvKesus::TEvAddQuoterResourceResult::TPtr& ev) {
         ReplyFromKesusError(ev->Get()->Record.GetError());
     }
 };
@@ -424,7 +424,7 @@ public:
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvKesus::TEvUpdateQuoterResourceResult, Handle);
+            hFunc(NEvKesus::TEvUpdateQuoterResourceResult, Handle);
         default:
             return TBase::StateFunc(ev);
         }
@@ -437,12 +437,12 @@ public:
     void SendRequest() override {
         UnsafeBecome(&TAlterRateLimiterResourceRPC::StateFunc);
 
-        THolder<TEvKesus::TEvUpdateQuoterResource> req = MakeHolder<TEvKesus::TEvUpdateQuoterResource>();
+        THolder<NEvKesus::TEvUpdateQuoterResource> req = MakeHolder<NEvKesus::TEvUpdateQuoterResource>();
         CopyProps(GetProtoRequest()->resource(), *req->Record.MutableResource());
         NTabletPipe::SendData(SelfId(), KesusPipeClient, req.Release(), 0);
     }
 
-    void Handle(TEvKesus::TEvUpdateQuoterResourceResult::TPtr& ev) {
+    void Handle(NEvKesus::TEvUpdateQuoterResourceResult::TPtr& ev) {
         ReplyFromKesusError(ev->Get()->Record.GetError());
     }
 };
@@ -455,7 +455,7 @@ public:
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvKesus::TEvDeleteQuoterResourceResult, Handle);
+            hFunc(NEvKesus::TEvDeleteQuoterResourceResult, Handle);
         default:
             return TBase::StateFunc(ev);
         }
@@ -468,12 +468,12 @@ public:
     void SendRequest() override {
         UnsafeBecome(&TDropRateLimiterResourceRPC::StateFunc);
 
-        THolder<TEvKesus::TEvDeleteQuoterResource> req = MakeHolder<TEvKesus::TEvDeleteQuoterResource>();
+        THolder<NEvKesus::TEvDeleteQuoterResource> req = MakeHolder<NEvKesus::TEvDeleteQuoterResource>();
         req->Record.SetResourcePath(GetProtoRequest()->resource_path());
         NTabletPipe::SendData(SelfId(), KesusPipeClient, req.Release(), 0);
     }
 
-    void Handle(TEvKesus::TEvDeleteQuoterResourceResult::TPtr& ev) {
+    void Handle(NEvKesus::TEvDeleteQuoterResourceResult::TPtr& ev) {
         ReplyFromKesusError(ev->Get()->Record.GetError());
     }
 };
@@ -486,7 +486,7 @@ public:
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvKesus::TEvDescribeQuoterResourcesResult, Handle);
+            hFunc(NEvKesus::TEvDescribeQuoterResourcesResult, Handle);
         default:
             return TBase::StateFunc(ev);
         }
@@ -502,7 +502,7 @@ public:
     void SendRequest() override {
         UnsafeBecome(&TListRateLimiterResourcesRPC::StateFunc);
 
-        THolder<TEvKesus::TEvDescribeQuoterResources> req = MakeHolder<TEvKesus::TEvDescribeQuoterResources>();
+        THolder<NEvKesus::TEvDescribeQuoterResources> req = MakeHolder<NEvKesus::TEvDescribeQuoterResources>();
         if (const TString& path = GetProtoRequest()->resource_path()) {
             req->Record.AddResourcePaths(path);
         }
@@ -510,7 +510,7 @@ public:
         NTabletPipe::SendData(SelfId(), KesusPipeClient, req.Release(), 0);
     }
 
-    void Handle(TEvKesus::TEvDescribeQuoterResourcesResult::TPtr& ev) {
+    void Handle(NEvKesus::TEvDescribeQuoterResourcesResult::TPtr& ev) {
         const NKikimrKesus::TKesusError& kesusError = ev->Get()->Record.GetError();
         if (kesusError.GetStatus() == Ydb::StatusIds::SUCCESS) {
             Ydb::RateLimiter::ListResourcesResult result;
@@ -533,7 +533,7 @@ public:
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvKesus::TEvDescribeQuoterResourcesResult, Handle);
+            hFunc(NEvKesus::TEvDescribeQuoterResourcesResult, Handle);
         default:
             return TBase::StateFunc(ev);
         }
@@ -546,12 +546,12 @@ public:
     void SendRequest() override {
         UnsafeBecome(&TDescribeRateLimiterResourceRPC::StateFunc);
 
-        THolder<TEvKesus::TEvDescribeQuoterResources> req = MakeHolder<TEvKesus::TEvDescribeQuoterResources>();
+        THolder<NEvKesus::TEvDescribeQuoterResources> req = MakeHolder<NEvKesus::TEvDescribeQuoterResources>();
         req->Record.AddResourcePaths(GetProtoRequest()->resource_path());
         NTabletPipe::SendData(SelfId(), KesusPipeClient, req.Release(), 0);
     }
 
-    void Handle(TEvKesus::TEvDescribeQuoterResourcesResult::TPtr& ev) {
+    void Handle(NEvKesus::TEvDescribeQuoterResourcesResult::TPtr& ev) {
         const NKikimrKesus::TKesusError& kesusError = ev->Get()->Record.GetError();
         if (kesusError.GetStatus() == Ydb::StatusIds::SUCCESS) {
             Ydb::RateLimiter::DescribeResourceResult result;

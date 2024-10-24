@@ -100,13 +100,13 @@ public:
 
 }; // TTxDirectBase
 
-class TDataShard::TTxUploadRows : public TTxDirectBase<TEvDataShard::TEvUploadRowsRequest::TPtr> {
+class TDataShard::TTxUploadRows : public TTxDirectBase<NEvDataShard::TEvUploadRowsRequest::TPtr> {
 public:
     using TTxDirectBase::TTxDirectBase;
     TTxType GetTxType() const override { return TXTYPE_UPLOAD_ROWS; }
 };
 
-class TDataShard::TTxEraseRows : public TTxDirectBase<TEvDataShard::TEvEraseRowsRequest::TPtr> {
+class TDataShard::TTxEraseRows : public TTxDirectBase<NEvDataShard::TEvEraseRowsRequest::TPtr> {
 public:
     using TTxDirectBase::TTxDirectBase;
     TTxType GetTxType() const override { return TXTYPE_ERASE_ROWS; }
@@ -214,34 +214,34 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
     return false;
 }
 
-void TDataShard::Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TActorContext& ctx) {
     if (MediatorStateWaiting) {
         MediatorStateWaitingMsgs.emplace_back(ev.Release());
         UpdateProposeQueueSize();
         return;
     }
     if (IsReplicated()) {
-        return Reject<TEvDataShard::TEvUploadRowsResponse>(this, ev, "bulk upsert",
+        return Reject<NEvDataShard::TEvUploadRowsResponse>(this, ev, "bulk upsert",
             ERejectReasons::WrongState, "Can't execute bulk upsert at replicated table", &ReadOnly, ctx, TDataShard::ELogThrottlerType::UploadRows_Reject);
     }
-    if (!MaybeReject<TEvDataShard::TEvUploadRowsResponse>(this, ev, ctx, "bulk upsert", true, TDataShard::ELogThrottlerType::UploadRows_Reject)) {
+    if (!MaybeReject<NEvDataShard::TEvUploadRowsResponse>(this, ev, ctx, "bulk upsert", true, TDataShard::ELogThrottlerType::UploadRows_Reject)) {
         Executor()->Execute(new TTxUploadRows(this, ev), ctx);
     } else {
         IncCounter(COUNTER_BULK_UPSERT_OVERLOADED);
     }
 }
 
-void TDataShard::Handle(TEvDataShard::TEvEraseRowsRequest::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvEraseRowsRequest::TPtr& ev, const TActorContext& ctx) {
     if (MediatorStateWaiting) {
         MediatorStateWaitingMsgs.emplace_back(ev.Release());
         UpdateProposeQueueSize();
         return;
     }
     if (IsReplicated()) {
-        return Reject<TEvDataShard::TEvEraseRowsResponse>(this, ev, "erase",
+        return Reject<NEvDataShard::TEvEraseRowsResponse>(this, ev, "erase",
             ERejectReasons::WrongState, "Can't execute erase at replicated table", &ExecError, ctx, TDataShard::ELogThrottlerType::EraseRows_Reject);
     }
-    if (!MaybeReject<TEvDataShard::TEvEraseRowsResponse>(this, ev, ctx, "erase", false, TDataShard::ELogThrottlerType::EraseRows_Reject)) {
+    if (!MaybeReject<NEvDataShard::TEvEraseRowsResponse>(this, ev, ctx, "erase", false, TDataShard::ELogThrottlerType::EraseRows_Reject)) {
         Executor()->Execute(new TTxEraseRows(this, ev), ctx);
     } else {
         IncCounter(COUNTER_ERASE_ROWS_OVERLOADED);

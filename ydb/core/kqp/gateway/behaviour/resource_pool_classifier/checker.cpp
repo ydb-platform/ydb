@@ -210,14 +210,14 @@ public:
 
         Serverless = ev->Get()->Serverless;
 
-        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::TEvConfigsDispatcher::TEvGetConfigRequest(
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::NEvConfigsDispatcher::TEvGetConfigRequest(
             (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem
         ), IEventHandle::FlagTrackDelivery);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         switch (ev->Get()->SourceType) {
-            case NConsole::TEvConfigsDispatcher::EvGetConfigRequest:
+            case NConsole::NEvConfigsDispatcher::EvGetConfigRequest:
                 CheckFeatureFlag(AppData()->FeatureFlags);
                 break;
 
@@ -226,7 +226,7 @@ public:
         }
     }
 
-    void Handle(NConsole::TEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev) {
+    void Handle(NConsole::NEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev) {
         CheckFeatureFlag(ev->Get()->Config->GetFeatureFlags());
     }
 
@@ -250,7 +250,7 @@ public:
         hFunc(TEvPrivate::TEvRanksCheckerResponse, Handle);
         hFunc(TEvFetchDatabaseResponse, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
-        hFunc(NConsole::TEvConfigsDispatcher::TEvGetConfigResponse, Handle);
+        hFunc(NConsole::NEvConfigsDispatcher::TEvGetConfigResponse, Handle);
         hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle)
     )
 

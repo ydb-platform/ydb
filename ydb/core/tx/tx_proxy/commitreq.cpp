@@ -296,7 +296,7 @@ private:
                 << " marker# P3");
 
             Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
-                    new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_COMMIT_WRITES,
+                    new NEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_COMMIT_WRITES,
                         ctx.SelfID, TxId, txBody,
                         TxFlags | (immediate ? NTxDataShard::TTxFlags::Immediate : 0)),
                     shardId, true));
@@ -313,7 +313,7 @@ private:
     STFUNC(StateWaitPrepare) {
         TRACE_EVENT(NKikimrServices::TX_PROXY);
         switch (ev->GetTypeRewrite()) {
-            HFuncTraced(TEvDataShard::TEvProposeTransactionResult, HandlePrepare);
+            HFuncTraced(NEvDataShard::TEvProposeTransactionResult, HandlePrepare);
             HFuncTraced(TEvPipeCache::TEvDeliveryProblem, HandlePrepare);
             HFuncTraced(TEvents::TEvUndelivered, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleExecTimeout);
@@ -335,7 +335,7 @@ private:
         return Die(ctx);
     }
 
-    void HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
+    void HandlePrepare(NEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
         const auto* msg = ev->Get();
         const auto& record = msg->Record;
         const ui64 shardId = msg->GetOrigin();
@@ -538,7 +538,7 @@ private:
     STFUNC(StatePrepareErrors) {
         TRACE_EVENT(NKikimrServices::TX_PROXY);
         switch (ev->GetTypeRewrite()) {
-            HFuncTraced(TEvDataShard::TEvProposeTransactionResult, HandlePrepareErrors);
+            HFuncTraced(NEvDataShard::TEvProposeTransactionResult, HandlePrepareErrors);
             HFuncTraced(TEvPipeCache::TEvDeliveryProblem, HandlePrepareErrors);
             HFuncTraced(TEvents::TEvUndelivered, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandlePrepareErrorTimeout);
@@ -551,7 +551,7 @@ private:
     }
 
 
-    void HandlePrepareErrors(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
+    void HandlePrepareErrors(NEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
         const auto* msg = ev->Get();
         const auto& record = msg->Record;
         const ui64 shardId = msg->GetOrigin();
@@ -651,7 +651,7 @@ private:
         TRACE_EVENT(NKikimrServices::TX_PROXY);
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvTxProxy::TEvProposeTransactionStatus, HandlePlan);
-            HFuncTraced(TEvDataShard::TEvProposeTransactionResult, HandlePlan);
+            HFuncTraced(NEvDataShard::TEvProposeTransactionResult, HandlePlan);
             HFuncTraced(TEvPipeCache::TEvDeliveryProblem, HandlePlan);
             HFuncTraced(TEvents::TEvUndelivered, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleExecTimeout);
@@ -714,7 +714,7 @@ private:
         }
     }
 
-    void HandlePlan(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
+    void HandlePlan(NEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
         const auto* msg = ev->Get();
         const auto& record = msg->Record;
 
@@ -823,7 +823,7 @@ private:
             << " lost pipe with unknown endpoint, ignoring");
     }
 
-    void MergeResult(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
+    void MergeResult(NEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
         ResultsReceivedCount++;
@@ -868,7 +868,7 @@ private:
                     state.Status == TPerShardState::EStatus::Prepared))
             {
                 Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
-                    new TEvDataShard::TEvCancelTransactionProposal(TxId),
+                    new NEvDataShard::TEvCancelTransactionProposal(TxId),
                     shardId, false));
             }
         }

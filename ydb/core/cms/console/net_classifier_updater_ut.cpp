@@ -169,10 +169,10 @@ Y_UNIT_TEST_SUITE(TNetClassifierUpdaterTest) {
             const auto kind = static_cast<ui32>(NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem);
             actorSystem.Send(
                 new IEventHandle(MakeConfigsDispatcherID(sender.NodeId()), sender,
-                    new TEvConfigsDispatcher::TEvGetConfigRequest(kind)
+                    new NEvConfigsDispatcher::TEvGetConfigRequest(kind)
                 ));
 
-            const auto event = cleverServer.GetRuntime()->GrabEdgeEvent<TEvConfigsDispatcher::TEvGetConfigResponse>(handle);
+            const auto event = cleverServer.GetRuntime()->GrabEdgeEvent<NEvConfigsDispatcher::TEvGetConfigResponse>(handle);
 
             if (CheckDistributableConfig(event->Config->GetNetClassifierDistributableConfig(), expectedNetData)) {
                 break;

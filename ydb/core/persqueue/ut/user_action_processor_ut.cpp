@@ -647,7 +647,7 @@ void TUserActionProcessorFixture::SendProposeTransactionRequest(ui32 partition,
                                                                 bool immediate,
                                                                 ui64 txId)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
+    auto event = MakeHolder<NEvPersQueue::TEvProposeTransactionBuilder>();
 
     ActorIdToProto(Ctx->Edge, event->Record.MutableSource());
     auto* body = event->Record.MutableTxBody();
@@ -665,7 +665,7 @@ void TUserActionProcessorFixture::SendProposeTransactionRequest(ui32 partition,
 
 void TUserActionProcessorFixture::SendProposeTransactionRequest(const TProposeTransactionParams& params)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
+    auto event = MakeHolder<NEvPersQueue::TEvProposeTransactionBuilder>();
 
     //
     // Source
@@ -708,7 +708,7 @@ void TUserActionProcessorFixture::SendProposeTransactionRequest(const TProposeTr
 
 void TUserActionProcessorFixture::WaitProposeTransactionResponse(const TProposeTransactionResponseMatcher& matcher)
 {
-    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>();
+    auto event = Ctx->Runtime->GrabEdgeEvent<NEvPersQueue::TEvProposeTransactionResult>();
     UNIT_ASSERT(event != nullptr);
 
     if (matcher.TxId) {

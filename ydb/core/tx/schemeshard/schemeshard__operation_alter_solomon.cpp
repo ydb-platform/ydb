@@ -25,7 +25,7 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(),
-                       {TEvHive::TEvCreateTabletReply::EventType, TEvHive::TEvAdoptTabletReply::EventType});
+                       {NEvHive::TEvCreateTabletReply::EventType, NEvHive::TEvAdoptTabletReply::EventType});
     }
 
     bool ProgressState(TOperationContext& context) override {
@@ -78,10 +78,10 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(),
-                       {TEvHive::TEvCreateTabletReply::EventType, TEvHive::TEvAdoptTabletReply::EventType});
+                       {NEvHive::TEvCreateTabletReply::EventType, NEvHive::TEvAdoptTabletReply::EventType});
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
@@ -188,7 +188,7 @@ public:
                          << ", at schemeshard: " << ssId);
 
         THolder<TProposeResponse> result;
-        result.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
+        result.Reset(new NEvSchemeShard::TEvModifySchemeTransactionResult(
             NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId)));
 
         TString errStr;
@@ -254,7 +254,7 @@ public:
         }
 
         if (!alter.HasChannelProfileId()) {
-            result->SetError(TEvSchemeShard::EStatus::StatusInvalidParameter, "set channel profile id, please");
+            result->SetError(NEvSchemeShard::EStatus::StatusInvalidParameter, "set channel profile id, please");
             return result;
         }
 

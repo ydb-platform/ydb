@@ -609,7 +609,7 @@ public:
     /**
      * Fills the result and returns true when it is useful, false when it may be omitted
      */
-    bool FillResult(TEvDataShard::TEvReadResult& result, TReadIteratorState& state) {
+    bool FillResult(NEvDataShard::TEvReadResult& result, TReadIteratorState& state) {
         bool useful = false;
 
         auto& record = result.Record;
@@ -1128,8 +1128,8 @@ private:
     }
 };
 
-std::unique_ptr<TEvDataShard::TEvReadResult> MakeEvReadResult(ui32 nodeId) {
-    auto result = std::make_unique<TEvDataShard::TEvReadResult>();
+std::unique_ptr<NEvDataShard::TEvReadResult> MakeEvReadResult(ui32 nodeId) {
+    auto result = std::make_unique<NEvDataShard::TEvReadResult>();
     result->Record.SetNodeId(nodeId);
     return result;
 }
@@ -1149,7 +1149,7 @@ class TDataShard::TReadOperation : public TOperation, public IReadOperation {
     size_t ExecuteCount = 0;
     bool ResultSent = false;
 
-    std::unique_ptr<TEvDataShard::TEvReadResult> Result;
+    std::unique_ptr<NEvDataShard::TEvReadResult> Result;
 
     std::unique_ptr<IBlockBuilder> BlockBuilder;
     TShortTableInfo TableInfo;
@@ -1622,7 +1622,7 @@ public:
                 << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")");
             Result->Record.SetReadId(ReadId.ReadId);
             Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId, request->ReadSpan.GetTraceId());
-            
+
             request->ReadSpan.EndError("Iterator aborted");
             Self->DeleteReadIterator(it);
             return;
@@ -1702,7 +1702,7 @@ public:
                 state.ReadContinuePending = true;
                 ctx.Send(
                     Self->SelfId(),
-                    new TEvDataShard::TEvReadContinue(ReadId.Sender, ReadId.ReadId));
+                    new NEvDataShard::TEvReadContinue(ReadId.Sender, ReadId.ReadId));
             } else {
                 Self->IncCounter(COUNTER_READ_ITERATORS_EXHAUSTED_COUNT);
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID()
@@ -1958,7 +1958,7 @@ class TDataShard::TTxReadViaPipeline : public NTabletFlatExecutor::TTransactionB
     TReadIteratorId ReadId;
 
     // When we need to reply with an error
-    std::unique_ptr<TEvDataShard::TEvReadResult> Reply;
+    std::unique_ptr<NEvDataShard::TEvReadResult> Reply;
 
     TOperation::TPtr Op;
     TVector<EExecutionUnitKind> CompleteList;
@@ -2263,7 +2263,7 @@ public:
         Reply = MakeEvReadResult(nodeId);
         SetStatusError(Reply->Record, code, message);
         Reply->Record.SetReadId(ReadId.ReadId);
-        
+
         readSpan.EndError(message);
     }
 
@@ -2309,7 +2309,7 @@ public:
 class TDataShard::TTxReadContinue : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
     TReadIteratorId ReadId;
 
-    std::unique_ptr<TEvDataShard::TEvReadResult> Result;
+    std::unique_ptr<NEvDataShard::TEvReadResult> Result;
     std::unique_ptr<IBlockBuilder> BlockBuilder;
     TShortTableInfo TableInfo;
     std::unique_ptr<TReader> Reader;
@@ -2466,7 +2466,7 @@ public:
                 Self->WaitVolatileDependenciesThenSend(
                     Reader->GetVolatileReadDependencies(),
                     Self->SelfId(),
-                    std::make_unique<TEvDataShard::TEvReadContinue>(ReadId.Sender, ReadId.ReadId));
+                    std::make_unique<NEvDataShard::TEvReadContinue>(ReadId.Sender, ReadId.ReadId));
                 return true;
             }
 
@@ -2604,7 +2604,7 @@ public:
                 state.ReadContinuePending = true;
                 ctx.Send(
                     Self->SelfId(),
-                    new TEvDataShard::TEvReadContinue(ReadId.Sender, ReadId.ReadId));
+                    new NEvDataShard::TEvReadContinue(ReadId.Sender, ReadId.ReadId));
             } else if (!wasExhausted) {
                 Self->IncCounter(COUNTER_READ_ITERATORS_EXHAUSTED_COUNT);
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID()
@@ -2613,17 +2613,17 @@ public:
         } else {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << ReadId
                 << " finished in ReadContinue");
-            
+
             state.Request->ReadSpan.EndOk();
             Self->DeleteReadIterator(it);
         }
     }
 };
 
-void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvRead::TPtr& ev, const TActorContext& ctx) {
     // Note that we mutate this request below
     auto* request = ev->Get();
-    
+
     if (ev->TraceId && !request->ReadSpan) {
         request->ReadSpan = NWilson::TSpan(TWilsonTablet::TabletTopLevel, std::move(ev->TraceId), "Datashard.Read", NWilson::EFlags::AUTO_END);
         if (request->ReadSpan) {
@@ -2636,7 +2636,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
     const auto& record = request->Record;
     if (Y_UNLIKELY(!record.HasReadId())) {
         TString msg = TStringBuilder() << "Missing ReadId at shard " << TabletID();
-        
+
         auto result = MakeEvReadResult(ctx.SelfID.NodeId());
         SetStatusError(result->Record, Ydb::StatusIds::BAD_REQUEST, msg);
         ctx.Send(ev->Sender, result.release());
@@ -2656,7 +2656,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
 
     auto replyWithError = [&] (auto code, const auto& msg) {
         auto result = MakeEvReadResult(ctx.SelfID.NodeId());
-        
+
         SetStatusError(
             result->Record,
             code,
@@ -2790,7 +2790,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
     Executor()->Execute(new TTxReadViaPipeline(this, readId, request->ReadSpan.GetTraceId()), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvReadContinue::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvReadContinue::TPtr& ev, const TActorContext& ctx) {
     TReadIteratorId readId(ev->Get()->Reader, ev->Get()->ReadId);
     auto it = ReadIterators.find(readId);
     if (Y_UNLIKELY(it == ReadIterators.end())) {
@@ -2800,7 +2800,7 @@ void TDataShard::Handle(TEvDataShard::TEvReadContinue::TPtr& ev, const TActorCon
     Executor()->Execute(new TTxReadContinue(this, readId, it->second->Request->ReadSpan.GetTraceId()), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvReadAck::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvReadAck::TPtr& ev, const TActorContext& ctx) {
     // Possible cases:
     // 1. read exhausted and we need to start its execution (if bytes available again),
     // can start transaction right from here.
@@ -2882,7 +2882,7 @@ void TDataShard::Handle(TEvDataShard::TEvReadAck::TPtr& ev, const TActorContext&
             state.ReadContinuePending = true;
             ctx.Send(
                 SelfId(),
-                new TEvDataShard::TEvReadContinue(ev->Sender, record.GetReadId()));
+                new NEvDataShard::TEvReadContinue(ev->Sender, record.GetReadId()));
         }
     } else if (!wasExhausted && state.IsExhausted()) {
         IncCounter(COUNTER_READ_ITERATORS_EXHAUSTED_COUNT);
@@ -2893,7 +2893,7 @@ void TDataShard::Handle(TEvDataShard::TEvReadAck::TPtr& ev, const TActorContext&
         << ", bytesLeft# " << state.Quota.Bytes << ", rowsLeft# " << state.Quota.Rows);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvReadCancel::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvReadCancel::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     if (!record.HasReadId())
         return;

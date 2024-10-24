@@ -191,8 +191,8 @@ public:
     virtual ui32 SetProgram(TTester& tester);
     /// @return shardId
     virtual ui32 GetShardProgram(ui32 idx, TString& outTxBody);
-    void AddProposeShardResult(ui32 shardId, const TEvDataShard::TEvProposeTransactionResult * event);
-    virtual void AddPlanStepShardResult(ui32 shardId, const TEvDataShard::TEvProposeTransactionResult * event, bool complete);
+    void AddProposeShardResult(ui32 shardId, const NEvDataShard::TEvProposeTransactionResult * event);
+    virtual void AddPlanStepShardResult(ui32 shardId, const NEvDataShard::TEvProposeTransactionResult * event, bool complete);
 
     virtual IEngineFlat::EStatus GetStatus(bool atPropose);
     virtual NKikimrMiniKQL::TResult GetResult() const;
@@ -244,7 +244,7 @@ public:
 
     ui32 SetProgram(TTester& tester) override;
     ui32 GetShardProgram(ui32 idx, TString& outTxBody) override;
-    void AddPlanStepShardResult(ui32 shardId, const TEvDataShard::TEvProposeTransactionResult * event, bool complete) override;
+    void AddPlanStepShardResult(ui32 shardId, const NEvDataShard::TEvProposeTransactionResult * event, bool complete) override;
     YdbOld::ResultSet GetScanResult() const;
     IEngineFlat::EStatus GetStatus(bool atPropose) override;
 
@@ -820,8 +820,8 @@ void SendProposeToCoordinator(
 struct IsTxResultComplete {
     bool operator()(IEventHandle& ev)
     {
-        if (ev.GetTypeRewrite() == TEvDataShard::EvProposeTransactionResult) {
-            auto status = ev.Get<TEvDataShard::TEvProposeTransactionResult>()->GetStatus();
+        if (ev.GetTypeRewrite() == NEvDataShard::EvProposeTransactionResult) {
+            auto status = ev.Get<NEvDataShard::TEvProposeTransactionResult>()->GetStatus();
             if (status == NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE)
                 return true;
         }
@@ -887,12 +887,12 @@ TVector<TCell> ToCells(const std::vector<TKeyType>& keys) {
 }
 
 void AddKeyQuery(
-    TEvDataShard::TEvRead& request,
+    NEvDataShard::TEvRead& request,
     const std::vector<ui32>& keys);
 
 template <typename TCellType>
 void AddRangeQuery(
-    TEvDataShard::TEvRead& request,
+    NEvDataShard::TEvRead& request,
     std::vector<TCellType> from,
     bool fromInclusive,
     std::vector<TCellType> to,
@@ -908,32 +908,32 @@ void AddRangeQuery(
     request.Ranges.emplace_back(fromBuf, toBuf, fromInclusive, toInclusive);
 }
 
-void AddFullRangeQuery(TEvDataShard::TEvRead& request);
+void AddFullRangeQuery(NEvDataShard::TEvRead& request);
 
-std::unique_ptr<TEvDataShard::TEvRead> GetBaseReadRequest(
+std::unique_ptr<NEvDataShard::TEvRead> GetBaseReadRequest(
     const TTableId& tableId,
     const NKikimrSchemeOp::TTableDescription& description,
     ui64 readId,
     NKikimrDataEvents::EDataFormat format = NKikimrDataEvents::FORMAT_ARROW,
     const TRowVersion& readVersion = {});
 
-std::unique_ptr<TEvDataShard::TEvReadResult> WaitReadResult(
+std::unique_ptr<NEvDataShard::TEvReadResult> WaitReadResult(
     Tests::TServer::TPtr server,
     TDuration timeout = TDuration::Max());
 
 void SendReadAsync(
     Tests::TServer::TPtr server,
     ui64 tabletId,
-    TEvDataShard::TEvRead* request,
+    NEvDataShard::TEvRead* request,
     TActorId sender,
     ui32 node = 0,
     const NTabletPipe::TClientConfig& clientConfig = GetPipeConfigWithRetries(),
     TActorId clientId = {});
 
-std::unique_ptr<TEvDataShard::TEvReadResult> SendRead(
+std::unique_ptr<NEvDataShard::TEvReadResult> SendRead(
     Tests::TServer::TPtr server,
     ui64 tabletId,
-    TEvDataShard::TEvRead* request,
+    NEvDataShard::TEvRead* request,
     TActorId sender,
     ui32 node = 0,
     const NTabletPipe::TClientConfig& clientConfig = GetPipeConfigWithRetries(),

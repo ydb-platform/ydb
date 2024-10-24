@@ -154,10 +154,10 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxInitRoot() {
 }
 
 struct TSchemeShard::TTxInitRootCompatibility : public TSchemeShard::TRwTxBase {
-    TEvSchemeShard::TEvInitRootShard::TPtr Ev;
+    NEvSchemeShard::TEvInitRootShard::TPtr Ev;
     TSideEffects OnComplete;
 
-    TTxInitRootCompatibility(TSelf *self, TEvSchemeShard::TEvInitRootShard::TPtr &ev)
+    TTxInitRootCompatibility(TSelf *self, NEvSchemeShard::TEvInitRootShard::TPtr &ev)
         : TRwTxBase(self)
         , Ev(ev)
     {}
@@ -176,16 +176,16 @@ struct TSchemeShard::TTxInitRootCompatibility : public TSchemeShard::TRwTxBase {
                          << ", pathId: " << Self->RootPathId()
                          << ", at schemeshard: " << Self->TabletID());
 
-        auto reply = MakeHolder<TEvSchemeShard::TEvInitRootShardResult>(Self->TabletID(), TEvSchemeShard::TEvInitRootShardResult::StatusAlreadyInitialized);
+        auto reply = MakeHolder<NEvSchemeShard::TEvInitRootShardResult>(Self->TabletID(), NEvSchemeShard::TEvInitRootShardResult::StatusAlreadyInitialized);
 
         if (!Self->IsDomainSchemeShard) {
-            reply->Record.SetStatus(TEvSchemeShard::TEvInitRootShardResult::StatusBadArgument);
+            reply->Record.SetStatus(NEvSchemeShard::TEvInitRootShardResult::StatusBadArgument);
             OnComplete.Send(answerTo, reply.Release());
             return;
         }
 
         if (Ev->Get()->Record.GetRootTagName() != root.Base()->Name) {
-            reply->Record.SetStatus(TEvSchemeShard::TEvInitRootShardResult::StatusBadArgument);
+            reply->Record.SetStatus(NEvSchemeShard::TEvInitRootShardResult::StatusBadArgument);
             OnComplete.Send(answerTo, reply.Release());
             return;
         }
@@ -205,7 +205,7 @@ struct TSchemeShard::TTxInitRootCompatibility : public TSchemeShard::TRwTxBase {
             return;
         }
 
-        reply->Record.SetStatus(TEvSchemeShard::TEvInitRootShardResult::StatusSuccess);
+        reply->Record.SetStatus(NEvSchemeShard::TEvInitRootShardResult::StatusSuccess);
         OnComplete.Send(answerTo, reply.Release());
 
         root.Base()->Owner = Ev->Get()->Record.GetOwner();
@@ -228,15 +228,15 @@ struct TSchemeShard::TTxInitRootCompatibility : public TSchemeShard::TRwTxBase {
     }
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxInitRootCompatibility(TEvSchemeShard::TEvInitRootShard::TPtr &ev) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxInitRootCompatibility(NEvSchemeShard::TEvInitRootShard::TPtr &ev) {
     return new TTxInitRootCompatibility(this, ev);
 }
 
 struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
-    TEvSchemeShard::TEvInitTenantSchemeShard::TPtr Ev;
-    TAutoPtr<TEvSchemeShard::TEvInitTenantSchemeShardResult> Reply;
+    NEvSchemeShard::TEvInitTenantSchemeShard::TPtr Ev;
+    TAutoPtr<NEvSchemeShard::TEvInitTenantSchemeShardResult> Reply;
 
-    TTxInitTenantSchemeShard(TSelf *self, TEvSchemeShard::TEvInitTenantSchemeShard::TPtr &ev)
+    TTxInitTenantSchemeShard(TSelf *self, NEvSchemeShard::TEvInitTenantSchemeShard::TPtr &ev)
         : TRwTxBase(self)
         , Ev(ev)
     {}
@@ -283,7 +283,7 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
         const auto& schemeLimits = record.GetSchemeLimits();
         const bool initiateMigration = record.GetInitiateMigration();
 
-        Reply.Reset(new TEvSchemeShard::TEvInitTenantSchemeShardResult(Self->TabletID(), NKikimrScheme::StatusSuccess));
+        Reply.Reset(new NEvSchemeShard::TEvInitTenantSchemeShardResult(Self->TabletID(), NKikimrScheme::StatusSuccess));
 
         if (Self->IsDomainSchemeShard) {
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -463,15 +463,15 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
     }
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxInitTenantSchemeShard(TEvSchemeShard::TEvInitTenantSchemeShard::TPtr &ev) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxInitTenantSchemeShard(NEvSchemeShard::TEvInitTenantSchemeShard::TPtr &ev) {
     return new TTxInitTenantSchemeShard(this, ev);
 }
 
 struct TSchemeShard::TTxPublishTenantAsReadOnly : public TSchemeShard::TRwTxBase {
-    TEvSchemeShard::TEvPublishTenantAsReadOnly::TPtr Ev;
-    TAutoPtr<TEvSchemeShard::TEvPublishTenantAsReadOnlyResult> Reply;
+    NEvSchemeShard::TEvPublishTenantAsReadOnly::TPtr Ev;
+    TAutoPtr<NEvSchemeShard::TEvPublishTenantAsReadOnlyResult> Reply;
 
-    TTxPublishTenantAsReadOnly(TSelf *self, TEvSchemeShard::TEvPublishTenantAsReadOnly::TPtr &ev)
+    TTxPublishTenantAsReadOnly(TSelf *self, NEvSchemeShard::TEvPublishTenantAsReadOnly::TPtr &ev)
         : TRwTxBase(self)
         , Ev(ev)
     {}
@@ -491,7 +491,7 @@ struct TSchemeShard::TTxPublishTenantAsReadOnly : public TSchemeShard::TRwTxBase
                          << ", message: " << record.ShortDebugString()
                          << ", at schemeshard: " << selfTabletId);
 
-        Reply = new TEvSchemeShard::TEvPublishTenantAsReadOnlyResult(ui64(selfTabletId), NKikimrScheme::StatusSuccess);
+        Reply = new NEvSchemeShard::TEvPublishTenantAsReadOnlyResult(ui64(selfTabletId), NKikimrScheme::StatusSuccess);
 
         switch (Self->InitState) {
         case TTenantInitState::Inprogress:
@@ -525,16 +525,16 @@ struct TSchemeShard::TTxPublishTenantAsReadOnly : public TSchemeShard::TRwTxBase
     }
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxPublishTenantAsReadOnly(TEvSchemeShard::TEvPublishTenantAsReadOnly::TPtr &ev) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxPublishTenantAsReadOnly(NEvSchemeShard::TEvPublishTenantAsReadOnly::TPtr &ev) {
     return new TTxPublishTenantAsReadOnly(this, ev);
 }
 
 
 struct TSchemeShard::TTxPublishTenant : public TSchemeShard::TRwTxBase {
-    TEvSchemeShard::TEvPublishTenant::TPtr Ev;
-    TAutoPtr<TEvSchemeShard::TEvPublishTenantResult> Reply;
+    NEvSchemeShard::TEvPublishTenant::TPtr Ev;
+    TAutoPtr<NEvSchemeShard::TEvPublishTenantResult> Reply;
 
-    TTxPublishTenant(TSelf *self, TEvSchemeShard::TEvPublishTenant::TPtr &ev)
+    TTxPublishTenant(TSelf *self, NEvSchemeShard::TEvPublishTenant::TPtr &ev)
         : TRwTxBase(self)
           , Ev(ev)
     {}
@@ -553,7 +553,7 @@ struct TSchemeShard::TTxPublishTenant : public TSchemeShard::TRwTxBase {
                          << ", message: " << record.ShortDebugString()
                          << ", at schemeshard: " << selfTabletId);
 
-        Reply = new TEvSchemeShard::TEvPublishTenantResult(ui64(selfTabletId));
+        Reply = new NEvSchemeShard::TEvPublishTenantResult(ui64(selfTabletId));
 
         switch (Self->InitState) {
         case TTenantInitState::ReadOnlyPreview:
@@ -582,15 +582,15 @@ struct TSchemeShard::TTxPublishTenant : public TSchemeShard::TRwTxBase {
     }
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxPublishTenant(TEvSchemeShard::TEvPublishTenant::TPtr &ev) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxPublishTenant(NEvSchemeShard::TEvPublishTenant::TPtr &ev) {
     return new TTxPublishTenant(this, ev);
 }
 
 struct TSchemeShard::TTxMigrate : public TSchemeShard::TRwTxBase {
-    TEvSchemeShard::TEvMigrateSchemeShard::TPtr Ev;
-    TAutoPtr<TEvSchemeShard::TEvMigrateSchemeShardResult> Reply;
+    NEvSchemeShard::TEvMigrateSchemeShard::TPtr Ev;
+    TAutoPtr<NEvSchemeShard::TEvMigrateSchemeShardResult> Reply;
 
-    TTxMigrate(TSelf *self, TEvSchemeShard::TEvMigrateSchemeShard::TPtr &ev)
+    TTxMigrate(TSelf *self, NEvSchemeShard::TEvMigrateSchemeShard::TPtr &ev)
         : TRwTxBase(self)
           , Ev(ev)
     {}
@@ -608,7 +608,7 @@ struct TSchemeShard::TTxMigrate : public TSchemeShard::TRwTxBase {
                          << ", message: " << record.ShortDebugString()
                          << ", at schemeshard: " << selfTabletId);
 
-        Reply = new TEvSchemeShard::TEvMigrateSchemeShardResult(ui64(selfTabletId));
+        Reply = new NEvSchemeShard::TEvMigrateSchemeShardResult(ui64(selfTabletId));
 
         const NKikimrScheme::TMigratePath& pathDescr = record.GetPath();
 
@@ -772,7 +772,7 @@ struct TSchemeShard::TTxMigrate : public TSchemeShard::TRwTxBase {
     }
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxMigrate(TEvSchemeShard::TEvMigrateSchemeShard::TPtr &ev) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxMigrate(NEvSchemeShard::TEvMigrateSchemeShard::TPtr &ev) {
     return new TTxMigrate(this, ev);
 }
 }}

@@ -143,7 +143,7 @@ protected:
     void Handle(NPqMetaCacheV2::TEvPqNewMetaCache::TEvGetNodesMappingResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void HandleTimeout(const TActorContext& ctx);
 
     void Die(const TActorContext& ctx) override;
@@ -212,7 +212,7 @@ public:
 
 protected:
     void SendReplyAndDie(NKikimrClient::TResponse&& record, const TActorContext& ctx) override {
-        THolder<TEvPersQueue::TEvResponse> result(new TEvPersQueue::TEvResponse());
+        THolder<NEvPersQueue::TEvResponse> result(new NEvPersQueue::TEvResponse());
         result->Record.Swap(&record);
 
         ctx.Send(Parent, result.Release());

@@ -95,8 +95,8 @@ struct CatchReplaceConfigResult {
     }
 
     bool operator()(IEventHandle &ev) {
-        if (ev.GetTypeRewrite() == TEvConsole::EvReplaceConfigSubscriptionsResponse) {
-            auto *x = ev.Get<TEvConsole::TEvReplaceConfigSubscriptionsResponse>();
+        if (ev.GetTypeRewrite() == NEvConsole::EvReplaceConfigSubscriptionsResponse) {
+            auto *x = ev.Get<NEvConsole::TEvReplaceConfigSubscriptionsResponse>();
             UNIT_ASSERT_VALUES_EQUAL(x->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
             Id = x->Record.GetSubscriptionId();
             return true;
@@ -173,7 +173,7 @@ public:
 
     void SendSubscriptionRequest(const TActorContext &ctx)
     {
-        auto *req = new TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest;
+        auto *req = new NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest;
         req->ConfigItemKinds = Kinds;
         ctx.Send(MakeConfigsDispatcherID(ctx.SelfID.NodeId()), req);
     }
@@ -194,13 +194,13 @@ public:
         }
     }
 
-    void Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr &ev, const TActorContext &ctx)
+    void Handle(NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr &ev, const TActorContext &ctx)
     {
         if (Sink)
             ctx.Send(ev->Forward(Sink));
     }
 
-    void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx)
+    void Handle(NEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx)
     {
         auto &rec = ev->Get()->Record;
         if (Sink) {
@@ -215,7 +215,7 @@ public:
             return;
         }
 
-        auto *resp = new TEvConsole::TEvConfigNotificationResponse;
+        auto *resp = new NEvConsole::TEvConfigNotificationResponse;
         resp->Record.SetSubscriptionId(rec.GetSubscriptionId());
         resp->Record.MutableConfigId()->CopyFrom(rec.GetConfigId());
         ctx.Send(ev->Sender, resp, 0, ev->Cookie);
@@ -241,8 +241,8 @@ public:
     STFUNC(StateWork)
     {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
-            HFunc(TEvConsole::TEvConfigNotificationRequest, Handle);
+            HFunc(NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
+            HFunc(NEvConsole::TEvConfigNotificationRequest, Handle);
             HFunc(TEvPrivate::TEvHoldResponse, Handle);
             HFunc(TEvPrivate::TEvSetSubscription, Handle);
         }
@@ -291,14 +291,14 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
         AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
 
         // Subscribers get notification.
-        runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>(handle);
-        runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>(handle);
+        runtime.GrabEdgeEventRethrow<NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>(handle);
+        runtime.GrabEdgeEventRethrow<NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>(handle);
 
         SendConfigure(runtime, MakeAddAction(ITEM_DOMAIN_LOG_1));
 
         // Expect two responses from subscribers and zero from dispatcher
         TDispatchOptions options;
-        options.FinalEvents.emplace_back(TEvConsole::EvConfigNotificationResponse, 2);
+        options.FinalEvents.emplace_back(NEvConsole::EvConfigNotificationResponse, 2);
         runtime.DispatchEvents(options);
     }
 
@@ -308,7 +308,7 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
         InitConfigsDispatcher(runtime);
 
         auto s1 = AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
-        runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>(handle);
+        runtime.GrabEdgeEventRethrow<NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>(handle);
         HoldSubscriber(runtime, s1);
 
         SendConfigure(runtime, MakeAddAction(ITEM_DOMAIN_LOG_1));
@@ -321,7 +321,7 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
 
         // Expect response from subscriber
         TDispatchOptions options;
-        options.FinalEvents.emplace_back(TEvConsole::EvConfigNotificationResponse, 1);
+        options.FinalEvents.emplace_back(NEvConsole::EvConfigNotificationResponse, 1);
         runtime.DispatchEvents(options);
 
         // New subscriber should get notification.
@@ -338,7 +338,7 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
         InitConfigsDispatcher(runtime);
 
         auto s1 = AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
-        runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>(handle);
+        runtime.GrabEdgeEventRethrow<NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>(handle);
         HoldSubscriber(runtime, s1);
 
         SendConfigure(runtime, MakeAddAction(ITEM_DOMAIN_LOG_1));
@@ -357,7 +357,7 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
 
         // Expect response from unhold subscriber
         TDispatchOptions options;
-        options.FinalEvents.emplace_back(TEvConsole::EvConfigNotificationResponse, 1);
+        options.FinalEvents.emplace_back(NEvConsole::EvConfigNotificationResponse, 1);
         runtime.DispatchEvents(options);
     }
 
@@ -367,7 +367,7 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
         InitConfigsDispatcher(runtime);
 
         auto s1 = AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
-        runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>(handle);
+        runtime.GrabEdgeEventRethrow<NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>(handle);
 
         // Subscriber removal should cause CMS subscription removal.
         SetSubscriptions(runtime, s1, {});
@@ -375,7 +375,7 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
         TDispatchOptions options;
         runtime.DispatchEvents(options);
 
-        runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>(handle);
+        runtime.GrabEdgeEventRethrow<NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>(handle);
     }
 
     Y_UNIT_TEST(TestRemoveSubscriptionWhileUpdateInProcess) {
@@ -384,16 +384,16 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
         InitConfigsDispatcher(runtime);
 
         auto s1 = AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
-        runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>(handle);
+        runtime.GrabEdgeEventRethrow<NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>(handle);
         HoldSubscriber(runtime, s1);
 
         AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
-        runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>(handle);
+        runtime.GrabEdgeEventRethrow<NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>(handle);
 
         SendConfigure(runtime, MakeAddAction(ITEM_DOMAIN_LOG_1));
 
         TDispatchOptions options1;
-        options1.FinalEvents.emplace_back(TEvConsole::EvConfigNotificationResponse, 1);
+        options1.FinalEvents.emplace_back(NEvConsole::EvConfigNotificationResponse, 1);
         runtime.DispatchEvents(options1);
 
         // We don't track acks from config dispatcher with InMemory subscriptions

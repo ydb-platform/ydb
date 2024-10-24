@@ -459,8 +459,8 @@ public:
                 hFunc(TEvTabletPipe::TEvClientConnected, Handle);
                 hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
                 hFunc(NSchemeShard::TEvIndexBuilder::TEvGetResponse, Handle);
-                hFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
-                hFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
+                hFunc(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
+                hFunc(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
                 default:
                     UnexpectedEvent("ExecuteState", ev->GetTypeRewrite());
             }
@@ -527,7 +527,7 @@ public:
         Send(schemeCache, ev.release());
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&) {
+    void Handle(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&) {
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -620,11 +620,11 @@ public:
     }
 
     void DoSubscribe() {
-        auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(TxId);
+        auto request = std::make_unique<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletion>(TxId);
         ForwardToSchemeShard(std::move(request));
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&) {
+    void Handle(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&) {
         GetIndexStatus();
     }
 

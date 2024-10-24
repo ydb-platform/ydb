@@ -115,7 +115,7 @@ namespace NTabletPipe {
                 HFunc(TEvTabletPipe::TEvClientCheckDelay, Handle);
                 HFunc(TEvTabletPipe::TEvClientConnected, Handle);
                 HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-                HFunc(TEvHive::TEvResponseHiveInfo, Handle);
+                HFunc(NEvHive::TEvResponseHiveInfo, Handle);
                 HFunc(TEvInterconnect::TEvNodeDisconnected, HandleRelaxed);
                 HFunc(TEvTabletPipe::TEvConnectResult, HandleOutdated);
                 // ignore everything else
@@ -430,11 +430,11 @@ namespace NTabletPipe {
                 },
             };
             HiveClient = Register(CreateClient(SelfId(), hiveTabletId, clientConfig));
-            NTabletPipe::SendData(SelfId(), HiveClient, new TEvHive::TEvRequestHiveInfo(TabletId, false));
+            NTabletPipe::SendData(SelfId(), HiveClient, new NEvHive::TEvRequestHiveInfo(TabletId, false));
         }
 
         // check aliveness section
-        void Handle(TEvHive::TEvResponseHiveInfo::TPtr &ev, const TActorContext &ctx) {
+        void Handle(NEvHive::TEvResponseHiveInfo::TPtr &ev, const TActorContext &ctx) {
             const auto &record = ev->Get()->Record;
             if (record.HasForwardRequest() && (++CurrentHiveForwards < MAX_HIVE_FORWARDS)) {
                 BLOG_I("hive request forwarded to " << record.GetForwardRequest().GetHiveTabletId());

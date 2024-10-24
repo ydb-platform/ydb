@@ -303,7 +303,7 @@ public:
         }
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
+    void Handle(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
         ScheduleRetry(TStringBuilder() << "Transaction " << ev->Get()->Record.GetTxId() << " completed, doublechecking");
     }
 
@@ -312,8 +312,8 @@ public:
             hFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle)
             hFunc(TEvTabletPipe::TEvClientConnected, Handle)
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle)
-            hFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle)
-            IgnoreFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered)
+            hFunc(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult, Handle)
+            IgnoreFunc(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionRegistered)
 
             default:
                 StateFuncBase(ev);
@@ -358,7 +358,7 @@ private:
 
         SchemePipeActorId = Register(NTabletPipe::CreateClient(SelfId(), response.GetSchemeShardTabletId()));
 
-        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+        auto request = MakeHolder<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(txId);
         NTabletPipe::SendData(SelfId(), SchemePipeActorId, std::move(request));
         LOG_D("Subscribe on create pool tx: " << txId);

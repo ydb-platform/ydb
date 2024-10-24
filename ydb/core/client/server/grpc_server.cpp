@@ -496,7 +496,7 @@ void TGRpcService::SetupIncomingRequests() {
     // proxy requests
     ADD_PROXY_REQUEST(SchemeInitRoot,  TSchemeInitRoot,  TEvBusProxy::TEvInitRoot,            MTYPE_CLIENT_SCHEME_INITROOT)
 
-    ADD_PROXY_REQUEST(PersQueueRequest, TPersQueueRequest, TEvBusProxy::TEvPersQueue,           MTYPE_CLIENT_PERSQUEUE)
+    ADD_PROXY_REQUEST(PersQueueRequest, TPersQueueRequest, TEvBusProxy::NEvPersQueue,           MTYPE_CLIENT_PERSQUEUE)
     ADD_PROXY_REQUEST(Request,          TRequest,          TEvBusProxy::TEvRequest,             MTYPE_CLIENT_REQUEST)
     ADD_PROXY_REQUEST(SchemeOperation,  TSchemeOperation,  TEvBusProxy::TEvFlatTxRequest,       MTYPE_CLIENT_FLAT_TX_REQUEST)
     ADD_PROXY_REQUEST(SchemeDescribe,   TSchemeDescribe,   TEvBusProxy::TEvFlatDescribeRequest, MTYPE_CLIENT_FLAT_DESCRIBE_REQUEST)

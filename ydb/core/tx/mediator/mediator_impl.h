@@ -341,7 +341,7 @@ class TTxMediator : public TActor<TTxMediator>, public NTabletFlatExecutor::TTab
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override;
     void DefaultSignalTabletActive(const TActorContext &ctx) override;
 
-    void Handle(TEvSubDomain::TEvConfigure::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvSubDomain::TEvConfigure::TPtr &ev, const TActorContext &ctx);
     void HandleEnqueue(TEvTxCoordinator::TEvCoordinatorSync::TPtr &ev, const TActorContext &ctx);
     void HandleEnqueueWatch(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx);
     void Handle(TEvTxCoordinator::TEvCoordinatorSync::TPtr &ev, const TActorContext &ctx);
@@ -351,7 +351,7 @@ class TTxMediator : public TActor<TTxMediator>, public NTabletFlatExecutor::TTab
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx);
 
-    void DoConfigure(const TEvSubDomain::TEvConfigure &ev, const TActorContext &ctx, const TActorId &ackTo = TActorId());
+    void DoConfigure(const NEvSubDomain::TEvConfigure &ev, const TActorContext &ctx, const TActorId &ackTo = TActorId());
 
     static ui64 SubjectiveTime();
     void InitSelfState(const TActorContext &ctx);
@@ -408,7 +408,7 @@ public:
 
     STFUNC_TABLET_DEF(StateSync,
                      HFunc(TEvTxCoordinator::TEvCoordinatorSync, HandleEnqueue)
-                     HFunc(TEvSubDomain::TEvConfigure, Handle)
+                     HFunc(NEvSubDomain::TEvConfigure, Handle)
                      FFunc(TEvMediatorTimecast::TEvWatch::EventType, HandleEnqueueWatch)
                      FFunc(TEvMediatorTimecast::TEvGranularWatch::EventType, HandleEnqueueWatch)
                      FFunc(TEvMediatorTimecast::TEvGranularWatchModify::EventType, HandleEnqueueWatch)
@@ -416,7 +416,7 @@ public:
                      HFunc(TEvTabletPipe::TEvServerDisconnected, Handle))
 
     STFUNC_TABLET_DEF(StateWork,
-                     HFunc(TEvSubDomain::TEvConfigure, Handle)
+                     HFunc(NEvSubDomain::TEvConfigure, Handle)
                      HFunc(TEvTxCoordinator::TEvCoordinatorStep, Handle)
                      HFunc(TEvTxCoordinator::TEvCoordinatorSync, Handle)
                      FFunc(TEvMediatorTimecast::TEvWatch::EventType, HandleForwardWatch)

@@ -6,11 +6,11 @@ namespace NHive {
 
 class TTxUpdateDomain : public TTransactionBase<THive> {
     const TSubDomainKey SubdomainKey;
-    const TEvHive::TEvUpdateDomain::TPtr Request;    
+    const NEvHive::TEvUpdateDomain::TPtr Request;
     TSideEffects SideEffects;
 
 public:
-    TTxUpdateDomain(TSubDomainKey subdomainKey, TEvHive::TEvUpdateDomain::TPtr request, THive* hive)
+    TTxUpdateDomain(TSubDomainKey subdomainKey, NEvHive::TEvUpdateDomain::TPtr request, THive* hive)
         : TBase(hive)
         , SubdomainKey(subdomainKey)
         , Request(std::move(request))
@@ -44,7 +44,7 @@ public:
         }
 
         if (Request) {
-            auto response = std::make_unique<TEvHive::TEvUpdateDomainReply>();
+            auto response = std::make_unique<NEvHive::TEvUpdateDomainReply>();
             response->Record.SetTxId(Request->Get()->Record.GetTxId());
             response->Record.SetOrigin(Self->TabletID());
             SideEffects.Send(Request->Sender, response.release(), 0, Request->Cookie);
@@ -58,7 +58,7 @@ public:
     }
 };
 
-ITransaction* THive::CreateUpdateDomain(TSubDomainKey subdomainKey, TEvHive::TEvUpdateDomain::TPtr event) {
+ITransaction* THive::CreateUpdateDomain(TSubDomainKey subdomainKey, NEvHive::TEvUpdateDomain::TPtr event) {
     return new TTxUpdateDomain(subdomainKey, std::move(event), this);
 }
 

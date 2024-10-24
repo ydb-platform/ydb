@@ -18,11 +18,11 @@ private:
 
     void SendCurrentTxToSS() {
         AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("chain_tx", SessionLogic->GetTxData().GetTransactions()[SessionLogic->GetStepForExecute()].DebugString());
-        auto evModification = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(SessionLogic->GetCurrentTxIdVerified(), (ui64)TabletId);
+        auto evModification = std::make_unique<NEvSchemeShard::TEvModifySchemeTransaction>(SessionLogic->GetCurrentTxIdVerified(), (ui64)TabletId);
         *evModification->Record.AddTransaction() = SessionLogic->GetTxData().GetTransactions()[SessionLogic->GetStepForExecute()];
         NActors::TActivationContext::AsActorContext().Send(TabletActorId, evModification.release());
 
-        auto evRegister = std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(SessionLogic->GetCurrentTxIdVerified());
+        auto evRegister = std::make_unique<NEvSchemeShard::TEvNotifyTxCompletion>(SessionLogic->GetCurrentTxIdVerified());
         NActors::TActivationContext::AsActorContext().Send(TabletActorId, evRegister.release());
     }
 
@@ -41,9 +41,9 @@ protected:
     virtual void OnBootstrap(const TActorContext& /*ctx*/) override;
 
     void Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
-    void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);
-    void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev);
-    void Handle(TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr& ev);
+    void Handle(NEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);
+    void Handle(NEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev);
+    void Handle(NEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr& ev);
 public:
     TTxChainActor(const std::shared_ptr<NKikimr::NOlap::NBackground::TSession>& session, const std::shared_ptr<NKikimr::NOlap::NBackground::ITabletAdapter>& adapter)
         : TBase(session, adapter)
@@ -55,10 +55,10 @@ public:
     STATEFN(StateInProgress) {
         const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_BACKGROUND)("SelfId", SelfId())("TabletId", TabletId);
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
+            hFunc(NEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
             hFunc(TEvTxAllocatorClient::TEvAllocateResult, Handle);
-            hFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
-            hFunc(TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
+            hFunc(NEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
+            hFunc(NEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
         default:
             TBase::StateInProgress(ev);
         }

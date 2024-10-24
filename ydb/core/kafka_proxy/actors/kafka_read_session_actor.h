@@ -32,12 +32,12 @@ namespace NKafka {
      *           HEARTBEAT request()
      *           ---------------->
      *           HEARTBEAT response(status = OK)
-     *           <---------------- 
+     *           <----------------
      *
      *           HEARTBEAT request()
      *           ---------------->
      *           HEARTBEAT response(status = REBALANCE_IN_PROGRESS) //if partitions to read list changes
-     *           <---------------- 
+     *           <----------------
      *
      *           JOIN_GROUP request(topics) //client send again, because REBALANCE_IN_PROGRESS in heartbeat response
      *           ---------------->
@@ -49,7 +49,7 @@ namespace NKafka {
      *           LEAVE_GROUP request()
      *           ---------------->
      *           LEAVE_GROUP response()
-     *           <----------------   
+     *           <----------------
      */
 
 class TKafkaReadSessionActor: public NActors::TActorBootstrapped<TKafkaReadSessionActor> {
@@ -108,14 +108,14 @@ private:
             HFunc(NGRpcProxy::V1::TEvPQProxy::TEvCloseSession, HandleAuthCloseSession);
 
             // from PQRB
-            HFunc(TEvPersQueue::TEvLockPartition, HandleLockPartition);
-            HFunc(TEvPersQueue::TEvReleasePartition, HandleReleasePartition);
-            HFunc(TEvPersQueue::TEvError, HandleBalancerError);
-            
+            HFunc(NEvPersQueue::TEvLockPartition, HandleLockPartition);
+            HFunc(NEvPersQueue::TEvReleasePartition, HandleReleasePartition);
+            HFunc(NEvPersQueue::TEvError, HandleBalancerError);
+
             // from Pipe
             HFunc(TEvTabletPipe::TEvClientConnected, HandlePipeConnected);
             HFunc(TEvTabletPipe::TEvClientDestroyed, HandlePipeDestroyed);
-            
+
             // others
             HFunc(TEvKafka::TEvWakeup, HandleWakeup);
             SFunc(TEvents::TEvPoison, Die);
@@ -128,9 +128,9 @@ private:
     void HandleHeartbeat(TEvKafka::TEvHeartbeatRequest::TPtr ev, const TActorContext& ctx);
     void HandlePipeConnected(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext&);
     void HandlePipeDestroyed(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx);
-    void HandleLockPartition(TEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext&);
-    void HandleReleasePartition(TEvPersQueue::TEvReleasePartition::TPtr& ev, const TActorContext&);
-    void HandleBalancerError(TEvPersQueue::TEvError::TPtr& ev, const TActorContext&);
+    void HandleLockPartition(NEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext&);
+    void HandleReleasePartition(NEvPersQueue::TEvReleasePartition::TPtr& ev, const TActorContext&);
+    void HandleBalancerError(NEvPersQueue::TEvError::TPtr& ev, const TActorContext&);
     void HandleWakeup(TEvKafka::TEvWakeup::TPtr, const TActorContext& ctx);
     void HandleAuthOk(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx);
     void HandleAuthCloseSession(NGRpcProxy::V1::TEvPQProxy::TEvCloseSession::TPtr& ev, const TActorContext& ctx);

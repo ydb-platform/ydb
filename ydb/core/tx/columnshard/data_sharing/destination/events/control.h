@@ -10,19 +10,19 @@ class TDestinationSession;
 
 namespace NKikimr::NOlap::NDataSharing::NEvents {
 
-struct TEvProposeFromInitiator: public NActors::TEventPB<TEvProposeFromInitiator, NKikimrColumnShardDataSharingProto::TEvProposeFromInitiator, TEvColumnShard::EvDataSharingProposeFromInitiator> {
+struct TEvProposeFromInitiator: public NActors::TEventPB<TEvProposeFromInitiator, NKikimrColumnShardDataSharingProto::TEvProposeFromInitiator, NEvColumnShard::EvDataSharingProposeFromInitiator> {
     TEvProposeFromInitiator() = default;
 
     TEvProposeFromInitiator(const TDestinationSession& session);
 };
 
-struct TEvConfirmFromInitiator: public NActors::TEventPB<TEvConfirmFromInitiator, NKikimrColumnShardDataSharingProto::TEvConfirmFromInitiator, TEvColumnShard::EvDataSharingConfirmFromInitiator> {
+struct TEvConfirmFromInitiator: public NActors::TEventPB<TEvConfirmFromInitiator, NKikimrColumnShardDataSharingProto::TEvConfirmFromInitiator, NEvColumnShard::EvDataSharingConfirmFromInitiator> {
     TEvConfirmFromInitiator() = default;
 
     TEvConfirmFromInitiator(const TString& sessionId);
 };
 
-struct TEvAckFinishFromInitiator: public NActors::TEventPB<TEvAckFinishFromInitiator, NKikimrColumnShardDataSharingProto::TEvAckFinishFromInitiator, TEvColumnShard::EvDataSharingAckFinishFromInitiator> {
+struct TEvAckFinishFromInitiator: public NActors::TEventPB<TEvAckFinishFromInitiator, NKikimrColumnShardDataSharingProto::TEvAckFinishFromInitiator, NEvColumnShard::EvDataSharingAckFinishFromInitiator> {
     TEvAckFinishFromInitiator() = default;
 
     TEvAckFinishFromInitiator(const TString& sharingId) {

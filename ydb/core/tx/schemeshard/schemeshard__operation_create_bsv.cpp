@@ -12,7 +12,7 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 
 TBlockStoreVolumeInfo::TPtr CreateBlockStoreVolumeInfo(const NKikimrSchemeOp::TBlockStoreVolumeDescription& op,
-                                                       TEvSchemeShard::EStatus& status,
+                                                       NEvSchemeShard::EStatus& status,
                                                        TString& errStr)
 {
     TBlockStoreVolumeInfo::TPtr volume = new TBlockStoreVolumeInfo();
@@ -202,7 +202,7 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
+        NEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
 
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);

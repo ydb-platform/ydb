@@ -882,7 +882,7 @@ void TPartitionFixture::SendProposeTransactionRequest(ui32 partition,
                                                       bool immediate,
                                                       ui64 txId)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
+    auto event = MakeHolder<NEvPersQueue::TEvProposeTransactionBuilder>();
 
     ActorIdToProto(Ctx->Edge, event->Record.MutableSourceActor());
     auto* body = event->Record.MutableData();
@@ -900,7 +900,7 @@ void TPartitionFixture::SendProposeTransactionRequest(ui32 partition,
 
 void TPartitionFixture::WaitProposeTransactionResponse(const TProposeTransactionResponseMatcher& matcher)
 {
-    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>();
+    auto event = Ctx->Runtime->GrabEdgeEvent<NEvPersQueue::TEvProposeTransactionResult>();
     UNIT_ASSERT(event != nullptr);
 
     if (matcher.TxId) {
@@ -1449,7 +1449,7 @@ void TPartitionTxTestHelper::WaitCommitDone(ui64 userActId) {
 void TPartitionTxTestHelper::WaitImmediateTxComplete(ui64 userActId, bool status) {
     auto actIter = UserActs.find(userActId);
     Cerr << "Wait immediate tx complete " << actIter->second.TxId << Endl;
-    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>(TDuration::Seconds(1));
+    auto event = Ctx->Runtime->GrabEdgeEvent<NEvPersQueue::TEvProposeTransactionResult>(TDuration::Seconds(1));
     UNIT_ASSERT(event != nullptr);
     UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), actIter->second.TxId);
     Cerr << "Got propose resutl: " << event->Record.DebugString() << Endl;
@@ -1612,7 +1612,7 @@ ui64 TPartitionTxTestHelper::MakeAndSendWriteTx(const TSrcIdMap& srcIdsAffected)
 ui64 TPartitionTxTestHelper::MakeAndSendImmediateTx(const TSrcIdMap& srcIdsAffected) {
     auto actIter = AddWriteTxImpl(srcIdsAffected, NextActId++, 0);
 
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
+    auto event = MakeHolder<NEvPersQueue::TEvProposeTransactionBuilder>();
 
     ActorIdToProto(Ctx->Edge, event->Record.MutableSourceActor());
     auto* body = event->Record.MutableData();

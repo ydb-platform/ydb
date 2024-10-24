@@ -22,7 +22,7 @@ using namespace Tests;
 
 Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
     static void DoSampleKBad(Tests::TServer::TPtr server, TActorId sender,
-                             const TString& tableFrom, const TRowVersion& snapshot, std::unique_ptr<TEvDataShard::TEvSampleKRequest>& ev) {
+                             const TString& tableFrom, const TRowVersion& snapshot, std::unique_ptr<NEvDataShard::TEvSampleKRequest>& ev) {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
         auto datashards = GetTableShards(server, sender, tableFrom);
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
             runtime.SendToPipe(tid, sender, ev.release(), 0, GetPipeConfigWithRetries());
 
             TAutoPtr<IEventHandle> handle;
-            auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvSampleKResponse>(handle);
+            auto reply = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvSampleKResponse>(handle);
             UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
         }
     }
@@ -82,8 +82,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
         TString err;
 
         for (auto tid : datashards) {
-            auto ev1 = std::make_unique<TEvDataShard::TEvSampleKRequest>();
-            auto ev2 = std::make_unique<TEvDataShard::TEvSampleKRequest>();
+            auto ev1 = std::make_unique<NEvDataShard::TEvSampleKRequest>();
+            auto ev2 = std::make_unique<NEvDataShard::TEvSampleKRequest>();
             auto fill = [&](auto& ev) {
                 auto& rec = ev->Record;
                 rec.SetId(1);
@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
             runtime.SendToPipe(tid, sender, ev2.release(), 0, GetPipeConfigWithRetries());
 
             TAutoPtr<IEventHandle> handle;
-            auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvSampleKResponse>(handle);
+            auto reply = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvSampleKResponse>(handle);
             UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::DONE);
 
             const auto& rows = reply->Record.GetRows();
@@ -223,42 +223,42 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
         auto snapshot = CreateVolatileSnapshot(server, {"/Root/table-1"});
 
         {
-            auto ev = std::make_unique<TEvDataShard::TEvSampleKRequest>();
+            auto ev = std::make_unique<NEvDataShard::TEvSampleKRequest>();
             auto& rec = ev->Record;
 
             rec.SetK(0);
             DoSampleKBad(server, sender, "/Root/table-1", snapshot, ev);
         }
         {
-            auto ev = std::make_unique<TEvDataShard::TEvSampleKRequest>();
+            auto ev = std::make_unique<NEvDataShard::TEvSampleKRequest>();
             auto& rec = ev->Record;
 
             rec.AddColumns();
             DoSampleKBad(server, sender, "/Root/table-1", snapshot, ev);
         }
         {
-            auto ev = std::make_unique<TEvDataShard::TEvSampleKRequest>();
+            auto ev = std::make_unique<NEvDataShard::TEvSampleKRequest>();
             auto& rec = ev->Record;
 
             rec.SetTabletId(0);
             DoSampleKBad(server, sender, "/Root/table-1", snapshot, ev);
         }
         {
-            auto ev = std::make_unique<TEvDataShard::TEvSampleKRequest>();
+            auto ev = std::make_unique<NEvDataShard::TEvSampleKRequest>();
             auto& rec = ev->Record;
 
             PathIdFromPathId({0, 0}, rec.MutablePathId());
             DoSampleKBad(server, sender, "/Root/table-1", snapshot, ev);
         }
         {
-            auto ev = std::make_unique<TEvDataShard::TEvSampleKRequest>();
+            auto ev = std::make_unique<NEvDataShard::TEvSampleKRequest>();
 
             auto snapshotCopy = snapshot;
             snapshotCopy.Step++;
             DoSampleKBad(server, sender, "/Root/table-1", snapshotCopy, ev);
         }
         {
-            auto ev = std::make_unique<TEvDataShard::TEvSampleKRequest>();
+            auto ev = std::make_unique<NEvDataShard::TEvSampleKRequest>();
 
             auto snapshotCopy = snapshot;
             snapshotCopy.TxId++;

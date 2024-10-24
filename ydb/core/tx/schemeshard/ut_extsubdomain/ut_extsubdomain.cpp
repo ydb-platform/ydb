@@ -837,9 +837,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         // ...and extsubdomain hive holds all other tablets (1 coordinator, 1 mediator, 1 schemeshard -- 3 total)
         {
             TActorId senderA = runtime.AllocateEdgeActor();
-            runtime.SendToPipe(subhiveId, senderA, new TEvHive::TEvRequestHiveInfo());
+            runtime.SendToPipe(subhiveId, senderA, new NEvHive::TEvRequestHiveInfo());
             TAutoPtr<IEventHandle> handle;
-            TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+            NEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<NEvHive::TEvResponseHiveInfo>(handle);
 
             UNIT_ASSERT_VALUES_EQUAL_C(expected.TabletsInsideExtSubdomainHive, response->Record.GetTablets().size(), "-- unexpected tablet count in extsubdomain hive");
 

@@ -52,11 +52,11 @@ void ProvideTieringSnapshot(TTestBasicRuntime& runtime, const TActorId& sender, 
 }
 
 bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, NOlap::TSnapshot snap) {
-    auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
+    auto event = std::make_unique<NEvColumnShard::TEvProposeTransaction>(
         NKikimrTxColumnShard::TX_KIND_SCHEMA, 0, sender, snap.GetTxId(), txBody);
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
-    auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
+    auto ev = runtime.GrabEdgeEvent<NEvColumnShard::TEvProposeTransactionResult>(sender);
     const auto& res = ev->Get()->Record;
     UNIT_ASSERT_EQUAL(res.GetTxId(), snap.GetTxId());
     UNIT_ASSERT_EQUAL(res.GetTxKind(), NKikimrTxColumnShard::TX_KIND_SCHEMA);
@@ -71,7 +71,7 @@ void PlanSchemaTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSn
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, plan.release());
     UNIT_ASSERT(runtime.GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAck>(sender));
-    auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
+    auto ev = runtime.GrabEdgeEvent<NEvColumnShard::TEvProposeTransactionResult>(sender);
     const auto& res = ev->Get()->Record;
     UNIT_ASSERT_EQUAL(res.GetTxId(), snap.GetTxId());
     UNIT_ASSERT_EQUAL(res.GetTxKind(), NKikimrTxColumnShard::TX_KIND_SCHEMA);
@@ -96,7 +96,7 @@ void PlanWriteTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSna
 
 ui32 WaitWriteResult(TTestBasicRuntime& runtime, ui64 shardId, std::vector<ui64>* writeIds) {
     TAutoPtr<IEventHandle> handle;
-    auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvWriteResult>(handle);
+    auto event = runtime.GrabEdgeEvent<NEvColumnShard::TEvWriteResult>(handle);
     UNIT_ASSERT(event);
 
     auto& resWrite = Proto(event);
@@ -113,7 +113,7 @@ bool WriteDataImpl(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shar
                     const TString& data, const std::shared_ptr<arrow::Schema>& schema, std::vector<ui64>* writeIds, const NEvWrite::EModificationType mType) {
     const TString dedupId = ToString(writeId);
 
-    auto write = std::make_unique<TEvColumnShard::TEvWrite>(sender, longTxId, tableId, dedupId, data, writeId, mType);
+    auto write = std::make_unique<NEvColumnShard::TEvWrite>(sender, longTxId, tableId, dedupId, data, writeId, mType);
     Y_ABORT_UNLESS(schema);
     write->SetArrowSchema(NArrow::SerializeSchema(*schema));
     ForwardToTablet(runtime, shardId, sender, write.release());
@@ -150,12 +150,12 @@ std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, cons
                               ui64 tableId, const ui64 writePartId, const TString& data,
                               const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, const NEvWrite::EModificationType mType)
 {
-    auto write = std::make_unique<TEvColumnShard::TEvWrite>(sender, longTxId, tableId, "0", data, writePartId, mType);
+    auto write = std::make_unique<NEvColumnShard::TEvWrite>(sender, longTxId, tableId, "0", data, writePartId, mType);
     write->SetArrowSchema(NArrow::SerializeSchema(*NArrow::MakeArrowSchema(ydbSchema)));
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, write.release());
     TAutoPtr<IEventHandle> handle;
-    auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvWriteResult>(handle);
+    auto event = runtime.GrabEdgeEvent<NEvColumnShard::TEvWriteResult>(handle);
     UNIT_ASSERT(event);
 
     auto& resWrite = Proto(event);
@@ -169,7 +169,7 @@ std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, cons
 
 void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vector<ui64>& pathIds,
                   NOlap::TSnapshot snap, ui64 scanId) {
-    auto scan = std::make_unique<TEvColumnShard::TEvScan>();
+    auto scan = std::make_unique<NEvColumnShard::TEvScan>();
     auto& record = scan->Record;
 
     record.SetTxId(snap.GetPlanStep());
@@ -210,9 +210,9 @@ void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, u
     TString txBody = TTestSchema::CommitTxBody(0, writeIds);
 
     ForwardToTablet(runtime, shardId, sender,
-                new TEvColumnShard::TEvProposeTransaction(txKind, sender, txId, txBody));
+                new NEvColumnShard::TEvProposeTransaction(txKind, sender, txId, txBody));
     TAutoPtr<IEventHandle> handle;
-    auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(handle);
+    auto event = runtime.GrabEdgeEvent<NEvColumnShard::TEvProposeTransactionResult>(handle);
     UNIT_ASSERT(event);
 
     auto& res = Proto(event);
@@ -246,7 +246,7 @@ void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64
     TAutoPtr<IEventHandle> handle;
 
     for (ui32 i = 0; i < txIds.size(); ++i) {
-        auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(handle);
+        auto event = runtime.GrabEdgeEvent<NEvColumnShard::TEvProposeTransactionResult>(handle);
         UNIT_ASSERT(event);
 
         auto& res = Proto(event);

@@ -115,7 +115,7 @@ public:
                " Status: " << NKikimrProto::EReplyStatus_Name(Status) <<
                " Explain: " << Explain);
 
-        ctx.Send(Sender, new TEvHive::TEvAdoptTabletReply(Status, TabletId, Owner, OwnerIdx, Explain, Self->TabletID()), 0, Cookie);;
+        ctx.Send(Sender, new NEvHive::TEvAdoptTabletReply(Status, TabletId, Owner, OwnerIdx, Explain, Self->TabletID()), 0, Cookie);;
     }
 
 };

@@ -11,7 +11,7 @@ struct TTxMediator::TTxConfigure : public TTransactionBase<TTxMediator> {
     ui64 Version;
     TVector<TCoordinatorId> Coordinators;
     ui32 TimeCastBuketsPerMediator;
-    TAutoPtr<TEvSubDomain::TEvConfigureStatus> Respond;
+    TAutoPtr<NEvSubDomain::TEvConfigureStatus> Respond;
     bool ConfigurationApplied;
 
     TTxConfigure(TSelf *mediator, TActorId ackTo, ui64 version, const TVector<TCoordinatorId>& coordinators, ui32 timeCastBuckets)
@@ -55,15 +55,15 @@ struct TTxMediator::TTxConfigure : public TTransactionBase<TTxMediator> {
         }
 
         if (curVersion == 0) {
-            Respond = new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, Self->TabletID());
+            Respond = new NEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, Self->TabletID());
             db.Table<Schema::DomainConfiguration>().Key(Version).Update(
                         NIceDb::TUpdate<Schema::DomainConfiguration::Coordinators>(Coordinators),
                         NIceDb::TUpdate<Schema::DomainConfiguration::TimeCastBuckets>(TimeCastBuketsPerMediator));
             ConfigurationApplied = true;
         } else if (curVersion == Version && curCoordinators == Coordinators && curBuckets == TimeCastBuketsPerMediator) {
-            Respond = new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::ALREADY, Self->TabletID());
+            Respond = new NEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::ALREADY, Self->TabletID());
         } else {
-            Respond = new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::REJECT, Self->TabletID());
+            Respond = new NEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::REJECT, Self->TabletID());
         }
 
 

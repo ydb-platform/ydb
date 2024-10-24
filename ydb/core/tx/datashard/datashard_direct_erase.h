@@ -7,8 +7,8 @@ namespace NKikimr {
 namespace NDataShard {
 
 class TDirectTxErase : public IDirectTx {
-    TEvDataShard::TEvEraseRowsRequest::TPtr Ev;
-    THolder<TEvDataShard::TEvEraseRowsResponse> Result;
+    NEvDataShard::TEvEraseRowsRequest::TPtr Ev;
+    THolder<NEvDataShard::TEvEraseRowsResponse> Result;
     THolder<IDataShardChangeCollector> ChangeCollector;
 
     enum class EStatus {
@@ -68,7 +68,7 @@ class TDirectTxErase : public IDirectTx {
         NKikimrTxDataShard::TEvEraseRowsResponse::EStatus& status, TString& error);
 
 public:
-    explicit TDirectTxErase(TEvDataShard::TEvEraseRowsRequest::TPtr& ev);
+    explicit TDirectTxErase(NEvDataShard::TEvEraseRowsRequest::TPtr& ev);
 
     static bool CheckRequest(TDataShard* self, const NKikimrTxDataShard::TEvEraseRowsRequest& request,
         NKikimrTxDataShard::TEvEraseRowsResponse::EStatus& status, TString& error);

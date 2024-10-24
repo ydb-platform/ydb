@@ -5,9 +5,9 @@ namespace NKikimr {
 namespace NHive {
 
 class TTxCutTabletHistory : public TTransactionBase<THive> {
-    TEvHive::TEvCutTabletHistory::TPtr Event;
+    NEvHive::TEvCutTabletHistory::TPtr Event;
 public:
-    TTxCutTabletHistory(TEvHive::TEvCutTabletHistory::TPtr& ev, THive* hive)
+    TTxCutTabletHistory(NEvHive::TEvCutTabletHistory::TPtr& ev, THive* hive)
         : TBase(hive)
         , Event(ev)
     {}
@@ -15,7 +15,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_CUT_TABLET_HISTORY; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        TEvHive::TEvCutTabletHistory* msg = Event->Get();
+        NEvHive::TEvCutTabletHistory* msg = Event->Get();
         auto tabletId = msg->Record.GetTabletID();
         BLOG_D("THive::TTxCutTabletHistory::Execute(" << tabletId << ")");
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
@@ -46,7 +46,7 @@ public:
     void Complete(const TActorContext&) override {}
 };
 
-ITransaction* THive::CreateCutTabletHistory(TEvHive::TEvCutTabletHistory::TPtr& ev) {
+ITransaction* THive::CreateCutTabletHistory(NEvHive::TEvCutTabletHistory::TPtr& ev) {
     return new TTxCutTabletHistory(ev, this);
 }
 

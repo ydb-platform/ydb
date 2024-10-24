@@ -119,7 +119,7 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
                 ", partition# " << partitionRequest.PartitionIndex <<
                 ", offset# " << partitionRequest.CommittedOffset);
 
-            TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+            TAutoPtr<NEvPersQueue::TEvRequest> req(new NEvPersQueue::TEvRequest);
             req->Record.Swap(&request);
 
             NTabletPipe::SendData(ctx, TabletIdToPipe[tabletId], req.Release());
@@ -127,7 +127,7 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
     }
 }
 
-void TKafkaOffsetCommitActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+void TKafkaOffsetCommitActor::Handle(NEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& partitionResult = ev->Get()->Record.GetPartitionResponse();
     auto requestInfo = CookieToRequestInfo.find(partitionResult.GetCookie());
     Y_ABORT_UNLESS(requestInfo != CookieToRequestInfo.end());

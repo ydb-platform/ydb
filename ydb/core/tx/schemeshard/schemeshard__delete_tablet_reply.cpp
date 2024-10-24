@@ -9,9 +9,9 @@ namespace NSchemeShard {
 using namespace NTabletFlatExecutor;
 
 struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
-    TEvHive::TEvDeleteTabletReply::TPtr Ev;
+    NEvHive::TEvDeleteTabletReply::TPtr Ev;
 
-    TTxDeleteTabletReply(TSelf* self, TEvHive::TEvDeleteTabletReply::TPtr& ev)
+    TTxDeleteTabletReply(TSelf* self, NEvHive::TEvDeleteTabletReply::TPtr& ev)
         : TRwTxBase(self)
         , Ev(ev)
         , ShardIdx(self->MakeLocalId(TLocalShardIdx(Ev->Get()->Record.GetTxId_Deprecated()))) // We use TxId field as a cookie where we store shardIdx
@@ -155,7 +155,7 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             auto itSubscribers = Self->ShardDeletionSubscribers.find(ShardIdx);
             if (itSubscribers != Self->ShardDeletionSubscribers.end()) {
                 for (const auto& subscriber : itSubscribers->second) {
-                    ctx.Send(subscriber, new TEvPrivate::TEvNotifyShardDeleted(ShardIdx));
+                    ctx.Send(subscriber, new NEvPrivate::TEvNotifyShardDeleted(ShardIdx));
                 }
                 Self->ShardDeletionSubscribers.erase(itSubscribers);
             }
@@ -190,11 +190,11 @@ private:
     TTabletId ForwardToHiveId = {};
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxDeleteTabletReply(TEvHive::TEvDeleteTabletReply::TPtr& ev) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxDeleteTabletReply(NEvHive::TEvDeleteTabletReply::TPtr& ev) {
     return new TTxDeleteTabletReply(this, ev);
 }
 
-void TSchemeShard::Handle(TEvPrivate::TEvSubscribeToShardDeletion::TPtr& ev, const TActorContext& ctx) {
+void TSchemeShard::Handle(NEvPrivate::TEvSubscribeToShardDeletion::TPtr& ev, const TActorContext& ctx) {
     auto shardIdx = ev->Get()->ShardIdx;
     if (ShardInfos.contains(shardIdx)) {
         ShardDeletionSubscribers[shardIdx].push_back(ev->Sender);
@@ -202,7 +202,7 @@ void TSchemeShard::Handle(TEvPrivate::TEvSubscribeToShardDeletion::TPtr& ev, con
     }
 
     // This is for tests, so it's kinda ok to reply from handler
-    ctx.Send(ev->Sender, new TEvPrivate::TEvNotifyShardDeleted(shardIdx));
+    ctx.Send(ev->Sender, new NEvPrivate::TEvNotifyShardDeleted(shardIdx));
 }
 
 }}

@@ -231,7 +231,7 @@ public:
         }
     }
 
-    std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui32 firstUnprocessedQuery, 
+    std::vector<THolder<NEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui32 firstUnprocessedQuery,
         TMaybe<TOwnedCellVec> lastProcessedKey, ui64& newReadId) final {
 
         auto it = PendingKeysByReadId.find(prevReadId);
@@ -264,23 +264,23 @@ public:
 
         PendingKeysByReadId.erase(it);
 
-        std::vector<THolder<TEvDataShard::TEvRead>> requests;
+        std::vector<THolder<NEvDataShard::TEvRead>> requests;
         requests.reserve(unprocessedPoints.size() + unprocessedRanges.size());
 
         if (!unprocessedPoints.empty()) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
+            THolder<NEvDataShard::TEvRead> request(new NEvDataShard::TEvRead());
             FillReadRequest(++newReadId, request, unprocessedPoints);
             requests.emplace_back(std::move(request));
             PendingKeysByReadId.insert({newReadId, std::move(unprocessedPoints)});
         }
 
         if (!unprocessedRanges.empty()) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
+            THolder<NEvDataShard::TEvRead> request(new NEvDataShard::TEvRead());
             FillReadRequest(++newReadId, request, unprocessedRanges);
             requests.emplace_back(std::move(request));
             PendingKeysByReadId.insert({newReadId, std::move(unprocessedRanges)});
         }
-        
+
         return requests;
     }
 
@@ -304,18 +304,18 @@ public:
             }
         }
 
-        std::vector<std::pair<ui64, THolder<TEvDataShard::TEvRead>>> readRequests;
+        std::vector<std::pair<ui64, THolder<NEvDataShard::TEvRead>>> readRequests;
         readRequests.reserve(rangesPerShard.size() + pointsPerShard.size());
 
         for (auto& [shardId, points] : pointsPerShard) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
+            THolder<NEvDataShard::TEvRead> request(new NEvDataShard::TEvRead());
             FillReadRequest(++readId, request, points);
             readRequests.emplace_back(shardId, std::move(request));
             PendingKeysByReadId.insert({readId, std::move(points)});
         }
 
         for (auto& [shardId, ranges] : rangesPerShard) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
+            THolder<NEvDataShard::TEvRead> request(new NEvDataShard::TEvRead());
             FillReadRequest(++readId, request, ranges);
             readRequests.emplace_back(shardId, std::move(request));
             PendingKeysByReadId.insert({readId, std::move(ranges)});
@@ -420,7 +420,7 @@ public:
     }
 
 private:
-    void FillReadRequest(ui64 readId, THolder<TEvDataShard::TEvRead>& request, const std::vector<TOwnedTableRange>& ranges) {
+    void FillReadRequest(ui64 readId, THolder<NEvDataShard::TEvRead>& request, const std::vector<TOwnedTableRange>& ranges) {
         auto& record = request->Record;
 
         record.SetReadId(readId);
@@ -495,7 +495,7 @@ public:
         UnprocessedRows.emplace_back(std::make_pair(TOwnedCellVec(joinKeyCells), std::move(inputRow.GetElement(1))));
     }
 
-    std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui32 firstUnprocessedQuery, 
+    std::vector<THolder<NEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui32 firstUnprocessedQuery,
         TMaybe<TOwnedCellVec> lastProcessedKey, ui64& newReadId) final {
 
         auto readIt = PendingKeysByReadId.find(prevReadId);
@@ -532,10 +532,10 @@ public:
 
         PendingKeysByReadId.erase(readIt);
 
-        std::vector<THolder<TEvDataShard::TEvRead>> readRequests;
+        std::vector<THolder<NEvDataShard::TEvRead>> readRequests;
 
         if (!unprocessedPoints.empty()) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
+            THolder<NEvDataShard::TEvRead> request(new NEvDataShard::TEvRead());
             FillReadRequest(++newReadId, request, unprocessedPoints);
             readRequests.emplace_back(std::move(request));
 
@@ -549,7 +549,7 @@ public:
         }
 
         if (!unprocessedRanges.empty()) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
+            THolder<NEvDataShard::TEvRead> request(new NEvDataShard::TEvRead());
             FillReadRequest(++newReadId, request, unprocessedRanges);
             readRequests.emplace_back(std::move(request));
 
@@ -633,11 +633,11 @@ public:
             PendingLeftRowsByKey.insert(std::make_pair(std::move(joinKey), TLeftRowInfo{std::move(leftData)}));
         }
 
-        std::vector<std::pair<ui64, THolder<TEvDataShard::TEvRead>>> requests;
+        std::vector<std::pair<ui64, THolder<NEvDataShard::TEvRead>>> requests;
         requests.reserve(rangesPerShard.size() + pointsPerShard.size());
 
         for (auto& [shardId, points] : pointsPerShard) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
+            THolder<NEvDataShard::TEvRead> request(new NEvDataShard::TEvRead());
             FillReadRequest(++readId, request, points);
             requests.emplace_back(shardId, std::move(request));
 
@@ -651,7 +651,7 @@ public:
         }
 
         for (auto& [shardId, ranges] : rangesPerShard) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
+            THolder<NEvDataShard::TEvRead> request(new NEvDataShard::TEvRead());
             FillReadRequest(++readId, request, ranges);
             requests.emplace_back(shardId, std::move(request));
 
@@ -820,7 +820,7 @@ private:
         bool RightRowExist = false;
     };
 
-    void FillReadRequest(ui64 readId, THolder<TEvDataShard::TEvRead>& request, const std::vector<TOwnedTableRange>& ranges) {
+    void FillReadRequest(ui64 readId, THolder<NEvDataShard::TEvRead>& request, const std::vector<TOwnedTableRange>& ranges) {
         auto& record = request->Record;
 
         record.SetReadId(readId);

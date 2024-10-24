@@ -15,7 +15,7 @@ namespace NKikimr::NBlobDepot {
         std::shared_ptr<TToken> ActorToken = std::make_shared<TToken>();
         std::vector<TEvBlobStorage::TEvAssimilateResult::TBlob> DecommitBlobs;
         THashSet<TLogoBlobID> ResolutionErrors;
-        TEvBlobDepot::TEvResolve::TPtr Ev;
+        NEvBlobDepot::TEvResolve::TPtr Ev;
 
         ui32 TxInFlight = 0;
 
@@ -34,7 +34,7 @@ namespace NKikimr::NBlobDepot {
         bool Finished = false;
 
     public:
-        TResolveDecommitActor(TBlobDepot *self, TEvBlobDepot::TEvResolve::TPtr ev)
+        TResolveDecommitActor(TBlobDepot *self, NEvBlobDepot::TEvResolve::TPtr ev)
             : Self(self)
             , Token(self->Token)
             , Ev(ev)
@@ -356,7 +356,7 @@ namespace NKikimr::NBlobDepot {
 
             STLOG(prio, BLOB_DEPOT, BDT89, "request failed", (Id, Self->GetLogId()), (Sender, Ev->Sender),
                 (Cookie, Ev->Cookie), (ErrorReason, errorReason));
-            auto [response, record] = TEvBlobDepot::MakeResponseFor(*Ev, NKikimrProto::ERROR, std::move(errorReason));
+            auto [response, record] = NEvBlobDepot::MakeResponseFor(*Ev, NKikimrProto::ERROR, std::move(errorReason));
             TActivationContext::Send(response.release());
             PassAway();
         }
@@ -380,7 +380,7 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
-    IActor *TBlobDepot::TData::CreateResolveDecommitActor(TEvBlobDepot::TEvResolve::TPtr ev) {
+    IActor *TBlobDepot::TData::CreateResolveDecommitActor(NEvBlobDepot::TEvResolve::TPtr ev) {
         return new TResolveDecommitActor(Self, ev);
     }
 

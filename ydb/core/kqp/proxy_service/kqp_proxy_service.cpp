@@ -121,7 +121,7 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NSchemeShard::TEvSchemeShard::TEvOwnerActorAck, HandleNoop)
+            hFunc(NSchemeShard::NEvSchemeShard::TEvOwnerActorAck, HandleNoop)
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -240,7 +240,7 @@ public:
         ui32 logConfigKind = (ui32)NKikimrConsole::TConfigItem::LogConfigItem;
         ui32 featureFlagsKind = (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-            new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
+            new NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
                 {tableServiceConfigKind, logConfigKind, featureFlagsKind}),
             IEventHandle::FlagTrackDelivery);
 
@@ -500,11 +500,11 @@ public:
         return TActor::PassAway();
     }
 
-    void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
+    void Handle(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
         KQP_PROXY_LOG_D("Subscribed for config changes.");
     }
 
-    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    void Handle(NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto &event = ev->Get()->Record;
 
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
@@ -516,18 +516,18 @@ public:
         FeatureFlags.Swap(event.MutableConfig()->MutableFeatureFlags());
         ResourcePoolsCache.UpdateFeatureFlags(FeatureFlags, ActorContext());
 
-        auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
+        auto responseEv = MakeHolder<NConsole::NEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
         PublishResourceUsage();
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         switch (ev->Get()->SourceType) {
-            case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
+            case NConsole::NEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
                 KQP_PROXY_LOG_C("Failed to deliver subscription request to config dispatcher.");
                 break;
 
-            case NConsole::TEvConsole::EvConfigNotificationResponse:
+            case NConsole::NEvConsole::EvConfigNotificationResponse:
                 KQP_PROXY_LOG_E("Failed to deliver config notification response.");
                 break;
 
@@ -1344,8 +1344,8 @@ public:
             hFunc(TEvPrivate::TEvCollectPeerProxyData, Handle);
             hFunc(TEvPrivate::TEvReadyToPublishResources, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
-            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
-            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+            hFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
+            hFunc(NConsole::NEvConsole::TEvConfigNotificationRequest, Handle);
             hFunc(TEvKqp::TEvQueryRequest, Handle);
             hFunc(TEvKqp::TEvScriptRequest, Handle);
             hFunc(TEvKqp::TEvCloseSessionRequest, Handle);

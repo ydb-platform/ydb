@@ -29,7 +29,7 @@ private:
         return TConclusionStatus::Success();
     }
 protected:
-    virtual std::unique_ptr<TEvDataShard::TEvKqpScan> DoBuildRequestInitiator(const TCursor& cursor) const override;
+    virtual std::unique_ptr<NEvDataShard::TEvKqpScan> DoBuildRequestInitiator(const TCursor& cursor) const override;
 
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrColumnShardExportProto::TSelectorContainer& proto) override {
         auto result = Snapshot.DeserializeFromProto(proto.GetBackup().GetSnapshot());

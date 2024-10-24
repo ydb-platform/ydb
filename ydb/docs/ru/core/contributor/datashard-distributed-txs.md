@@ -49,7 +49,7 @@
 
 Распределённые транзакции в таблетке DataShard начинаются с фазы подготовки, где транзакция предлагается на выполнение одним из следующих сообщений:
 
-* [TEvDataShard::TEvProposeTransaction](https://github.com/ydb-platform/ydb/blob/c97ef92f814152462ae0374eafa093bca584d7b5/ydb/core/tx/datashard/datashard.h#L435) точка входа для транзакций разных типов
+* [NEvDataShard::TEvProposeTransaction](https://github.com/ydb-platform/ydb/blob/c97ef92f814152462ae0374eafa093bca584d7b5/ydb/core/tx/datashard/datashard.h#L435) точка входа для транзакций разных типов
 * [TDataEvents::TEvWrite](https://github.com/ydb-platform/ydb/blob/c97ef92f814152462ae0374eafa093bca584d7b5/ydb/core/tx/data_events/events.h#L38) специальная точка входа для операций записи данных и коммитов
 
 Если в сообщении не указан режим работы `Immediate` (немедленного выполнения), то оно запускает фазу подготовки распределённой транзакции. Тело транзакции валидируется на возможность выполнения (например, [CheckDataTxUnit](https://github.com/ydb-platform/ydb/blob/main/ydb/core/tx/datashard/check_data_tx_unit.cpp) в случае обычных транзакций с подпрограммами), при этом выбирается допустимый диапазон планирования:

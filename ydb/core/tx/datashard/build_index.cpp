@@ -235,7 +235,7 @@ public:
             Uploader = {};
         }
 
-        TAutoPtr<TEvDataShard::TEvBuildIndexProgressResponse> progress = new TEvDataShard::TEvBuildIndexProgressResponse;
+        TAutoPtr<NEvDataShard::TEvBuildIndexProgressResponse> progress = new NEvDataShard::TEvBuildIndexProgressResponse;
         progress->Record.SetBuildIndexId(BuildIndexId);
         progress->Record.SetTabletId(DataShardId);
         progress->Record.SetRequestSeqNoGeneration(SeqNo.Generation);
@@ -337,7 +337,7 @@ private:
             LastUploadedKey = WriteBuf.ExtractLastKey();
 
             //send progress
-            TAutoPtr<TEvDataShard::TEvBuildIndexProgressResponse> progress = new TEvDataShard::TEvBuildIndexProgressResponse;
+            TAutoPtr<NEvDataShard::TEvBuildIndexProgressResponse> progress = new NEvDataShard::TEvBuildIndexProgressResponse;
             progress->Record.SetBuildIndexId(BuildIndexId);
             progress->Record.SetTabletId(DataShardId);
             progress->Record.SetRequestSeqNoGeneration(SeqNo.Generation);
@@ -492,7 +492,7 @@ TAutoPtr<NTable::IScan> CreateBuildIndexScan(
 
 class TDataShard::TTxHandleSafeBuildIndexScan: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxHandleSafeBuildIndexScan(TDataShard* self, TEvDataShard::TEvBuildIndexCreateRequest::TPtr&& ev)
+    TTxHandleSafeBuildIndexScan(TDataShard* self, NEvDataShard::TEvBuildIndexCreateRequest::TPtr&& ev)
         : TTransactionBase(self)
         , Ev(std::move(ev)) {
     }
@@ -507,14 +507,14 @@ public:
     }
 
 private:
-    TEvDataShard::TEvBuildIndexCreateRequest::TPtr Ev;
+    NEvDataShard::TEvBuildIndexCreateRequest::TPtr Ev;
 };
 
-void TDataShard::Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext&) {
+void TDataShard::Handle(NEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext&) {
     Execute(new TTxHandleSafeBuildIndexScan(this, std::move(ev)));
 }
 
-void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::HandleSafe(NEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     TRowVersion rowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
 
@@ -527,7 +527,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
 
     TScanRecord::TSeqNo seqNo = {record.GetSeqNoGeneration(), record.GetSeqNoRound()};
     auto badRequest = [&](const TString& error) {
-        auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
+        auto response = MakeHolder<NEvDataShard::TEvBuildIndexProgressResponse>();
         response->Record.SetBuildIndexId(record.GetBuildIndexId());
         response->Record.SetTabletId(TabletID());
         response->Record.SetRequestSeqNoGeneration(seqNo.Generation);

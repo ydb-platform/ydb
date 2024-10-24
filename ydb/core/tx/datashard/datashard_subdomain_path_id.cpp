@@ -55,7 +55,7 @@ private:
     const ui64 LocalPathId;
 };
 
-void TDataShard::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NSchemeShard::NEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
 
     if (FindSubDomainPathIdActor == ev->Sender) {

@@ -417,7 +417,7 @@ Y_UNIT_TEST(PartitionFirstClass) {
         }
         {
             TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvPersQueue::EvPeriodicTopicStats);
+            options.FinalEvents.emplace_back(NEvPersQueue::EvPeriodicTopicStats);
             auto processedCountersEvent = tc.Runtime->DispatchEvents(options);
             UNIT_ASSERT_VALUES_EQUAL(processedCountersEvent, true);
         }

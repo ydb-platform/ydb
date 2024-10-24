@@ -29,13 +29,13 @@ class TConfigsManager::TTxReplaceYamlConfig : public TTransactionBase<TConfigsMa
 
 public:
     TTxReplaceYamlConfig(TConfigsManager *self,
-                         TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev)
+                         NEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev)
         : TTxReplaceYamlConfig(self, ev, false)
     {
     }
 
     TTxReplaceYamlConfig(TConfigsManager *self,
-                         TEvConsole::TEvSetYamlConfigRequest::TPtr &ev)
+                         NEvConsole::TEvSetYamlConfigRequest::TPtr &ev)
         : TTxReplaceYamlConfig(self, ev, true)
     {
     }
@@ -155,21 +155,21 @@ public:
 
             if (hasForbiddenUnknown) {
                 Error = true;
-                auto ev = MakeHolder<TEvConsole::TEvGenericError>();
+                auto ev = MakeHolder<NEvConsole::TEvGenericError>();
                 ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
                 ErrorReason = "Unknown keys in config.";
                 fillResponse(ev, NYql::TSeverityIds::S_ERROR);
             } else if (!Force) {
-                auto ev = MakeHolder<TEvConsole::TEvReplaceYamlConfigResponse>();
+                auto ev = MakeHolder<NEvConsole::TEvReplaceYamlConfigResponse>();
                 fillResponse(ev, NYql::TSeverityIds::S_WARNING);
             } else {
-                auto ev = MakeHolder<TEvConsole::TEvSetYamlConfigResponse>();
+                auto ev = MakeHolder<NEvConsole::TEvSetYamlConfigResponse>();
                 fillResponse(ev, NYql::TSeverityIds::S_WARNING);
             }
         } catch (const yexception& ex) {
             Error = true;
 
-            auto ev = MakeHolder<TEvConsole::TEvGenericError>();
+            auto ev = MakeHolder<NEvConsole::TEvGenericError>();
             ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
             auto *issue = ev->Record.AddIssues();
             issue->set_severity(NYql::TSeverityIds::S_ERROR);
@@ -235,12 +235,12 @@ private:
     TString UpdatedConfig;
 };
 
-ITransaction *TConfigsManager::CreateTxReplaceYamlConfig(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev)
+ITransaction *TConfigsManager::CreateTxReplaceYamlConfig(NEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev)
 {
     return new TTxReplaceYamlConfig(this, ev);
 }
 
-ITransaction *TConfigsManager::CreateTxSetYamlConfig(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev)
+ITransaction *TConfigsManager::CreateTxSetYamlConfig(NEvConsole::TEvSetYamlConfigRequest::TPtr &ev)
 {
     return new TTxReplaceYamlConfig(this, ev);
 }

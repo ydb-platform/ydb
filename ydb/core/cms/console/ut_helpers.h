@@ -126,14 +126,14 @@ TVector<ui64> CheckConfigure(TTenantTestRuntime &runtime,
                              bool fillAffected,
                              Ts... args)
 {
-    auto *event = new TEvConsole::TEvConfigureRequest;
+    auto *event = new NEvConsole::TEvConfigureRequest;
     event->Record.SetDryRun(dryRun);
     event->Record.SetFillAffectedConfigs(fillAffected);
     CollectActions(event->Record, args...);
 
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigureResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigureResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), code);
     return {reply->Record.GetAddedItemIds().begin(), reply->Record.GetAddedItemIds().end()};
 }
@@ -149,7 +149,7 @@ TVector<ui64> CheckConfigure(TTenantTestRuntime &runtime,
 template <typename ...Ts>
 void SendConfigure(TTenantTestRuntime &runtime, Ts... args)
 {
-    auto *event = new TEvConsole::TEvConfigureRequest;
+    auto *event = new NEvConsole::TEvConfigureRequest;
     CollectActions(event->Record, args...);
     runtime.SendToConsole(event);
 }
@@ -193,7 +193,7 @@ void CheckListConfigSubscriptions(TTenantTestRuntime &runtime, Ydb::StatusIds::S
     THashMap<ui64, TSubscription> subscriptions;
     CollectSubscriptions(subscriptions, args...);
 
-    auto *event = new TEvConsole::TEvListConfigSubscriptionsRequest;
+    auto *event = new NEvConsole::TEvListConfigSubscriptionsRequest;
     if (tabletId)
         event->Record.MutableSubscriber()->SetTabletId(tabletId);
     else if (serviceId)
@@ -201,7 +201,7 @@ void CheckListConfigSubscriptions(TTenantTestRuntime &runtime, Ydb::StatusIds::S
 
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvListConfigSubscriptionsResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvListConfigSubscriptionsResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), code);
 
     for (auto &rec : reply->Record.GetSubscriptions()) {
@@ -218,12 +218,12 @@ inline void WaitForTenantStatus(TTenantTestRuntime &runtime,
                                 Ydb::StatusIds::StatusCode code)
 {
    while (true) {
-       auto *event = new TEvConsole::TEvGetTenantStatusRequest;
+       auto *event = new NEvConsole::TEvGetTenantStatusRequest;
        event->Record.MutableRequest()->set_path(path);
 
        TAutoPtr<IEventHandle> handle;
        runtime.SendToConsole(event);
-       auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetTenantStatusResponse>(handle);
+       auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvGetTenantStatusResponse>(handle);
        auto &operation = reply->Record.GetResponse().operation();
        if (operation.status() == code)
            return;
@@ -298,11 +298,11 @@ inline void CheckReplaceConfig(TTenantTestRuntime &runtime,
                              TString yamlConfig)
 {
         TAutoPtr<IEventHandle> handle;
-        auto *event = new TEvConsole::TEvReplaceYamlConfigRequest;
+        auto *event = new NEvConsole::TEvReplaceYamlConfigRequest;
         event->Record.MutableRequest()->set_config(yamlConfig);
         runtime.SendToConsole(event);
 
-        runtime.GrabEdgeEventRethrow<TEvConsole::TEvReplaceYamlConfigResponse>(handle);
+        runtime.GrabEdgeEventRethrow<NEvConsole::TEvReplaceYamlConfigResponse>(handle);
         Y_UNUSED(code);
 }
 
@@ -312,12 +312,12 @@ inline void CheckDropConfig(TTenantTestRuntime &runtime,
                             ui64 version)
 {
         TAutoPtr<IEventHandle> handle;
-        auto *event = new TEvConsole::TEvDropConfigRequest;
+        auto *event = new NEvConsole::TEvDropConfigRequest;
         event->Record.MutableRequest()->mutable_identity()->set_cluster(clusterName);
         event->Record.MutableRequest()->mutable_identity()->set_version(version);
         runtime.SendToConsole(event);
 
-        runtime.GrabEdgeEventRethrow<TEvConsole::TEvDropConfigResponse>(handle);
+        runtime.GrabEdgeEventRethrow<NEvConsole::TEvDropConfigResponse>(handle);
         Y_UNUSED(code);
 }
 
@@ -331,11 +331,11 @@ inline void CheckAddVolatileConfig(TTenantTestRuntime &runtime,
         TString config = TString("metadata:\n  cluster: \"") + clusterName + "\"\n  version: " + ToString(version) + "\n  id: " + ToString(id) + "\nselector_config:\n" + volatileYamlConfig;
 
         TAutoPtr<IEventHandle> handle;
-        auto *event = new TEvConsole::TEvAddVolatileConfigRequest;
+        auto *event = new NEvConsole::TEvAddVolatileConfigRequest;
         event->Record.MutableRequest()->set_config(config);
         runtime.SendToConsole(event);
 
-        runtime.GrabEdgeEventRethrow<TEvConsole::TEvAddVolatileConfigResponse>(handle);
+        runtime.GrabEdgeEventRethrow<NEvConsole::TEvAddVolatileConfigResponse>(handle);
         Y_UNUSED(code);
 }
 
@@ -346,13 +346,13 @@ inline void CheckRemoveVolatileConfig(TTenantTestRuntime &runtime,
                                       ui64 id)
 {
         TAutoPtr<IEventHandle> handle;
-        auto *event = new TEvConsole::TEvRemoveVolatileConfigRequest;
+        auto *event = new NEvConsole::TEvRemoveVolatileConfigRequest;
         event->Record.MutableRequest()->mutable_identity()->set_cluster(clusterName);
         event->Record.MutableRequest()->mutable_identity()->set_version(version);
         event->Record.MutableRequest()->mutable_ids()->add_ids(id);
         runtime.SendToConsole(event);
 
-        runtime.GrabEdgeEventRethrow<TEvConsole::TEvRemoveVolatileConfigResponse>(handle);
+        runtime.GrabEdgeEventRethrow<NEvConsole::TEvRemoveVolatileConfigResponse>(handle);
         Y_UNUSED(code);
 }
 

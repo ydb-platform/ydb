@@ -13,12 +13,12 @@ namespace NKqp {
 
 class TKqpStreamLookupWorker {
 public:
-    using TReadList = std::vector<std::pair<ui64, THolder<TEvDataShard::TEvRead>>>;
+    using TReadList = std::vector<std::pair<ui64, THolder<NEvDataShard::TEvRead>>>;
     using TPartitionInfo = std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>;
 
     struct TShardReadResult {
         const ui64 ShardId;
-        THolder<TEventHandle<TEvDataShard::TEvReadResult>> ReadResult;
+        THolder<TEventHandle<NEvDataShard::TEvReadResult>> ReadResult;
         size_t UnprocessedResultRow = 0;
     };
 
@@ -54,7 +54,7 @@ public:
     virtual std::vector<NScheme::TTypeInfo> GetKeyColumnTypes() const;
 
     virtual void AddInputRow(NUdf::TUnboxedValue inputRow) = 0;
-    virtual std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui32 firstUnprocessedQuery, 
+    virtual std::vector<THolder<NEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui32 firstUnprocessedQuery,
         TMaybe<TOwnedCellVec> lastProcessedKey, ui64& newReadId) = 0;
     virtual TReadList BuildRequests(const TPartitionInfo& partitioning, ui64& readId) = 0;
     virtual void AddResult(TShardReadResult result) = 0;

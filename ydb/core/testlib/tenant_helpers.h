@@ -268,12 +268,12 @@ inline void CheckTenantStatus(TTenantTestRuntime &runtime, const TString &path, 
 
     bool ok = false;
     while (!ok) {
-        auto *event = new NConsole::TEvConsole::TEvGetTenantStatusRequest;
+        auto *event = new NConsole::NEvConsole::TEvGetTenantStatusRequest;
         event->Record.MutableRequest()->set_path(path);
 
         TAutoPtr<IEventHandle> handle;
         runtime.SendToConsole(event);
-        auto reply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvGetTenantStatusResponse>(handle);
+        auto reply = runtime.GrabEdgeEventRethrow<NConsole::NEvConsole::TEvGetTenantStatusResponse>(handle);
         auto &operation = reply->Record.GetResponse().operation();
         UNIT_ASSERT_VALUES_EQUAL(operation.status(), code);
         if (code != Ydb::StatusIds::SUCCESS)
@@ -319,7 +319,7 @@ inline void CheckCreateTenant(TTenantTestRuntime &runtime,
 {
     using EType = TCreateTenantRequest::EType;
 
-    auto *event = new NConsole::TEvConsole::TEvCreateTenantRequest;
+    auto *event = new NConsole::NEvConsole::TEvCreateTenantRequest;
     event->Record.MutableRequest()->set_path(request.Path);
 
     auto *resources = request.Type == EType::Shared
@@ -353,29 +353,29 @@ inline void CheckCreateTenant(TTenantTestRuntime &runtime,
     if (request.PlanResolution) {
         event->Record.MutableRequest()->mutable_options()->set_plan_resolution(request.PlanResolution);
     }
-    
+
     event->Record.MutableRequest()->mutable_database_quotas()->CopyFrom(request.DatabaseQuotas);
 
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
-    auto reply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvCreateTenantResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NConsole::NEvConsole::TEvCreateTenantResponse>(handle);
     auto &operation = reply->Record.GetResponse().operation();
 
     if (operation.ready()) {
         UNIT_ASSERT_VALUES_EQUAL_C(operation.status(), code, operation.DebugString());
     } else {
         TString id = operation.id();
-        auto *request = new NConsole::TEvConsole::TEvNotifyOperationCompletionRequest;
+        auto *request = new NConsole::NEvConsole::TEvNotifyOperationCompletionRequest;
         request->Record.MutableRequest()->set_id(id);
 
         runtime.SendToConsole(request);
         TAutoPtr<IEventHandle> handle;
-        auto replies = runtime.GrabEdgeEventsRethrow<NConsole::TEvConsole::TEvNotifyOperationCompletionResponse,
-                                                     NConsole::TEvConsole::TEvOperationCompletionNotification>(handle);
+        auto replies = runtime.GrabEdgeEventsRethrow<NConsole::NEvConsole::TEvNotifyOperationCompletionResponse,
+                                                     NConsole::NEvConsole::TEvOperationCompletionNotification>(handle);
         auto *resp = std::get<1>(replies);
         if (!resp) {
             UNIT_ASSERT(!std::get<0>(replies)->Record.GetResponse().operation().ready());
-            resp = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvOperationCompletionNotification>(handle);
+            resp = runtime.GrabEdgeEventRethrow<NConsole::NEvConsole::TEvOperationCompletionNotification>(handle);
         }
 
         UNIT_ASSERT(resp->Record.GetResponse().operation().ready());
@@ -446,14 +446,14 @@ inline void CheckRemoveTenant(TTenantTestRuntime &runtime,
                               const TString &token,
                               Ydb::StatusIds::StatusCode code)
 {
-    auto *event = new NConsole::TEvConsole::TEvRemoveTenantRequest;
+    auto *event = new NConsole::NEvConsole::TEvRemoveTenantRequest;
     event->Record.MutableRequest()->set_path(path);
     if (token)
         event->Record.SetUserToken(token);
 
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
-    auto reply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvRemoveTenantResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NConsole::NEvConsole::TEvRemoveTenantResponse>(handle);
     auto &operation = reply->Record.GetResponse().operation();
 
     if (operation.ready()) {
@@ -461,10 +461,10 @@ inline void CheckRemoveTenant(TTenantTestRuntime &runtime,
     } else {
         TString id = operation.id();
         for (;;) {
-            auto check = new NConsole::TEvConsole::TEvGetOperationRequest;
+            auto check = new NConsole::NEvConsole::TEvGetOperationRequest;
             check->Record.MutableRequest()->set_id(id);
             runtime.SendToConsole(check);
-            auto checkReply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvGetOperationResponse>(handle);
+            auto checkReply = runtime.GrabEdgeEventRethrow<NConsole::NEvConsole::TEvGetOperationResponse>(handle);
             auto &checkOperation = checkReply->Record.GetResponse().operation();
             if (checkOperation.ready()) {
                 UNIT_ASSERT_VALUES_EQUAL(checkOperation.status(), code);
@@ -489,11 +489,11 @@ inline void WaitTenantStatus(TTenantTestRuntime &runtime,
                              TVector<Ydb::Cms::GetDatabaseStatusResult::State> expected)
 {
     for (;;) {
-        auto *req = new NConsole::TEvConsole::TEvGetTenantStatusRequest;
+        auto *req = new NConsole::NEvConsole::TEvGetTenantStatusRequest;
         req->Record.MutableRequest()->set_path(path);
         runtime.SendToConsole(req);
 
-        auto ev = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvGetTenantStatusResponse>(runtime.Sender);
+        auto ev = runtime.GrabEdgeEventRethrow<NConsole::NEvConsole::TEvGetTenantStatusResponse>(runtime.Sender);
         auto &operation = ev->Get()->Record.GetResponse().operation();
         UNIT_ASSERT_C(operation.status() == Ydb::StatusIds::SUCCESS,
                 "Unexpected status " << operation.status() << " for tenant " << path);

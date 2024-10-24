@@ -17,7 +17,7 @@ public:
     }
 
     void Bootstrap() {
-        Send(ReplyTo, new TEvPrivate::TEvImportSchemeReady(ImportInfo->Id, ItemIdx, false, "Imports from S3 are disabled"));
+        Send(ReplyTo, new NEvPrivate::TEvImportSchemeReady(ImportInfo->Id, ItemIdx, false, "Imports from S3 are disabled"));
         PassAway();
     }
 

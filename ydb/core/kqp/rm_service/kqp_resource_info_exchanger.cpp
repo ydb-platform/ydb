@@ -123,7 +123,7 @@ public:
         ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;
 
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
+             new NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
              IEventHandle::FlagTrackDelivery);
 
         Become(&TKqpResourceInfoExchangerActor::WorkState);
@@ -369,11 +369,11 @@ private:
 
 private:
 
-    void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
+    void Handle(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
         LOG_D("Subscribed for config changes.");
     }
 
-    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    void Handle(NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto &event = ev->Get()->Record;
 
         NKikimrConfig::TTableServiceConfig tableServiceConfig;
@@ -401,17 +401,17 @@ private:
             ExchangerSettings.MaxDelayMs = TDuration::MilliSeconds(exchangerSettings.GetMaxDelayMs());
         }
 
-        auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
+        auto responseEv = MakeHolder<NConsole::NEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         switch (ev->Get()->SourceType) {
-            case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
+            case NConsole::NEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
                 LOG_C("Failed to deliver subscription request to config dispatcher.");
                 break;
 
-            case NConsole::TEvConsole::EvConfigNotificationResponse:
+            case NConsole::NEvConsole::EvConfigNotificationResponse:
                 LOG_E("Failed to deliver config notification response.");
                 break;
 
@@ -605,8 +605,8 @@ private:
     STATEFN(WorkState) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
-            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
-            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
+            hFunc(NConsole::NEvConsole::TEvConfigNotificationRequest, Handle);
+            hFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(TEvStateStorage::TEvBoardInfoUpdate, Handle);
             hFunc(TEvTenantPool::TEvTenantPoolStatus, Handle);

@@ -82,15 +82,15 @@ void InitFeatureFlagsConfigurator(TTenantTestRuntime& runtime) {
         MakeFeatureFlagsServiceID(),
         runtime.Register(CreateFeatureFlagsConfigurator()));
     TDispatchOptions options;
-    options.FinalEvents.emplace_back(TEvConfigsDispatcher::EvSetConfigSubscriptionResponse, 1);
+    options.FinalEvents.emplace_back(NEvConfigsDispatcher::EvSetConfigSubscriptionResponse, 1);
     runtime.DispatchEvents(options);
 }
 
 void WaitForUpdate(TTenantTestRuntime& runtime) {
     struct TIsConfigNotificationProcessed {
         bool operator()(IEventHandle& ev) {
-            if (ev.GetTypeRewrite() == NConsole::TEvConsole::EvConfigNotificationResponse) {
-                auto& rec = ev.Get<NConsole::TEvConsole::TEvConfigNotificationResponse>()->Record;
+            if (ev.GetTypeRewrite() == NConsole::NEvConsole::EvConfigNotificationResponse) {
+                auto& rec = ev.Get<NConsole::NEvConsole::TEvConfigNotificationResponse>()->Record;
                 if (rec.GetConfigId().ItemIdsSize() != 1 || rec.GetConfigId().GetItemIds(0).GetId())
                     return true;
             }
@@ -108,7 +108,7 @@ template <class ...Ts>
 void ConfigureAndWaitUpdate(
     TTenantTestRuntime& runtime, Ts&&... args)
 {
-    auto* event = new TEvConsole::TEvConfigureRequest;
+    auto* event = new NEvConsole::TEvConfigureRequest;
     CollectActions(event->Record, std::forward<Ts>(args)...);
 
     runtime.SendToConsole(event);

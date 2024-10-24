@@ -11,13 +11,13 @@ namespace NDataShard {
 
 class TDataShard::TTxSplit : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
-    TEvDataShard::TEvSplit::TPtr Ev;
+    NEvDataShard::TEvSplit::TPtr Ev;
     bool SplitAlreadyFinished;
 
     std::vector<std::unique_ptr<IEventHandle>> Replies;
 
 public:
-    TTxSplit(TDataShard* ds, TEvDataShard::TEvSplit::TPtr& ev)
+    TTxSplit(TDataShard* ds, NEvDataShard::TEvSplit::TPtr& ev)
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
         , Ev(ev)
         , SplitAlreadyFinished(false)
@@ -93,7 +93,7 @@ public:
             // Send the Ack
             for (const TActorId& ackTo : Self->SrcAckSplitTo) {
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack split to schemeshard " << Self->SrcSplitOpId);
-                ctx.Send(ackTo, new TEvDataShard::TEvSplitAck(Self->SrcSplitOpId, Self->TabletID()));
+                ctx.Send(ackTo, new NEvDataShard::TEvSplitAck(Self->SrcSplitOpId, Self->TabletID()));
             }
         } else {
             Self->CheckSplitCanStart(ctx);
@@ -438,12 +438,12 @@ NTabletFlatExecutor::ITransaction* TDataShard::CreateTxSplitSnapshotComplete(TIn
 
 class TDataShard::TTxSplitTransferSnapshotAck : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
-    TEvDataShard::TEvSplitTransferSnapshotAck::TPtr Ev;
+    NEvDataShard::TEvSplitTransferSnapshotAck::TPtr Ev;
     bool AllDstAcksReceived;
     ui64 ActivateTabletId;
 
 public:
-    TTxSplitTransferSnapshotAck(TDataShard* ds, TEvDataShard::TEvSplitTransferSnapshotAck::TPtr& ev)
+    TTxSplitTransferSnapshotAck(TDataShard* ds, NEvDataShard::TEvSplitTransferSnapshotAck::TPtr& ev)
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
         , Ev(ev)
         , AllDstAcksReceived(false)
@@ -483,7 +483,7 @@ public:
             for (const TActorId& ackTo : Self->SrcAckSplitTo) {
                 ui64 opId = Self->SrcSplitOpId;
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack split to schemeshard " << opId);
-                ctx.Send(ackTo, new TEvDataShard::TEvSplitAck(opId, Self->TabletID()));
+                ctx.Send(ackTo, new NEvDataShard::TEvSplitAck(opId, Self->TabletID()));
             }
         }
 
@@ -530,7 +530,7 @@ public:
         for (const auto& [ackTo, opIds] : Waiters) {
             for (const ui64 opId : opIds) {
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack split partitioning changed to schemeshard " << opId);
-                ctx.Send(ackTo, new TEvDataShard::TEvSplitPartitioningChangedAck(opId, Self->TabletID()));
+                ctx.Send(ackTo, new NEvDataShard::TEvSplitPartitioningChangedAck(opId, Self->TabletID()));
             }
         }
 
@@ -548,15 +548,15 @@ public:
     }
 };
 
-void TDataShard::Handle(TEvDataShard::TEvSplit::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvSplit::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxSplit(this, ev), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvSplitTransferSnapshotAck::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvSplitTransferSnapshotAck::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxSplitTransferSnapshotAck(this, ev), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvSplitPartitioningChanged::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvSplitPartitioningChanged::TPtr& ev, const TActorContext& ctx) {
     const auto opId = ev->Get()->Record.GetOperationCookie();
 
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Got TEvSplitPartitioningChanged"

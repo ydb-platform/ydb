@@ -293,7 +293,7 @@ public:
     void Die(const NActors::TActorContext& ctx) override {
         for (auto& pr : ShardUploadRetryStates) {
             if (pr.second.SentOverloadSeqNo) {
-                auto* msg = new TEvDataShard::TEvOverloadUnsubscribe(pr.second.SentOverloadSeqNo);
+                auto* msg = new NEvDataShard::TEvOverloadUnsubscribe(pr.second.SentOverloadSeqNo);
                 ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(msg, pr.first, false), 0, 0, Span.GetTraceId());
             }
         }
@@ -484,14 +484,14 @@ private:
                 errorMessage = Sprintf("Unknown column: %s", name.c_str());
                 return false;
             }
-            i32 pgTypeMod = -1;            
+            i32 pgTypeMod = -1;
             ui32 colId = *cp;
             auto& ci = *entry.Columns.FindPtr(colId);
 
             TString columnTypeName = NScheme::TypeName(ci.PType, ci.PTypeMod);
 
             const Ydb::Type& typeInProto = reqColumns[pos].second;
-            
+
             TString parseProtoError;
             NScheme::TTypeInfoMod inTypeInfoMod;
             if (!NScheme::TypeInfoFromProto(typeInProto, inTypeInfoMod, parseProtoError)){
@@ -1083,7 +1083,7 @@ private:
     void RetryShardRequest(ui64 shardId, TShardUploadRetryState* state, const TActorContext& ctx) {
         Y_ABORT_UNLESS(ShardRepliesLeft.contains(shardId));
 
-        auto ev = std::make_unique<TEvDataShard::TEvUploadRowsRequest>();
+        auto ev = std::make_unique<NEvDataShard::TEvUploadRowsRequest>();
         ev->Record = state->Headers;
         for (const auto& pr : state->Rows) {
             auto* row = ev->Record.AddRows();
@@ -1106,7 +1106,7 @@ private:
 
         // Group rows by shard id
         TVector<TShardUploadRetryState*> uploadRetryStates(keyRange->GetPartitions().size());
-        TVector<std::unique_ptr<TEvDataShard::TEvUploadRowsRequest>> shardRequests(keyRange->GetPartitions().size());
+        TVector<std::unique_ptr<NEvDataShard::TEvUploadRowsRequest>> shardRequests(keyRange->GetPartitions().size());
         for (const auto& keyValue : GetRows()) {
             // Find partition for the key
             auto it = std::lower_bound(keyRange->GetPartitions().begin(), keyRange->GetPartitions().end(), keyValue.first.GetCells(),
@@ -1126,9 +1126,9 @@ private:
                 retryState = uploadRetryStates[shardIdx] = &ShardUploadRetryStates[shardId];
             }
 
-            TEvDataShard::TEvUploadRowsRequest* ev = shardRequests[shardIdx].get();
+            NEvDataShard::TEvUploadRowsRequest* ev = shardRequests[shardIdx].get();
             if (!ev) {
-                shardRequests[shardIdx].reset(new TEvDataShard::TEvUploadRowsRequest());
+                shardRequests[shardIdx].reset(new NEvDataShard::TEvUploadRowsRequest());
                 ev = shardRequests[shardIdx].get();
                 ev->Record.SetCancelDeadlineMs(Deadline().MilliSeconds());
 
@@ -1212,8 +1212,8 @@ private:
 
     STFUNC(StateWaitResults) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvDataShard::TEvUploadRowsResponse, Handle);
-            HFunc(TEvDataShard::TEvOverloadReady, Handle);
+            HFunc(NEvDataShard::TEvUploadRowsResponse, Handle);
+            HFunc(NEvDataShard::TEvOverloadReady, Handle);
             HFunc(TEvents::TEvUndelivered, Handle);
             HFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
@@ -1224,7 +1224,7 @@ private:
         }
     }
 
-    void Handle(TEvDataShard::TEvUploadRowsResponse::TPtr& ev, const NActors::TActorContext& ctx) {
+    void Handle(NEvDataShard::TEvUploadRowsResponse::TPtr& ev, const NActors::TActorContext& ctx) {
         const auto& shardResponse = ev->Get()->Record;
 
         ui64 shardId = shardResponse.GetTabletID();
@@ -1280,7 +1280,7 @@ private:
         return ReplyIfDone(ctx);
     }
 
-    void Handle(TEvDataShard::TEvOverloadReady::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NEvDataShard::TEvOverloadReady::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
         ui64 shardId = record.GetTabletID();
         ui64 seqNo = record.GetSeqNo();

@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         dropFn(runtime, ++txId);
         TestModificationResult(runtime, txId - 1);
 
-        auto ev = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>();
+        auto ev = runtime.GrabEdgeEvent<NEvSchemeShard::TEvModifySchemeTransactionResult>();
         UNIT_ASSERT(ev);
 
         const auto& record = ev->Record;
@@ -503,5 +503,5 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         env.TestWaitNotification(runtime, txId - 1);
 
         TestLs(runtime, "/MyRoot/ExternalTable", false, NLs::PathExist);
-    }    
+    }
 }

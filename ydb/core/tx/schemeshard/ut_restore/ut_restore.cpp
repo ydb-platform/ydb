@@ -581,7 +581,7 @@ value {
 
         bool uploadResponseDropped = false;
         runtime.SetObserverFunc([&uploadResponseDropped](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::EvS3UploadRowsResponse) {
+            if (ev->GetTypeRewrite() == NEvDataShard::EvS3UploadRowsResponse) {
                 uploadResponseDropped = true;
                 return TTestActorRuntime::EEventAction::DROP;
             }
@@ -605,8 +605,8 @@ value {
 
         TMaybe<NKikimrTxDataShard::TShardOpResult> result;
         runtime.SetObserverFunc([&result](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::EvSchemaChanged) {
-                const auto& record = ev->Get<TEvDataShard::TEvSchemaChanged>()->Record;
+            if (ev->GetTypeRewrite() == NEvDataShard::EvSchemaChanged) {
+                const auto& record = ev->Get<NEvDataShard::TEvSchemaChanged>()->Record;
                 if (record.HasOpResult()) {
                     result = record.GetOpResult();
                 }
@@ -640,7 +640,7 @@ value {
 
         ui32 uploadRowsCount = 0;
         runtime.SetObserverFunc([&uploadRowsCount](TAutoPtr<IEventHandle>& ev) {
-            uploadRowsCount += ui32(ev->GetTypeRewrite() == TEvDataShard::EvS3UploadRowsResponse);
+            uploadRowsCount += ui32(ev->GetTypeRewrite() == NEvDataShard::EvS3UploadRowsResponse);
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
@@ -1461,11 +1461,11 @@ value {
 
         TMaybe<NKikimrTxDataShard::TShardOpResult> result;
         runtime.SetObserverFunc([&result](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() != TEvDataShard::EvSchemaChanged) {
+            if (ev->GetTypeRewrite() != NEvDataShard::EvSchemaChanged) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
 
-            const auto& record = ev->Get<TEvDataShard::TEvSchemaChanged>()->Record;
+            const auto& record = ev->Get<NEvDataShard::TEvSchemaChanged>()->Record;
             if (!record.HasOpResult()) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
@@ -1526,8 +1526,8 @@ value {
         ui32 requests = 0;
         ui32 responses = 0;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            requests += ui32(ev->GetTypeRewrite() == TEvDataShard::EvS3UploadRowsRequest);
-            responses += ui32(ev->GetTypeRewrite() == TEvDataShard::EvS3UploadRowsResponse);
+            requests += ui32(ev->GetTypeRewrite() == NEvDataShard::EvS3UploadRowsRequest);
+            responses += ui32(ev->GetTypeRewrite() == NEvDataShard::EvS3UploadRowsResponse);
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
@@ -1760,24 +1760,24 @@ value {
     Y_UNIT_TEST_WITH_COMPRESSION(CancelUponProposeShouldSucceed) {
         auto data = GenerateTestData(Codec, "a", 1);
         data.YsonStr = EmptyYsonStr;
-        CancelShouldSucceed<TEvDataShard::TEvProposeTransaction>(data);
+        CancelShouldSucceed<NEvDataShard::TEvProposeTransaction>(data);
     }
 
     Y_UNIT_TEST_WITH_COMPRESSION(CancelUponProposeResultShouldSucceed) {
         auto data = GenerateTestData(Codec, "a", 1);
         data.YsonStr = EmptyYsonStr;
-        CancelShouldSucceed<TEvDataShard::TEvProposeTransactionResult>(data);
+        CancelShouldSucceed<NEvDataShard::TEvProposeTransactionResult>(data);
     }
 
     Y_UNIT_TEST_WITH_COMPRESSION(CancelUponUploadResponseShouldSucceed) {
         const auto data = GenerateTestData(Codec, "a", 1);
-        CancelShouldSucceed<TEvDataShard::TEvS3UploadRowsResponse>(data);
+        CancelShouldSucceed<NEvDataShard::TEvS3UploadRowsResponse>(data);
     }
 
     Y_UNIT_TEST_WITH_COMPRESSION(CancelHungOperationShouldSucceed) {
         auto data = GenerateTestData(Codec, "a", 1);
         data.YsonStr = EmptyYsonStr;
-        CancelShouldSucceed<TEvDataShard::TEvProposeTransactionResult>(data, true);
+        CancelShouldSucceed<NEvDataShard::TEvProposeTransactionResult>(data, true);
     }
 
     Y_UNIT_TEST_WITH_COMPRESSION(CancelAlmostCompleteOperationShouldNotHaveEffect) {
@@ -1795,7 +1795,7 @@ value {
 
         THolder<IEventHandle> schemaChanged;
         auto prevObserver = SetDelayObserver(runtime, schemaChanged, [](TAutoPtr<IEventHandle>& ev) {
-            return ev->GetTypeRewrite() == TEvDataShard::TEvSchemaChanged::EventType;
+            return ev->GetTypeRewrite() == NEvDataShard::TEvSchemaChanged::EventType;
         });
 
         TPortManager portManager;
@@ -1809,7 +1809,7 @@ value {
 
         THolder<IEventHandle> progress;
         prevObserver = SetDelayObserver(runtime, progress, [](TAutoPtr<IEventHandle>& ev) {
-            return ev->GetTypeRewrite() == TEvPrivate::TEvProgressOperation::EventType;
+            return ev->GetTypeRewrite() == NEvPrivate::TEvProgressOperation::EventType;
         });
 
         TestCancelTxTable(runtime, ++txId, restoreTxId);
@@ -3233,39 +3233,39 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST(CancelUponGettingSchemeShouldSucceed) {
         CancelShouldSucceed([](TAutoPtr<IEventHandle>& ev) {
-            return ev->GetTypeRewrite() == TEvPrivate::EvImportSchemeReady;
+            return ev->GetTypeRewrite() == NEvPrivate::EvImportSchemeReady;
         });
     }
 
     Y_UNIT_TEST(CancelUponCreatingTableShouldSucceed) {
         CancelShouldSucceed([](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
+            if (ev->GetTypeRewrite() != NEvSchemeShard::EvModifySchemeTransaction) {
                 return false;
             }
 
-            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
+            return ev->Get<NEvSchemeShard::TEvModifySchemeTransaction>()->Record
                 .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexedTable;
         });
     }
 
     Y_UNIT_TEST(CancelUponTransferringShouldSucceed) {
         CancelShouldSucceed([](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
+            if (ev->GetTypeRewrite() != NEvSchemeShard::EvModifySchemeTransaction) {
                 return false;
             }
 
-            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
+            return ev->Get<NEvSchemeShard::TEvModifySchemeTransaction>()->Record
                 .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpRestore;
         });
     }
 
     Y_UNIT_TEST(CancelUponBuildingIndicesShouldSucceed) {
         CancelShouldSucceed([](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
+            if (ev->GetTypeRewrite() != NEvSchemeShard::EvModifySchemeTransaction) {
                 return false;
             }
 
-            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
+            return ev->Get<NEvSchemeShard::TEvModifySchemeTransaction>()->Record
                 .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpApplyIndexBuild;
         });
     }
@@ -3472,11 +3472,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(s3Mock.Start());
 
         auto delayFunc = [](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
+            if (ev->GetTypeRewrite() != NEvSchemeShard::EvModifySchemeTransaction) {
                 return false;
             }
 
-            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
+            return ev->Get<NEvSchemeShard::TEvModifySchemeTransaction>()->Record
                 .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpRestore;
         };
 
@@ -3642,11 +3642,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(s3Mock.Start());
 
         auto delayFunc = [](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
+            if (ev->GetTypeRewrite() != NEvSchemeShard::EvModifySchemeTransaction) {
                 return false;
             }
 
-            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
+            return ev->Get<NEvSchemeShard::TEvModifySchemeTransaction>()->Record
                 .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpRestore;
         };
 

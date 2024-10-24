@@ -10,14 +10,14 @@ struct TKesusTablet::TTxQuoterResourceDescribe : public TTxBase {
     const ui64 Cookie;
     const NKikimrKesus::TEvDescribeQuoterResources Record;
 
-    THolder<TEvKesus::TEvDescribeQuoterResourcesResult> Reply;
+    THolder<NEvKesus::TEvDescribeQuoterResourcesResult> Reply;
 
     TTxQuoterResourceDescribe(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvDescribeQuoterResources& record)
         : TTxBase(self)
         , Sender(sender)
         , Cookie(cookie)
         , Record(record)
-        , Reply(MakeHolder<TEvKesus::TEvDescribeQuoterResourcesResult>())
+        , Reply(MakeHolder<NEvKesus::TEvDescribeQuoterResourcesResult>())
     {
         Reply->Record.MutableError()->SetStatus(Ydb::StatusIds::SUCCESS);
     }
@@ -87,7 +87,7 @@ struct TKesusTablet::TTxQuoterResourceDescribe : public TTxBase {
             for (ui64 id : Record.GetResourceIds()) {
                 const TQuoterResourceTree* resource = Self->QuoterResources.FindId(id);
                 if (!resource) {
-                    Reply = MakeHolder<TEvKesus::TEvDescribeQuoterResourcesResult>(
+                    Reply = MakeHolder<NEvKesus::TEvDescribeQuoterResourcesResult>(
                         Ydb::StatusIds::NOT_FOUND,
                         TStringBuilder() << "Resource with id " << id << " doesn't exist.");
                     return true;
@@ -97,7 +97,7 @@ struct TKesusTablet::TTxQuoterResourceDescribe : public TTxBase {
             for (const TString& path : Record.GetResourcePaths()) {
                 const TQuoterResourceTree* resource = Self->QuoterResources.FindPath(path);
                 if (!resource) {
-                    Reply = MakeHolder<TEvKesus::TEvDescribeQuoterResourcesResult>(
+                    Reply = MakeHolder<NEvKesus::TEvDescribeQuoterResourcesResult>(
                         Ydb::StatusIds::NOT_FOUND,
                         TStringBuilder() << "Resource with path \"" << path << "\" doesn't exist.");
                     return true;
@@ -119,7 +119,7 @@ struct TKesusTablet::TTxQuoterResourceDescribe : public TTxBase {
     }
 };
 
-void TKesusTablet::Handle(TEvKesus::TEvDescribeQuoterResources::TPtr& ev) {
+void TKesusTablet::Handle(NEvKesus::TEvDescribeQuoterResources::TPtr& ev) {
     Execute(new TTxQuoterResourceDescribe(this, ev->Sender, ev->Cookie, ev->Get()->Record), TActivationContext::AsActorContext());
 }
 

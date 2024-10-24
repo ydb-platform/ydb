@@ -35,7 +35,7 @@ void TShardDeleter::SendDeleteRequests(TTabletId hiveTabletId,
         // !HACK: use shardIdx as  TxId because Hive only replies with TxId
         // TODO: change hive events to get rid of this hack
         // svc@ in progress fixing it
-        TAutoPtr<TEvHive::TEvDeleteTablet> event = new TEvHive::TEvDeleteTablet(shardIdx.GetOwnerId(), ui64(shardIdx.GetLocalId()), ui64(shardIdx.GetLocalId()));
+        TAutoPtr<NEvHive::TEvDeleteTablet> event = new NEvHive::TEvDeleteTablet(shardIdx.GetOwnerId(), ui64(shardIdx.GetLocalId()), ui64(shardIdx.GetLocalId()));
         auto itShard = shardsInfos.find(shardIdx);
         if (itShard != shardsInfos.end()) {
             TTabletId shardTabletId = itShard->second.TabletID;
@@ -147,7 +147,7 @@ bool TShardDeleter::Empty() const {
     return PerHiveDeletions.empty();
 }
 
-void TSelfPinger::Handle(TEvSchemeShard::TEvMeasureSelfResponseTime::TPtr &ev, const NActors::TActorContext &ctx) {
+void TSelfPinger::Handle(NEvSchemeShard::TEvMeasureSelfResponseTime::TPtr &ev, const NActors::TActorContext &ctx) {
     Y_UNUSED(ev);
     TInstant now = AppData(ctx)->TimeProvider->Now();
     TDuration responseTime = now - SelfPingSentTime;
@@ -165,7 +165,7 @@ void TSelfPinger::Handle(TEvSchemeShard::TEvMeasureSelfResponseTime::TPtr &ev, c
     }
 }
 
-void TSelfPinger::Handle(TEvSchemeShard::TEvWakeupToMeasureSelfResponseTime::TPtr &ev, const NActors::TActorContext &ctx) {
+void TSelfPinger::Handle(NEvSchemeShard::TEvWakeupToMeasureSelfResponseTime::TPtr &ev, const NActors::TActorContext &ctx) {
     Y_UNUSED(ev);
     SelfPingWakeupScheduled = false;
     DoSelfPing(ctx);
@@ -187,7 +187,7 @@ void TSelfPinger::DoSelfPing(const NActors::TActorContext &ctx) {
     if (SelfPingInFlight)
         return;
 
-    ctx.Send(ctx.SelfID, new TEvSchemeShard::TEvMeasureSelfResponseTime);
+    ctx.Send(ctx.SelfID, new NEvSchemeShard::TEvMeasureSelfResponseTime);
     SelfPingSentTime = AppData(ctx)->TimeProvider->Now();
     SelfPingInFlight = true;
 }
@@ -196,7 +196,7 @@ void TSelfPinger::ScheduleSelfPingWakeup(const NActors::TActorContext &ctx) {
     if (SelfPingWakeupScheduled)
         return;
 
-    ctx.Schedule(SELF_PING_INTERVAL, new TEvSchemeShard::TEvWakeupToMeasureSelfResponseTime);
+    ctx.Schedule(SELF_PING_INTERVAL, new NEvSchemeShard::TEvWakeupToMeasureSelfResponseTime);
     SelfPingWakeupScheduled = true;
     SelfPingWakeupScheduledTime = AppData(ctx)->TimeProvider->Now();
 }
@@ -555,7 +555,7 @@ bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDescr, TCol
 
         NScheme::TTypeInfo typeInfo;
         if (!GetTypeInfo(typeRegistry->GetType(typeName), column.GetTypeInfo(), typeName, columnName, typeInfo, explain)) {
-            return false; 
+            return false;
         }
 
         columnTypes[columnName] = typeInfo;

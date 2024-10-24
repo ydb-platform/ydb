@@ -3,13 +3,13 @@
 namespace NKikimr::NReplication::NController {
 
 class TController::TTxDropReplication: public TTxBase {
-    TEvController::TEvDropReplication::TPtr PubEv;
+    NEvController::TEvDropReplication::TPtr PubEv;
     TEvPrivate::TEvDropReplication::TPtr PrivEv;
-    THolder<IEventHandle> Result; // TEvController::TEvDropReplicationResult
+    THolder<IEventHandle> Result; // NEvController::TEvDropReplicationResult
     TReplication::TPtr Replication;
 
 public:
-    explicit TTxDropReplication(TController* self, TEvController::TEvDropReplication::TPtr& ev)
+    explicit TTxDropReplication(TController* self, NEvController::TEvDropReplication::TPtr& ev)
         : TTxBase("TxDropReplication", self)
         , PubEv(ev)
     {
@@ -47,7 +47,7 @@ public:
             CLOG_W(ctx, "Cannot drop unknown replication"
                 << ": pathId# " << pathId);
 
-            auto ev = MakeHolder<TEvController::TEvDropReplicationResult>();
+            auto ev = MakeHolder<NEvController::TEvDropReplicationResult>();
             ev->Record.MutableOperationId()->CopyFrom(record.GetOperationId());
             ev->Record.SetOrigin(Self->TabletID());
             ev->Record.SetStatus(NKikimrReplication::TEvDropReplicationResult::NOT_FOUND);
@@ -120,7 +120,7 @@ public:
         db.Table<Schema::Replications>().Key(rid).Delete();
 
         if (const auto& op = Replication->GetDropOp()) {
-            auto ev = MakeHolder<TEvController::TEvDropReplicationResult>();
+            auto ev = MakeHolder<NEvController::TEvDropReplicationResult>();
             ev->Record.MutableOperationId()->SetTxId(op->OperationId.first);
             ev->Record.MutableOperationId()->SetPartId(op->OperationId.second);
             ev->Record.SetOrigin(Self->TabletID());
@@ -148,7 +148,7 @@ public:
 
 }; // TTxDropReplication
 
-void TController::RunTxDropReplication(TEvController::TEvDropReplication::TPtr& ev, const TActorContext& ctx) {
+void TController::RunTxDropReplication(NEvController::TEvDropReplication::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxDropReplication(this, ev), ctx);
 }
 

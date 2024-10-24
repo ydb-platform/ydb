@@ -69,7 +69,7 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
-        auto event = MakeHolder<TEvDataShard::TEvApplyReplicationChanges>();
+        auto event = MakeHolder<NEvDataShard::TEvApplyReplicationChanges>();
         auto& tableId = *event->Record.MutableTableId();
         tableId.SetOwnerId(TableId.PathId.OwnerId);
         tableId.SetTableId(TableId.PathId.LocalPathId);
@@ -97,13 +97,13 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
 
     STATEFN(StateWaitingStatus) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvDataShard::TEvApplyReplicationChangesResult, Handle);
+            hFunc(NEvDataShard::TEvApplyReplicationChangesResult, Handle);
         default:
             return StateBase(ev);
         }
     }
 
-    void Handle(TEvDataShard::TEvApplyReplicationChangesResult::TPtr& ev) {
+    void Handle(NEvDataShard::TEvApplyReplicationChangesResult::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
         const auto& record = ev->Get()->Record;

@@ -12,7 +12,7 @@ class TTxCancelTx: public ISubOperation {
     const TActorId Sender;
 
 public:
-    TTxCancelTx(TEvSchemeShard::TEvCancelTx::TPtr ev)
+    TTxCancelTx(NEvSchemeShard::TEvCancelTx::TPtr ev)
         : OperationId(ev->Get()->Record.GetTxId(), 0)
         , TargetOperationId(ev->Get()->Record.GetTargetTxId(), 0)
         , Sender(ev->Sender)
@@ -37,7 +37,7 @@ public:
             << ", target opId# " << TargetOperationId);
 
         auto proposeResult = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
-        auto result = MakeHolder<TEvSchemeShard::TEvCancelTxResult>(ui64(TargetOperationId.GetTxId()), ui64(OperationId.GetTxId()));
+        auto result = MakeHolder<NEvSchemeShard::TEvCancelTxResult>(ui64(TargetOperationId.GetTxId()), ui64(OperationId.GetTxId()));
 
         auto found = context.SS->FindTx(TargetOperationId);
         if (!found) {
@@ -92,7 +92,7 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreateTxCancelTx(TEvSchemeShard::TEvCancelTx::TPtr ev) {
+ISubOperation::TPtr CreateTxCancelTx(NEvSchemeShard::TEvCancelTx::TPtr ev) {
     return new TTxCancelTx(ev);
 }
 

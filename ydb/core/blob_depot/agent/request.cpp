@@ -85,18 +85,18 @@ namespace NKikimr::NBlobDepot {
             (Id, ev->Cookie), (Type, TypeName<TEvent>()), (Sender, ev->Sender), (PipeServerId, PipeServerId),
             (Match, ev->Sender == PipeServerId));
         if (ev->Sender == PipeServerId) {
-            Y_ABORT_UNLESS(IsConnected || ev->GetTypeRewrite() == TEvBlobDepot::EvRegisterAgentResult);
+            Y_ABORT_UNLESS(IsConnected || ev->GetTypeRewrite() == NEvBlobDepot::EvRegisterAgentResult);
             OnRequestComplete(ev->Cookie, ev->Get(), TabletRequestInFlight);
         }
     }
 
-    template void TBlobDepotAgent::HandleTabletResponse(TEvBlobDepot::TEvRegisterAgentResult::TPtr ev);
-    template void TBlobDepotAgent::HandleTabletResponse(TEvBlobDepot::TEvAllocateIdsResult::TPtr ev);
-    template void TBlobDepotAgent::HandleTabletResponse(TEvBlobDepot::TEvBlockResult::TPtr ev);
-    template void TBlobDepotAgent::HandleTabletResponse(TEvBlobDepot::TEvQueryBlocksResult::TPtr ev);
-    template void TBlobDepotAgent::HandleTabletResponse(TEvBlobDepot::TEvCollectGarbageResult::TPtr ev);
-    template void TBlobDepotAgent::HandleTabletResponse(TEvBlobDepot::TEvCommitBlobSeqResult::TPtr ev);
-    template void TBlobDepotAgent::HandleTabletResponse(TEvBlobDepot::TEvResolveResult::TPtr ev);
+    template void TBlobDepotAgent::HandleTabletResponse(NEvBlobDepot::TEvRegisterAgentResult::TPtr ev);
+    template void TBlobDepotAgent::HandleTabletResponse(NEvBlobDepot::TEvAllocateIdsResult::TPtr ev);
+    template void TBlobDepotAgent::HandleTabletResponse(NEvBlobDepot::TEvBlockResult::TPtr ev);
+    template void TBlobDepotAgent::HandleTabletResponse(NEvBlobDepot::TEvQueryBlocksResult::TPtr ev);
+    template void TBlobDepotAgent::HandleTabletResponse(NEvBlobDepot::TEvCollectGarbageResult::TPtr ev);
+    template void TBlobDepotAgent::HandleTabletResponse(NEvBlobDepot::TEvCommitBlobSeqResult::TPtr ev);
+    template void TBlobDepotAgent::HandleTabletResponse(NEvBlobDepot::TEvResolveResult::TPtr ev);
 
     template<typename TEvent>
     void TBlobDepotAgent::HandleOtherResponse(TAutoPtr<TEventHandle<TEvent>> ev) {

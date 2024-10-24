@@ -23,7 +23,7 @@ namespace NKikimr::NBlobDepot {
 
     void TData::HandleTrash(TRecordsPerChannelGroup& record) {
         const ui32 generation = Self->Executor()->Generation();
-        THashMap<ui32, std::unique_ptr<TEvBlobDepot::TEvPushNotify>> outbox;
+        THashMap<ui32, std::unique_ptr<NEvBlobDepot::TEvPushNotify>> outbox;
 
         Y_DEBUG_ABORT_UNLESS(!record.CollectGarbageRequestsInFlight);
         Y_DEBUG_ABORT_UNLESS(record.Collectible(this));
@@ -100,7 +100,7 @@ namespace NKikimr::NBlobDepot {
                     if (agent.Connection) {
                         auto& ev = outbox[agentId];
                         if (!ev) {
-                            ev.reset(new TEvBlobDepot::TEvPushNotify);
+                            ev.reset(new NEvBlobDepot::TEvPushNotify);
                         }
                         auto *item = ev->Record.AddInvalidatedSteps();
                         item->SetChannel(record.Channel);
@@ -254,7 +254,7 @@ namespace NKikimr::NBlobDepot {
         TRecordsPerChannelGroup& record = GetRecordsPerChannelGroup(channel, groupId);
         record.ClearInFlight(this);
     }
-    
+
     void TData::CollectTrashByHardBarrier(ui8 channel, ui32 groupId, TGenStep hardGenStep,
             const std::function<bool(TLogoBlobID)>& callback) {
         TRecordsPerChannelGroup& record = GetRecordsPerChannelGroup(channel, groupId);

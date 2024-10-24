@@ -315,7 +315,7 @@ public:
         TVector<TActorId> targets;
         targets.swap(StorageInfoSubscribers);
         for (TActorId target : targets) {
-            notifications.Send(target, new TEvHive::TEvGetTabletStorageInfoResult(Id, *TabletStorageInfo));
+            notifications.Send(target, new NEvHive::TEvGetTabletStorageInfoResult(Id, *TabletStorageInfo));
         }
     }
 

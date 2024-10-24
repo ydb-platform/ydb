@@ -261,7 +261,7 @@ public:
             if (tablet->IsBootingSuppressed()) {
                 // Tablet will never boot, so will notify about creation right after commit
                 for (const TActorId& actor : tablet->ActorsToNotify) {
-                    SideEffects.Send(actor, new TEvHive::TEvTabletCreationResult(NKikimrProto::OK, TabletId));
+                    SideEffects.Send(actor, new NEvHive::TEvTabletCreationResult(NKikimrProto::OK, TabletId));
                 }
                 tablet->ActorsToNotify.clear();
                 db.Table<Schema::Tablet>().Key(TabletId).UpdateToNull<Schema::Tablet::ActorsToNotify>();

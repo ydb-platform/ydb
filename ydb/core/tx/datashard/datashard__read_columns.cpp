@@ -53,7 +53,7 @@ class TReadColumnsScan : public INoTxScan {
     ui64 Bytes = 0;
     bool ShardFinished = true;
     TString LastKeySerialized;
-    TAutoPtr<TEvDataShard::TEvReadColumnsResponse> Result;
+    TAutoPtr<NEvDataShard::TEvReadColumnsResponse> Result;
 
     IDriver *Driver = nullptr;
     TIntrusiveConstPtr<TScheme> Scheme;
@@ -128,7 +128,7 @@ public:
     }
 
     TAutoPtr<IDestructable> Finish(EAbort reason) noexcept override {
-        Result = new TEvDataShard::TEvReadColumnsResponse(TabletId);
+        Result = new NEvDataShard::TEvReadColumnsResponse(TabletId);
 
         if (reason == EAbort::None) {
             TString buffer = BlockBuilder->Finish();
@@ -176,8 +176,8 @@ public:
 
 class TDataShard::TTxReadColumns : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
-    TEvDataShard::TEvReadColumnsRequest::TPtr Ev;
-    TAutoPtr<TEvDataShard::TEvReadColumnsResponse> Result;
+    NEvDataShard::TEvReadColumnsRequest::TPtr Ev;
+    TAutoPtr<NEvDataShard::TEvReadColumnsResponse> Result;
     TSmallVec<TRawTypeValue> KeyFrom;
     TSmallVec<TRawTypeValue> KeyTo;
     bool InclusiveFrom;
@@ -187,7 +187,7 @@ private:
     TRowVersion ReadVersion = TRowVersion::Max();
 
 public:
-    TTxReadColumns(TDataShard* ds, TEvDataShard::TEvReadColumnsRequest::TPtr ev)
+    TTxReadColumns(TDataShard* ds, NEvDataShard::TEvReadColumnsRequest::TPtr ev)
         : TBase(ds)
         , Ev(ev)
     {
@@ -209,7 +209,7 @@ public:
             return true;
         }
 
-        Result = new TEvDataShard::TEvReadColumnsResponse(Self->TabletID());
+        Result = new NEvDataShard::TEvReadColumnsResponse(Self->TabletID());
 
         if (Self->IsFollower()) {
             // Note: this request is no longer supported, and it has never been used with followers
@@ -373,7 +373,7 @@ private:
     }
 };
 
-void TDataShard::Handle(TEvDataShard::TEvReadColumnsRequest::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvReadColumnsRequest::TPtr& ev, const TActorContext& ctx) {
     Executor()->Execute(new TTxReadColumns(this, ev), ctx);
 }
 

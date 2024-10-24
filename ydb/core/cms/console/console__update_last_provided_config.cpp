@@ -4,7 +4,7 @@ namespace NKikimr::NConsole {
 
 class TConfigsManager::TTxUpdateLastProvidedConfig : public TTransactionBase<TConfigsManager> {
 public:
-    TTxUpdateLastProvidedConfig(TEvConsole::TEvConfigNotificationResponse::TPtr ev,
+    TTxUpdateLastProvidedConfig(NEvConsole::TEvConfigNotificationResponse::TPtr ev,
                                 TConfigsManager *self)
         : TBase(self)
         , Request(std::move(ev))
@@ -59,10 +59,10 @@ public:
     }
 
 private:
-    TEvConsole::TEvConfigNotificationResponse::TPtr Request;
+    NEvConsole::TEvConfigNotificationResponse::TPtr Request;
 };
 
-ITransaction *TConfigsManager::CreateTxUpdateLastProvidedConfig(TEvConsole::TEvConfigNotificationResponse::TPtr &ev)
+ITransaction *TConfigsManager::CreateTxUpdateLastProvidedConfig(NEvConsole::TEvConfigNotificationResponse::TPtr &ev)
 {
     return new TTxUpdateLastProvidedConfig(ev, this);
 }

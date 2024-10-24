@@ -652,7 +652,7 @@ namespace NKikimr::NBlobDepot {
         void CommitTrash(void *cookie);
         void HandleTrash(TRecordsPerChannelGroup& record);
         void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev);
-        void OnPushNotifyResult(TEvBlobDepot::TEvPushNotifyResult::TPtr ev);
+        void OnPushNotifyResult(NEvBlobDepot::TEvPushNotifyResult::TPtr ev);
         void OnCommitConfirmedGC(ui8 channel, ui32 groupId, std::vector<TLogoBlobID> trashDeleted);
         bool OnBarrierShift(ui64 tabletId, ui8 channel, bool hard, TGenStep previous, TGenStep current, ui32& maxItems,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
@@ -696,16 +696,16 @@ namespace NKikimr::NBlobDepot {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         class TResolveDecommitActor;
-        IActor *CreateResolveDecommitActor(TEvBlobDepot::TEvResolve::TPtr ev);
+        IActor *CreateResolveDecommitActor(NEvBlobDepot::TEvResolve::TPtr ev);
 
         class TTxCommitAssimilatedBlob;
         void ExecuteTxCommitAssimilatedBlob(NKikimrProto::EReplyStatus status, TBlobSeqId blobSeqId, TData::TKey key,
             ui32 notifyEventType, TActorId parentId, ui64 cookie, bool keep = false, bool doNotKeep = false);
 
         class TTxResolve;
-        void ExecuteTxResolve(TEvBlobDepot::TEvResolve::TPtr ev, THashSet<TLogoBlobID>&& resolutionErrors = {});
+        void ExecuteTxResolve(NEvBlobDepot::TEvResolve::TPtr ev, THashSet<TLogoBlobID>&& resolutionErrors = {});
 
-        void Handle(TEvBlobDepot::TEvResolve::TPtr ev);
+        void Handle(NEvBlobDepot::TEvResolve::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

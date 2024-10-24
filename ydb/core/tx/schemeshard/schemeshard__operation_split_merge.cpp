@@ -23,10 +23,10 @@ public:
     TConfigureDestination(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
+        IgnoreMessages(DebugHint(), {NEvHive::TEvCreateTabletReply::EventType});
     }
 
-    bool HandleReply(TEvDataShard::TEvInitSplitMergeDestinationAck::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvDataShard::TEvInitSplitMergeDestinationAck::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -148,7 +148,7 @@ public:
             splitDescForShard.AddDestinationRanges()->CopyFrom(rangeDescr);
 
             Y_ABORT_UNLESS(txState->SplitDescription);
-            auto event = MakeHolder<TEvDataShard::TEvInitSplitMergeDestination>(
+            auto event = MakeHolder<NEvDataShard::TEvInitSplitMergeDestination>(
                 ui64(OperationId.GetTxId()),
                 context.SS->TabletID(),
                 subDomainPathId,
@@ -193,10 +193,10 @@ public:
     TTransferData(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvInitSplitMergeDestinationAck::EventType});
+        IgnoreMessages(DebugHint(), {NEvHive::TEvCreateTabletReply::EventType, NEvDataShard::TEvInitSplitMergeDestinationAck::EventType});
     }
 
-    bool HandleReply(TEvDataShard::TEvSplitAck::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvDataShard::TEvSplitAck::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -345,7 +345,7 @@ public:
                         << " splitOpId# " << OperationId
                         << " at tablet " << context.SS->TabletID());
 
-            auto event = MakeHolder<TEvDataShard::TEvSplit>(ui64(OperationId.GetTxId()));
+            auto event = MakeHolder<NEvDataShard::TEvSplit>(ui64(OperationId.GetTxId()));
 
             Y_ABORT_UNLESS(txState->SplitDescription);
             event->Record.MutableSplitDescription()->CopyFrom(*txState->SplitDescription);
@@ -371,11 +371,11 @@ public:
     TNotifySrc(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvInitSplitMergeDestinationAck::EventType,  TEvDataShard::TEvSplitAck::EventType});
+        IgnoreMessages(DebugHint(), {NEvHive::TEvCreateTabletReply::EventType, NEvDataShard::TEvInitSplitMergeDestinationAck::EventType,  NEvDataShard::TEvSplitAck::EventType});
     }
 
 
-    bool HandleReply(TEvDataShard::TEvSplitPartitioningChangedAck::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvDataShard::TEvSplitPartitioningChangedAck::TPtr& ev, TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
         auto tabletId = TTabletId(ev->Get()->Record.GetTabletId());
 
@@ -460,7 +460,7 @@ public:
                       "Notify src datashard %" PRIu64 " on partitioning changed splitOp# %" PRIu64 " at tablet %" PRIu64,
                       datashardId, OperationId.GetTxId(), context.SS->TabletID());
 
-            THolder<TEvDataShard::TEvSplitPartitioningChanged> event = MakeHolder<TEvDataShard::TEvSplitPartitioningChanged>(ui64(OperationId.GetTxId()));
+            THolder<NEvDataShard::TEvSplitPartitioningChanged> event = MakeHolder<NEvDataShard::TEvSplitPartitioningChanged>(ui64(OperationId.GetTxId()));
 
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, shard.Idx, event.Release());
 

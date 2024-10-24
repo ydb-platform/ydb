@@ -37,7 +37,7 @@ public:
         return false;
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
         LOG_I(DebugHint() << "HandleReply TEvOperationPlan"
@@ -155,7 +155,7 @@ public:
         const auto& lockguard = Transaction.GetLockGuard();
         const auto lockOwner = TTxId(lockguard.GetOwnerTxId());
         if (!lockguard.HasOwnerTxId() || !lockOwner) {
-            result->SetError(TEvSchemeShard::EStatus::StatusInvalidParameter, TStringBuilder() << "path checks failed"
+            result->SetError(NEvSchemeShard::EStatus::StatusInvalidParameter, TStringBuilder() << "path checks failed"
                 << ", lock owner tx id not set"
                 << ", path: " << dstPath.PathString());
             return result;
@@ -165,7 +165,7 @@ public:
         result->SetPathId(pathId.LocalPathId);
 
         if (!dstPath.LockedBy()) {
-            result->SetError(TEvSchemeShard::EStatus::StatusAlreadyExists, TStringBuilder() << "path checks failed"
+            result->SetError(NEvSchemeShard::EStatus::StatusAlreadyExists, TStringBuilder() << "path checks failed"
                 << ", path already unlocked"
                 << ", path: " << dstPath.PathString());
             return result;

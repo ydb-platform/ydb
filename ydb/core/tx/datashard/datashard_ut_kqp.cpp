@@ -95,8 +95,8 @@ private:
         void Attach(NActors::TTestActorRuntime* runtime) {
             runtime->SetObserverFunc([this, runtime](TAutoPtr<NActors::IEventHandle>& event) {
 
-                    if (event->GetTypeRewrite() == TEvDataShard::TEvProposeTransactionResult::EventType) {
-                        auto status = event.Get()->Get<TEvDataShard::TEvProposeTransactionResult>()->GetStatus();
+                    if (event->GetTypeRewrite() == NEvDataShard::TEvProposeTransactionResult::EventType) {
+                        auto status = event.Get()->Get<NEvDataShard::TEvProposeTransactionResult>()->GetStatus();
                         if (status == NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE) {
                             StartedScans++;
                             if (StartedScans == 3 && !ActionDone && Counter <= 0 && !Reason) {

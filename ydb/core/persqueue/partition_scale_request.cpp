@@ -90,7 +90,7 @@ void TPartitionScaleRequest::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&, co
     Die(ctx);
 }
 
-void TPartitionScaleRequest::Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& /*ev*/, const TActorContext& ctx) {
+void TPartitionScaleRequest::Handle(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& /*ev*/, const TActorContext& ctx) {
     auto scaleRequestResult = std::make_unique<TEvPartitionScaleRequestDone>(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
     Send(ParentActorId, scaleRequestResult.release());
     Die(ctx);
@@ -117,7 +117,7 @@ void TPartitionScaleRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatus:
             SchemePipeActorId = ctx.ExecutorThread.RegisterActor(NTabletPipe::CreateClient(ctx.SelfID, msg->Record.GetSchemeShardTabletId(), clientConfig));
         }
 
-        auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(msg->Record.GetTxId());
+        auto request = std::make_unique<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletion>(msg->Record.GetTxId());
         NTabletPipe::SendData(this->SelfId(), SchemePipeActorId, request.release());
     }
 }

@@ -22,15 +22,15 @@ struct TKesusTablet::TTxDummy : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        ctx.Send(Sender, new TEvKesus::TEvDummyResponse(), 0, Cookie);
+        ctx.Send(Sender, new NEvKesus::TEvDummyResponse(), 0, Cookie);
     }
 };
 
-void TKesusTablet::Handle(TEvKesus::TEvDummyRequest::TPtr& ev) {
+void TKesusTablet::Handle(NEvKesus::TEvDummyRequest::TPtr& ev) {
     if (ev->Get()->Record.GetUseTransactions()) {
         Execute(new TTxDummy(this, ev->Sender, ev->Cookie), TActivationContext::AsActorContext());
     } else {
-        Send(ev->Sender, new TEvKesus::TEvDummyResponse(), 0, ev->Cookie);
+        Send(ev->Sender, new NEvKesus::TEvDummyResponse(), 0, ev->Cookie);
     }
 }
 

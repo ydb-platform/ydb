@@ -30,11 +30,11 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
     bool ExecuteStartForceTraversal(TTransactionContext& txc) {
         ++Self->TraversalRound;
         ++Self->GlobalTraversalRound;
-        
+
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistGlobalTraversalRound(db);
 
-        AggregateStatisticsRequest = std::make_unique<TEvStatistics::TEvAggregateStatistics>(); 
+        AggregateStatisticsRequest = std::make_unique<TEvStatistics::TEvAggregateStatistics>();
         auto& outRecord = AggregateStatisticsRequest->Record;
         outRecord.SetRound(Self->GlobalTraversalRound);
         PathIdFromPathId(Self->TraversalPathId, outRecord.MutablePathId());
@@ -51,7 +51,7 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
             outNode.MutableTabletIds()->CopyFrom(inNode.GetTabletIds());
         }
 
-        return true;        
+        return true;
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
@@ -112,7 +112,7 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
     }
 };
 
-void TStatisticsAggregator::Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev) {
+void TStatisticsAggregator::Handle(NEvHive::TEvResponseTabletDistribution::TPtr& ev) {
     auto& record = ev->Get()->Record;
     Execute(new TTxResponseTabletDistribution(this, std::move(record)),
         TActivationContext::AsActorContext());

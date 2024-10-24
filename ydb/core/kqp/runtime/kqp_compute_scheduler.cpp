@@ -332,7 +332,7 @@ TSchedulerEntityHandle::TSchedulerEntityHandle(TSchedulerEntity* ptr)
 {
 }
 
-TSchedulerEntityHandle::TSchedulerEntityHandle(){} 
+TSchedulerEntityHandle::TSchedulerEntityHandle(){}
 
 TSchedulerEntityHandle::TSchedulerEntityHandle(TSchedulerEntityHandle&& other) {
     Ptr.swap(other.Ptr);
@@ -596,9 +596,9 @@ void TComputeScheduler::TImpl::AdvanceTime(TMonotonic now, TSchedulerEntity::TGr
         auto tracked = record->TrackedMicroSeconds.load();
         v.Next()->MaxLimitDeviation = SmoothPeriod.MicroSeconds() * v.Next()->Capacity;
         v.Next()->LastNowRecalc = now;
-        v.Next()->TrackedBefore = 
+        v.Next()->TrackedBefore =
             Max<ssize_t>(
-                tracked - FromDuration(ForgetInteval) * group.get()->Capacity, 
+                tracked - FromDuration(ForgetInteval) * group.get()->Capacity,
                 Min<ssize_t>(group.get()->Limit(now) - group.get()->MaxLimitDeviation, tracked));
 
         v.Next()->MaxDeviation = (FromDuration(SmoothPeriod) * v.Next()->Capacity) / v.Next()->Capacity;
@@ -761,7 +761,7 @@ public:
 
         ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
+             new NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
              IEventHandle::FlagTrackDelivery);
 
         Become(&TSchedulerActor::State);
@@ -779,8 +779,8 @@ public:
 
     STATEFN(State) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
-            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+            hFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
+            hFunc(NConsole::NEvConsole::TEvConfigNotificationRequest, Handle);
 
             hFunc(NWorkload::TEvUpdatePoolInfo, Handle);
 
@@ -794,7 +794,7 @@ public:
         }
     }
 
-    void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
+    void Handle(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_NODE, "Subscribed for config changes");
     }
 
@@ -838,7 +838,7 @@ public:
         Schedule(Opts.AdvanceTimeInterval, new TEvents::TEvWakeup());
     }
 
-    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    void Handle(NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto &event = ev->Get()->Record;
         auto& config = event.GetConfig().GetTableServiceConfig().GetComputeSchedulerSettings();
 

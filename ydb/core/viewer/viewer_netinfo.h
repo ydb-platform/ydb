@@ -16,7 +16,7 @@ class TJsonNetInfo : public TViewerPipeClient {
     std::unordered_map<TString, NKikimrViewer::TTenant> TenantByPath;
     std::unordered_map<TPathId, NKikimrViewer::TTenant> TenantBySubDomainKey;
     std::unordered_map<TString, std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> NavigateResult;
-    std::unique_ptr<TEvHive::TEvResponseHiveDomainStats> HiveStats;
+    std::unique_ptr<NEvHive::TEvResponseHiveDomainStats> HiveStats;
     NMon::TEvHttpInfo::TPtr Event;
     std::vector<TNodeId> NodeIds;
     std::unordered_map<TNodeId, std::unique_ptr<TEvWhiteboard::TEvSystemStateResponse>> NodeSysInfo;
@@ -77,8 +77,8 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
-            hFunc(NConsole::TEvConsole::TEvListTenantsResponse, Handle);
-            hFunc(TEvHive::TEvResponseHiveDomainStats, Handle);
+            hFunc(NConsole::NEvConsole::TEvListTenantsResponse, Handle);
+            hFunc(NEvHive::TEvResponseHiveDomainStats, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(TEvWhiteboard::TEvNodeStateResponse, Handle);
@@ -94,7 +94,7 @@ public:
         RequestDone();
     }
 
-    void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev) {
+    void Handle(NConsole::NEvConsole::TEvListTenantsResponse::TPtr& ev) {
         Ydb::Cms::ListDatabasesResult listTenantsResult;
         ev->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
         for (const TString& path : listTenantsResult.paths()) {
@@ -107,7 +107,7 @@ public:
         RequestDone();
     }
 
-    void Handle(TEvHive::TEvResponseHiveDomainStats::TPtr& ev) {
+    void Handle(NEvHive::TEvResponseHiveDomainStats::TPtr& ev) {
         HiveStats.reset(ev->Release().Release());
         for (const NKikimrHive::THiveDomainStats& hiveStat : HiveStats->Record.GetDomainStats()) {
             TPathId subDomainKey(hiveStat.GetShardId(), hiveStat.GetPathId());

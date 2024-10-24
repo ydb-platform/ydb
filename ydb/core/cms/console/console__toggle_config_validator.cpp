@@ -10,7 +10,7 @@ namespace NKikimr::NConsole {
 
 class TConfigsManager::TTxToggleConfigValidator : public TTransactionBase<TConfigsManager> {
 public:
-    TTxToggleConfigValidator(TEvConsole::TEvToggleConfigValidatorRequest::TPtr ev,
+    TTxToggleConfigValidator(NEvConsole::TEvToggleConfigValidatorRequest::TPtr ev,
                              TConfigsManager *self)
         : TBase(self)
         , Request(std::move(ev))
@@ -36,7 +36,7 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
                     "TConsole::TTxToggleConfigValidator: " << rec.ShortDebugString());
 
-        Response = MakeHolder<TEvConsole::TEvToggleConfigValidatorResponse>();
+        Response = MakeHolder<NEvConsole::TEvToggleConfigValidatorResponse>();
 
         const TString &name = rec.GetName();
         bool disable = rec.GetDisable();
@@ -105,12 +105,12 @@ public:
     }
 
 private:
-    TEvConsole::TEvToggleConfigValidatorRequest::TPtr Request;
-    TAutoPtr<TEvConsole::TEvToggleConfigValidatorResponse> Response;
+    NEvConsole::TEvToggleConfigValidatorRequest::TPtr Request;
+    TAutoPtr<NEvConsole::TEvToggleConfigValidatorResponse> Response;
     bool Modify;
 };
 
-ITransaction *TConfigsManager::CreateTxToggleConfigValidator(TEvConsole::TEvToggleConfigValidatorRequest::TPtr &ev)
+ITransaction *TConfigsManager::CreateTxToggleConfigValidator(NEvConsole::TEvToggleConfigValidatorRequest::TPtr &ev)
 {
     return new TTxToggleConfigValidator(ev, this);
 }

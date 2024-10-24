@@ -721,12 +721,12 @@ public:
 
     void OnCommit(ui64) override {
         if (WriteResult->IsError()) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, 
-                "Complete volatile write [" << Step << " : " << TxId << "] from " << Self->TabletID() 
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                "Complete volatile write [" << Step << " : " << TxId << "] from " << Self->TabletID()
                 << " at tablet " << Self->TabletID() << ", error:  " << WriteResult->GetError());
         } else {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, 
-                "Complete volatile write [" << Step << " : " << TxId << "] from " << Self->TabletID() 
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                "Complete volatile write [" << Step << " : " << TxId << "] from " << Self->TabletID()
                 << " at tablet " << Self->TabletID() << " send result to client " << Target);
         }
 
@@ -1572,8 +1572,8 @@ void TDataShard::NotifySchemeshard(const TActorContext& ctx, ui64 txId) {
                    << TransQueue.TxInFlyToString());
     }
 
-    THolder<TEvDataShard::TEvSchemaChanged> event =
-        THolder(new TEvDataShard::TEvSchemaChanged(ctx.SelfID, TabletID(), State, op->TxId, op->PlanStep, Generation()));
+    THolder<NEvDataShard::TEvSchemaChanged> event =
+        THolder(new NEvDataShard::TEvSchemaChanged(ctx.SelfID, TabletID(), State, op->TxId, op->PlanStep, Generation()));
 
     switch (op->Type) {
         case TSchemaOperation::ETypeBackup:
@@ -2871,11 +2871,11 @@ void TDataShard::Handle(TEvents::TEvGone::TPtr &ev) {
     Actors.erase(ev->Sender);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvGetShardState::TPtr &ev, const TActorContext &ctx) {
+void TDataShard::Handle(NEvDataShard::TEvGetShardState::TPtr &ev, const TActorContext &ctx) {
     Execute(new TTxGetShardState(this, ev), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvSchemaChangedResult::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvSchemaChangedResult::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Handle TEvSchemaChangedResult " << ev->Get()->Record.GetTxId()
                 << "  datashard " << TabletID()
@@ -2883,7 +2883,7 @@ void TDataShard::Handle(TEvDataShard::TEvSchemaChangedResult::TPtr& ev, const TA
     Execute(CreateTxSchemaChanged(ev), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvStateChangedResult::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvStateChangedResult::TPtr& ev, const TActorContext& ctx) {
     Y_UNUSED(ev);
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Handle TEvStateChangedResult "
@@ -2993,7 +2993,7 @@ bool TDataShard::CheckDataTxReject(const TString& opDescr,
     return reject;
 }
 
-bool TDataShard::CheckDataTxRejectAndReply(const TEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx)
+bool TDataShard::CheckDataTxRejectAndReply(const NEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx)
 {
     auto* msg = ev->Get();
     switch (msg->GetTxKind()) {
@@ -3016,8 +3016,8 @@ bool TDataShard::CheckDataTxRejectAndReply(const TEvDataShard::TEvProposeTransac
 
     if (reject) {
         LWTRACK(ProposeTransactionReject, msg->Orbit);
-        THolder<TEvDataShard::TEvProposeTransactionResult> result =
-            THolder(new TEvDataShard::TEvProposeTransactionResult(msg->GetTxKind(),
+        THolder<NEvDataShard::TEvProposeTransactionResult> result =
+            THolder(new NEvDataShard::TEvProposeTransactionResult(msg->GetTxKind(),
                                                             TabletID(),
                                                             msg->GetTxId(),
                                                             rejectStatus));
@@ -3083,7 +3083,7 @@ void TDataShard::UpdateProposeQueueSize() const {
     SetCounter(COUNTER_DELAYED_PROPOSE_QUEUE_SIZE, DelayedProposeQueue.size());
 }
 
-void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {
+void TDataShard::Handle(NEvDataShard::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {
     auto* msg = ev->Get();
     LWTRACK(ProposeTransactionRequest, msg->Orbit);
 
@@ -3141,8 +3141,8 @@ void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TAc
         break;
     }
 
-    THolder<TEvDataShard::TEvProposeTransactionResult> result
-        = THolder(new TEvDataShard::TEvProposeTransactionResult(ev->Get()->GetTxKind(),
+    THolder<NEvDataShard::TEvProposeTransactionResult> result
+        = THolder(new NEvDataShard::TEvProposeTransactionResult(ev->Get()->GetTxKind(),
                                                         TabletID(),
                                                         ev->Get()->GetTxId(),
                                                         NKikimrTxDataShard::TEvProposeTransactionResult::ERROR));
@@ -3155,7 +3155,7 @@ void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TAc
     //Executor()->WakeUp(ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvProposeTransactionAttach::TPtr &ev, const TActorContext &ctx) {
+void TDataShard::Handle(NEvDataShard::TEvProposeTransactionAttach::TPtr &ev, const TActorContext &ctx) {
     const auto &record = ev->Get()->Record;
     const ui64 txId = record.GetTxId();
     NKikimrProto::EReplyStatus status = NKikimrProto::NODATA;
@@ -3170,18 +3170,18 @@ void TDataShard::Handle(TEvDataShard::TEvProposeTransactionAttach::TPtr &ev, con
         status = NKikimrProto::OK;
     }
 
-    ctx.Send(ev->Sender, new TEvDataShard::TEvProposeTransactionAttachResult(TabletID(), txId, status), 0, ev->Cookie);
+    ctx.Send(ev->Sender, new NEvDataShard::TEvProposeTransactionAttachResult(TabletID(), txId, status), 0, ev->Cookie);
 }
 
-void TDataShard::HandleAsFollower(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {
+void TDataShard::HandleAsFollower(NEvDataShard::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {
     auto* msg = ev->Get();
     LWTRACK(ProposeTransactionRequest, msg->Orbit);
 
     IncCounter(COUNTER_PREPARE_REQUEST);
 
     if (TxInFly() > GetMaxTxInFly()) {
-        THolder<TEvDataShard::TEvProposeTransactionResult> result =
-            THolder(new TEvDataShard::TEvProposeTransactionResult(ev->Get()->GetTxKind(), TabletID(),
+        THolder<NEvDataShard::TEvProposeTransactionResult> result =
+            THolder(new NEvDataShard::TEvProposeTransactionResult(ev->Get()->GetTxKind(), TabletID(),
                 ev->Get()->GetTxId(), NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED));
         ctx.Send(ev->Sender, result.Release());
         IncCounter(COUNTER_PREPARE_OVERLOADED);
@@ -3194,8 +3194,8 @@ void TDataShard::HandleAsFollower(TEvDataShard::TEvProposeTransaction::TPtr &ev,
         return;
     }
 
-    THolder<TEvDataShard::TEvProposeTransactionResult> result
-        = THolder(new TEvDataShard::TEvProposeTransactionResult(ev->Get()->GetTxKind(),
+    THolder<NEvDataShard::TEvProposeTransactionResult> result
+        = THolder(new NEvDataShard::TEvProposeTransactionResult(ev->Get()->GetTxKind(),
                                                         TabletID(),
                                                         ev->Get()->GetTxId(),
                                                         NKikimrTxDataShard::TEvProposeTransactionResult::ERROR));
@@ -3216,7 +3216,7 @@ void TDataShard::CheckDelayedProposeQueue(const TActorContext &ctx) {
     }
 }
 
-void TDataShard::ProposeTransaction(TEvDataShard::TEvProposeTransaction::TPtr &&ev, const TActorContext &ctx) {
+void TDataShard::ProposeTransaction(NEvDataShard::TEvProposeTransaction::TPtr &&ev, const TActorContext &ctx) {
     auto* msg = ev->Get();
 
     // This transaction may run in immediate mode
@@ -3226,7 +3226,7 @@ void TDataShard::ProposeTransaction(TEvDataShard::TEvProposeTransaction::TPtr &&
     if (mayRunImmediate) {
         // Enqueue immediate transactions so they don't starve existing operations
         LWTRACK(ProposeTransactionEnqueue, msg->Orbit);
-        ProposeQueue.Enqueue(IEventHandle::Upcast<TEvDataShard::TEvProposeTransaction>(std::move(ev)), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, ctx);
+        ProposeQueue.Enqueue(IEventHandle::Upcast<NEvDataShard::TEvProposeTransaction>(std::move(ev)), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, ctx);
         UpdateProposeQueueSize();
     } else {
         // Prepare planned transactions as soon as possible
@@ -3321,13 +3321,13 @@ void TDataShard::Handle(TEvPrivate::TEvDelayedProposeTransaction::TPtr &ev, cons
             // N.B. we don't call ProposeQueue.Reset(), tx will Ack() on its first Execute()
 
             switch (item.Event->GetTypeRewrite()) {
-                case TEvDataShard::TEvProposeTransaction::EventType: {
-                    auto event = IEventHandle::Downcast<TEvDataShard::TEvProposeTransaction>(std::move(item.Event));
+                case NEvDataShard::TEvProposeTransaction::EventType: {
+                    auto event = IEventHandle::Downcast<NEvDataShard::TEvProposeTransaction>(std::move(item.Event));
                     NWilson::TSpan datashardTransactionSpan(TWilsonTablet::TabletTopLevel, std::move(event->TraceId), "Datashard.Transaction", NWilson::EFlags::AUTO_END);
                     if (datashardTransactionSpan) {
                         datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
                     }
-                    
+
                     Execute(new TTxProposeTransactionBase(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan)), ctx);
                     return;
                 }
@@ -3349,11 +3349,11 @@ void TDataShard::Handle(TEvPrivate::TEvDelayedProposeTransaction::TPtr &ev, cons
         TActorId target = item.Event->Sender;
         ui64 cookie = item.Event->Cookie;
         switch (item.Event->GetTypeRewrite()) {
-            case TEvDataShard::TEvProposeTransaction::EventType: {
-                auto* msg = item.Event->Get<TEvDataShard::TEvProposeTransaction>();
+            case NEvDataShard::TEvProposeTransaction::EventType: {
+                auto* msg = item.Event->Get<NEvDataShard::TEvProposeTransaction>();
                 auto kind = msg->GetTxKind();
                 auto txId = msg->GetTxId();
-                auto result = new TEvDataShard::TEvProposeTransactionResult(
+                auto result = new NEvDataShard::TEvProposeTransactionResult(
                     kind, TabletID(), txId,
                     NKikimrTxDataShard::TEvProposeTransactionResult::CANCELLED);
                 ctx.Send(target, result, 0, cookie);
@@ -3369,7 +3369,7 @@ void TDataShard::Handle(TEvPrivate::TEvDelayedProposeTransaction::TPtr &ev, cons
                 Y_FAIL_S("Unexpected event type " << item.Event->GetTypeRewrite());
         }
 
-        
+
     }
 
     // N.B. Ack directly since we didn't start any delayed transactions
@@ -3772,7 +3772,7 @@ bool TDataShard::CheckTxNeedWait(const TRowVersion& mvccSnapshot) const {
     return false;
 }
 
-bool TDataShard::CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr& ev) const {
+bool TDataShard::CheckTxNeedWait(const NEvDataShard::TEvProposeTransaction::TPtr& ev) const {
     auto* msg = ev->Get();
     auto& rec = msg->Record;
     if (rec.HasMvccSnapshot()) {
@@ -4109,7 +4109,7 @@ void TDataShard::ResolveTablePath(const TActorContext &ctx)
             TableResolvePipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
         }
 
-        auto event = MakeHolder<TEvSchemeShard::TEvDescribeScheme>(PathOwnerId, pathId);
+        auto event = MakeHolder<NEvSchemeShard::TEvDescribeScheme>(PathOwnerId, pathId);
         event->Record.MutableOptions()->SetReturnPartitioningInfo(false);
         event->Record.MutableOptions()->SetReturnPartitionConfig(false);
         event->Record.MutableOptions()->SetReturnChildren(false);
@@ -4157,7 +4157,7 @@ void TDataShard::SerializeKeySample(const TUserTable &tinfo,
 }
 
 
-void TDataShard::Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr ev, const TActorContext &ctx) {
+void TDataShard::Handle(NEvSchemeShard::TEvDescribeSchemeResult::TPtr ev, const TActorContext &ctx) {
     const auto &rec = ev->Get()->GetRecord();
 
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
@@ -4181,28 +4181,28 @@ void TDataShard::Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr ev, const 
     Execute(new TTxStoreTablePath(this, pathId, rec.GetPath()), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvGetInfoRequest::TPtr &ev,
+void TDataShard::Handle(NEvDataShard::TEvGetInfoRequest::TPtr &ev,
                                const TActorContext &ctx)
 {
     Execute(CreateTxGetInfo(this, ev), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvListOperationsRequest::TPtr &ev,
+void TDataShard::Handle(NEvDataShard::TEvListOperationsRequest::TPtr &ev,
                                const TActorContext &ctx)
 {
     Execute(CreateTxListOperations(this, ev), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvGetOperationRequest::TPtr &ev,
+void TDataShard::Handle(NEvDataShard::TEvGetOperationRequest::TPtr &ev,
                                const TActorContext &ctx)
 {
     Execute(CreateTxGetOperation(this, ev), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvGetDataHistogramRequest::TPtr &ev,
+void TDataShard::Handle(NEvDataShard::TEvGetDataHistogramRequest::TPtr &ev,
                                const TActorContext &ctx)
 {
-    auto *response = new TEvDataShard::TEvGetDataHistogramResponse;
+    auto *response = new NEvDataShard::TEvGetDataHistogramResponse;
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
     const auto& rec = ev->Get()->Record;
 
@@ -4235,13 +4235,13 @@ void TDataShard::Handle(TEvDataShard::TEvGetDataHistogramRequest::TPtr &ev,
     ctx.Send(ev->Sender, response);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvGetReadTableSinkStateRequest::TPtr &ev,
+void TDataShard::Handle(NEvDataShard::TEvGetReadTableSinkStateRequest::TPtr &ev,
                                const TActorContext &ctx)
 {
     ui64 txId = ev->Get()->Record.GetTxId();
     auto op = Pipeline.FindOp(txId);
     if (!op) {
-        auto *response = new TEvDataShard::TEvGetReadTableSinkStateResponse;
+        auto *response = new NEvDataShard::TEvGetReadTableSinkStateResponse;
         SetStatusError(response->Record, Ydb::StatusIds::NOT_FOUND,
                        TStringBuilder() << "Cannot find operation "
                        << txId << " on shard " << TabletID());
@@ -4250,7 +4250,7 @@ void TDataShard::Handle(TEvDataShard::TEvGetReadTableSinkStateRequest::TPtr &ev,
     }
 
     if (op->GetKind() != EOperationKind::ReadTable) {
-        auto *response = new TEvDataShard::TEvGetReadTableSinkStateResponse;
+        auto *response = new NEvDataShard::TEvGetReadTableSinkStateResponse;
         SetStatusError(response->Record, Ydb::StatusIds::BAD_REQUEST,
                        TStringBuilder() << "Cannot get sink state for tx of kind "
                        << op->GetKind());
@@ -4263,13 +4263,13 @@ void TDataShard::Handle(TEvDataShard::TEvGetReadTableSinkStateRequest::TPtr &ev,
     ctx.Send(ev->Forward(tx->GetStreamSink()));
 }
 
-void TDataShard::Handle(TEvDataShard::TEvGetReadTableScanStateRequest::TPtr &ev,
+void TDataShard::Handle(NEvDataShard::TEvGetReadTableScanStateRequest::TPtr &ev,
                                const TActorContext &ctx)
 {
     ui64 txId = ev->Get()->Record.GetTxId();
     auto op = Pipeline.FindOp(txId);
     if (!op) {
-        auto *response = new TEvDataShard::TEvGetReadTableScanStateResponse;
+        auto *response = new NEvDataShard::TEvGetReadTableScanStateResponse;
         SetStatusError(response->Record, Ydb::StatusIds::NOT_FOUND,
                        TStringBuilder() << "Cannot find operation "
                        << txId << " on shard " << TabletID());
@@ -4278,7 +4278,7 @@ void TDataShard::Handle(TEvDataShard::TEvGetReadTableScanStateRequest::TPtr &ev,
     }
 
     if (op->GetKind() != EOperationKind::ReadTable) {
-        auto *response = new TEvDataShard::TEvGetReadTableScanStateResponse;
+        auto *response = new NEvDataShard::TEvGetReadTableScanStateResponse;
         SetStatusError(response->Record, Ydb::StatusIds::BAD_REQUEST,
                        TStringBuilder() << "Cannot get scan state for tx of kind "
                        << op->GetKind());
@@ -4291,7 +4291,7 @@ void TDataShard::Handle(TEvDataShard::TEvGetReadTableScanStateRequest::TPtr &ev,
     ctx.Send(ev->Forward(tx->GetStreamSink()));
 
     if (!tx->GetScanActor()) {
-        auto *response = new TEvDataShard::TEvGetReadTableScanStateResponse;
+        auto *response = new NEvDataShard::TEvGetReadTableScanStateResponse;
         SetStatusError(response->Record, Ydb::StatusIds::GENERIC_ERROR,
                        TStringBuilder() << "Operation has no registered scan actor");
         ctx.Send(ev->Sender, response);
@@ -4301,13 +4301,13 @@ void TDataShard::Handle(TEvDataShard::TEvGetReadTableScanStateRequest::TPtr &ev,
     ctx.Send(ev->Forward(tx->GetScanActor()));
 }
 
-void TDataShard::Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev,
+void TDataShard::Handle(NEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev,
                                const TActorContext &ctx)
 {
     ui64 txId = ev->Get()->Record.GetTxId();
     auto op = Pipeline.FindOp(txId);
     if (!op) {
-        auto *response = new TEvDataShard::TEvGetReadTableStreamStateResponse;
+        auto *response = new NEvDataShard::TEvGetReadTableStreamStateResponse;
         SetStatusError(response->Record, Ydb::StatusIds::NOT_FOUND,
                        TStringBuilder() << "Cannot find operation "
                        << txId << " on shard " << TabletID());
@@ -4316,7 +4316,7 @@ void TDataShard::Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &e
     }
 
     if (op->GetKind() != EOperationKind::ReadTable) {
-        auto *response = new TEvDataShard::TEvGetReadTableStreamStateResponse;
+        auto *response = new NEvDataShard::TEvGetReadTableStreamStateResponse;
         SetStatusError(response->Record, Ydb::StatusIds::BAD_REQUEST,
                        TStringBuilder() << "Cannot get stream state for tx of kind "
                        << op->GetKind());
@@ -4329,10 +4329,10 @@ void TDataShard::Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &e
     ctx.Send(ev->Forward(tx->GetStreamSink()));
 }
 
-void TDataShard::Handle(TEvDataShard::TEvGetRSInfoRequest::TPtr &ev,
+void TDataShard::Handle(NEvDataShard::TEvGetRSInfoRequest::TPtr &ev,
                                const TActorContext &ctx)
 {
-    auto *response = new TEvDataShard::TEvGetRSInfoResponse;
+    auto *response = new NEvDataShard::TEvGetRSInfoResponse;
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
     for (auto &pr : OutReadSets.CurrentReadSets) {
@@ -4374,20 +4374,20 @@ void TDataShard::Handle(TEvDataShard::TEvGetRSInfoRequest::TPtr &ev,
     ctx.Send(ev->Sender, response);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvGetSlowOpProfilesRequest::TPtr &ev,
+void TDataShard::Handle(NEvDataShard::TEvGetSlowOpProfilesRequest::TPtr &ev,
                                const TActorContext &ctx)
 {
-    auto *response = new TEvDataShard::TEvGetSlowOpProfilesResponse;
+    auto *response = new NEvDataShard::TEvGetSlowOpProfilesResponse;
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
     Pipeline.FillStoredExecutionProfiles(response->Record);
     ctx.Send(ev->Sender, response);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvRefreshVolatileSnapshotRequest::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvRefreshVolatileSnapshotRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxRefreshVolatileSnapshot(this, std::move(ev)), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxDiscardVolatileSnapshot(this, std::move(ev)), ctx);
 }
 
@@ -4425,13 +4425,13 @@ void TDataShard::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev,
     ReadIteratorsOnNodeDisconnected(ev->Sender, ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvMigrateSchemeShardRequest::TPtr& ev,
+void TDataShard::Handle(NEvDataShard::TEvMigrateSchemeShardRequest::TPtr& ev,
                                const TActorContext& ctx)
 {
     Execute(new TTxMigrateSchemeShard(this, ev), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvCancelBackup::TPtr& ev, const TActorContext& ctx)
+void TDataShard::Handle(NEvDataShard::TEvCancelBackup::TPtr& ev, const TActorContext& ctx)
 {
     TOperation::TPtr op = Pipeline.FindOp(ev->Get()->Record.GetBackupTxId());
     if (op) {
@@ -4439,7 +4439,7 @@ void TDataShard::Handle(TEvDataShard::TEvCancelBackup::TPtr& ev, const TActorCon
     }
 }
 
-void TDataShard::Handle(TEvDataShard::TEvCancelRestore::TPtr& ev, const TActorContext& ctx)
+void TDataShard::Handle(NEvDataShard::TEvCancelRestore::TPtr& ev, const TActorContext& ctx)
 {
     TOperation::TPtr op = Pipeline.FindOp(ev->Get()->Record.GetRestoreTxId());
     if (op) {
@@ -4447,32 +4447,32 @@ void TDataShard::Handle(TEvDataShard::TEvCancelRestore::TPtr& ev, const TActorCo
     }
 }
 
-void TDataShard::Handle(TEvDataShard::TEvGetS3Upload::TPtr& ev, const TActorContext& ctx)
+void TDataShard::Handle(NEvDataShard::TEvGetS3Upload::TPtr& ev, const TActorContext& ctx)
 {
     Execute(new TTxGetS3Upload(this, ev), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvStoreS3UploadId::TPtr& ev, const TActorContext& ctx)
+void TDataShard::Handle(NEvDataShard::TEvStoreS3UploadId::TPtr& ev, const TActorContext& ctx)
 {
     Execute(new TTxStoreS3UploadId(this, ev), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvChangeS3UploadStatus::TPtr& ev, const TActorContext& ctx)
+void TDataShard::Handle(NEvDataShard::TEvChangeS3UploadStatus::TPtr& ev, const TActorContext& ctx)
 {
     Execute(new TTxChangeS3UploadStatus(this, ev), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvGetS3DownloadInfo::TPtr& ev, const TActorContext& ctx)
+void TDataShard::Handle(NEvDataShard::TEvGetS3DownloadInfo::TPtr& ev, const TActorContext& ctx)
 {
     Execute(new TTxGetS3DownloadInfo(this, ev), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TActorContext& ctx)
+void TDataShard::Handle(NEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TActorContext& ctx)
 {
     Execute(new TTxStoreS3DownloadInfo(this, ev), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TActorContext& ctx)
+void TDataShard::Handle(NEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TActorContext& ctx)
 {
     const float rejectProbabilty = Executor()->GetRejectProbability();
     if (rejectProbabilty > 0) {
@@ -4601,7 +4601,7 @@ TDuration TDataShard::CleanupTimeout() const {
 
 class TDataShard::TTxGetRemovedRowVersions : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxGetRemovedRowVersions(TDataShard* self, TEvDataShard::TEvGetRemovedRowVersions::TPtr&& ev)
+    TTxGetRemovedRowVersions(TDataShard* self, NEvDataShard::TEvGetRemovedRowVersions::TPtr&& ev)
         : TTransactionBase(self)
         , Ev(std::move(ev))
     { }
@@ -4611,7 +4611,7 @@ public:
         auto it = pathId ? Self->GetUserTables().find(pathId.LocalPathId) : Self->GetUserTables().begin();
         Y_ABORT_UNLESS(it != Self->GetUserTables().end());
 
-        Reply = MakeHolder<TEvDataShard::TEvGetRemovedRowVersionsResult>(txc.DB.GetRemovedRowVersions(it->second->LocalTid));
+        Reply = MakeHolder<NEvDataShard::TEvGetRemovedRowVersionsResult>(txc.DB.GetRemovedRowVersions(it->second->LocalTid));
         return true;
     }
 
@@ -4620,11 +4620,11 @@ public:
     }
 
 private:
-    TEvDataShard::TEvGetRemovedRowVersions::TPtr Ev;
-    THolder<TEvDataShard::TEvGetRemovedRowVersionsResult> Reply;
+    NEvDataShard::TEvGetRemovedRowVersions::TPtr Ev;
+    THolder<NEvDataShard::TEvGetRemovedRowVersionsResult> Reply;
 };
 
-void TDataShard::Handle(TEvDataShard::TEvGetRemovedRowVersions::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvGetRemovedRowVersions::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxGetRemovedRowVersions(this, std::move(ev)), ctx);
 }
 
@@ -4746,7 +4746,7 @@ void TDataShard::BreakWriteConflict(ui64 txId, absl::flat_hash_set<ui64>& volati
 
 class TDataShard::TTxGetOpenTxs : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxGetOpenTxs(TDataShard* self, TEvDataShard::TEvGetOpenTxs::TPtr&& ev)
+    TTxGetOpenTxs(TDataShard* self, NEvDataShard::TEvGetOpenTxs::TPtr&& ev)
         : TTransactionBase(self)
         , Ev(std::move(ev))
     { }
@@ -4758,7 +4758,7 @@ public:
 
         auto openTxs = txc.DB.GetOpenTxs(it->second->LocalTid);
 
-        Reply = MakeHolder<TEvDataShard::TEvGetOpenTxsResult>(pathId, std::move(openTxs));
+        Reply = MakeHolder<NEvDataShard::TEvGetOpenTxsResult>(pathId, std::move(openTxs));
         return true;
     }
 
@@ -4767,11 +4767,11 @@ public:
     }
 
 private:
-    TEvDataShard::TEvGetOpenTxs::TPtr Ev;
-    THolder<TEvDataShard::TEvGetOpenTxsResult> Reply;
+    NEvDataShard::TEvGetOpenTxs::TPtr Ev;
+    THolder<NEvDataShard::TEvGetOpenTxsResult> Reply;
 };
 
-void TDataShard::Handle(TEvDataShard::TEvGetOpenTxs::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvGetOpenTxs::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxGetOpenTxs(this, std::move(ev)), ctx);
 }
 
@@ -4787,7 +4787,7 @@ void TDataShard::Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev, const T
 
 } // NDataShard
 
-TString TEvDataShard::TEvRead::ToString() const {
+TString NEvDataShard::TEvRead::ToString() const {
     TStringStream ss;
     ss << TBase::ToString();
     if (!Keys.empty()) {
@@ -4799,7 +4799,7 @@ TString TEvDataShard::TEvRead::ToString() const {
     return ss.Str();
 }
 
-NActors::IEventBase* TEvDataShard::TEvRead::Load(TEventSerializedData* data) {
+NActors::IEventBase* NEvDataShard::TEvRead::Load(TEventSerializedData* data) {
     auto* base = TBase::Load(data);
     auto* event = static_cast<TEvRead*>(base);
     auto& record = event->Record;
@@ -4818,7 +4818,7 @@ NActors::IEventBase* TEvDataShard::TEvRead::Load(TEventSerializedData* data) {
 }
 
 // really ugly hacky, because Record is not mutable and calling members are const
-void TEvDataShard::TEvRead::FillRecord() {
+void NEvDataShard::TEvRead::FillRecord() {
     if (!Keys.empty()) {
         Record.MutableKeys()->Reserve(Keys.size());
         for (auto& key: Keys) {
@@ -4837,7 +4837,7 @@ void TEvDataShard::TEvRead::FillRecord() {
     }
 }
 
-TString TEvDataShard::TEvReadResult::ToString() const {
+TString NEvDataShard::TEvReadResult::ToString() const {
     TStringStream ss;
     ss << TBase::ToString();
 
@@ -4853,7 +4853,7 @@ TString TEvDataShard::TEvReadResult::ToString() const {
     return ss.Str();
 }
 
-NActors::IEventBase* TEvDataShard::TEvReadResult::Load(TEventSerializedData* data) {
+NActors::IEventBase* NEvDataShard::TEvReadResult::Load(TEventSerializedData* data) {
     auto* base = TBase::Load(data);
     auto* event = static_cast<TEvReadResult*>(base);
     auto& record = event->Record;
@@ -4875,7 +4875,7 @@ NActors::IEventBase* TEvDataShard::TEvReadResult::Load(TEventSerializedData* dat
     return base;
 }
 
-void TEvDataShard::TEvReadResult::FillRecord() {
+void NEvDataShard::TEvReadResult::FillRecord() {
     if (ArrowBatch) {
         auto* protoBatch = Record.MutableArrowBatch();
         protoBatch->SetSchema(NArrow::SerializeSchema(*ArrowBatch->schema()));
@@ -4905,11 +4905,11 @@ void TEvDataShard::TEvReadResult::FillRecord() {
     }
 }
 
-std::shared_ptr<arrow::RecordBatch> TEvDataShard::TEvReadResult::GetArrowBatch() const {
-    return const_cast<TEvDataShard::TEvReadResult*>(this)->GetArrowBatch();
+std::shared_ptr<arrow::RecordBatch> NEvDataShard::TEvReadResult::GetArrowBatch() const {
+    return const_cast<NEvDataShard::TEvReadResult*>(this)->GetArrowBatch();
 }
 
-std::shared_ptr<arrow::RecordBatch> TEvDataShard::TEvReadResult::GetArrowBatch() {
+std::shared_ptr<arrow::RecordBatch> NEvDataShard::TEvReadResult::GetArrowBatch() {
     if (ArrowBatch)
         return ArrowBatch;
 

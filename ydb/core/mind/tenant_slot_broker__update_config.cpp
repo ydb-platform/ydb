@@ -5,7 +5,7 @@ namespace NTenantSlotBroker {
 
 class TTenantSlotBroker::TTxUpdateConfig : public TTransactionBase<TTenantSlotBroker> {
 public:
-    TTxUpdateConfig(TTenantSlotBroker *self, TEvConsole::TEvConfigNotificationRequest::TPtr ev)
+    TTxUpdateConfig(TTenantSlotBroker *self, NEvConsole::TEvConfigNotificationRequest::TPtr ev)
         : TBase(self)
         , Event(std::move(ev))
         , Modify(false)
@@ -31,7 +31,7 @@ public:
             Modify = true;
         }
 
-        auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
+        auto resp = MakeHolder<NEvConsole::TEvConfigNotificationResponse>(rec);
         Response = new IEventHandle(Event->Sender, Self->SelfId(), resp.Release(),
                                         0, Event->Cookie);
 
@@ -54,12 +54,12 @@ public:
     }
 
 private:
-    TEvConsole::TEvConfigNotificationRequest::TPtr Event;
+    NEvConsole::TEvConfigNotificationRequest::TPtr Event;
     TAutoPtr<IEventHandle> Response;
     bool Modify;
 };
 
-ITransaction *TTenantSlotBroker::CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev)
+ITransaction *TTenantSlotBroker::CreateTxUpdateConfig(NEvConsole::TEvConfigNotificationRequest::TPtr &ev)
 {
     return new TTxUpdateConfig(this, std::move(ev));
 }

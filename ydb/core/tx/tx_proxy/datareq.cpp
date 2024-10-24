@@ -395,12 +395,12 @@ private:
     void TryToInvalidateTable(TTableId tableId, const TActorContext &ctx);
 
     void RegisterPlan(const TActorContext &ctx);
-    void MergeResult(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
+    void MergeResult(NEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
     void MakeFlatMKQLResponse(const TActorContext &ctx, const NCpuTime::TCpuTimer& timer);
 
-    void ProcessStreamResponseData(TEvDataShard::TEvProposeTransactionResult::TPtr &ev,
+    void ProcessStreamResponseData(NEvDataShard::TEvProposeTransactionResult::TPtr &ev,
                                    const TActorContext &ctx);
-    void FinishShardStream(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
+    void FinishShardStream(NEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
     void FinishStreamResponse(const TActorContext &ctx);
 
     ui64 SelectCoordinator(NSchemeCache::TSchemeCacheRequest &cacheRequest, const TActorContext &ctx);
@@ -415,15 +415,15 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, const TActorContext &ctx);
     void Handle(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvDataShard::TEvProposeTransactionRestart::TPtr &ev, const TActorContext &ctx);
-    void HandlePrepare(TEvDataShard::TEvProposeTransactionAttachResult::TPtr &ev, const TActorContext &ctx);
-    void HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
-    void HandlePrepareErrors(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvDataShard::TEvProposeTransactionRestart::TPtr &ev, const TActorContext &ctx);
+    void HandlePrepare(NEvDataShard::TEvProposeTransactionAttachResult::TPtr &ev, const TActorContext &ctx);
+    void HandlePrepare(NEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
+    void HandlePrepareErrors(NEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
     void HandlePrepareErrorTimeout(const TActorContext &ctx);
-    void HandlePlan(TEvDataShard::TEvProposeTransactionAttachResult::TPtr &ev, const TActorContext &ctx);
-    void HandlePlan(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvDataShard::TEvGetReadTableSinkStateRequest::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev, const TActorContext &ctx);
+    void HandlePlan(NEvDataShard::TEvProposeTransactionAttachResult::TPtr &ev, const TActorContext &ctx);
+    void HandlePlan(NEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvDataShard::TEvGetReadTableSinkStateRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxProxy::TEvProposeTransactionStatus::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxProcessing::TEvStreamClearanceRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxProcessing::TEvStreamIsDead::TPtr &ev, const TActorContext &ctx);
@@ -530,11 +530,11 @@ public:
     STFUNC(StateWaitPrepare) {
         TRACE_EVENT(NKikimrServices::TX_PROXY);
         switch (ev->GetTypeRewrite()) {
-            HFuncTraced(TEvDataShard::TEvGetReadTableSinkStateRequest, Handle);
-            HFuncTraced(TEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
-            HFuncTraced(TEvDataShard::TEvProposeTransactionResult, HandlePrepare);
-            HFuncTraced(TEvDataShard::TEvProposeTransactionRestart, Handle);
-            HFuncTraced(TEvDataShard::TEvProposeTransactionAttachResult, HandlePrepare);
+            HFuncTraced(NEvDataShard::TEvGetReadTableSinkStateRequest, Handle);
+            HFuncTraced(NEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
+            HFuncTraced(NEvDataShard::TEvProposeTransactionResult, HandlePrepare);
+            HFuncTraced(NEvDataShard::TEvProposeTransactionRestart, Handle);
+            HFuncTraced(NEvDataShard::TEvProposeTransactionAttachResult, HandlePrepare);
             HFuncTraced(TEvTxProcessing::TEvStreamClearanceRequest, Handle);
             HFuncTraced(TEvTxProcessing::TEvStreamIsDead, Handle);
             HFuncTraced(TEvTxProcessing::TEvStreamQuotaRequest, Handle);
@@ -551,7 +551,7 @@ public:
     STFUNC(StatePrepareErrors) {
         TRACE_EVENT(NKikimrServices::TX_PROXY);
         switch (ev->GetTypeRewrite()) {
-            HFuncTraced(TEvDataShard::TEvProposeTransactionResult, HandlePrepareErrors);
+            HFuncTraced(NEvDataShard::TEvProposeTransactionResult, HandlePrepareErrors);
             HFuncTraced(TEvTxProcessing::TEvStreamIsDead, Handle);
             HFuncTraced(TEvPipeCache::TEvDeliveryProblem, HandlePrepareErrors);
             HFuncTraced(TEvents::TEvUndelivered, Handle);
@@ -562,12 +562,12 @@ public:
     STFUNC(StateWaitPlan) {
         TRACE_EVENT(NKikimrServices::TX_PROXY);
         switch (ev->GetTypeRewrite()) {
-            HFuncTraced(TEvDataShard::TEvGetReadTableSinkStateRequest, Handle);
-            HFuncTraced(TEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
+            HFuncTraced(NEvDataShard::TEvGetReadTableSinkStateRequest, Handle);
+            HFuncTraced(NEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
             HFuncTraced(TEvTxProxy::TEvProposeTransactionStatus, Handle);
-            HFuncTraced(TEvDataShard::TEvProposeTransactionResult, HandlePlan);
-            HFuncTraced(TEvDataShard::TEvProposeTransactionRestart, Handle);
-            HFuncTraced(TEvDataShard::TEvProposeTransactionAttachResult, HandlePlan);
+            HFuncTraced(NEvDataShard::TEvProposeTransactionResult, HandlePlan);
+            HFuncTraced(NEvDataShard::TEvProposeTransactionRestart, Handle);
+            HFuncTraced(NEvDataShard::TEvProposeTransactionAttachResult, HandlePlan);
             HFuncTraced(TEvTxProcessing::TEvStreamClearanceRequest, Handle);
             HFuncTraced(TEvTxProcessing::TEvStreamIsDead, Handle);
             HFuncTraced(TEvTxProcessing::TEvStreamQuotaRequest, Handle);
@@ -1115,12 +1115,12 @@ void TDataReq::ContinueFlatMKQLResolve(const TActorContext &ctx) {
             << " followers " << (CanUseFollower ? "allowed" : "disallowed") << " marker# P4");
 
         const TActorId pipeCache = CanUseFollower ? Services.FollowerPipeCache : Services.LeaderPipeCache;
-        TEvDataShard::TEvProposeTransaction* ev;
+        NEvDataShard::TEvProposeTransaction* ev;
         if (FlatMKQLRequest->Snapshot && FlatMKQLRequest->ReadOnlyProgram) {
-            ev = new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_DATA,
+            ev = new NEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_DATA,
                 ctx.SelfID, TxId, transactionBuffer, FlatMKQLRequest->Snapshot, TxFlags | NTxDataShard::TTxFlags::Immediate);
         } else {
-            ev = new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_DATA,
+            ev = new NEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_DATA,
                 ctx.SelfID, TxId, transactionBuffer, TxFlags | (shardData.Immediate ? NTxDataShard::TTxFlags::Immediate : 0));
         }
 
@@ -1206,7 +1206,7 @@ void TDataReq::ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheR
         const TActorId pipeCache = CanUseFollower ? Services.FollowerPipeCache : Services.LeaderPipeCache;
 
         Send(pipeCache, new TEvPipeCache::TEvForward(
-                new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCAN,
+                new NEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCAN,
                     ctx.SelfID, TxId, transactionBuffer,
                     TxFlags | (immediate ? NTxDataShard::TTxFlags::Immediate : 0)),
                 partition.ShardId, true));
@@ -1748,7 +1748,7 @@ void TDataReq::Handle(TEvPrivate::TEvReattachToShard::TPtr &ev, const TActorCont
     const TActorId pipeCache = CanUseFollower ? Services.FollowerPipeCache : Services.LeaderPipeCache;
 
     Send(pipeCache, new TEvPipeCache::TEvForward(
-                new TEvDataShard::TEvProposeTransactionAttach(tabletId, TxId),
+                new NEvDataShard::TEvProposeTransactionAttach(tabletId, TxId),
                 tabletId, true), 0, ++perTablet->ReattachState.Cookie);
 }
 
@@ -1853,8 +1853,8 @@ void TDataReq::HandlePrepareErrors(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, c
 }
 
 
-void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx) {
-    TEvDataShard::TEvProposeTransactionResult *msg = ev->Get();
+void TDataReq::HandlePrepare(NEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx) {
+    NEvDataShard::TEvProposeTransactionResult *msg = ev->Get();
     const NKikimrTxDataShard::TEvProposeTransactionResult &record = msg->Record;
 
     const ui64 tabletId = msg->GetOrigin();
@@ -2038,7 +2038,7 @@ void TDataReq::CancelProposal(ui64 exceptTablet) {
     for (const auto &x : PerTablet)
         if (x.first != exceptTablet) {
             Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
-                new TEvDataShard::TEvCancelTransactionProposal(TxId),
+                new NEvDataShard::TEvCancelTransactionProposal(TxId),
                 x.first,
                 false
             ));
@@ -2055,8 +2055,8 @@ void TDataReq::ExtractDatashardErrors(const NKikimrTxDataShard::TEvProposeTransa
     ComplainingDatashards.push_back(record.GetOrigin());
 }
 
-void TDataReq::HandlePrepareErrors(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx) {
-    TEvDataShard::TEvProposeTransactionResult *msg = ev->Get();
+void TDataReq::HandlePrepareErrors(NEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx) {
+    NEvDataShard::TEvProposeTransactionResult *msg = ev->Get();
     const NKikimrTxDataShard::TEvProposeTransactionResult &record = msg->Record;
 
     const ui64 tabletId = msg->GetOrigin();
@@ -2155,7 +2155,7 @@ void TDataReq::Handle(TEvTxProxy::TEvProposeTransactionStatus::TPtr &ev, const T
     }
 }
 
-void TDataReq::Handle(TEvDataShard::TEvProposeTransactionRestart::TPtr &ev, const TActorContext &ctx) {
+void TDataReq::Handle(NEvDataShard::TEvProposeTransactionRestart::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ctx);
     const auto &record = ev->Get()->Record;
     const ui64 tabletId = record.GetTabletId();
@@ -2171,7 +2171,7 @@ void TDataReq::Handle(TEvDataShard::TEvProposeTransactionRestart::TPtr &ev, cons
     perTablet->Restarting = true;
 }
 
-void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionAttachResult::TPtr &ev, const TActorContext &ctx) {
+void TDataReq::HandlePrepare(NEvDataShard::TEvProposeTransactionAttachResult::TPtr &ev, const TActorContext &ctx) {
     const auto &record = ev->Get()->Record;
     const ui64 tabletId = record.GetTabletId();
 
@@ -2220,7 +2220,7 @@ void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionAttachResult::TP
     return MarkShardError(tabletId, *perTablet, true, ctx);
 }
 
-void TDataReq::HandlePlan(TEvDataShard::TEvProposeTransactionAttachResult::TPtr &ev, const TActorContext &ctx) {
+void TDataReq::HandlePlan(NEvDataShard::TEvProposeTransactionAttachResult::TPtr &ev, const TActorContext &ctx) {
     const auto &record = ev->Get()->Record;
     const ui64 tabletId = record.GetTabletId();
 
@@ -2267,9 +2267,9 @@ void TDataReq::HandlePlan(TEvDataShard::TEvProposeTransactionAttachResult::TPtr 
     return Die(ctx);
 }
 
-void TDataReq::HandlePlan(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx) {
+void TDataReq::HandlePlan(NEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx) {
     // from tablets
-    TEvDataShard::TEvProposeTransactionResult *msg = ev->Get();
+    NEvDataShard::TEvProposeTransactionResult *msg = ev->Get();
     const auto &record = msg->Record;
 
     const ui64 tabletId = msg->GetOrigin();
@@ -2418,8 +2418,8 @@ void TDataReq::HandlePlan(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TAct
         "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId << " lost pipe with unknown endpoint, ignoring");
 }
 
-void TDataReq::Handle(TEvDataShard::TEvGetReadTableSinkStateRequest::TPtr &ev, const TActorContext &ctx) {
-    auto *response = new TEvDataShard::TEvGetReadTableSinkStateResponse;
+void TDataReq::Handle(NEvDataShard::TEvGetReadTableSinkStateRequest::TPtr &ev, const TActorContext &ctx) {
+    auto *response = new NEvDataShard::TEvGetReadTableSinkStateResponse;
 
     if (!ReadTableRequest) {
         response->Record.MutableStatus()->SetCode(Ydb::StatusIds::GENERIC_ERROR);
@@ -2462,11 +2462,11 @@ void TDataReq::Handle(TEvDataShard::TEvGetReadTableSinkStateRequest::TPtr &ev, c
     ctx.Send(ev->Sender, response);
 }
 
-void TDataReq::Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev, const TActorContext &ctx) {
+void TDataReq::Handle(NEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev, const TActorContext &ctx) {
     if (ReadTableRequest) {
         ctx.Send(ev->Forward(RequestSource));
     } else {
-        auto *response = new TEvDataShard::TEvGetReadTableStreamStateResponse;
+        auto *response = new NEvDataShard::TEvGetReadTableStreamStateResponse;
         response->Record.MutableStatus()->SetCode(Ydb::StatusIds::GENERIC_ERROR);
         auto *issue = response->Record.MutableStatus()->AddIssues();
         issue->set_severity(NYql::TSeverityIds::S_ERROR);
@@ -2585,7 +2585,7 @@ void TDataReq::HandleExecTimeout(const TActorContext &ctx) {
     return Die(ctx);
 }
 
-void TDataReq::MergeResult(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx) {
+void TDataReq::MergeResult(NEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx) {
     NKikimrTxDataShard::TEvProposeTransactionResult &record = ev->Get()->Record;
 
     ResultsReceivedCount++;
@@ -2734,7 +2734,7 @@ void TDataReq::MakeFlatMKQLResponse(const TActorContext &ctx, const NCpuTime::TC
     }
 }
 
-void TDataReq::ProcessStreamResponseData(TEvDataShard::TEvProposeTransactionResult::TPtr &ev,
+void TDataReq::ProcessStreamResponseData(NEvDataShard::TEvProposeTransactionResult::TPtr &ev,
                                          const TActorContext &ctx)
 {
     Y_DEBUG_ABORT_UNLESS(ReadTableRequest);
@@ -2764,7 +2764,7 @@ void TDataReq::ProcessStreamResponseData(TEvDataShard::TEvProposeTransactionResu
         FinishStreamResponse(ctx);
 }
 
-void TDataReq::FinishShardStream(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx) {
+void TDataReq::FinishShardStream(NEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx) {
 
     auto &rec = ev->Get()->Record;
     auto shard = rec.GetOrigin();

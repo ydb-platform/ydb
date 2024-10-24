@@ -5,7 +5,7 @@
 
 namespace NKikimr::NOlap::NDataSharing::NEvents {
 
-struct TEvAckDataToSource: public NActors::TEventPB<TEvAckDataToSource, NKikimrColumnShardDataSharingProto::TEvAckDataToSource, TEvColumnShard::EvDataSharingAckDataToSource> {
+struct TEvAckDataToSource: public NActors::TEventPB<TEvAckDataToSource, NKikimrColumnShardDataSharingProto::TEvAckDataToSource, NEvColumnShard::EvDataSharingAckDataToSource> {
     TEvAckDataToSource() = default;
 
     TEvAckDataToSource(const TString& sessionId, const ui32 packIdx) {
@@ -14,7 +14,7 @@ struct TEvAckDataToSource: public NActors::TEventPB<TEvAckDataToSource, NKikimrC
     }
 };
 
-struct TEvAckFinishToSource: public NActors::TEventPB<TEvAckFinishToSource, NKikimrColumnShardDataSharingProto::TEvAckFinishToSource, TEvColumnShard::EvDataSharingAckFinishToSource> {
+struct TEvAckFinishToSource: public NActors::TEventPB<TEvAckFinishToSource, NKikimrColumnShardDataSharingProto::TEvAckFinishToSource, NEvColumnShard::EvDataSharingAckFinishToSource> {
     TEvAckFinishToSource() = default;
 
     TEvAckFinishToSource(const TString& sessionId) {

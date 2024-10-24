@@ -38,7 +38,7 @@ void TRulePreparationActor::StartChecker() {
     Controller->OnPreparationFinished(std::move(Objects));
 }
 
-void TRulePreparationActor::Handle(NSchemeShard::TEvSchemeShard::TEvProcessingResponse::TPtr& ev) {
+void TRulePreparationActor::Handle(NSchemeShard::NEvSchemeShard::TEvProcessingResponse::TPtr& ev) {
     auto& proto = ev->Get()->Record;
     if (proto.HasError()) {
         Controller->OnPreparationProblem(proto.GetError().GetErrorMessage());

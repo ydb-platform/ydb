@@ -94,7 +94,7 @@ auto TSchemeShard::BuildStatsForCollector(TPathId pathId, TShardIdx shardIdx, TT
     return ev;
 }
 
-class TTxStoreTableStats: public TTxStoreStats<TEvDataShard::TEvPeriodicTableStats> {
+class TTxStoreTableStats: public TTxStoreStats<NEvDataShard::TEvPeriodicTableStats> {
     TSideEffects MergeOpSideEffects;
 
     struct TMessage {
@@ -110,7 +110,7 @@ class TTxStoreTableStats: public TTxStoreStats<TEvDataShard::TEvPeriodicTableSta
     TVector<TMessage> PendingMessages;
 
 public:
-    TTxStoreTableStats(TSchemeShard* ss, TStatsQueue<TEvDataShard::TEvPeriodicTableStats>& queue, bool& persistStatsPending)
+    TTxStoreTableStats(TSchemeShard* ss, TStatsQueue<NEvDataShard::TEvPeriodicTableStats>& queue, bool& persistStatsPending)
         : TTxStoreStats(ss, queue, persistStatsPending)
     {
     }
@@ -120,7 +120,7 @@ public:
     void Complete(const TActorContext& ctx) override;
 
     // returns true to continue batching
-    bool PersistSingleStats(const TPathId& pathId, const TStatsQueue<TEvDataShard::TEvPeriodicTableStats>::TItem& item, TTransactionContext& txc, const TActorContext& ctx) override;
+    bool PersistSingleStats(const TPathId& pathId, const TStatsQueue<NEvDataShard::TEvPeriodicTableStats>::TItem& item, TTransactionContext& txc, const TActorContext& ctx) override;
     void ScheduleNextBatch(const TActorContext& ctx) override;
 
     template <typename T>
@@ -228,7 +228,7 @@ TPartitionStats TTxStoreTableStats::PrepareStats(const TActorContext& ctx,
 }
 
 bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
-                                            const TStatsQueueItem<TEvDataShard::TEvPeriodicTableStats>& item,
+                                            const TStatsQueueItem<NEvDataShard::TEvPeriodicTableStats>& item,
                                             NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
     const auto& rec = item.Ev->Get()->Record;
     const auto datashardId = TTabletId(rec.GetDatashardId());
@@ -492,7 +492,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     // Request histograms from the datashard
     LOG_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
              "Requesting full stats from datashard %" PRIu64, rec.GetDatashardId());
-    auto request = new TEvDataShard::TEvGetTableStats(pathId.LocalPathId);
+    auto request = new NEvDataShard::TEvGetTableStats(pathId.LocalPathId);
     request->Record.SetCollectKeySample(collectKeySample);
     PendingMessages.emplace_back(item.Ev->Sender, request);
 
@@ -514,7 +514,7 @@ void TTxStoreTableStats::ScheduleNextBatch(const TActorContext& ctx) {
     Self->ExecuteTableStatsBatch(ctx);
 }
 
-void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx) {
+void TSchemeShard::Handle(NEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx) {
     const auto& rec = ev->Get()->Record;
 
     auto datashardId = TTabletId(rec.GetDatashardId());
@@ -561,7 +561,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const T
     }
 }
 
-void TSchemeShard::Handle(TEvPrivate::TEvPersistTableStats::TPtr&, const TActorContext& ctx) {
+void TSchemeShard::Handle(NEvPrivate::TEvPersistTableStats::TPtr&, const TActorContext& ctx) {
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
            "Started TEvPersistStats at tablet " << TabletID() << ", queue size# " << TableStatsQueue.Size());
 
@@ -585,7 +585,7 @@ void TSchemeShard::ScheduleTableStatsBatch(const TActorContext& ctx) {
         LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Will delay TTxStoreTableStats on# " << delay << ", queue# " << TableStatsQueue.Size());
 
-        ctx.Schedule(delay, new TEvPrivate::TEvPersistTableStats());
+        ctx.Schedule(delay, new NEvPrivate::TEvPersistTableStats());
         TableStatsBatchScheduled = true;
     }
 }

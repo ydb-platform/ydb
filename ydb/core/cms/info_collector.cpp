@@ -48,7 +48,7 @@ private:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             sFunc(TEvents::TEvWakeup, ReplyAndDie);
-            hFunc(TEvConfigsDispatcher::TEvGetConfigResponse, Handle);
+            hFunc(NEvConfigsDispatcher::TEvGetConfigResponse, Handle);
 
             // State Storage Config
             hFunc(TEvStateStorage::TEvListStateStorageResult, Handle);
@@ -87,7 +87,7 @@ private:
 
     // Configs
     void RequestBootstrapConfig();
-    void Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev);
+    void Handle(NEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev);
 
     // State Storage
     void RequestStateStorageConfig();
@@ -210,10 +210,10 @@ void TInfoCollector::Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
 
 void TInfoCollector::RequestBootstrapConfig() {
     const auto configKind = static_cast<ui32>(NKikimrConsole::TConfigItem::BootstrapConfigItem);
-    Send(MakeConfigsDispatcherID(SelfId().NodeId()), new TEvConfigsDispatcher::TEvGetConfigRequest(configKind));
+    Send(MakeConfigsDispatcherID(SelfId().NodeId()), new NEvConfigsDispatcher::TEvGetConfigRequest(configKind));
 }
 
-void TInfoCollector::Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev) {
+void TInfoCollector::Handle(NEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev) {
     const auto& config  = ev->Get()->Config;
     const auto& initialBootstrapConfig = AppData()->BootstrapConfig;
 

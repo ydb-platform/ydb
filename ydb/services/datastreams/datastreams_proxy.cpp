@@ -730,7 +730,7 @@ namespace NKikimr::NDataStreams::V1 {
                                           TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId);
         }
 
-        void Handle(TEvPersQueue::TEvOffsetsResponse::TPtr& ev, const TActorContext& ctx) {
+        void Handle(NEvPersQueue::TEvOffsetsResponse::TPtr& ev, const TActorContext& ctx) {
             for (auto& part : ev->Get()->Record.GetPartResult()) {
                 StartEndOffsetsPerPartition[part.GetPartition()] = std::make_pair<ui64, ui64>(part.GetStartOffset(), part.GetEndOffset());
             }
@@ -770,7 +770,7 @@ namespace NKikimr::NDataStreams::V1 {
 
     void TDescribeStreamActor::StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPersQueue::TEvOffsetsResponse, Handle);
+            HFunc(NEvPersQueue::TEvOffsetsResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             default: TBase::StateWork(ev);
@@ -812,7 +812,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         for (auto& tabletId : tabletIds) {
             Pipes.push_back(ActorContext().Register(NTabletPipe::CreateClient(ActorContext().SelfID, tabletId, clientConfig)));
-            TAutoPtr<TEvPersQueue::TEvOffsets> req(new TEvPersQueue::TEvOffsets);
+            TAutoPtr<NEvPersQueue::TEvOffsets> req(new NEvPersQueue::TEvOffsets);
             NTabletPipe::SendData(ActorContext(), Pipes.back(), req.Release());
         }
     }
@@ -1215,7 +1215,7 @@ namespace NKikimr::NDataStreams::V1 {
                                    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
                                    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
                                    const NKikimrSchemeOp::TDirEntry& selfInfo) override;
-        void OnNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) override;
+        void OnNotifyTxCompletionResult(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) override;
 
     private:
         TString ConsumerName;
@@ -1272,7 +1272,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
     }
 
-    void TRegisterStreamConsumerActor::OnNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
+    void TRegisterStreamConsumerActor::OnNotifyTxCompletionResult(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
         Ydb::DataStreams::V1::RegisterStreamConsumerResult result;
         auto consumer = result.Mutableconsumer();
@@ -1503,7 +1503,7 @@ namespace NKikimr::NDataStreams::V1 {
         void Bootstrap(const NActors::TActorContext& ctx);
         void StateWork(TAutoPtr<IEventHandle>& ev);
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
-        void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
+        void Handle(NEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
@@ -1582,14 +1582,14 @@ namespace NKikimr::NDataStreams::V1 {
         cmdRead->SetTimeoutMs(READ_TIMEOUT_MS);
         cmdRead->SetExternalOperation(true);
 
-        TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+        TAutoPtr<NEvPersQueue::TEvRequest> req(new NEvPersQueue::TEvRequest);
         req->Record.Swap(&request);
         NTabletPipe::SendData(ctx, PipeClient, req.Release());
     }
 
     void TGetRecordsActor::StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPersQueue::TEvResponse, Handle);
+            HFunc(NEvPersQueue::TEvResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvents::TEvWakeup, Handle);
@@ -1632,7 +1632,7 @@ namespace NKikimr::NDataStreams::V1 {
                        TStringBuilder() << "No such shard: " << ShardIterator.GetShardId());
     }
 
-    void TGetRecordsActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+    void TGetRecordsActor::Handle(NEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
         switch (record.GetStatus()) {
             case NMsgBusProxy::MSTATUS_ERROR:
@@ -1752,7 +1752,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         void Bootstrap(const NActors::TActorContext& ctx);
         void StateWork(TAutoPtr<IEventHandle>& ev);
-        void Handle(TEvPersQueue::TEvOffsetsResponse::TPtr& ev, const TActorContext& ctx);
+        void Handle(NEvPersQueue::TEvOffsetsResponse::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx);
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
@@ -1839,7 +1839,7 @@ namespace NKikimr::NDataStreams::V1 {
 
     void TListShardsActor::StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPersQueue::TEvOffsetsResponse, Handle);
+            HFunc(NEvPersQueue::TEvOffsetsResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
         default: TBase::StateWork(ev);
@@ -1964,12 +1964,12 @@ namespace NKikimr::NDataStreams::V1 {
 
         for (auto& tabletId : tabletIds) {
             Pipes.push_back(ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig)));
-            TAutoPtr<TEvPersQueue::TEvOffsets> req(new TEvPersQueue::TEvOffsets);
+            TAutoPtr<NEvPersQueue::TEvOffsets> req(new NEvPersQueue::TEvOffsets);
             NTabletPipe::SendData(ctx, Pipes.back(), req.Release());
         }
     }
 
-    void TListShardsActor::Handle(TEvPersQueue::TEvOffsetsResponse::TPtr& ev, const TActorContext& ctx) {
+    void TListShardsActor::Handle(NEvPersQueue::TEvOffsetsResponse::TPtr& ev, const TActorContext& ctx) {
         for (auto& part : ev->Get()->Record.GetPartResult()) {
             StartEndOffsetsPerPartition[part.GetPartition()] =
                 std::make_pair<ui64, ui64>(part.GetStartOffset(), part.GetEndOffset());

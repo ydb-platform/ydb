@@ -195,7 +195,7 @@ public:
             OpenPipe(ctx);
 
         if (Action == EAction::REPLACE_SUBSCRIPTION) {
-            auto request = MakeHolder<TEvConsole::TEvReplaceConfigSubscriptionsRequest>();
+            auto request = MakeHolder<NEvConsole::TEvReplaceConfigSubscriptionsRequest>();
             BuildSubscription(*request->Record.MutableSubscription());
 
             LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
@@ -204,7 +204,7 @@ public:
 
             NTabletPipe::SendData(ctx, Pipe, request.Release(), Cookie);
         } else if (Action == EAction::ADD_SUBSCRIPTION) {
-            auto request = MakeHolder<TEvConsole::TEvAddConfigSubscriptionRequest>();
+            auto request = MakeHolder<NEvConsole::TEvAddConfigSubscriptionRequest>();
             BuildSubscription(*request->Record.MutableSubscription());
 
             LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
@@ -213,7 +213,7 @@ public:
 
             NTabletPipe::SendData(ctx, Pipe, request.Release(), Cookie);
         } else if (Action == EAction::REMOVE_SUBSCRIPTION) {
-            auto request = MakeHolder<TEvConsole::TEvRemoveConfigSubscriptionRequest>();
+            auto request = MakeHolder<NEvConsole::TEvRemoveConfigSubscriptionRequest>();
             request->Record.SetSubscriptionId(SubscriptionId);
 
             LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
@@ -222,7 +222,7 @@ public:
 
             NTabletPipe::SendData(ctx, Pipe, request.Release(), Cookie);
         } else if (Action == EAction::GET_NODE_CONFIG) {
-            auto request = MakeHolder<TEvConsole::TEvGetNodeConfigRequest>();
+            auto request = MakeHolder<NEvConsole::TEvGetNodeConfigRequest>();
             request->Record.MutableNode()->SetNodeId(SelfId().NodeId());
             request->Record.MutableNode()->SetHost(FQDNHostName());
             request->Record.MutableNode()->SetTenant(Tenant);
@@ -260,23 +260,23 @@ public:
             Y_ABORT("unknown action");
     }
 
-    void Handle(TEvConsole::TEvAddConfigSubscriptionResponse::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NEvConsole::TEvAddConfigSubscriptionResponse::TPtr &ev, const TActorContext &ctx) {
         ctx.Send(ev->Forward(OwnerId));
         Die(ctx);
     }
 
-    void Handle(TEvConsole::TEvGetNodeConfigResponse::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NEvConsole::TEvGetNodeConfigResponse::TPtr &ev, const TActorContext &ctx) {
         ctx.Send(ev->Forward(OwnerId));
         Die(ctx);
     }
 
-    void Handle(TEvConsole::TEvRemoveConfigSubscriptionResponse::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NEvConsole::TEvRemoveConfigSubscriptionResponse::TPtr &ev, const TActorContext &ctx) {
         if (OwnerId)
             ctx.Send(ev->Forward(OwnerId));
         Die(ctx);
     }
 
-    void Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev, const TActorContext &ctx) {
         ctx.Send(ev->Forward(OwnerId));
         Die(ctx);
     }
@@ -334,10 +334,10 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvConsole::TEvAddConfigSubscriptionResponse, Handle);
-            HFunc(TEvConsole::TEvGetNodeConfigResponse, Handle);
-            HFunc(TEvConsole::TEvRemoveConfigSubscriptionResponse, Handle);
-            HFunc(TEvConsole::TEvReplaceConfigSubscriptionsResponse, Handle);
+            HFunc(NEvConsole::TEvAddConfigSubscriptionResponse, Handle);
+            HFunc(NEvConsole::TEvGetNodeConfigResponse, Handle);
+            HFunc(NEvConsole::TEvRemoveConfigSubscriptionResponse, Handle);
+            HFunc(NEvConsole::TEvReplaceConfigSubscriptionsResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvPrivate::TEvRetryPoolStatus, Handle);
@@ -449,7 +449,7 @@ void SubscribeViaConfigDispatcher(const TActorContext &ctx,
 {
     ctx.Send(
         MakeConfigsDispatcherID(ctx.SelfID.NodeId()),
-        new TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(configItemKinds, owner),
+        new NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(configItemKinds, owner),
         cookie);
 }
 
@@ -459,7 +459,7 @@ void UnsubscribeViaConfigDispatcher(const TActorContext &ctx,
 {
     ctx.Send(
         MakeConfigsDispatcherID(ctx.SelfID.NodeId()),
-        new TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest(owner),
+        new NEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest(owner),
         cookie);
 }
 

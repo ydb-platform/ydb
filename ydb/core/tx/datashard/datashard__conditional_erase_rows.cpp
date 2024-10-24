@@ -146,10 +146,10 @@ class TCondEraseScan: public IActorCallback, public IScan, public IEraserOps {
         return keyCells;
     }
 
-    static THolder<TEvDataShard::TEvEraseRowsRequest> MakeEraseRowsRequest(const TTableId& tableId,
+    static THolder<NEvDataShard::TEvEraseRowsRequest> MakeEraseRowsRequest(const TTableId& tableId,
             IEraseRowsCondition* condition, const TVector<TKey>& keyOrder, TVector<TString>& keys)
     {
-        auto request = MakeHolder<TEvDataShard::TEvEraseRowsRequest>();
+        auto request = MakeHolder<NEvDataShard::TEvEraseRowsRequest>();
 
         request->Record.SetTableId(tableId.PathId.LocalPathId);
         request->Record.SetSchemaVersion(tableId.SchemaVersion);
@@ -174,7 +174,7 @@ class TCondEraseScan: public IActorCallback, public IScan, public IEraserOps {
     }
 
     void Reply(bool aborted = false) {
-        auto response = MakeHolder<TEvDataShard::TEvConditionalEraseRowsResponse>();
+        auto response = MakeHolder<NEvDataShard::TEvConditionalEraseRowsResponse>();
         response->Record.SetTabletID(DataShard.TabletId);
 
         if (aborted) {
@@ -193,7 +193,7 @@ class TCondEraseScan: public IActorCallback, public IScan, public IEraserOps {
         Send(ReplyTo, std::move(response));
     }
 
-    void Handle(TEvDataShard::TEvEraseRowsResponse::TPtr& ev) {
+    void Handle(NEvDataShard::TEvEraseRowsResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
         Success = (record.GetStatus() == NKikimrTxDataShard::TEvEraseRowsResponse::OK);
@@ -209,7 +209,7 @@ class TCondEraseScan: public IActorCallback, public IScan, public IEraserOps {
         }
     }
 
-    void Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev) {
+    void Handle(NEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev) {
         ReplyTo = ev->Sender;
         Reply();
     }
@@ -318,8 +318,8 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvDataShard::TEvEraseRowsResponse, Handle);
-            hFunc(TEvDataShard::TEvConditionalEraseRowsRequest, Handle);
+            hFunc(NEvDataShard::TEvEraseRowsResponse, Handle);
+            hFunc(NEvDataShard::TEvConditionalEraseRowsRequest, Handle);
         }
     }
 
@@ -504,7 +504,7 @@ static bool CheckUnit(NScheme::TTypeInfo type, NKikimrSchemeOp::TTTLSettings::EU
     case NScheme::NTypeIds::Uint64:
     case NScheme::NTypeIds::DyNumber:
         return CheckUnit(false, unit, error);
-    
+
     case NScheme::NTypeIds::Pg:
         switch (NPg::PgTypeIdFromTypeDesc(type.GetPgTypeDesc())) {
             case DATEOID:
@@ -525,9 +525,9 @@ static bool CheckUnit(NScheme::TTypeInfo type, NKikimrSchemeOp::TTTLSettings::EU
     }
 }
 
-void TDataShard::Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, const TActorContext& ctx) {
-    using TEvRequest = TEvDataShard::TEvConditionalEraseRowsRequest;
-    using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
+void TDataShard::Handle(NEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, const TActorContext& ctx) {
+    using TEvRequest = NEvDataShard::TEvConditionalEraseRowsRequest;
+    using TEvResponse = NEvDataShard::TEvConditionalEraseRowsResponse;
 
     const auto& record = ev->Get()->Record;
 

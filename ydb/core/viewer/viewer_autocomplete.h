@@ -19,7 +19,7 @@ class TJsonAutocomplete : public TViewerPipeClient {
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
 
-    std::optional<TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse>> ConsoleResult;
+    std::optional<TRequestResponse<NConsole::NEvConsole::TEvListTenantsResponse>> ConsoleResult;
     std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> CacheResult;
 
     struct TSchemaWordData {
@@ -173,7 +173,7 @@ public:
 
     STATEFN(StateRequestedDescribe) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NConsole::TEvConsole::TEvListTenantsResponse, Handle);
+            hFunc(NConsole::NEvConsole::TEvListTenantsResponse, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
@@ -265,7 +265,7 @@ public:
         RequestDone();
     }
 
-    void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev) {
+    void Handle(NConsole::NEvConsole::TEvListTenantsResponse::TPtr& ev) {
         ConsoleResult->Set(std::move(ev));
         RequestDone();
     }

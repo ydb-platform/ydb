@@ -478,14 +478,14 @@ Y_UNIT_TEST(TestDescribeBalancer) {
         tc.Runtime->SetDispatchTimeout(TDuration::MilliSeconds(100));
         PQBalancerPrepare(TOPIC_NAME, {{1,{1, 2}}}, ssId, tc);
         TAutoPtr<IEventHandle> handle;
-        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, new TEvPersQueue::TEvDescribe(), 0, GetPipeConfigWithRetries());
-        TEvPersQueue::TEvDescribeResponse* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvDescribeResponse>(handle);
+        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, new NEvPersQueue::TEvDescribe(), 0, GetPipeConfigWithRetries());
+        NEvPersQueue::TEvDescribeResponse* result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvDescribeResponse>(handle);
         UNIT_ASSERT(result);
         auto& rec = result->Record;
         UNIT_ASSERT(rec.HasSchemeShardId() && rec.GetSchemeShardId() == ssId);
         PQTabletRestart(tc);
-        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, new TEvPersQueue::TEvDescribe(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvDescribeResponse>(handle);
+        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, new NEvPersQueue::TEvDescribe(), 0, GetPipeConfigWithRetries());
+        result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvDescribeResponse>(handle);
         UNIT_ASSERT(result);
         auto& rec2 = result->Record;
         UNIT_ASSERT(rec2.HasSchemeShardId() && rec2.GetSchemeShardId() == ssId);
@@ -508,7 +508,7 @@ Y_UNIT_TEST(TestCheckACL) {
         tc.Runtime->RegisterService(NKikimr::MakeTicketParserID(), ticketParserId);
 
         TAutoPtr<IEventHandle> handle;
-        THolder<TEvPersQueue::TEvCheckACL> request(new TEvPersQueue::TEvCheckACL());
+        THolder<NEvPersQueue::TEvCheckACL> request(new NEvPersQueue::TEvCheckACL());
         request->Record.SetToken(NACLib::TUserToken("client@" BUILTIN_ACL_DOMAIN, {}).SerializeAsString());
         request->Record.SetOperation(NKikimrPQ::EOperation::READ_OP);
         request->Record.SetUser("client");
@@ -521,11 +521,11 @@ Y_UNIT_TEST(TestCheckACL) {
 
         {
             TDispatchOptions options;
-            options.FinalEvents.emplace_back(NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult);
+            options.FinalEvents.emplace_back(NSchemeShard::NEvSchemeShard::EvDescribeSchemeResult);
             tc.Runtime->DispatchEvents(options);
         }
 
-        TEvPersQueue::TEvCheckACLResponse* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
+        NEvPersQueue::TEvCheckACLResponse* result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvCheckACLResponse>(handle);
         auto& rec = result->Record;
         UNIT_ASSERT(rec.GetAccess() == NKikimrPQ::EAccess::DENIED);
         UNIT_ASSERT_VALUES_EQUAL(rec.GetTopic(), TOPIC_NAME);
@@ -534,17 +534,17 @@ Y_UNIT_TEST(TestCheckACL) {
 
         {
             TDispatchOptions options;
-            options.FinalEvents.emplace_back(NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult);
+            options.FinalEvents.emplace_back(NSchemeShard::NEvSchemeShard::EvDescribeSchemeResult);
             tc.Runtime->DispatchEvents(options);
         }
 
-        request.Reset(new TEvPersQueue::TEvCheckACL());
+        request.Reset(new NEvPersQueue::TEvCheckACL());
         request->Record.SetToken(NACLib::TUserToken("client@" BUILTIN_ACL_DOMAIN, {}).SerializeAsString());
         request->Record.SetUser("client");
         request->Record.SetOperation(NKikimrPQ::EOperation::READ_OP);
 
         tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
+        result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvCheckACLResponse>(handle);
         auto& rec2 = result->Record;
         UNIT_ASSERT_C(rec2.GetAccess() == NKikimrPQ::EAccess::ALLOWED, rec2);
 
@@ -552,66 +552,66 @@ Y_UNIT_TEST(TestCheckACL) {
 
         {
             TDispatchOptions options;
-            options.FinalEvents.emplace_back(NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult);
+            options.FinalEvents.emplace_back(NSchemeShard::NEvSchemeShard::EvDescribeSchemeResult);
             tc.Runtime->DispatchEvents(options);
         }
 
-        request.Reset(new TEvPersQueue::TEvCheckACL());
+        request.Reset(new NEvPersQueue::TEvCheckACL());
         request->Record.SetToken(NACLib::TUserToken("client@" BUILTIN_ACL_DOMAIN, {}).SerializeAsString());
         request->Record.SetUser("client");
         request->Record.SetOperation(NKikimrPQ::EOperation::WRITE_OP);
 
         tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
+        result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvCheckACLResponse>(handle);
         auto& rec3 = result->Record;
         UNIT_ASSERT(rec3.GetAccess() == NKikimrPQ::EAccess::ALLOWED);
 
-        request.Reset(new TEvPersQueue::TEvCheckACL());
+        request.Reset(new NEvPersQueue::TEvCheckACL());
         request->Record.SetToken(NACLib::TUserToken("client@" BUILTIN_ACL_DOMAIN, {}).SerializeAsString());
         request->Record.SetUser("client2");
         request->Record.SetOperation(NKikimrPQ::EOperation::WRITE_OP);
 
         tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
+        result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvCheckACLResponse>(handle);
         auto& rec9 = result->Record;
         UNIT_ASSERT(rec9.GetAccess() == NKikimrPQ::EAccess::ALLOWED);
 
-        request.Reset(new TEvPersQueue::TEvCheckACL());
+        request.Reset(new NEvPersQueue::TEvCheckACL());
         // No auth provided and auth for topic not required
         request->Record.SetOperation(NKikimrPQ::EOperation::WRITE_OP);
 
         tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
+        result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvCheckACLResponse>(handle);
         auto& rec5 = result->Record;
         UNIT_ASSERT(rec5.GetAccess() == NKikimrPQ::EAccess::ALLOWED);
 
-        request.Reset(new TEvPersQueue::TEvCheckACL());
+        request.Reset(new NEvPersQueue::TEvCheckACL());
         // No auth provided and auth for topic not required
         request->Record.SetOperation(NKikimrPQ::EOperation::READ_OP);
 
         tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
+        result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvCheckACLResponse>(handle);
         auto& rec6 = result->Record;
         UNIT_ASSERT(rec6.GetAccess() == NKikimrPQ::EAccess::ALLOWED);
 
-        request.Reset(new TEvPersQueue::TEvCheckACL());
+        request.Reset(new NEvPersQueue::TEvCheckACL());
         // No auth provided and auth for topic is required
         request->Record.SetOperation(NKikimrPQ::EOperation::READ_OP);
         request->Record.SetToken("");
 
         PQBalancerPrepare(TOPIC_NAME, {{1,{1, 2}}}, ssId, tc, true);
         tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
+        result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvCheckACLResponse>(handle);
         auto& rec7 = result->Record;
         UNIT_ASSERT(rec7.GetAccess() == NKikimrPQ::EAccess::DENIED);
 
-        request.Reset(new TEvPersQueue::TEvCheckACL());
+        request.Reset(new NEvPersQueue::TEvCheckACL());
         // No auth provided and auth for topic is required
         request->Record.SetOperation(NKikimrPQ::EOperation::READ_OP);
         request->Record.SetToken("");
 
         tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
+        result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvCheckACLResponse>(handle);
         auto& rec8 = result->Record;
         UNIT_ASSERT(rec8.GetAccess() == NKikimrPQ::EAccess::DENIED);
     });
@@ -679,9 +679,9 @@ Y_UNIT_TEST(TestWaitInOwners) {
         auto p = CmdSetOwner(0, tc, "owner", true); //will break last owner
 
         TAutoPtr<IEventHandle> handle;
-        TEvPersQueue::TEvResponse *result;
+        NEvPersQueue::TEvResponse *result;
         try {
-            result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+            result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvResponse>(handle);
         } catch (NActors::TSchedulingLimitReachedException) {
             result = nullptr;
         }
@@ -693,7 +693,7 @@ Y_UNIT_TEST(TestWaitInOwners) {
 
         WritePartData(0, "sourceid", 12, 1, 1, 5, 20, "value", tc, p.first, 0);
 
-        result = tc.Runtime->GrabEdgeEventIf<TEvPersQueue::TEvResponse>(handle, [](const TEvPersQueue::TEvResponse& ev){
+        result = tc.Runtime->GrabEdgeEventIf<NEvPersQueue::TEvResponse>(handle, [](const NEvPersQueue::TEvResponse& ev){
                 if (ev.Record.HasPartitionResponse() && ev.Record.GetPartitionResponse().CmdWriteResultSize() > 0 || ev.Record.GetErrorCode() != NPersQueue::NErrorCode::OK)
                     return true;
                 return false;
@@ -704,7 +704,7 @@ Y_UNIT_TEST(TestWaitInOwners) {
         UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
 
         try {
-            result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+            result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvResponse>(handle);
         } catch (NActors::TSchedulingLimitReachedException) {
             result = nullptr;
         }
@@ -718,7 +718,7 @@ Y_UNIT_TEST(TestWaitInOwners) {
         SetOwner(0, tc, "owner", false); //will wait
 
         try {
-            result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+            result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvResponse>(handle);
         } catch (NActors::TSchedulingLimitReachedException) {
             result = nullptr;
         }
@@ -732,7 +732,7 @@ Y_UNIT_TEST(TestWaitInOwners) {
         tc.Runtime->DispatchEvents(options);
 
         try {
-            result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+            result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvResponse>(handle);
         } catch (NActors::TSchedulingLimitReachedException) {
             result = nullptr;
         }
@@ -780,9 +780,9 @@ Y_UNIT_TEST(TestReserveBytes) {
         CmdWrite(0, "sourceid0", data, tc, false, {}, true, cookie, 4);
 
         TAutoPtr<IEventHandle> handle;
-        TEvPersQueue::TEvResponse *result;
+        NEvPersQueue::TEvResponse *result;
         try {
-            result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+            result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvResponse>(handle);
         } catch (NActors::TSchedulingLimitReachedException) {
             result = nullptr;
         }
@@ -791,7 +791,7 @@ Y_UNIT_TEST(TestReserveBytes) {
 
         CmdWrite(0, "sourceid2", data, tc, false, {}, false, cookie, 5);
 
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle); //now no inflight - 80 may fit
+        result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvResponse>(handle); //now no inflight - 80 may fit
 
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Record.HasStatus());
@@ -835,8 +835,8 @@ Y_UNIT_TEST(TestMessageNo) {
         WriteData(0, "sourceid1", data, tc, cookie, 2, -1);
 
         TAutoPtr<IEventHandle> handle;
-        TEvPersQueue::TEvResponse *result;
-        result = tc.Runtime->GrabEdgeEventIf<TEvPersQueue::TEvResponse>(handle, [](const TEvPersQueue::TEvResponse& ev){
+        NEvPersQueue::TEvResponse *result;
+        result = tc.Runtime->GrabEdgeEventIf<NEvPersQueue::TEvResponse>(handle, [](const NEvPersQueue::TEvResponse& ev){
             if (!ev.Record.HasPartitionResponse() || !ev.Record.GetPartitionResponse().HasCmdReadResult())
                 return true;
             return false;
@@ -900,9 +900,9 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
 
             WritePartDataWithBigMsg(0, "sourceid0", 1, 1, 5, s.size(), parts[1], tc, cookie, 0, 12_MB);
             TAutoPtr<IEventHandle> handle;
-            TEvPersQueue::TEvResponse *result;
+            NEvPersQueue::TEvResponse *result;
 
-            result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+            result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvResponse>(handle);
 
             UNIT_ASSERT(result);
 
@@ -926,9 +926,9 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
                 WritePartData(0, "sourceid1", -1, j == toWrite ? 2 : 1, k, parts.size(), s.size(), parts[k], tc, cookie, j);
 
                 TAutoPtr<IEventHandle> handle;
-                TEvPersQueue::TEvResponse *result;
+                NEvPersQueue::TEvResponse *result;
 
-                result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+                result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvResponse>(handle);
 
                 UNIT_ASSERT(result);
 
@@ -962,9 +962,9 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
             WritePartData(0, "sourceidX", 10, 1, 0, 5, s.size(), parts[1], tc, cookie, 0);
 
             TAutoPtr<IEventHandle> handle;
-            TEvPersQueue::TEvResponse *result;
+            NEvPersQueue::TEvResponse *result;
 
-            result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+            result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvResponse>(handle);
 
             UNIT_ASSERT(result);
             UNIT_ASSERT(result->Record.HasStatus());
@@ -974,7 +974,7 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
             cookie = CmdSetOwner(0, tc).first;
             WritePartData(0, "sourceidX", 12, 1, 0, 5, s.size(), parts[1], tc, cookie, 0);
 
-            result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+            result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvResponse>(handle);
 
             UNIT_ASSERT(result);
             UNIT_ASSERT(result->Record.HasStatus());
@@ -983,7 +983,7 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
             //check gaps
             WritePartData(0, "sourceidX", 15, 1, 1, 5, s.size(), parts[1], tc, cookie, 1);
 
-            result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+            result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvResponse>(handle);
 
             UNIT_ASSERT(result);
             UNIT_ASSERT(result->Record.HasStatus());
@@ -993,7 +993,7 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
             cookie = CmdSetOwner(0, tc).first;
             WritePartData(0, "sourceidX", 12, 1, 0, 5, s.size(), parts[1], tc, cookie, 0);
 
-            result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+            result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvResponse>(handle);
 
             UNIT_ASSERT(result);
             UNIT_ASSERT(result->Record.HasStatus());
@@ -1002,7 +1002,7 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
             //check gaps
             WritePartData(0, "sourceidX", 12, 1, 4, 5, s.size(), parts[1], tc, cookie, 1);
 
-            result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+            result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvResponse>(handle);
 
             UNIT_ASSERT(result);
             UNIT_ASSERT(result->Record.HasStatus());
@@ -1012,7 +1012,7 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
             cookie = CmdSetOwner(0, tc).first;
             WritePartData(0, "sourceidY", 13, 1, 0, 5, s.size(), TString{10_MB, 'a'}, tc, cookie, 0);
 
-            result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+            result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvResponse>(handle);
 
             UNIT_ASSERT(result);
             UNIT_ASSERT(result->Record.HasStatus());
@@ -1920,10 +1920,10 @@ Y_UNIT_TEST(TestReadSubscription) {
         CmdWrite(0, "sourceid0", data, tc, false, {}, true);
 
         TAutoPtr<IEventHandle> handle;
-        TEvPersQueue::TEvResponse *result;
-        THolder<TEvPersQueue::TEvRequest> request;
+        NEvPersQueue::TEvResponse *result;
+        THolder<NEvPersQueue::TEvRequest> request;
 
-        request.Reset(new TEvPersQueue::TEvRequest);
+        request.Reset(new NEvPersQueue::TEvRequest);
         auto req = request->Record.MutablePartitionRequest();
         req->SetPartition(0);
         auto read = req->MutableCmdRead();
@@ -1935,14 +1935,14 @@ Y_UNIT_TEST(TestReadSubscription) {
 
         tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
 
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+        result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvResponse>(handle);
 
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Record.HasStatus());
         UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::OK); //read without write must be timeouted
         UNIT_ASSERT_EQUAL(result->Record.GetPartitionResponse().GetCmdReadResult().ResultSize(), 0); //read without write must be timeouted
 
-        request.Reset(new TEvPersQueue::TEvRequest);
+        request.Reset(new NEvPersQueue::TEvRequest);
         req = request->Record.MutablePartitionRequest();
         req->SetPartition(0);
         read = req->MutableCmdRead();
@@ -1956,14 +1956,14 @@ Y_UNIT_TEST(TestReadSubscription) {
 
         CmdWrite(0, "sourceid1", data, tc); //write
 
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle); //now got data
+        result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvResponse>(handle); //now got data
 
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Record.HasStatus());
         UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::OK);
         UNIT_ASSERT_EQUAL(result->Record.GetPartitionResponse().GetCmdReadResult().ResultSize(), 3); //got response, but only for 3 from 5 writed blobs
 
-        request.Reset(new TEvPersQueue::TEvRequest);
+        request.Reset(new NEvPersQueue::TEvRequest);
         req = request->Record.MutablePartitionRequest();
         req->SetPartition(0);
         read = req->MutableCmdRead();
@@ -1977,7 +1977,7 @@ Y_UNIT_TEST(TestReadSubscription) {
 
         CmdWrite(0, "sourceid2", data, tc); //write
 
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle); //now got data
+        result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvResponse>(handle); //now got data
 
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Record.HasStatus());
@@ -2186,11 +2186,11 @@ Y_UNIT_TEST(TestManyConsumers) {
     }
 
     for (ui32 i = 0; i < 100; ++i) {
-        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, new TEvPersQueue::TEvStatus(), 0, GetPipeConfigWithRetries());
+        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, new NEvPersQueue::TEvStatus(), 0, GetPipeConfigWithRetries());
 
         TAutoPtr<IEventHandle> handle;
-        TEvPersQueue::TEvStatusResponse *result;
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvStatusResponse>(handle);
+        NEvPersQueue::TEvStatusResponse *result;
+        result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvStatusResponse>(handle);
         Y_UNUSED(result);
     }
     PQBalancerPrepare(TOPIC_NAME, {{0,{tc.TabletId, 1}}}, ssId, tc, false, true);
@@ -2226,39 +2226,39 @@ Y_UNIT_TEST(TestStatusWithMultipleConsumers) {
     }
 
     {
-        THolder<TEvPersQueue::TEvStatus> statusEvent = MakeHolder<TEvPersQueue::TEvStatus>();
+        THolder<NEvPersQueue::TEvStatus> statusEvent = MakeHolder<NEvPersQueue::TEvStatus>();
         statusEvent->Record.AddConsumers("consumer-0");
         statusEvent->Record.AddConsumers("consumer-1");
         tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, statusEvent.Release(), 0, GetPipeConfigWithRetries());
         TAutoPtr<IEventHandle> handle;
-        TEvPersQueue::TEvStatusResponse *result;
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvStatusResponse>(handle);
+        NEvPersQueue::TEvStatusResponse *result;
+        result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvStatusResponse>(handle);
         UNIT_ASSERT_EQUAL(result->Record.GetPartResult()[0].GetConsumerResult().size(),  2);
         UNIT_ASSERT_EQUAL(result->Record.GetPartResult()[0].GetConsumerResult()[0].GetErrorCode(), NPersQueue::NErrorCode::OK);
         UNIT_ASSERT_EQUAL(result->Record.GetPartResult()[0].GetConsumerResult()[1].GetErrorCode(), NPersQueue::NErrorCode::OK);
     }
 
     {
-        THolder<TEvPersQueue::TEvStatus> statusEvent = MakeHolder<TEvPersQueue::TEvStatus>();
+        THolder<NEvPersQueue::TEvStatus> statusEvent = MakeHolder<NEvPersQueue::TEvStatus>();
         statusEvent->Record.AddConsumers("nonex-consumer-2");
         statusEvent->Record.AddConsumers("nonex-consumer-3");
         tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, statusEvent.Release(), 0, GetPipeConfigWithRetries());
         TAutoPtr<IEventHandle> handle;
-        TEvPersQueue::TEvStatusResponse *result;
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvStatusResponse>(handle);
+        NEvPersQueue::TEvStatusResponse *result;
+        result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvStatusResponse>(handle);
         UNIT_ASSERT_EQUAL(result->Record.GetPartResult()[0].GetConsumerResult().size(),  2);
         UNIT_ASSERT_EQUAL(result->Record.GetPartResult()[0].GetConsumerResult()[0].GetErrorCode(), NPersQueue::NErrorCode::SCHEMA_ERROR);
         UNIT_ASSERT_EQUAL(result->Record.GetPartResult()[0].GetConsumerResult()[1].GetErrorCode(), NPersQueue::NErrorCode::SCHEMA_ERROR);
     }
 
     {
-        THolder<TEvPersQueue::TEvStatus> statusEvent = MakeHolder<TEvPersQueue::TEvStatus>();
+        THolder<NEvPersQueue::TEvStatus> statusEvent = MakeHolder<NEvPersQueue::TEvStatus>();
         statusEvent->Record.AddConsumers("consumer-0");
         statusEvent->Record.AddConsumers("nonex-consumer");
         tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, statusEvent.Release(), 0, GetPipeConfigWithRetries());
         TAutoPtr<IEventHandle> handle;
-        TEvPersQueue::TEvStatusResponse *result;
-        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvStatusResponse>(handle);
+        NEvPersQueue::TEvStatusResponse *result;
+        result = tc.Runtime->GrabEdgeEvent<NEvPersQueue::TEvStatusResponse>(handle);
 
         auto consumer0Result = std::find_if(
             result->Record.GetPartResult()[0].GetConsumerResult().begin(),

@@ -131,7 +131,7 @@ TMaybe<TPathId> GetTablePathId(TTestActorRuntime& runtime, TActorId sender, TStr
     request->Record.MutableDescribePath()->SetPath(path);
     runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
 
-    auto reply = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDescribeSchemeResult>(sender);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvSchemeShard::TEvDescribeSchemeResult>(sender);
     if (reply->Get()->GetRecord().GetStatus() != NKikimrScheme::EStatus::StatusSuccess) {
         return {};
     }
@@ -274,10 +274,10 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
         TDataShardId sourceDatashard{};
 
         {
-            auto request = MakeHolder<TEvDataShard::TEvGetInfoRequest>();
+            auto request = MakeHolder<NEvDataShard::TEvGetInfoRequest>();
             runtime.SendToPipe(srcShards[0], edgeActor, request.Release(), 0, GetPipeConfigWithRetries());
 
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetInfoResponse>(edgeActor);
+            auto ev = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvGetInfoResponse>(edgeActor);
             sourceDatashard.ActorId = ev->Sender;
         }
 

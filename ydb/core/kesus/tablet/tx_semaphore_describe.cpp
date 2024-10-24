@@ -8,8 +8,8 @@ struct TKesusTablet::TTxSemaphoreDescribe : public TTxBase {
     const ui64 Cookie;
     const NKikimrKesus::TEvDescribeSemaphore Record;
 
-    THolder<TEvKesus::TEvDescribeSemaphoreChanged> Notification;
-    THolder<TEvKesus::TEvDescribeSemaphoreResult> Reply;
+    THolder<NEvKesus::TEvDescribeSemaphoreChanged> Notification;
+    THolder<NEvKesus::TEvDescribeSemaphoreResult> Reply;
     ui64 NotificationCookie = 0;
 
     TTxSemaphoreDescribe(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvDescribeSemaphore& record)
@@ -36,7 +36,7 @@ struct TKesusTablet::TTxSemaphoreDescribe : public TTxBase {
         if (Record.GetProxyGeneration() != 0 || Record.GetSessionId() != 0) {
             proxy = Self->Proxies.FindPtr(Sender);
             if (!proxy || proxy->Generation != Record.GetProxyGeneration()) {
-                Reply.Reset(new TEvKesus::TEvDescribeSemaphoreResult(
+                Reply.Reset(new NEvKesus::TEvDescribeSemaphoreResult(
                     Record.GetProxyGeneration(),
                     Ydb::StatusIds::BAD_SESSION,
                     proxy ? "ProxyGeneration mismatch" : "Proxy is not registered"));
@@ -49,14 +49,14 @@ struct TKesusTablet::TTxSemaphoreDescribe : public TTxBase {
 
             session = Self->Sessions.FindPtr(Record.GetSessionId());
             if (!session || session->OwnerProxy != proxy) {
-                Reply.Reset(new TEvKesus::TEvDescribeSemaphoreResult(
+                Reply.Reset(new NEvKesus::TEvDescribeSemaphoreResult(
                     Record.GetProxyGeneration(),
                     session ? Ydb::StatusIds::BAD_SESSION : Ydb::StatusIds::SESSION_EXPIRED,
                     session ? "Session not attached" : "Session does not exist"));
                 return true;
             }
         } else if (Record.GetWatchData() || Record.GetWatchOwners()) {
-            Reply.Reset(new TEvKesus::TEvDescribeSemaphoreResult(
+            Reply.Reset(new NEvKesus::TEvDescribeSemaphoreResult(
                 Record.GetProxyGeneration(),
                 Ydb::StatusIds::BAD_REQUEST,
                 "Watches cannot be used without an active session"));
@@ -69,14 +69,14 @@ struct TKesusTablet::TTxSemaphoreDescribe : public TTxBase {
 
         auto* semaphore = Self->SemaphoresByName.Value(Record.GetName(), nullptr);
         if (!semaphore) {
-            Reply.Reset(new TEvKesus::TEvDescribeSemaphoreResult(
+            Reply.Reset(new NEvKesus::TEvDescribeSemaphoreResult(
                 Record.GetProxyGeneration(),
                 Ydb::StatusIds::NOT_FOUND,
                 TStringBuilder() << "Semaphore not found"));
             return true;
         }
 
-        Reply.Reset(new TEvKesus::TEvDescribeSemaphoreResult(Record.GetProxyGeneration()));
+        Reply.Reset(new NEvKesus::TEvDescribeSemaphoreResult(Record.GetProxyGeneration()));
         auto* desc = Reply->Record.MutableSemaphoreDescription();
         desc->set_name(semaphore->Name);
         desc->set_data(semaphore->Data);
@@ -112,7 +112,7 @@ struct TKesusTablet::TTxSemaphoreDescribe : public TTxBase {
                 semaphore->OwnersWatchers.erase(session);
             if (replacingWatch) {
                 NotificationCookie = session->RemoveSemaphoreWatchCookie(semaphore);
-                Notification.Reset(new TEvKesus::TEvDescribeSemaphoreChanged(proxy->Generation, false, false));
+                Notification.Reset(new NEvKesus::TEvDescribeSemaphoreChanged(proxy->Generation, false, false));
             }
 
             session->SemaphoreWatchCookie[semaphore] = Cookie;
@@ -143,7 +143,7 @@ struct TKesusTablet::TTxSemaphoreDescribe : public TTxBase {
     }
 };
 
-void TKesusTablet::Handle(TEvKesus::TEvDescribeSemaphore::TPtr& ev) {
+void TKesusTablet::Handle(NEvKesus::TEvDescribeSemaphore::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     VerifyKesusPath(record.GetKesusPath());
 

@@ -42,7 +42,7 @@ public:
                     if (msg->Status != NKikimrProto::EReplyStatus::OK) {
                         BLOG_W("THive::TTxBlockStorageResult Complete status was " << NKikimrProto::EReplyStatus_Name(msg->Status) << " for TabletId " << tablet->Id);
                     }
-                    SideEffects.Send(Self->SelfId(), new TEvHive::TEvInitiateDeleteStorage(tablet->Id));
+                    SideEffects.Send(Self->SelfId(), new NEvHive::TEvInitiateDeleteStorage(tablet->Id));
                 } else {
                     tablet->State = ETabletState::ReadyToWork;
                     if (tablet->IsBootingSuppressed()) {
@@ -54,7 +54,7 @@ public:
                 }
             } else {
                 BLOG_W("THive::TTxBlockStorageResult retrying for " << TabletId << " because of " << NKikimrProto::EReplyStatus_Name(msg->Status));
-                SideEffects.Schedule(TDuration::MilliSeconds(1000), new TEvHive::TEvInitiateBlockStorage(tablet->Id));
+                SideEffects.Schedule(TDuration::MilliSeconds(1000), new NEvHive::TEvInitiateBlockStorage(tablet->Id));
             }
         }
         return true;

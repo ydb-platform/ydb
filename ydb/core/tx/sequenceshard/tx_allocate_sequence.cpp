@@ -4,7 +4,7 @@ namespace NKikimr {
 namespace NSequenceShard {
 
     struct TSequenceShard::TTxAllocateSequence : public TTxBase {
-        explicit TTxAllocateSequence(TSelf* self, TEvSequenceShard::TEvAllocateSequence::TPtr&& ev)
+        explicit TTxAllocateSequence(TSelf* self, NEvSequenceShard::TEvAllocateSequence::TPtr&& ev)
             : TTxBase(self)
             , Ev(std::move(ev))
         { }
@@ -179,14 +179,14 @@ namespace NSequenceShard {
         }
 
         void SetResult(NKikimrTxSequenceShard::TEvAllocateSequenceResult::EStatus status) {
-            Result.Reset(new TEvSequenceShard::TEvAllocateSequenceResult(status, Self->TabletID()));
+            Result.Reset(new NEvSequenceShard::TEvAllocateSequenceResult(status, Self->TabletID()));
         }
 
-        TEvSequenceShard::TEvAllocateSequence::TPtr Ev;
-        THolder<TEvSequenceShard::TEvAllocateSequenceResult> Result;
+        NEvSequenceShard::TEvAllocateSequence::TPtr Ev;
+        THolder<NEvSequenceShard::TEvAllocateSequenceResult> Result;
     };
 
-    void TSequenceShard::Handle(TEvSequenceShard::TEvAllocateSequence::TPtr& ev, const TActorContext& ctx) {
+    void TSequenceShard::Handle(NEvSequenceShard::TEvAllocateSequence::TPtr& ev, const TActorContext& ctx) {
         Execute(new TTxAllocateSequence(this, std::move(ev)), ctx);
     }
 

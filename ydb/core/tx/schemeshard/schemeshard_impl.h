@@ -93,7 +93,7 @@ private:
     using TCompactionQueue = NOperationQueue::TOperationQueueWithTimer<
         TShardCompactionInfo,
         TCompactionQueueImpl,
-        TEvPrivate::EvRunBackgroundCompaction,
+        NEvPrivate::EvRunBackgroundCompaction,
         NKikimrServices::FLAT_TX_SCHEMESHARD,
         NKikimrServices::TActivity::SCHEMESHARD_BACKGROUND_COMPACTION>;
 
@@ -118,7 +118,7 @@ private:
     using TBorrowedCompactionQueue = NOperationQueue::TOperationQueueWithTimer<
         TShardIdx,
         TFifoQueue<TShardIdx>,
-        TEvPrivate::EvRunBorrowedCompaction,
+        NEvPrivate::EvRunBorrowedCompaction,
         NKikimrServices::FLAT_TX_SCHEMESHARD,
         NKikimrServices::TActivity::SCHEMESHARD_BORROWED_COMPACTION>;
 
@@ -143,7 +143,7 @@ private:
     using TBackgroundCleaningQueue = NOperationQueue::TOperationQueueWithTimer<
         TPathId,
         TFifoQueue<TPathId>,
-        TEvPrivate::EvRunBackgroundCleaning,
+        NEvPrivate::EvRunBackgroundCleaning,
         NKikimrServices::FLAT_TX_SCHEMESHARD,
         NKikimrServices::TActivity::SCHEMESHARD_BACKGROUND_CLEANING>;
 
@@ -358,11 +358,11 @@ public:
     // time when we opened the batch
     bool TableStatsBatchScheduled = false;
     bool TablePersistStatsPending = false;
-    TStatsQueue<TEvDataShard::TEvPeriodicTableStats> TableStatsQueue;
+    TStatsQueue<NEvDataShard::TEvPeriodicTableStats> TableStatsQueue;
 
     bool TopicStatsBatchScheduled = false;
     bool TopicPersistStatsPending = false;
-    TStatsQueue<TEvPersQueue::TEvPeriodicTopicStats> TopicStatsQueue;
+    TStatsQueue<NEvPersQueue::TEvPeriodicTopicStats> TopicStatsQueue;
 
     TSet<TPathId> CleanDroppedPathsCandidates;
     TSet<TPathId> CleanDroppedSubDomainsCandidates;
@@ -373,14 +373,14 @@ public:
     TTokenBucket DropBlockStoreVolumeRateLimiter;
 
     TActorId DelayedInitTenantDestination;
-    TAutoPtr<TEvSchemeShard::TEvInitTenantSchemeShardResult> DelayedInitTenantReply;
+    TAutoPtr<NEvSchemeShard::TEvInitTenantSchemeShardResult> DelayedInitTenantReply;
 
     NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory{NExternalSource::CreateExternalSourceFactory({})};
 
     THolder<TProposeResponse> IgniteOperation(TProposeRequest& request, TOperationContext& context);
     void AbortOperationPropose(const TTxId txId, TOperationContext& context);
 
-    THolder<TEvDataShard::TEvProposeTransaction> MakeDataShardProposal(const TPathId& pathId, const TOperationId& opId,
+    THolder<NEvDataShard::TEvProposeTransaction> MakeDataShardProposal(const TPathId& pathId, const TOperationId& opId,
         const TString& body, const TActorContext& ctx) const;
 
     TPathId RootPathId() const {
@@ -458,7 +458,7 @@ public:
     void SubscribeConsoleConfigs(const TActorContext& ctx);
     void ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfig, const TActorContext& ctx);
     void ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featureFlags, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvConsoleConfigsTimeout::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPrivate::TEvConsoleConfigsTimeout::TPtr& ev, const TActorContext& ctx);
 
     void ConfigureStatsBatching(
         const NKikimrConfig::TSchemeShardConfig& config,
@@ -852,10 +852,10 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxInitRoot();
 
     struct TTxInitRootCompatibility;
-    NTabletFlatExecutor::ITransaction* CreateTxInitRootCompatibility(TEvSchemeShard::TEvInitRootShard::TPtr &ev);
+    NTabletFlatExecutor::ITransaction* CreateTxInitRootCompatibility(NEvSchemeShard::TEvInitRootShard::TPtr &ev);
 
     struct TTxInitTenantSchemeShard;
-    NTabletFlatExecutor::ITransaction* CreateTxInitTenantSchemeShard(TEvSchemeShard::TEvInitTenantSchemeShard::TPtr &ev);
+    NTabletFlatExecutor::ITransaction* CreateTxInitTenantSchemeShard(NEvSchemeShard::TEvInitTenantSchemeShard::TPtr &ev);
 
     struct TActivationOpts {
         TSideEffects::TPublications DelayPublications;
@@ -889,7 +889,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxCleanDroppedPaths();
 
     void ScheduleCleanDroppedPaths();
-    void Handle(TEvPrivate::TEvCleanDroppedPaths::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPrivate::TEvCleanDroppedPaths::TPtr& ev, const TActorContext& ctx);
 
     void EnqueueBackgroundCompaction(const TShardIdx& shardIdx, const TPartitionStats& stats);
     void UpdateBackgroundCompaction(const TShardIdx& shardIdx, const TPartitionStats& stats);
@@ -922,9 +922,9 @@ public:
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
     bool CheckOwnerUndelivered(TEvents::TEvUndelivered::TPtr& ev);
     void RetryNodeSubscribe(ui32 nodeId);
-    void Handle(TEvPrivate::TEvRetryNodeSubscribe::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPrivate::TEvRetryNodeSubscribe::TPtr& ev, const TActorContext& ctx);
     void HandleBackgroundCleaningTransactionResult(
-        TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& result);
+        NEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& result);
     void HandleBackgroundCleaningCompletionResult(const TTxId& txId);
     void CleanBackgroundCleaningState(const TPathId& pathId);
     void ClearTempDirsState();
@@ -933,42 +933,42 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxCleanDroppedSubDomains();
 
     void ScheduleCleanDroppedSubDomains();
-    void Handle(TEvPrivate::TEvCleanDroppedSubDomains::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPrivate::TEvCleanDroppedSubDomains::TPtr& ev, const TActorContext& ctx);
 
     struct TTxFixBadPaths;
     NTabletFlatExecutor::ITransaction* CreateTxFixBadPaths();
 
     struct TTxPublishTenantAsReadOnly;
-    NTabletFlatExecutor::ITransaction* CreateTxPublishTenantAsReadOnly(TEvSchemeShard::TEvPublishTenantAsReadOnly::TPtr &ev);
+    NTabletFlatExecutor::ITransaction* CreateTxPublishTenantAsReadOnly(NEvSchemeShard::TEvPublishTenantAsReadOnly::TPtr &ev);
 
     struct TTxPublishTenant;
-    NTabletFlatExecutor::ITransaction* CreateTxPublishTenant(TEvSchemeShard::TEvPublishTenant::TPtr &ev);
+    NTabletFlatExecutor::ITransaction* CreateTxPublishTenant(NEvSchemeShard::TEvPublishTenant::TPtr &ev);
 
     struct TTxMigrate;
-    NTabletFlatExecutor::ITransaction* CreateTxMigrate(TEvSchemeShard::TEvMigrateSchemeShard::TPtr &ev);
+    NTabletFlatExecutor::ITransaction* CreateTxMigrate(NEvSchemeShard::TEvMigrateSchemeShard::TPtr &ev);
 
     struct TTxDescribeScheme;
-    NTabletFlatExecutor::ITransaction* CreateTxDescribeScheme(TEvSchemeShard::TEvDescribeScheme::TPtr &ev);
+    NTabletFlatExecutor::ITransaction* CreateTxDescribeScheme(NEvSchemeShard::TEvDescribeScheme::TPtr &ev);
 
     struct TTxNotifyCompletion;
-    NTabletFlatExecutor::ITransaction* CreateTxNotifyTxCompletion(TEvSchemeShard::TEvNotifyTxCompletion::TPtr &ev);
+    NTabletFlatExecutor::ITransaction* CreateTxNotifyTxCompletion(NEvSchemeShard::TEvNotifyTxCompletion::TPtr &ev);
 
     struct TTxDeleteTabletReply;
-    NTabletFlatExecutor::ITransaction* CreateTxDeleteTabletReply(TEvHive::TEvDeleteTabletReply::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxDeleteTabletReply(NEvHive::TEvDeleteTabletReply::TPtr& ev);
 
     struct TTxShardStateChanged;
-    NTabletFlatExecutor::ITransaction* CreateTxShardStateChanged(TEvDataShard::TEvStateChanged::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxShardStateChanged(NEvDataShard::TEvStateChanged::TPtr& ev);
 
     struct TTxRunConditionalErase;
-    NTabletFlatExecutor::ITransaction* CreateTxRunConditionalErase(TEvPrivate::TEvRunConditionalErase::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxRunConditionalErase(NEvPrivate::TEvRunConditionalErase::TPtr& ev);
 
     struct TTxScheduleConditionalErase;
-    NTabletFlatExecutor::ITransaction* CreateTxScheduleConditionalErase(TEvDataShard::TEvConditionalEraseRowsResponse::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxScheduleConditionalErase(NEvDataShard::TEvConditionalEraseRowsResponse::TPtr& ev);
 
     struct TTxSyncTenant;
     NTabletFlatExecutor::ITransaction* CreateTxSyncTenant(TPathId tabletId);
     struct TTxUpdateTenant;
-    NTabletFlatExecutor::ITransaction* CreateTxUpdateTenant(TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxUpdateTenant(NEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr& ev);
 
     struct TTxPublishToSchemeBoard;
     NTabletFlatExecutor::ITransaction* CreateTxPublishToSchemeBoard(THashMap<TTxId, TDeque<TPathId>>&& paths);
@@ -976,10 +976,10 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxAckPublishToSchemeBoard(NSchemeBoard::NSchemeshardEvents::TEvUpdateAck::TPtr& ev);
 
     struct TTxOperationPropose;
-    NTabletFlatExecutor::ITransaction* CreateTxOperationPropose(TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxOperationPropose(NEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev);
 
     struct TTxOperationProposeCancelTx;
-    NTabletFlatExecutor::ITransaction* CreateTxOperationPropose(TEvSchemeShard::TEvCancelTx::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxOperationPropose(NEvSchemeShard::TEvCancelTx::TPtr& ev);
 
     struct TTxOperationProgress;
     NTabletFlatExecutor::ITransaction* CreateTxOperationProgress(TOperationId opId);
@@ -997,7 +997,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxServerlessStorageBilling();
 
     struct TTxLogin;
-    NTabletFlatExecutor::ITransaction* CreateTxLogin(TEvSchemeShard::TEvLogin::TPtr &ev);
+    NTabletFlatExecutor::ITransaction* CreateTxLogin(NEvSchemeShard::TEvLogin::TPtr &ev);
 
     template <EventBasePtr TEvPtr>
     NTabletFlatExecutor::ITransaction* CreateTxOperationReply(TOperationId id, TEvPtr& ev);
@@ -1050,69 +1050,69 @@ public:
     void Handle(NKikimr::NOlap::NBackground::TEvRemoveSession::TPtr& ev, const TActorContext& ctx);
 
 
-    void Handle(TEvSchemeShard::TEvInitRootShard::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvSchemeShard::TEvInitTenantSchemeShard::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvSchemeShard::TEvInitRootShard::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvSchemeShard::TEvInitTenantSchemeShard::TPtr &ev, const TActorContext &ctx);
 
-    void Handle(TEvSchemeShard::TEvModifySchemeTransaction::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvSchemeShard::TEvDescribeScheme::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvSchemeShard::TEvNotifyTxCompletion::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvSchemeShard::TEvModifySchemeTransaction::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvSchemeShard::TEvDescribeScheme::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvSchemeShard::TEvNotifyTxCompletion::TPtr &ev, const TActorContext &ctx);
 
-    void Handle(TEvSchemeShard::TEvCancelTx::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvSchemeShard::TEvCancelTx::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvPrivate::TEvProgressOperation::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvPrivate::TEvProgressOperation::TPtr &ev, const TActorContext &ctx);
 
-    void Handle(TEvPersQueue::TEvProposeTransactionAttachResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvProposeTransactionAttachResult::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx);
 
-    void Handle(TEvHive::TEvCreateTabletReply::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvHive::TEvAdoptTabletReply::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvHive::TEvDeleteTabletReply::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvPrivate::TEvSubscribeToShardDeletion::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvHive::TEvDeleteOwnerTabletsReply::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvHive::TEvUpdateTabletsObjectReply::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvHive::TEvUpdateDomainReply::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvPersQueue::TEvDropTabletReply::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(NSequenceShard::TEvSequenceShard::TEvDropSequenceResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(NSequenceShard::TEvSequenceShard::TEvUpdateSequenceResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(NSequenceShard::TEvSequenceShard::TEvFreezeSequenceResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(NSequenceShard::TEvSequenceShard::TEvRestoreSequenceResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(NSequenceShard::TEvSequenceShard::TEvRedirectSequenceResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(NSequenceShard::TEvSequenceShard::TEvGetSequenceResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(NReplication::TEvController::TEvCreateReplicationResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(NReplication::TEvController::TEvAlterReplicationResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(NReplication::TEvController::TEvDropReplicationResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvDataShard::TEvSchemaChanged::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvStateChanged::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvPersQueue::TEvUpdateConfigResponse::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvBlobDepot::TEvApplyConfigResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvSubDomain::TEvConfigureStatus::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvBlockStore::TEvUpdateVolumeConfigResponse::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvFileStore::TEvUpdateConfigResponse::TPtr& ev, const TActorContext& ctx);
-    void Handle(NKesus::TEvKesus::TEvSetConfigResult::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvSchemeShard::TEvInitTenantSchemeShardResult::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvSchemeShard::TEvPublishTenantAsReadOnly::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvSchemeShard::TEvPublishTenantAsReadOnlyResult::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvSchemeShard::TEvPublishTenant::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvSchemeShard::TEvPublishTenantResult::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvSchemeShard::TEvMigrateSchemeShard::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvSchemeShard::TEvMigrateSchemeShardResult::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvMigrateSchemeShardResponse::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvHive::TEvCreateTabletReply::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvHive::TEvAdoptTabletReply::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvHive::TEvDeleteTabletReply::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvPrivate::TEvSubscribeToShardDeletion::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvHive::TEvDeleteOwnerTabletsReply::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvHive::TEvUpdateTabletsObjectReply::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvHive::TEvUpdateDomainReply::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvPersQueue::TEvDropTabletReply::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvColumnShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvColumnShard::TEvNotifyTxCompletionResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(NSequenceShard::NEvSequenceShard::TEvCreateSequenceResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(NSequenceShard::NEvSequenceShard::TEvDropSequenceResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(NSequenceShard::NEvSequenceShard::TEvUpdateSequenceResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(NSequenceShard::NEvSequenceShard::TEvFreezeSequenceResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(NSequenceShard::NEvSequenceShard::TEvRestoreSequenceResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(NSequenceShard::NEvSequenceShard::TEvRedirectSequenceResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(NSequenceShard::NEvSequenceShard::TEvGetSequenceResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(NReplication::NEvController::TEvCreateReplicationResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(NReplication::NEvController::TEvAlterReplicationResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(NReplication::NEvController::TEvDropReplicationResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvDataShard::TEvSchemaChanged::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvStateChanged::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvPersQueue::TEvUpdateConfigResponse::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvPersQueue::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvBlobDepot::TEvApplyConfigResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvSubDomain::TEvConfigureStatus::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvBlockStore::TEvUpdateVolumeConfigResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvFileStore::TEvUpdateConfigResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NKesus::NEvKesus::TEvSetConfigResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvSchemeShard::TEvInitTenantSchemeShardResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvSchemeShard::TEvPublishTenantAsReadOnly::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvSchemeShard::TEvPublishTenantAsReadOnlyResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvSchemeShard::TEvPublishTenant::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvSchemeShard::TEvPublishTenantResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvSchemeShard::TEvMigrateSchemeShard::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvSchemeShard::TEvMigrateSchemeShardResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvMigrateSchemeShardResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvDataShard::TEvCompactBorrowedResult::TPtr &ev, const TActorContext &ctx);
 
 
-    void Handle(TEvSchemeShard::TEvProcessingRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvSchemeShard::TEvSyncTenantSchemeShard::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvSchemeShard::TEvProcessingRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvSchemeShard::TEvSyncTenantSchemeShard::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr& ev, const TActorContext& ctx);
 
     void Handle(NSchemeBoard::NSchemeshardEvents::TEvUpdateAck::TPtr& ev, const TActorContext& ctx);
 
@@ -1121,37 +1121,37 @@ public:
     void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx);
     void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvDataShard::TEvInitSplitMergeDestinationAck::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvSplitAck::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvSplitPartitioningChangedAck::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvInitSplitMergeDestinationAck::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvSplitAck::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvSplitPartitioningChangedAck::TPtr& ev, const TActorContext& ctx);
 
     void ExecuteTableStatsBatch(const TActorContext& ctx);
     void ScheduleTableStatsBatch(const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvPersistTableStats::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetTableStatsResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPrivate::TEvPersistTableStats::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvGetTableStatsResult::TPtr& ev, const TActorContext& ctx);
 
     void ExecuteTopicStatsBatch(const TActorContext& ctx);
     void ScheduleTopicStatsBatch(const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvPersistTopicStats::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvPeriodicTopicStats::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPrivate::TEvPersistTopicStats::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvPeriodicTopicStats::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvSchemeShard::TEvFindTabletSubDomainPathId::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvSchemeShard::TEvFindTabletSubDomainPathId::TPtr& ev, const TActorContext& ctx);
 
     void ScheduleConditionalEraseRun(const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvRunConditionalErase::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvConditionalEraseRowsResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPrivate::TEvRunConditionalErase::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvConditionalEraseRowsResponse::TPtr& ev, const TActorContext& ctx);
     void ConditionalEraseHandleDisconnect(TTabletId tabletId, const TActorId& clientId, const TActorContext& ctx);
 
     void Handle(NSysView::TEvSysView::TEvGetPartitionStats::TPtr& ev, const TActorContext& ctx);
 
     void ScheduleServerlessStorageBilling(const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvServerlessStorageBilling::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPrivate::TEvServerlessStorageBilling::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr &ev, const TActorContext &ctx);
-    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr &ev, const TActorContext &ctx);
+    void Handle(NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx);
 
-    void Handle(TEvSchemeShard::TEvLogin::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvSchemeShard::TEvLogin::TPtr& ev, const TActorContext& ctx);
 
     void RestartPipeTx(TTabletId tabletId, const TActorContext& ctx);
 
@@ -1165,11 +1165,11 @@ public:
     };
 
     void Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvIndexBuilder::TEvCreateResponse::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvSchemeShard::TEvCancelTxResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvSchemeShard::TEvCancelTxResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvIndexBuilder::TEvCancelResponse::TPtr& ev, const TActorContext& ctx);
     // } // NLongRunningCommon
 
@@ -1201,13 +1201,13 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxCreateExport(TEvExport::TEvCreateExportRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxGetExport(TEvExport::TEvGetExportRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxCancelExport(TEvExport::TEvCancelExportRequest::TPtr& ev);
-    NTabletFlatExecutor::ITransaction* CreateTxCancelExportAck(TEvSchemeShard::TEvCancelTxResult::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxCancelExportAck(NEvSchemeShard::TEvCancelTxResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxForgetExport(TEvExport::TEvForgetExportRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxListExports(TEvExport::TEvListExportsRequest::TPtr& ev);
 
     NTabletFlatExecutor::ITransaction* CreateTxProgressExport(ui64 id);
     NTabletFlatExecutor::ITransaction* CreateTxProgressExport(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
-    NTabletFlatExecutor::ITransaction* CreateTxProgressExport(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressExport(NEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressExport(TTxId completedTxId);
 
     void Handle(TEvExport::TEvCreateExportRequest::TPtr& ev, const TActorContext& ctx);
@@ -1248,15 +1248,15 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxCreateImport(TEvImport::TEvCreateImportRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxGetImport(TEvImport::TEvGetImportRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxCancelImport(TEvImport::TEvCancelImportRequest::TPtr& ev);
-    NTabletFlatExecutor::ITransaction* CreateTxCancelImportAck(TEvSchemeShard::TEvCancelTxResult::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxCancelImportAck(NEvSchemeShard::TEvCancelTxResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxCancelImportAck(TEvIndexBuilder::TEvCancelResponse::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxForgetImport(TEvImport::TEvForgetImportRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxListImports(TEvImport::TEvListImportsRequest::TPtr& ev);
 
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(ui64 id, const TMaybe<ui32>& itemIdx = Nothing());
-    NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvPrivate::TEvImportSchemeReady::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressImport(NEvPrivate::TEvImportSchemeReady::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
-    NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressImport(NEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvIndexBuilder::TEvCreateResponse::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TTxId completedTxId);
 
@@ -1265,7 +1265,7 @@ public:
     void Handle(TEvImport::TEvCancelImportRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvImport::TEvForgetImportRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvImport::TEvListImportsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvImportSchemeReady::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPrivate::TEvImportSchemeReady::TPtr& ev, const TActorContext& ctx);
 
     void ResumeImports(const TVector<ui64>& ids, const TActorContext& ctx);
     // } // NImport
@@ -1357,14 +1357,14 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxList(TEvIndexBuilder::TEvListRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgress(TIndexBuildId id);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvTxAllocatorClient::TEvAllocateResult::TPtr& allocateResult);
-    NTabletFlatExecutor::ITransaction* CreateTxReply(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& modifyResult);
+    NTabletFlatExecutor::ITransaction* CreateTxReply(NEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& modifyResult);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TTxId completedTxId);
-    NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& progress);
-    NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvSampleKResponse::TPtr& sampleK);
-    NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& reshuffle);
+    NTabletFlatExecutor::ITransaction* CreateTxReply(NEvDataShard::TEvBuildIndexProgressResponse::TPtr& progress);
+    NTabletFlatExecutor::ITransaction* CreateTxReply(NEvDataShard::TEvSampleKResponse::TPtr& sampleK);
+    NTabletFlatExecutor::ITransaction* CreateTxReply(NEvDataShard::TEvReshuffleKMeansResponse::TPtr& reshuffle);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& upload);
     NTabletFlatExecutor::ITransaction* CreatePipeRetry(TIndexBuildId indexBuildId, TTabletId tabletId);
-    NTabletFlatExecutor::ITransaction* CreateTxBilling(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxBilling(NEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev);
 
     void Handle(TEvIndexBuilder::TEvCreateRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvIndexBuilder::TEvGetRequest::TPtr& ev, const TActorContext& ctx);
@@ -1372,12 +1372,12 @@ public:
     void Handle(TEvIndexBuilder::TEvForgetRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvIndexBuilder::TEvListRequest::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvSampleKResponse::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvBuildIndexProgressResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvSampleKResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvReshuffleKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const TActorContext& ctx);
 
     void Resume(const TDeque<TIndexBuildId>& indexIds, const TActorContext& ctx);
     void SetupRouting(const TDeque<TIndexBuildId>& indexIds, const TActorContext& ctx);
@@ -1391,12 +1391,12 @@ public:
 
     TDedicatedPipePool<TPathId> CdcStreamScanPipes;
 
-    NTabletFlatExecutor::ITransaction* CreateTxProgressCdcStreamScan(TEvPrivate::TEvRunCdcStreamScan::TPtr& ev);
-    NTabletFlatExecutor::ITransaction* CreateTxProgressCdcStreamScan(TEvDataShard::TEvCdcStreamScanResponse::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressCdcStreamScan(NEvPrivate::TEvRunCdcStreamScan::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressCdcStreamScan(NEvDataShard::TEvCdcStreamScanResponse::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreatePipeRetry(const TPathId& streamPathId, TTabletId tabletId);
 
-    void Handle(TEvPrivate::TEvRunCdcStreamScan::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvCdcStreamScanResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPrivate::TEvRunCdcStreamScan::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvCdcStreamScanResponse::TPtr& ev, const TActorContext& ctx);
 
     void ResumeCdcStreamScans(const TVector<TPathId>& ids, const TActorContext& ctx);
 
@@ -1412,7 +1412,7 @@ public:
     static constexpr ui64 SendStatsIntervalMaxSeconds = 240;
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvSendBaseStatsToSA::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPrivate::TEvSendBaseStatsToSA::TPtr& ev, const TActorContext& ctx);
 
     void InitializeStatistics(const TActorContext& ctx);
     void ResolveSA();

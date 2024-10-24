@@ -13,7 +13,7 @@ public:
         : OperationId(std::move(id))
     {}
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
         LOG_I(DebugHint() << "HandleReply TEvOperationPlan: step# " << step);
 

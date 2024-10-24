@@ -13,14 +13,14 @@ TParentDomainLink::TParentDomainLink(NKikimr::NSchemeShard::TSchemeShard *self)
     };
 }
 
-THolder<TEvSchemeShard::TEvSyncTenantSchemeShard> TParentDomainLink::MakeSyncMsg() const {
+THolder<NEvSchemeShard::TEvSyncTenantSchemeShard> TParentDomainLink::MakeSyncMsg() const {
     Y_ABORT_UNLESS(Self->SubDomains.contains(Self->RootPathId()));
     auto& rootPath = Self->PathsById.at(Self->RootPathId());
 
     Y_ABORT_UNLESS(Self->PathsById.contains(Self->RootPathId()));
     auto& rootSubdomain = Self->SubDomains.at(Self->RootPathId());
 
-    TEvSchemeShard::TEvSyncTenantSchemeShard* ptr = new TEvSchemeShard::TEvSyncTenantSchemeShard({
+    NEvSchemeShard::TEvSyncTenantSchemeShard* ptr = new NEvSchemeShard::TEvSyncTenantSchemeShard({
         .DomainKey = Self->ParentDomainId,
         .TabletId = Self->TabletID(),
         .Generation = Self->Generation(),
@@ -33,7 +33,7 @@ THolder<TEvSchemeShard::TEvSyncTenantSchemeShard> TParentDomainLink::MakeSyncMsg
         .TenantGraphShard = ui64(rootSubdomain->GetTenantGraphShardID()),
         .RootACL = rootPath->ACL
     });
-    return THolder<TEvSchemeShard::TEvSyncTenantSchemeShard>(ptr);
+    return THolder<NEvSchemeShard::TEvSyncTenantSchemeShard>(ptr);
 }
 
 void TParentDomainLink::SendSync(const TActorContext &ctx) {
@@ -75,7 +75,7 @@ void TParentDomainLink::Shutdown(const NActors::TActorContext &ctx) {
     }
 }
 
-bool TSubDomainsLinks::Sync(TEvSchemeShard::TEvSyncTenantSchemeShard::TPtr &ev, const TActorContext &ctx) {
+bool TSubDomainsLinks::Sync(NEvSchemeShard::TEvSyncTenantSchemeShard::TPtr &ev, const TActorContext &ctx) {
     Y_ABORT_UNLESS(Self->IsDomainSchemeShard);
 
     const auto& record = ev->Get()->Record;

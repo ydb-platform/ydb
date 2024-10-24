@@ -26,7 +26,7 @@ namespace NKikimr::NDataShard {
 
 class TSampleKScan final: public TActor<TSampleKScan>, public NTable::IScan {
 protected:
-    const TAutoPtr<TEvDataShard::TEvSampleKResponse> Response;
+    const TAutoPtr<NEvDataShard::TEvSampleKResponse> Response;
     const TActorId ResponseActorId;
 
     const TTags ScanTags;
@@ -61,7 +61,7 @@ public:
         return NKikimrServices::TActivity::SAMPLE_K_SCAN_ACTOR;
     }
 
-    TSampleKScan(TAutoPtr<TEvDataShard::TEvSampleKResponse>&& response,
+    TSampleKScan(TAutoPtr<NEvDataShard::TEvSampleKResponse>&& response,
                  const TActorId& responseActorId,
                  const TSerializedTableRange& range,
                  ui64 k,
@@ -221,7 +221,7 @@ private:
 
 class TDataShard::TTxHandleSafeSampleKScan: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxHandleSafeSampleKScan(TDataShard* self, TEvDataShard::TEvSampleKRequest::TPtr&& ev)
+    TTxHandleSafeSampleKScan(TDataShard* self, NEvDataShard::TEvSampleKRequest::TPtr&& ev)
         : TTransactionBase(self)
         , Ev(std::move(ev)) {
     }
@@ -236,14 +236,14 @@ public:
     }
 
 private:
-    TEvDataShard::TEvSampleKRequest::TPtr Ev;
+    NEvDataShard::TEvSampleKRequest::TPtr Ev;
 };
 
-void TDataShard::Handle(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext&) {
+void TDataShard::Handle(NEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext&) {
     Execute(new TTxHandleSafeSampleKScan(this, std::move(ev)));
 }
 
-void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::HandleSafe(NEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     TRowVersion rowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
 
@@ -255,7 +255,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
     }
     const ui64 id = record.GetId();
 
-    auto response = MakeHolder<TEvDataShard::TEvSampleKResponse>();
+    auto response = MakeHolder<NEvDataShard::TEvSampleKResponse>();
     response->Record.SetId(id);
     response->Record.SetTabletId(TabletID());
 

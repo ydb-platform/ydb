@@ -42,7 +42,7 @@ protected:
     const TString PQ_ROOT_PATH;
     TSet<TString> Consumers;
     struct TTopicInfo : NKikimrViewer::TMetaTopicInfo {
-        TMap<i32, THolder<TEvPersQueue::TEvPartitionClientInfoResponse>> PartitionResults;
+        TMap<i32, THolder<NEvPersQueue::TEvPartitionClientInfoResponse>> PartitionResults;
         TMap<i32, NKikimrViewer::TMetaTopicPartitionInfo> PartitionInfo;
     };
     TMap<TString, TTopicInfo> Topics;
@@ -59,7 +59,7 @@ public:
         , PQ_ROOT_PATH("/Root/PQ") // TODO(xenoxeno)
     {}
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx) {
         DescribeResult.Reset(ev->Release());
         ++Responses;
         ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestCompleted(TxProxy, TEvTxUserProxy::EvNavigate));
@@ -125,13 +125,13 @@ public:
             TActorId pipeClient = GetTabletPipe(tabletId, ctx);
             const auto& range = TabletPartitions.equal_range(tabletId);
             if (range.first != range.second) {
-                TAutoPtr<TEvPersQueue::TEvPartitionClientInfo> request = new TEvPersQueue::TEvPartitionClientInfo();
+                TAutoPtr<NEvPersQueue::TEvPartitionClientInfo> request = new NEvPersQueue::TEvPartitionClientInfo();
                 for (auto it = range.first; it != range.second; ++it) {
                     request->Record.AddPartitions(it->second);
                     ++Requests; // because we are waiting for individual partition responses
                 }
                 NTabletPipe::SendData(ctx, pipeClient, request.Release(), tabletId);
-                ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestSent(pipeClient, tabletId, TEvPersQueue::EvPartitionClientInfo));
+                ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestSent(pipeClient, tabletId, NEvPersQueue::EvPartitionClientInfo));
             }
             pipeClient = GetTabletPipe(tabletId, ctx);
             NTabletPipe::SendData(ctx, pipeClient, new TEvTablet::TEvGetCounters(), tabletId);
@@ -139,18 +139,18 @@ public:
             ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestSent(pipeClient, tabletId, TEvTablet::EvGetCounters));
             ui64 hiveTabletId = domainsInfo->GetHive();
             pipeClient = GetTabletPipe(hiveTabletId, ctx);
-            NTabletPipe::SendData(ctx, pipeClient, new TEvHive::TEvLookupChannelInfo(tabletId), tabletId);
+            NTabletPipe::SendData(ctx, pipeClient, new NEvHive::TEvLookupChannelInfo(tabletId), tabletId);
             ++Requests;
-            ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestSent(pipeClient, hiveTabletId, TEvHive::EvLookupChannelInfo));
+            ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestSent(pipeClient, hiveTabletId, NEvHive::EvLookupChannelInfo));
         }
     }
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFunc(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult, Handle);
             HFunc(TEvTablet::TEvGetCountersResponse, TBase::Handle);
-            HFunc(TEvPersQueue::TEvPartitionClientInfoResponse, Handle);
-            HFunc(TEvHive::TEvChannelInfo, TBase::Handle);
+            HFunc(NEvPersQueue::TEvPartitionClientInfoResponse, Handle);
+            HFunc(NEvHive::TEvChannelInfo, TBase::Handle);
             HFunc(TEvBlobStorage::TEvResponseControllerInfo, TBase::Handle);
             CFunc(TEvents::TSystem::PoisonPill, HandlePoisonPill);
         }
@@ -163,7 +163,7 @@ public:
         return name;
     }
 
-    void Handle(TEvPersQueue::TEvPartitionClientInfoResponse::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NEvPersQueue::TEvPartitionClientInfoResponse::TPtr &ev, const TActorContext &ctx) {
         auto it = TabletTopic.find(ev->Cookie); // by tablet id
         if (it != TabletTopic.end()) {
             it->second->PartitionResults.emplace(ev->Get()->Record.GetPartition(), ev->Release());

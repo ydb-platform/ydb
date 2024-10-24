@@ -2633,7 +2633,7 @@ public:
         return SelfId().LocalId();
     }
 
-    void Handle(TEvHive::TEvDrainNodeResult::TPtr& result) {
+    void Handle(NEvHive::TEvDrainNodeResult::TPtr& result) {
         Send(Source, new NMon::TEvRemoteJsonInfoRes(
             TStringBuilder() << "{\"status\":\"" << NKikimrProto::EReplyStatus_Name(result->Get()->Record.GetStatus()) << "\","
                              << "\"movements\":" << result->Get()->Record.GetMovements() << "}"));
@@ -2643,7 +2643,7 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             cFunc(TEvents::TSystem::PoisonPill, PassAway);
-            hFunc(TEvHive::TEvDrainNodeResult, Handle);
+            hFunc(NEvHive::TEvDrainNodeResult, Handle);
         }
     }
 };
@@ -2901,7 +2901,7 @@ public:
             });
             tablets.resize(tablets.size() * TabletPercent / 100);
         }
-        TVector<THolder<TEvHive::TEvReassignTablet>> operations;
+        TVector<THolder<NEvHive::TEvReassignTablet>> operations;
         TActorId waitActorId;
         TReassignTabletWaitActor* waitActor = nullptr;
         if (Wait) {
@@ -2938,7 +2938,7 @@ public:
             if (Wait) {
                 tablet->ActorsToNotifyOnRestart.emplace_back(waitActorId); // volatile settings, will not persist upon restart
             }
-            operations.emplace_back(new TEvHive::TEvReassignTablet(tablet->Id, channels, forcedGroupIds));
+            operations.emplace_back(new NEvHive::TEvReassignTablet(tablet->Id, channels, forcedGroupIds));
         }
         if (Wait) {
             waitActor->TabletsTotal = operations.size();
@@ -2988,7 +2988,7 @@ public:
         return SelfId().LocalId();
     }
 
-    void Handle(TEvHive::TEvInitMigrationReply::TPtr& reply) {
+    void Handle(NEvHive::TEvInitMigrationReply::TPtr& reply) {
         TStringBuilder output;
         NProtobufJson::TProto2JsonConfig config;
         config.SetEnumMode(NProtobufJson::TProto2JsonConfig::EnumName);
@@ -3000,7 +3000,7 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             cFunc(TEvents::TSystem::PoisonPill, PassAway);
-            hFunc(TEvHive::TEvInitMigrationReply, Handle);
+            hFunc(NEvHive::TEvInitMigrationReply, Handle);
         }
     }
 };
@@ -3030,7 +3030,7 @@ public:
             Self->SubActors.emplace_back(waitActor);
         }
         // TODO: pass arguments as post data json
-        ctx.Send(new IEventHandle(Self->SelfId(), waitActorId, new TEvHive::TEvInitMigration()));
+        ctx.Send(new IEventHandle(Self->SelfId(), waitActorId, new NEvHive::TEvInitMigration()));
         return true;
     }
 
@@ -3069,7 +3069,7 @@ public:
         return SelfId().LocalId();
     }
 
-    void Handle(TEvHive::TEvQueryMigrationReply::TPtr& reply) {
+    void Handle(NEvHive::TEvQueryMigrationReply::TPtr& reply) {
         TStringBuilder output;
         NProtobufJson::TProto2JsonConfig config;
         config.SetEnumMode(NProtobufJson::TProto2JsonConfig::EnumName);
@@ -3081,7 +3081,7 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             cFunc(TEvents::TSystem::PoisonPill, PassAway);
-            hFunc(TEvHive::TEvQueryMigrationReply, Handle);
+            hFunc(NEvHive::TEvQueryMigrationReply, Handle);
         }
     }
 };
@@ -3106,7 +3106,7 @@ public:
         waitActor = new TQueryMigrationWaitActor(Source, Self);
         waitActorId = ctx.RegisterWithSameMailbox(waitActor);
         Self->SubActors.emplace_back(waitActor);
-        ctx.Send(new IEventHandle(Self->SelfId(), waitActorId, new TEvHive::TEvQueryMigration()));
+        ctx.Send(new IEventHandle(Self->SelfId(), waitActorId, new NEvHive::TEvQueryMigration()));
         return true;
     }
 
@@ -3234,7 +3234,7 @@ public:
         return SelfId().LocalId();
     }
 
-    void Handle(TEvHive::TEvStopTabletResult::TPtr& result) {
+    void Handle(NEvHive::TEvStopTabletResult::TPtr& result) {
         Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << result->Get()->Record.AsJSON()));
         PassAway();
     }
@@ -3242,7 +3242,7 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             cFunc(TEvents::TSystem::PoisonPill, PassAway);
-            hFunc(TEvHive::TEvStopTabletResult, Handle);
+            hFunc(NEvHive::TEvStopTabletResult, Handle);
         }
     }
 };
@@ -3316,7 +3316,7 @@ public:
         return SelfId().LocalId();
     }
 
-    void Handle(TEvHive::TEvResumeTabletResult::TPtr& result) {
+    void Handle(NEvHive::TEvResumeTabletResult::TPtr& result) {
         Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << result->Get()->Record.AsJSON()));
         PassAway();
     }
@@ -3324,7 +3324,7 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             cFunc(TEvents::TSystem::PoisonPill, PassAway);
-            hFunc(TEvHive::TEvResumeTabletResult, Handle);
+            hFunc(NEvHive::TEvResumeTabletResult, Handle);
         }
     }
 };
@@ -3849,7 +3849,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        TAutoPtr<TEvHive::TEvTabletMetrics> event(new TEvHive::TEvTabletMetrics());
+        TAutoPtr<NEvHive::TEvTabletMetrics> event(new NEvHive::TEvTabletMetrics());
         auto& record = event->Record;
         auto& metrics = *record.AddTabletMetrics();
         metrics = Metrics;
@@ -3861,7 +3861,7 @@ public:
 class TCreateTabletActor : public TActorBootstrapped<TCreateTabletActor> {
 public:
     TActorId Source;
-    TAutoPtr<TEvHive::TEvCreateTablet> Event;
+    TAutoPtr<NEvHive::TEvCreateTablet> Event;
     THive* Hive;
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -3870,7 +3870,7 @@ public:
 
     TCreateTabletActor(const TActorId& source, ui64 owner, ui64 ownerIdx, TTabletTypes::EType type, ui32 channelsProfile, ui32 followers, THive* hive)
         : Source(source)
-        , Event(new TEvHive::TEvCreateTablet())
+        , Event(new NEvHive::TEvCreateTablet())
         , Hive(hive)
     {
         Event->Record.SetOwner(owner);
@@ -3885,14 +3885,14 @@ public:
         Die(ctx);
     }
 
-    void Handle(TEvHive::TEvCreateTabletReply::TPtr& ptr, const TActorContext& ctx) {
+    void Handle(NEvHive::TEvCreateTabletReply::TPtr& ptr, const TActorContext& ctx) {
         TStringStream stream;
         stream << ptr->Get()->Record.AsJSON();
         ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(stream.Str()));
         Die(ctx);
     }
 
-    void Handle(TEvHive::TEvTabletCreationResult::TPtr& ptr, const TActorContext& ctx) {
+    void Handle(NEvHive::TEvTabletCreationResult::TPtr& ptr, const TActorContext& ctx) {
         TStringStream stream;
         stream << ptr->Get()->Record.AsJSON();
         ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(stream.Str()));
@@ -3901,8 +3901,8 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvHive::TEvCreateTabletReply, Handle);
-            HFunc(TEvHive::TEvTabletCreationResult, Handle);
+            HFunc(NEvHive::TEvCreateTabletReply, Handle);
+            HFunc(NEvHive::TEvTabletCreationResult, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
@@ -3919,12 +3919,12 @@ private:
 
 public:
     TActorId Source;
-    TAutoPtr<TEvHive::TEvDeleteTablet> Event;
+    TAutoPtr<NEvHive::TEvDeleteTablet> Event;
     THive* Hive;
 
     TDeleteTabletActor(const TActorId& source, ui64 owner, ui64 ownerIdx, THive* hive)
         : Source(source)
-        , Event(new TEvHive::TEvDeleteTablet())
+        , Event(new NEvHive::TEvDeleteTablet())
         , Hive(hive)
     {
         Event->Record.SetShardOwnerId(owner);
@@ -3938,7 +3938,7 @@ public:
 
     TDeleteTabletActor(const TActorId& source, ui64 tabletId, THive* hive)
         : Source(source)
-        , Event(new TEvHive::TEvDeleteTablet())
+        , Event(new NEvHive::TEvDeleteTablet())
         , Hive(hive)
     {
         ui64 owner = 0;
@@ -3962,7 +3962,7 @@ private:
         Die(ctx);
     }
 
-    void Handle(TEvHive::TEvDeleteTabletReply::TPtr& ptr, const TActorContext& ctx) {
+    void Handle(NEvHive::TEvDeleteTabletReply::TPtr& ptr, const TActorContext& ctx) {
         TStringStream stream;
         stream << ptr->Get()->Record.AsJSON();
         ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(stream.Str()));
@@ -3971,7 +3971,7 @@ private:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvHive::TEvDeleteTabletReply, Handle);
+            HFunc(NEvHive::TEvDeleteTabletReply, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }

@@ -18,11 +18,11 @@ class TJsonTenantInfo : public TViewerPipeClient {
     using TThis = TJsonTenantInfo;
     using TBase = TViewerPipeClient;
     using TBase::ReplyAndPassAway;
-    std::optional<TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse>> ListTenantsResponse;
-    std::unordered_map<TString, TRequestResponse<NConsole::TEvConsole::TEvGetTenantStatusResponse>> TenantStatusResponses;
+    std::optional<TRequestResponse<NConsole::NEvConsole::TEvListTenantsResponse>> ListTenantsResponse;
+    std::unordered_map<TString, TRequestResponse<NConsole::NEvConsole::TEvGetTenantStatusResponse>> TenantStatusResponses;
     std::unordered_map<TString, TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> NavigateKeySetResult;
-    std::unordered_map<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveDomainStats>> HiveDomainStats;
-    std::unordered_map<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveStorageStats>> HiveStorageStats;
+    std::unordered_map<TTabletId, TRequestResponse<NEvHive::TEvResponseHiveDomainStats>> HiveDomainStats;
+    std::unordered_map<TTabletId, TRequestResponse<NEvHive::TEvResponseHiveStorageStats>> HiveStorageStats;
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvSystemStateResponse>> SystemStateResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvTabletStateResponse>> TabletStateResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvViewer::TEvViewerResponse>> OffloadedSystemStateResponse;
@@ -157,10 +157,10 @@ public:
 
     STATEFN(StateCollectingInfo) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NConsole::TEvConsole::TEvListTenantsResponse, Handle);
-            hFunc(NConsole::TEvConsole::TEvGetTenantStatusResponse, Handle);
-            hFunc(TEvHive::TEvResponseHiveDomainStats, Handle);
-            hFunc(TEvHive::TEvResponseHiveStorageStats, Handle);
+            hFunc(NConsole::NEvConsole::TEvListTenantsResponse, Handle);
+            hFunc(NConsole::NEvConsole::TEvGetTenantStatusResponse, Handle);
+            hFunc(NEvHive::TEvResponseHiveDomainStats, Handle);
+            hFunc(NEvHive::TEvResponseHiveStorageStats, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(TEvWhiteboard::TEvTabletStateResponse, Handle);
@@ -201,7 +201,7 @@ public:
         TBase::Handle(ev); // all RequestDone() are handled by base handler
     }
 
-    void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev) {
+    void Handle(NConsole::NEvConsole::TEvListTenantsResponse::TPtr& ev) {
         ListTenantsResponse->Set(std::move(ev));
         Ydb::Cms::ListDatabasesResult listTenantsResult;
         ListTenantsResponse->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
@@ -213,7 +213,7 @@ public:
         RequestDone();
     }
 
-    void Handle(NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr& ev) {
+    void Handle(NConsole::NEvConsole::TEvGetTenantStatusResponse::TPtr& ev) {
         Ydb::Cms::GetDatabaseStatusResult getTenantStatusResult;
         ev->Get()->Record.GetResponse().operation().result().UnpackTo(&getTenantStatusResult);
         TString path = getTenantStatusResult.path();
@@ -312,7 +312,7 @@ public:
         }
     }
 
-    void Handle(TEvHive::TEvResponseHiveDomainStats::TPtr& ev) {
+    void Handle(NEvHive::TEvResponseHiveDomainStats::TPtr& ev) {
         auto& response = HiveDomainStats[ev->Cookie];
         response.Set(std::move(ev));
         for (const NKikimrHive::THiveDomainStats& hiveStat : response.Get()->Record.GetDomainStats()) {
@@ -357,7 +357,7 @@ public:
         RequestDone();
     }
 
-    void Handle(TEvHive::TEvResponseHiveStorageStats::TPtr& ev) {
+    void Handle(NEvHive::TEvResponseHiveStorageStats::TPtr& ev) {
         HiveStorageStats[ev->Cookie].Set(std::move(ev));
         RequestDone();
     }

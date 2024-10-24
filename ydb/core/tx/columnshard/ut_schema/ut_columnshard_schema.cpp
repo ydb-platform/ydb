@@ -89,11 +89,11 @@ std::shared_ptr<arrow::RecordBatch> UpdateColumn(std::shared_ptr<arrow::RecordBa
 bool TriggerTTL(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap, const std::vector<ui64>& pathIds,
                 ui64 tsSeconds, const TString& ttlColumnName) {
     TString txBody = TTestSchema::TtlTxBody(pathIds, ttlColumnName, tsSeconds);
-    auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
+    auto event = std::make_unique<NEvColumnShard::TEvProposeTransaction>(
         NKikimrTxColumnShard::TX_KIND_TTL, sender, snap.GetTxId(), txBody);
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
-    auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
+    auto ev = runtime.GrabEdgeEvent<NEvColumnShard::TEvProposeTransactionResult>(sender);
     const auto& res = ev->Get()->Record;
     UNIT_ASSERT_EQUAL(res.GetTxId(), snap.GetTxId());
     UNIT_ASSERT_EQUAL(res.GetTxKind(), NKikimrTxColumnShard::TX_KIND_TTL);

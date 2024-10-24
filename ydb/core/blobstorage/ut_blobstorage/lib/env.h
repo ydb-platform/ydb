@@ -91,14 +91,14 @@ struct TEnvironmentSetup {
 
         STFUNC(StateWork) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest, Handle);
-                hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle)
-                hFunc(NConsole::TEvConsole::TEvConfigNotificationResponse, Handle)
-                hFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest, Handle)
+                hFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest, Handle);
+                hFunc(NConsole::NEvConsole::TEvConfigNotificationRequest, Handle)
+                hFunc(NConsole::NEvConsole::TEvConfigNotificationResponse, Handle)
+                hFunc(NConsole::NEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest, Handle)
             }
         }
 
-        void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr& ev) {
+        void Handle(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr& ev) {
             auto& items = ev->Get()->ConfigItemKinds;
             if (items.at(0) != NKikimrConsole::TConfigItem::BlobStorageConfigItem) {
                 return;
@@ -106,21 +106,21 @@ struct TEnvironmentSetup {
             Subscribers.emplace(ev->Sender);
         }
 
-        void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+        void Handle(NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
             EdgeId = ev->Sender;
             for (auto& id : Subscribers) {
-                auto update = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+                auto update = MakeHolder<NConsole::NEvConsole::TEvConfigNotificationRequest>();
                 update->Record.CopyFrom(ev->Get()->Record);
                 Send(id, update.Release());
             }
         }
 
-        void Handle(NConsole::TEvConsole::TEvConfigNotificationResponse::TPtr& ev) {
+        void Handle(NConsole::NEvConsole::TEvConfigNotificationResponse::TPtr& ev) {
             Forward(ev, EdgeId);
         }
 
-        void Handle(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest::TPtr& ev) {
-                Send(ev->Sender, MakeHolder<NConsole::TEvConsole::TEvRemoveConfigSubscriptionResponse>().Release());
+        void Handle(NConsole::NEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest::TPtr& ev) {
+                Send(ev->Sender, MakeHolder<NConsole::NEvConsole::TEvRemoveConfigSubscriptionResponse>().Release());
         }
     };
 
@@ -405,7 +405,7 @@ struct TEnvironmentSetup {
                 ADD_ICB_CONTROL("DSProxyControls.SlowDiskThreshold", 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
                 ADD_ICB_CONTROL("DSProxyControls.PredictedDelayMultiplier", 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisks", 2, 1, 2, Settings.MaxNumOfSlowDisks);
-                
+
 #undef ADD_ICB_CONTROL
 
                 {

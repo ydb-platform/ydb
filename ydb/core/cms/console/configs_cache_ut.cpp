@@ -143,7 +143,7 @@ Y_UNIT_TEST_SUITE(TConfigsCacheTests) {
         runtime.Register(actor);
 
         TDispatchOptions options;
-        options.FinalEvents.emplace_back(TEvConsole::EvConfigSubscriptionResponse, 1);
+        options.FinalEvents.emplace_back(NEvConsole::EvConfigSubscriptionResponse, 1);
         runtime.DispatchEvents(options);
     }
 
@@ -195,7 +195,7 @@ Y_UNIT_TEST_SUITE(TConfigsCacheTests) {
         runtime.Register(actor);
 
         TDispatchOptions options;
-        options.FinalEvents.emplace_back(TEvConsole::EvConfigSubscriptionResponse, 1);
+        options.FinalEvents.emplace_back(NEvConsole::EvConfigSubscriptionResponse, 1);
         runtime.DispatchEvents(options);
 
         ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName("cluster-1");
@@ -244,7 +244,7 @@ Y_UNIT_TEST_SUITE(TConfigsCacheTests) {
         runtime.Register(actor);
 
         TDispatchOptions options;
-        options.FinalEvents.emplace_back(TEvConsole::EvConfigSubscriptionResponse, 1);
+        options.FinalEvents.emplace_back(NEvConsole::EvConfigSubscriptionResponse, 1);
         runtime.DispatchEvents(options);
 
         AwaitForCondition(runtime, [&saves]() { return saves > 0; }, TDuration::MilliSeconds(5000));
@@ -276,7 +276,7 @@ Y_UNIT_TEST_SUITE(TConfigsCacheTests) {
         runtime.Register(actor);
 
         TDispatchOptions options;
-        options.FinalEvents.emplace_back(TEvConsole::EvConfigSubscriptionResponse, 1);
+        options.FinalEvents.emplace_back(NEvConsole::EvConfigSubscriptionResponse, 1);
         runtime.DispatchEvents(options);
 
         auto group = GetServiceCounters(runtime.GetDynamicCounters(0), "utils")->GetSubgroup("component", "configs_cache");

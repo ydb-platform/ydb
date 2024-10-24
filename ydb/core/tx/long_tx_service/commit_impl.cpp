@@ -124,7 +124,7 @@ namespace NLongTxService {
 
             TXLOG_DEBUG("Sending TEvProposeTransaction to ColumnShard# " << tabletId << " WriteId# " << data.GetWriteIdsStr());
 
-            SendToTablet(tabletId, MakeHolder<TEvColumnShard::TEvProposeTransaction>(
+            SendToTablet(tabletId, MakeHolder<NEvColumnShard::TEvProposeTransaction>(
                     NKikimrTxColumnShard::TX_KIND_COMMIT,
                     SelfId(),
                     TxId,
@@ -134,7 +134,7 @@ namespace NLongTxService {
 
         STFUNC(StatePrepare) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvColumnShard::TEvProposeTransactionResult, HandlePrepare);
+                hFunc(NEvColumnShard::TEvProposeTransactionResult, HandlePrepare);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandlePrepare);
                 CFunc(TEvents::TSystem::Wakeup, HandlePrepareTimeout);
             }
@@ -165,7 +165,7 @@ namespace NLongTxService {
             return true;
         }
 
-        void HandlePrepare(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev) {
+        void HandlePrepare(NEvColumnShard::TEvProposeTransactionResult::TPtr& ev) {
             const auto* msg = ev->Get();
             const ui64 tabletId = msg->Record.GetOrigin();
             const NKikimrTxColumnShard::EResultStatus status = msg->Record.GetStatus();
@@ -269,7 +269,7 @@ namespace NLongTxService {
         STFUNC(StatePlan) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxProxy::TEvProposeTransactionStatus, HandlePlan);
-                hFunc(TEvColumnShard::TEvProposeTransactionResult, HandlePlan);
+                hFunc(NEvColumnShard::TEvProposeTransactionResult, HandlePlan);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandlePlan);
                 CFunc(TEvents::TSystem::Wakeup, HandlePlanTimeout);
             }
@@ -309,7 +309,7 @@ namespace NLongTxService {
             }
         }
 
-        void HandlePlan(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev) {
+        void HandlePlan(NEvColumnShard::TEvProposeTransactionResult::TPtr& ev) {
             const auto* msg = ev->Get();
             const ui64 tabletId = msg->Record.GetOrigin();
             const auto status = msg->Record.GetStatus();
@@ -427,7 +427,7 @@ namespace NLongTxService {
             TXLOG_DEBUG("Ask TEvProposeTransactionResult from ColumnShard# " << tabletId
                 << " for PlanStep# " << PlanStep << " TxId# " << TxId);
 
-            SendToTablet(tabletId, MakeHolder<TEvColumnShard::TEvCheckPlannedTransaction>(
+            SendToTablet(tabletId, MakeHolder<NEvColumnShard::TEvCheckPlannedTransaction>(
                 SelfId(),
                 PlanStep,
                 TxId));
@@ -438,7 +438,7 @@ namespace NLongTxService {
         void CancelProposal() {
             for (const auto& pr : Params.ColumnShardWrites) {
                 const ui64 tabletId = pr.first;
-                SendToTablet(tabletId, MakeHolder<TEvColumnShard::TEvCancelTransactionProposal>(TxId), false);
+                SendToTablet(tabletId, MakeHolder<NEvColumnShard::TEvCancelTransactionProposal>(TxId), false);
             }
         }
 

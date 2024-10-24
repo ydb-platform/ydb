@@ -5,7 +5,7 @@ namespace NKikimr::NConsole {
 
 class TTenantsManager::TTxUpdateTenantPoolConfig : public TTransactionBase<TTenantsManager> {
 public:
-    TTxUpdateTenantPoolConfig(TEvConsole::TEvUpdateTenantPoolConfig::TPtr ev, TTenantsManager *self)
+    TTxUpdateTenantPoolConfig(NEvConsole::TEvUpdateTenantPoolConfig::TPtr ev, TTenantsManager *self)
         : TBase(self)
         , Request(std::move(ev))
     {
@@ -35,7 +35,7 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "TTxUpdateTenantPoolConfig: "
                     << rec.ShortDebugString());
 
-        Response.Reset(new TEvConsole::TEvGetTenantStatusResponse);
+        Response.Reset(new NEvConsole::TEvGetTenantStatusResponse);
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();
         operation.set_ready(true);
 
@@ -84,11 +84,11 @@ public:
     }
 
 private:
-    TEvConsole::TEvUpdateTenantPoolConfig::TPtr Request;
-    THolder<TEvConsole::TEvGetTenantStatusResponse> Response;
+    NEvConsole::TEvUpdateTenantPoolConfig::TPtr Request;
+    THolder<NEvConsole::TEvGetTenantStatusResponse> Response;
 };
 
-ITransaction *TTenantsManager::CreateTxUpdateTenantPoolConfig(TEvConsole::TEvUpdateTenantPoolConfig::TPtr &ev)
+ITransaction *TTenantsManager::CreateTxUpdateTenantPoolConfig(NEvConsole::TEvUpdateTenantPoolConfig::TPtr &ev)
 {
     return new TTxUpdateTenantPoolConfig(ev, this);
 }

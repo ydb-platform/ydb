@@ -253,11 +253,11 @@ class TDataShard
     ITransaction *CreateTxMonitoring(TDataShard *self,
                                      NMon::TEvRemoteHttpInfo::TPtr ev);
     ITransaction *CreateTxGetInfo(TDataShard *self,
-                                  TEvDataShard::TEvGetInfoRequest::TPtr ev);
+                                  NEvDataShard::TEvGetInfoRequest::TPtr ev);
     ITransaction *CreateTxListOperations(TDataShard *self,
-                                         TEvDataShard::TEvListOperationsRequest::TPtr ev);
+                                         NEvDataShard::TEvListOperationsRequest::TPtr ev);
     ITransaction *CreateTxGetOperation(TDataShard *self,
-                                       TEvDataShard::TEvGetOperationRequest::TPtr ev);
+                                       NEvDataShard::TEvGetOperationRequest::TPtr ev);
 
     ITransaction *CreateTxMonitoringCleanupBorrowedParts(
             TDataShard *self,
@@ -1239,13 +1239,13 @@ class TDataShard
     }
 
     void Handle(TEvents::TEvGone::TPtr &ev);
-    void Handle(TEvDataShard::TEvGetShardState::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvDataShard::TEvSchemaChangedResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvDataShard::TEvStateChangedResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvDataShard::TEvProposeTransactionAttach::TPtr &ev, const TActorContext &ctx);
-    void HandleAsFollower(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx);
-    void ProposeTransaction(TEvDataShard::TEvProposeTransaction::TPtr &&ev, const TActorContext &ctx);
+    void Handle(NEvDataShard::TEvGetShardState::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvDataShard::TEvSchemaChangedResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvDataShard::TEvStateChangedResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvDataShard::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvDataShard::TEvProposeTransactionAttach::TPtr &ev, const TActorContext &ctx);
+    void HandleAsFollower(NEvDataShard::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx);
+    void ProposeTransaction(NEvDataShard::TEvProposeTransaction::TPtr &&ev, const TActorContext &ctx);
     void Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx);
     void ProposeTransaction(NEvents::TDataEvents::TEvWrite::TPtr&& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx);
@@ -1268,58 +1268,58 @@ class TDataShard
     void Handle(TEvMediatorTimecast::TEvSubscribeReadStepResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvMediatorRestoreBackup::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvCancelTransactionProposal::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvDataShard::TEvReturnBorrowedPart::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvReturnBorrowedPartAck::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvInitSplitMergeDestination::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvSplit::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvSplitTransferSnapshot::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvCancelTransactionProposal::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvDataShard::TEvReturnBorrowedPart::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvReturnBorrowedPartAck::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvInitSplitMergeDestination::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvSplit::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvSplitTransferSnapshot::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvReplicationSourceOffsets::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvSplitTransferSnapshotAck::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvSplitPartitioningChanged::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetTableStats::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvSplitTransferSnapshotAck::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvSplitPartitioningChanged::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvGetTableStats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvTableStatsError::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
-    void HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvEraseRowsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(NEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvEraseRowsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvConditionalEraseRowsRegistered::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvReadContinue::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvReadAck::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvReadCancel::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvReadColumnsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetInfoRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvListOperationsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetDataHistogramRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetOperationRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetReadTableSinkStateRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetReadTableScanStateRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetRSInfoRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetSlowOpProfilesRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvRefreshVolatileSnapshotRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvMigrateSchemeShardRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetS3Upload::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvStoreS3UploadId::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvChangeS3UploadStatus::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
-    void HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
-    void HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, const TActorContext& ctx);
-    void HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx);
-    void HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvRead::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvReadContinue::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvReadAck::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvReadCancel::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvReadColumnsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvGetInfoRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvListOperationsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvGetDataHistogramRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvGetOperationRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvGetReadTableSinkStateRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvGetReadTableScanStateRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvGetReadTableStreamStateRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvGetRSInfoRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvGetSlowOpProfilesRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvRefreshVolatileSnapshotRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvMigrateSchemeShardRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvGetS3Upload::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvStoreS3UploadId::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvChangeS3UploadStatus::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvGetS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(NEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(NEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(NEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(NEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAsyncJobComplete::TPtr& ev, const TActorContext& ctx);
@@ -1328,8 +1328,8 @@ class TDataShard
     void HandleSafe(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvStatisticsScanFinished::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvDataShard::TEvCancelBackup::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvDataShard::TEvCancelRestore::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvDataShard::TEvCancelBackup::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvDataShard::TEvCancelRestore::TPtr &ev, const TActorContext &ctx);
 
     void Handle(TEvTxProcessing::TEvStreamClearanceResponse::TPtr &ev, const TActorContext &ctx) {
         ForwardEventToOperation(ev, ctx);
@@ -1341,12 +1341,12 @@ class TDataShard
         ForwardEventToOperation(ev, ctx);
     }
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr ev, const TActorContext &ctx);
+    void Handle(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr ev, const TActorContext &ctx);
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx);
+    void Handle(NSchemeShard::NEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
     // change sending
@@ -1365,18 +1365,18 @@ class TDataShard
     void Handle(TEvChangeExchange::TEvActivateSenderAck::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvChangeExchange::TEvSplitAck::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvDataShard::TEvGetRemovedRowVersions::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvGetRemovedRowVersions::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvDataShard::TEvCompactBorrowed::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvCompactBorrowed::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetCompactTableStats::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvCompactTable::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvGetCompactTableStats::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvDataShard::TEvApplyReplicationChanges::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvApplyReplicationChanges::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvDataShard::TEvGetOpenTxs::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvDataShard::TEvGetOpenTxs::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvRemoveLockChangeRecords::TPtr& ev, const TActorContext& ctx);
 
@@ -1451,7 +1451,7 @@ class TDataShard
     NTabletFlatExecutor::ITransaction* CreateTxInit();
     NTabletFlatExecutor::ITransaction* CreateTxInitSchema();
     NTabletFlatExecutor::ITransaction* CreateTxInitSchemaDefaults();
-    NTabletFlatExecutor::ITransaction* CreateTxSchemaChanged(TEvDataShard::TEvSchemaChangedResult::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxSchemaChanged(NEvDataShard::TEvSchemaChangedResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxStartSplit();
     NTabletFlatExecutor::ITransaction* CreateTxSplitSnapshotComplete(TIntrusivePtr<TSplitSnapshotContext> snapContext);
     NTabletFlatExecutor::ITransaction* CreateTxSplitPartitioningChanged(THashMap<TActorId, THashSet<ui64>>&& waiters);
@@ -1616,7 +1616,7 @@ public:
                            NKikimrTxDataShard::TEvProposeTransactionResult::EStatus& rejectStatus,
                            ERejectReasons& rejectReasons,
                            TString& rejectDescription);
-    bool CheckDataTxRejectAndReply(const TEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
+    bool CheckDataTxRejectAndReply(const NEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
     bool CheckDataTxRejectAndReply(const NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx);
 
     TSysLocks& SysLocksTable() { return SysLocks; }
@@ -2079,7 +2079,7 @@ public:
 
     bool WaitPlanStep(ui64 step);
     bool CheckTxNeedWait(const TRowVersion& mvccSnapshot) const;
-    bool CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr& ev) const;
+    bool CheckTxNeedWait(const NEvDataShard::TEvProposeTransaction::TPtr& ev) const;
     bool CheckTxNeedWait(const NEvents::TDataEvents::TEvWrite::TPtr& ev) const;
 
     void WaitPredictedPlanStep(ui64 step);
@@ -2199,7 +2199,7 @@ private:
                 info.PipeToOwner = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, ownerTabletId, clientConfig));
             }
 
-            THolder<TEvDataShard::TEvReturnBorrowedPart> ev = MakeHolder<TEvDataShard::TEvReturnBorrowedPart>(MyTabletID, partMetaVec);
+            THolder<NEvDataShard::TEvReturnBorrowedPart> ev = MakeHolder<NEvDataShard::TEvReturnBorrowedPart>(MyTabletID, partMetaVec);
             NTabletPipe::SendData(ctx, info.PipeToOwner, ev.Release());
         }
 
@@ -2221,7 +2221,7 @@ private:
 
             TVector<TLogoBlobID> partMetaVec(LoanReturns[deadTabletId].PartMeta.begin(), LoanReturns[deadTabletId].PartMeta.end());
 
-            ctx.Send(ctx.SelfID, new TEvDataShard::TEvReturnBorrowedPartAck(partMetaVec));
+            ctx.Send(ctx.SelfID, new NEvDataShard::TEvReturnBorrowedPartAck(partMetaVec));
         }
 
         void LoanDone(TLogoBlobID partMeta, const TActorContext& ctx) {
@@ -2280,11 +2280,11 @@ private:
             NTabletPipe::TClientConfig clientConfig;
             PipesToDstShards[dstTabletId] = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, dstTabletId, clientConfig));
 
-            THolder<TEvDataShard::TEvSplitTransferSnapshot> ev = MakeHolder<TEvDataShard::TEvSplitTransferSnapshot>(0);
+            THolder<NEvDataShard::TEvSplitTransferSnapshot> ev = MakeHolder<NEvDataShard::TEvSplitTransferSnapshot>(0);
             ev->Record.CopyFrom(*DataToSend[dstTabletId]);
             ev->Record.SetSrcTabletGeneration(Self->Generation());
 
-            auto fnCalcTotalSize = [] (const TEvDataShard::TEvSplitTransferSnapshot& ev) {
+            auto fnCalcTotalSize = [] (const NEvDataShard::TEvSplitTransferSnapshot& ev) {
                 ui64 size = 0;
                 for (ui32 i = 0; i < ev.Record.TableSnapshotSize(); ++i) {
                     size += ev.Record.GetTableSnapshot(i).GetSnapshotData().size();
@@ -2949,7 +2949,7 @@ private:
         // A set of tables for which we are waiting source offsets data
         THashSet<TPathId> Pending;
         // The latest pending transfer snapshot event
-        TEvDataShard::TEvSplitTransferSnapshot::TPtr Snapshot;
+        NEvDataShard::TEvSplitTransferSnapshot::TPtr Snapshot;
     };
 
     THashMap<ui64, TReplicationSourceOffsetsReceiveState> ReceiveReplicationSourceOffsetsFrom;
@@ -3053,21 +3053,21 @@ protected:
         TRACE_EVENT(NKikimrServices::TX_DATASHARD);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvGone, Handle);
-            HFuncTraced(TEvDataShard::TEvGetShardState, Handle);
-            HFuncTraced(TEvDataShard::TEvSchemaChangedResult, Handle);
-            HFuncTraced(TEvDataShard::TEvStateChangedResult, Handle);
-            HFuncTraced(TEvDataShard::TEvProposeTransaction, Handle);
-            HFuncTraced(TEvDataShard::TEvProposeTransactionAttach, Handle);
-            HFuncTraced(TEvDataShard::TEvCancelBackup, Handle);
-            HFuncTraced(TEvDataShard::TEvCancelRestore, Handle);
-            HFuncTraced(TEvDataShard::TEvGetS3Upload, Handle);
-            HFuncTraced(TEvDataShard::TEvStoreS3UploadId, Handle);
-            HFuncTraced(TEvDataShard::TEvChangeS3UploadStatus, Handle);
-            HFuncTraced(TEvDataShard::TEvGetS3DownloadInfo, Handle);
-            HFuncTraced(TEvDataShard::TEvStoreS3DownloadInfo, Handle);
-            HFuncTraced(TEvDataShard::TEvS3UploadRowsRequest, Handle);
-            HFuncTraced(TEvDataShard::TEvObjectStorageListingRequest, Handle);
-            HFuncTraced(TEvDataShard::TEvMigrateSchemeShardRequest, Handle);
+            HFuncTraced(NEvDataShard::TEvGetShardState, Handle);
+            HFuncTraced(NEvDataShard::TEvSchemaChangedResult, Handle);
+            HFuncTraced(NEvDataShard::TEvStateChangedResult, Handle);
+            HFuncTraced(NEvDataShard::TEvProposeTransaction, Handle);
+            HFuncTraced(NEvDataShard::TEvProposeTransactionAttach, Handle);
+            HFuncTraced(NEvDataShard::TEvCancelBackup, Handle);
+            HFuncTraced(NEvDataShard::TEvCancelRestore, Handle);
+            HFuncTraced(NEvDataShard::TEvGetS3Upload, Handle);
+            HFuncTraced(NEvDataShard::TEvStoreS3UploadId, Handle);
+            HFuncTraced(NEvDataShard::TEvChangeS3UploadStatus, Handle);
+            HFuncTraced(NEvDataShard::TEvGetS3DownloadInfo, Handle);
+            HFuncTraced(NEvDataShard::TEvStoreS3DownloadInfo, Handle);
+            HFuncTraced(NEvDataShard::TEvS3UploadRowsRequest, Handle);
+            HFuncTraced(NEvDataShard::TEvObjectStorageListingRequest, Handle);
+            HFuncTraced(NEvDataShard::TEvMigrateSchemeShardRequest, Handle);
             HFuncTraced(TEvTxProcessing::TEvPlanStep, Handle);
             HFuncTraced(TEvTxProcessing::TEvReadSet, Handle);
             HFuncTraced(TEvTxProcessing::TEvReadSetAck, Handle);
@@ -3092,47 +3092,47 @@ protected:
             HFuncTraced(TEvMediatorTimecast::TEvSubscribeReadStepResult, Handle);
             HFuncTraced(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);
             HFuncTraced(TEvPrivate::TEvMediatorRestoreBackup, Handle);
-            HFuncTraced(TEvDataShard::TEvCancelTransactionProposal, Handle);
-            HFuncTraced(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
-            HFunc(TEvDataShard::TEvReturnBorrowedPart, Handle);
-            HFunc(TEvDataShard::TEvReturnBorrowedPartAck, Handle);
-            HFunc(TEvDataShard::TEvInitSplitMergeDestination, Handle);
-            HFunc(TEvDataShard::TEvSplit, Handle);
-            HFunc(TEvDataShard::TEvSplitTransferSnapshot, Handle);
+            HFuncTraced(NEvDataShard::TEvCancelTransactionProposal, Handle);
+            HFuncTraced(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFunc(NEvDataShard::TEvReturnBorrowedPart, Handle);
+            HFunc(NEvDataShard::TEvReturnBorrowedPartAck, Handle);
+            HFunc(NEvDataShard::TEvInitSplitMergeDestination, Handle);
+            HFunc(NEvDataShard::TEvSplit, Handle);
+            HFunc(NEvDataShard::TEvSplitTransferSnapshot, Handle);
             HFunc(TEvPrivate::TEvReplicationSourceOffsets, Handle);
-            HFunc(TEvDataShard::TEvSplitTransferSnapshotAck, Handle);
-            HFunc(TEvDataShard::TEvSplitPartitioningChanged, Handle);
-            HFunc(TEvDataShard::TEvGetTableStats, Handle);
+            HFunc(NEvDataShard::TEvSplitTransferSnapshotAck, Handle);
+            HFunc(NEvDataShard::TEvSplitPartitioningChanged, Handle);
+            HFunc(NEvDataShard::TEvGetTableStats, Handle);
             HFunc(TEvPrivate::TEvAsyncTableStats, Handle);
             HFunc(TEvPrivate::TEvTableStatsError, Handle);
-            HFunc(TEvDataShard::TEvKqpScan, Handle);
-            HFunc(TEvDataShard::TEvUploadRowsRequest, Handle);
-            HFunc(TEvDataShard::TEvEraseRowsRequest, Handle);
-            HFunc(TEvDataShard::TEvOverloadUnsubscribe, Handle);
-            HFunc(TEvDataShard::TEvConditionalEraseRowsRequest, Handle);
+            HFunc(NEvDataShard::TEvKqpScan, Handle);
+            HFunc(NEvDataShard::TEvUploadRowsRequest, Handle);
+            HFunc(NEvDataShard::TEvEraseRowsRequest, Handle);
+            HFunc(NEvDataShard::TEvOverloadUnsubscribe, Handle);
+            HFunc(NEvDataShard::TEvConditionalEraseRowsRequest, Handle);
             HFunc(TEvPrivate::TEvConditionalEraseRowsRegistered, Handle);
-            HFunc(TEvDataShard::TEvRead, Handle);
-            HFunc(TEvDataShard::TEvReadContinue, Handle);
-            HFunc(TEvDataShard::TEvReadAck, Handle);
-            HFunc(TEvDataShard::TEvReadCancel, Handle);
-            HFunc(TEvDataShard::TEvReadColumnsRequest, Handle);
+            HFunc(NEvDataShard::TEvRead, Handle);
+            HFunc(NEvDataShard::TEvReadContinue, Handle);
+            HFunc(NEvDataShard::TEvReadAck, Handle);
+            HFunc(NEvDataShard::TEvReadCancel, Handle);
+            HFunc(NEvDataShard::TEvReadColumnsRequest, Handle);
             HFunc(NEvents::TDataEvents::TEvWrite, Handle);
-            HFunc(TEvDataShard::TEvGetInfoRequest, Handle);
-            HFunc(TEvDataShard::TEvListOperationsRequest, Handle);
-            HFunc(TEvDataShard::TEvGetDataHistogramRequest, Handle);
-            HFunc(TEvDataShard::TEvGetOperationRequest, Handle);
-            HFunc(TEvDataShard::TEvGetReadTableSinkStateRequest, Handle);
-            HFunc(TEvDataShard::TEvGetReadTableScanStateRequest, Handle);
-            HFunc(TEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
-            HFunc(TEvDataShard::TEvGetRSInfoRequest, Handle);
-            HFunc(TEvDataShard::TEvGetSlowOpProfilesRequest, Handle);
-            HFunc(TEvDataShard::TEvRefreshVolatileSnapshotRequest, Handle);
-            HFunc(TEvDataShard::TEvDiscardVolatileSnapshotRequest, Handle);
-            HFuncTraced(TEvDataShard::TEvBuildIndexCreateRequest, Handle);
-            HFunc(TEvDataShard::TEvSampleKRequest, Handle);
-            HFunc(TEvDataShard::TEvReshuffleKMeansRequest, Handle);
-            HFunc(TEvDataShard::TEvLocalKMeansRequest, Handle);
-            HFunc(TEvDataShard::TEvCdcStreamScanRequest, Handle);
+            HFunc(NEvDataShard::TEvGetInfoRequest, Handle);
+            HFunc(NEvDataShard::TEvListOperationsRequest, Handle);
+            HFunc(NEvDataShard::TEvGetDataHistogramRequest, Handle);
+            HFunc(NEvDataShard::TEvGetOperationRequest, Handle);
+            HFunc(NEvDataShard::TEvGetReadTableSinkStateRequest, Handle);
+            HFunc(NEvDataShard::TEvGetReadTableScanStateRequest, Handle);
+            HFunc(NEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
+            HFunc(NEvDataShard::TEvGetRSInfoRequest, Handle);
+            HFunc(NEvDataShard::TEvGetSlowOpProfilesRequest, Handle);
+            HFunc(NEvDataShard::TEvRefreshVolatileSnapshotRequest, Handle);
+            HFunc(NEvDataShard::TEvDiscardVolatileSnapshotRequest, Handle);
+            HFuncTraced(NEvDataShard::TEvBuildIndexCreateRequest, Handle);
+            HFunc(NEvDataShard::TEvSampleKRequest, Handle);
+            HFunc(NEvDataShard::TEvReshuffleKMeansRequest, Handle);
+            HFunc(NEvDataShard::TEvLocalKMeansRequest, Handle);
+            HFunc(NEvDataShard::TEvCdcStreamScanRequest, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanRegistered, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanProgress, Handle);
             HFunc(TEvPrivate::TEvAsyncJobComplete, Handle);
@@ -3141,7 +3141,7 @@ protected:
             HFunc(TEvents::TEvUndelivered, Handle);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
             HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
+            HFunc(NSchemeShard::NEvSchemeShard::TEvSubDomainPathIdFound, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted);
             IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable);
@@ -3155,16 +3155,16 @@ protected:
             HFunc(TEvChangeExchange::TEvActivateSender, Handle);
             HFunc(TEvChangeExchange::TEvActivateSenderAck, Handle);
             HFunc(TEvChangeExchange::TEvSplitAck, Handle);
-            HFunc(TEvDataShard::TEvGetRemovedRowVersions, Handle);
-            HFunc(TEvDataShard::TEvCompactBorrowed, Handle);
-            HFunc(TEvDataShard::TEvCompactTable, Handle);
-            HFunc(TEvDataShard::TEvGetCompactTableStats, Handle);
-            HFunc(TEvDataShard::TEvApplyReplicationChanges, Handle);
-            fFunc(TEvDataShard::EvGetReplicationSourceOffsets, HandleByReplicationSourceOffsetsServer);
-            fFunc(TEvDataShard::EvReplicationSourceOffsetsAck, HandleByReplicationSourceOffsetsServer);
-            fFunc(TEvDataShard::EvReplicationSourceOffsetsCancel, HandleByReplicationSourceOffsetsServer);
+            HFunc(NEvDataShard::TEvGetRemovedRowVersions, Handle);
+            HFunc(NEvDataShard::TEvCompactBorrowed, Handle);
+            HFunc(NEvDataShard::TEvCompactTable, Handle);
+            HFunc(NEvDataShard::TEvGetCompactTableStats, Handle);
+            HFunc(NEvDataShard::TEvApplyReplicationChanges, Handle);
+            fFunc(NEvDataShard::EvGetReplicationSourceOffsets, HandleByReplicationSourceOffsetsServer);
+            fFunc(NEvDataShard::EvReplicationSourceOffsetsAck, HandleByReplicationSourceOffsetsServer);
+            fFunc(NEvDataShard::EvReplicationSourceOffsetsCancel, HandleByReplicationSourceOffsetsServer);
             HFunc(TEvLongTxService::TEvLockStatus, Handle);
-            HFunc(TEvDataShard::TEvGetOpenTxs, Handle);
+            HFunc(NEvDataShard::TEvGetOpenTxs, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveLockChangeRecords, Handle);
             HFunc(TEvPrivate::TEvConfirmReadonlyLease, Handle);
             HFunc(TEvPrivate::TEvPlanPredictedTxs, Handle);
@@ -3185,17 +3185,17 @@ protected:
         TRACE_EVENT(NKikimrServices::TX_DATASHARD);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvGone, Handle);
-            HFuncTraced(TEvDataShard::TEvProposeTransaction, HandleAsFollower);
+            HFuncTraced(NEvDataShard::TEvProposeTransaction, HandleAsFollower);
             HFuncTraced(TEvPrivate::TEvDelayedProposeTransaction, Handle);
-            HFuncTraced(TEvDataShard::TEvReadColumnsRequest, Handle);
+            HFuncTraced(NEvDataShard::TEvReadColumnsRequest, Handle);
             HFuncTraced(TEvTabletPipe::TEvClientConnected, Handle);
             HFuncTraced(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFuncTraced(TEvTabletPipe::TEvServerConnected, Handle);
             HFuncTraced(TEvTabletPipe::TEvServerDisconnected, Handle);
-            HFuncTraced(TEvDataShard::TEvRead, Handle);
-            HFuncTraced(TEvDataShard::TEvReadContinue, Handle);
-            HFuncTraced(TEvDataShard::TEvReadAck, Handle);
-            HFuncTraced(TEvDataShard::TEvReadCancel, Handle);
+            HFuncTraced(NEvDataShard::TEvRead, Handle);
+            HFuncTraced(NEvDataShard::TEvReadContinue, Handle);
+            HFuncTraced(NEvDataShard::TEvReadAck, Handle);
+            HFuncTraced(NEvDataShard::TEvReadCancel, Handle);
             HFuncTraced(TEvPrivate::TEvPeriodicWakeup, DoPeriodicTasks);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3208,7 +3208,7 @@ protected:
 
     void Die(const TActorContext &ctx) override;
 
-    void SendViaSchemeshardPipe(const TActorContext &ctx, ui64 tabletId, THolder<TEvDataShard::TEvSchemaChanged> event) {
+    void SendViaSchemeshardPipe(const TActorContext &ctx, ui64 tabletId, THolder<NEvDataShard::TEvSchemaChanged> event) {
         Y_ABORT_UNLESS(tabletId);
         Y_ABORT_UNLESS(CurrentSchemeShardId == tabletId);
 
@@ -3229,7 +3229,7 @@ protected:
             clientConfig.RetryPolicy = SchemeShardPipeRetryPolicy;
             StateReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
         }
-        THolder<TEvDataShard::TEvStateChanged> ev(new TEvDataShard::TEvStateChanged(ctx.SelfID, TabletID(), state));
+        THolder<NEvDataShard::TEvStateChanged> ev(new NEvDataShard::TEvStateChanged(ctx.SelfID, TabletID(), state));
         NTabletPipe::SendData(ctx, StateReportPipe, ev.Release());
     }
 
@@ -3265,7 +3265,7 @@ protected:
                 DbStatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
             }
 
-            THolder<TEvDataShard::TEvPeriodicTableStats> ev(new TEvDataShard::TEvPeriodicTableStats(TabletID(), PathOwnerId, tableId));
+            THolder<NEvDataShard::TEvPeriodicTableStats> ev(new NEvDataShard::TEvPeriodicTableStats(TabletID(), PathOwnerId, tableId));
             ev->Record.SetFollowerId(FollowerId());
             ev->Record.SetShardState(State);
             ev->Record.SetGeneration(Executor()->Generation());
@@ -3313,14 +3313,14 @@ protected:
                 }
                 for (const auto& pi : SysTablesPartOwners) {
                     ev->Record.AddSysTablesPartOwners(pi);
-                }                
+                }
             }
 
             ev->Record.MutableTableStats()->SetImmediateTxCompleted(TabletCounters->Cumulative()[COUNTER_PREPARE_IMMEDIATE].Get() + TabletCounters->Cumulative()[COUNTER_WRITE_IMMEDIATE].Get());
             ev->Record.MutableTableStats()->SetPlannedTxCompleted(TabletCounters->Cumulative()[COUNTER_PLANNED_TX_COMPLETE].Get());
             ev->Record.MutableTableStats()->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_PREPARE_OVERLOADED].Get() + TabletCounters->Cumulative()[COUNTER_WRITE_OVERLOADED].Get());
             ev->Record.MutableTableStats()->SetTxRejectedBySpace(
-                TabletCounters->Cumulative()[COUNTER_PREPARE_OUT_OF_SPACE].Get() 
+                TabletCounters->Cumulative()[COUNTER_PREPARE_OUT_OF_SPACE].Get()
               + TabletCounters->Cumulative()[COUNTER_PREPARE_DISK_SPACE_EXHAUSTED].Get()
               + TabletCounters->Cumulative()[COUNTER_WRITE_OUT_OF_SPACE].Get()
               + TabletCounters->Cumulative()[COUNTER_WRITE_DISK_SPACE_EXHAUSTED].Get()

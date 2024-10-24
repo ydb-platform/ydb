@@ -60,7 +60,7 @@ public:
 class TDataShard::TTxGetInfo : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxGetInfo(TDataShard *self,
-               TEvDataShard::TEvGetInfoRequest::TPtr ev)
+               NEvDataShard::TEvGetInfoRequest::TPtr ev)
         : TBase(self)
         , Ev(ev)
     {}
@@ -68,7 +68,7 @@ public:
     bool Execute(NTabletFlatExecutor::TTransactionContext &,
                  const TActorContext &ctx) override
     {
-        auto *response = new TEvDataShard::TEvGetInfoResponse;
+        auto *response = new NEvDataShard::TEvGetInfoResponse;
         response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
         for (auto &pr : Self->GetUserTables()) {
@@ -166,13 +166,13 @@ public:
     TTxType GetTxType() const override { return TXTYPE_MONITORING; }
 
 private:
-    TEvDataShard::TEvGetInfoRequest::TPtr Ev;
+    NEvDataShard::TEvGetInfoRequest::TPtr Ev;
 };
 
 class TDataShard::TTxListOperations : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxListOperations(TDataShard *self,
-                      TEvDataShard::TEvListOperationsRequest::TPtr ev)
+                      NEvDataShard::TEvListOperationsRequest::TPtr ev)
         : TBase(self)
         , Ev(ev)
     {}
@@ -180,7 +180,7 @@ public:
     bool Execute(NTabletFlatExecutor::TTransactionContext &,
                  const TActorContext &ctx) override
     {
-        auto *response = new TEvDataShard::TEvListOperationsResponse;
+        auto *response = new NEvDataShard::TEvListOperationsResponse;
         response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
         for (auto &pr : Self->Pipeline.GetImmediateOps())
@@ -213,13 +213,13 @@ public:
     TTxType GetTxType() const override { return TXTYPE_MONITORING; }
 
 private:
-    TEvDataShard::TEvListOperationsRequest::TPtr Ev;
+    NEvDataShard::TEvListOperationsRequest::TPtr Ev;
 };
 
 class TDataShard::TTxGetOperation : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxGetOperation(TDataShard *self,
-                    TEvDataShard::TEvGetOperationRequest::TPtr ev)
+                    NEvDataShard::TEvGetOperationRequest::TPtr ev)
         : TBase(self)
         , Ev(ev)
     {}
@@ -227,7 +227,7 @@ public:
     bool Execute(NTabletFlatExecutor::TTransactionContext &,
                  const TActorContext &ctx) override
     {
-        auto *response = new TEvDataShard::TEvGetOperationResponse;
+        auto *response = new NEvDataShard::TEvGetOperationResponse;
 
         auto op = Self->Pipeline.FindOp(Ev->Get()->Record.GetTxId());
         if (!op)
@@ -315,7 +315,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_MONITORING; }
 
 private:
-    TEvDataShard::TEvGetOperationRequest::TPtr Ev;
+    NEvDataShard::TEvGetOperationRequest::TPtr Ev;
 };
 
 ITransaction *TDataShard::CreateTxMonitoring(TDataShard *self, NMon::TEvRemoteHttpInfo::TPtr ev)
@@ -323,17 +323,17 @@ ITransaction *TDataShard::CreateTxMonitoring(TDataShard *self, NMon::TEvRemoteHt
     return new TTxMonitoring(self, ev);
 }
 
-ITransaction *TDataShard::CreateTxGetInfo(TDataShard *self, TEvDataShard::TEvGetInfoRequest::TPtr ev)
+ITransaction *TDataShard::CreateTxGetInfo(TDataShard *self, NEvDataShard::TEvGetInfoRequest::TPtr ev)
 {
     return new TTxGetInfo(self, ev);
 }
 
-ITransaction *TDataShard::CreateTxListOperations(TDataShard *self, TEvDataShard::TEvListOperationsRequest::TPtr ev)
+ITransaction *TDataShard::CreateTxListOperations(TDataShard *self, NEvDataShard::TEvListOperationsRequest::TPtr ev)
 {
     return new TTxListOperations(self, ev);
 }
 
-ITransaction *TDataShard::CreateTxGetOperation(TDataShard *self, TEvDataShard::TEvGetOperationRequest::TPtr ev)
+ITransaction *TDataShard::CreateTxGetOperation(TDataShard *self, NEvDataShard::TEvGetOperationRequest::TPtr ev)
 {
     return new TTxGetOperation(self, ev);
 }

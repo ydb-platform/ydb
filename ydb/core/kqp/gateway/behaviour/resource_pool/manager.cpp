@@ -52,8 +52,8 @@ TResourcePoolManager::TAsyncStatus CheckFeatureFlag(const TResourcePoolManager::
         ythrow yexception() << "This place needs an actor system. Please contact internal support";
     }
 
-    using TRequest = NConsole::TEvConfigsDispatcher::TEvGetConfigRequest;
-    using TResponse = NConsole::TEvConfigsDispatcher::TEvGetConfigResponse;
+    using TRequest = NConsole::NEvConfigsDispatcher::TEvGetConfigRequest;
+    using TResponse = NConsole::NEvConfigsDispatcher::TEvGetConfigResponse;
     auto event = std::make_unique<TRequest>((ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem);
 
     auto promise = NThreading::NewPromise<TFeatureFlagCheckResult>();

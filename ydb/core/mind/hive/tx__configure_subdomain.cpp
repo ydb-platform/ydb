@@ -6,10 +6,10 @@ namespace NHive {
 
 class TTxConfigureSubdomain : public TTransactionBase<THive> {
 private:
-    TEvHive::TEvConfigureHive::TPtr Event;
+    NEvHive::TEvConfigureHive::TPtr Event;
 
 public:
-    TTxConfigureSubdomain(TEvHive::TEvConfigureHive::TPtr event, THive* hive)
+    TTxConfigureSubdomain(NEvHive::TEvConfigureHive::TPtr event, THive* hive)
         : TBase(hive)
         , Event(std::move(event))
     {}
@@ -32,11 +32,11 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         BLOG_D("THive::TTxConfigureSubdomain::Complete");
-        ctx.Send(Event->Sender, new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, Self->TabletID()));
+        ctx.Send(Event->Sender, new NEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, Self->TabletID()));
     }
 };
 
-ITransaction* THive::CreateConfigureSubdomain(TEvHive::TEvConfigureHive::TPtr event) {
+ITransaction* THive::CreateConfigureSubdomain(NEvHive::TEvConfigureHive::TPtr event) {
     return new TTxConfigureSubdomain(std::move(event), this);
 }
 

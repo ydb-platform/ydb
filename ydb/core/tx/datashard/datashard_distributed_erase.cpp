@@ -167,7 +167,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             LOG_E(done);
         }
 
-        auto response = MakeHolder<TEvDataShard::TEvEraseRowsResponse>();
+        auto response = MakeHolder<NEvDataShard::TEvEraseRowsResponse>();
         auto& record = response->Record;
         record.SetStatus(status);
         record.SetErrorDescription(error);
@@ -300,7 +300,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                 << ": txId# " << TxId
                 << ", shard# " << shardId);
 
-            auto cancel = MakeHolder<TEvDataShard::TEvCancelTransactionProposal>(TxId);
+            auto cancel = MakeHolder<NEvDataShard::TEvCancelTransactionProposal>(TxId);
             Send(LeaderPipeCache, new TEvPipeCache::TEvForward(cancel.Release(), shardId, false));
         }
     }
@@ -561,18 +561,18 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
 
     STATEFN(StateAwaitRequest) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvDataShard::TEvEraseRowsRequest, Handle);
+            hFunc(NEvDataShard::TEvEraseRowsRequest, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
         }
     }
 
-    void Store(TEvDataShard::TEvEraseRowsRequest::TPtr& ev) {
-        LOG_D("Store TEvDataShard::TEvEraseRowsRequest");
+    void Store(NEvDataShard::TEvEraseRowsRequest::TPtr& ev) {
+        LOG_D("Store NEvDataShard::TEvEraseRowsRequest");
         Request = ev;
     }
 
-    void Handle(TEvDataShard::TEvEraseRowsRequest::TPtr& ev) {
-        LOG_D("Handle TEvDataShard::TEvEraseRowsRequest");
+    void Handle(NEvDataShard::TEvEraseRowsRequest::TPtr& ev) {
+        LOG_D("Handle NEvDataShard::TEvEraseRowsRequest");
 
         const auto& record = ev->Get()->Record;
 
@@ -741,7 +741,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                     << ", dependents# " << tx.DependentsSize()
                     << ", dependencies# " << tx.DependenciesSize());
 
-                auto propose = MakeHolder<TEvDataShard::TEvProposeTransaction>(
+                auto propose = MakeHolder<NEvDataShard::TEvProposeTransaction>(
                     NKikimrTxDataShard::TX_KIND_DISTRIBUTED_ERASE, SelfId(), TxId, tx.SerializeAsString()
                 );
 
@@ -762,14 +762,14 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
 
     STATEFN(StatePropose) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvDataShard::TEvProposeTransactionResult, HandlePropose);
+            hFunc(NEvDataShard::TEvProposeTransactionResult, HandlePropose);
             hFunc(TEvPipeCache::TEvDeliveryProblem, HandlePropose);
         default:
             return StateExecuteBase(ev);
         }
     }
 
-    void HandlePropose(TEvDataShard::TEvProposeTransactionResult::TPtr& ev) {
+    void HandlePropose(NEvDataShard::TEvProposeTransactionResult::TPtr& ev) {
         const auto* msg = ev->Get();
 
         const ui64 shardId = msg->GetOrigin();
@@ -778,7 +778,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         }
 
         const auto status = msg->GetStatus();
-        LOG_D("HandlePropose TEvDataShard::TEvProposeTransactionResult"
+        LOG_D("HandlePropose NEvDataShard::TEvProposeTransactionResult"
             << ": txId# " << TxId
             << ", shard# " << shardId
             << ", status# " << static_cast<ui32>(status));
@@ -922,7 +922,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
     STATEFN(StatePlan) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxy::TEvProposeTransactionStatus, HandlePlan);
-            hFunc(TEvDataShard::TEvProposeTransactionResult, HandlePlan);
+            hFunc(NEvDataShard::TEvProposeTransactionResult, HandlePlan);
             hFunc(TEvPipeCache::TEvDeliveryProblem, HandlePlan);
         default:
             return StateExecuteBase(ev);
@@ -963,7 +963,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         }
     }
 
-    void HandlePlan(TEvDataShard::TEvProposeTransactionResult::TPtr& ev) {
+    void HandlePlan(NEvDataShard::TEvProposeTransactionResult::TPtr& ev) {
         const auto* msg = ev->Get();
 
         const ui64 shardId = msg->GetOrigin();
@@ -972,7 +972,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         }
 
         const auto status = msg->GetStatus();
-        LOG_D("HandlePlan TEvDataShard::TEvProposeTransactionResult"
+        LOG_D("HandlePlan NEvDataShard::TEvProposeTransactionResult"
             << ": txId# " << TxId
             << ", shard# " << shardId
             << ", status# " << static_cast<ui32>(status));
@@ -1072,7 +1072,7 @@ public:
 
     STATEFN(StatePrepareBase) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvDataShard::TEvEraseRowsRequest, Store);
+            hFunc(NEvDataShard::TEvEraseRowsRequest, Store);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
         }
     }
@@ -1097,7 +1097,7 @@ private:
     TIntrusivePtr<NTxProxy::TTxProxyMon> Mon;
 
     THashMap<TTableId, TTableInfo> TableInfos;
-    TEvDataShard::TEvEraseRowsRequest::TPtr Request;
+    NEvDataShard::TEvEraseRowsRequest::TPtr Request;
 
     THashSet<ui64> Shards;
     THashSet<ui64> PendingPrepare;

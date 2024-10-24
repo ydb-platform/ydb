@@ -91,7 +91,7 @@ protected:
 
     NDataShard::TUploadRetryLimits Limits;
 
-    TActorId ResponseActorId;  
+    TActorId ResponseActorId;
     ui64 BuildIndexId = 0;
     TIndexBuildInfo::TSampleK::TRows Init;
 
@@ -118,8 +118,8 @@ public:
         , Init(std::move(init))
         , Child(child)
     {
-        LogPrefix = TStringBuilder() 
-            << "TUploadSampleK: BuildIndexId: " << BuildIndexId 
+        LogPrefix = TStringBuilder()
+            << "TUploadSampleK: BuildIndexId: " << BuildIndexId
             << " ResponseActorId: " << ResponseActorId;
         Limits.MaxUploadRowsRetryCount = limits.MaxRetries;
         Y_ASSERT(!Init.empty());
@@ -243,10 +243,10 @@ private:
     }
 };
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
+THolder<NEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.LockTxId), ss->TabletID());
+    auto propose = MakeHolder<NEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.LockTxId), ss->TabletID());
     propose->Record.SetFailOnExist(false);
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
@@ -260,10 +260,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> InitiatePropose(
+THolder<NEvSchemeShard::TEvModifySchemeTransaction> InitiatePropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.InitiateTxId), ss->TabletID());
+    auto propose = MakeHolder<NEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.InitiateTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
@@ -284,12 +284,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> InitiatePropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropBuildPropose(
+THolder<NEvSchemeShard::TEvModifySchemeTransaction> DropBuildPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
     Y_ASSERT(buildInfo.IsBuildVectorIndex());
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    auto propose = MakeHolder<NEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
     auto path = TPath::Init(buildInfo.TablePathId, ss).Dive(buildInfo.IndexName);
@@ -309,12 +309,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropBuildPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
+THolder<NEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
     Y_ASSERT(buildInfo.IsBuildVectorIndex());
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    auto propose = MakeHolder<NEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
     modifyScheme.SetInternal(true);
@@ -373,12 +373,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
+THolder<NEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
     Y_ABORT_UNLESS(buildInfo.IsBuildColumns(), "Unknown operation kind while building AlterMainTablePropose");
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.AlterMainTableTxId), ss->TabletID());
+    auto propose = MakeHolder<NEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.AlterMainTableTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
@@ -418,10 +418,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
+THolder<NEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    auto propose = MakeHolder<NEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
@@ -445,10 +445,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose(
+THolder<NEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.UnlockTxId), ss->TabletID());
+    auto propose = MakeHolder<NEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.UnlockTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
@@ -466,10 +466,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CancelPropose(
+THolder<NEvSchemeShard::TEvModifySchemeTransaction> CancelPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    auto propose = MakeHolder<NEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
@@ -521,10 +521,10 @@ private:
 
     void SendSampleKRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         Y_ASSERT(buildInfo.IsBuildVectorIndex());
-        auto ev = MakeHolder<TEvDataShard::TEvSampleKRequest>();
+        auto ev = MakeHolder<NEvDataShard::TEvSampleKRequest>();
         ev->Record.SetId(ui64(BuildId));
 
-        PathIdFromPathId(buildInfo.TablePathId, ev->Record.MutablePathId());        
+        PathIdFromPathId(buildInfo.TablePathId, ev->Record.MutablePathId());
 
         ev->Record.SetK(buildInfo.KMeans.K);
         ev->Record.SetMaxProbability(buildInfo.Sample.MaxProbability);
@@ -546,10 +546,10 @@ private:
 
     void SendKMeansReshuffleRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         Y_ASSERT(buildInfo.IsBuildVectorIndex());
-        auto ev = MakeHolder<TEvDataShard::TEvReshuffleKMeansRequest>();
+        auto ev = MakeHolder<NEvDataShard::TEvReshuffleKMeansRequest>();
         ev->Record.SetId(ui64(BuildId));
 
-        PathIdFromPathId(buildInfo.TablePathId, ev->Record.MutablePathId());        
+        PathIdFromPathId(buildInfo.TablePathId, ev->Record.MutablePathId());
         *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
             buildInfo.SpecializedIndexDescription).GetSettings().settings();
         ev->Record.SetUpload(buildInfo.KMeans.GetUpload());
@@ -585,7 +585,7 @@ private:
     }
 
     void SendBuildIndexRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
-        auto ev = MakeHolder<TEvDataShard::TEvBuildIndexCreateRequest>();
+        auto ev = MakeHolder<NEvDataShard::TEvBuildIndexCreateRequest>();
         ev->Record.SetBuildIndexId(ui64(BuildId));
 
         ev->Record.SetOwnerId(buildInfo.TablePathId.OwnerId);
@@ -634,7 +634,7 @@ private:
 
         ToTabletSend.emplace_back(shardId, ui64(BuildId), std::move(ev));
     }
-    
+
     void SendUploadSampleKRequest(TIndexBuildInfo& buildInfo) {
         auto path = TPath::Init(buildInfo.TablePathId, Self)
                         .Dive(buildInfo.IndexName)
@@ -832,7 +832,7 @@ public:
             } else if (buildInfo.AlterMainTableTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), AlterMainTablePropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.AlterMainTableTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.AlterMainTableTxId)));
+                Send(Self->SelfId(), MakeHolder<NEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.AlterMainTableTxId)));
             } else {
                 ChangeState(BuildId, TIndexBuildInfo::EState::Locking);
                 Progress(BuildId);
@@ -844,7 +844,7 @@ public:
             } else if (buildInfo.LockTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), LockPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.LockTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.LockTxId)));
+                Send(Self->SelfId(), MakeHolder<NEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.LockTxId)));
             } else {
                 ChangeState(BuildId, TIndexBuildInfo::EState::Initiating);
                 Progress(BuildId);
@@ -861,7 +861,7 @@ public:
             } else if (buildInfo.InitiateTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), InitiatePropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.InitiateTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.InitiateTxId)));
+                Send(Self->SelfId(), MakeHolder<NEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.InitiateTxId)));
             } else {
                 if (buildInfo.IsBuildVectorIndex()) {
                     Y_ASSERT(buildInfo.KMeans.NeedsAnotherLevel());
@@ -896,7 +896,7 @@ public:
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), DropBuildPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.ApplyTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
+                Send(Self->SelfId(), MakeHolder<NEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
             } else {
                 buildInfo.ApplyTxId = {};
                 buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
@@ -918,13 +918,13 @@ public:
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), CreateBuildPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.ApplyTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
+                Send(Self->SelfId(), MakeHolder<NEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
             } else {
                 buildInfo.ApplyTxId = {};
                 buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
                 buildInfo.ApplyTxDone = false;
                 ++buildInfo.KMeans.Level;
-                
+
                 NIceDb::TNiceDb db(txc.DB);
                 Self->PersistBuildIndexApplyTxId(db, buildInfo);
                 Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
@@ -941,7 +941,7 @@ public:
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), ApplyPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.ApplyTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
+                Send(Self->SelfId(), MakeHolder<NEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
             } else {
                 ChangeState(BuildId, TIndexBuildInfo::EState::Unlocking);
                 Progress(BuildId);
@@ -953,7 +953,7 @@ public:
             } else if (buildInfo.UnlockTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), UnlockPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.UnlockTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.UnlockTxId)));
+                Send(Self->SelfId(), MakeHolder<NEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.UnlockTxId)));
             } else {
                 ChangeState(BuildId, TIndexBuildInfo::EState::Done);
                 Progress(BuildId);
@@ -969,7 +969,7 @@ public:
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), CancelPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.ApplyTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
+                Send(Self->SelfId(), MakeHolder<NEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
             } else {
                 ChangeState(BuildId, TIndexBuildInfo::EState::Cancellation_Unlocking);
                 Progress(BuildId);
@@ -981,7 +981,7 @@ public:
             } else if (buildInfo.UnlockTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), UnlockPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.UnlockTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.UnlockTxId)));
+                Send(Self->SelfId(), MakeHolder<NEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.UnlockTxId)));
             } else {
                 ChangeState(BuildId, TIndexBuildInfo::EState::Cancelled);
                 Progress(BuildId);
@@ -997,7 +997,7 @@ public:
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), CancelPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.ApplyTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
+                Send(Self->SelfId(), MakeHolder<NEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
             } else {
                 ChangeState(BuildId, TIndexBuildInfo::EState::Rejection_Unlocking);
                 Progress(BuildId);
@@ -1009,7 +1009,7 @@ public:
             } else if (buildInfo.UnlockTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), UnlockPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.UnlockTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.UnlockTxId)));
+                Send(Self->SelfId(), MakeHolder<NEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.UnlockTxId)));
             } else {
                 ChangeState(BuildId, TIndexBuildInfo::EState::Rejected);
                 Progress(BuildId);
@@ -1074,7 +1074,7 @@ private:
     TInstant ScheduledAt;
 
 public:
-    explicit TTxBilling(TSelf* self, TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev)
+    explicit TTxBilling(TSelf* self, NEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev)
         : TTxBase(self, TXTYPE_PROGRESS_INDEX_BUILD)
         , BuildIndexId(ev->Get()->BuildId)
         , ScheduledAt(ev->Get()->SendAt)
@@ -1197,10 +1197,10 @@ public:
 
 struct TSchemeShard::TIndexBuilder::TTxReplySampleK: public TSchemeShard::TIndexBuilder::TTxReply  {
 private:
-    TEvDataShard::TEvSampleKResponse::TPtr SampleK;
+    NEvDataShard::TEvSampleKResponse::TPtr SampleK;
 
 public:
-    explicit TTxReplySampleK(TSelf* self, TEvDataShard::TEvSampleKResponse::TPtr& sampleK)
+    explicit TTxReplySampleK(TSelf* self, NEvDataShard::TEvSampleKResponse::TPtr& sampleK)
         : TTxReply(self)
         , SampleK(sampleK)
     {
@@ -1346,10 +1346,10 @@ public:
 
 struct TSchemeShard::TIndexBuilder::TTxReplyReshuffleKMeans: public TSchemeShard::TIndexBuilder::TTxReply {
 private:
-    TEvDataShard::TEvReshuffleKMeansResponse::TPtr Reshuffle;
+    NEvDataShard::TEvReshuffleKMeansResponse::TPtr Reshuffle;
 
 public:
-    explicit TTxReplyReshuffleKMeans(TSelf* self, TEvDataShard::TEvReshuffleKMeansResponse::TPtr& reshuffle)
+    explicit TTxReplyReshuffleKMeans(TSelf* self, NEvDataShard::TEvReshuffleKMeansResponse::TPtr& reshuffle)
         : TTxReply(self)
         , Reshuffle(reshuffle)
     {
@@ -1433,7 +1433,7 @@ public:
             case  NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR:
             case  NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST:
                 buildInfo.Issue += TStringBuilder()
-                    << "One of the shards report "<< shardStatus.Status 
+                    << "One of the shards report "<< shardStatus.Status
                     << " at Filling stage, process has to be canceled"
                     << ", shardId: " << shardId
                     << ", shardIdx: " << shardIdx;
@@ -1556,9 +1556,9 @@ public:
 
 struct TSchemeShard::TIndexBuilder::TTxReplyProgress: public TSchemeShard::TIndexBuilder::TTxReply  {
 private:
-    TEvDataShard::TEvBuildIndexProgressResponse::TPtr ShardProgress;
+    NEvDataShard::TEvBuildIndexProgressResponse::TPtr ShardProgress;
 public:
-    explicit TTxReplyProgress(TSelf* self, TEvDataShard::TEvBuildIndexProgressResponse::TPtr& shardProgress)
+    explicit TTxReplyProgress(TSelf* self, NEvDataShard::TEvBuildIndexProgressResponse::TPtr& shardProgress)
         : TTxReply(self)
         , ShardProgress(shardProgress)
     {}
@@ -1730,7 +1730,7 @@ public:
         : TTxReply(self)
         , CompletedTxId(completedTxId)
     {}
- 
+
     bool DoExecute(TTransactionContext& txc, [[maybe_unused]] const TActorContext& ctx) override {
         const auto txId = CompletedTxId;
         const auto* buildIdPtr = Self->TxIdToIndexBuilds.FindPtr(txId);
@@ -1820,9 +1820,9 @@ public:
 
 struct TSchemeShard::TIndexBuilder::TTxReplyModify: public TSchemeShard::TIndexBuilder::TTxReply  {
 private:
-    TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult;
+    NEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult;
 public:
-    explicit TTxReplyModify(TSelf* self, TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& modifyResult)
+    explicit TTxReplyModify(TSelf* self, NEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& modifyResult)
         : TTxReply(self)
         , ModifyResult(modifyResult)
     {}
@@ -2098,7 +2098,7 @@ ITransaction* TSchemeShard::CreateTxReply(TEvTxAllocatorClient::TEvAllocateResul
     return new TIndexBuilder::TTxReplyAllocate(this, allocateResult);
 }
 
-ITransaction* TSchemeShard::CreateTxReply(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& modifyResult) {
+ITransaction* TSchemeShard::CreateTxReply(NEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& modifyResult) {
     return new TIndexBuilder::TTxReplyModify(this, modifyResult);
 }
 
@@ -2106,15 +2106,15 @@ ITransaction* TSchemeShard::CreateTxReply(TTxId completedTxId) {
     return new TIndexBuilder::TTxReplyCompleted(this, completedTxId);
 }
 
-ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& progress) {
+ITransaction* TSchemeShard::CreateTxReply(NEvDataShard::TEvBuildIndexProgressResponse::TPtr& progress) {
     return new TIndexBuilder::TTxReplyProgress(this, progress);
 }
 
-ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvSampleKResponse::TPtr& sampleK) {
+ITransaction* TSchemeShard::CreateTxReply(NEvDataShard::TEvSampleKResponse::TPtr& sampleK) {
     return new TIndexBuilder::TTxReplySampleK(this, sampleK);
 }
 
-ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& reshuffle) {
+ITransaction* TSchemeShard::CreateTxReply(NEvDataShard::TEvReshuffleKMeansResponse::TPtr& reshuffle) {
     return new TIndexBuilder::TTxReplyReshuffleKMeans(this, reshuffle);
 }
 
@@ -2126,7 +2126,7 @@ ITransaction* TSchemeShard::CreatePipeRetry(TIndexBuildId indexBuildId, TTabletI
     return new TIndexBuilder::TTxReplyRetry(this, indexBuildId, tabletId);
 }
 
-ITransaction* TSchemeShard::CreateTxBilling(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev) {
+ITransaction* TSchemeShard::CreateTxBilling(NEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev) {
     return new TIndexBuilder::TTxBilling(this, ev);
 }
 

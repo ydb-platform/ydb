@@ -42,14 +42,14 @@ struct TEvPrivate {
 
 TVector<TCell> ToCells(const std::vector<TString> &keys);
 
-void AddRangeQuery(TEvDataShard::TEvRead &request,
+void AddRangeQuery(NEvDataShard::TEvRead &request,
                    const std::vector<TString> &from, bool fromInclusive,
                    const std::vector<TString> &to, bool toInclusive);
 
-void AddKeyQuery(TEvDataShard::TEvRead &request, const TOwnedCellVec &key);
+void AddKeyQuery(NEvDataShard::TEvRead &request, const TOwnedCellVec &key);
 
 IActor *CreateReadIteratorScan(
-    TEvDataShard::TEvRead* request,
+    NEvDataShard::TEvRead* request,
     ui64 tablet,
     const TActorId& parent,
     const TSubLoadId& id,

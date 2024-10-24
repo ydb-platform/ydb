@@ -10,10 +10,10 @@ namespace NDataShard {
 
 class TDataShard::TTxInitSplitMergeDestination : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
-    TEvDataShard::TEvInitSplitMergeDestination::TPtr Ev;
+    NEvDataShard::TEvInitSplitMergeDestination::TPtr Ev;
 
 public:
-    TTxInitSplitMergeDestination(TDataShard* ds, TEvDataShard::TEvInitSplitMergeDestination::TPtr ev)
+    TTxInitSplitMergeDestination(TDataShard* ds, NEvDataShard::TEvInitSplitMergeDestination::TPtr ev)
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
         , Ev(ev)
     {}
@@ -111,7 +111,7 @@ public:
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack init split/merge destination OpId " << opId);
 
-        ctx.Send(ackTo, new TEvDataShard::TEvInitSplitMergeDestinationAck(opId, Self->TabletID()));
+        ctx.Send(ackTo, new NEvDataShard::TEvInitSplitMergeDestinationAck(opId, Self->TabletID()));
         Self->SendRegistrationRequestTimeCast(ctx);
     }
 };
@@ -119,10 +119,10 @@ public:
 
 class TDataShard::TTxSplitTransferSnapshot : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
-    TEvDataShard::TEvSplitTransferSnapshot::TPtr Ev;
+    NEvDataShard::TEvSplitTransferSnapshot::TPtr Ev;
 
 public:
-    TTxSplitTransferSnapshot(TDataShard* ds, TEvDataShard::TEvSplitTransferSnapshot::TPtr& ev)
+    TTxSplitTransferSnapshot(TDataShard* ds, NEvDataShard::TEvSplitTransferSnapshot::TPtr& ev)
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
         , Ev(ev)
     {}
@@ -303,7 +303,7 @@ public:
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack snapshot OpId " << opId);
 
-        ctx.Send(ackTo, new TEvDataShard::TEvSplitTransferSnapshotAck(opId, Self->TabletID()));
+        ctx.Send(ackTo, new NEvDataShard::TEvSplitTransferSnapshotAck(opId, Self->TabletID()));
     }
 
     class TTxLastSnapshotReceived : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -561,11 +561,11 @@ public:
     }
 };
 
-void TDataShard::Handle(TEvDataShard::TEvInitSplitMergeDestination::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvInitSplitMergeDestination::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxInitSplitMergeDestination(this, ev), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvSplitTransferSnapshot::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvSplitTransferSnapshot::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
     const ui64 srcTabletId = msg->Record.GetSrcTabletId();
     const ui64 srcTabletGen = msg->Record.GetSrcTabletGeneration();

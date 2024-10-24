@@ -6716,6 +6716,15 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
     }
 
+    Y_UNIT_TEST(CreateViewIfNotExistsGrammarSupport) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                CREATE VIEW IF NOT EXISTS TheView WITH (security_invoker = TRUE) AS SELECT 1;
+            )"
+        );
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+    }
+
     Y_UNIT_TEST(CreateViewFromTable) {
         constexpr const char* path = "/PathPrefix/TheView";
         constexpr const char* query = R"(
@@ -6793,6 +6802,15 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+    }
+
+    Y_UNIT_TEST(DropViewIfExistsGrammarSupport) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                DROP VIEW IF EXISTS TheView;
+            )"
+        );
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
     }
 
     Y_UNIT_TEST(CreateViewWithTablePrefix) {

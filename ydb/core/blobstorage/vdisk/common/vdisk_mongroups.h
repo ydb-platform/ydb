@@ -576,9 +576,11 @@ public:                                                                         
             GROUP_CONSTRUCTOR(TDefragGroup)
             {
                 COUNTER_INIT_IF_EXTENDED(DefragBytesRewritten, true);
+                COUNTER_INIT_IF_EXTENDED(DefragThreshold, false);
             }
 
             COUNTER_DEF(DefragBytesRewritten);
+            COUNTER_DEF(DefragThreshold);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

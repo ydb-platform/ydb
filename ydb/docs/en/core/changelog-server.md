@@ -1,5 +1,23 @@
 # {{ ydb-short-name }} Server changelog
 
+## Version 23.4 {#24-1}
+
+Release date: July 31, 2024.
+
+### Functionality
+
+* The [Knn UDF](./yql/reference/udf/list/knn.md) function for precise nearest vector search has been implemented.
+* The QueryService gRPC service has been developed, providing the ability to execute all types of queries (DML, DDL) and to retrieve unlimited amounts of data.
+* [Integration with the LDAP protocol](./concepts/auth.md) has been implemented, and it is now possible to obtain a list of groups from external LDAP directories.
+
+### Embedded UI
+
+### Performance
+
+### Bug fixes
+
+
+
 ## Version 23.4 {#23-4}
 
 Release date: May 14, 2024.

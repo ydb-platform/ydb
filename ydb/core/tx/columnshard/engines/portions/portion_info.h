@@ -88,7 +88,7 @@ private:
     YDB_READONLY_DEF(std::vector<TIndexChunk>, Indexes);
     YDB_READONLY(TRuntimeFeatures, RuntimeFeatures, 0);
     std::vector<TUnifiedBlobId> BlobIds;
-    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info);
+    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
 
     template <class TChunkInfo>
     static void CheckChunksOrder(const std::vector<TChunkInfo>& chunks) {
@@ -294,7 +294,7 @@ public:
         return defaultTierName;
     }
 
-    static TConclusion<TPortionInfo> BuildFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info);
+    static TConclusion<TPortionInfo> BuildFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo);
     void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
 
     std::vector<TPage> BuildPages() const;

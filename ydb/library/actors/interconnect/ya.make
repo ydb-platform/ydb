@@ -2,10 +2,6 @@ LIBRARY()
 
 NO_WSHADOW()
 
-IF (PROFILE_MEMORY_ALLOCATIONS)
-    CFLAGS(-DPROFILE_MEMORY_ALLOCATIONS)
-ENDIF()
-
 SRCS(
     channel_scheduler.h
     event_filter.h

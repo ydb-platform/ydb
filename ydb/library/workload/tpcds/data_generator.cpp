@@ -1,5 +1,4 @@
 #include "data_generator.h"
-#include "driver.h"
 #include <ydb/public/api/protos/ydb_formats.pb.h>
 #include <library/cpp/charset/wide.h>
 #include <util/string/escape.h>

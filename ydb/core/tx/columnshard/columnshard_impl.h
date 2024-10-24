@@ -245,6 +245,10 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModification::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(NOlap::NDataSharing::NEvents::TEvStartTransferSchemeHistory::TPtr& ev, const TActorContext& ctx);
+    void Handle(NOlap::NDataSharing::NEvents::TEvTransferSchemeHistory::TPtr& ev, const TActorContext& ctx);
+    void Handle(NOlap::NDataSharing::NEvents::TEvAckTransferSchemeHistory::TPtr& ev, const TActorContext& ctx);
+
     void Handle(NOlap::NDataSharing::NEvents::TEvProposeFromInitiator::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvConfirmFromInitiator::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvStartToSource::TPtr& ev, const TActorContext& ctx);
@@ -403,6 +407,10 @@ protected:
             HFunc(NOlap::NBackground::TEvExecuteGeneralLocalTransaction, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvApplyLinksModification, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished, Handle);
+
+            HFunc(NOlap::NDataSharing::NEvents::TEvStartTransferSchemeHistory, Handle);
+            HFunc(NOlap::NDataSharing::NEvents::TEvTransferSchemeHistory, Handle);
+            HFunc(NOlap::NDataSharing::NEvents::TEvAckTransferSchemeHistory, Handle);
 
             HFunc(NOlap::NDataSharing::NEvents::TEvProposeFromInitiator, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvConfirmFromInitiator, Handle);

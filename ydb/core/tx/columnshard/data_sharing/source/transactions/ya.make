@@ -5,6 +5,7 @@ SRCS(
     tx_data_ack_to_source.cpp
     tx_finish_ack_to_source.cpp
     tx_write_source_cursor.cpp
+    tx_transfer_scheme_history.cpp
 )
 
 PEERDIR(

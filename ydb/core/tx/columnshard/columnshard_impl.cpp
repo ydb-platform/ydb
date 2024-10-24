@@ -1147,6 +1147,40 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModificatio
     }
 }
 
+void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvStartTransferSchemeHistory::TPtr& ev, const TActorContext& ctx) {
+    auto currentSession = SharingSessionsManager->GetSourceSession(ev->Get()->Record.GetSessionId());
+    if (!currentSession) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "ignore_inactual_sharing_session")("sesion_id", ev->Get()->Record.GetSessionId());
+        return;
+    }
+
+    Execute(currentSession->TransferSchemeHistory(this).release(), ctx);
+}
+
+void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvTransferSchemeHistory::TPtr& ev, const TActorContext& /*ctx*/) {
+    auto currentSession = SharingSessionsManager->GetDestinationSession(ev->Get()->Record.GetSessionId());
+    if (!currentSession) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "ignore_inactual_sharing_session")("sesion_id", ev->Get()->Record.GetSessionId());
+        return;
+    }
+
+    auto& schemeHistoryProto = ev->Get()->Record.GetSchemeHistory();
+
+    std::vector<NKikimrColumnShardDataSharingProto::TSchemeHistoryEntry> schemeHistory(schemeHistoryProto.begin(), schemeHistoryProto.end());
+
+    currentSession->TransferSchema(this, schemeHistory, (NOlap::TTabletId)ev->Get()->Record.GetSourceTabletId());
+}
+
+void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvAckTransferSchemeHistory::TPtr& ev, const TActorContext& /*ctx*/) {
+    auto currentSession = SharingSessionsManager->GetSourceSession(ev->Get()->Record.GetSessionId());
+    if (!currentSession) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "ignore_inactual_sharing_session")("sesion_id", ev->Get()->Record.GetSessionId());
+        return;
+    }
+
+    currentSession->AckTransferSchemeHistory(this);
+}
+
 void TColumnShard::Handle(TAutoPtr<TEventHandle<NOlap::NBackground::TEvExecuteGeneralLocalTransaction>>& ev, const TActorContext& ctx) {
     Execute(ev->Get()->ExtractTransaction().release(), ctx);
 }

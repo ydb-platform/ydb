@@ -403,7 +403,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
     }
 
     Y_UNIT_TEST(TableReshardingModuloN) {
-        TShardingTypeTest().SetShardingType("HASH_FUNCTION_CONSISTENCY_64").Execute();
+        TShardingTypeTest().SetShardingType("HASH_FUNCTION_MODULO_N").Execute();
     }
 
     class TAsyncReshardingTest: public TReshardingTest {

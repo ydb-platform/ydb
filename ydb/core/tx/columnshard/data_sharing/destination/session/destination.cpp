@@ -76,6 +76,26 @@ NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestin
     return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxDataFromSource(self, selfPtr, data, sourceTabletId));
 }
 
+void TDestinationSession::TransferSchema(NColumnShard::TColumnShard* columnShard, const std::vector<NKikimrColumnShardDataSharingProto::TSchemeHistoryEntry>& schemeHistory, const TTabletId sourceTabletId) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TDestinationSession::TransferSchema")("session", GetSessionId());
+
+    NOlap::TColumnEngineForLogs& index = columnShard->MutableIndexAs<NOlap::TColumnEngineForLogs>();
+
+    for (auto& entry : schemeHistory) {
+        TSnapshot snapshot = TSnapshot::Zero();
+        snapshot.DeserializeFromProto(entry.GetSnapshot());
+
+        if (!index.GetVersionedIndex().HasSnapshot(snapshot)) {
+            index.RegisterSchemaVersion(snapshot, entry.GetScheme());
+        }
+    }
+
+    auto ev = std::make_unique<NEvents::TEvAckTransferSchemeHistory>(GetSessionId());
+
+    NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
+        new TEvPipeCache::TEvForward(ev.release(), (ui64)sourceTabletId, true), IEventHandle::FlagTrackDelivery, GetRuntimeId());
+}
+
 NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::ReceiveFinished(NColumnShard::TColumnShard* self, const TTabletId sourceTabletId, const std::shared_ptr<TDestinationSession>& selfPtr) {
     if (GetCursorVerified(sourceTabletId).GetDataFinished()) {
         return TConclusionStatus::Fail("session finished already");
@@ -155,6 +175,8 @@ NKikimr::TConclusionStatus TDestinationSession::DeserializeCursorFromProto(const
 }
 
 bool TDestinationSession::DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TDestinationSession::DoStart")("session", GetSessionId());
+
     AFL_VERIFY(IsConfirmed());
     NYDBTest::TControllers::GetColumnShardController()->OnDataSharingStarted(shard.TabletID(), GetSessionId());
     THashMap<TString, THashSet<TUnifiedBlobId>> local;

@@ -558,7 +558,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev) 
     }
     LOG_ROW_DISPATCHER_TRACE("Forward TEvNewDataArrived to " << ev->Get()->ReadActorId);
     it->second->Counters.NewDataArrived++;
-    it->second->EventsQueue.Send(ev.Release()->Release().Release());
+    it->second->EventsQueue.Send(ev->Release().Release());
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) {
@@ -572,7 +572,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) {
     Metrics.RowsSent->Add(ev->Get()->Record.MessagesSize());
     LOG_ROW_DISPATCHER_TRACE("Forward TEvMessageBatch to " << ev->Get()->ReadActorId);
     it->second->Counters.MessageBatch++;
-    it->second->EventsQueue.Send(ev.Release()->Release().Release());
+    it->second->EventsQueue.Send(ev->Release().Release());
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) {
@@ -585,7 +585,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) {
     }
     Metrics.ErrorsCount->Inc();
     LOG_ROW_DISPATCHER_TRACE("Forward TEvSessionError to " << ev->Get()->ReadActorId);
-    it->second->EventsQueue.Send(ev.Release()->Release().Release());
+    it->second->EventsQueue.Send(ev->Release().Release());
     DeleteConsumer(key);
 }
 
@@ -598,7 +598,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStatus::TPtr& ev) {
         return;
     }
     LOG_ROW_DISPATCHER_TRACE("Forward TEvStatus to " << ev->Get()->ReadActorId);
-    it->second->EventsQueue.Send(ev.Release()->Release().Release());
+    it->second->EventsQueue.Send(ev->Release().Release());
 }
 
 void TRowDispatcher::Handle(NFq::TEvPrivate::TEvUpdateMetrics::TPtr&) {

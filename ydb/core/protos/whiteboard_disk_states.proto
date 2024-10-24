@@ -1,0 +1,18 @@
+package NKikimrWhiteboard;
+
+enum EFlag {
+    Grey = 0;
+    Green = 1;
+    Yellow = 2;
+    Orange = 3;
+    Red = 4;
+}
+
+enum EVDiskState {
+    Initial = 1;
+    LocalRecoveryError = 2;
+    SyncGuidRecovery = 3;
+    SyncGuidRecoveryError = 4;
+    OK = 5;
+    PDiskError = 6;
+}

@@ -145,6 +145,7 @@ SRCS(
     tx_proxy.proto
     tx_scheme.proto
     tx_sequenceshard.proto
+    whiteboard_disk_states.proto
     ydb_result_set_old.proto
     ydb_table_impl.proto
     yql_translation_settings.proto

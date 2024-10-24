@@ -1,8 +1,12 @@
 import argparse
 import os
-import process_command_files as pcf
 import tarfile
 import sys
+
+# Explicitly enable local imports
+# Don't forget to add imported scripts to inputs of the calling command!
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import process_command_files as pcf
 
 
 def parse_args():

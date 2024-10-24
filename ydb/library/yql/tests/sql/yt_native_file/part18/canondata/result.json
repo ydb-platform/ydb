@@ -400,9 +400,9 @@
     ],
     "test.test[blocks-add_uint64_opt2--Peephole]": [
         {
-            "checksum": "6d104d1006467e0c6271c27fdcffc9a8",
-            "size": 1659,
-            "uri": "https://{canondata_backend}/1775059/9c2ca60935243529853659689fecddbe72aa159b/resource.tar.gz#test.test_blocks-add_uint64_opt2--Peephole_/opt.yql"
+            "checksum": "93abe1dc836aa0061f46c82d1c64261b",
+            "size": 1668,
+            "uri": "https://{canondata_backend}/1600758/bfa3ee7c9a6f6e734b0bec20dabbba6bb004f287/resource.tar.gz#test.test_blocks-add_uint64_opt2--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-add_uint64_opt2--Plan]": [
@@ -456,9 +456,9 @@
     ],
     "test.test[blocks-combine_all_min_filter--Peephole]": [
         {
-            "checksum": "4a8fc10717081d3a01a44dbc27597c1f",
-            "size": 2095,
-            "uri": "https://{canondata_backend}/1775319/8b72d711520d5cd84e67e6541ace66cd7067ac53/resource.tar.gz#test.test_blocks-combine_all_min_filter--Peephole_/opt.yql"
+            "checksum": "6a8d7c2216b88a60b351591f98039db1",
+            "size": 2153,
+            "uri": "https://{canondata_backend}/1600758/bfa3ee7c9a6f6e734b0bec20dabbba6bb004f287/resource.tar.gz#test.test_blocks-combine_all_min_filter--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_all_min_filter--Plan]": [
@@ -596,9 +596,9 @@
     ],
     "test.test[blocks-filter_partial_expr--Peephole]": [
         {
-            "checksum": "fe2b2a01f8c0ad7c6b9e9235f81a8f34",
-            "size": 1813,
-            "uri": "https://{canondata_backend}/1775059/9c2ca60935243529853659689fecddbe72aa159b/resource.tar.gz#test.test_blocks-filter_partial_expr--Peephole_/opt.yql"
+            "checksum": "dcd211bdcc642f5fdafeee36eb7e5c17",
+            "size": 1822,
+            "uri": "https://{canondata_backend}/1600758/bfa3ee7c9a6f6e734b0bec20dabbba6bb004f287/resource.tar.gz#test.test_blocks-filter_partial_expr--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-filter_partial_expr--Plan]": [

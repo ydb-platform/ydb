@@ -46,15 +46,18 @@ bool TTablesManager::FillMonitoringReport(NTabletFlatExecutor::TTransactionConte
 bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
     THashMap<ui32, TSchemaPreset> schemaPresets;
     {
+        TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->TableLoadTimeCounters.StartGuard();
         TMemoryProfileGuard g("TTablesManager/InitFromDB::Tables");
         auto rowset = db.Table<Schema::TableInfo>().Select();
         if (!rowset.IsReady()) {
+            timer.AddLoadingFail();
             return false;
         }
 
         while (!rowset.EndOfSet()) {
             TTableInfo table;
             if (!table.InitFromDB(rowset)) {
+                timer.AddLoadingFail();
                 return false;
             }
             if (table.IsDropped()) {
@@ -64,6 +67,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             AFL_VERIFY(Tables.emplace(table.GetPathId(), std::move(table)).second);
 
             if (!rowset.Next()) {
+                timer.AddLoadingFail();
                 return false;
             }
         }
@@ -71,9 +75,11 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
 
     bool isFakePresetOnly = true;
     {
+        TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->SchemaPresetLoadTimeCounters.StartGuard();
         TMemoryProfileGuard g("TTablesManager/InitFromDB::SchemaPresets");
         auto rowset = db.Table<Schema::SchemaPresetInfo>().Select();
         if (!rowset.IsReady()) {
+            timer.AddLoadingFail();
             return false;
         }
 
@@ -90,15 +96,18 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             AFL_VERIFY(schemaPresets.emplace(preset.GetId(), preset).second);
             AFL_VERIFY(SchemaPresetsIds.emplace(preset.GetId()).second);
             if (!rowset.Next()) {
+                timer.AddLoadingFail();
                 return false;
             }
         }
     }
 
     {
+        TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->TableVersionsLoadTimeCounters.StartGuard();
         TMemoryProfileGuard g("TTablesManager/InitFromDB::Versions");
         auto rowset = db.Table<Schema::TableVersionInfo>().Select();
         if (!rowset.IsReady()) {
+            timer.AddLoadingFail();
             return false;
         }
 
@@ -132,15 +141,18 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             }
             table.AddVersion(version);
             if (!rowset.Next()) {
+                timer.AddLoadingFail();
                 return false;
             }
         }
     }
 
     {
+        TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->SchemaPresetVersionsLoadTimeCounters.StartGuard();
         TMemoryProfileGuard g("TTablesManager/InitFromDB::PresetVersions");
         auto rowset = db.Table<Schema::SchemaPresetVersionInfo>().Select();
         if (!rowset.IsReady()) {
+            timer.AddLoadingFail();
             return false;
         }
 
@@ -156,6 +168,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "load_preset")("preset_id", id)("snapshot", version)("version", info.HasSchema() ? info.GetSchema().GetVersion() : -1);
             preset.AddVersion(version, info);
             if (!rowset.Next()) {
+                timer.AddLoadingFail();
                 return false;
             }
         }
@@ -340,7 +353,9 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
 
 TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId)
     : StoragesManager(storagesManager)
-    , TabletId(tabletId) {
+    , LoadTimeCounters(std::make_unique<TTableLoadTimeCounters>())
+    , TabletId(tabletId)
+{
 }
 
 bool TTablesManager::TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const ui64 pathId) const {

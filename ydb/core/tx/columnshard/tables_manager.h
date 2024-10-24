@@ -148,6 +148,7 @@ private:
     TTtl Ttl;
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
+    std::unique_ptr<TTableLoadTimeCounters> LoadTimeCounters;
     ui64 TabletId = 0;
 public:
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId);

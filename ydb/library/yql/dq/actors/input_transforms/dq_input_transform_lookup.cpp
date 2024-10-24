@@ -81,6 +81,10 @@ public:
         InitMonCounters(taskCounters);
     }
 
+    ~TInputTransformStreamLookupBase() override {
+        Free();
+    }
+
     void Bootstrap() {
         Become(&TInputTransformStreamLookupBase::StateFunc);
         NDq::IDqAsyncIoFactory::TLookupSourceArguments lookupSourceArgs {
@@ -192,6 +196,10 @@ private: //IDqComputeActorAsyncInput
 
     void PassAway() final {
         Send(LookupSourceId, new NActors::TEvents::TEvPoison{});
+        Free();
+    }
+
+    void Free() {
         auto guard = BindAllocator();
         //All resources, held by this class, that have been created with mkql allocator, must be deallocated here
         KeysForLookup.reset();

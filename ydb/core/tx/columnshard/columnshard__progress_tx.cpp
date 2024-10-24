@@ -114,7 +114,7 @@ void TColumnShard::EnqueueProgressTx(const TActorContext& ctx, const std::option
     }
 }
 
-void TColumnShard::Handle(TEvColumnShard::TEvCheckPlannedTransaction::TPtr& ev, const TActorContext& ctx) {
+void TColumnShard::Handle(NEvColumnShard::TEvCheckPlannedTransaction::TPtr& ev, const TActorContext& ctx) {
     auto& record = Proto(ev->Get());
     ui64 step = record.GetStep();
     ui64 txId = record.GetTxId();
@@ -125,7 +125,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvCheckPlannedTransaction::TPtr& ev, 
     if (finished) {
         auto txKind = NKikimrTxColumnShard::ETransactionKind::TX_KIND_COMMIT;
         auto status = NKikimrTxColumnShard::SUCCESS;
-        auto result = MakeHolder<TEvColumnShard::TEvProposeTransactionResult>(TabletID(), txKind, txId, status);
+        auto result = MakeHolder<NEvColumnShard::TEvProposeTransactionResult>(TabletID(), txKind, txId, status);
         result->Record.SetStep(step);
 
         ctx.Send(ev->Get()->GetSource(), result.Release());

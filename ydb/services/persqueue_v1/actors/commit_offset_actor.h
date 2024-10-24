@@ -51,7 +51,7 @@ private:
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
 
-            HFunc(TEvPersQueue::TEvResponse, Handle);
+            HFunc(NEvPersQueue::TEvResponse, Handle);
         default:
             break;
         };
@@ -63,7 +63,7 @@ private:
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const NActors::TActorContext& ctx);
 
-    void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
 
     void AnswerError(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx);
     void ProcessAnswers(const TActorContext& ctx);

@@ -5,7 +5,7 @@
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/public/api/protos/ydb_issue_message.pb.h> 
+#include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
@@ -102,14 +102,14 @@ private:
 
 class TController::TTxDescribeReplication: public TTxBase {
     const TActorId Sender;
-    TEvController::TEvDescribeReplication::TPtr PubEv;
+    NEvController::TEvDescribeReplication::TPtr PubEv;
     TEvPrivate::TEvDescribeTargetsResult::TPtr PrivEv;
     TReplication::TPtr Replication;
-    THolder<TEvController::TEvDescribeReplicationResult> Result;
+    THolder<NEvController::TEvDescribeReplicationResult> Result;
     THashMap<ui64, TString> TargetsToDescribe;
 
 public:
-    explicit TTxDescribeReplication(TController* self, TEvController::TEvDescribeReplication::TPtr& ev)
+    explicit TTxDescribeReplication(TController* self, NEvController::TEvDescribeReplication::TPtr& ev)
         : TTxBase("TxDescribeReplication", self)
         , Sender(ev->Sender)
         , PubEv(ev)
@@ -145,7 +145,7 @@ public:
 
         Replication = Self->Find(pathId);
         if (!Replication) {
-            Result = MakeHolder<TEvController::TEvDescribeReplicationResult>();
+            Result = MakeHolder<NEvController::TEvDescribeReplicationResult>();
             Result->Record.SetStatus(NKikimrReplication::TEvDescribeReplicationResult::NOT_FOUND);
             return true;
         }
@@ -175,7 +175,7 @@ public:
 
         Replication = Self->Find(rid);
         if (!Replication) {
-            Result = MakeHolder<TEvController::TEvDescribeReplicationResult>();
+            Result = MakeHolder<NEvController::TEvDescribeReplicationResult>();
             Result->Record.SetStatus(NKikimrReplication::TEvDescribeReplicationResult::NOT_FOUND);
             return true;
         }
@@ -184,7 +184,7 @@ public:
     }
 
     bool DescribeReplication(TReplication::TPtr replication) {
-        Result = MakeHolder<TEvController::TEvDescribeReplicationResult>();
+        Result = MakeHolder<NEvController::TEvDescribeReplicationResult>();
         Result->Record.SetStatus(NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
         Result->Record.MutableConnectionParams()->CopyFrom(replication->GetConfig().GetSrcConnectionParams());
 
@@ -278,7 +278,7 @@ public:
 
 }; // TTxDescribeReplication
 
-void TController::RunTxDescribeReplication(TEvController::TEvDescribeReplication::TPtr& ev, const TActorContext& ctx) {
+void TController::RunTxDescribeReplication(NEvController::TEvDescribeReplication::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxDescribeReplication(this, ev), ctx);
 }
 

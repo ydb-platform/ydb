@@ -59,7 +59,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     struct TTxWrite;
 
     void HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext &ctx);
-    void HandleUpdateACL(TEvPersQueue::TEvUpdateACL::TPtr&, const TActorContext &ctx);
+    void HandleUpdateACL(NEvPersQueue::TEvUpdateACL::TPtr&, const TActorContext &ctx);
 
     void Die(const TActorContext& ctx) override;
     void OnActivateExecutor(const TActorContext &ctx) override;
@@ -72,21 +72,21 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
     TString GenerateStat();
 
-    void Handle(TEvPersQueue::TEvDescribe::TPtr &ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvDescribe::TPtr &ev, const TActorContext& ctx);
 
-    void HandleOnInit(TEvPersQueue::TEvUpdateBalancerConfig::TPtr &ev, const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr &ev, const TActorContext& ctx);
+    void HandleOnInit(NEvPersQueue::TEvUpdateBalancerConfig::TPtr &ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvUpdateBalancerConfig::TPtr &ev, const TActorContext& ctx);
 
-    void HandleOnInit(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
+    void HandleOnInit(NEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvPersQueue::TEvCheckACL::TPtr&, const TActorContext&);
-    void Handle(TEvPersQueue::TEvGetPartitionIdForWrite::TPtr&, const TActorContext&);
+    void Handle(NEvPersQueue::TEvCheckACL::TPtr&, const TActorContext&);
+    void Handle(NEvPersQueue::TEvGetPartitionIdForWrite::TPtr&, const TActorContext&);
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext&);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext&);
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx);
+    void Handle(NSchemeShard::NEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
     // Begin balancing
@@ -94,16 +94,16 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void Handle(TEvPQ::TEvBalanceConsumer::TPtr& ev, const TActorContext& ctx); // from self
 
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx); // from Partition/PQ
-    void Handle(TEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev, const TActorContext& ctx); // from ReadSession
-    void Handle(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx); // from ReadSession
-    void HandleOnInit(TEvPersQueue::TEvRegisterReadSession::TPtr &ev, const TActorContext& ctx); // from ReadSession
-    void Handle(TEvPersQueue::TEvRegisterReadSession::TPtr &ev, const TActorContext& ctx); // from ReadSession
-    void Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActorContext& ctx);  // from ReadSession
+    void Handle(NEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev, const TActorContext& ctx); // from ReadSession
+    void Handle(NEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx); // from ReadSession
+    void HandleOnInit(NEvPersQueue::TEvRegisterReadSession::TPtr &ev, const TActorContext& ctx); // from ReadSession
+    void Handle(NEvPersQueue::TEvRegisterReadSession::TPtr &ev, const TActorContext& ctx); // from ReadSession
+    void Handle(NEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActorContext& ctx);  // from ReadSession
 
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext&);
 
-    void Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr &ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvGetReadSessionsInfo::TPtr &ev, const TActorContext& ctx);
     // End balancing
 
     TStringBuilder GetPrefix() const;
@@ -118,20 +118,20 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void UpdateConfigCounters();
 
     void RespondWithACL(
-        const TEvPersQueue::TEvCheckACL::TPtr &request,
+        const NEvPersQueue::TEvCheckACL::TPtr &request,
         const NKikimrPQ::EAccess &access,
         const TString &error,
         const TActorContext &ctx);
-    void CheckACL(const TEvPersQueue::TEvCheckACL::TPtr &request, const NACLib::TUserToken& token, const TActorContext &ctx);
+    void CheckACL(const NEvPersQueue::TEvCheckACL::TPtr &request, const NACLib::TUserToken& token, const TActorContext &ctx);
     void GetStat(const TActorContext&);
-    TEvPersQueue::TEvPeriodicTopicStats* GetStatsEvent();
+    NEvPersQueue::TEvPeriodicTopicStats* GetStatsEvent();
     void GetACL(const TActorContext&);
     void AnswerWaitingRequests(const TActorContext& ctx);
 
-    void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvStatsWakeup::TPtr& ev, const TActorContext& ctx);
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx);
+    void Handle(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
     void Handle(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx);
@@ -171,8 +171,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     ui32 NumActiveParts;
 
     std::vector<TActorId> WaitingResponse;
-    std::vector<TEvPersQueue::TEvCheckACL::TPtr> WaitingACLRequests;
-    std::vector<TEvPersQueue::TEvDescribe::TPtr> WaitingDescribeRequests;
+    std::vector<NEvPersQueue::TEvCheckACL::TPtr> WaitingACLRequests;
+    std::vector<NEvPersQueue::TEvDescribe::TPtr> WaitingDescribeRequests;
 
 public:
     struct TPartitionInfo {
@@ -269,8 +269,8 @@ private:
 
     ui64 StatsReportRound;
 
-    std::deque<TAutoPtr<TEvPersQueue::TEvRegisterReadSession>> RegisterEvents;
-    std::deque<TAutoPtr<TEvPersQueue::TEvUpdateBalancerConfig>> UpdateEvents;
+    std::deque<TAutoPtr<NEvPersQueue::TEvRegisterReadSession>> RegisterEvents;
+    std::deque<TAutoPtr<NEvPersQueue::TEvUpdateBalancerConfig>> UpdateEvents;
 
     TActorId FindSubDomainPathIdActor;
 
@@ -294,17 +294,17 @@ public:
         TMetricsTimeKeeper keeper(ResourceMetrics, ctx);
 
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPersQueue::TEvUpdateBalancerConfig, HandleOnInit);
-            HFunc(TEvPersQueue::TEvDescribe, Handle);
-            HFunc(TEvPersQueue::TEvRegisterReadSession, HandleOnInit);
-            HFunc(TEvPersQueue::TEvGetReadSessionsInfo, Handle);
+            HFunc(NEvPersQueue::TEvUpdateBalancerConfig, HandleOnInit);
+            HFunc(NEvPersQueue::TEvDescribe, Handle);
+            HFunc(NEvPersQueue::TEvRegisterReadSession, HandleOnInit);
+            HFunc(NEvPersQueue::TEvGetReadSessionsInfo, Handle);
             HFunc(TEvTabletPipe::TEvServerConnected, Handle);
             HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
-            HFunc(TEvPersQueue::TEvCheckACL, Handle);
-            HFunc(TEvPersQueue::TEvGetPartitionIdForWrite, Handle);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
+            HFunc(NEvPersQueue::TEvCheckACL, Handle);
+            HFunc(NEvPersQueue::TEvGetPartitionIdForWrite, Handle);
+            HFunc(NSchemeShard::NEvSchemeShard::TEvSubDomainPathIdFound, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
-            HFunc(TEvPersQueue::TEvGetPartitionsLocation, HandleOnInit);
+            HFunc(NEvPersQueue::TEvGetPartitionsLocation, HandleOnInit);
             default:
                 StateInitImpl(ev, SelfId());
                 break;
@@ -317,28 +317,28 @@ public:
 
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvents::TEvWakeup, HandleWakeup);
-            HFunc(TEvPersQueue::TEvUpdateACL, HandleUpdateACL);
-            HFunc(TEvPersQueue::TEvCheckACL, Handle);
-            HFunc(TEvPersQueue::TEvGetPartitionIdForWrite, Handle);
-            HFunc(TEvPersQueue::TEvUpdateBalancerConfig, Handle);
-            HFunc(TEvPersQueue::TEvDescribe, Handle);
-            HFunc(TEvPersQueue::TEvRegisterReadSession, Handle);
-            HFunc(TEvPersQueue::TEvGetReadSessionsInfo, Handle);
-            HFunc(TEvPersQueue::TEvPartitionReleased, Handle);
+            HFunc(NEvPersQueue::TEvUpdateACL, HandleUpdateACL);
+            HFunc(NEvPersQueue::TEvCheckACL, Handle);
+            HFunc(NEvPersQueue::TEvGetPartitionIdForWrite, Handle);
+            HFunc(NEvPersQueue::TEvUpdateBalancerConfig, Handle);
+            HFunc(NEvPersQueue::TEvDescribe, Handle);
+            HFunc(NEvPersQueue::TEvRegisterReadSession, Handle);
+            HFunc(NEvPersQueue::TEvGetReadSessionsInfo, Handle);
+            HFunc(NEvPersQueue::TEvPartitionReleased, Handle);
             HFunc(TEvTabletPipe::TEvServerConnected, Handle);
             HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            HFunc(TEvPersQueue::TEvStatusResponse, Handle);
+            HFunc(NEvPersQueue::TEvStatusResponse, Handle);
             HFunc(TEvPQ::TEvStatsWakeup, Handle);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
+            HFunc(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFunc(NSchemeShard::NEvSchemeShard::TEvSubDomainPathIdFound, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
-            HFunc(TEvPersQueue::TEvStatus, Handle);
-            HFunc(TEvPersQueue::TEvGetPartitionsLocation, Handle);
+            HFunc(NEvPersQueue::TEvStatus, Handle);
+            HFunc(NEvPersQueue::TEvGetPartitionsLocation, Handle);
             HFunc(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
-            HFunc(TEvPersQueue::TEvReadingPartitionStartedRequest, Handle);
-            HFunc(TEvPersQueue::TEvReadingPartitionFinishedRequest, Handle);
+            HFunc(NEvPersQueue::TEvReadingPartitionStartedRequest, Handle);
+            HFunc(NEvPersQueue::TEvReadingPartitionFinishedRequest, Handle);
             HFunc(TEvPQ::TEvWakeupReleasePartition, Handle);
             HFunc(TEvPQ::TEvBalanceConsumer, Handle);
             // from PQ

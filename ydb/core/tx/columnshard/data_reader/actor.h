@@ -13,7 +13,7 @@ private:
     virtual TConclusionStatus DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) = 0;
     virtual TConclusionStatus DoOnFinished() = 0;
     virtual void DoOnError(const TString& errorMessage) = 0;
-    virtual std::unique_ptr<TEvColumnShard::TEvInternalScan> DoBuildRequestInitiator() const = 0;
+    virtual std::unique_ptr<NEvColumnShard::TEvInternalScan> DoBuildRequestInitiator() const = 0;
 
 public:
     TConclusionStatus OnDataChunk(const std::shared_ptr<arrow::Table>& data) {
@@ -29,7 +29,7 @@ public:
         DoOnError(errorMessage);
     }
 
-    std::unique_ptr<TEvColumnShard::TEvInternalScan> BuildRequestInitiator() const {
+    std::unique_ptr<NEvColumnShard::TEvInternalScan> BuildRequestInitiator() const {
         return DoBuildRequestInitiator();
     }
 

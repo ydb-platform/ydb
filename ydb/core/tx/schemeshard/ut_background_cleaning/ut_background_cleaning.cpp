@@ -13,8 +13,8 @@ using namespace NSchemeShardUT_Private;
 
 namespace {
 
-THolder<NConsole::TEvConsole::TEvConfigNotificationRequest> GetTestBackgroundCleaningConfig(bool withRetries = false) {
-    auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+THolder<NConsole::NEvConsole::TEvConfigNotificationRequest> GetTestBackgroundCleaningConfig(bool withRetries = false) {
+    auto request = MakeHolder<NConsole::NEvConsole::TEvConfigNotificationRequest>();
 
     auto* backgroundCleaningConfig = request->Record.MutableConfig()->MutableBackgroundCleaningConfig();
     backgroundCleaningConfig->SetMaxRate(10);
@@ -100,13 +100,13 @@ THashSet<TString> GetTables(
     ui64 tabletId)
 {
     auto sender = runtime.AllocateEdgeActor();
-    auto request = MakeHolder<TEvDataShard::TEvGetInfoRequest>();
+    auto request = MakeHolder<NEvDataShard::TEvGetInfoRequest>();
     runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
     THashSet<TString> result;
 
     TAutoPtr<IEventHandle> handle;
-    auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetInfoResponse>(handle);
+    auto response = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvGetInfoResponse>(handle);
     for (auto& table: response->Record.GetUserTables()) {
         result.insert(table.GetName());
     }
@@ -545,7 +545,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         TestMkTempDir(runtime, txId, "/MyRoot/test", "tmp", ownerActorId, { NKikimrScheme::StatusPreconditionFailed }, 1, true);
         env.TestWaitNotification(runtime, txId);
         ++txId;
-        
+
         TestMkTempDir(runtime, txId, "/MyRoot/test", "tmp", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, false);
         env.TestWaitNotification(runtime, txId);
         ++txId;

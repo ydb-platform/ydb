@@ -112,9 +112,9 @@ public:
     STFUNC(AwaitState) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, HandleResponse);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
-            HFunc(NConsole::TEvConsole::TEvGetOperationResponse, Handle);
+            HFunc(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
+            HFunc(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
+            HFunc(NConsole::NEvConsole::TEvGetOperationResponse, Handle);
             HFunc(NSchemeShard::TEvExport::TEvGetExportResponse, Handle);
             HFunc(NSchemeShard::TEvImport::TEvGetImportResponse, Handle);
             HFunc(NSchemeShard::TEvIndexBuilder::TEvGetResponse, Handle);
@@ -125,15 +125,15 @@ public:
         }
     }
 private:
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&, const TActorContext& ctx) {
+    void Handle(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&, const TActorContext& ctx) {
         ReplyGetOperationResponse(false, ctx);
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&, const TActorContext& ctx) {
+    void Handle(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&, const TActorContext& ctx) {
         ReplyGetOperationResponse(true, ctx);
     }
 
-    void Handle(NConsole::TEvConsole::TEvGetOperationResponse::TPtr &ev, const TActorContext& ctx) {
+    void Handle(NConsole::NEvConsole::TEvGetOperationResponse::TPtr &ev, const TActorContext& ctx) {
         auto &rec = ev->Get()->Record.GetResponse();
         if (rec.operation().ready())
             ReplyWithError(rec.operation().status(), rec.operation().issues(), ctx);
@@ -166,7 +166,7 @@ private:
         Y_ABORT_UNLESS(pipeActor);
         PipeActorId_ = ctx.ExecutorThread.RegisterActor(pipeActor);
 
-        auto request = MakeHolder<NConsole::TEvConsole::TEvGetOperationRequest>();
+        auto request = MakeHolder<NConsole::NEvConsole::TEvGetOperationRequest>();
         request->Record.MutableRequest()->set_id(GetProtoRequest()->id());
         request->Record.SetUserToken(Request->GetSerializedToken());
         NTabletPipe::SendData(ctx, PipeActorId_, request.Release());
@@ -193,7 +193,7 @@ private:
         Y_ABORT_UNLESS(pipeActor);
         PipeActorId_ = ctx.ExecutorThread.RegisterActor(pipeActor);
 
-        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+        auto request = MakeHolder<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(txId);
         NTabletPipe::SendData(ctx, PipeActorId_, request.Release());
     }

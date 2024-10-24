@@ -11,24 +11,24 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 
 bool ValidateConfig(const NKikimrSchemeOp::TCreateSolomonVolume& op,
-                                       TEvSchemeShard::EStatus& status, TString& errStr)
+                                       NEvSchemeShard::EStatus& status, TString& errStr)
 {
     if (op.GetPartitionCount() && op.AdoptedPartitionsSize()) {
         errStr = "mutable exclusive parameters PartitionCount and AdoptedPartitions are set";
-        status = TEvSchemeShard::EStatus::StatusInvalidParameter;
+        status = NEvSchemeShard::EStatus::StatusInvalidParameter;
         return false;
     }
     if (op.GetPartitionCount()) {
         if (!op.HasChannelProfileId() && !op.HasStorageConfig()) {
             errStr = "set storage config, please";
-            status = TEvSchemeShard::EStatus::StatusInvalidParameter;
+            status = NEvSchemeShard::EStatus::StatusInvalidParameter;
         }
         return true;
     }
 
     if (op.HasChannelProfileId() || op.HasStorageConfig()) {
         errStr = "don't set channel profile id or storage config, please. We are going to adopt already created tablets";
-        status = TEvSchemeShard::EStatus::StatusInvalidParameter;
+        status = NEvSchemeShard::EStatus::StatusInvalidParameter;
     }
 
     // check unique
@@ -38,7 +38,7 @@ bool ValidateConfig(const NKikimrSchemeOp::TCreateSolomonVolume& op,
         if (tabletIds.contains(portion.GetTabletId())) {
             errStr = "Duplicate tabletsId in AdoptedPartitions "
                     + ToString(portion.GetTabletId());
-            status = TEvSchemeShard::EStatus::StatusInvalidParameter;
+            status = NEvSchemeShard::EStatus::StatusInvalidParameter;
             return false;
         }
         tabletIds.insert(portion.GetTabletId());
@@ -47,7 +47,7 @@ bool ValidateConfig(const NKikimrSchemeOp::TCreateSolomonVolume& op,
         if (owners.contains(owner)) {
             errStr = "Duplicate pair owner and shard in AdoptedPartitions "
                     + ToString(owner.first) + " " +  ToString(owner.second);
-            status = TEvSchemeShard::EStatus::StatusInvalidParameter;
+            status = NEvSchemeShard::EStatus::StatusInvalidParameter;
             return false;
         }
         owners.insert(owner);
@@ -101,7 +101,7 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(),
-            {TEvHive::TEvCreateTabletReply::EventType, TEvHive::TEvAdoptTabletReply::EventType});
+            {NEvHive::TEvCreateTabletReply::EventType, NEvHive::TEvAdoptTabletReply::EventType});
     }
 
     bool ProgressState(TOperationContext& context) override {
@@ -149,10 +149,10 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(),
-            {TEvHive::TEvCreateTabletReply::EventType, TEvHive::TEvAdoptTabletReply::EventType});
+            {NEvHive::TEvCreateTabletReply::EventType, NEvHive::TEvAdoptTabletReply::EventType});
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
@@ -255,10 +255,10 @@ public:
                          << ", at schemeshard: " << ssId);
 
         THolder<TProposeResponse> result;
-        result.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
+        result.Reset(new NEvSchemeShard::TEvModifySchemeTransactionResult(
             NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId)));
 
-        TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
+        NEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         TString errStr;
 
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);

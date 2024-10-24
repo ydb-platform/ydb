@@ -409,15 +409,15 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         ETag = result.GetResult().GetETag();
         ContentLength = result.GetResult().GetContentLength();
 
-        Send(DataShard, new TEvDataShard::TEvGetS3DownloadInfo(TxId));
+        Send(DataShard, new NEvDataShard::TEvGetS3DownloadInfo(TxId));
     }
 
-    void Handle(TEvDataShard::TEvS3DownloadInfo::TPtr& ev) {
+    void Handle(NEvDataShard::TEvS3DownloadInfo::TPtr& ev) {
         IMPORT_LOG_D("Handle " << ev->Get()->ToString());
 
         const auto& info = ev->Get()->Info;
         if (!info.DataETag) {
-            Send(DataShard, new TEvDataShard::TEvStoreS3DownloadInfo(TxId, {
+            Send(DataShard, new NEvDataShard::TEvStoreS3DownloadInfo(TxId, {
                 ETag, ProcessedBytes, WrittenBytes, WrittenRows
             }));
             return;
@@ -557,12 +557,12 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             << ": count# " << record->RowsSize()
             << ", size# " << record->ByteSizeLong());
 
-        Send(DataShard, new TEvDataShard::TEvS3UploadRowsRequest(TxId, record, {
+        Send(DataShard, new NEvDataShard::TEvS3UploadRowsRequest(TxId, record, {
             ETag, ProcessedBytes, WrittenBytes, WrittenRows
         }));
     }
 
-    void Handle(TEvDataShard::TEvS3UploadRowsResponse::TPtr& ev) {
+    void Handle(NEvDataShard::TEvS3UploadRowsResponse::TPtr& ev) {
         IMPORT_LOG_D("Handle " << ev->Get()->ToString());
 
         const auto& record = ev->Get()->Record;
@@ -762,8 +762,8 @@ public:
             hFunc(TEvExternalStorage::TEvHeadObjectResponse, Handle);
             hFunc(TEvExternalStorage::TEvGetObjectResponse, Handle);
 
-            hFunc(TEvDataShard::TEvS3DownloadInfo, Handle);
-            hFunc(TEvDataShard::TEvS3UploadRowsResponse, Handle);
+            hFunc(NEvDataShard::TEvS3DownloadInfo, Handle);
+            hFunc(NEvDataShard::TEvS3UploadRowsResponse, Handle);
 
             sFunc(TEvents::TEvWakeup, Restart);
             sFunc(TEvents::TEvPoisonPill, NotifyDied);

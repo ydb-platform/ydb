@@ -227,7 +227,7 @@ protected:
     void SendWriteRequest(const TWriteRequestParams& params);
     void WaitWriteResponse(const TWriteResponseMatcher& matcher);
 
-    std::unique_ptr<TEvPersQueue::TEvRequest> MakeGetOwnershipRequest(const TGetOwnershipRequestParams& params,
+    std::unique_ptr<NEvPersQueue::TEvRequest> MakeGetOwnershipRequest(const TGetOwnershipRequestParams& params,
                                                                       const TActorId& pipe) const;
 
     //
@@ -294,7 +294,7 @@ void TPQTabletFixture::SendToPipe(const TActorId& sender,
 
 void TPQTabletFixture::SendProposeTransactionRequest(const TProposeTransactionParams& params)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
+    auto event = MakeHolder<NEvPersQueue::TEvProposeTransactionBuilder>();
     THashSet<ui32> partitions;
 
     ActorIdToProto(Ctx->Edge, event->Record.MutableSourceActor());
@@ -349,7 +349,7 @@ void TPQTabletFixture::SendProposeTransactionRequest(const TProposeTransactionPa
 
 void TPQTabletFixture::WaitProposeTransactionResponse(const TProposeTransactionResponseMatcher& matcher)
 {
-    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>();
+    auto event = Ctx->Runtime->GrabEdgeEvent<NEvPersQueue::TEvProposeTransactionResult>();
     UNIT_ASSERT(event != nullptr);
 
     if (matcher.TxId) {
@@ -504,7 +504,7 @@ void TPQTabletFixture::WaitReadSetAck(NHelpers::TPQTabletMock& tablet, const TRe
 
 void TPQTabletFixture::SendDropTablet(const TDropTabletParams& params)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvDropTablet>();
+    auto event = MakeHolder<NEvPersQueue::TEvDropTablet>();
     event->Record.SetTxId(params.TxId);
     event->Record.SetRequestedState(NKikimrPQ::EDropped);
 
@@ -514,7 +514,7 @@ void TPQTabletFixture::SendDropTablet(const TDropTabletParams& params)
 
 void TPQTabletFixture::WaitDropTabletReply(const TDropTabletReplyMatcher& matcher)
 {
-    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvDropTabletReply>();
+    auto event = Ctx->Runtime->GrabEdgeEvent<NEvPersQueue::TEvDropTabletReply>();
     UNIT_ASSERT(event != nullptr);
 
     if (matcher.Status.Defined()) {
@@ -573,10 +573,10 @@ void TPQTabletFixture::WaitForProposePartitionConfigResult(size_t count)
     WaitForEvent<TEvPQ::TEvProposePartitionConfigResult>(count);
 }
 
-std::unique_ptr<TEvPersQueue::TEvRequest> TPQTabletFixture::MakeGetOwnershipRequest(const TGetOwnershipRequestParams& params,
+std::unique_ptr<NEvPersQueue::TEvRequest> TPQTabletFixture::MakeGetOwnershipRequest(const TGetOwnershipRequestParams& params,
                                                                                     const TActorId& pipe) const
 {
-    auto event = std::make_unique<TEvPersQueue::TEvRequest>();
+    auto event = std::make_unique<NEvPersQueue::TEvRequest>();
     auto* request = event->Record.MutablePartitionRequest();
     auto* command = request->MutableCmdGetOwnership();
 
@@ -637,7 +637,7 @@ void TPQTabletFixture::SendGetOwnershipRequest(const TGetOwnershipRequestParams&
 
 void TPQTabletFixture::WaitGetOwnershipResponse(const TGetOwnershipResponseMatcher& matcher)
 {
-    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>();
+    auto event = Ctx->Runtime->GrabEdgeEvent<NEvPersQueue::TEvResponse>();
     UNIT_ASSERT(event != nullptr);
 
     if (matcher.Cookie.Defined()) {
@@ -656,7 +656,7 @@ void TPQTabletFixture::WaitGetOwnershipResponse(const TGetOwnershipResponseMatch
 
 void TPQTabletFixture::SendWriteRequest(const TWriteRequestParams& params)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto event = MakeHolder<NEvPersQueue::TEvRequest>();
     auto* request = event->Record.MutablePartitionRequest();
 
     if (params.Topic.Defined()) {
@@ -702,7 +702,7 @@ void TPQTabletFixture::WaitWriteResponse(const TWriteResponseMatcher& matcher)
     bool found = false;
 
     auto observer = [&found, &matcher](TAutoPtr<IEventHandle>& event) {
-        if (auto* msg = event->CastAsLocal<TEvPersQueue::TEvResponse>()) {
+        if (auto* msg = event->CastAsLocal<NEvPersQueue::TEvResponse>()) {
             if (matcher.Cookie.Defined()) {
                 if (msg->Record.HasCookie() && (*matcher.Cookie == msg->Record.GetCookie())) {
                     found = true;
@@ -767,7 +767,7 @@ void TPQTabletFixture::WaitForPQWriteState()
 
 void TPQTabletFixture::SendCancelTransactionProposal(const TCancelTransactionProposalParams& params)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvCancelTransactionProposal>(params.TxId);
+    auto event = MakeHolder<NEvPersQueue::TEvCancelTransactionProposal>(params.TxId);
 
     SendToPipe(Ctx->Edge,
                event.Release());

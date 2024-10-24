@@ -23,11 +23,11 @@ public:
     void Bootstrap(const TActorContext& ctx);
 
 private:
-    void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvConsole::TEvConfigNotificationRequest::TPtr& ev, const TActorContext& ctx);
 
     STRICT_STFUNC(StateWork,
-        HFunc(TEvConsole::TEvConfigNotificationRequest, Handle)
-        IgnoreFunc(TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse)
+        HFunc(NEvConsole::TEvConfigNotificationRequest, Handle)
+        IgnoreFunc(NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse)
     )
 
     void ApplyConfigs(const NKikimrConfig::TTracingConfig& cfg);
@@ -55,17 +55,17 @@ void TJaegerTracingConfigurator::Bootstrap(const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "TJaegerTracingConfigurator: subscribing to config updates");
     ui32 item = static_cast<ui32>(NKikimrConsole::TConfigItem::TracingConfigItem);
     ctx.Send(MakeConfigsDispatcherID(SelfId().NodeId()),
-             new TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(item));
+             new NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(item));
 }
 
-void TJaegerTracingConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr& ev, const TActorContext& ctx) {
+void TJaegerTracingConfigurator::Handle(NEvConsole::TEvConfigNotificationRequest::TPtr& ev, const TActorContext& ctx) {
     auto& rec = ev->Get()->Record;
 
     LOG_INFO_S(ctx, NKikimrServices::CMS_CONFIGS, "TJaegerTracingConfigurator: got new config: " << rec.GetConfig().ShortDebugString());
 
     ApplyConfigs(rec.GetConfig().GetTracingConfig());
 
-    auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
+    auto resp = MakeHolder<NEvConsole::TEvConfigNotificationResponse>(rec);
     LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
                 "TJaegerTracingConfigurator: Send TEvConfigNotificationResponse");
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);

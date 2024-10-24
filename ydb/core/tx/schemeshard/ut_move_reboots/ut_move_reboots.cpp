@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
 
                 { //wait stats
                     TVector<THolder<IEventHandle>> suppressed;
-                    auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvPeriodicTableStats::EventType);
+                    auto prevObserver = SetSuppressObserver(runtime, suppressed, NEvDataShard::TEvPeriodicTableStats::EventType);
 
                     WaitForSuppressed(runtime, suppressed, 1, prevObserver);
                     for (auto &msg : suppressed) {
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
 
                 { //wait stats
                     TVector<THolder<IEventHandle>> suppressed;
-                    auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvPeriodicTableStats::EventType);
+                    auto prevObserver = SetSuppressObserver(runtime, suppressed, NEvDataShard::TEvPeriodicTableStats::EventType);
 
                     WaitForSuppressed(runtime, suppressed, 1, prevObserver);
                     for (auto &msg : suppressed) {
@@ -157,7 +157,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
 
                 { //wait stats
                     TVector<THolder<IEventHandle>> suppressed;
-                    auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvPeriodicTableStats::EventType);
+                    auto prevObserver = SetSuppressObserver(runtime, suppressed, NEvDataShard::TEvPeriodicTableStats::EventType);
 
                     WaitForSuppressed(runtime, suppressed, 1, prevObserver);
                     for (auto &msg : suppressed) {
@@ -192,7 +192,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
 
                 { //wait stats
                     TVector<THolder<IEventHandle>> suppressed;
-                    auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvPeriodicTableStats::EventType);
+                    auto prevObserver = SetSuppressObserver(runtime, suppressed, NEvDataShard::TEvPeriodicTableStats::EventType);
 
                     WaitForSuppressed(runtime, suppressed, 1, prevObserver);
                     for (auto &msg : suppressed) {

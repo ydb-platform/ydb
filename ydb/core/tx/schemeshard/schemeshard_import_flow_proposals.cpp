@@ -8,7 +8,7 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
+THolder<NEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     TSchemeShard* ss,
     TTxId txId,
     TImportInfo::TPtr importInfo,
@@ -18,7 +18,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto propose = MakeHolder<NEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
     auto& record = propose->Record;
 
     auto& modifyScheme = *record.AddTransaction();
@@ -75,7 +75,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
+THolder<NEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     TSchemeShard* ss,
     TTxId txId,
     TImportInfo::TPtr importInfo,
@@ -118,7 +118,7 @@ static NKikimrSchemeOp::TTableDescription RebuildTableDescription(
     return tableDesc;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
+THolder<NEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
     TSchemeShard* ss,
     TTxId txId,
     TImportInfo::TPtr importInfo,
@@ -127,7 +127,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
     Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto propose = MakeHolder<NEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
 
     auto& modifyScheme = *propose->Record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpRestore);
@@ -175,11 +175,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvCancelTx> CancelRestorePropose(
+THolder<NEvSchemeShard::TEvCancelTx> CancelRestorePropose(
     TImportInfo::TPtr importInfo,
     TTxId restoreTxId
 ) {
-    auto propose = MakeHolder<TEvSchemeShard::TEvCancelTx>();
+    auto propose = MakeHolder<NEvSchemeShard::TEvCancelTx>();
 
     auto& record = propose->Record;
     record.SetTxId(importInfo->Id);

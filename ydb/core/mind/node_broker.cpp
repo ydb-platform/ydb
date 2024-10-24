@@ -199,7 +199,7 @@ void TNodeBroker::AddNode(const TNodeInfo &info)
     FreeIds.Reset(info.NodeId);
     if (info.SlotIndex.has_value()) {
         SlotIndexesPools[info.ServicedSubDomain].Acquire(info.SlotIndex.value());
-    }    
+    }
 
     if (info.Expire > Epoch.Start) {
         LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
@@ -729,7 +729,7 @@ bool TNodeBroker::DbLoadState(TTransactionContext &txc,
             info.ServicedSubDomain = TSubDomainKey(nodesRowset.GetValueOrDefault<T::ServicedSubDomain>());
             if (nodesRowset.HaveValue<T::SlotIndex>()) {
                 info.SlotIndex = nodesRowset.GetValue<T::SlotIndex>();
-            } 
+            }
             AddNode(info);
 
             LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
@@ -843,9 +843,9 @@ void TNodeBroker::DbUpdateNodeLocation(const TNodeInfo &node,
     db.Table<T>().Key(node.NodeId).Update<T::Location>(node.Location.GetSerializedLocation());
 }
 
-void TNodeBroker::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
+void TNodeBroker::Handle(NEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                          const TActorContext &ctx)
-{   
+{
     const auto& appConfig = ev->Get()->Record.GetConfig();
     if (appConfig.HasFeatureFlags()) {
         EnableStableNodeNames = appConfig.GetFeatureFlags().GetEnableStableNodeNames();
@@ -855,13 +855,13 @@ void TNodeBroker::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
         ProcessTx(CreateTxUpdateConfig(ev), ctx);
     } else {
         // ignore and immediately ack messages from old persistent console subscriptions
-        auto response = MakeHolder<TEvConsole::TEvConfigNotificationResponse>();
+        auto response = MakeHolder<NEvConsole::TEvConfigNotificationResponse>();
         response->Record.MutableConfigId()->CopyFrom(ev->Get()->Record.GetConfigId());
         ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
 }
 
-void TNodeBroker::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
+void TNodeBroker::Handle(NEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
                          const TActorContext &ctx)
 {
     auto &rec = ev->Get()->Record;

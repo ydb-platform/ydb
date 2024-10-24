@@ -45,8 +45,8 @@ protected:
     TMap<ui32, NKikimrWhiteboard::TEvVDiskStateResponse> VDiskInfo;
     TMap<ui32, NKikimrWhiteboard::TEvPDiskStateResponse> PDiskInfo;
     TMap<ui32, NKikimrWhiteboard::TEvBSGroupStateResponse> BSGroupInfo;
-    THashMap<TString, THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>> DescribeResult;
-    THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveStorageStats>> HiveStorageStats;
+    THashMap<TString, THolder<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult>> DescribeResult;
+    THashMap<TTabletId, THolder<NEvHive::TEvResponseHiveStorageStats>> HiveStorageStats;
     THolder<TEvBlobStorage::TEvControllerConfigResponse> BaseConfig;
 
     // indexes
@@ -243,7 +243,7 @@ public:
         RequestDone();
     }
 
-    void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev) {
+    void Handle(NConsole::NEvConsole::TEvListTenantsResponse::TPtr& ev) {
         Ydb::Cms::ListDatabasesResult listTenantsResult;
         ev->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
         for (const TString& path : listTenantsResult.paths()) {
@@ -301,7 +301,7 @@ public:
         RequestDone();
     }
 
-    void Handle(TEvHive::TEvResponseHiveStorageStats::TPtr& ev) {
+    void Handle(NEvHive::TEvResponseHiveStorageStats::TPtr& ev) {
         HiveStorageStats[ev->Cookie] = ev->Release();
         RequestDone();
     }
@@ -388,11 +388,11 @@ public:
             hFunc(TEvWhiteboard::TEvVDiskStateResponse, Handle);
             hFunc(TEvWhiteboard::TEvPDiskStateResponse, Handle);
             hFunc(TEvWhiteboard::TEvBSGroupStateResponse, Handle);
-            hFunc(NConsole::TEvConsole::TEvListTenantsResponse, Handle);
+            hFunc(NConsole::NEvConsole::TEvListTenantsResponse, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvBlobStorage::TEvControllerSelectGroupsResult, Handle);
             hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
-            hFunc(TEvHive::TEvResponseHiveStorageStats, Handle);
+            hFunc(NEvHive::TEvResponseHiveStorageStats, Handle);
             hFunc(TEvents::TEvUndelivered, Undelivered);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             hFunc(TEvTabletPipe::TEvClientConnected, TBase::Handle);

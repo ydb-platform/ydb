@@ -33,10 +33,10 @@ public:
             Pipe = ctx.RegisterWithSameMailbox(TPipeCreator::CreateClient(ctx.SelfID, BalancerTabletId, clientConfig));
         }
 
-        NTabletPipe::SendData(ctx, Pipe, new TEvPersQueue::TEvGetPartitionIdForWrite());
+        NTabletPipe::SendData(ctx, Pipe, new NEvPersQueue::TEvGetPartitionIdForWrite());
     }
 
-    ui32 Handle(TEvPersQueue::TEvGetPartitionIdForWriteResponse::TPtr& ev, const TActorContext& ctx) {
+    ui32 Handle(NEvPersQueue::TEvGetPartitionIdForWriteResponse::TPtr& ev, const TActorContext& ctx) {
         Close(ctx);
 
         PartitionId_ = ev->Get()->Record.GetPartitionId();

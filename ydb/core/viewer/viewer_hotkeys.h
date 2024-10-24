@@ -6,14 +6,14 @@
 namespace NKikimr::NViewer {
 
 using namespace NActors;
-namespace TEvSchemeShard = NSchemeShard::TEvSchemeShard;
+namespace NEvSchemeShard = NSchemeShard::NEvSchemeShard;
 
 class TJsonHotkeys : public TViewerPipeClient {
     static const bool WithRetry = false;
     using TThis = TJsonHotkeys;
     using TBase = TViewerPipeClient;
     using TBase::ReplyAndPassAway;
-    TAutoPtr<TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
+    TAutoPtr<NEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
     ui32 Timeout = 0;
     ui32 Limit = 0;
     float PollingFactor = 0.0;
@@ -57,14 +57,14 @@ public:
 
     STATEFN(StateRequestedDescribe) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
-            hFunc(TEvDataShard::TEvGetDataHistogramResponse, Handle);
+            hFunc(NEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            hFunc(NEvDataShard::TEvGetDataHistogramResponse, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, TBase::Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
-    void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+    void Handle(NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         DescribeResult = ev->Release();
         const auto& pbRecord(DescribeResult->GetRecord());
         if (pbRecord.HasPathDescription()) {
@@ -83,7 +83,7 @@ public:
                 ui32 tablets = (ui32) std::max(1, (int) std::ceil(PollingFactor * tabletsOrder.size()));
 
                 for (ui32 i = 0; i < tablets; ++i) {
-                    THolder<TEvDataShard::TEvGetDataHistogramRequest> request = MakeHolder<TEvDataShard::TEvGetDataHistogramRequest>();
+                    THolder<NEvDataShard::TEvGetDataHistogramRequest> request = MakeHolder<NEvDataShard::TEvGetDataHistogramRequest>();
                     if (EnableSampling) {
                         request->Record.SetCollectKeySampleMs(30000); // 30 sec
                     }
@@ -97,7 +97,7 @@ public:
         RequestDone();
     }
 
-    void Handle(TEvDataShard::TEvGetDataHistogramResponse::TPtr& ev) {
+    void Handle(NEvDataShard::TEvGetDataHistogramResponse::TPtr& ev) {
         const auto& rec = ev->Get()->Record;
         for (const auto& i: rec.GetTableHistograms()) {
             for (const auto& item: i.GetKeyAccessSample().GetItems()) {

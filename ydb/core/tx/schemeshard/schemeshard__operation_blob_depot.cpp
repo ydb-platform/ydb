@@ -66,7 +66,7 @@ namespace NKikimr::NSchemeShard {
                         auto tabletId = context.SS->ShardInfos[shardIdx].TabletID;
                         blobDepotInfo->BlobDepotTabletId = tabletId;
                         Y_ABORT_UNLESS(shard.TabletType == ETabletType::BlobDepot);
-                        auto event = std::make_unique<TEvBlobDepot::TEvApplyConfig>(static_cast<ui64>(OperationId.GetTxId()));
+                        auto event = std::make_unique<NEvBlobDepot::TEvApplyConfig>(static_cast<ui64>(OperationId.GetTxId()));
                         event->Record.MutableConfig()->CopyFrom(blobDepotInfo->Description.GetConfig());
                         context.OnComplete.BindMsgToPipe(OperationId, tabletId, shardIdx, event.release());
                         txState->ShardsInProgress.insert(shardIdx);
@@ -76,7 +76,7 @@ namespace NKikimr::NSchemeShard {
                     return false;
                 }
 
-                bool HandleReply(TEvBlobDepot::TEvApplyConfigResult::TPtr& ev, TOperationContext& context) override {
+                bool HandleReply(NEvBlobDepot::TEvApplyConfigResult::TPtr& ev, TOperationContext& context) override {
                     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint()
                             << " TConfigureBlobDepotParts::HandleReply"
                             << " at schemeshard# " << context.SS->SelfTabletId());
@@ -92,7 +92,7 @@ namespace NKikimr::NSchemeShard {
 
                     return !txState->ShardsInProgress;
                 }
-                
+
                 TString DebugHint() const override {
                     return TStringBuilder() << "TConfigureBlobDepotParts id# " << OperationId;
                 }
@@ -112,7 +112,7 @@ namespace NKikimr::NSchemeShard {
                     return false;
                 }
 
-                bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+                bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
                     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint()
                             << " TProposeBlobDepotCreate::HandleReply"
                             << " at schemeshard# " << context.SS->SelfTabletId());
@@ -379,7 +379,7 @@ namespace NKikimr::NSchemeShard {
                 parentPath->IncAliveChildren();
 
                 SetState(TTxState::CreateParts);
-                
+
                 auto resp = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, txId, ssId);
                 resp->SetPathId(pathId.LocalPathId);
                 return resp;

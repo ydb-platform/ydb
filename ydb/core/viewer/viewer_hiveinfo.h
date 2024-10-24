@@ -11,7 +11,7 @@ class TJsonHiveInfo : public TViewerPipeClient {
     using TThis = TJsonHiveInfo;
     using TBase = TViewerPipeClient;
     using TBase::ReplyAndPassAway;
-    TAutoPtr<TEvHive::TEvResponseHiveInfo> HiveInfo;
+    TAutoPtr<NEvHive::TEvResponseHiveInfo> HiveInfo;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
     TNodeId NodeId = 0;
@@ -30,7 +30,7 @@ public:
         NodeId = FromStringWithDefault<TNodeId>(params.Get("node"), 0);
         InitConfig(params);
         if (hiveId != 0 ) {
-            TAutoPtr<TEvHive::TEvRequestHiveInfo> request = new TEvHive::TEvRequestHiveInfo();
+            TAutoPtr<NEvHive::TEvRequestHiveInfo> request = new NEvHive::TEvRequestHiveInfo();
             if (params.Has("tablet_id")) {
                 request->Record.SetTabletID(FromStringWithDefault<ui64>(params.Get("tablet_id"), 0));
             }
@@ -52,13 +52,13 @@ public:
 
     STATEFN(StateRequestedInfo) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvHive::TEvResponseHiveInfo, Handle);
+            hFunc(NEvHive::TEvResponseHiveInfo, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, TBase::Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
-    void Handle(TEvHive::TEvResponseHiveInfo::TPtr& ev) {
+    void Handle(NEvHive::TEvResponseHiveInfo::TPtr& ev) {
         HiveInfo = ev->Release();
         RequestDone();
     }

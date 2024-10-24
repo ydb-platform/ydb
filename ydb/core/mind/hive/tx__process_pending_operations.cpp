@@ -15,7 +15,7 @@ public:
     bool Execute(TTransactionContext&, const TActorContext&) override {
         BLOG_D("THive::TTxProcessPendingOperations()::Execute");
         for (auto& [owner, pendingCreateTablet] : Self->PendingCreateTablets) {
-            THolder<TEvHive::TEvCreateTablet> evCreateTablet(new TEvHive::TEvCreateTablet());
+            THolder<NEvHive::TEvCreateTablet> evCreateTablet(new NEvHive::TEvCreateTablet());
             evCreateTablet->Record = pendingCreateTablet.CreateTablet;
             BLOG_D("THive::TTxProcessPendingOperations(): retry CreateTablet");
             TlsActivationContext->Send(new IEventHandle(Self->SelfId(), pendingCreateTablet.Sender, evCreateTablet.Release(), 0, pendingCreateTablet.Cookie));

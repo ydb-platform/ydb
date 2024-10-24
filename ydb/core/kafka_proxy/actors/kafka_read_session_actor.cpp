@@ -451,7 +451,7 @@ void TKafkaReadSessionActor::AuthAndFindBalancers(const TActorContext& ctx) {
         topicHandler->GetLocalCluster(), false));
 }
 
-void TKafkaReadSessionActor::HandleBalancerError(TEvPersQueue::TEvError::TPtr& ev, const TActorContext& ctx) {
+void TKafkaReadSessionActor::HandleBalancerError(NEvPersQueue::TEvError::TPtr& ev, const TActorContext& ctx) {
     if (JoinGroupCorellationId != 0) {
         SendJoinGroupResponseFail(ctx, JoinGroupCorellationId, ConvertErrorCode(ev->Get()->Record.GetCode()), ev->Get()->Record.GetDescription());
         CloseReadSession(ctx);
@@ -504,7 +504,7 @@ TActorId TKafkaReadSessionActor::CreatePipeClient(ui64 tabletId, const TActorCon
 
 void TKafkaReadSessionActor::RegisterBalancerSession(const TString& topic, const TActorId& pipe, const TVector<ui32>& groups, const TActorContext& ctx) {
     KAFKA_LOG_I("register session: topic# " << topic );
-    auto request = MakeHolder<TEvPersQueue::TEvRegisterReadSession>();
+    auto request = MakeHolder<NEvPersQueue::TEvRegisterReadSession>();
 
     auto& req = request->Record;
     req.SetSession(Session);
@@ -519,7 +519,7 @@ void TKafkaReadSessionActor::RegisterBalancerSession(const TString& topic, const
     NTabletPipe::SendData(ctx, pipe, request.Release());
 }
 
-void TKafkaReadSessionActor::HandleLockPartition(TEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext& ctx) {
+void TKafkaReadSessionActor::HandleLockPartition(NEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     KAFKA_LOG_D("partition lock is coming from PQRB topic# " << record.GetTopic() <<  ", partition# " << record.GetPartition());
 
@@ -556,7 +556,7 @@ void TKafkaReadSessionActor::HandleLockPartition(TEvPersQueue::TEvLockPartition:
     NewPartitionsToLockOnTime[topicName].push_back(partitionToLock);
 }
 
-void TKafkaReadSessionActor::HandleReleasePartition(TEvPersQueue::TEvReleasePartition::TPtr& ev, const TActorContext& ctx) {
+void TKafkaReadSessionActor::HandleReleasePartition(NEvPersQueue::TEvReleasePartition::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     const ui32 group = record.HasGroup() ? record.GetGroup() : 0;
     KAFKA_LOG_D("partition release is coming from PQRB topic# " << record.GetTopic() <<  ", group# " << group);
@@ -626,7 +626,7 @@ void TKafkaReadSessionActor::HandleReleasePartition(TEvPersQueue::TEvReleasePart
 void TKafkaReadSessionActor::InformBalancerAboutPartitionRelease(const TString& topic, ui64 partition, const TActorContext& ctx) {
     KAFKA_LOG_I("released topic# " << topic
              << ", partition# " << partition);
-    auto request = MakeHolder<TEvPersQueue::TEvPartitionReleased>();
+    auto request = MakeHolder<NEvPersQueue::TEvPartitionReleased>();
 
     auto topicIt = TopicsInfo.find(topic);
     Y_ABORT_UNLESS(topicIt != TopicsInfo.end());

@@ -96,7 +96,7 @@ namespace {
             TString fromKey;
             bool fromKeyInclusive = true;
             for (;;) {
-                auto req = MakeHolder<TEvDataShard::TEvReadColumnsRequest>();
+                auto req = MakeHolder<NEvDataShard::TEvReadColumnsRequest>();
                 req->Record.SetTableId(tableId.PathId.LocalPathId);
                 if (!snapshot.IsMax()) {
                     req->Record.SetSnapshotStep(snapshot.Step);
@@ -109,7 +109,7 @@ namespace {
                 req->Record.SetFormat("debug_text");
                 runtime.SendToPipe(shardId, sender, req.Release());
 
-                auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadColumnsResponse>(sender);
+                auto ev = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvReadColumnsResponse>(sender);
                 auto* msg = ev->Get();
                 //Cerr << msg->Record.DebugString() << Endl;
                 UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus(), 0u);
@@ -413,7 +413,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             auto tablets = GetTableShards(server, senderDiscard, "/Root/table-1");
             const auto tableId = ResolveTableId(server, senderDiscard, "/Root/table-1");
             for (ui64 shardId : tablets) {
-                auto req = MakeHolder<TEvDataShard::TEvDiscardVolatileSnapshotRequest>();
+                auto req = MakeHolder<NEvDataShard::TEvDiscardVolatileSnapshotRequest>();
                 req->Record.SetOwnerId(tableId.PathId.OwnerId);
                 req->Record.SetPathId(tableId.PathId.LocalPathId);
                 req->Record.SetStep(snapshot.Step);
@@ -422,7 +422,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
                 using TResponse = NKikimrTxDataShard::TEvDiscardVolatileSnapshotResponse;
 
-                auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvDiscardVolatileSnapshotResponse>(senderDiscard);
+                auto ev = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvDiscardVolatileSnapshotResponse>(senderDiscard);
                 UNIT_ASSERT_C(ev->Get()->Record.GetStatus() == TResponse::DISCARDED,
                     "Unexpected status " << TResponse::EStatus_Name(ev->Get()->Record.GetStatus()));
             }
@@ -869,7 +869,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         TVector<THolder<IEventHandle>> capturedTimecast;
         auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) -> auto {
             switch (ev->GetTypeRewrite()) {
-                case TEvDataShard::TEvSplit::EventType: {
+                case NEvDataShard::TEvSplit::EventType: {
                     if (captureSplit) {
                         Cerr << "... captured TEvSplit" << Endl;
                         capturedSplit.emplace_back(ev.Release());
@@ -1168,8 +1168,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         TTestActorRuntime::EEventAction Process(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                case TEvDataShard::TEvRead::EventType: {
-                    auto& record = ev->Get<TEvDataShard::TEvRead>()->Record;
+                case NEvDataShard::TEvRead::EventType: {
+                    auto& record = ev->Get<NEvDataShard::TEvRead>()->Record;
                     Cerr << "TEvRead:" << Endl;
                     Cerr << record.DebugString() << Endl;
                     Last = {};
@@ -1193,8 +1193,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                     }
                     break;
                 }
-                case TEvDataShard::TEvProposeTransaction::EventType: {
-                    auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                case NEvDataShard::TEvProposeTransaction::EventType: {
+                    auto& record = ev->Get<NEvDataShard::TEvProposeTransaction>()->Record;
                     Cerr << "TEvProposeTransaction:" << Endl;
                     Cerr << record.DebugString() << Endl;
                     if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_DATA) {
@@ -1279,8 +1279,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                     }
                     break;
                 }
-                case TEvDataShard::TEvProposeTransactionResult::EventType: {
-                    auto& record = ev->Get<TEvDataShard::TEvProposeTransactionResult>()->Record;
+                case NEvDataShard::TEvProposeTransactionResult::EventType: {
+                    auto& record = ev->Get<NEvDataShard::TEvProposeTransactionResult>()->Record;
                     Cerr << "TEvProposeTransactionResult:" << Endl;
                     Cerr << record.DebugString() << Endl;
                     LastLocks.clear();
@@ -1776,13 +1776,13 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         observer.InjectLocks.reset();
     }
 
-    std::unique_ptr<TEvDataShard::TEvRead> PrepareRead(
+    std::unique_ptr<NEvDataShard::TEvRead> PrepareRead(
             ui64 readId,
             const TTableId& tableId,
             const TRowVersion& snapshot,
             const TVector<ui32>& columns)
     {
-        auto request = std::make_unique<TEvDataShard::TEvRead>();
+        auto request = std::make_unique<NEvDataShard::TEvRead>();
         auto& record = request->Record;
         record.SetReadId(readId);
         record.MutableTableId()->SetOwnerId(tableId.PathId.OwnerId);
@@ -1797,7 +1797,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         return request;
     }
 
-    void AddReadRange(TEvDataShard::TEvRead& request, ui32 fromKey, ui32 toKey) {
+    void AddReadRange(NEvDataShard::TEvRead& request, ui32 fromKey, ui32 toKey) {
         TVector<TCell> fromKeyCells = { TCell::Make(fromKey) };
         TVector<TCell> toKeyCells = { TCell::Make(toKey) };
         auto fromBuf = TSerializedCellVec::Serialize(fromKeyCells);
@@ -1805,7 +1805,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         request.Ranges.emplace_back(fromBuf, toBuf, true, true);
     }
 
-    TString ReadResultRowsString(const TEvDataShard::TEvReadResult& result) {
+    TString ReadResultRowsString(const NEvDataShard::TEvReadResult& result) {
         TStringBuilder builder;
         for (size_t row = 0; row < result.GetRowsCount(); ++row) {
             auto rowCells = result.GetCells(row);
@@ -1915,7 +1915,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             request->Record.SetLockNodeId(runtime.GetNodeId(0));
             auto clientId = runtime.ConnectToPipe(shards.at(0), readSender, 0, NKikimr::NTabletPipe::TClientConfig());
             runtime.SendToPipe(clientId, readSender, request.release());
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(readSender);
+            auto ev = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvReadResult>(readSender);
             auto* response = ev->Get();
             UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(
@@ -1944,7 +1944,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             request->Record.SetLockNodeId(runtime.GetNodeId(0));
             auto clientId = runtime.ConnectToPipe(shards.at(0), readSender, 0, NKikimr::NTabletPipe::TClientConfig());
             runtime.SendToPipe(clientId, readSender, request.release());
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(readSender);
+            auto ev = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvReadResult>(readSender);
             auto* response = ev->Get();
             UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus().GetCode(), Ydb::StatusIds::ABORTED);
         }
@@ -1960,7 +1960,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             auto clientId = runtime.ConnectToPipe(shards.at(0), readSender, 0, NKikimr::NTabletPipe::TClientConfig());
             runtime.SendToPipe(clientId, readSender, request.release());
             {
-                auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(readSender);
+                auto ev = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvReadResult>(readSender);
                 auto* response = ev->Get();
                 UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
                 UNIT_ASSERT_VALUES_EQUAL(
@@ -1968,7 +1968,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                     "1 1 1\n");
             }
             {
-                auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(readSender);
+                auto ev = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvReadResult>(readSender);
                 auto* response = ev->Get();
                 UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus().GetCode(), Ydb::StatusIds::ABORTED);
             }
@@ -2883,8 +2883,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         // Check shard has some open transactions
         {
             auto checkSender = runtime.AllocateEdgeActor();
-            runtime.SendToPipe(shards.at(0), checkSender, new TEvDataShard::TEvGetOpenTxs(tableId.PathId));
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(checkSender);
+            runtime.SendToPipe(shards.at(0), checkSender, new NEvDataShard::TEvGetOpenTxs(tableId.PathId));
+            auto ev = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvGetOpenTxsResult>(checkSender);
             UNIT_ASSERT_C(!ev->Get()->OpenTxs.empty(), "at shard " << shards.at(0));
         }
 
@@ -2907,8 +2907,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         {
             auto checkSender = runtime.AllocateEdgeActor();
             for (auto shardId : shards) {
-                runtime.SendToPipe(shardId, checkSender, new TEvDataShard::TEvGetOpenTxs(tableId.PathId));
-                auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(checkSender);
+                runtime.SendToPipe(shardId, checkSender, new NEvDataShard::TEvGetOpenTxs(tableId.PathId));
+                auto ev = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvGetOpenTxsResult>(checkSender);
                 UNIT_ASSERT_C(ev->Get()->OpenTxs.empty(), "at shard " << shardId);
             }
         }
@@ -2978,8 +2978,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         // Check shard has some open transactions
         {
             auto checkSender = runtime.AllocateEdgeActor();
-            runtime.SendToPipe(shards.at(0), checkSender, new TEvDataShard::TEvGetOpenTxs(tableId.PathId));
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(checkSender);
+            runtime.SendToPipe(shards.at(0), checkSender, new NEvDataShard::TEvGetOpenTxs(tableId.PathId));
+            auto ev = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvGetOpenTxsResult>(checkSender);
             UNIT_ASSERT_C(!ev->Get()->OpenTxs.empty(), "at shard " << shards.at(0));
         }
 
@@ -2997,8 +2997,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         {
             auto checkSender = runtime.AllocateEdgeActor();
             for (auto shardId : shards2) {
-                runtime.SendToPipe(shardId, checkSender, new TEvDataShard::TEvGetOpenTxs(tableId2.PathId));
-                auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(checkSender);
+                runtime.SendToPipe(shardId, checkSender, new NEvDataShard::TEvGetOpenTxs(tableId2.PathId));
+                auto ev = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvGetOpenTxsResult>(checkSender);
                 UNIT_ASSERT_C(ev->Get()->OpenTxs.empty(), "at shard " << shardId);
             }
         }
@@ -3655,14 +3655,14 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         std::vector<std::unique_ptr<IEventHandle>> readAcks;
         std::vector<std::unique_ptr<IEventHandle>> readResults;
 
-        auto readObserverHolder = runtime.AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
+        auto readObserverHolder = runtime.AddObserver<NEvDataShard::TEvRead>([&](auto& ev) {
             if (blockReads) {
                 reads.emplace_back(ev.Release());
             } else {
                 ev->Get()->Record.SetMaxRowsInResult(1);
             }
         });
-        auto readResultObserverHolder = runtime.AddObserver<TEvDataShard::TEvReadResult>([&](auto& ev) {
+        auto readResultObserverHolder = runtime.AddObserver<NEvDataShard::TEvReadResult>([&](auto& ev) {
             if (!haveReadResult) {
                 haveReadResult = true;
                 haveReadResultSnapshot = ev->Get()->Record.HasSnapshot();
@@ -3670,7 +3670,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 readResults.emplace_back(ev.Release());
             }
         });
-        auto readAckObserverHolder = runtime.AddObserver<TEvDataShard::TEvReadAck>([&](auto& ev) {
+        auto readAckObserverHolder = runtime.AddObserver<NEvDataShard::TEvReadAck>([&](auto& ev) {
             if (blockReadAcks) {
                 readAcks.emplace_back(ev.Release());
             }
@@ -3771,8 +3771,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                     ++timecastUpdates;
                     break;
                 }
-                case TEvDataShard::TEvRead::EventType: {
-                    auto* msg = ev->Get<TEvDataShard::TEvRead>();
+                case NEvDataShard::TEvRead::EventType: {
+                    auto* msg = ev->Get<NEvDataShard::TEvRead>();
                     msg->Record.SetMaxRowsInResult(1);
                     break;
                 }
@@ -3980,7 +3980,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         TCreateTabletNodePinning(TTestActorRuntime& runtime)
             : Runtime(runtime)
             , Node1(Runtime.GetNodeId(0))
-            , Observer(Runtime.AddObserver<TEvHive::TEvCreateTablet>([this](auto& ev) { this->Process(ev); }))
+            , Observer(Runtime.AddObserver<NEvHive::TEvCreateTablet>([this](auto& ev) { this->Process(ev); }))
         {}
 
         void SetNodeIndexes(std::initializer_list<ui32> nodeIndexes) {
@@ -3995,7 +3995,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         }
 
     private:
-        void Process(TEvHive::TEvCreateTablet::TPtr& ev) {
+        void Process(NEvHive::TEvCreateTablet::TPtr& ev) {
             auto* msg = ev->Get();
             msg->Record.ClearAllowedNodeIDs();
             for (ui32 nodeId : AllowedNodes) {
@@ -4120,7 +4120,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         TSplitSrcBlocking(TTestActorRuntime& runtime)
             : Runtime(runtime)
             , Node1(Runtime.GetNodeId(0))
-            , Observer(Runtime.AddObserver<TEvDataShard::TEvSplit>([this](auto& ev) { this->Process(ev); }))
+            , Observer(Runtime.AddObserver<NEvDataShard::TEvSplit>([this](auto& ev) { this->Process(ev); }))
         {}
 
         void Unblock() {
@@ -4133,7 +4133,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         }
 
     private:
-        void Process(TEvDataShard::TEvSplit::TPtr& ev) {
+        void Process(NEvDataShard::TEvSplit::TPtr& ev) {
             Cerr << "... blocking TEvSplit" << Endl;
             Blocked.emplace_back(ev.Release());
         }
@@ -4605,9 +4605,9 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         // But when borrowed dst compaction will have pressure to compact it all
         ExecSQL(server, sender, "DELETE FROM `/Root/table` WHERE key < 5");
 
-        std::vector<TEvDataShard::TEvSplitTransferSnapshot::TPtr> snapshots;
-        auto captureSnapshots = runtime.AddObserver<TEvDataShard::TEvSplitTransferSnapshot>(
-            [&](TEvDataShard::TEvSplitTransferSnapshot::TPtr& ev) {
+        std::vector<NEvDataShard::TEvSplitTransferSnapshot::TPtr> snapshots;
+        auto captureSnapshots = runtime.AddObserver<NEvDataShard::TEvSplitTransferSnapshot>(
+            [&](NEvDataShard::TEvSplitTransferSnapshot::TPtr& ev) {
                 auto* msg = ev->Get();
                 Cerr << "... captured snapshot from " << msg->Record.GetSrcTabletId() << Endl;
                 snapshots.emplace_back(ev.Release());
@@ -4934,8 +4934,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         // Check shard has open transactions
         {
-            runtime.SendToPipe(shards.at(0), sender, new TEvDataShard::TEvGetOpenTxs(tableId1.PathId));
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(sender);
+            runtime.SendToPipe(shards.at(0), sender, new NEvDataShard::TEvGetOpenTxs(tableId1.PathId));
+            auto ev = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvGetOpenTxsResult>(sender);
             UNIT_ASSERT_C(!ev->Get()->OpenTxs.empty(), "at shard " << shards.at(0));
         }
 
@@ -4946,8 +4946,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         // Check shard doesn't have open transactions
         {
-            runtime.SendToPipe(shards.at(0), sender, new TEvDataShard::TEvGetOpenTxs(tableId2.PathId));
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(sender);
+            runtime.SendToPipe(shards.at(0), sender, new NEvDataShard::TEvGetOpenTxs(tableId2.PathId));
+            auto ev = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvGetOpenTxsResult>(sender);
             UNIT_ASSERT_C(ev->Get()->OpenTxs.empty(), "at shard " << shards.at(0));
         }
 
@@ -4963,8 +4963,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         // Check shard doesn't have open transactions
         {
-            runtime.SendToPipe(shards.at(0), sender, new TEvDataShard::TEvGetOpenTxs(tableId2.PathId));
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(sender);
+            runtime.SendToPipe(shards.at(0), sender, new NEvDataShard::TEvGetOpenTxs(tableId2.PathId));
+            auto ev = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvGetOpenTxsResult>(sender);
             UNIT_ASSERT_C(ev->Get()->OpenTxs.empty(), "at shard " << shards.at(0));
         }
     }

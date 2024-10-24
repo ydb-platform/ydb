@@ -27,12 +27,12 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), {
-            TEvHive::TEvCreateTabletReply::EventType
+            NEvHive::TEvCreateTabletReply::EventType
         });
     }
 
     bool HandleReply(
-        TEvFileStore::TEvUpdateConfigResponse::TPtr& ev,
+        NEvFileStore::TEvUpdateConfigResponse::TPtr& ev,
         TOperationContext& context) override
     {
         const auto ssId = context.SS->SelfTabletId();
@@ -103,7 +103,7 @@ public:
             auto shardIdx = shard.Idx;
             auto tabletId = context.SS->ShardInfos[shardIdx].TabletID;
 
-            TAutoPtr<TEvFileStore::TEvUpdateConfig> event(new TEvFileStore::TEvUpdateConfig());
+            TAutoPtr<NEvFileStore::TEvUpdateConfig> event(new NEvFileStore::TEvUpdateConfig());
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.MutableConfig()->CopyFrom(*fs->AlterConfig);
             event->Record.MutableConfig()->SetVersion(fs->AlterVersion);
@@ -135,12 +135,12 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), {
-            TEvHive::TEvCreateTabletReply::EventType
+            NEvHive::TEvCreateTabletReply::EventType
         });
     }
 
     bool HandleReply(
-        TEvPrivate::TEvOperationPlan::TPtr& ev,
+        NEvPrivate::TEvOperationPlan::TPtr& ev,
         TOperationContext& context) override
     {
         const auto step = TStepId(ev->Get()->StepId);

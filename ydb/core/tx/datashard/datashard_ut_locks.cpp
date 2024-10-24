@@ -624,10 +624,10 @@ void CheckLocksCacheUsage(bool waitForLocksStore) {
         txId = reply->Record.GetTxId();
     }
     {
-        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+        auto request = MakeHolder<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(txId);
         runtime.SendToPipe(pipe, sender, request.Release());
-        runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvNotifyTxCompletionResult>(handle);
+        runtime.GrabEdgeEventRethrow<NEvSchemeShard::TEvNotifyTxCompletionResult>(handle);
     }
 
     {
@@ -646,7 +646,7 @@ void CheckLocksCacheUsage(bool waitForLocksStore) {
             auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
             request->Record.MutableDescribePath()->SetPath("/Root/table-1");
             runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
-            auto reply = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDescribeSchemeResult>(handle);
+            auto reply = runtime.GrabEdgeEventRethrow<NEvSchemeShard::TEvDescribeSchemeResult>(handle);
             for (auto i = 0; i < 2; ++i)
                 shards[i] = reply->GetRecord().GetPathDescription()
                     .GetTablePartitions(i).GetDatashardId();

@@ -148,7 +148,7 @@ private:
         };
 
         struct TEvRetryRead : public TEventLocal<TEvRetryRead, EvRetryRead> {
-            explicit TEvRetryRead(ui64 readId, ui64 lastSeqNo, bool instantStart = false) 
+            explicit TEvRetryRead(ui64 readId, ui64 lastSeqNo, bool instantStart = false)
                 : ReadId(readId)
                 , LastSeqNo(lastSeqNo)
                 , InstantStart(instantStart) {
@@ -181,7 +181,7 @@ private:
             StreamLookupWorker.reset();
             for (auto& [id, state] : Reads) {
                 Counters->SentIteratorCancels->Inc();
-                auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
+                auto cancel = MakeHolder<NEvDataShard::TEvReadCancel>();
                 cancel->Record.SetReadId(id);
                 Send(MainPipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state.ShardId, false));
             }
@@ -242,7 +242,7 @@ private:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
-                hFunc(TEvDataShard::TEvReadResult, Handle);
+                hFunc(NEvDataShard::TEvReadResult, Handle);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
                 hFunc(TEvPrivate::TEvSchemeCacheRequestTimeout, Handle);
                 hFunc(TEvPrivate::TEvRetryRead, Handle);
@@ -259,7 +259,7 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
         CA_LOG_D("TEvResolveKeySetResult was received for table: " << StreamLookupWorker->GetTablePath());
         if (ev->Get()->Request->ErrorCount > 0) {
-            TString errorMsg = TStringBuilder() << "Failed to get partitioning for table: " 
+            TString errorMsg = TStringBuilder() << "Failed to get partitioning for table: "
                 << StreamLookupWorker->GetTablePath();
             LookupActorStateSpan.EndError(errorMsg);
 
@@ -275,7 +275,7 @@ private:
         ProcessInputRows();
     }
 
-    void Handle(TEvDataShard::TEvReadResult::TPtr& ev) {
+    void Handle(NEvDataShard::TEvReadResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
 
@@ -363,7 +363,7 @@ private:
             }
 
             Counters->SentIteratorAcks->Inc();
-            THolder<TEvDataShard::TEvReadAck> request(new TEvDataShard::TEvReadAck());
+            THolder<NEvDataShard::TEvReadAck> request(new NEvDataShard::TEvReadAck());
             request->Record.SetReadId(record.GetReadId());
             request->Record.SetSeqNo(record.GetSeqNo());
 
@@ -384,7 +384,7 @@ private:
         }
 
         StreamLookupWorker->AddResult(TKqpStreamLookupWorker::TShardReadResult{
-            read.ShardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())
+            read.ShardId, THolder<TEventHandle<NEvDataShard::TEvReadResult>>(ev.Release())
         });
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
@@ -419,7 +419,7 @@ private:
         auto readIt = Reads.find(ev->Get()->ReadId);
         YQL_ENSURE(readIt != Reads.end(), "Unexpected readId: " << ev->Get()->ReadId);
         auto& read = readIt->second;
-        
+
         if (read.State == EReadState::Running && read.LastSeqNo <= ev->Get()->LastSeqNo) {
             if (ev->Get()->InstantStart) {
                 read.SetFinished();
@@ -456,7 +456,7 @@ private:
         }
     }
 
-    void StartTableRead(ui64 shardId, THolder<TEvDataShard::TEvRead> request) {
+    void StartTableRead(ui64 shardId, THolder<NEvDataShard::TEvRead> request) {
         Counters->CreatedIterators->Inc();
         auto& record = request->Record;
 
@@ -566,7 +566,7 @@ private:
             keyColumnTypes, TVector<TKeyDesc::TColumnOp>{}));
 
         Counters->IteratorsShardResolve->Inc();
-        LookupActorStateSpan = NWilson::TSpan(TWilsonKqp::LookupActorShardsResolve, LookupActorSpan.GetTraceId(), 
+        LookupActorStateSpan = NWilson::TSpan(TWilsonKqp::LookupActorShardsResolve, LookupActorSpan.GetTraceId(),
             "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
 
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvInvalidateTable(StreamLookupWorker->GetTableId(), {}));

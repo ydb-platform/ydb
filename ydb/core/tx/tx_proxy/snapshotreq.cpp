@@ -103,7 +103,7 @@ public:
     STFUNC(StateWaitPrepare) {
         TRACE_EVENT(NKikimrServices::TX_PROXY);
         switch (ev->GetTypeRewrite()) {
-            HFuncTraced(TEvDataShard::TEvProposeTransactionResult, HandlePrepare);
+            HFuncTraced(NEvDataShard::TEvProposeTransactionResult, HandlePrepare);
             HFuncTraced(TEvPipeCache::TEvDeliveryProblem, HandlePrepare);
             HFuncTraced(TEvents::TEvUndelivered, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleExecTimeout);
@@ -113,7 +113,7 @@ public:
     STFUNC(StatePrepareErrors) {
         TRACE_EVENT(NKikimrServices::TX_PROXY);
         switch (ev->GetTypeRewrite()) {
-            HFuncTraced(TEvDataShard::TEvProposeTransactionResult, HandlePrepareErrors);
+            HFuncTraced(NEvDataShard::TEvProposeTransactionResult, HandlePrepareErrors);
             HFuncTraced(TEvPipeCache::TEvDeliveryProblem, HandlePrepareErrors);
             HFuncTraced(TEvents::TEvUndelivered, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandlePrepareErrorTimeout);
@@ -124,7 +124,7 @@ public:
         TRACE_EVENT(NKikimrServices::TX_PROXY);
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvTxProxy::TEvProposeTransactionStatus, HandlePlan);
-            HFuncTraced(TEvDataShard::TEvProposeTransactionResult, HandlePlan);
+            HFuncTraced(NEvDataShard::TEvProposeTransactionResult, HandlePlan);
             HFuncTraced(TEvPipeCache::TEvDeliveryProblem, HandlePlan);
             HFuncTraced(TEvents::TEvUndelivered, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleExecTimeout);
@@ -396,7 +396,7 @@ public:
                 << " marker# P3");
 
             Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
-                    new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SNAPSHOT,
+                    new NEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SNAPSHOT,
                         ctx.SelfID, TxId, txBody, TxFlags),
                     shardId, true));
 
@@ -437,7 +437,7 @@ public:
         return Die(ctx);
     }
 
-    void HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
+    void HandlePrepare(NEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
         const auto* msg = ev->Get();
         const auto& record = msg->Record;
         const ui64 shardId = msg->GetOrigin();
@@ -636,7 +636,7 @@ public:
                     state.Status == TPerShardState::EStatus::Prepared))
             {
                 Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
-                    new TEvDataShard::TEvCancelTransactionProposal(TxId),
+                    new NEvDataShard::TEvCancelTransactionProposal(TxId),
                     shardId, false));
             }
         }
@@ -652,7 +652,7 @@ public:
         ComplainingDatashards.push_back(record.GetOrigin());
     }
 
-    void HandlePrepareErrors(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
+    void HandlePrepareErrors(NEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
         const auto* msg = ev->Get();
         const auto& record = msg->Record;
         const ui64 shardId = msg->GetOrigin();
@@ -803,7 +803,7 @@ public:
         }
     }
 
-    void HandlePlan(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
+    void HandlePlan(NEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
         const auto* msg = ev->Get();
         const auto& record = msg->Record;
 
@@ -912,7 +912,7 @@ public:
             << " lost pipe with unknown endpoint, ignoring");
     }
 
-    void MergeResult(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
+    void MergeResult(NEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
         ResultsReceivedCount++;
@@ -1156,8 +1156,8 @@ public:
     STFUNC(StateWaitResponse) {
         TRACE_EVENT(NKikimrServices::TX_PROXY);
         switch (ev->GetTypeRewrite()) {
-            HFuncTraced(TEvDataShard::TEvRefreshVolatileSnapshotResponse, HandleResponse);
-            HFuncTraced(TEvDataShard::TEvDiscardVolatileSnapshotResponse, HandleResponse);
+            HFuncTraced(NEvDataShard::TEvRefreshVolatileSnapshotResponse, HandleResponse);
+            HFuncTraced(NEvDataShard::TEvDiscardVolatileSnapshotResponse, HandleResponse);
             HFuncTraced(TEvPipeCache::TEvDeliveryProblem, HandleResponse);
             HFuncTraced(TEvents::TEvUndelivered, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleExecTimeout);
@@ -1419,7 +1419,7 @@ public:
         switch (Op) {
             case EOp::Refresh: {
                 reqname = "TEvRefreshVolatileSnapshotRequest";
-                auto req = MakeHolder<TEvDataShard::TEvRefreshVolatileSnapshotRequest>();
+                auto req = MakeHolder<NEvDataShard::TEvRefreshVolatileSnapshotRequest>();
                 req->Record.SetOwnerId(path.OwnerId);
                 req->Record.SetPathId(path.LocalPathId);
                 req->Record.SetStep(SnapshotStep);
@@ -1429,7 +1429,7 @@ public:
             }
             case EOp::Discard: {
                 reqname = "TEvDiscardVolatileSnapshotRequest";
-                auto req = MakeHolder<TEvDataShard::TEvDiscardVolatileSnapshotRequest>();
+                auto req = MakeHolder<NEvDataShard::TEvDiscardVolatileSnapshotRequest>();
                 req->Record.SetOwnerId(path.OwnerId);
                 req->Record.SetPathId(path.LocalPathId);
                 req->Record.SetStep(SnapshotStep);
@@ -1447,7 +1447,7 @@ public:
         Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(tosend.Release(), shardId, true));
     }
 
-    void HandleResponse(TEvDataShard::TEvRefreshVolatileSnapshotResponse::TPtr& ev, const TActorContext& ctx) {
+    void HandleResponse(NEvDataShard::TEvRefreshVolatileSnapshotResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
         auto& state = PerShardStates[record.GetOrigin()];
         Y_VERIFY_S(state.Status != TPerShardState::EStatus::Unknown,
@@ -1495,7 +1495,7 @@ public:
         }
     }
 
-    void HandleResponse(TEvDataShard::TEvDiscardVolatileSnapshotResponse::TPtr& ev, const TActorContext& ctx) {
+    void HandleResponse(NEvDataShard::TEvDiscardVolatileSnapshotResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
         auto& state = PerShardStates[record.GetOrigin()];
         Y_VERIFY_S(state.Status != TPerShardState::EStatus::Unknown,

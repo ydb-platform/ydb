@@ -194,7 +194,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             : KqpValidateLocks(tabletId, sysLocks, kqpLocks, useGenericReadSets, inReadSets);
 
         if (!validated) {
-            tx->Result() = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
+            tx->Result() = MakeHolder<NEvDataShard::TEvProposeTransactionResult>(
                 NKikimrTxDataShard::TX_KIND_DATA,
                 tabletId,
                 txId,

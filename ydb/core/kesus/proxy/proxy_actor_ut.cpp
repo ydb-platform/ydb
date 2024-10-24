@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(TProxyActorTest) {
 
         ui64 cookie = RandomNumber<ui64>();
         auto edge = ctx.Runtime->AllocateEdgeActor(1);
-        ctx.SendFromEdge(42, edge, new TEvKesus::TEvCreateSemaphore("", "Sem2", 2), cookie);
+        ctx.SendFromEdge(42, edge, new NEvKesus::TEvCreateSemaphore("", "Sem2", 2), cookie);
         ctx.RebootTablet();
         ctx.ExpectProxyError(edge, cookie, Ydb::StatusIds::UNAVAILABLE);
     }

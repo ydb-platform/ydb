@@ -80,7 +80,7 @@ constexpr auto TPgTablesScanBase::ActorActivityType() {
 }
 
 void TPgTablesScanBase::ProceedToScan() {
-    auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeScheme>();
+    auto request = MakeHolder<NSchemeShard::NEvSchemeShard::TEvDescribeScheme>();
     NKikimrSchemeOp::TDescribePath& record = request->Record;
     auto pathVec = SplitPath(TablePath_);
     auto sz = pathVec.size();
@@ -95,14 +95,14 @@ void TPgTablesScanBase::ProceedToScan() {
     Become(&TPgTablesScan::StateWork);
 }
 
-void TPgTablesScanBase::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
+void TPgTablesScanBase::Handle(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
     Y_UNUSED(ctx);
     const auto& record = ev->Get()->GetRecord();
     const auto status = record.GetStatus();
     switch (status) {
         case NKikimrScheme::StatusSuccess: {
             const auto& pathDescription = record.GetPathDescription();
-            Y_ENSURE(pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeDir 
+            Y_ENSURE(pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeDir
                 || pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeSubDomain);
             break;
         }
@@ -154,7 +154,7 @@ void TPgTablesScanBase::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeRe
 
 void TPgTablesScanBase::StateWork(TAutoPtr<IEventHandle>& ev) {
     switch (ev->GetTypeRewrite()) {
-        HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+        HFunc(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult, Handle);
         default:
             LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
                 "NSysView::TScanActorBase: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());

@@ -44,11 +44,11 @@ void TLoggerInit::Initialize() {
 void THelper::WaitForSchemeOperation(TActorId sender, ui64 txId) {
     auto& runtime = *Server.GetRuntime();
     auto& settings = Server.GetSettings();
-    auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+    auto request = MakeHolder<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletion>();
     request->Record.SetTxId(txId);
     auto tid = ChangeStateStorage(Tests::SchemeRoot, settings.Domain);
     runtime.SendToPipe(tid, sender, request.Release(), 0, GetPipeConfigWithRetries());
-    runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(sender);
+    runtime.GrabEdgeEventRethrow<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult>(sender);
 }
 
 void THelper::StartScanRequest(const TString& request, const bool expectSuccess, TVector<THashMap<TString, NYdb::TValue>>* result) const {

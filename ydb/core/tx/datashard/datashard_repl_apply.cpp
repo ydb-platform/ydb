@@ -12,7 +12,7 @@ using namespace NTabletFlatExecutor;
 class TDataShard::TTxApplyReplicationChanges : public TTransactionBase<TDataShard> {
 public:
     explicit TTxApplyReplicationChanges(TDataShard* self, TPipeline& pipeline,
-            TEvDataShard::TEvApplyReplicationChanges::TPtr&& ev)
+            NEvDataShard::TEvApplyReplicationChanges::TPtr&& ev)
         : TTransactionBase(self)
         , Pipeline(pipeline)
         , Ev(std::move(ev))
@@ -30,7 +30,7 @@ public:
         TSetupSysLocks guardLocks(*Self, &locksDb);
 
         if (Self->State != TShardState::Ready) {
-            Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
+            Result = MakeHolder<NEvDataShard::TEvApplyReplicationChangesResult>(
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_WRONG_STATE,
                 TStringBuilder() << "DataShard is not ready");
@@ -38,7 +38,7 @@ public:
         }
 
         if (!Self->IsReplicated() && !Self->IsIncrementalRestore()) {
-            Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
+            Result = MakeHolder<NEvDataShard::TEvApplyReplicationChangesResult>(
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
                 TStringBuilder() << "Table is nor replicated nor under incremental restore");
@@ -56,7 +56,7 @@ public:
             TString error = TStringBuilder()
                 << "DataShard " << Self->TabletID() << " does not have a table "
                 << tableId.GetOwnerId() << ":" << tableId.GetTableId();
-            Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
+            Result = MakeHolder<NEvDataShard::TEvApplyReplicationChangesResult>(
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_SCHEME_ERROR,
                 std::move(error));
@@ -70,7 +70,7 @@ public:
                 << tableId.GetOwnerId() << ":" << tableId.GetTableId()
                 << " with schema version " << userTable.GetTableSchemaVersion()
                 << " and cannot apply changes for schema version " << tableId.GetSchemaVersion();
-            Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
+            Result = MakeHolder<NEvDataShard::TEvApplyReplicationChangesResult>(
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                 tableId.GetSchemaVersion() < userTable.GetTableSchemaVersion()
                     ? NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_OUTDATED_SCHEME
@@ -94,7 +94,7 @@ public:
         }
 
         if (!Result) {
-            Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
+            Result = MakeHolder<NEvDataShard::TEvApplyReplicationChangesResult>(
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK);
         }
 
@@ -121,7 +121,7 @@ public:
         ui64 writeTxId = change.GetWriteTxId();
         if (userTable.ReplicationConfig.HasWeakConsistency() || userTable.IncrementalBackupConfig.HasWeakConsistency()) {
             if (writeTxId) {
-                Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
+                Result = MakeHolder<NEvDataShard::TEvApplyReplicationChangesResult>(
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
                     "WriteTxId cannot be specified for weak consistency");
@@ -129,7 +129,7 @@ public:
             }
         } else {
             if (writeTxId == 0) {
-                Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
+                Result = MakeHolder<NEvDataShard::TEvApplyReplicationChangesResult>(
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
                     "Non-zero WriteTxId must be specified for strong consistency");
@@ -141,7 +141,7 @@ public:
         if (!TSerializedCellVec::TryParse(change.GetKey(), keyCellVec) ||
             keyCellVec.GetCells().size() != userTable.KeyColumnTypes.size())
         {
-            Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
+            Result = MakeHolder<NEvDataShard::TEvApplyReplicationChangesResult>(
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
                 TStringBuilder() << "Key at " << EscapeC(source.Name) << ":" << sourceOffset << " is not a valid primary key");
@@ -183,7 +183,7 @@ public:
                 break;
             }
             case NKikimrTxDataShard::TEvApplyReplicationChanges::TChange::ROWOPERATION_NOT_SET: {
-                Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
+                Result = MakeHolder<NEvDataShard::TEvApplyReplicationChangesResult>(
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_UNEXPECTED_ROW_OPERATION,
                     TStringBuilder() << "Update at " << EscapeC(source.Name) << ":" << sourceOffset << " has an unexpected row operation");
@@ -221,7 +221,7 @@ public:
         if (!TSerializedCellVec::TryParse(proto.GetData(), updateCellVec) ||
             updateCellVec.GetCells().size() != count)
         {
-            Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
+            Result = MakeHolder<NEvDataShard::TEvApplyReplicationChangesResult>(
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
                 TStringBuilder() << "Update at " << EscapeC(source.Name) << ":" << sourceOffset << " has invalid data");
@@ -232,14 +232,14 @@ public:
             ui32 tag = tags[i];
             auto it = userTable.Columns.find(tag);
             if (it == userTable.Columns.end()) {
-                Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
+                Result = MakeHolder<NEvDataShard::TEvApplyReplicationChangesResult>(
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
                     TStringBuilder() << "Update at " << EscapeC(source.Name) << ":" << sourceOffset << " is updating an unknown column " << tag);
                 return false;
             }
             if (it->second.IsKey) {
-                Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
+                Result = MakeHolder<NEvDataShard::TEvApplyReplicationChangesResult>(
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
                     TStringBuilder() << "Update at " << EscapeC(source.Name) << ":" << sourceOffset << " is updating a primary key column " << tag);
@@ -264,12 +264,12 @@ public:
 
 private:
     TPipeline& Pipeline;
-    TEvDataShard::TEvApplyReplicationChanges::TPtr Ev;
-    THolder<TEvDataShard::TEvApplyReplicationChangesResult> Result;
+    NEvDataShard::TEvApplyReplicationChanges::TPtr Ev;
+    THolder<NEvDataShard::TEvApplyReplicationChangesResult> Result;
     std::optional<TRowVersion> MvccReadWriteVersion;
 }; // TTxApplyReplicationChanges
 
-void TDataShard::Handle(TEvDataShard::TEvApplyReplicationChanges::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvApplyReplicationChanges::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxApplyReplicationChanges(this, Pipeline, std::move(ev)), ctx);
 }
 

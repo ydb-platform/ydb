@@ -83,15 +83,15 @@ namespace NSequenceShard {
             hFunc(TEvTabletPipe::TEvServerConnected, Handle);
             hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
 
-            HFunc(TEvSequenceShard::TEvMarkSchemeShardPipe, Handle);
-            HFunc(TEvSequenceShard::TEvCreateSequence, Handle);
-            HFunc(TEvSequenceShard::TEvAllocateSequence, Handle);
-            HFunc(TEvSequenceShard::TEvDropSequence, Handle);
-            HFunc(TEvSequenceShard::TEvUpdateSequence, Handle);
-            HFunc(TEvSequenceShard::TEvFreezeSequence, Handle);
-            HFunc(TEvSequenceShard::TEvRestoreSequence, Handle);
-            HFunc(TEvSequenceShard::TEvRedirectSequence, Handle);
-            HFunc(TEvSequenceShard::TEvGetSequence, Handle);
+            HFunc(NEvSequenceShard::TEvMarkSchemeShardPipe, Handle);
+            HFunc(NEvSequenceShard::TEvCreateSequence, Handle);
+            HFunc(NEvSequenceShard::TEvAllocateSequence, Handle);
+            HFunc(NEvSequenceShard::TEvDropSequence, Handle);
+            HFunc(NEvSequenceShard::TEvUpdateSequence, Handle);
+            HFunc(NEvSequenceShard::TEvFreezeSequence, Handle);
+            HFunc(NEvSequenceShard::TEvRestoreSequence, Handle);
+            HFunc(NEvSequenceShard::TEvRedirectSequence, Handle);
+            HFunc(NEvSequenceShard::TEvGetSequence, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {

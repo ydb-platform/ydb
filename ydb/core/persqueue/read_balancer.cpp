@@ -149,7 +149,7 @@ void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
     auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
     ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
 
-    ctx.Send(ctx.SelfID, new TEvPersQueue::TEvUpdateACL());
+    ctx.Send(ctx.SelfID, new NEvPersQueue::TEvUpdateACL());
 }
 
 void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TActorContext &ctx) {
@@ -170,7 +170,7 @@ void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TA
     }
 }
 
-void TPersQueueReadBalancer::HandleUpdateACL(TEvPersQueue::TEvUpdateACL::TPtr&, const TActorContext &ctx) {
+void TPersQueueReadBalancer::HandleUpdateACL(NEvPersQueue::TEvUpdateACL::TPtr&, const TActorContext &ctx) {
     GetACL(ctx);
 }
 
@@ -329,14 +329,14 @@ TString TPersQueueReadBalancer::GenerateStat() {
 }
 
 
-void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvUpdateBalancerConfig::TPtr &ev, const TActorContext&) {
+void TPersQueueReadBalancer::HandleOnInit(NEvPersQueue::TEvUpdateBalancerConfig::TPtr &ev, const TActorContext&) {
 
     UpdateEvents.push_back(ev->Release().Release());
 }
 
-void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionIdForWrite::TPtr &ev, const TActorContext &ctx) {
+void TPersQueueReadBalancer::Handle(NEvPersQueue::TEvGetPartitionIdForWrite::TPtr &ev, const TActorContext &ctx) {
     NextPartitionIdForWrite = (NextPartitionIdForWrite + 1) % TotalGroups; //TODO: change here when there will be more than 1 partition in partition_group.
-    THolder<TEvPersQueue::TEvGetPartitionIdForWriteResponse> response = MakeHolder<TEvPersQueue::TEvGetPartitionIdForWriteResponse>();
+    THolder<NEvPersQueue::TEvGetPartitionIdForWriteResponse> response = MakeHolder<NEvPersQueue::TEvGetPartitionIdForWriteResponse>();
     response->Record.SetPartitionId(NextPartitionIdForWrite);
     ctx.Send(ev->Sender, response.Release());
     if (NextPartitionIdForWrite == StartPartitionIdForWrite) { // randomize next cycle
@@ -345,7 +345,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionIdForWrite::TPt
 }
 
 
-void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvCheckACL::TPtr &ev, const TActorContext &ctx) {
+void TPersQueueReadBalancer::Handle(NEvPersQueue::TEvCheckACL::TPtr &ev, const TActorContext &ctx) {
 
     if (!AppData(ctx)->PQConfig.GetCheckACL()) {
         RespondWithACL(ev, NKikimrPQ::EAccess::ALLOWED, "", ctx);
@@ -375,11 +375,11 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvCheckACL::TPtr &ev, const T
 
 
 void TPersQueueReadBalancer::RespondWithACL(
-        const TEvPersQueue::TEvCheckACL::TPtr &request,
+        const NEvPersQueue::TEvCheckACL::TPtr &request,
         const NKikimrPQ::EAccess &access,
         const TString &error,
         const TActorContext &ctx) {
-    THolder<TEvPersQueue::TEvCheckACLResponse> res{new TEvPersQueue::TEvCheckACLResponse};
+    THolder<NEvPersQueue::TEvCheckACLResponse> res{new NEvPersQueue::TEvCheckACLResponse};
     res->Record.SetTopic(Topic);
     res->Record.SetPath(Path);
     res->Record.SetAccess(access);
@@ -387,7 +387,7 @@ void TPersQueueReadBalancer::RespondWithACL(
     ctx.Send(request->Sender, res.Release());
 }
 
-void TPersQueueReadBalancer::CheckACL(const TEvPersQueue::TEvCheckACL::TPtr &request, const NACLib::TUserToken& token, const TActorContext &ctx) {
+void TPersQueueReadBalancer::CheckACL(const NEvPersQueue::TEvCheckACL::TPtr &request, const NACLib::TUserToken& token, const TActorContext &ctx) {
     NACLib::EAccessRights rights = NACLib::EAccessRights::UpdateRow;
     const auto& record = request->Get()->Record;
     switch(record.GetOperation()) {
@@ -417,12 +417,12 @@ void TPersQueueReadBalancer::CheckACL(const TEvPersQueue::TEvCheckACL::TPtr &req
     }
 }
 
-void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvDescribe::TPtr &ev, const TActorContext& ctx) {
+void TPersQueueReadBalancer::Handle(NEvPersQueue::TEvDescribe::TPtr &ev, const TActorContext& ctx) {
     if (ctx.Now() > LastACLUpdate + ACL_EXPIRATION_TIMEOUT || Topic.empty()) { //Topic.empty is only for tests
         WaitingDescribeRequests.push_back(ev);
         return;
     } else {
-        THolder<TEvPersQueue::TEvDescribeResponse> res{new TEvPersQueue::TEvDescribeResponse};
+        THolder<NEvPersQueue::TEvDescribeResponse> res{new NEvPersQueue::TEvDescribeResponse};
         res->Record.MutableConfig()->CopyFrom(TabletConfig);
         res->Record.MutableConfig()->ClearAllPartitions();
         res->Record.SetVersion(Version);
@@ -441,10 +441,10 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvDescribe::TPtr &ev, const T
 }
 
 
-void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr &ev, const TActorContext& ctx) {
+void TPersQueueReadBalancer::Handle(NEvPersQueue::TEvUpdateBalancerConfig::TPtr &ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
     if ((int)record.GetVersion() < Version && Inited) {
-        THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
+        THolder<NEvPersQueue::TEvUpdateConfigResponse> res{new NEvPersQueue::TEvUpdateConfigResponse};
         res->Record.SetStatus(NKikimrPQ::ERROR_BAD_VERSION);
         res->Record.SetTxId(record.GetTxId());
         res->Record.SetOrigin(TabletID());
@@ -459,7 +459,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "BALANCER Topic " << Topic << "Tablet " << TabletID()
                             << " Config already applied version " << record.GetVersion() << " actor " << ev->Sender
                             << " txId " << record.GetTxId());
-            THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
+            THolder<NEvPersQueue::TEvUpdateConfigResponse> res{new NEvPersQueue::TEvUpdateConfigResponse};
             res->Record.SetStatus(NKikimrPQ::OK);
             res->Record.SetTxId(record.GetTxId());
             res->Record.SetOrigin(TabletID());
@@ -469,7 +469,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     }
 
     if ((int)record.GetVersion() > Version && !WaitingResponse.empty()) { //old transaction is not done yet
-        THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
+        THolder<NEvPersQueue::TEvUpdateConfigResponse> res{new NEvPersQueue::TEvUpdateConfigResponse};
         res->Record.SetStatus(NKikimrPQ::ERROR_UPDATE_IN_PROGRESS);
         res->Record.SetTxId(ev->Get()->Record.GetTxId());
         res->Record.SetOrigin(TabletID());
@@ -682,7 +682,7 @@ void TPersQueueReadBalancer::RequestTabletIfNeeded(const ui64 tabletId, const TA
             return;
         }
         TActorId pipeClient = GetPipeClient(tabletId, ctx);
-        NTabletPipe::SendData(ctx, pipeClient, new NSchemeShard::TEvSchemeShard::TEvDescribeScheme(tabletId, PathId));
+        NTabletPipe::SendData(ctx, pipeClient, new NSchemeShard::NEvSchemeShard::TEvDescribeScheme(tabletId, PathId));
     } else {
         TActorId pipeClient = GetPipeClient(tabletId, ctx);
 
@@ -697,8 +697,8 @@ void TPersQueueReadBalancer::RequestTabletIfNeeded(const ui64 tabletId, const TA
             }
 
             LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                TStringBuilder() << "Send TEvPersQueue::TEvStatus TabletId: " << tabletId << " Cookie: " << cookie);
-            NTabletPipe::SendData(ctx, pipeClient, new TEvPersQueue::TEvStatus("", true), cookie);
+                TStringBuilder() << "Send NEvPersQueue::TEvStatus TabletId: " << tabletId << " Cookie: " << cookie);
+            NTabletPipe::SendData(ctx, pipeClient, new NEvPersQueue::TEvStatus("", true), cookie);
         }
 
         NTabletPipe::SendData(ctx, pipeClient, new TEvPQ::TEvSubDomainStatus(SubDomainOutOfSpace));
@@ -706,7 +706,7 @@ void TPersQueueReadBalancer::RequestTabletIfNeeded(const ui64 tabletId, const TA
 }
 
 
-void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) {
+void TPersQueueReadBalancer::Handle(NEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     ui64 tabletId = record.GetTabletId();
     ui64 cookie = ev->Cookie;
@@ -755,7 +755,7 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvStatsWakeup::TPtr& ev, const TActo
     CheckStat(ctx);
 }
 
-void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext&) {
+void TPersQueueReadBalancer::Handle(NEvPersQueue::TEvStatus::TPtr& ev, const TActorContext&) {
     Send(ev.Get()->Sender, GetStatsEvent());
 }
 
@@ -788,20 +788,20 @@ void TPersQueueReadBalancer::TAggregatedStats::AggrStats(ui64 avgWriteSpeedPerSe
 }
 
 void TPersQueueReadBalancer::AnswerWaitingRequests(const TActorContext& ctx) {
-    std::vector<TEvPersQueue::TEvCheckACL::TPtr> ww;
+    std::vector<NEvPersQueue::TEvCheckACL::TPtr> ww;
     ww.swap(WaitingACLRequests);
     for (auto& r : ww) {
         Handle(r, ctx);
     }
 
-    std::vector<TEvPersQueue::TEvDescribe::TPtr> dr;
+    std::vector<NEvPersQueue::TEvDescribe::TPtr> dr;
     dr.swap(WaitingDescribeRequests);
     for (auto& r : dr) {
         Handle(r, ctx);
     }
 }
 
-void TPersQueueReadBalancer::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
+void TPersQueueReadBalancer::Handle(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
     Y_UNUSED(ctx);
     if (!WaitingForACL) //ignore if already processed
         return;
@@ -811,12 +811,12 @@ void TPersQueueReadBalancer::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSch
         ACL.Clear();
         Y_PROTOBUF_SUPPRESS_NODISCARD ACL.MutableACL()->ParseFromString(record.GetPathDescription().GetSelf().GetEffectiveACL());
         LastACLUpdate = ctx.Now();
-        ctx.Schedule(TDuration::Seconds(AppData(ctx)->PQConfig.GetBalancerMetadataRetryTimeoutSec()), new TEvPersQueue::TEvUpdateACL());
+        ctx.Schedule(TDuration::Seconds(AppData(ctx)->PQConfig.GetBalancerMetadataRetryTimeoutSec()), new NEvPersQueue::TEvUpdateACL());
 
         AnswerWaitingRequests(ctx);
     } else {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "couldn't receive ACL due to " << record.GetStatus());
-        ctx.Schedule(ACL_ERROR_RETRY_TIMEOUT, new TEvPersQueue::TEvUpdateACL());
+        ctx.Schedule(ACL_ERROR_RETRY_TIMEOUT, new NEvPersQueue::TEvUpdateACL());
     }
 }
 
@@ -832,7 +832,7 @@ void TPersQueueReadBalancer::CheckStat(const TActorContext& ctx) {
 
     AggregatedStats.Metrics = AggregatedStats.NewMetrics;
 
-    TEvPersQueue::TEvPeriodicTopicStats* ev = GetStatsEvent();
+    NEvPersQueue::TEvPeriodicTopicStats* ev = GetStatsEvent();
     LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
             TStringBuilder() << "Send TEvPeriodicTopicStats PathId: " << PathId
                              << " Generation: " << Generation
@@ -975,8 +975,8 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
     }
 }
 
-TEvPersQueue::TEvPeriodicTopicStats* TPersQueueReadBalancer::GetStatsEvent() {
-    TEvPersQueue::TEvPeriodicTopicStats* ev = new TEvPersQueue::TEvPeriodicTopicStats();
+NEvPersQueue::TEvPeriodicTopicStats* TPersQueueReadBalancer::GetStatsEvent() {
+    NEvPersQueue::TEvPeriodicTopicStats* ev = new NEvPersQueue::TEvPeriodicTopicStats();
     auto& rec = ev->Record;
     rec.SetPathId(PathId);
     rec.SetGeneration(Generation);
@@ -1022,7 +1022,7 @@ void TPersQueueReadBalancer::GetACL(const TActorContext& ctx) {
     if (WaitingForACL) // if there is request infly
         return;
     if (SchemeShardId == 0) {
-        ctx.Schedule(ACL_SUCCESS_RETRY_TIMEOUT, new TEvPersQueue::TEvUpdateACL());
+        ctx.Schedule(ACL_SUCCESS_RETRY_TIMEOUT, new NEvPersQueue::TEvUpdateACL());
     } else {
         WaitingForACL = true;
         RequestTabletIfNeeded(SchemeShardId, ctx);
@@ -1030,14 +1030,14 @@ void TPersQueueReadBalancer::GetACL(const TActorContext& ctx) {
 }
 
 
-void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx) {
-    auto* evResponse = new TEvPersQueue::TEvGetPartitionsLocationResponse();
+void TPersQueueReadBalancer::HandleOnInit(NEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx) {
+    auto* evResponse = new NEvPersQueue::TEvGetPartitionsLocationResponse();
     evResponse->Record.SetStatus(false);
     ctx.Send(ev->Sender, evResponse);
 }
 
-void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx) {
-    auto* evResponse = new TEvPersQueue::TEvGetPartitionsLocationResponse();
+void TPersQueueReadBalancer::Handle(NEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx) {
+    auto* evResponse = new NEvPersQueue::TEvGetPartitionsLocationResponse();
     const auto& request = ev->Get()->Record;
     auto addPartitionToResponse = [&](ui64 partitionId, ui64 tabletId) {
         auto* pResponse = evResponse->Record.AddLocations();
@@ -1126,7 +1126,7 @@ void TPersQueueReadBalancer::StartFindSubDomainPathId(bool delayFirstRequest) {
     }
 }
 
-void TPersQueueReadBalancer::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx) {
+void TPersQueueReadBalancer::Handle(NSchemeShard::NEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
 
     if (FindSubDomainPathIdActor == ev->Sender) {
@@ -1214,15 +1214,15 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPt
     Balancer->Handle(ev, ctx);
 }
 
-void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev, const TActorContext& ctx) {
+void TPersQueueReadBalancer::Handle(NEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev, const TActorContext& ctx) {
     Balancer->Handle(ev, ctx);
 }
 
-void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx) {
+void TPersQueueReadBalancer::Handle(NEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx) {
     Balancer->Handle(ev, ctx);
 }
 
-void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActorContext& ctx) {
+void TPersQueueReadBalancer::Handle(NEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActorContext& ctx) {
     Balancer->Handle(ev, ctx);
 }
 
@@ -1244,17 +1244,17 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& 
     Balancer->Handle(ev, ctx);
 }
 
-void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TActorContext&)
+void TPersQueueReadBalancer::HandleOnInit(NEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TActorContext&)
 {
     RegisterEvents.push_back(ev->Release().Release());
 }
 
-void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TActorContext& ctx)
+void TPersQueueReadBalancer::Handle(NEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TActorContext& ctx)
 {
     Balancer->Handle(ev, ctx);
 }
 
-void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TActorContext& ctx)
+void TPersQueueReadBalancer::Handle(NEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TActorContext& ctx)
 {
     Balancer->Handle(ev, ctx);
 }

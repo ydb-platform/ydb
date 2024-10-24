@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
                            {NLs::PartitionKeys({""})});
 
         TVector<THolder<IEventHandle>> suppressed;
-        auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvHive::TEvCreateTablet::EventType);
+        auto prevObserver = SetSuppressObserver(runtime, suppressed, NEvHive::TEvCreateTablet::EventType);
 
         TestSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
                             SourceTabletId: 72075186233409546
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
         while (true) {
             TVector<THolder<IEventHandle>> suppressed;
-            auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvGetTableStatsResult::EventType);
+            auto prevObserver = SetSuppressObserver(runtime, suppressed, NEvDataShard::TEvGetTableStatsResult::EventType);
 
             WaitForSuppressed(runtime, suppressed, 1, prevObserver);
             for (auto &msg : suppressed) {
@@ -188,7 +188,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
         {
             TVector<THolder<IEventHandle>> suppressed;
-            auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvPeriodicTableStats::EventType);
+            auto prevObserver = SetSuppressObserver(runtime, suppressed, NEvDataShard::TEvPeriodicTableStats::EventType);
 
             WaitForSuppressed(runtime, suppressed, 1000, prevObserver);
             for (auto &msg : suppressed) {
@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
         {
             TVector<THolder<IEventHandle>> suppressed;
-            auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvPeriodicTableStats::EventType);
+            auto prevObserver = SetSuppressObserver(runtime, suppressed, NEvDataShard::TEvPeriodicTableStats::EventType);
 
             WaitForSuppressed(runtime, suppressed, 5*1000, prevObserver);
             for (auto &msg : suppressed) {
@@ -243,7 +243,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
         ui64 txId = 100;
 
         TVector<THolder<IEventHandle>> suppressed;
-        auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvPeriodicTableStats::EventType);
+        auto prevObserver = SetSuppressObserver(runtime, suppressed, NEvDataShard::TEvPeriodicTableStats::EventType);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
                         Name: "Table"
@@ -287,7 +287,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
         ui64 txId = 100;
 
-        TBlockEvents<TEvDataShard::TEvPeriodicTableStats> statsBlocker(runtime);
+        TBlockEvents<NEvDataShard::TEvPeriodicTableStats> statsBlocker(runtime);
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
                 TableDescription {
@@ -361,7 +361,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
             }
 
             TVector<THolder<IEventHandle>> suppressed;
-            auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvPeriodicTableStats::EventType);
+            auto prevObserver = SetSuppressObserver(runtime, suppressed, NEvDataShard::TEvPeriodicTableStats::EventType);
 
             {
                 TInactiveZone inactive(activeZone);
@@ -541,10 +541,10 @@ struct TLoadAndSplitSimulator {
 
     void ChangeEvent(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-            case TEvDataShard::EvPeriodicTableStats:
+            case NEvDataShard::EvPeriodicTableStats:
                 // replace real stats with the simulated ones
                 {
-                    auto x = reinterpret_cast<TEvDataShard::TEvPeriodicTableStats::TPtr*>(&ev);
+                    auto x = reinterpret_cast<NEvDataShard::TEvPeriodicTableStats::TPtr*>(&ev);
                     auto& record = (*x).Get()->Get()->Record;
 
                     if (record.GetTableLocalId() != TableLocalPathId) {
@@ -563,10 +563,10 @@ struct TLoadAndSplitSimulator {
                     ++PeriodicTableStatsCount;
                 }
                 break;
-            case TEvDataShard::EvGetTableStats:
+            case NEvDataShard::EvGetTableStats:
                 // count requests for key access samples, as they indicate consideration of performing a split
                 {
-                    auto x = reinterpret_cast<TEvDataShard::TEvGetTableStats::TPtr*>(&ev);
+                    auto x = reinterpret_cast<NEvDataShard::TEvGetTableStats::TPtr*>(&ev);
                     auto& record = (*x).Get()->Get()->Record;
 
                     if (record.GetTableId() != TableLocalPathId) {
@@ -581,10 +581,10 @@ struct TLoadAndSplitSimulator {
                     }
                 }
                 break;
-            case TEvDataShard::EvGetTableStatsResult:
+            case NEvDataShard::EvGetTableStatsResult:
                 // replace real key access samples with the simulated ones
                 {
-                    auto x = reinterpret_cast<TEvDataShard::TEvGetTableStatsResult::TPtr*>(&ev);
+                    auto x = reinterpret_cast<NEvDataShard::TEvGetTableStatsResult::TPtr*>(&ev);
                     auto& record = (*x).Get()->Get()->Record;
 
                     if (record.GetTableLocalId() != TableLocalPathId) {
@@ -609,10 +609,10 @@ struct TLoadAndSplitSimulator {
                         << Endl;
                 }
                 break;
-            case TEvDataShard::EvSplit:
+            case NEvDataShard::EvSplit:
                 // save key ranges of the new datashards
                 {
-                    auto x = reinterpret_cast<TEvDataShard::TEvSplit::TPtr*>(&ev);
+                    auto x = reinterpret_cast<NEvDataShard::TEvSplit::TPtr*>(&ev);
                     auto& record = (*x).Get()->Get()->Record;
 
                     // remove info for the source shard(s) that will be splitted
@@ -639,10 +639,10 @@ struct TLoadAndSplitSimulator {
                     ++SplitReqCount;
                 }
                 break;
-            case TEvDataShard::EvSplitAck:
+            case NEvDataShard::EvSplitAck:
                 // count splits
                 {
-                    auto x = reinterpret_cast<TEvDataShard::TEvSplitAck::TPtr*>(&ev);
+                    auto x = reinterpret_cast<NEvDataShard::TEvSplitAck::TPtr*>(&ev);
                     auto& record = (*x).Get()->Get()->Record;
 
                     auto now = TInstant::Now();

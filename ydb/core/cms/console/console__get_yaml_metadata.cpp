@@ -10,7 +10,7 @@ using namespace NKikimrConsole;
 class TConfigsManager::TTxGetYamlMetadata : public TTransactionBase<TConfigsManager> {
 public:
     TTxGetYamlMetadata(TConfigsManager *self,
-                       TEvConsole::TEvGetAllMetadataRequest::TPtr &ev)
+                       NEvConsole::TEvGetAllMetadataRequest::TPtr &ev)
         : TBase(self)
         , Request(std::move(ev))
     {
@@ -18,7 +18,7 @@ public:
 
     bool Execute(TTransactionContext &, const TActorContext &) override
     {
-        Response = MakeHolder<TEvConsole::TEvGetAllMetadataResponse>();
+        Response = MakeHolder<NEvConsole::TEvGetAllMetadataResponse>();
 
         if (Self->YamlConfig) {
             auto doc = NFyaml::TDocument::Parse(Self->YamlConfig);
@@ -52,11 +52,11 @@ public:
     }
 
 private:
-    TEvConsole::TEvGetAllMetadataRequest::TPtr Request;
-    THolder<TEvConsole::TEvGetAllMetadataResponse> Response;
+    NEvConsole::TEvGetAllMetadataRequest::TPtr Request;
+    THolder<NEvConsole::TEvGetAllMetadataResponse> Response;
 };
 
-ITransaction *TConfigsManager::CreateTxGetYamlMetadata(TEvConsole::TEvGetAllMetadataRequest::TPtr &ev)
+ITransaction *TConfigsManager::CreateTxGetYamlMetadata(NEvConsole::TEvGetAllMetadataRequest::TPtr &ev)
 {
     return new TTxGetYamlMetadata(this, ev);
 }

@@ -598,11 +598,11 @@ public:
         return "no error";
     }
 
-    static bool IsSuccess(const std::unique_ptr<TEvSchemeShard::TEvDescribeSchemeResult>& ev) {
+    static bool IsSuccess(const std::unique_ptr<NEvSchemeShard::TEvDescribeSchemeResult>& ev) {
         return ev->GetRecord().status() == NKikimrScheme::StatusSuccess;
     }
 
-    static TString GetError(const std::unique_ptr<TEvSchemeShard::TEvDescribeSchemeResult>& ev) {
+    static TString GetError(const std::unique_ptr<NEvSchemeShard::TEvDescribeSchemeResult>& ev) {
         return NKikimrScheme::EStatus_Name(ev->GetRecord().status());
     }
 
@@ -630,13 +630,13 @@ public:
     TTabletId BsControllerId;
     TTabletId RootSchemeShardId;
     TTabletId RootHiveId;
-    THashMap<TString, TRequestResponse<TEvSchemeShard::TEvDescribeSchemeResult>> DescribeByPath;
+    THashMap<TString, TRequestResponse<NEvSchemeShard::TEvDescribeSchemeResult>> DescribeByPath;
     THashMap<TString, THashSet<TString>> PathsByPoolName;
     THashMap<TString, THolder<NTenantSlotBroker::TEvTenantSlotBroker::TEvTenantState>> TenantStateByPath;
-    THashMap<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStats;
-    THashMap<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveInfo>> HiveInfo;
+    THashMap<TTabletId, TRequestResponse<NEvHive::TEvResponseHiveNodeStats>> HiveNodeStats;
+    THashMap<TTabletId, TRequestResponse<NEvHive::TEvResponseHiveInfo>> HiveInfo;
     ui64 HiveNodeStatsToGo = 0;
-    std::optional<TRequestResponse<TEvConsole::TEvListTenantsResponse>> ListTenants;
+    std::optional<TRequestResponse<NEvConsole::TEvListTenantsResponse>> ListTenants;
     std::optional<TRequestResponse<TEvInterconnect::TEvNodesInfo>> NodesInfo;
     THashMap<TNodeId, const TEvInterconnect::TNodeInfo*> MergedNodeInfo;
     std::optional<TRequestResponse<TEvSysView::TEvGetStoragePoolsResponse>> StoragePools;
@@ -861,10 +861,10 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
-            hFunc(TEvConsole::TEvListTenantsResponse, Handle);
-            hFunc(TEvHive::TEvResponseHiveNodeStats, Handle);
-            hFunc(TEvHive::TEvResponseHiveInfo, Handle);
-            hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            hFunc(NEvConsole::TEvListTenantsResponse, Handle);
+            hFunc(NEvHive::TEvResponseHiveNodeStats, Handle);
+            hFunc(NEvHive::TEvResponseHiveInfo, Handle);
+            hFunc(NEvSchemeShard::TEvDescribeSchemeResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle)
             hFunc(TEvSysView::TEvGetStoragePoolsResponse, Handle);
             hFunc(TEvSysView::TEvGetGroupsResponse, Handle);
@@ -935,14 +935,14 @@ public:
 
     std::unordered_map<TTabletId, std::vector<TString>> TabletToDescribePath;
 
-    [[nodiscard]] TRequestResponse<TEvSchemeShard::TEvDescribeSchemeResult> RequestDescribe(TTabletId schemeShardId, const TString& path) {
-        THolder<TEvSchemeShard::TEvDescribeScheme> request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>();
+    [[nodiscard]] TRequestResponse<NEvSchemeShard::TEvDescribeSchemeResult> RequestDescribe(TTabletId schemeShardId, const TString& path) {
+        THolder<NEvSchemeShard::TEvDescribeScheme> request = MakeHolder<NEvSchemeShard::TEvDescribeScheme>();
         NKikimrSchemeOp::TDescribePath& record = request->Record;
         record.SetPath(path);
         record.MutableOptions()->SetReturnPartitioningInfo(false);
         record.MutableOptions()->SetReturnPartitionConfig(false);
         record.MutableOptions()->SetReturnChildren(false);
-        auto response = RequestTabletPipe<TEvSchemeShard::TEvDescribeSchemeResult>(schemeShardId, request.Release());
+        auto response = RequestTabletPipe<NEvSchemeShard::TEvDescribeSchemeResult>(schemeShardId, request.Release());
         if (response.Span) {
             response.Span.Attribute("path", path);
         }
@@ -950,20 +950,20 @@ public:
         return response;
     }
 
-    [[nodiscard]] TRequestResponse<TEvHive::TEvResponseHiveInfo> RequestHiveInfo(TTabletId hiveId) {
-        THolder<TEvHive::TEvRequestHiveInfo> request = MakeHolder<TEvHive::TEvRequestHiveInfo>();
+    [[nodiscard]] TRequestResponse<NEvHive::TEvResponseHiveInfo> RequestHiveInfo(TTabletId hiveId) {
+        THolder<NEvHive::TEvRequestHiveInfo> request = MakeHolder<NEvHive::TEvRequestHiveInfo>();
         request->Record.SetReturnFollowers(true);
-        return RequestTabletPipe<TEvHive::TEvResponseHiveInfo>(hiveId, request.Release());
+        return RequestTabletPipe<NEvHive::TEvResponseHiveInfo>(hiveId, request.Release());
     }
 
-    [[nodiscard]] TRequestResponse<TEvHive::TEvResponseHiveNodeStats> RequestHiveNodeStats(TTabletId hiveId) {
-        THolder<TEvHive::TEvRequestHiveNodeStats> request = MakeHolder<TEvHive::TEvRequestHiveNodeStats>();
-        return RequestTabletPipe<TEvHive::TEvResponseHiveNodeStats>(hiveId, request.Release());
+    [[nodiscard]] TRequestResponse<NEvHive::TEvResponseHiveNodeStats> RequestHiveNodeStats(TTabletId hiveId) {
+        THolder<NEvHive::TEvRequestHiveNodeStats> request = MakeHolder<NEvHive::TEvRequestHiveNodeStats>();
+        return RequestTabletPipe<NEvHive::TEvResponseHiveNodeStats>(hiveId, request.Release());
     }
 
-    [[nodiscard]] TRequestResponse<TEvConsole::TEvListTenantsResponse> RequestListTenants() {
-        THolder<TEvConsole::TEvListTenantsRequest> request = MakeHolder<TEvConsole::TEvListTenantsRequest>();
-        return RequestTabletPipe<TEvConsole::TEvListTenantsResponse>(ConsoleId, request.Release());
+    [[nodiscard]] TRequestResponse<NEvConsole::TEvListTenantsResponse> RequestListTenants() {
+        THolder<NEvConsole::TEvListTenantsRequest> request = MakeHolder<NEvConsole::TEvListTenantsRequest>();
+        return RequestTabletPipe<NEvConsole::TEvListTenantsResponse>(ConsoleId, request.Release());
     }
 
     void RequestBsController() {
@@ -1336,7 +1336,7 @@ public:
         RequestDone("TEvGetPDisksRequest");
     }
 
-    void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+    void Handle(NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         TabletRequests.CompleteRequest(ev->Cookie);
         TString path = ev->Get()->GetRecord().path();
         auto& response = DescribeByPath[path];
@@ -1426,7 +1426,7 @@ public:
             || domainInfo->ServerlessComputeResourcesMode == NKikimrSubDomains::EServerlessComputeResourcesModeExclusive;
     }
 
-    void Handle(TEvHive::TEvResponseHiveNodeStats::TPtr& ev) {
+    void Handle(NEvHive::TEvResponseHiveNodeStats::TPtr& ev) {
         TTabletId hiveId = TabletRequests.CompleteRequest(ev->Cookie);
         TInstant aliveBarrier = TInstant::Now() - TDuration::Minutes(5);
         {
@@ -1466,13 +1466,13 @@ public:
         RequestDone("TEvResponseHiveNodeStats");
     }
 
-    void Handle(TEvHive::TEvResponseHiveInfo::TPtr& ev) {
+    void Handle(NEvHive::TEvResponseHiveInfo::TPtr& ev) {
         TTabletId hiveId = TabletRequests.CompleteRequest(ev->Cookie);
         HiveInfo[hiveId].Set(std::move(ev));
         RequestDone("TEvResponseHiveInfo");
     }
 
-    void Handle(TEvConsole::TEvListTenantsResponse::TPtr& ev) {
+    void Handle(NEvConsole::TEvListTenantsResponse::TPtr& ev) {
         TabletRequests.CompleteRequest(ev->Cookie);
         ListTenants->Set(std::move(ev));
         RequestSchemeCacheNavigate(DomainPath);

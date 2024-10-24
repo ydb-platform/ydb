@@ -121,7 +121,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             valueCells.GetCells().size() != valueCols.size())
         {
             SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder() << "Cell count doesn't match row scheme"
-                    << ": got keys " << keyCells.GetCells().size() << ", values " << valueCells.GetCells().size() 
+                    << ": got keys " << keyCells.GetCells().size() << ", values " << valueCells.GetCells().size()
                     << "; expected keys " << tableInfo.KeyColumnTypes.size() << ", values " << valueCols.size());
             return true;
         }
@@ -342,7 +342,7 @@ void TCommonUploadOps<TEvRequest, TEvResponse>::SetError(ui32 status, const TStr
     Result->Record.SetErrorDescription(descr);
 }
 
-template class TCommonUploadOps<TEvDataShard::TEvUploadRowsRequest, TEvDataShard::TEvUploadRowsResponse>;
-template class TCommonUploadOps<TEvDataShard::TEvS3UploadRowsRequest, TEvDataShard::TEvS3UploadRowsResponse>;
+template class TCommonUploadOps<NEvDataShard::TEvUploadRowsRequest, NEvDataShard::TEvUploadRowsResponse>;
+template class TCommonUploadOps<NEvDataShard::TEvS3UploadRowsRequest, NEvDataShard::TEvS3UploadRowsResponse>;
 
 }

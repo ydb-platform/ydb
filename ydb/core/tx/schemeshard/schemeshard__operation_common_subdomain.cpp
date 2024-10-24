@@ -13,10 +13,10 @@ namespace NKikimr::NSchemeShard::NSubDomainState {
 TConfigureParts::TConfigureParts(TOperationId id)
     : OperationId(id)
 {
-    IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
+    IgnoreMessages(DebugHint(), {NEvHive::TEvCreateTabletReply::EventType});
 }
 
-bool TConfigureParts::HandleReply(TEvSchemeShard::TEvInitTenantSchemeShardResult::TPtr& ev, TOperationContext& context) {
+bool TConfigureParts::HandleReply(NEvSchemeShard::TEvInitTenantSchemeShardResult::TPtr& ev, TOperationContext& context) {
     TTabletId ssId = context.SS->SelfTabletId();
     LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 DebugHint()
@@ -74,7 +74,7 @@ bool TConfigureParts::HandleReply(TEvSchemeShard::TEvInitTenantSchemeShardResult
     return false;
 }
 
-bool TConfigureParts::HandleReply(TEvSubDomain::TEvConfigureStatus::TPtr& ev, TOperationContext& context) {
+bool TConfigureParts::HandleReply(NEvSubDomain::TEvConfigureStatus::TPtr& ev, TOperationContext& context) {
     TTabletId ssId = context.SS->SelfTabletId();
     LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 DebugHint()
@@ -186,7 +186,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                 " opId: " << OperationId <<
                 " schemeshard: " << ssId);
             shard.Operation = TTxState::ConfigureParts;
-            auto event = new TEvSubDomain::TEvConfigure(processing);
+            auto event = new NEvSubDomain::TEvConfigure(processing);
             context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
             break;
         }
@@ -196,7 +196,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                 " opId: " << OperationId <<
                 " schemeshard: " << ssId);
             shard.Operation = TTxState::ConfigureParts;
-            auto event = new TEvHive::TEvConfigureHive(TSubDomainKey(pathId.OwnerId, pathId.LocalPathId));
+            auto event = new NEvHive::TEvConfigureHive(TSubDomainKey(pathId.OwnerId, pathId.LocalPathId));
             context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
             break;
         }
@@ -221,7 +221,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
             break;
         }
         case ETabletType::SchemeShard: {
-            auto event = new TEvSchemeShard::TEvInitTenantSchemeShard(ui64(ssId),
+            auto event = new NEvSchemeShard::TEvInitTenantSchemeShard(ui64(ssId),
                                                                             pathId.LocalPathId, path.PathString(),
                                                                             path.Base()->Owner, path.GetEffectiveACL(), path.GetEffectiveACLVersion(),
                                                                             processing, storagePools,
@@ -256,7 +256,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                 " opId: " << OperationId <<
                 " schemeshard: " << ssId);
             shard.Operation = TTxState::ConfigureParts;
-            auto event = new TEvSubDomain::TEvConfigure(processing);
+            auto event = new NEvSubDomain::TEvConfigure(processing);
             context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
             break;
         }
@@ -266,7 +266,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                 " opId: " << OperationId <<
                 " schemeshard: " << ssId);
             shard.Operation = TTxState::ConfigureParts;
-            auto event = new TEvSubDomain::TEvConfigure(processing);
+            auto event = new NEvSubDomain::TEvConfigure(processing);
             context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
             break;
         }
@@ -286,13 +286,13 @@ TPropose::TPropose(TOperationId id)
     : OperationId(id)
 {
     IgnoreMessages(DebugHint(), {
-        TEvHive::TEvCreateTabletReply::EventType,
-        TEvSubDomain::TEvConfigureStatus::EventType,
-        TEvPrivate::TEvCompleteBarrier::EventType,
+        NEvHive::TEvCreateTabletReply::EventType,
+        NEvSubDomain::TEvConfigureStatus::EventType,
+        NEvPrivate::TEvCompleteBarrier::EventType,
     });
 }
 
-bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) {
+bool TPropose::HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) {
     TStepId step = TStepId(ev->Get()->StepId);
     TTabletId ssId = context.SS->SelfTabletId();
 

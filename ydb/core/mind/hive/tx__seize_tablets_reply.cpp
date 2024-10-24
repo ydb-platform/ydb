@@ -5,11 +5,11 @@ namespace NKikimr {
 namespace NHive {
 
 class TTxSeizeTabletsReply : public TTransactionBase<THive> {
-    THolder<TEvHive::TEvSeizeTabletsReply::THandle> Request;
+    THolder<NEvHive::TEvSeizeTabletsReply::THandle> Request;
     TVector<TTabletId> TabletIds;
 
 public:
-    TTxSeizeTabletsReply(THolder<TEvHive::TEvSeizeTabletsReply::THandle> event, THive *hive)
+    TTxSeizeTabletsReply(THolder<NEvHive::TEvSeizeTabletsReply::THandle> event, THive *hive)
         : TBase(hive)
         , Request(std::move(event))
     {}
@@ -160,7 +160,7 @@ public:
     void Complete(const TActorContext& ctx) override {
         BLOG_D("THive::TTxSeizeTabletsReply::Complete");
         if (!TabletIds.empty()) {
-            THolder<TEvHive::TEvReleaseTablets> request(new TEvHive::TEvReleaseTablets());
+            THolder<NEvHive::TEvReleaseTablets> request(new NEvHive::TEvReleaseTablets());
             request->Record.SetNewOwnerID(Self->TabletID());
             for (TTabletId tabletId : TabletIds) {
                 request->Record.AddTabletIDs(tabletId);
@@ -173,7 +173,7 @@ public:
     }
 };
 
-ITransaction* THive::CreateSeizeTabletsReply(TEvHive::TEvSeizeTabletsReply::TPtr event) {
+ITransaction* THive::CreateSeizeTabletsReply(NEvHive::TEvSeizeTabletsReply::TPtr event) {
     return new TTxSeizeTabletsReply(THolder(std::move(event.Release())), this);
 }
 

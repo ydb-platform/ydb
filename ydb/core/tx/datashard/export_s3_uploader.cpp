@@ -312,7 +312,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
         } else {
             if (!UploadId) {
-                this->Send(DataShard, new TEvDataShard::TEvGetS3Upload(this->SelfId(), TxId));
+                this->Send(DataShard, new NEvDataShard::TEvGetS3Upload(this->SelfId(), TxId));
                 return;
             }
 
@@ -338,10 +338,10 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         Finish();
     }
 
-    void Handle(TEvDataShard::TEvS3Upload::TPtr& ev) {
+    void Handle(NEvDataShard::TEvS3Upload::TPtr& ev) {
         auto& upload = ev->Get()->Upload;
 
-        EXPORT_LOG_D("Handle TEvDataShard::TEvS3Upload"
+        EXPORT_LOG_D("Handle NEvDataShard::TEvS3Upload"
             << ": self# " << this->SelfId()
             << ", upload# " << upload);
 
@@ -401,7 +401,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             return;
         }
 
-        this->Send(DataShard, new TEvDataShard::TEvStoreS3UploadId(this->SelfId(), TxId, result.GetResult().GetUploadId().c_str()));
+        this->Send(DataShard, new NEvDataShard::TEvStoreS3UploadId(this->SelfId(), TxId, result.GetResult().GetUploadId().c_str()));
     }
 
     void Handle(TEvExternalStorage::TEvUploadPartResponse::TPtr& ev) {
@@ -536,10 +536,10 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             PassAway();
         } else {
             if (success) {
-                this->Send(DataShard, new TEvDataShard::TEvChangeS3UploadStatus(this->SelfId(), TxId,
+                this->Send(DataShard, new NEvDataShard::TEvChangeS3UploadStatus(this->SelfId(), TxId,
                     TS3Upload::EStatus::Complete, std::move(Parts)));
             } else {
-                this->Send(DataShard, new TEvDataShard::TEvChangeS3UploadStatus(this->SelfId(), TxId,
+                this->Send(DataShard, new NEvDataShard::TEvChangeS3UploadStatus(this->SelfId(), TxId,
                     TS3Upload::EStatus::Abort, *Error));
             }
         }
@@ -650,7 +650,7 @@ public:
     STATEFN(StateUploadData) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBuffer, Handle);
-            hFunc(TEvDataShard::TEvS3Upload, Handle);
+            hFunc(NEvDataShard::TEvS3Upload, Handle);
 
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleData);
             hFunc(TEvExternalStorage::TEvCreateMultipartUploadResponse, Handle);

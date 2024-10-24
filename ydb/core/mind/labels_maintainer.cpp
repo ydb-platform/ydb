@@ -32,9 +32,9 @@ public:
     STFUNC(StateWork) {
         TRACE_EVENT(NKikimrServices::LABELS_MAINTAINER);
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvConsole::TEvConfigNotificationRequest, Handle);
+            HFunc(NEvConsole::TEvConfigNotificationRequest, Handle);
             HFunc(TEvTenantPool::TEvTenantPoolStatus, Handle);
-            IgnoreFunc(TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            IgnoreFunc(NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
 
         default:
             Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
@@ -59,7 +59,7 @@ private:
     {
         auto kind = (ui32)NKikimrConsole::TConfigItem::MonitoringConfigItem;
         ctx.Send(MakeConfigsDispatcherID(ctx.SelfID.NodeId()),
-                 new TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(kind));
+                 new NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(kind));
     }
 
     /**
@@ -338,7 +338,7 @@ private:
         return ss.Str();
     }
 
-    void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
+    void Handle(NEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                 const TActorContext &ctx)
     {
         auto &rec = ev->Get()->Record;
@@ -348,7 +348,7 @@ private:
 
         ApplyConfig(rec.GetConfig().GetMonitoringConfig(), ctx);
 
-        auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
+        auto resp = MakeHolder<NEvConsole::TEvConfigNotificationResponse>(rec);
 
         LOG_TRACE_S(ctx, NKikimrServices::LABELS_MAINTAINER,
                     "Send TEvConfigNotificationResponse: " << resp->Record.ShortDebugString());

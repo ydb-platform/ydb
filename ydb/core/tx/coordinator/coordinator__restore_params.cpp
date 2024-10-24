@@ -149,7 +149,7 @@ void TTxCoordinator::Handle(TEvPrivate::TEvRestoredProcessingParams::TPtr& ev, c
             "Coordinator# " << TabletID()
             << " applying discovered processing params version " << params.GetVersion());
     RestoreProcessingParamsActor = { };
-    DoConfiguration(TEvSubDomain::TEvConfigure(std::move(params)), ctx);
+    DoConfiguration(NEvSubDomain::TEvConfigure(std::move(params)), ctx);
 }
 
 } // namespace NKikimr::NFlatTxCoordinator

@@ -8,14 +8,14 @@
 namespace NKikimr::NViewer {
 
 using namespace NActors;
-namespace TEvSchemeShard = NSchemeShard::TEvSchemeShard;
+namespace NEvSchemeShard = NSchemeShard::NEvSchemeShard;
 using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
 class TJsonDescribe : public TViewerPipeClient {
     using TThis = TJsonDescribe;
     using TBase = TViewerPipeClient;
     using TBase::ReplyAndPassAway;
-    TAutoPtr<TEvSchemeShard::TEvDescribeSchemeResult> SchemeShardResult;
+    TAutoPtr<NEvSchemeShard::TEvDescribeSchemeResult> SchemeShardResult;
     TAutoPtr<TEvTxProxySchemeCache::TEvNavigateKeySetResult> CacheResult;
     TAutoPtr<NKikimrViewer::TEvDescribeSchemeInfo> DescribeResult;
     TJsonSettings JsonSettings;
@@ -56,7 +56,7 @@ public:
         InitConfig(params);
 
         if (params.Has("schemeshard_id")) {
-            THolder<TEvSchemeShard::TEvDescribeScheme> request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>();
+            THolder<NEvSchemeShard::TEvDescribeScheme> request = MakeHolder<NEvSchemeShard::TEvDescribeScheme>();
             FillParams(&request->Record, params);
             ui64 schemeShardId = FromStringWithDefault<ui64>(params.Get("schemeshard_id"));
             SendRequestToPipe(ConnectTabletPipe(schemeShardId), request.Release());
@@ -84,14 +84,14 @@ public:
 
     STATEFN(StateRequestedDescribe) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            hFunc(NEvSchemeShard::TEvDescribeSchemeResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, TBase::Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
-    void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+    void Handle(NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         SchemeShardResult = ev->Release();
         if (SchemeShardResult->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
             ReplyAndPassAway();

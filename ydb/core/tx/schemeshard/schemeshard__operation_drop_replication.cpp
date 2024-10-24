@@ -53,7 +53,7 @@ public:
             Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.Idx));
             const auto tabletId = context.SS->ShardInfos.at(shard.Idx).TabletID;
 
-            auto ev = MakeHolder<NReplication::TEvController::TEvDropReplication>();
+            auto ev = MakeHolder<NReplication::NEvController::TEvDropReplication>();
             PathIdFromPathId(pathId, ev->Record.MutablePathId());
             ev->Record.MutableOperationId()->SetTxId(ui64(OperationId.GetTxId()));
             ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
@@ -70,7 +70,7 @@ public:
         return false;
     }
 
-    bool HandleReply(NReplication::TEvController::TEvDropReplicationResult::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NReplication::NEvController::TEvDropReplicationResult::TPtr& ev, TOperationContext& context) override {
         LOG_I(DebugHint() << "HandleReply " << ev->Get()->ToString());
 
         const auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
@@ -122,7 +122,7 @@ public:
         : ::NKikimr::NSchemeShard::TDeleteParts(id)
     {
         IgnoreMessages(DebugHint(), {
-            NReplication::TEvController::TEvDropReplicationResult::EventType,
+            NReplication::NEvController::TEvDropReplicationResult::EventType,
         });
     }
 };
@@ -139,7 +139,7 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), {
-            NReplication::TEvController::TEvDropReplicationResult::EventType,
+            NReplication::NEvController::TEvDropReplicationResult::EventType,
         });
     }
 
@@ -154,7 +154,7 @@ public:
         return false;
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
         LOG_I(DebugHint() << "HandleReply TEvOperationPlan"

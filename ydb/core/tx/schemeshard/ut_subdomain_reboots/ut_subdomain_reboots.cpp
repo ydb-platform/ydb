@@ -816,7 +816,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                 TestDropTable(runtime, ++t.TxId, "/MyRoot/USER_0", "Table1");
 
                 TDispatchOptions opts;
-                opts.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvDataShard::EvSchemaChangedResult, 2));
+                opts.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(NEvDataShard::EvSchemaChangedResult, 2));
                 runtime.DispatchEvents(opts);
 
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);

@@ -26,7 +26,7 @@
 
 namespace NKikimr::NCms {
 
-namespace TEvConsole = NConsole::TEvConsole;
+namespace NEvConsole = NConsole::NEvConsole;
 using NTabletFlatExecutor::TTabletExecutedFlat;
 using NTabletFlatExecutor::ITransaction;
 using NTabletFlatExecutor::TTransactionBase;
@@ -147,7 +147,7 @@ private:
                                            const TMaybe<TString> &maintenanceTaskId = {});
     ITransaction *CreateTxStoreWalleTask(const TTaskInfo &task, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp);
     ITransaction *CreateTxUpdateConfig(TEvCms::TEvSetConfigRequest::TPtr &ev);
-    ITransaction *CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
+    ITransaction *CreateTxUpdateConfig(NEvConsole::TEvConfigNotificationRequest::TPtr &ev);
     ITransaction *CreateTxUpdateDowntimes();
 
     static void AuditLog(const TActorContext &ctx, const TString &message) {
@@ -211,8 +211,8 @@ private:
                                                                             TEvCms::TEvManageNotificationResponse>));
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
-            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
-            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse);
+            IgnoreFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            IgnoreFunc(NConsole::NEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
@@ -262,14 +262,14 @@ private:
             HFunc(TEvCms::TEvGetLogTailRequest, Handle);
             HFunc(TEvCms::TEvGetSentinelStateRequest, Handle);
             FFunc(TEvCms::EvGetClusterInfoRequest, EnqueueRequest);
-            HFunc(TEvConsole::TEvConfigNotificationRequest, Handle);
-            HFunc(TEvConsole::TEvReplaceConfigSubscriptionsResponse, Handle);
+            HFunc(NEvConsole::TEvConfigNotificationRequest, Handle);
+            HFunc(NEvConsole::TEvReplaceConfigSubscriptionsResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
-            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
-            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse);
+            IgnoreFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            IgnoreFunc(NConsole::NEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
@@ -430,8 +430,8 @@ private:
     void Handle(TEvCms::TEvGetLogTailRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvGetSentinelStateRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvGetClusterInfoRequest::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
 

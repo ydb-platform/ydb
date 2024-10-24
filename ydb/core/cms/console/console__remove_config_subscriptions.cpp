@@ -4,7 +4,7 @@ namespace NKikimr::NConsole {
 
 class TConfigsManager::TTxRemoveConfigSubscriptions : public TTransactionBase<TConfigsManager> {
 public:
-    TTxRemoveConfigSubscriptions(TEvConsole::TEvRemoveConfigSubscriptionsRequest::TPtr ev,
+    TTxRemoveConfigSubscriptions(NEvConsole::TEvRemoveConfigSubscriptionsRequest::TPtr ev,
                                  TConfigsManager *self)
         : TBase(self)
         , Request(std::move(ev))
@@ -20,7 +20,7 @@ public:
 
         Y_ABORT_UNLESS(Self->PendingSubscriptionModifications.IsEmpty());
 
-        Response = new TEvConsole::TEvRemoveConfigSubscriptionsResponse;
+        Response = new NEvConsole::TEvRemoveConfigSubscriptionsResponse;
         Response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
         TSubscriberId subscriber(rec.GetSubscriber());
@@ -59,11 +59,11 @@ public:
     }
 
 private:
-    TEvConsole::TEvRemoveConfigSubscriptionsRequest::TPtr Request;
-    TAutoPtr<TEvConsole::TEvRemoveConfigSubscriptionsResponse> Response;
+    NEvConsole::TEvRemoveConfigSubscriptionsRequest::TPtr Request;
+    TAutoPtr<NEvConsole::TEvRemoveConfigSubscriptionsResponse> Response;
 };
 
-ITransaction *TConfigsManager::CreateTxRemoveConfigSubscriptions(TEvConsole::TEvRemoveConfigSubscriptionsRequest::TPtr &ev)
+ITransaction *TConfigsManager::CreateTxRemoveConfigSubscriptions(NEvConsole::TEvRemoveConfigSubscriptionsRequest::TPtr &ev)
 {
     return new TTxRemoveConfigSubscriptions(ev, this);
 }

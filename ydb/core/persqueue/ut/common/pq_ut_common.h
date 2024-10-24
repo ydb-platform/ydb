@@ -575,6 +575,6 @@ void CmdWrite(
     bool treatBadOffsetAsError = true,
     bool disableDeduplication = false);
 
-THolder<TEvPersQueue::TEvPeriodicTopicStats> GetReadBalancerPeriodicTopicStats(TTestActorRuntime& runtime, ui64 balancerId);
+THolder<NEvPersQueue::TEvPeriodicTopicStats> GetReadBalancerPeriodicTopicStats(TTestActorRuntime& runtime, ui64 balancerId);
 
 } // namespace NKikimr::NPQ

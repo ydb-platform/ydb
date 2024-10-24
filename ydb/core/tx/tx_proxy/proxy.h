@@ -36,7 +36,7 @@ namespace NTxProxy {
 struct TEvTxUserProxy {
     enum EEv {
         EvProposeTransaction = EventSpaceBegin(TKikimrEvents::ES_TX_USERPROXY), // reply would be with generic TEvTxProxy::TEvProposeTransactionStatus
-        EvNavigate, // --/-- TEvSchemeShard::TEvNavigateSchemePartResult
+        EvNavigate, // --/-- NEvSchemeShard::TEvNavigateSchemePartResult
 
         EvProposeTransactionStatus = EvProposeTransaction + 1 * 512,
         EvNavigateStatus,

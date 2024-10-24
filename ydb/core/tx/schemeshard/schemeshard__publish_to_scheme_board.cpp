@@ -10,7 +10,7 @@ using namespace NTabletFlatExecutor;
 
 struct TSchemeShard::TTxPublishToSchemeBoard: public TSchemeShard::TRwTxBase {
     THashMap<TTxId, TDeque<TPathId>> Paths;
-    THashMap<TTxId, TVector<THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder>>> Descriptions;
+    THashMap<TTxId, TVector<THolder<NEvSchemeShard::TEvDescribeSchemeResultBuilder>>> Descriptions;
 
     TTxPublishToSchemeBoard(TSelf *self, THashMap<TTxId, TDeque<TPathId>>&& paths)
         : TRwTxBase(self)
@@ -129,8 +129,8 @@ struct TSchemeShard::TTxAckPublishToSchemeBoard: public TTransactionBase<TScheme
                                << ", at schemeshard: " << Self->TabletID()
                                << ", txId: " << txId);
 
-                THolder<TEvPrivate::TEvCompletePublication> msg = MakeHolder<TEvPrivate::TEvCompletePublication>(opId, pathId, version);
-                TEvPrivate::TEvCompletePublication::TPtr personalEv = (TEventHandle<TEvPrivate::TEvCompletePublication>*) new IEventHandle(
+                THolder<NEvPrivate::TEvCompletePublication> msg = MakeHolder<NEvPrivate::TEvCompletePublication>(opId, pathId, version);
+                NEvPrivate::TEvCompletePublication::TPtr personalEv = (TEventHandle<NEvPrivate::TEvCompletePublication>*) new IEventHandle(
                     Self->SelfId(), Self->SelfId(), msg.Release());
 
                 TMemoryChanges memChanges;
@@ -211,7 +211,7 @@ private:
                            << ", at schemeshard: " << Self->TabletID()
                            << ", to actorId: " << subscriber);
 
-            SideEffects.Send(subscriber, new TEvSchemeShard::TEvNotifyTxCompletionResult(ui64(txId)), ui64(txId));
+            SideEffects.Send(subscriber, new NEvSchemeShard::TEvNotifyTxCompletionResult(ui64(txId)), ui64(txId));
         }
     }
 

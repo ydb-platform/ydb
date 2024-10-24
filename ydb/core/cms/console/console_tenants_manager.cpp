@@ -718,7 +718,7 @@ public:
         if (!Pipe)
             OpenPipe(ctx);
 
-        auto request = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>();
+        auto request = MakeHolder<NEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(TxId);
 
         BLOG_TRACE("TSubdomainManip(" << Tenant->Path << ") send notification request: " << request->ToString());
@@ -732,7 +732,7 @@ public:
         if (!Pipe)
             OpenPipe(ctx);
 
-        auto request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>(Tenant->Path);
+        auto request = MakeHolder<NEvSchemeShard::TEvDescribeScheme>(Tenant->Path);
         NTabletPipe::SendData(ctx, Pipe, request.Release());
     }
 
@@ -755,12 +755,12 @@ public:
         }
     }
 
-    void Handle(TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr &ev, const TActorContext&) {
+    void Handle(NEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr &ev, const TActorContext&) {
         BLOG_D("TSubdomainManip(" << Tenant->Path << ") got TEvNotifyTxCompletionRegistered: "
                     << ev->Get()->Record.ShortDebugString());
     }
 
-    void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr &ev, const TActorContext& ctx) {
+    void Handle(NEvSchemeShard::TEvNotifyTxCompletionResult::TPtr &ev, const TActorContext& ctx) {
         BLOG_D("TSubdomainManip(" << Tenant->Path << ") got TEvNotifyTxCompletionResult: "
                     << ev->Get()->Record.ShortDebugString());
 
@@ -829,7 +829,7 @@ public:
         }
     }
 
-    void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr ev, const TActorContext &ctx)
+    void Handle(NEvSchemeShard::TEvDescribeSchemeResult::TPtr ev, const TActorContext &ctx)
     {
         const auto &rec = ev->Get()->GetRecord();
 
@@ -893,9 +893,9 @@ public:
 
     STFUNC(StateSubdomain) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
-            HFunc(TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
-            HFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
+            HFunc(NEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFunc(NEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
+            HFunc(NEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, HandleSubdomain);
@@ -909,7 +909,7 @@ public:
 
     STFUNC(GetSubdomainKey) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFunc(NEvSchemeShard::TEvDescribeSchemeResult, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
 
@@ -2137,7 +2137,7 @@ void TTenantsManager::SendTenantNotifications(TTenant::TPtr tenant,
                                               const TActorContext &ctx)
 {
     for (auto &subscriber : tenant->Subscribers) {
-        auto notification = MakeHolder<TEvConsole::TEvOperationCompletionNotification>();
+        auto notification = MakeHolder<NEvConsole::TEvOperationCompletionNotification>();
         auto &operation = *notification->Record.MutableResponse()->mutable_operation();
         Ydb::TOperationId id = MakeOperationId(tenant, action);
         operation.set_id(ProtoToString(id));
@@ -2935,19 +2935,19 @@ void TTenantsManager::DbUpdateDatabaseQuotas(TTenant::TPtr tenant,
         .Update(NIceDb::TUpdate<Schema::Tenants::DatabaseQuotas>(serialized));
 }
 
-void TTenantsManager::Handle(TEvConsole::TEvAlterTenantRequest::TPtr &ev, const TActorContext &ctx)
+void TTenantsManager::Handle(NEvConsole::TEvAlterTenantRequest::TPtr &ev, const TActorContext &ctx)
 {
     Counters.Inc(COUNTER_ALTER_REQUESTS);
     ProcessOrDelayTx(CreateTxAlterTenant(ev), ctx);
 }
 
-void TTenantsManager::Handle(TEvConsole::TEvCreateTenantRequest::TPtr &ev, const TActorContext &ctx)
+void TTenantsManager::Handle(NEvConsole::TEvCreateTenantRequest::TPtr &ev, const TActorContext &ctx)
 {
     Counters.Inc(COUNTER_CREATE_REQUESTS);
     ProcessOrDelayTx(CreateTxCreateTenant(ev), ctx);
 }
 
-void TTenantsManager::Handle(TEvConsole::TEvDescribeTenantOptionsRequest::TPtr &ev, const TActorContext &ctx)
+void TTenantsManager::Handle(NEvConsole::TEvDescribeTenantOptionsRequest::TPtr &ev, const TActorContext &ctx)
 {
     Ydb::Cms::DescribeDatabaseOptionsResult result;
 
@@ -2998,24 +2998,24 @@ void TTenantsManager::Handle(TEvConsole::TEvDescribeTenantOptionsRequest::TPtr &
         (*description.mutable_labels())["slot_type"] = pr.second.TenantSlotType;
     }
 
-    auto resp = MakeHolder<TEvConsole::TEvDescribeTenantOptionsResponse>();
+    auto resp = MakeHolder<NEvConsole::TEvDescribeTenantOptionsResponse>();
     auto &operation = *resp->Record.MutableResponse()->mutable_operation();
     operation.set_ready(true);
     operation.set_status(Ydb::StatusIds::SUCCESS);
     operation.mutable_result()->PackFrom(result);
 
     LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS,
-                "Send TEvConsole::TEvDescribeTenantOptionsResponse: "
+                "Send NEvConsole::TEvDescribeTenantOptionsResponse: "
                 << resp->Record.ShortDebugString());
 
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
 
-void TTenantsManager::Handle(TEvConsole::TEvGetOperationRequest::TPtr &ev, const TActorContext &ctx)
+void TTenantsManager::Handle(NEvConsole::TEvGetOperationRequest::TPtr &ev, const TActorContext &ctx)
 {
     Counters.Inc(COUNTER_GET_OPERATION_REQUESTS);
 
-    auto resp = MakeHolder<TEvConsole::TEvGetOperationResponse>();
+    auto resp = MakeHolder<NEvConsole::TEvGetOperationResponse>();
     auto &operation = *resp->Record.MutableResponse()->mutable_operation();
     FillOperationStatus(ev->Get()->Record.GetRequest().id(), operation);
 
@@ -3023,20 +3023,20 @@ void TTenantsManager::Handle(TEvConsole::TEvGetOperationRequest::TPtr &ev, const
         Counters.Inc(operation.status(), COUNTER_CREATE_RESPONSES);
 
     LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS,
-                "Send TEvConsole::TEvGetOperationResponse: "
+                "Send NEvConsole::TEvGetOperationResponse: "
                 << resp->Record.ShortDebugString());
 
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
 
-void TTenantsManager::Handle(TEvConsole::TEvGetTenantStatusRequest::TPtr &ev, const TActorContext &ctx)
+void TTenantsManager::Handle(NEvConsole::TEvGetTenantStatusRequest::TPtr &ev, const TActorContext &ctx)
 {
     Counters.Inc(COUNTER_STATUS_REQUESTS);
 
     auto path = CanonizePath(ev->Get()->Record.GetRequest().path());
     auto tenant = GetTenant(path);
 
-    auto resp = MakeHolder<TEvConsole::TEvGetTenantStatusResponse>();
+    auto resp = MakeHolder<NEvConsole::TEvGetTenantStatusResponse>();
     auto &operation = *resp->Record.MutableResponse()->mutable_operation();
     operation.set_ready(true);
 
@@ -3047,7 +3047,7 @@ void TTenantsManager::Handle(TEvConsole::TEvGetTenantStatusRequest::TPtr &ev, co
         issue->set_message(Sprintf("Unknown tenant %s", path.data()));
 
         LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS,
-                    "Send TEvConsole::TEvGetTenantStatusResponse: "
+                    "Send NEvConsole::TEvGetTenantStatusResponse: "
                     << resp->Record.ShortDebugString());
 
         Counters.Inc(Ydb::StatusIds::NOT_FOUND, COUNTER_STATUS_RESPONSES);
@@ -3062,7 +3062,7 @@ void TTenantsManager::Handle(TEvConsole::TEvGetTenantStatusRequest::TPtr &ev, co
         operation.mutable_result()->PackFrom(result);
 
         LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS,
-                    "Send TEvConsole::TEvGetTenantStatusResponse: "
+                    "Send NEvConsole::TEvGetTenantStatusResponse: "
                     << resp->Record.ShortDebugString());
 
         Counters.Inc(Ydb::StatusIds::SUCCESS, COUNTER_STATUS_RESPONSES);
@@ -3076,7 +3076,7 @@ void TTenantsManager::Handle(TEvConsole::TEvGetTenantStatusRequest::TPtr &ev, co
     }
 }
 
-void TTenantsManager::Handle(TEvConsole::TEvListTenantsRequest::TPtr &ev, const TActorContext &ctx)
+void TTenantsManager::Handle(NEvConsole::TEvListTenantsRequest::TPtr &ev, const TActorContext &ctx)
 {
     Counters.Inc(COUNTER_LIST_REQUESTS);
 
@@ -3084,30 +3084,30 @@ void TTenantsManager::Handle(TEvConsole::TEvListTenantsRequest::TPtr &ev, const 
     for (auto &pr : Tenants)
         result.add_paths(pr.first);
 
-    auto resp = MakeHolder<TEvConsole::TEvListTenantsResponse>();
+    auto resp = MakeHolder<NEvConsole::TEvListTenantsResponse>();
     auto &operation = *resp->Record.MutableResponse()->mutable_operation();
     operation.set_ready(true);
     operation.set_status(Ydb::StatusIds::SUCCESS);
     operation.mutable_result()->PackFrom(result);
 
     LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS,
-                "Send TEvConsole::TEvListTenantsResponse: "
+                "Send NEvConsole::TEvListTenantsResponse: "
                 << resp->Record.ShortDebugString());
 
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
 
-void TTenantsManager::Handle(TEvConsole::TEvNotifyOperationCompletionRequest::TPtr &ev, const TActorContext &ctx)
+void TTenantsManager::Handle(NEvConsole::TEvNotifyOperationCompletionRequest::TPtr &ev, const TActorContext &ctx)
 {
     auto &rec = ev->Get()->Record;
     Ydb::Operations::Operation operation;
     auto tenant = FillOperationStatus(rec.GetRequest().id(), operation);
 
     if (operation.ready() && operation.status() != Ydb::StatusIds::NOT_FOUND) {
-        auto resp = MakeHolder<TEvConsole::TEvOperationCompletionNotification>();
+        auto resp = MakeHolder<NEvConsole::TEvOperationCompletionNotification>();
         resp->Record.MutableResponse()->mutable_operation()->CopyFrom(operation);
         LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS,
-                    "Send TEvConsole::TEvOperationCompletionNotification: "
+                    "Send NEvConsole::TEvOperationCompletionNotification: "
                     << resp->Record.ShortDebugString());
         ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
     } else {
@@ -3118,23 +3118,23 @@ void TTenantsManager::Handle(TEvConsole::TEvNotifyOperationCompletionRequest::TP
             tenant->Subscribers.push_back(ev->Sender);
         }
 
-        auto resp = MakeHolder<TEvConsole::TEvNotifyOperationCompletionResponse>();
+        auto resp = MakeHolder<NEvConsole::TEvNotifyOperationCompletionResponse>();
         resp->Record.MutableResponse()->mutable_operation()->CopyFrom(operation);
         LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS,
-                    "Send TEvConsole::TEvNotifyOperationCompletionResponse: "
+                    "Send NEvConsole::TEvNotifyOperationCompletionResponse: "
                     << resp->Record.ShortDebugString());
         ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
     }
 }
 
-void TTenantsManager::Handle(TEvConsole::TEvRemoveTenantRequest::TPtr &ev, const TActorContext &ctx)
+void TTenantsManager::Handle(NEvConsole::TEvRemoveTenantRequest::TPtr &ev, const TActorContext &ctx)
 {
     Counters.Inc(COUNTER_REMOVE_REQUESTS);
 
     TxProcessor->ProcessTx(CreateTxRemoveTenant(ev), ctx);
 }
 
-void TTenantsManager::Handle(TEvConsole::TEvUpdateTenantPoolConfig::TPtr &ev, const TActorContext &ctx)
+void TTenantsManager::Handle(NEvConsole::TEvUpdateTenantPoolConfig::TPtr &ev, const TActorContext &ctx)
 {
     TxProcessor->ProcessTx(CreateTxUpdateTenantPoolConfig(ev), ctx);
 }
@@ -3414,7 +3414,7 @@ void TTenantsManager::Handle(TEvTenantSlotBroker::TEvTenantState::TPtr &ev, cons
         FillTenantStatus(tenant, result);
         FillTenantAllocatedSlots(tenant, result, rec);
 
-        auto resp = MakeHolder<TEvConsole::TEvGetTenantStatusResponse>();
+        auto resp = MakeHolder<NEvConsole::TEvGetTenantStatusResponse>();
         auto &operation = *resp->Record.MutableResponse()->mutable_operation();
         operation.set_ready(true);
         operation.set_status(Ydb::StatusIds::SUCCESS);
@@ -3423,7 +3423,7 @@ void TTenantsManager::Handle(TEvTenantSlotBroker::TEvTenantState::TPtr &ev, cons
         Counters.Inc(Ydb::StatusIds::SUCCESS, COUNTER_STATUS_RESPONSES);
 
         LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS,
-                    "Send TEvConsole::TEvGetTenantStatusResponse: "
+                    "Send NEvConsole::TEvGetTenantStatusResponse: "
                     << resp->Record.ShortDebugString());
 
         ctx.Send(req->Sender, resp.Release(), 0, req->Cookie);

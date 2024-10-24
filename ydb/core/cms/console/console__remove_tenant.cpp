@@ -6,7 +6,7 @@ using namespace NOperationId;
 
 class TTenantsManager::TTxRemoveTenant : public TTransactionBase<TTenantsManager> {
 public:
-    TTxRemoveTenant(TEvConsole::TEvRemoveTenantRequest::TPtr ev, TTenantsManager *self)
+    TTxRemoveTenant(NEvConsole::TEvRemoveTenantRequest::TPtr ev, TTenantsManager *self)
         : TBase(self)
         , Path(CanonizePath(ev->Get()->Record.GetRequest().path()))
         , Request(std::move(ev))
@@ -50,7 +50,7 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "TTxRemoveTenant: "
                     << Request->Get()->Record.ShortDebugString());
 
-        Response = new TEvConsole::TEvRemoveTenantResponse;
+        Response = new NEvConsole::TEvRemoveTenantResponse;
 
         if (!Self->CheckAccess(token, code, error, ctx))
             return Error(code, error, ctx);
@@ -113,12 +113,12 @@ public:
 
 private:
     TString Path;
-    TEvConsole::TEvRemoveTenantRequest::TPtr Request;
-    TAutoPtr<TEvConsole::TEvRemoveTenantResponse> Response;
+    NEvConsole::TEvRemoveTenantRequest::TPtr Request;
+    TAutoPtr<NEvConsole::TEvRemoveTenantResponse> Response;
     TTenant::TPtr Tenant;
 };
 
-ITransaction *TTenantsManager::CreateTxRemoveTenant(TEvConsole::TEvRemoveTenantRequest::TPtr &ev)
+ITransaction *TTenantsManager::CreateTxRemoveTenant(NEvConsole::TEvRemoveTenantRequest::TPtr &ev)
 {
     return new TTxRemoveTenant(ev, this);
 }

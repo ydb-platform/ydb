@@ -211,7 +211,7 @@ void TSchemeShard::Handle(TEvImport::TEvListImportsRequest::TPtr& ev, const TAct
     Execute(CreateTxListImports(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvPrivate::TEvImportSchemeReady::TPtr& ev, const TActorContext& ctx) {
+void TSchemeShard::Handle(NEvPrivate::TEvImportSchemeReady::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxProgressImport(ev), ctx);
 }
 

@@ -20,13 +20,13 @@ void TReplicationSourceOffsetsServer::StateWork(STFUNC_SIG) {
         hFunc(TEvents::TEvUndelivered, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, Handle);
         hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
-        hFunc(TEvDataShard::TEvGetReplicationSourceOffsets, Handle);
-        hFunc(TEvDataShard::TEvReplicationSourceOffsetsAck, Handle);
-        hFunc(TEvDataShard::TEvReplicationSourceOffsetsCancel, Handle);
+        hFunc(NEvDataShard::TEvGetReplicationSourceOffsets, Handle);
+        hFunc(NEvDataShard::TEvReplicationSourceOffsetsAck, Handle);
+        hFunc(NEvDataShard::TEvReplicationSourceOffsetsCancel, Handle);
     }
 }
 
-void TReplicationSourceOffsetsServer::Handle(TEvDataShard::TEvGetReplicationSourceOffsets::TPtr& ev) {
+void TReplicationSourceOffsetsServer::Handle(NEvDataShard::TEvGetReplicationSourceOffsets::TPtr& ev) {
     const auto* msg = ev->Get();
 
     TReadId readId(ev->Sender, msg->Record.GetReadId());
@@ -79,7 +79,7 @@ void TReplicationSourceOffsetsServer::ProcessRead(const TReadId& readId, TReadSt
         }
     }
 
-    auto res = MakeHolder<TEvDataShard::TEvReplicationSourceOffsets>(readId.ReadId, ++state.LastSeqNo);
+    auto res = MakeHolder<NEvDataShard::TEvReplicationSourceOffsets>(readId.ReadId, ++state.LastSeqNo);
     ui64 resSize = 0;
 
     auto itTable = Self->ReplicatedTables.find(state.PathId);
@@ -114,7 +114,7 @@ void TReplicationSourceOffsetsServer::ProcessRead(const TReadId& readId, TReadSt
                         return;
                     }
                     // Start a new chunk immediately
-                    res = MakeHolder<TEvDataShard::TEvReplicationSourceOffsets>(readId.ReadId, ++state.LastSeqNo);
+                    res = MakeHolder<NEvDataShard::TEvReplicationSourceOffsets>(readId.ReadId, ++state.LastSeqNo);
                     resSize = 0;
                 }
 
@@ -160,7 +160,7 @@ void TReplicationSourceOffsetsServer::ProcessNode(TNodeState& node) {
     }
 }
 
-void TReplicationSourceOffsetsServer::Handle(TEvDataShard::TEvReplicationSourceOffsetsAck::TPtr& ev) {
+void TReplicationSourceOffsetsServer::Handle(NEvDataShard::TEvReplicationSourceOffsetsAck::TPtr& ev) {
     const auto* msg = ev->Get();
     TReadId readId(ev->Sender, msg->Record.GetReadId());
 
@@ -208,7 +208,7 @@ void TReplicationSourceOffsetsServer::Handle(TEvDataShard::TEvReplicationSourceO
     }
 }
 
-void TReplicationSourceOffsetsServer::Handle(TEvDataShard::TEvReplicationSourceOffsetsCancel::TPtr& ev) {
+void TReplicationSourceOffsetsServer::Handle(NEvDataShard::TEvReplicationSourceOffsetsCancel::TPtr& ev) {
     const auto* msg = ev->Get();
     TReadId readId(ev->Sender, msg->Record.GetReadId());
 

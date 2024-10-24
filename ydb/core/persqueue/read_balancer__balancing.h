@@ -154,8 +154,8 @@ private:
     void UpdateSpecialSessions();
     void ChangePartitionCounters(ssize_t activeDiff, ssize_t inactiveDiff);
     void LockPartition(ui32 partitionId, const TActorContext& ctx);
-    std::unique_ptr<TEvPersQueue::TEvReleasePartition> MakeEvReleasePartition(ui32 partitionId) const;
-    std::unique_ptr<TEvPersQueue::TEvLockPartition> MakeEvLockPartition(ui32 partitionId, ui32 step) const;
+    std::unique_ptr<NEvPersQueue::TEvReleasePartition> MakeEvReleasePartition(ui32 partitionId) const;
+    std::unique_ptr<NEvPersQueue::TEvLockPartition> MakeEvLockPartition(ui32 partitionId, ui32 step) const;
     TString GetPrefix() const;
 };
 
@@ -231,7 +231,7 @@ struct TConsumer {
     bool SetCommittedState(ui32 partitionId, ui32 generation, ui64 cookie);
     bool ProccessReadingFinished(ui32 partitionId, bool wasInactive, const TActorContext& ctx);
     void StartReading(ui32 partitionId, const TActorContext& ctx);
-    void FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx);
+    void FinishReading(NEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx);
 
     void ScheduleBalance(const TActorContext& ctx);
     void Balance(const TActorContext& ctx);
@@ -315,23 +315,23 @@ public:
     bool SetCommittedState(const TString& consumer, ui32 partitionId, ui32 generation, ui64 cookie, const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvWakeupReleasePartition::TPtr &ev, const TActorContext& ctx);
 
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext&);
 
-    void Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvBalanceConsumer::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
     void ProcessPendingStats(const TActorContext& ctx);
 
     void RenderApp(TStringStream& str) const;

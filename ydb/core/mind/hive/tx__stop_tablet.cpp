@@ -71,7 +71,7 @@ public:
                 tablet->State = newState;
             }
             if (status != NKikimrProto::UNKNOWN) {
-                SideEffects.Send(ActorToNotify, new TEvHive::TEvStopTabletResult(status, TabletId), 0, 0);
+                SideEffects.Send(ActorToNotify, new NEvHive::TEvStopTabletResult(status, TabletId), 0, 0);
                 Self->ReportStoppedToWhiteboard(*tablet);
                 BLOG_D("Report tablet " << tablet->ToString() << " as stopped to Whiteboard");
             }

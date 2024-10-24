@@ -24,7 +24,7 @@ class TDescribeTableRPC : public TRpcSchemeRequestActor<TDescribeTableRPC, TEvDe
     using TBase = TRpcSchemeRequestActor<TDescribeTableRPC, TEvDescribeTableRequest>;
 
     TString OverrideName;
-    NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr PendingDescribeResult;
+    NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr PendingDescribeResult;
     TActorId ShardsResolverId;
     bool NeedResolveShards = false;
     //ShardId -> NodeId
@@ -77,7 +77,7 @@ private:
     void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFunc(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult, Handle);
             HFunc(NKqp::NShardResolver::TEvShardsResolveStatus, Handle);
             default: TBase::StateWork(ev);
         }
@@ -112,7 +112,7 @@ private:
         }
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->GetRecord();
 
         const auto partsNum = record.GetPathDescription().GetTablePartitions().size();
@@ -123,7 +123,7 @@ private:
         }
     }
 
-    void ProcessDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
+    void ProcessDescribeSchemeResult(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->GetRecord();
         const auto status = record.GetStatus();
 
@@ -230,7 +230,7 @@ private:
         }
     }
 
-    void PerformTabletResolve(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+    void PerformTabletResolve(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         PendingDescribeResult = ev;
         const auto& record = PendingDescribeResult->Get()->GetRecord();
         const auto& parts = record.GetPathDescription().GetTablePartitions();

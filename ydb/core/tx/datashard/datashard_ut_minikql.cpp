@@ -720,12 +720,12 @@ Y_UNIT_TEST(WriteAndReadMultipleShards) {
 //
 
 void GetTableStats(TTestActorRuntime &runtime, ui64 tabletId, ui64 tableId, NKikimrTableStats::TTableStats& stats) {
-    TAutoPtr<TEvDataShard::TEvGetTableStats> ev(new TEvDataShard::TEvGetTableStats(tableId));
+    TAutoPtr<NEvDataShard::TEvGetTableStats> ev(new NEvDataShard::TEvGetTableStats(tableId));
 
     TActorId edge = runtime.AllocateEdgeActor();
     runtime.SendToPipe(tabletId, edge, ev.Release());
     TAutoPtr<IEventHandle> handle;
-    TEvDataShard::TEvGetTableStatsResult* response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetTableStatsResult>(handle);
+    NEvDataShard::TEvGetTableStatsResult* response = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvGetTableStatsResult>(handle);
     stats.Swap(response->Record.MutableTableStats());
 }
 

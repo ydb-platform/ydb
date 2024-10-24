@@ -33,7 +33,7 @@ namespace NSequenceProxy {
         void Bootstrap() {
             Send(PipeCache,
                 new TEvPipeCache::TEvForward(
-                    new TEvSequenceShard::TEvAllocateSequence(PathId, Cache),
+                    new NEvSequenceShard::TEvAllocateSequence(PathId, Cache),
                     TabletId,
                     true),
                 IEventHandle::FlagTrackDelivery);
@@ -58,13 +58,13 @@ namespace NSequenceProxy {
     private:
         STFUNC(StateAlloc) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvSequenceShard::TEvAllocateSequenceResult, Handle);
+                hFunc(NEvSequenceShard::TEvAllocateSequenceResult, Handle);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
                 hFunc(TEvents::TEvUndelivered, Handle);
             }
         }
 
-        void Handle(TEvSequenceShard::TEvAllocateSequenceResult::TPtr& ev) {
+        void Handle(NEvSequenceShard::TEvAllocateSequenceResult::TPtr& ev) {
             auto* msg = ev->Get();
             switch (msg->Record.GetStatus()) {
                 case NKikimrTxSequenceShard::TEvAllocateSequenceResult::SUCCESS:

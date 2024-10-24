@@ -38,7 +38,7 @@ public:
         SideEffects.Reset(Self->SelfId());
 
         if (!OwnerActor) {
-            SideEffects.Send(Sender, new TEvHive::TEvLockTabletExecutionResult(
+            SideEffects.Send(Sender, new NEvHive::TEvLockTabletExecutionResult(
                     TabletId,
                     NKikimrProto::ERROR,
                     TStringBuilder() << "Trying to lock tablet " << TabletId << " to an invalid owner actor"
@@ -48,7 +48,7 @@ public:
 
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet == nullptr) {
-            SideEffects.Send(Sender, new TEvHive::TEvLockTabletExecutionResult(
+            SideEffects.Send(Sender, new NEvHive::TEvLockTabletExecutionResult(
                     TabletId,
                     NKikimrProto::ERROR,
                     TStringBuilder() << "Trying to lock tablet " << TabletId << ", which doesn't exist"
@@ -57,7 +57,7 @@ public:
         }
 
         if (OwnerActor.NodeId() != Sender.NodeId()) {
-            SideEffects.Send(Sender, new TEvHive::TEvLockTabletExecutionResult(
+            SideEffects.Send(Sender, new NEvHive::TEvLockTabletExecutionResult(
                     TabletId,
                     NKikimrProto::ERROR,
                     TStringBuilder() << "Trying to lock tablet " << TabletId << " to " << OwnerActor << ", which is on a different node"
@@ -66,7 +66,7 @@ public:
         }
 
         if (IsReconnect && tablet->LockedToActor != OwnerActor) {
-            SideEffects.Send(Sender, new TEvHive::TEvLockTabletExecutionResult(
+            SideEffects.Send(Sender, new NEvHive::TEvLockTabletExecutionResult(
                     TabletId,
                     NKikimrProto::ERROR,
                     TStringBuilder() << "Trying to restore lock to tablet " << TabletId << ", which has expired"
@@ -86,7 +86,7 @@ public:
         ui32 flags = 0;
         if (PreviousOwner && PreviousOwner != OwnerActor) {
             // Notify previous owner that its lock ownership has been lost
-            SideEffects.Send(PreviousOwner, new TEvHive::TEvLockTabletExecutionLost(TabletId));
+            SideEffects.Send(PreviousOwner, new NEvHive::TEvLockTabletExecutionLost(TabletId));
         }
 
         if (tablet->IsLockedToActor()) {
@@ -101,7 +101,7 @@ public:
             flags |= IEventHandle::FlagSubscribeOnSession;
         }
 
-        SideEffects.Send(Sender, new TEvHive::TEvLockTabletExecutionResult(TabletId, NKikimrProto::OK, {}), flags, Cookie);
+        SideEffects.Send(Sender, new NEvHive::TEvLockTabletExecutionResult(TabletId, NKikimrProto::OK, {}), flags, Cookie);
         return true;
     }
 
@@ -124,7 +124,7 @@ ITransaction* THive::CreateLockTabletExecution(const NKikimrHive::TEvLockTabletE
     return new TTxLockTabletExecution(rec, sender, cookie, this);
 }
 
-void THive::Handle(TEvHive::TEvLockTabletExecution::TPtr& ev) {
+void THive::Handle(NEvHive::TEvLockTabletExecution::TPtr& ev) {
     Execute(CreateLockTabletExecution(ev->Get()->Record, ev->Sender, ev->Cookie));
 }
 

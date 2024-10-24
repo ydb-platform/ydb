@@ -6,13 +6,13 @@ namespace NHive {
 
 class TTxRequestTabletSequence : public TTransactionBase<THive> {
 protected:
-    TEvHive::TEvRequestTabletIdSequence::TPtr Event;
+    NEvHive::TEvRequestTabletIdSequence::TPtr Event;
     TSequencer::TOwnerType Owner;
     TSequencer::TSequence Sequence;
     size_t Size;
 
 public:
-    TTxRequestTabletSequence(TEvHive::TEvRequestTabletIdSequence::TPtr event, THive *hive)
+    TTxRequestTabletSequence(NEvHive::TEvRequestTabletIdSequence::TPtr event, THive *hive)
         : TBase(hive)
         , Event(std::move(event))
     {}
@@ -58,7 +58,7 @@ public:
             BLOG_CRIT("Could not allocate sequence of " << Size << " elements for " << Owner);
         } else {
             BLOG_D("Respond with sequence " << Sequence << " to " << Owner);
-            THolder<TEvHive::TEvResponseTabletIdSequence> response = MakeHolder<TEvHive::TEvResponseTabletIdSequence>();
+            THolder<NEvHive::TEvResponseTabletIdSequence> response = MakeHolder<NEvHive::TEvResponseTabletIdSequence>();
             const auto& pbRecord(Event->Get()->Record);
             response->Record.MutableOwner()->CopyFrom(pbRecord.GetOwner());
             response->Record.SetBeginId(Sequence.Begin);
@@ -68,7 +68,7 @@ public:
     }
 };
 
-ITransaction* THive::CreateRequestTabletSequence(TEvHive::TEvRequestTabletIdSequence::TPtr event) {
+ITransaction* THive::CreateRequestTabletSequence(NEvHive::TEvRequestTabletIdSequence::TPtr event) {
     return new TTxRequestTabletSequence(std::move(event), this);
 }
 

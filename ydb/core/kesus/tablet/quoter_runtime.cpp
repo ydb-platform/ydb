@@ -30,10 +30,10 @@ public:
     }
 
     void CloseSession(ui64 resourceId, Ydb::StatusIds::StatusCode status, const TString& reason) override {
-        THolder<TEvKesus::TEvResourcesAllocated> ev = MakeHolder<TEvKesus::TEvResourcesAllocated>();
+        THolder<NEvKesus::TEvResourcesAllocated> ev = MakeHolder<NEvKesus::TEvResourcesAllocated>();
         auto* info = ev->Record.AddResourcesInfo();
         info->SetResourceId(resourceId);
-        TEvKesus::FillError(info->MutableStateNotification(), status, reason);
+        NEvKesus::FillError(info->MutableStateNotification(), status, reason);
         TRACE_LOG_EVENT(Kesus->TabletID(), "TEvResourcesAllocated", ev->Record, Actor, 0);
         Kesus->Send(Actor, std::move(ev));
     }
@@ -46,7 +46,7 @@ private:
 void TKesusTablet::TQuoterResourceSessionsAccumulator::Accumulate(const TActorId& recipient, ui64 resourceId, double amount, const NKikimrKesus::TStreamingQuoterResource* props) {
     TSendInfo& info = SendInfos[recipient];
     if (!info.Event) {
-        info.Event = MakeHolder<TEvKesus::TEvResourcesAllocated>();
+        info.Event = MakeHolder<NEvKesus::TEvResourcesAllocated>();
     }
     auto [indexIt, insertedNew] = info.ResIdIndex.try_emplace(resourceId, info.Event->Record.ResourcesInfoSize());
     NKikimrKesus::TEvResourcesAllocated::TResourceInfo* resInfo = nullptr;
@@ -69,7 +69,7 @@ void TKesusTablet::TQuoterResourceSessionsAccumulator::Accumulate(const TActorId
 void TKesusTablet::TQuoterResourceSessionsAccumulator::Sync(const TActorId& recipient, ui64 resourceId, ui32 lastReportId, double amount) {
     TSendSyncInfo& info = SendSyncInfos[recipient];
     if (!info.Event) {
-        info.Event = MakeHolder<TEvKesus::TEvSyncResources>();
+        info.Event = MakeHolder<NEvKesus::TEvSyncResources>();
     }
     auto [indexIt, insertedNew] = info.ResIdIndex.try_emplace(resourceId, info.Event->Record.ResourcesInfoSize());
     NKikimrKesus::TEvSyncResources::TResourceInfo* resInfo = nullptr;
@@ -104,8 +104,8 @@ void TKesusTablet::TQuoterResourceSessionsAccumulator::SendAll(const TActorConte
     SendSyncInfos.clear();
 }
 
-void TKesusTablet::Handle(TEvKesus::TEvSubscribeOnResources::TPtr& ev) {
-    THolder<TEvKesus::TEvSubscribeOnResourcesResult> reply = MakeHolder<TEvKesus::TEvSubscribeOnResourcesResult>();
+void TKesusTablet::Handle(NEvKesus::TEvSubscribeOnResources::TPtr& ev) {
+    THolder<NEvKesus::TEvSubscribeOnResourcesResult> reply = MakeHolder<NEvKesus::TEvSubscribeOnResourcesResult>();
     const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetActorID());
     const TActorId pipeServerId = ev->Recipient;
     const ui32 clientVersion = ev->Get()->Record.GetProtocolVersion();
@@ -132,7 +132,7 @@ void TKesusTablet::Handle(TEvKesus::TEvSubscribeOnResources::TPtr& ev) {
             *result->MutableEffectiveProps() = resourceTree->GetEffectiveProps();
         } else {
             ++unknownSubscriptions;
-            TEvKesus::FillError(result->MutableError(), Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Resource \"" << resource.GetResourcePath() << "\" doesn't exist.");
+            NEvKesus::FillError(result->MutableError(), Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Resource \"" << resource.GetResourcePath() << "\" doesn't exist.");
         }
     }
     if (subscriptions) {
@@ -152,8 +152,8 @@ void TKesusTablet::Handle(TEvKesus::TEvSubscribeOnResources::TPtr& ev) {
     HandleQuoterTick();
 }
 
-void TKesusTablet::Handle(TEvKesus::TEvUpdateConsumptionState::TPtr& ev) {
-    THolder<TEvKesus::TEvResourcesAllocated> errors;
+void TKesusTablet::Handle(NEvKesus::TEvUpdateConsumptionState::TPtr& ev) {
+    THolder<NEvKesus::TEvResourcesAllocated> errors;
     const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetActorID());
     const TInstant now = TActivationContext::Now();
     IResourceSink::TPtr sink = new TQuoterResourceSink(ev->Sender, this);
@@ -171,11 +171,11 @@ void TKesusTablet::Handle(TEvKesus::TEvUpdateConsumptionState::TPtr& ev) {
             session->UpdateConsumptionState(resource.GetConsumeResource(), resource.GetAmount(), queue, now);
         } else {
             if (!errors) {
-                errors = MakeHolder<TEvKesus::TEvResourcesAllocated>();
+                errors = MakeHolder<NEvKesus::TEvResourcesAllocated>();
             }
             auto* notification = errors->Record.AddResourcesInfo();
             notification->SetResourceId(resource.GetResourceId());
-            TEvKesus::FillError(notification->MutableStateNotification(), Ydb::StatusIds::BAD_SESSION, "No such session exists.");
+            NEvKesus::FillError(notification->MutableStateNotification(), Ydb::StatusIds::BAD_SESSION, "No such session exists.");
         }
     }
     if (consumptionStarts) {
@@ -189,7 +189,7 @@ void TKesusTablet::Handle(TEvKesus::TEvUpdateConsumptionState::TPtr& ev) {
         TRACE_LOG_EVENT(TabletID(), "TEvResourcesAllocated", errors->Record, ev->Sender, 0);
         Send(ev->Sender, std::move(errors));
     }
-    auto ack = MakeHolder<TEvKesus::TEvUpdateConsumptionStateAck>();
+    auto ack = MakeHolder<NEvKesus::TEvUpdateConsumptionStateAck>();
     TRACE_LOG_EVENT(TabletID(), "TEvUpdateConsumptionStateAck", ack->Record, ev->Sender, ev->Cookie);
     Send(ev->Sender, std::move(ack), 0, ev->Cookie);
 
@@ -200,8 +200,8 @@ void TKesusTablet::Handle(TEvKesus::TEvUpdateConsumptionState::TPtr& ev) {
     HandleQuoterTick();
 }
 
-void TKesusTablet::Handle(TEvKesus::TEvAccountResources::TPtr& ev) {
-    auto ack = MakeHolder<TEvKesus::TEvAccountResourcesAck>();
+void TKesusTablet::Handle(NEvKesus::TEvAccountResources::TPtr& ev) {
+    auto ack = MakeHolder<NEvKesus::TEvAccountResourcesAck>();
     const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetActorID());
     const TInstant now = TActivationContext::Now();
     TTickProcessorQueue queue;
@@ -217,7 +217,7 @@ void TKesusTablet::Handle(TEvKesus::TEvAccountResources::TPtr& ev) {
                 queue, now);
             result->SetAcceptedUs(accepted.MicroSeconds());
         } else {
-            TEvKesus::FillError(result->MutableStateNotification(), Ydb::StatusIds::BAD_SESSION, "No such session exists.");
+            NEvKesus::FillError(result->MutableStateNotification(), Ydb::StatusIds::BAD_SESSION, "No such session exists.");
         }
     }
     QuoterTickProcessorQueue.Merge(std::move(queue));
@@ -231,8 +231,8 @@ void TKesusTablet::Handle(TEvKesus::TEvAccountResources::TPtr& ev) {
     HandleQuoterTick();
 }
 
-void TKesusTablet::Handle(TEvKesus::TEvReportResources::TPtr& ev) {
-    auto ack = MakeHolder<TEvKesus::TEvReportResourcesAck>();
+void TKesusTablet::Handle(NEvKesus::TEvReportResources::TPtr& ev) {
+    auto ack = MakeHolder<NEvKesus::TEvReportResourcesAck>();
     const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetActorID());
     const TInstant now = TActivationContext::Now();
     TTickProcessorQueue queue;
@@ -242,7 +242,7 @@ void TKesusTablet::Handle(TEvKesus::TEvReportResources::TPtr& ev) {
         if (TQuoterSession* session = QuoterResources.FindSession(clientId, resource.GetResourceId())) {
             session->ReportConsumed(resource.GetReportId(), resource.GetTotalConsumed(), queue, now);
         } else {
-            TEvKesus::FillError(result->MutableStateNotification(), Ydb::StatusIds::BAD_SESSION, "No such session exists.");
+            NEvKesus::FillError(result->MutableStateNotification(), Ydb::StatusIds::BAD_SESSION, "No such session exists.");
         }
     }
     QuoterTickProcessorQueue.Merge(std::move(queue));
@@ -256,7 +256,7 @@ void TKesusTablet::Handle(TEvKesus::TEvReportResources::TPtr& ev) {
     HandleQuoterTick();
 }
 
-void TKesusTablet::Handle(TEvKesus::TEvResourcesAllocatedAck::TPtr& ev) {
+void TKesusTablet::Handle(NEvKesus::TEvResourcesAllocatedAck::TPtr& ev) {
     Y_UNUSED(ev);
 }
 
@@ -307,8 +307,8 @@ void TKesusTablet::HandleQuoterTick() {
     }
 }
 
-void TKesusTablet::Handle(TEvKesus::TEvGetQuoterResourceCounters::TPtr& ev) {
-    THolder<TEvKesus::TEvGetQuoterResourceCountersResult> reply = MakeHolder<TEvKesus::TEvGetQuoterResourceCountersResult>();
+void TKesusTablet::Handle(NEvKesus::TEvGetQuoterResourceCounters::TPtr& ev) {
+    THolder<NEvKesus::TEvGetQuoterResourceCountersResult> reply = MakeHolder<NEvKesus::TEvGetQuoterResourceCountersResult>();
     QuoterResources.FillCounters(reply->Record);
     TRACE_LOG_EVENT(TabletID(), "TEvGetQuoterResourceCountersResult", reply->Record, ev->Sender, ev->Cookie);
     Send(ev->Sender, std::move(reply), 0, ev->Cookie);

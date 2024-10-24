@@ -33,8 +33,8 @@ void TDataShard::HandleMonIndexPage(NMon::TEvRemoteHttpInfo::TPtr& ev) {
     Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(std::move(response)));
 }
 
-void TDataShard::Handle(TEvDataShard::TEvGetInfoRequest::TPtr& ev) {
-    auto* response = new TEvDataShard::TEvGetInfoResponse;
+void TDataShard::Handle(NEvDataShard::TEvGetInfoRequest::TPtr& ev) {
+    auto* response = new NEvDataShard::TEvGetInfoResponse;
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
     for (auto& pr : GetUserTables()) {
@@ -123,8 +123,8 @@ void TDataShard::Handle(TEvDataShard::TEvGetInfoRequest::TPtr& ev) {
     Send(ev->Sender, response);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvListOperationsRequest::TPtr& ev) {
-    auto* response = new TEvDataShard::TEvListOperationsResponse;
+void TDataShard::Handle(NEvDataShard::TEvListOperationsRequest::TPtr& ev) {
+    auto* response = new NEvDataShard::TEvListOperationsResponse;
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
     auto addOperation = [&](const TOperation::TPtr& op) {
@@ -149,8 +149,8 @@ void TDataShard::Handle(TEvDataShard::TEvListOperationsRequest::TPtr& ev) {
     Send(ev->Sender, response);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvGetOperationRequest::TPtr& ev) {
-    auto* response = new TEvDataShard::TEvGetOperationResponse;
+void TDataShard::Handle(NEvDataShard::TEvGetOperationRequest::TPtr& ev) {
+    auto* response = new NEvDataShard::TEvGetOperationResponse;
 
     auto op = Pipeline.FindOp(ev->Get()->Record.GetTxId());
     if (!op) {
@@ -236,8 +236,8 @@ void TDataShard::Handle(TEvDataShard::TEvGetOperationRequest::TPtr& ev) {
     Send(ev->Sender, response);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvGetDataHistogramRequest::TPtr& ev) {
-    auto* response = new TEvDataShard::TEvGetDataHistogramResponse;
+void TDataShard::Handle(NEvDataShard::TEvGetDataHistogramRequest::TPtr& ev) {
+    auto* response = new NEvDataShard::TEvGetDataHistogramResponse;
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
     const auto& rec = ev->Get()->Record;
 
@@ -271,8 +271,8 @@ void TDataShard::Handle(TEvDataShard::TEvGetDataHistogramRequest::TPtr& ev) {
     Send(ev->Sender, response);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvGetRSInfoRequest::TPtr& ev) {
-    auto* response = new TEvDataShard::TEvGetRSInfoResponse;
+void TDataShard::Handle(NEvDataShard::TEvGetRSInfoRequest::TPtr& ev) {
+    auto* response = new NEvDataShard::TEvGetRSInfoResponse;
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
     for (auto& pr : OutReadSets.CurrentReadSets) {
@@ -331,8 +331,8 @@ void TDataShard::Handle(TEvDataShard::TEvGetRSInfoRequest::TPtr& ev) {
     Send(ev->Sender, response);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvGetSlowOpProfilesRequest::TPtr& ev) {
-    auto* response = new TEvDataShard::TEvGetSlowOpProfilesResponse;
+void TDataShard::Handle(NEvDataShard::TEvGetSlowOpProfilesRequest::TPtr& ev) {
+    auto* response = new NEvDataShard::TEvGetSlowOpProfilesResponse;
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
     Pipeline.FillStoredExecutionProfiles(response->Record);
     Send(ev->Sender, response);

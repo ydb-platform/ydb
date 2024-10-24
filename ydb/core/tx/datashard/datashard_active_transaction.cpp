@@ -919,7 +919,7 @@ bool TActiveTransaction::OnStopping(TDataShard& self, const TActorContext& ctx) 
                     << " because datashard "
                     << self.TabletID()
                     << " is restarting";
-            auto result = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
+            auto result = MakeHolder<NEvDataShard::TEvProposeTransactionResult>(
                     kind, self.TabletID(), GetTxId(), rejectStatus);
             result->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, rejectReason);
             LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, rejectReason);
@@ -936,7 +936,7 @@ bool TActiveTransaction::OnStopping(TDataShard& self, const TActorContext& ctx) 
     } else {
         // Distributed operations send notification when proposed
         if (GetTarget() && !HasCompletedFlag()) {
-            auto notify = MakeHolder<TEvDataShard::TEvProposeTransactionRestart>(
+            auto notify = MakeHolder<NEvDataShard::TEvProposeTransactionRestart>(
                 self.TabletID(), GetTxId());
             ctx.Send(GetTarget(), notify.Release(), 0, GetCookie());
         }
@@ -950,7 +950,7 @@ void TActiveTransaction::OnCleanup(TDataShard& self, std::vector<std::unique_ptr
     if (!IsImmediate() && GetTarget() && !HasCompletedFlag()) {
         auto kind = static_cast<NKikimrTxDataShard::ETransactionKind>(GetKind());
         auto status = NKikimrTxDataShard::TEvProposeTransactionResult::ABORTED;
-        auto result = std::make_unique<TEvDataShard::TEvProposeTransactionResult>(
+        auto result = std::make_unique<NEvDataShard::TEvProposeTransactionResult>(
             kind, self.TabletID(), GetTxId(), status);
 
         if (self.State == TShardState::SplitSrcWaitForNoTxInFlight) {

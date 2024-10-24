@@ -21,14 +21,14 @@ namespace NKikimr::NConsole {
  * from updates. Subscription response means subscription was
  * registered in dispatcher and carries no additional info.
  *
- * Subscribers receive TEvConsole::TEvConfigNotificationRequest
+ * Subscribers receive NEvConsole::TEvConfigNotificationRequest
  * as if they were subscribed in CMS and should process this
- * event accordingly (TEvConsole::TEvConfigNotificationResponse
+ * event accordingly (NEvConsole::TEvConfigNotificationResponse
  * event should be send in response with proper SubscriptionId,
  * ConfigId filled in and request Cookie used for response).
  */
 
-namespace TEvConfigsDispatcher {
+namespace NEvConfigsDispatcher {
     enum EEv {
         EvSetConfigSubscriptionRequest = EventSpaceBegin(TKikimrEvents::ES_CONFIGS_DISPATCHER),
         EvSetConfigSubscriptionResponse,

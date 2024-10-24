@@ -68,7 +68,7 @@ struct TPartitionInfo {
 
     struct TPendingRequest {
         TPendingRequest(ui64 cookie,
-                        std::shared_ptr<TEvPersQueue::TEvRequest> event,
+                        std::shared_ptr<NEvPersQueue::TEvRequest> event,
                         const TActorId& sender) :
             Cookie(cookie),
             Event(std::move(event)),
@@ -80,7 +80,7 @@ struct TPartitionInfo {
         TPendingRequest(TPendingRequest&& rhs) = default;
 
         ui64 Cookie;
-        std::shared_ptr<TEvPersQueue::TEvRequest> Event;
+        std::shared_ptr<NEvPersQueue::TEvRequest> Event;
         TActorId Sender;
     };
 
@@ -158,7 +158,7 @@ public:
         , Tablet(tablet)
         , TabletGeneration(tabletGeneration)
         , Request(request)
-        , Response(new TEvPersQueue::TEvResponse)
+        , Response(new NEvPersQueue::TEvResponse)
         , DirectReadKey(directReadKey)
     {
         Y_ABORT_UNLESS(Request.HasPartitionRequest() && Request.GetPartitionRequest().HasCmdRead());
@@ -176,7 +176,7 @@ public:
     }
 
 private:
-    void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx)
+    void Handle(NEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx)
     {
         Y_ABORT_UNLESS(Response);
         const auto& record = ev->Get()->Record;
@@ -280,7 +280,7 @@ private:
                 read->ClearMaxTimeLagMs();
                 read->SetReadTimestampMs(readFromTimestampMs);
 
-                THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+                THolder<NEvPersQueue::TEvRequest> req(new NEvPersQueue::TEvRequest);
                 req->Record = Request;
                 ctx.Send(Tablet, req.Release());
 
@@ -326,7 +326,7 @@ private:
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPersQueue::TEvResponse, Handle);
+            HFunc(NEvPersQueue::TEvResponse, Handle);
         default:
             break;
         };
@@ -336,7 +336,7 @@ private:
     const TActorId Tablet;
     ui32 TabletGeneration;
     NKikimrClient::TPersQueueRequest Request;
-    THolder<TEvPersQueue::TEvResponse> Response;
+    THolder<NEvPersQueue::TEvResponse> Response;
     std::shared_ptr<NKikimrClient::TResponse> PreparedResponse;
     TDirectReadKey DirectReadKey;
 
@@ -365,7 +365,7 @@ public:
     , CounterId(0)
     , Waiting(0)
     , ReqId(reqId)
-    , Response(new TEvPersQueue::TEvResponse)
+    , Response(new NEvPersQueue::TEvResponse)
     , Timestamp(TAppData::TimeProvider->Now())
     , WasSplit(false)
     , Cookie(cookie)
@@ -445,7 +445,7 @@ public:
     ui32 CounterId;
     ui32 Waiting;
     const TString ReqId;
-    THolder<TEvPersQueue::TEvResponse> Response;
+    THolder<NEvPersQueue::TEvResponse> Response;
     TInstant Timestamp;
     bool WasSplit;
     TMaybe<ui64> Cookie;
@@ -543,7 +543,7 @@ TActorId CreateOffsetsProxyActor(const ui64 tabletId, const TActorId& sender, co
 {
     return ctx.Register(new TBuilderProxy<TEvPQ::TEvPartitionOffsetsResponse,
                                           NKikimrPQ::TOffsetsResponse,
-                                          TEvPersQueue::TEvOffsetsResponse>(tabletId, sender, count, 0));
+                                          NEvPersQueue::TEvOffsetsResponse>(tabletId, sender, count, 0));
 }
 
 /******************************************************* StatusProxy *********************************************************/
@@ -553,7 +553,7 @@ TActorId CreateStatusProxyActor(const ui64 tabletId, const TActorId& sender, con
 {
     return ctx.Register(new TBuilderProxy<TEvPQ::TEvPartitionStatusResponse,
                                           NKikimrPQ::TStatusResponse,
-                                          TEvPersQueue::TEvStatusResponse>(tabletId, sender, count, cookie));
+                                          NEvPersQueue::TEvStatusResponse>(tabletId, sender, count, cookie));
 }
 
 /******************************************************* MonitoringProxy *********************************************************/
@@ -1307,7 +1307,7 @@ void TPersQueue::InitializeMeteringSink(const TActorContext& ctx) {
 
 void TPersQueue::ReturnTabletState(const TActorContext& ctx, const TChangeNotification& req, NKikimrProto::EReplyStatus status)
 {
-    THolder<TEvPersQueue::TEvDropTabletReply> event = MakeHolder<TEvPersQueue::TEvDropTabletReply>();
+    THolder<NEvPersQueue::TEvDropTabletReply> event = MakeHolder<NEvPersQueue::TEvDropTabletReply>();
     event->Record.SetStatus(status);
     event->Record.SetTabletId(TabletID());
     event->Record.SetTxId(req.TxId);
@@ -1605,9 +1605,9 @@ void TPersQueue::FinishResponse(THashMap<ui64, TAutoPtr<TResponseBuilder>>::iter
 }
 
 
-void TPersQueue::Handle(TEvPersQueue::TEvUpdateConfig::TPtr& ev, const TActorContext& ctx)
+void TPersQueue::Handle(NEvPersQueue::TEvUpdateConfig::TPtr& ev, const TActorContext& ctx)
 {
-    PQ_LOG_D("Handle TEvPersQueue::TEvUpdateConfig");
+    PQ_LOG_D("Handle NEvPersQueue::TEvUpdateConfig");
     if (!ConfigInited) {
         UpdateConfigRequests.emplace_back(ev->Release(), ev->Sender);
         return;
@@ -1637,7 +1637,7 @@ void TPersQueue::TrySendUpdateConfigResponses(const TActorContext& ctx)
                     << " Config applied version " << Config.GetVersion() << " actor " << p.Actor
                     << " txId " << p.TxId << " config:\n" << Config.DebugString());
 
-        THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
+        THolder<NEvPersQueue::TEvUpdateConfigResponse> res{new NEvPersQueue::TEvUpdateConfigResponse};
         res->Record.SetStatus(NKikimrPQ::OK);
         res->Record.SetTxId(p.TxId);
         res->Record.SetOrigin(TabletID());
@@ -1686,7 +1686,7 @@ void TPersQueue::UpdateReadRuleGenerations(NKikimrPQ::TPQTabletConfig& cfg) cons
     }
 }
 
-void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConfig> ev, const TActorId& sender, const TActorContext& ctx)
+void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<NEvPersQueue::TEvUpdateConfig> ev, const TActorId& sender, const TActorContext& ctx)
 {
     const auto& record = ev->GetRecord();
 
@@ -1705,7 +1705,7 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
                     << " Config already applied version " << Config.GetVersion() << " actor " << sender
                     << " txId " << record.GetTxId() << " config:\n" << cfg.DebugString());
 
-        THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
+        THolder<NEvPersQueue::TEvUpdateConfigResponse> res{new NEvPersQueue::TEvUpdateConfigResponse};
         res->Record.SetStatus(NKikimrPQ::OK);
         res->Record.SetTxId(record.GetTxId());
         res->Record.SetOrigin(TabletID());
@@ -1717,7 +1717,7 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
                     << " Config has too small  version " << curConfigVersion << " actual " << newConfigVersion << " actor " << sender
                     << " txId " << record.GetTxId() << " config:\n" << cfg.DebugString());
 
-        THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
+        THolder<NEvPersQueue::TEvUpdateConfigResponse> res{new NEvPersQueue::TEvUpdateConfigResponse};
         res->Record.SetStatus(NKikimrPQ::ERROR_BAD_VERSION);
         res->Record.SetTxId(record.GetTxId());
         res->Record.SetOrigin(TabletID());
@@ -1738,7 +1738,7 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
                     << " actor " << sender
                     << " txId " << record.GetTxId() << " config:\n" << cfg.DebugString());
 
-        THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
+        THolder<NEvPersQueue::TEvUpdateConfigResponse> res{new NEvPersQueue::TEvUpdateConfigResponse};
         res->Record.SetStatus(NKikimrPQ::ERROR_UPDATE_IN_PROGRESS);
         res->Record.SetTxId(record.GetTxId());
         res->Record.SetOrigin(TabletID());
@@ -1754,7 +1754,7 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
                     << ", actor " << sender
                     << ", txId " << record.GetTxId());
 
-        THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
+        THolder<NEvPersQueue::TEvUpdateConfigResponse> res{new NEvPersQueue::TEvUpdateConfigResponse};
         res->Record.SetStatus(NKikimrPQ::ERROR);
         res->Record.SetTxId(record.GetTxId());
         res->Record.SetOrigin(TabletID());
@@ -1779,7 +1779,7 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
                         << " actor " << sender
                         << " txId " << record.GetTxId());
 
-            THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
+            THolder<NEvPersQueue::TEvUpdateConfigResponse> res{new NEvPersQueue::TEvUpdateConfigResponse};
             res->Record.SetStatus(NKikimrPQ::ERROR);
             res->Record.SetTxId(record.GetTxId());
             res->Record.SetOrigin(TabletID());
@@ -1862,9 +1862,9 @@ void TPersQueue::ClearNewConfig()
     NewConfig.Clear();
 }
 
-void TPersQueue::Handle(TEvPersQueue::TEvDropTablet::TPtr& ev, const TActorContext& ctx)
+void TPersQueue::Handle(NEvPersQueue::TEvDropTablet::TPtr& ev, const TActorContext& ctx)
 {
-    PQ_LOG_D("Handle TEvPersQueue::TEvDropTablet");
+    PQ_LOG_D("Handle NEvPersQueue::TEvDropTablet");
 
     auto& record = ev->Get()->Record;
     ui64 txId = record.GetTxId();
@@ -1888,10 +1888,10 @@ void TPersQueue::Handle(TEvPersQueue::TEvDropTablet::TPtr& ev, const TActorConte
     BeginWriteTabletState(ctx, reqState);
 }
 
-void TPersQueue::Handle(TEvPersQueue::TEvOffsets::TPtr& ev, const TActorContext& ctx)
+void TPersQueue::Handle(NEvPersQueue::TEvOffsets::TPtr& ev, const TActorContext& ctx)
 {
     if (!ConfigInited) {
-        THolder<TEvPersQueue::TEvOffsetsResponse> res = MakeHolder<TEvPersQueue::TEvOffsetsResponse>();
+        THolder<NEvPersQueue::TEvOffsetsResponse> res = MakeHolder<NEvPersQueue::TEvOffsetsResponse>();
         auto& resp = res->Record;
         resp.SetTabletId(TabletID());
 
@@ -1919,7 +1919,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvOffsets::TPtr& ev, const TActorContext&
     }
 }
 
-void TPersQueue::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx)
+void TPersQueue::Handle(NEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx)
 {
     auto& record = ev->Get()->Record;
     ActorIdToProto(ev->Sender, record.MutableSender());
@@ -1934,13 +1934,13 @@ void TPersQueue::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
 }
 
 
-void TPersQueue::Handle(TEvPersQueue::TEvPartitionClientInfo::TPtr& ev, const TActorContext& ctx) {
+void TPersQueue::Handle(NEvPersQueue::TEvPartitionClientInfo::TPtr& ev, const TActorContext& ctx) {
     for (auto partition : ev->Get()->Record.GetPartitions()) {
         auto it = Partitions.find(TPartitionId(partition));
         if (it != Partitions.end()) {
             ctx.Send(it->second.Actor, new TEvPQ::TEvGetPartitionClientInfo(ev->Sender), 0, ev->Cookie);
         } else {
-            THolder<TEvPersQueue::TEvPartitionClientInfoResponse> clientInfo = MakeHolder<TEvPersQueue::TEvPartitionClientInfoResponse>();
+            THolder<NEvPersQueue::TEvPartitionClientInfoResponse> clientInfo = MakeHolder<NEvPersQueue::TEvPartitionClientInfoResponse>();
             clientInfo->Record.SetPartition(partition);
             ctx.Send(ev->Sender, clientInfo.Release(), 0, ev->Cookie);
         }
@@ -1954,9 +1954,9 @@ void TPersQueue::ProcessStatusRequests(const TActorContext &ctx) {
     StatusRequests.clear();
 }
 
-void TPersQueue::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx)
+void TPersQueue::Handle(NEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx)
 {
-    PQ_LOG_D("Handle TEvPersQueue::TEvStatus");
+    PQ_LOG_D("Handle NEvPersQueue::TEvStatus");
 
     ReadBalancerActorId = ev->Sender;
 
@@ -2792,7 +2792,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
 }
 
 void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
-                                                   TEvPersQueue::TEvRequest::TPtr& event,
+                                                   NEvPersQueue::TEvRequest::TPtr& event,
                                                    const TActorId& sender,
                                                    const TActorContext& ctx)
 {
@@ -2839,7 +2839,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
             HandleEventForSupportivePartition(responseCookie, req, sender, ctx);
         } else {
             partition.PendingRequests.emplace_back(responseCookie,
-                                                   std::shared_ptr<TEvPersQueue::TEvRequest>(event->Release().Release()),
+                                                   std::shared_ptr<NEvPersQueue::TEvRequest>(event->Release().Release()),
                                                    sender);
         }
     } else {
@@ -2876,7 +2876,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
 
         TPartitionInfo& partition = Partitions.at(partitionId);
         partition.PendingRequests.emplace_back(responseCookie,
-                                               std::shared_ptr<TEvPersQueue::TEvRequest>(event->Release().Release()),
+                                               std::shared_ptr<NEvPersQueue::TEvRequest>(event->Release().Release()),
                                                sender);
 
         if (writeInfo.LongTxSubscriptionStatus == NKikimrLongTxService::TEvLockStatus::STATUS_UNSPECIFIED) {
@@ -2887,7 +2887,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
     }
 }
 
-void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx)
+void TPersQueue::Handle(NEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx)
 {
     NKikimrClient::TPersQueueRequest& request = ev->Get()->Record;
     TString s = request.HasRequestId() ? request.GetRequestId() : "<none>";
@@ -3301,9 +3301,9 @@ void TPersQueue::DeleteExpiredTransactions(const TActorContext& ctx)
     TryWriteTxs(ctx);
 }
 
-void TPersQueue::Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx)
+void TPersQueue::Handle(NEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx)
 {
-    PQ_LOG_D("Handle TEvPersQueue::TEvCancelTransactionProposal");
+    PQ_LOG_D("Handle NEvPersQueue::TEvCancelTransactionProposal");
 
     NKikimrPQ::TEvCancelTransactionProposal& event = ev->Get()->Record;
     Y_ABORT_UNLESS(event.HasTxId());
@@ -3317,10 +3317,10 @@ void TPersQueue::Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, co
     }
 }
 
-void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx)
+void TPersQueue::Handle(NEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx)
 {
     const NKikimrPQ::TEvProposeTransaction& event = ev->Get()->GetRecord();
-    PQ_LOG_D("Handle TEvPersQueue::TEvProposeTransaction " << event.ShortDebugString());
+    PQ_LOG_D("Handle NEvPersQueue::TEvProposeTransaction " << event.ShortDebugString());
 
     switch (event.GetTxBodyCase()) {
     case NKikimrPQ::TEvProposeTransaction::kData:
@@ -3373,7 +3373,7 @@ bool TPersQueue::CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBod
     return true;
 }
 
-void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransaction> ev,
+void TPersQueue::HandleDataTransaction(TAutoPtr<NEvPersQueue::TEvProposeTransaction> ev,
                                        const TActorContext& ctx)
 {
     NKikimrPQ::TEvProposeTransaction& event = *ev->MutableRecord();
@@ -3392,7 +3392,7 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
     }
 
     //
-    // TODO(abcdef): сохранить пока инициализируемся. TEvPersQueue::TEvHasDataInfo::TPtr как образец. не только конфиг. Inited==true
+    // TODO(abcdef): сохранить пока инициализируемся. NEvPersQueue::TEvHasDataInfo::TPtr как образец. не только конфиг. Inited==true
     //
 
     if (txBody.OperationsSize() <= 0) {
@@ -3484,7 +3484,7 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
     }
 }
 
-void TPersQueue::HandleConfigTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransaction> ev,
+void TPersQueue::HandleConfigTransaction(TAutoPtr<NEvPersQueue::TEvProposeTransaction> ev,
                                          const TActorContext& ctx)
 {
     const NKikimrPQ::TEvProposeTransaction& event = ev->GetRecord();
@@ -3992,7 +3992,7 @@ void TPersQueue::SaveTxWrites(NKikimrPQ::TTabletTxInfo& info)
 void TPersQueue::ScheduleProposeTransactionResult(const TDistributedTransaction& tx)
 {
     PQ_LOG_D("schedule TEvProposeTransactionResult(PREPARED)");
-    auto event = std::make_unique<TEvPersQueue::TEvProposeTransactionResult>();
+    auto event = std::make_unique<NEvPersQueue::TEvProposeTransactionResult>();
 
     event->Record.SetOrigin(TabletID());
     event->Record.SetStatus(NKikimrPQ::TEvProposeTransactionResult::PREPARED);
@@ -4190,7 +4190,7 @@ void TPersQueue::SendEvTxRollbackToPartitions(const TActorContext& ctx,
 void TPersQueue::SendEvProposeTransactionResult(const TActorContext& ctx,
                                                 TDistributedTransaction& tx)
 {
-    auto result = std::make_unique<TEvPersQueue::TEvProposeTransactionResult>();
+    auto result = std::make_unique<NEvPersQueue::TEvProposeTransactionResult>();
     auto status =
         (tx.GetDecision() == NKikimrTx::TReadSetData::DECISION_COMMIT) ? NKikimrPQ::TEvProposeTransactionResult::COMPLETE : NKikimrPQ::TEvProposeTransactionResult::ABORTED;
 
@@ -4199,7 +4199,7 @@ void TPersQueue::SendEvProposeTransactionResult(const TActorContext& ctx,
     result->Record.SetTxId(tx.TxId);
     result->Record.SetStep(tx.Step);
 
-    PQ_LOG_D("send TEvPersQueue::TEvProposeTransactionResult(" <<
+    PQ_LOG_D("send NEvPersQueue::TEvProposeTransactionResult(" <<
              NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(result->Record.GetStatus()) <<
              ")");
     ctx.Send(tx.SourceActor, std::move(result));
@@ -4581,7 +4581,7 @@ void TPersQueue::SendProposeTransactionAbort(const TActorId& target,
                                              const TString& reason,
                                              const TActorContext& ctx)
 {
-    auto event = std::make_unique<TEvPersQueue::TEvProposeTransactionResult>();
+    auto event = std::make_unique<NEvPersQueue::TEvProposeTransactionResult>();
 
     event->Record.SetOrigin(TabletID());
     event->Record.SetStatus(NKikimrPQ::TEvProposeTransactionResult::ABORTED);
@@ -4593,7 +4593,7 @@ void TPersQueue::SendProposeTransactionAbort(const TActorId& target,
         error->SetReason(reason);
     }
 
-    PQ_LOG_D("send TEvPersQueue::TEvProposeTransactionResult(" <<
+    PQ_LOG_D("send NEvPersQueue::TEvProposeTransactionResult(" <<
              NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event->Record.GetStatus()) <<
              ")");
     ctx.Send(target, std::move(event));
@@ -4776,9 +4776,9 @@ void TPersQueue::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext
     }
 }
 
-void TPersQueue::Handle(TEvPersQueue::TEvProposeTransactionAttach::TPtr &ev, const TActorContext &ctx)
+void TPersQueue::Handle(NEvPersQueue::TEvProposeTransactionAttach::TPtr &ev, const TActorContext &ctx)
 {
-    PQ_LOG_D("Handle TEvPersQueue::TEvProposeTransactionAttach " << ev->Get()->Record.ShortDebugString());
+    PQ_LOG_D("Handle NEvPersQueue::TEvProposeTransactionAttach " << ev->Get()->Record.ShortDebugString());
 
     const ui64 txId = ev->Get()->Record.GetTxId();
     NKikimrProto::EReplyStatus status = NKikimrProto::NODATA;
@@ -4797,7 +4797,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransactionAttach::TPtr &ev, con
         }
     }
 
-    ctx.Send(ev->Sender, new TEvPersQueue::TEvProposeTransactionAttachResult(TabletID(), txId, status), 0, ev->Cookie);
+    ctx.Send(ev->Sender, new NEvPersQueue::TEvProposeTransactionAttachResult(TabletID(), txId, status), 0, ev->Cookie);
 }
 
 void TPersQueue::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx)
@@ -4991,12 +4991,12 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
     switch(ev->GetTypeRewrite())
     {
         HFuncTraced(TEvInterconnect::TEvNodeInfo, Handle);
-        HFuncTraced(TEvPersQueue::TEvRequest, Handle);
-        HFuncTraced(TEvPersQueue::TEvUpdateConfig, Handle);
-        HFuncTraced(TEvPersQueue::TEvOffsets, Handle);
-        HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
-        HFuncTraced(TEvPersQueue::TEvStatus, Handle);
-        HFuncTraced(TEvPersQueue::TEvPartitionClientInfo, Handle);
+        HFuncTraced(NEvPersQueue::TEvRequest, Handle);
+        HFuncTraced(NEvPersQueue::TEvUpdateConfig, Handle);
+        HFuncTraced(NEvPersQueue::TEvOffsets, Handle);
+        HFuncTraced(NEvPersQueue::TEvHasDataInfo, Handle);
+        HFuncTraced(NEvPersQueue::TEvStatus, Handle);
+        HFuncTraced(NEvPersQueue::TEvPartitionClientInfo, Handle);
         HFuncTraced(TEvKeyValue::TEvResponse, Handle);
         HFuncTraced(TEvPQ::TEvInitComplete, Handle);
         HFuncTraced(TEvPQ::TEvPartitionCounters, Handle);
@@ -5004,7 +5004,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvPartitionLabeledCounters, Handle);
         HFuncTraced(TEvPQ::TEvPartitionLabeledCountersDrop, Handle);
         HFuncTraced(TEvPQ::TEvTabletCacheCounters, Handle);
-        HFuncTraced(TEvPersQueue::TEvDropTablet, Handle);
+        HFuncTraced(NEvPersQueue::TEvDropTablet, Handle);
         HFuncTraced(TEvTabletPipe::TEvServerConnected, Handle);
         HFuncTraced(TEvTabletPipe::TEvServerDisconnected, Handle);
         HFuncTraced(TEvTabletPipe::TEvClientConnected, Handle);
@@ -5012,7 +5012,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvError, Handle);
         HFuncTraced(TEvPQ::TEvProxyResponse, Handle);
         CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
-        HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle);
+        HFuncTraced(NEvPersQueue::TEvProposeTransaction, Handle);
         HFuncTraced(TEvPQ::TEvPartitionConfigChanged, Handle);
         HFuncTraced(TEvTxProcessing::TEvPlanStep, Handle);
         HFuncTraced(TEvTxProcessing::TEvReadSet, Handle);
@@ -5021,9 +5021,9 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvProposePartitionConfigResult, Handle);
         HFuncTraced(TEvPQ::TEvTxCommitDone, Handle);
         HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
-        HFuncTraced(TEvPersQueue::TEvProposeTransactionAttach, Handle);
+        HFuncTraced(NEvPersQueue::TEvProposeTransactionAttach, Handle);
         HFuncTraced(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
-        HFuncTraced(TEvPersQueue::TEvCancelTransactionProposal, Handle);
+        HFuncTraced(NEvPersQueue::TEvCancelTransactionProposal, Handle);
         HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
         HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
         HFuncTraced(TEvPQ::TEvPartitionScaleStatusChanged, Handle);

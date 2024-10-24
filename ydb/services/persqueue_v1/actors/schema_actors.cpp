@@ -492,9 +492,9 @@ bool TDescribeTopicActorImpl::StateWork(TAutoPtr<IEventHandle>& ev, const TActor
     switch (ev->GetTypeRewrite()) {
         HFuncCtx(TEvTabletPipe::TEvClientDestroyed, Handle, ctx);
         HFuncCtx(TEvTabletPipe::TEvClientConnected, Handle, ctx);
-        HFuncCtx(NKikimr::TEvPersQueue::TEvStatusResponse, Handle, ctx);
-        HFuncCtx(NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse, Handle, ctx);
-        HFuncCtx(TEvPersQueue::TEvGetPartitionsLocationResponse, Handle, ctx);
+        HFuncCtx(NKikimr::NEvPersQueue::TEvStatusResponse, Handle, ctx);
+        HFuncCtx(NKikimr::NEvPersQueue::TEvReadSessionsInfoResponse, Handle, ctx);
+        HFuncCtx(NEvPersQueue::TEvGetPartitionsLocationResponse, Handle, ctx);
         HFuncCtx(TEvPQProxy::TEvRequestTablet, Handle, ctx);
         default: return false;
     }
@@ -636,14 +636,14 @@ void TDescribeTopicActorImpl::RequestBalancer(const TActorContext& ctx) {
 }
 
 void TDescribeTopicActorImpl::RequestPartitionStatus(const TTabletInfo& tablet, const TActorContext& ctx) {
-    THolder<NKikimr::TEvPersQueue::TEvStatus> ev;
+    THolder<NKikimr::NEvPersQueue::TEvStatus> ev;
     if (Settings.Consumers.empty()) {
-        ev = MakeHolder<NKikimr::TEvPersQueue::TEvStatus>(
+        ev = MakeHolder<NKikimr::NEvPersQueue::TEvStatus>(
             Settings.Consumer.empty() ? "" : NPersQueue::ConvertNewConsumerName(Settings.Consumer, ctx),
             Settings.Consumer.empty()
         );
     } else {
-        ev = MakeHolder<NKikimr::TEvPersQueue::TEvStatus>();
+        ev = MakeHolder<NKikimr::NEvPersQueue::TEvStatus>();
         for (const auto& consumer : Settings.Consumers) {
             ev->Record.AddConsumers(consumer);
         }
@@ -671,7 +671,7 @@ void TDescribeTopicActorImpl::RequestPartitionsLocation(const TActorContext& ctx
     }
     NTabletPipe::SendData(
         ctx, *BalancerPipe,
-        new TEvPersQueue::TEvGetPartitionsLocation(partsVector)
+        new NEvPersQueue::TEvGetPartitionsLocation(partsVector)
     );
     ++RequestsInfly;
 }
@@ -680,13 +680,13 @@ void TDescribeTopicActorImpl::RequestReadSessionsInfo(const TActorContext& ctx) 
     Y_ABORT_UNLESS(Settings.Mode == TDescribeTopicActorSettings::EMode::DescribeConsumer);
     NTabletPipe::SendData(
             ctx, *BalancerPipe,
-                    new TEvPersQueue::TEvGetReadSessionsInfo(NPersQueue::ConvertNewConsumerName(Settings.Consumer, ctx))
+                    new NEvPersQueue::TEvGetReadSessionsInfo(NPersQueue::ConvertNewConsumerName(Settings.Consumer, ctx))
             );
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "DescribeTopicImpl " << ctx.SelfID.ToString() << ": Request sessions");
     ++RequestsInfly;
 }
 
-void TDescribeTopicActorImpl::Handle(NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) {
+void TDescribeTopicActorImpl::Handle(NKikimr::NEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) {
     auto it = Tablets.find(ev->Get()->Record.GetTabletId());
     if (it == Tablets.end()) return;
 
@@ -724,7 +724,7 @@ void TDescribeTopicActorImpl::Handle(NKikimr::TEvPersQueue::TEvStatusResponse::T
 }
 
 
-void TDescribeTopicActorImpl::Handle(NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) {
+void TDescribeTopicActorImpl::Handle(NKikimr::NEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "DescribeTopicImpl " << ctx.SelfID.ToString() << ": Got sessions");
 
     if (GotReadSessions)
@@ -745,7 +745,7 @@ void TDescribeTopicActorImpl::Handle(NKikimr::TEvPersQueue::TEvReadSessionsInfoR
     }
 }
 
-void TDescribeTopicActorImpl::Handle(TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext& ctx) {
+void TDescribeTopicActorImpl::Handle(NEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "DescribeTopicImpl " << ctx.SelfID.ToString() << ": Got location");
 
     if (GotLocation)
@@ -805,7 +805,7 @@ void SetPartitionLocation(const NKikimrPQ::TPartitionLocation& location, Ydb::To
 }
 
 
-void TDescribeTopicActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) {
+void TDescribeTopicActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::NEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) {
     Y_UNUSED(ctx);
     Y_UNUSED(tabletInfo);
     Y_UNUSED(ev);
@@ -832,7 +832,7 @@ void FillPartitionStats(const NKikimrPQ::TStatusResponse::TPartResult& partResul
     partStats->set_partition_node_id(nodeId);
 }
 
-void TDescribeTopicActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) {
+void TDescribeTopicActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::NEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) {
     Y_UNUSED(ctx);
 
     auto& record = ev->Get()->Record;
@@ -894,7 +894,7 @@ void TDescribeTopicActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPer
 }
 
 bool TDescribeTopicActor::ApplyResponse(
-        TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
+        NEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
 ) {
     const auto& record = ev->Get()->Record;
     Y_ABORT_UNLESS(record.LocationsSize() == TotalPartitions);
@@ -926,7 +926,7 @@ void TDescribeConsumerActor::Reply(const TActorContext& ctx) {
 }
 
 
-void TDescribeConsumerActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) {
+void TDescribeConsumerActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::NEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) {
     Y_UNUSED(ctx);
     Y_UNUSED(tabletInfo);
 
@@ -947,7 +947,7 @@ void TDescribeConsumerActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEv
 }
 
 
-void TDescribeConsumerActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) {
+void TDescribeConsumerActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::NEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) {
     Y_UNUSED(ctx);
     Y_UNUSED(tabletInfo);
 
@@ -1008,7 +1008,7 @@ void TDescribeConsumerActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEv
 }
 
 bool TDescribeConsumerActor::ApplyResponse(
-        TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
+        NEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
 ) {
     const auto& record = ev->Get()->Record;
     Y_ABORT_UNLESS(record.LocationsSize() == TotalPartitions);
@@ -1410,11 +1410,11 @@ void TDescribePartitionActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache:
     ProcessTablets(PQGroupInfo->Description, this->ActorContext());
 }
 
-void TDescribePartitionActor::ApplyResponse(TTabletInfo&, NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr&, const TActorContext&) {
+void TDescribePartitionActor::ApplyResponse(TTabletInfo&, NKikimr::NEvPersQueue::TEvReadSessionsInfoResponse::TPtr&, const TActorContext&) {
     Y_ABORT("");
 }
 
-void TDescribePartitionActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext&) {
+void TDescribePartitionActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::NEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext&) {
     auto* partResult = Result.mutable_partition();
 
     const auto& record = ev->Get()->Record;
@@ -1429,7 +1429,7 @@ void TDescribePartitionActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TE
 }
 
 bool TDescribePartitionActor::ApplyResponse(
-        TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
+        NEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
 ) {
     const auto& record = ev->Get()->Record;
     if (Settings.Partitions) {
@@ -1506,7 +1506,7 @@ void TPartitionsLocationActor::HandleCacheNavigateResponse(
 }
 
 bool TPartitionsLocationActor::ApplyResponse(
-        TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
+        NEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
 ) {
     const auto& record = ev->Get()->Record;
     for (auto i = 0u; i < record.LocationsSize(); i++) {

@@ -635,7 +635,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         Send(ev->Sender, std::move(update));
     }
 
-    void DelayUpdate(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+    void DelayUpdate(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         SBP_LOG_D("DelayUpdate " << ev->Get()->ToString()
             << ": sender# " << ev->Sender
             << ", cookie# " << ev->Cookie);
@@ -643,14 +643,14 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         DelayedUpdates.emplace_back(ev.Release());
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+    void Handle(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         //NOTE: avoid using TEventPreSerializedPB::GetRecord() or TEventPreSerializedPB::ToString()
         // that will cause full reconstruction of TEvDescribeSchemeResult from base stab
         // and PreSerializedData
-        auto* msg = static_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder*>(ev->Get());
+        auto* msg = static_cast<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResultBuilder*>(ev->Get());
         auto& record = msg->Record;
 
-        SBP_LOG_D("Handle TEvSchemeShard::TEvDescribeSchemeResult { " << record.ShortDebugString() << " }"
+        SBP_LOG_D("Handle NEvSchemeShard::TEvDescribeSchemeResult { " << record.ShortDebugString() << " }"
             << ": sender# " << ev->Sender
             << ", cookie# " << ev->Cookie
             << ", event size# " << msg->GetCachedByteSize()
@@ -903,7 +903,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvListSchemeBoardResult, Handle);
 
-            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, DelayUpdate);
+            hFunc(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult, DelayUpdate);
 
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
             hFunc(TSchemeBoardMonEvents::TEvDescribeRequest, Handle);
@@ -920,7 +920,7 @@ public:
             hFunc(NInternalEvents::TEvRequestDescribe, Handle);
             hFunc(NInternalEvents::TEvRequestUpdate, Handle);
 
-            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            hFunc(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult, Handle);
             hFunc(NSchemeshardEvents::TEvUpdateAck, Handle);
 
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);

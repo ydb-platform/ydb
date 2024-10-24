@@ -13,7 +13,7 @@ namespace NKesus {
 TString CanonizeQuoterResourcePath(const TVector<TString>& path);
 TString CanonizeQuoterResourcePath(const TString& path);
 
-namespace TEvKesus {
+namespace NEvKesus {
     enum EEv {
         EvBegin = EventSpaceBegin(TKikimrEvents::ES_KESUS),
 

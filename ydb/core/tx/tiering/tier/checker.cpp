@@ -42,7 +42,7 @@ void TTierPreparationActor::StartChecker() {
     Controller->OnPreparationFinished(std::move(Objects));
 }
 
-void TTierPreparationActor::Handle(NSchemeShard::TEvSchemeShard::TEvProcessingResponse::TPtr& ev) {
+void TTierPreparationActor::Handle(NSchemeShard::NEvSchemeShard::TEvProcessingResponse::TPtr& ev) {
     auto& proto = ev->Get()->Record;
     if (proto.HasError()) {
         Controller->OnPreparationProblem(proto.GetError().GetErrorMessage());

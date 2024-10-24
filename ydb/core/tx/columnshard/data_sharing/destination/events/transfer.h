@@ -82,7 +82,7 @@ public:
 
 };
 
-struct TEvSendDataFromSource: public NActors::TEventPB<TEvSendDataFromSource, NKikimrColumnShardDataSharingProto::TEvSendDataFromSource, TEvColumnShard::EvDataSharingSendDataFromSource> {
+struct TEvSendDataFromSource: public NActors::TEventPB<TEvSendDataFromSource, NKikimrColumnShardDataSharingProto::TEvSendDataFromSource, NEvColumnShard::EvDataSharingSendDataFromSource> {
     TEvSendDataFromSource() = default;
 
     TEvSendDataFromSource(const TString& sessionId, const ui32 packIdx, const TTabletId sourceTabletId, const THashMap<ui64, TPathIdData>& pathIdData) {
@@ -95,7 +95,7 @@ struct TEvSendDataFromSource: public NActors::TEventPB<TEvSendDataFromSource, NK
     }
 };
 
-struct TEvFinishedFromSource: public NActors::TEventPB<TEvFinishedFromSource, NKikimrColumnShardDataSharingProto::TEvFinishedFromSource, TEvColumnShard::EvDataSharingFinishedFromSource> {
+struct TEvFinishedFromSource: public NActors::TEventPB<TEvFinishedFromSource, NKikimrColumnShardDataSharingProto::TEvFinishedFromSource, NEvColumnShard::EvDataSharingFinishedFromSource> {
     TEvFinishedFromSource() = default;
 
     TEvFinishedFromSource(const TString& sessionId, const TTabletId sourceTabletId) {

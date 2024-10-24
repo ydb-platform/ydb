@@ -24,12 +24,12 @@ private:
     void StartChecker();
 protected:
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev);
-    void Handle(NSchemeShard::TEvSchemeShard::TEvProcessingResponse::TPtr& ev);
+    void Handle(NSchemeShard::NEvSchemeShard::TEvProcessingResponse::TPtr& ev);
 public:
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
-            hFunc(NSchemeShard::TEvSchemeShard::TEvProcessingResponse, Handle);
+            hFunc(NSchemeShard::NEvSchemeShard::TEvProcessingResponse, Handle);
             default:
                 break;
         }

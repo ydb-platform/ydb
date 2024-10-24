@@ -247,7 +247,7 @@ void TSideEffects::DoActivateOps(TSchemeShard* ss, const TActorContext& ctx) {
         for (ui32 partIdx = 0; partIdx < operation->Parts.size(); ++partIdx) {
             LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "Activate send for " << TOperationId(txId, partIdx));
-            ctx.Send(ctx.SelfID, new TEvPrivate::TEvProgressOperation(ui64(txId), partIdx));
+            ctx.Send(ctx.SelfID, new NEvPrivate::TEvProgressOperation(ui64(txId), partIdx));
         }
     }
 
@@ -270,7 +270,7 @@ void TSideEffects::DoActivateOps(TSchemeShard* ss, const TActorContext& ctx) {
 
         LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "Activate send for " << opPart);
-        ctx.Send(ctx.SelfID, new TEvPrivate::TEvProgressOperation(ui64(opPart.GetTxId()), opPart.GetSubTxId()));
+        ctx.Send(ctx.SelfID, new NEvPrivate::TEvProgressOperation(ui64(opPart.GetTxId()), opPart.GetSubTxId()));
     }
 }
 
@@ -416,7 +416,7 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
         auto& tenantLink = ss->SubDomainsLinks.GetLink(pathId);
         Y_ABORT_UNLESS(tenantLink.DomainKey == pathId);
 
-        auto message = MakeHolder<TEvSchemeShard::TEvUpdateTenantSchemeShard>(ss->TabletID(), ss->Generation());
+        auto message = MakeHolder<NEvSchemeShard::TEvUpdateTenantSchemeShard>(ss->TabletID(), ss->Generation());
 
         bool hasChanges = false;
 
@@ -798,7 +798,7 @@ void TSideEffects::DoUpdateTempDirsToMakeState(TSchemeShard* ss, const TActorCon
 
         if (it == TempDirsByOwner.end()) {
             ctx.Send(new IEventHandle(ownerActorId, ss->SelfId(),
-                new TEvSchemeShard::TEvOwnerActorAck(),
+                new NEvSchemeShard::TEvOwnerActorAck(),
                 IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession));
 
             auto& currentDirsTables = TempDirsByOwner[ownerActorId];
@@ -1103,8 +1103,8 @@ void TSideEffects::DoCheckBarriers(TSchemeShard *ss, NTabletFlatExecutor::TTrans
         TStorageChanges dbChanges;
         TOperationContext context{ss, txc, ctx, *this, memChanges, dbChanges};
 
-        THolder<TEvPrivate::TEvCompleteBarrier> msg = MakeHolder<TEvPrivate::TEvCompleteBarrier>(txId, name);
-        TEvPrivate::TEvCompleteBarrier::TPtr personalEv = (TEventHandle<TEvPrivate::TEvCompleteBarrier>*) new IEventHandle(
+        THolder<NEvPrivate::TEvCompleteBarrier> msg = MakeHolder<NEvPrivate::TEvCompleteBarrier>(txId, name);
+        NEvPrivate::TEvCompleteBarrier::TPtr personalEv = (TEventHandle<NEvPrivate::TEvCompleteBarrier>*) new IEventHandle(
                     context.SS->SelfId(), context.SS->SelfId(), msg.Release());
 
         for (auto& partId: blockedParts) {

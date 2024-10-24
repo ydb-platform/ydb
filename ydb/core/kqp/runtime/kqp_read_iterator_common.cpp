@@ -35,8 +35,8 @@ void SetDefaultIteratorQuotaSettings(ui32 rows, ui32 bytes) {
     SetDefaultReadAckSettings(settings.Ack);
 }
 
-THolder<NKikimr::TEvDataShard::TEvRead> GetDefaultReadSettings() {
-    auto result = MakeHolder<NKikimr::TEvDataShard::TEvRead>();
+THolder<NKikimr::NEvDataShard::TEvRead> GetDefaultReadSettings() {
+    auto result = MakeHolder<NKikimr::NEvDataShard::TEvRead>();
     auto ptr = Singleton<TEvReadDefaultSettings>()->Settings.AtomicLoad();
     result->Record.MergeFrom(ptr->Read);
     return result;
@@ -49,8 +49,8 @@ void SetDefaultReadSettings(const NKikimrTxDataShard::TEvRead& read) {
     Singleton<TEvReadDefaultSettings>()->Settings.AtomicStore(MakeIntrusive<TEvReadSettings>(settings));
 }
 
-THolder<NKikimr::TEvDataShard::TEvReadAck> GetDefaultReadAckSettings() {
-    auto result = MakeHolder<NKikimr::TEvDataShard::TEvReadAck>();
+THolder<NKikimr::NEvDataShard::TEvReadAck> GetDefaultReadAckSettings() {
+    auto result = MakeHolder<NKikimr::NEvDataShard::TEvReadAck>();
     auto ptr = Singleton<TEvReadDefaultSettings>()->Settings.AtomicLoad();
     result->Record.MergeFrom(ptr->Ack);
     return result;
@@ -91,7 +91,7 @@ size_t MaxShardResolves() {
     return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxShardResolves;
 }
 
-size_t MaxShardRetries() {  
+size_t MaxShardRetries() {
     return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxShardAttempts;
 }
 

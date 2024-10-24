@@ -60,24 +60,24 @@ public:
         return Params;
     }
 
-    THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> Describe(const TActorContext& ctx);
+    THolder<NEvSchemeShard::TEvDescribeSchemeResultBuilder> Describe(const TActorContext& ctx);
 
 private:
     TSchemeShard* Self;
     NKikimrSchemeOp::TDescribePath Params;
 
-    THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> Result;
+    THolder<NEvSchemeShard::TEvDescribeSchemeResultBuilder> Result;
 
 }; // TPathDescriber
 
-THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
+THolder<NEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     TSchemeShard* self,
     const TActorContext& ctx,
     TPathId pathId,
     const NKikimrSchemeOp::TDescribeOptions& opts
 );
 
-THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
+THolder<NEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     TSchemeShard* self,
     const TActorContext& ctx,
     TPathId pathId

@@ -40,9 +40,9 @@ TMaybe<size_t> MaxTotalRetries();
 TMaybe<TDuration> ShardTimeout();
 
 void SetDefaultIteratorQuotaSettings(ui32 rows, ui32 bytes);
-THolder<NKikimr::TEvDataShard::TEvRead> GetDefaultReadSettings();
+THolder<NKikimr::NEvDataShard::TEvRead> GetDefaultReadSettings();
 void SetDefaultReadSettings(const NKikimrTxDataShard::TEvRead&);
-THolder<NKikimr::TEvDataShard::TEvReadAck> GetDefaultReadAckSettings();
+THolder<NKikimr::NEvDataShard::TEvReadAck> GetDefaultReadAckSettings();
 void SetDefaultReadAckSettings(const NKikimrTxDataShard::TEvReadAck&);
 
 } // namespace NKqp

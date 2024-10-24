@@ -13,7 +13,7 @@ namespace NKikimr::NBlobDepot {
             TGenStep Soft;
             TGenStep HardGenCtr;
             TGenStep Hard;
-            std::deque<std::unique_ptr<TEvBlobDepot::TEvCollectGarbage::THandle>> ProcessingQ;
+            std::deque<std::unique_ptr<NEvBlobDepot::TEvCollectGarbage::THandle>> ProcessingQ;
         };
 
         THashMap<std::tuple<ui64, ui8>, TBarrier> Barriers;
@@ -29,7 +29,7 @@ namespace NKikimr::NBlobDepot {
         void AddBarrierOnLoad(ui64 tabletId, ui8 channel, TGenStep softGenCtr, TGenStep soft, TGenStep hardGenCtr, TGenStep hard);
         bool AddBarrierOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBarrier& barrier, ui32& maxItems,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
-        void Handle(TEvBlobDepot::TEvCollectGarbage::TPtr ev);
+        void Handle(NEvBlobDepot::TEvCollectGarbage::TPtr ev);
         void GetBlobBarrierRelation(TLogoBlobID id, bool *underSoft, bool *underHard) const;
         void OnDataLoaded();
 

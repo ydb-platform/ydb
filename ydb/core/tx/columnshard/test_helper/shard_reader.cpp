@@ -2,8 +2,8 @@
 
 namespace NKikimr::NTxUT {
 
-std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TShardReader::BuildStartEvent() const {
-    auto ev = std::make_unique<TEvDataShard::TEvKqpScan>();
+std::unique_ptr<NKikimr::NEvDataShard::TEvKqpScan> TShardReader::BuildStartEvent() const {
+    auto ev = std::make_unique<NEvDataShard::TEvKqpScan>();
     ev->Record.SetLocalPathId(PathId);
     ev->Record.MutableSnapshot()->SetStep(Snapshot.GetPlanStep());
     ev->Record.MutableSnapshot()->SetTxId(Snapshot.GetTxId());

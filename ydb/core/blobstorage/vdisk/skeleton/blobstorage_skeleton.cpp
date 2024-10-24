@@ -175,9 +175,9 @@ namespace NKikimr {
             }
         }
 
-        void Handle(const NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx) {
+        void Handle(const NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx) {
             auto& record = ev->Get()->Record;
-            ctx.Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
+            ctx.Send(ev->Sender, new NConsole::NEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
             if (!record.HasConfig() ) {
                 return;
             }
@@ -1778,7 +1778,7 @@ namespace NKikimr {
                                                           MinREALHugeBlobInBytes,
                                                           Db->GetVDiskIncarnationGuid());
             ctx.Send(*SkeletonFrontIDPtr, msg.release());
-            ctx.Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
+            ctx.Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
                 NKikimrConsole::TConfigItem::BlobStorageConfigItem,
                 SelfId()
             ));
@@ -2428,7 +2428,7 @@ namespace NKikimr {
         }
 
         void PassAway() override {
-            Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest(
+            Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::NEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest(
                 SelfId()
             ));
             TActor::PassAway();
@@ -2694,8 +2694,8 @@ namespace NKikimr {
         )
 
         STRICT_STFUNC(StateNormal,
-            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
-            HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+            IgnoreFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            HFunc(NConsole::NEvConsole::TEvConfigNotificationRequest, Handle);
             HFunc(TEvBlobStorage::TEvVMovedPatch, Handle)
             HFunc(TEvBlobStorage::TEvVPatchStart, Handle)
             HFunc(TEvBlobStorage::TEvVPatchDiff, HandleVPatchDiffResending)

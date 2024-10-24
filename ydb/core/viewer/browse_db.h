@@ -23,7 +23,7 @@ public:
         : TBrowseTabletsCommon(owner, browseContext)
     {}
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx) {
         DescribeResult.Reset(ev->Release());
         ++Responses;
         ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestCompleted(TxProxy, TEvTxUserProxy::EvNavigate));
@@ -65,17 +65,17 @@ public:
             ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestSent(TxProxy, tabletId, TEvTablet::EvGetCounters));
             ui64 hiveTabletId = domainsInfo->GetHive();
             pipeClient = GetTabletPipe(hiveTabletId, ctx);
-            NTabletPipe::SendData(ctx, pipeClient, new TEvHive::TEvLookupChannelInfo(tabletId), tabletId);
+            NTabletPipe::SendData(ctx, pipeClient, new NEvHive::TEvLookupChannelInfo(tabletId), tabletId);
             ++Requests;
-            ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestSent(pipeClient, TEvHive::EvLookupChannelInfo));
+            ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestSent(pipeClient, NEvHive::EvLookupChannelInfo));
         }
     }
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFunc(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult, Handle);
             HFunc(TEvTablet::TEvGetCountersResponse, TBase::Handle);
-            HFunc(TEvHive::TEvChannelInfo, TBase::Handle);
+            HFunc(NEvHive::TEvChannelInfo, TBase::Handle);
             HFunc(TEvBlobStorage::TEvResponseControllerInfo, TBase::Handle);
             CFunc(TEvents::TSystem::PoisonPill, HandlePoisonPill);
         }

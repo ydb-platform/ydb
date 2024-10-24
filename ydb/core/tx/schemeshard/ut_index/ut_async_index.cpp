@@ -58,11 +58,11 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         env.TestWaitNotification(runtime, txId);
     }
 
-    THolder<TEvDataShard::TEvUploadRowsRequest> MakeUploadRows(ui64 tableId,
+    THolder<NEvDataShard::TEvUploadRowsRequest> MakeUploadRows(ui64 tableId,
             const TVector<ui32>& keyTags, const TVector<ui32>& valueTags,
             TVector<std::pair<TString, TString>>&& serializedRows)
     {
-        auto ev = MakeHolder<TEvDataShard::TEvUploadRowsRequest>();
+        auto ev = MakeHolder<NEvDataShard::TEvUploadRowsRequest>();
         ev->Record.SetTableId(tableId);
 
         auto& scheme = *ev->Record.MutableRowScheme();
@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         ForwardToTablet(runtime, mainTabletIds[0], sender, ev.Release());
 
         if (block) {
-            runtime.GrabEdgeEvent<TEvDataShard::TEvUploadRowsResponse>(sender);
+            runtime.GrabEdgeEvent<NEvDataShard::TEvUploadRowsResponse>(sender);
         }
 
         return mainTabletIds;

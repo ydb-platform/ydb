@@ -56,8 +56,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
 
             TVector<THolder<IEventHandle>> suppressed;
             auto suppressEvent  = [&](TAutoPtr<IEventHandle>& ev) -> auto {
-                if (ev->GetTypeRewrite() == TEvDataShard::TEvStateChanged::EventType) {
-                    auto *msg = ev->Get<TEvDataShard::TEvStateChanged>();
+                if (ev->GetTypeRewrite() == NEvDataShard::TEvStateChanged::EventType) {
+                    auto *msg = ev->Get<NEvDataShard::TEvStateChanged>();
                     auto state = msg->Record.GetState();
                     Cerr << "TEvStateChanged has happened " << state << Endl;
 
@@ -1159,7 +1159,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             while (retries--) {
                 {
                     TDispatchOptions opts;
-                    opts.FinalEvents.emplace_back(TEvDataShard::EvSplit);
+                    opts.FinalEvents.emplace_back(NEvDataShard::EvSplit);
                     runtime.DispatchEvents(opts);
                 }
 

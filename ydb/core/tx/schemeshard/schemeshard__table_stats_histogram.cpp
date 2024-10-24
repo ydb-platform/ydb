@@ -45,7 +45,7 @@ TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram
         for (const auto& point : histogram.GetBuckets()) {
             ui64 leftSize = Min(point.GetValue(), total);
             ui64 rightSize = total - leftSize;
-            
+
             // search for a median point at which abs(leftSize - rightSize) is minimum
             ui64 sizesDiff = Max(leftSize, rightSize) - Min(leftSize, rightSize);
             if (idxMedDiff > sizesDiff) {
@@ -242,12 +242,12 @@ const char* ToString(ESplitReason splitReason) {
 }
 
 class TTxPartitionHistogram: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
-    TEvDataShard::TEvGetTableStatsResult::TPtr Ev;
+    NEvDataShard::TEvGetTableStatsResult::TPtr Ev;
 
     TSideEffects SplitOpSideEffects;
 
 public:
-    explicit TTxPartitionHistogram(TSelf* self, TEvDataShard::TEvGetTableStatsResult::TPtr& ev)
+    explicit TTxPartitionHistogram(TSelf* self, NEvDataShard::TEvGetTableStatsResult::TPtr& ev)
         : TBase(self)
         , Ev(ev)
     {
@@ -265,7 +265,7 @@ public:
 }; // TTxStorePartitionStats
 
 
-void TSchemeShard::Handle(TEvDataShard::TEvGetTableStatsResult::TPtr& ev, const TActorContext& ctx) {
+void TSchemeShard::Handle(NEvDataShard::TEvGetTableStatsResult::TPtr& ev, const TActorContext& ctx) {
     const auto& rec = ev->Get()->Record;
 
     auto datashardId = TTabletId(rec.GetDatashardId());

@@ -171,7 +171,7 @@ struct THash<NKikimr::NTenantSlotBroker::TSlotDescription> {
 namespace NKikimr {
 namespace NTenantSlotBroker {
 
-namespace TEvConsole = NConsole::TEvConsole;
+namespace NEvConsole = NConsole::NEvConsole;
 using NTabletFlatExecutor::TTabletExecutedFlat;
 using NTabletFlatExecutor::ITransaction;
 using NTabletFlatExecutor::TTransactionBase;
@@ -938,7 +938,7 @@ private:
                                           TSlot::TPtr slot = nullptr);
     ITransaction *CreateTxInitScheme();
     ITransaction *CreateTxLoadState();
-    ITransaction *CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
+    ITransaction *CreateTxUpdateConfig(NEvConsole::TEvConfigNotificationRequest::TPtr &ev);
     ITransaction *CreateTxUpdateNodeLocation(TEvInterconnect::TEvNodeInfo::TPtr &ev);
     ITransaction *CreateTxUpdatePoolStatus(TEvTenantPool::TEvTenantPoolStatus::TPtr &ev);
     ITransaction *CreateTxUpdateSlotStatus(TEvTenantPool::TEvConfigureSlotResult::TPtr &ev);
@@ -1057,9 +1057,9 @@ private:
     void TxCompleted(ITransaction *tx, const TActorContext &ctx);
     void ProcessNextTx(const TActorContext &ctx);
 
-    void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
+    void Handle(NEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                 const TActorContext &ctx);
-    void Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
+    void Handle(NEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvents::TEvUndelivered::TPtr &ev,
                 const TActorContext &ctx);
@@ -1101,8 +1101,8 @@ private:
     {
         TRACE_EVENT(NKikimrServices::TENANT_SLOT_BROKER);
         switch (ev->GetTypeRewrite()) {
-            HFuncTraced(TEvConsole::TEvConfigNotificationRequest, Handle);
-            HFuncTraced(TEvConsole::TEvReplaceConfigSubscriptionsResponse, Handle);
+            HFuncTraced(NEvConsole::TEvConfigNotificationRequest, Handle);
+            HFuncTraced(NEvConsole::TEvReplaceConfigSubscriptionsResponse, Handle);
             HFuncTraced(TEvents::TEvUndelivered, Handle);
             HFuncTraced(TEvInterconnect::TEvNodeInfo, Handle);
             HFuncTraced(TEvPrivate::TEvCheckAllSlotsStatus, Handle);
@@ -1118,8 +1118,8 @@ private:
             HFuncTraced(TEvTenantSlotBroker::TEvGetTenantState, Handle);
             HFuncTraced(TEvTenantSlotBroker::TEvListTenants, Handle);
             HFuncTraced(TEvTenantSlotBroker::TEvRegisterPool, Handle);
-            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
-            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse);
+            IgnoreFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            IgnoreFunc(NConsole::NEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {

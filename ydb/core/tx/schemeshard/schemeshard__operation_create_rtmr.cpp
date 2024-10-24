@@ -9,7 +9,7 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-bool ValidateConfig(const NKikimrSchemeOp::TRtmrVolumeDescription& op, TString& errStr, TEvSchemeShard::EStatus& status) {
+bool ValidateConfig(const NKikimrSchemeOp::TRtmrVolumeDescription& op, TString& errStr, NEvSchemeShard::EStatus& status) {
     ui64 count = op.PartitionsSize();
     for (ui64 i = 0; i < count; ++i) {
         const auto& part = op.GetPartitions(i);
@@ -17,13 +17,13 @@ bool ValidateConfig(const NKikimrSchemeOp::TRtmrVolumeDescription& op, TString& 
         if (part.HasTabletId() && TTabletId(part.GetTabletId())) {
             errStr = "Explicit tablet id provided for partition " + ::ToString(i);
 
-            status = TEvSchemeShard::EStatus::StatusInvalidParameter;
+            status = NEvSchemeShard::EStatus::StatusInvalidParameter;
             return false;
         }
 
         if (part.GetPartitionId().size() != sizeof(TGUID)) {
             errStr = "Invalid guid size for partition " + ::ToString(i);
-            status = TEvSchemeShard::EStatus::StatusInvalidParameter;
+            status = NEvSchemeShard::EStatus::StatusInvalidParameter;
             return false;
         }
     }
@@ -68,7 +68,7 @@ public:
     TConfigureParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
+        IgnoreMessages(DebugHint(), {NEvHive::TEvCreateTabletReply::EventType});
     }
 
     bool ProgressState(TOperationContext& context) override {
@@ -116,10 +116,10 @@ public:
     TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
+        IgnoreMessages(DebugHint(), {NEvHive::TEvCreateTabletReply::EventType});
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         auto step = TStepId(ev->Get()->StepId);
         auto ssId = context.SS->SelfTabletId();
 
@@ -223,7 +223,7 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
+        NEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
 
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);

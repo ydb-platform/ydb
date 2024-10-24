@@ -25,59 +25,59 @@
 #include <util/generic/set.h>
 
 #define SCHEMESHARD_INCOMING_EVENTS(action) \
-    action(TEvHive::TEvCreateTabletReply,        NSchemeShard::TXTYPE_CREATE_TABLET_REPLY)               \
-    action(TEvHive::TEvAdoptTabletReply,         NSchemeShard::TXTYPE_CREATE_TABLET_REPLY)               \
-    action(TEvHive::TEvDeleteTabletReply,        NSchemeShard::TXTYPE_FREE_TABLET_RESULT)                \
-    action(TEvHive::TEvDeleteOwnerTabletsReply,           NSchemeShard::TXTYPE_FREE_OWNER_TABLETS_RESULT)\
-    action(TEvHive::TEvUpdateTabletsObjectReply, NSchemeShard::TXTYPE_CREATE_TABLET_REPLY)               \
-    action(TEvHive::TEvUpdateDomainReply,        NSchemeShard::TXTYPE_UPDATE_DOMAIN_REPLY)               \
+    action(NEvHive::TEvCreateTabletReply,        NSchemeShard::TXTYPE_CREATE_TABLET_REPLY)               \
+    action(NEvHive::TEvAdoptTabletReply,         NSchemeShard::TXTYPE_CREATE_TABLET_REPLY)               \
+    action(NEvHive::TEvDeleteTabletReply,        NSchemeShard::TXTYPE_FREE_TABLET_RESULT)                \
+    action(NEvHive::TEvDeleteOwnerTabletsReply,           NSchemeShard::TXTYPE_FREE_OWNER_TABLETS_RESULT)\
+    action(NEvHive::TEvUpdateTabletsObjectReply, NSchemeShard::TXTYPE_CREATE_TABLET_REPLY)               \
+    action(NEvHive::TEvUpdateDomainReply,        NSchemeShard::TXTYPE_UPDATE_DOMAIN_REPLY)               \
 \
-    action(TEvDataShard::TEvProposeTransactionResult,     NSchemeShard::TXTYPE_DATASHARD_PROPOSE_RESULT) \
-    action(TEvDataShard::TEvSchemaChanged,       NSchemeShard::TXTYPE_DATASHARD_SCHEMA_CHANGED)          \
-    action(TEvDataShard::TEvStateChanged,        NSchemeShard::TXTYPE_DATASHARD_STATE_RESULT)            \
-    action(TEvDataShard::TEvInitSplitMergeDestinationAck, NSchemeShard::TXTYPE_INIT_SPLIT_DST_ACK)       \
-    action(TEvDataShard::TEvSplitAck,            NSchemeShard::TXTYPE_SPLIT_ACK)                         \
-    action(TEvDataShard::TEvSplitPartitioningChangedAck,  NSchemeShard::TXTYPE_SPLIT_PARTITIONING_CHANGED_DST_ACK) \
+    action(NEvDataShard::TEvProposeTransactionResult,     NSchemeShard::TXTYPE_DATASHARD_PROPOSE_RESULT) \
+    action(NEvDataShard::TEvSchemaChanged,       NSchemeShard::TXTYPE_DATASHARD_SCHEMA_CHANGED)          \
+    action(NEvDataShard::TEvStateChanged,        NSchemeShard::TXTYPE_DATASHARD_STATE_RESULT)            \
+    action(NEvDataShard::TEvInitSplitMergeDestinationAck, NSchemeShard::TXTYPE_INIT_SPLIT_DST_ACK)       \
+    action(NEvDataShard::TEvSplitAck,            NSchemeShard::TXTYPE_SPLIT_ACK)                         \
+    action(NEvDataShard::TEvSplitPartitioningChangedAck,  NSchemeShard::TXTYPE_SPLIT_PARTITIONING_CHANGED_DST_ACK) \
 \
-    action(TEvColumnShard::TEvProposeTransactionResult,   NSchemeShard::TXTYPE_COLUMNSHARD_PROPOSE_RESULT)              \
-    action(TEvColumnShard::TEvNotifyTxCompletionResult,   NSchemeShard::TXTYPE_COLUMNSHARD_NOTIFY_TX_COMPLETION_RESULT) \
+    action(NEvColumnShard::TEvProposeTransactionResult,   NSchemeShard::TXTYPE_COLUMNSHARD_PROPOSE_RESULT)              \
+    action(NEvColumnShard::TEvNotifyTxCompletionResult,   NSchemeShard::TXTYPE_COLUMNSHARD_NOTIFY_TX_COMPLETION_RESULT) \
 \
-    action(NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult,   NSchemeShard::TXTYPE_SEQUENCESHARD_CREATE_SEQUENCE_RESULT)   \
-    action(NSequenceShard::TEvSequenceShard::TEvDropSequenceResult,     NSchemeShard::TXTYPE_SEQUENCESHARD_DROP_SEQUENCE_RESULT)     \
-    action(NSequenceShard::TEvSequenceShard::TEvUpdateSequenceResult,   NSchemeShard::TXTYPE_SEQUENCESHARD_UPDATE_SEQUENCE_RESULT)   \
-    action(NSequenceShard::TEvSequenceShard::TEvFreezeSequenceResult,   NSchemeShard::TXTYPE_SEQUENCESHARD_FREEZE_SEQUENCE_RESULT)   \
-    action(NSequenceShard::TEvSequenceShard::TEvRestoreSequenceResult,  NSchemeShard::TXTYPE_SEQUENCESHARD_RESTORE_SEQUENCE_RESULT)  \
-    action(NSequenceShard::TEvSequenceShard::TEvRedirectSequenceResult, NSchemeShard::TXTYPE_SEQUENCESHARD_REDIRECT_SEQUENCE_RESULT) \
-    action(NSequenceShard::TEvSequenceShard::TEvGetSequenceResult, NSchemeShard::TXTYPE_SEQUENCESHARD_GET_SEQUENCE_RESULT) \
+    action(NSequenceShard::NEvSequenceShard::TEvCreateSequenceResult,   NSchemeShard::TXTYPE_SEQUENCESHARD_CREATE_SEQUENCE_RESULT)   \
+    action(NSequenceShard::NEvSequenceShard::TEvDropSequenceResult,     NSchemeShard::TXTYPE_SEQUENCESHARD_DROP_SEQUENCE_RESULT)     \
+    action(NSequenceShard::NEvSequenceShard::TEvUpdateSequenceResult,   NSchemeShard::TXTYPE_SEQUENCESHARD_UPDATE_SEQUENCE_RESULT)   \
+    action(NSequenceShard::NEvSequenceShard::TEvFreezeSequenceResult,   NSchemeShard::TXTYPE_SEQUENCESHARD_FREEZE_SEQUENCE_RESULT)   \
+    action(NSequenceShard::NEvSequenceShard::TEvRestoreSequenceResult,  NSchemeShard::TXTYPE_SEQUENCESHARD_RESTORE_SEQUENCE_RESULT)  \
+    action(NSequenceShard::NEvSequenceShard::TEvRedirectSequenceResult, NSchemeShard::TXTYPE_SEQUENCESHARD_REDIRECT_SEQUENCE_RESULT) \
+    action(NSequenceShard::NEvSequenceShard::TEvGetSequenceResult, NSchemeShard::TXTYPE_SEQUENCESHARD_GET_SEQUENCE_RESULT) \
 \
-    action(NReplication::TEvController::TEvCreateReplicationResult, NSchemeShard::TXTYPE_CREATE_REPLICATION_RESULT) \
-    action(NReplication::TEvController::TEvAlterReplicationResult,  NSchemeShard::TXTYPE_ALTER_REPLICATION_RESULT)  \
-    action(NReplication::TEvController::TEvDropReplicationResult,   NSchemeShard::TXTYPE_DROP_REPLICATION_RESULT)   \
+    action(NReplication::NEvController::TEvCreateReplicationResult, NSchemeShard::TXTYPE_CREATE_REPLICATION_RESULT) \
+    action(NReplication::NEvController::TEvAlterReplicationResult,  NSchemeShard::TXTYPE_ALTER_REPLICATION_RESULT)  \
+    action(NReplication::NEvController::TEvDropReplicationResult,   NSchemeShard::TXTYPE_DROP_REPLICATION_RESULT)   \
 \
-    action(TEvSubDomain::TEvConfigureStatus,     NSchemeShard::TXTYPE_SUBDOMAIN_CONFIGURE_RESULT)        \
+    action(NEvSubDomain::TEvConfigureStatus,     NSchemeShard::TXTYPE_SUBDOMAIN_CONFIGURE_RESULT)        \
 \
-    action(TEvSchemeShard::TEvInitTenantSchemeShardResult,   NSchemeShard::TXTYPE_SUBDOMAIN_CONFIGURE_RESULT)  \
-    action(TEvSchemeShard::TEvMigrateSchemeShardResult,      NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
-    action(TEvSchemeShard::TEvPublishTenantAsReadOnlyResult, NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
-    action(TEvPrivate::TEvCommitTenantUpdate,                    NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
-    action(TEvPrivate::TEvUndoTenantUpdate,                      NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
-    action(TEvSchemeShard::TEvPublishTenantResult,           NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
-    action(TEvSchemeShard::TEvRewriteOwnerResult,            NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
-    action(TEvDataShard::TEvMigrateSchemeShardResponse,          NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
+    action(NEvSchemeShard::TEvInitTenantSchemeShardResult,   NSchemeShard::TXTYPE_SUBDOMAIN_CONFIGURE_RESULT)  \
+    action(NEvSchemeShard::TEvMigrateSchemeShardResult,      NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
+    action(NEvSchemeShard::TEvPublishTenantAsReadOnlyResult, NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
+    action(NEvPrivate::TEvCommitTenantUpdate,                    NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
+    action(NEvPrivate::TEvUndoTenantUpdate,                      NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
+    action(NEvSchemeShard::TEvPublishTenantResult,           NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
+    action(NEvSchemeShard::TEvRewriteOwnerResult,            NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
+    action(NEvDataShard::TEvMigrateSchemeShardResponse,          NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
 \
-    action(TEvBlockStore::TEvUpdateVolumeConfigResponse,  NSchemeShard::TXTYPE_BLOCKSTORE_CONFIG_RESULT) \
-    action(TEvFileStore::TEvUpdateConfigResponse,         NSchemeShard::TXTYPE_FILESTORE_CONFIG_RESULT)  \
-    action(NKesus::TEvKesus::TEvSetConfigResult,          NSchemeShard::TXTYPE_KESUS_CONFIG_RESULT)      \
-    action(TEvPersQueue::TEvDropTabletReply,              NSchemeShard::TXTYPE_DROP_TABLET_RESULT)       \
-    action(TEvPersQueue::TEvUpdateConfigResponse,         NSchemeShard::TXTYPE_PERSQUEUE_CONFIG_RESULT)  \
-    action(TEvPersQueue::TEvProposeTransactionResult,     NSchemeShard::TXTYPE_PERSQUEUE_PROPOSE_RESULT) \
-    action(TEvBlobDepot::TEvApplyConfigResult,            NSchemeShard::TXTYPE_BLOB_DEPOT_CONFIG_RESULT) \
+    action(NEvBlockStore::TEvUpdateVolumeConfigResponse,  NSchemeShard::TXTYPE_BLOCKSTORE_CONFIG_RESULT) \
+    action(NEvFileStore::TEvUpdateConfigResponse,         NSchemeShard::TXTYPE_FILESTORE_CONFIG_RESULT)  \
+    action(NKesus::NEvKesus::TEvSetConfigResult,          NSchemeShard::TXTYPE_KESUS_CONFIG_RESULT)      \
+    action(NEvPersQueue::TEvDropTabletReply,              NSchemeShard::TXTYPE_DROP_TABLET_RESULT)       \
+    action(NEvPersQueue::TEvUpdateConfigResponse,         NSchemeShard::TXTYPE_PERSQUEUE_CONFIG_RESULT)  \
+    action(NEvPersQueue::TEvProposeTransactionResult,     NSchemeShard::TXTYPE_PERSQUEUE_PROPOSE_RESULT) \
+    action(NEvBlobDepot::TEvApplyConfigResult,            NSchemeShard::TXTYPE_BLOB_DEPOT_CONFIG_RESULT) \
 \
-    action(TEvPrivate::TEvOperationPlan,                   NSchemeShard::TXTYPE_PLAN_STEP)                             \
-    action(TEvPrivate::TEvCompletePublication, NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_PUBLICATION) \
-    action(TEvPrivate::TEvCompleteBarrier,     NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_BARRIER)     \
+    action(NEvPrivate::TEvOperationPlan,                   NSchemeShard::TXTYPE_PLAN_STEP)                             \
+    action(NEvPrivate::TEvCompletePublication, NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_PUBLICATION) \
+    action(NEvPrivate::TEvCompleteBarrier,     NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_BARRIER)     \
 \
-    action(TEvPersQueue::TEvProposeTransactionAttachResult, NSchemeShard::TXTYPE_PERSQUEUE_PROPOSE_ATTACH_RESULT)
+    action(NEvPersQueue::TEvProposeTransactionAttachResult, NSchemeShard::TXTYPE_PERSQUEUE_PROPOSE_ATTACH_RESULT)
 
 
 namespace NKikimr {
@@ -161,8 +161,8 @@ public:
     }
 };
 
-using TProposeRequest = NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction;
-using TProposeResponse = NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult;
+using TProposeRequest = NKikimr::NSchemeShard::NEvSchemeShard::TEvModifySchemeTransaction;
+using TProposeResponse = NKikimr::NSchemeShard::NEvSchemeShard::TEvModifySchemeTransactionResult;
 using TTxTransaction = NKikimrSchemeOp::TModifyScheme;
 
 class ISubOperationState {
@@ -447,7 +447,7 @@ ISubOperation::TPtr CreateBackup(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateRestore(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateRestore(TOperationId id, TTxState::ETxState state);
 
-ISubOperation::TPtr CreateTxCancelTx(TEvSchemeShard::TEvCancelTx::TPtr ev);
+ISubOperation::TPtr CreateTxCancelTx(NEvSchemeShard::TEvCancelTx::TPtr ev);
 
 TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);

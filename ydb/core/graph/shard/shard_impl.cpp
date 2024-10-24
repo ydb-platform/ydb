@@ -161,12 +161,12 @@ void TGraphShard::AggregateHistogram(std::unordered_map<TString, double>& values
 
 STFUNC(TGraphShard::StateWork) {
     switch (ev->GetTypeRewrite()) {
-        hFunc(TEvSubDomain::TEvConfigure, Handle);
+        hFunc(NEvSubDomain::TEvConfigure, Handle);
         hFunc(TEvTabletPipe::TEvServerConnected, Handle);
         hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
         hFunc(TEvGraph::TEvSendMetrics, Handle);
         hFunc(TEvGraph::TEvGetMetrics, Handle);
-        hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+        hFunc(NConsole::NEvConsole::TEvConfigNotificationRequest, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
             BLOG_W("StateWork unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
@@ -183,9 +183,9 @@ void TGraphShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev) {
     BLOG_TRACE("Handle TEvTabletPipe::TEvServerDisconnected(" << ev->Get()->ClientId << ") " << ev->Get()->ServerId);
 }
 
-void TGraphShard::Handle(TEvSubDomain::TEvConfigure::TPtr& ev) {
-    BLOG_D("Handle TEvSubDomain::TEvConfigure(" << ev->Get()->Record.ShortDebugString() << ")");
-    Send(ev->Sender, new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, TabletID()));
+void TGraphShard::Handle(NEvSubDomain::TEvConfigure::TPtr& ev) {
+    BLOG_D("Handle NEvSubDomain::TEvConfigure(" << ev->Get()->Record.ShortDebugString() << ")");
+    Send(ev->Sender, new NEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, TabletID()));
 }
 
 void TGraphShard::Handle(TEvGraph::TEvSendMetrics::TPtr& ev) {
@@ -227,11 +227,11 @@ void TGraphShard::Handle(TEvGraph::TEvGetMetrics::TPtr& ev) {
     ExecuteTxGetMetrics(ev);
 }
 
-void TGraphShard::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+void TGraphShard::Handle(NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
     const NKikimrConsole::TConfigNotificationRequest& record = ev->Get()->Record;
-    BLOG_D("Received TEvConsole::TEvConfigNotificationRequest with update of config: " << record.GetConfig().GetGraphConfig().ShortDebugString());
+    BLOG_D("Received NEvConsole::TEvConfigNotificationRequest with update of config: " << record.GetConfig().GetGraphConfig().ShortDebugString());
     ApplyConfig(record.GetConfig().GetGraphConfig());
-    Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
+    Send(ev->Sender, new NConsole::NEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
 }
 
 IActor* CreateGraphShard(const TActorId& tablet, TTabletStorageInfo* info) {

@@ -42,7 +42,7 @@ public:
 private:
     void StateGetConfig(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvConfigsDispatcher::TEvGetConfigResponse, Handle);
+            HFunc(NEvConfigsDispatcher::TEvGetConfigResponse, Handle);
             HFunc(TEvents::TEvUndelivered, Handle);
             HFunc(TEvents::TEvWakeup, HandleWakeup);
             default: TBase::StateFuncBase(ev);
@@ -64,7 +64,7 @@ private:
         Become(&TCreateTableRPC::StateWork);
     }
 
-    void Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NEvConfigsDispatcher::TEvGetConfigResponse::TPtr &ev, const TActorContext &ctx) {
         auto &config = ev->Get()->Config->GetTableProfilesConfig();
         Profiles.Load(config);
 
@@ -88,7 +88,7 @@ private:
     void SendConfigRequest(const TActorContext &ctx) {
         ui32 configKind = (ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem;
         ctx.Send(MakeConfigsDispatcherID(ctx.SelfID.NodeId()),
-                 new TEvConfigsDispatcher::TEvGetConfigRequest(configKind),
+                 new NEvConfigsDispatcher::TEvGetConfigRequest(configKind),
                  IEventHandle::FlagTrackDelivery);
     }
 

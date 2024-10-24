@@ -41,8 +41,8 @@ class TDescribeReq : public TActor<TDescribeReq> {
     }
 
     void ReportError(NKikimrScheme::EStatus status, const TString& reason, const TActorContext &ctx) {
-        TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder> result =
-                new NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder();
+        TAutoPtr<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResultBuilder> result =
+                new NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResultBuilder();
 
         if (SchemeRequest != nullptr) {
             const auto &record = SchemeRequest->Ev->Get()->Record;
@@ -83,7 +83,7 @@ class TDescribeReq : public TActor<TDescribeReq> {
     {
         auto schemeShardId = entry.DomainInfo->DomainKey.OwnerId;
 
-        auto result = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>(
+        auto result = MakeHolder<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResultBuilder>(
             path, TPathId());
 
         auto* pathDescription = result->Record.MutablePathDescription();
@@ -151,7 +151,7 @@ class TDescribeReq : public TActor<TDescribeReq> {
     {
         auto schemeShardId = entry.DomainInfo->DomainKey.OwnerId;
 
-        auto result = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>(
+        auto result = MakeHolder<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResultBuilder>(
             path, TPathId());
 
         auto* pathDescription = result->Record.MutablePathDescription();
@@ -186,7 +186,7 @@ class TDescribeReq : public TActor<TDescribeReq> {
     void Handle(TEvTxProxyReq::TEvNavigateScheme::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx);
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -215,7 +215,7 @@ public:
 
     STFUNC(StateWaitExec) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFunc(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult, Handle);
             HFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         }
     }
@@ -237,8 +237,8 @@ void TDescribeReq::Handle(TEvTxProxyReq::TEvNavigateScheme::TPtr &ev, const TAct
 
         if (record.GetDescribePath().GetPath() == "/") {
             // Special handling for enumerating roots
-            TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder> result =
-                new NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder("/", TPathId(NSchemeShard::RootSchemeShardId, NSchemeShard::RootPathId));
+            TAutoPtr<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResultBuilder> result =
+                new NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResultBuilder("/", TPathId(NSchemeShard::RootSchemeShardId, NSchemeShard::RootPathId));
             auto descr = result->Record.MutablePathDescription();
             FillRootDescr(descr->MutableSelf(), "/", NSchemeShard::RootSchemeShardId);
             auto entry = result->Record.MutablePathDescription()->AddChildren();
@@ -255,8 +255,8 @@ void TDescribeReq::Handle(TEvTxProxyReq::TEvNavigateScheme::TPtr &ev, const TAct
     }
 
     if (UserToken == nullptr && record.GetDescribePath().HasPathId()) {
-        TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> req =
-                new NSchemeShard::TEvSchemeShard::TEvDescribeScheme(
+        TAutoPtr<NSchemeShard::NEvSchemeShard::TEvDescribeScheme> req =
+                new NSchemeShard::NEvSchemeShard::TEvDescribeScheme(
                                       record.GetDescribePath().GetSchemeshardId(),
                                       record.GetDescribePath().GetPathId());
 
@@ -368,8 +368,8 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
 
     const ui64 shardToRequest = entry.DomainInfo->ExtractSchemeShard();
 
-    TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> req(
-        new NSchemeShard::TEvSchemeShard::TEvDescribeScheme(describePath));
+    TAutoPtr<NSchemeShard::NEvSchemeShard::TEvDescribeScheme> req(
+        new NSchemeShard::NEvSchemeShard::TEvDescribeScheme(describePath));
 
     auto& record = req.Get()->Record;
     if (UserToken != nullptr) {
@@ -393,7 +393,7 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
 }
 
 
-void TDescribeReq::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx) {
+void TDescribeReq::Handle(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
                 "Actor# " << ctx.SelfID.ToString() <<
                 " Handle TEvDescribeSchemeResult" <<

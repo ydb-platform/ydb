@@ -9,7 +9,7 @@ namespace NNodeBroker {
 class TNodeBroker::TTxUpdateConfig : public TTransactionBase<TNodeBroker> {
 public:
     TTxUpdateConfig(TNodeBroker *self,
-                    TEvConsole::TEvConfigNotificationRequest::TPtr notification)
+                    NEvConsole::TEvConfigNotificationRequest::TPtr notification)
         : TBase(self)
         , Notification(std::move(notification))
         , Config(Notification->Get()->GetConfig().GetNodeBrokerConfig())
@@ -38,7 +38,7 @@ public:
         if (!google::protobuf::util::MessageDifferencer::Equals(Config, Self->Config))
             Modify = true;
 
-        auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
+        auto resp = MakeHolder<NEvConsole::TEvConfigNotificationResponse>(rec);
         Response = new IEventHandle(Notification->Sender, Self->SelfId(), resp.Release(),
                                     0, Notification->Cookie);
 
@@ -95,14 +95,14 @@ public:
     }
 
 private:
-    TEvConsole::TEvConfigNotificationRequest::TPtr Notification;
+    NEvConsole::TEvConfigNotificationRequest::TPtr Notification;
     TEvNodeBroker::TEvSetConfigRequest::TPtr Request;
     TAutoPtr<IEventHandle> Response;
     const NKikimrNodeBroker::TConfig &Config;
     bool Modify;
 };
 
-ITransaction *TNodeBroker::CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev)
+ITransaction *TNodeBroker::CreateTxUpdateConfig(NEvConsole::TEvConfigNotificationRequest::TPtr &ev)
 {
     return new TTxUpdateConfig(this, std::move(ev));
 }

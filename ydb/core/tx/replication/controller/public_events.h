@@ -7,7 +7,7 @@
 
 namespace NKikimr::NReplication {
 
-namespace TEvController {
+namespace NEvController {
     enum EEv {
         EvCreateReplication = EventSpaceBegin(TKikimrEvents::ES_REPLICATION_CONTROLLER),
         EvCreateReplicationResult,
@@ -56,6 +56,6 @@ namespace TEvController {
         : public TEventPB<TEvDescribeReplicationResult, NKikimrReplication::TEvDescribeReplicationResult, EvDescribeReplicationResult>
     {};
 
-}; // TEvController
+}; // NEvController
 
 }

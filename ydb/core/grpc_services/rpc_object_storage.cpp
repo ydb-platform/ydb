@@ -560,7 +560,7 @@ private:
             TString err;
 
             bool filterParsedOk = CellsFromTuple(&filterType, columnValues, typesRef, true, cells, err, owner);
-            
+
             if (!filterParsedOk) {
                 ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Sprintf("Invalid filter: '%s'", err.data()), ctx);
                 return false;
@@ -713,14 +713,14 @@ private:
     void MakeShardRequest(ui32 idx, const NActors::TActorContext& ctx) {
         ui64 shardId = KeyRange->GetPartitions()[idx].ShardId;
 
-        THolder<TEvDataShard::TEvObjectStorageListingRequest> ev(new TEvDataShard::TEvObjectStorageListingRequest());
+        THolder<NEvDataShard::TEvObjectStorageListingRequest> ev(new NEvDataShard::TEvObjectStorageListingRequest());
         ev->Record.SetTableId(KeyRange->TableId.PathId.LocalPathId);
         ev->Record.SetSerializedKeyPrefix(PrefixColumns.GetBuffer());
         ev->Record.SetPathColumnPrefix(Request->Getpath_column_prefix());
         ev->Record.SetPathColumnDelimiter(Request->Getpath_column_delimiter());
         ev->Record.SetSerializedStartAfterKeySuffix(StartAfterSuffixColumns.GetBuffer());
         ev->Record.SetMaxKeys(MaxKeys - ContentsRows.size() - CommonPrefixesRows.size());
-        
+
         if (!CommonPrefixesRows.empty()) {
             // Next shard might have the same common prefix, need to skip it
             ev->Record.SetLastCommonPrefix(CommonPrefixesRows.back());
@@ -739,7 +739,7 @@ private:
 
         if (!Filter.ColumnIds.empty()) {
             auto* filter = ev->Record.mutable_filter();
-            
+
             for (const auto& colId : Filter.ColumnIds) {
                 filter->add_columns(colId);
             }
@@ -773,7 +773,7 @@ private:
 
     STFUNC(StateWaitResults) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvDataShard::TEvObjectStorageListingResponse, Handle);
+            HFunc(NEvDataShard::TEvObjectStorageListingResponse, Handle);
             HFunc(TEvents::TEvUndelivered, Handle);
             HFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
@@ -783,7 +783,7 @@ private:
         }
     }
 
-    void Handle(TEvDataShard::TEvObjectStorageListingResponse::TPtr& ev, const NActors::TActorContext& ctx) {
+    void Handle(NEvDataShard::TEvObjectStorageListingResponse::TPtr& ev, const NActors::TActorContext& ctx) {
         const auto& shardResponse = ev->Get()->Record;
 
         // Notify the cache that we are done with the pipe
@@ -839,7 +839,7 @@ private:
                 return NYdb::TTypeBuilder().Pg(getPgTypeFromColMeta(colMeta)).Build();
             case NScheme::NTypeIds::Decimal:
                 return NYdb::TTypeBuilder().Decimal(NYdb::TDecimalType(
-                        typeInfo.GetDecimalType().GetPrecision(), 
+                        typeInfo.GetDecimalType().GetPrecision(),
                         typeInfo.GetDecimalType().GetScale()))
                     .Build();
             default:
@@ -852,7 +852,7 @@ private:
         for (const auto& colMeta : columns) {
             const auto type = getTypeFromColMeta(colMeta);
             auto* col = resultSet.Addcolumns();
-            
+
             *col->mutable_type()->mutable_optional_type()->mutable_item() = NYdb::TProtoAccessor::GetProto(type);
             *col->mutable_name() = colMeta.Name;
         }
@@ -879,7 +879,7 @@ private:
                     Ydb::Value valueProto;
                     valueProto.set_low_128(loHi.first);
                     valueProto.set_high_128(loHi.second);
-                    const NYdb::TDecimalValue decimal(valueProto, 
+                    const NYdb::TDecimalValue decimal(valueProto,
                         {static_cast<ui8>(colMeta.PType.GetDecimalType().GetPrecision()), static_cast<ui8>(colMeta.PType.GetDecimalType().GetScale())});
                     vb.Decimal(decimal);
                 } else {
@@ -926,10 +926,10 @@ private:
         if (CommonPrefixesRows.size() > 0) {
             lastDirectory = CommonPrefixesRows[CommonPrefixesRows.size() - 1];
         }
-        
+
         if (isTruncated && (lastDirectory || lastFile)) {
             NKikimrTxDataShard::TObjectStorageListingContinuationToken token;
-            
+
             if (lastDirectory > lastFile) {
                 token.set_last_path(lastDirectory);
                 token.set_is_folder(true);
@@ -939,7 +939,7 @@ private:
             }
 
             TString serializedToken = token.SerializeAsString();
-            
+
             resp->set_next_continuation_token(serializedToken);
         }
 
@@ -949,7 +949,7 @@ private:
             GrpcRequest->RaiseIssue(NYql::ExceptionToIssue(ex));
             GrpcRequest->ReplyWithYdbStatus(Ydb::StatusIds::INTERNAL_ERROR);
         }
-        
+
         Finished = true;
         Die(ctx);
     }

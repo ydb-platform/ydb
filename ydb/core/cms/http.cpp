@@ -62,29 +62,29 @@ public:
             ApiHandlers["/api/managenotificationrequest"] = new TApiMethodHandler<TJsonProxyCms<TEvCms::TEvManageNotificationRequest,
                                                                                                 TEvCms::TEvManageNotificationResponse>>;
 
-            ApiHandlers["/api/console/yamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvGetAllConfigsRequest,
-                                                                                             NConsole::TEvConsole::TEvGetAllConfigsResponse, true, true>>;
+            ApiHandlers["/api/console/yamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::NEvConsole::TEvGetAllConfigsRequest,
+                                                                                             NConsole::NEvConsole::TEvGetAllConfigsResponse, true, true>>;
 
-            ApiHandlers["/api/console/readonly"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvIsYamlReadOnlyRequest,
-                                                                                             NConsole::TEvConsole::TEvIsYamlReadOnlyResponse, true, true>>;
+            ApiHandlers["/api/console/readonly"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::NEvConsole::TEvIsYamlReadOnlyRequest,
+                                                                                             NConsole::NEvConsole::TEvIsYamlReadOnlyResponse, true, true>>;
 
-            ApiHandlers["/api/console/removevolatileyamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvRemoveVolatileConfigRequest,
-                                                                                         NConsole::TEvConsole::TEvRemoveVolatileConfigResponse, true, true>>;
+            ApiHandlers["/api/console/removevolatileyamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::NEvConsole::TEvRemoveVolatileConfigRequest,
+                                                                                         NConsole::NEvConsole::TEvRemoveVolatileConfigResponse, true, true>>;
 
-            ApiHandlers["/api/console/configureyamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvReplaceYamlConfigRequest,
-                                                                                            NConsole::TEvConsole::TEvReplaceYamlConfigResponse, true, true>>;
+            ApiHandlers["/api/console/configureyamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::NEvConsole::TEvReplaceYamlConfigRequest,
+                                                                                            NConsole::NEvConsole::TEvReplaceYamlConfigResponse, true, true>>;
 
-            ApiHandlers["/api/console/configurevolatileyamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvAddVolatileConfigRequest,
-                                                                                            NConsole::TEvConsole::TEvAddVolatileConfigResponse, true, true>>;
+            ApiHandlers["/api/console/configurevolatileyamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::NEvConsole::TEvAddVolatileConfigRequest,
+                                                                                            NConsole::NEvConsole::TEvAddVolatileConfigResponse, true, true>>;
 
-            ApiHandlers["/api/console/resolveyamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvResolveConfigRequest,
-                                                                                            NConsole::TEvConsole::TEvResolveConfigResponse, true, true>>;
+            ApiHandlers["/api/console/resolveyamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::NEvConsole::TEvResolveConfigRequest,
+                                                                                            NConsole::NEvConsole::TEvResolveConfigResponse, true, true>>;
 
-            ApiHandlers["/api/console/resolveallyamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvResolveAllConfigRequest,
-                                                                                     NConsole::TEvConsole::TEvResolveAllConfigResponse, true, true>>;
+            ApiHandlers["/api/console/resolveallyamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::NEvConsole::TEvResolveAllConfigRequest,
+                                                                                     NConsole::NEvConsole::TEvResolveAllConfigResponse, true, true>>;
 
-            ApiHandlers["/api/console/configure"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvConfigureRequest,
-                                                                                            NConsole::TEvConsole::TEvConfigureResponse, true>>;
+            ApiHandlers["/api/console/configure"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::NEvConsole::TEvConfigureRequest,
+                                                                                            NConsole::NEvConsole::TEvConfigureResponse, true>>;
             ApiHandlers["/api/json/log"] = new TApiMethodHandler<TJsonProxyLog>;
             ApiHandlers["/api/json/console/log"] = new TApiMethodHandler<TJsonProxyConsoleLog>;
             ApiHandlers["/api/json/configitems"] = new TApiMethodHandler<TJsonProxyConfigItems>;
@@ -95,11 +95,11 @@ public:
             ApiHandlers["/api/json/sentinel"] = new TApiMethodHandler<TJsonProxySentinel>;
 
             ApiHandlers["/api/datashard/json/getinfo"]
-                = new TApiMethodHandler<TJsonProxyDataShard<TEvDataShard::TEvGetInfoRequest,
-                                                            TEvDataShard::TEvGetInfoResponse>>;
+                = new TApiMethodHandler<TJsonProxyDataShard<NEvDataShard::TEvGetInfoRequest,
+                                                            NEvDataShard::TEvGetInfoResponse>>;
             ApiHandlers["/api/datashard/json/listoperations"]
-                = new TApiMethodHandler<TJsonProxyDataShard<TEvDataShard::TEvListOperationsRequest,
-                                                            TEvDataShard::TEvListOperationsResponse>>;
+                = new TApiMethodHandler<TJsonProxyDataShard<NEvDataShard::TEvListOperationsRequest,
+                                                            NEvDataShard::TEvListOperationsResponse>>;
             ApiHandlers["/api/datashard/json/getoperation"] = new TApiMethodHandler<TJsonProxyDataShardGetOperation>;
             ApiHandlers["/api/datashard/json/getreadtablesinkstate"] = new TApiMethodHandler<TJsonProxyDataShardGetReadTableSinkState>;
             ApiHandlers["/api/datashard/json/getreadtablescanstate"] = new TApiMethodHandler<TJsonProxyDataShardGetReadTableScanState>;

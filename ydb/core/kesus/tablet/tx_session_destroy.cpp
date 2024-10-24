@@ -23,12 +23,12 @@ struct TKesusTablet::TTxSessionDestroy : public TTxBase {
 
     void ReplyOk() {
         Events.emplace_back(Sender, Cookie,
-            new TEvKesus::TEvDestroySessionResult(Record.GetProxyGeneration()));
+            new NEvKesus::TEvDestroySessionResult(Record.GetProxyGeneration()));
     }
 
     void ReplyError(Ydb::StatusIds::StatusCode status, const TString& reason) {
         Events.emplace_back(Sender, Cookie,
-            new TEvKesus::TEvDestroySessionResult(Record.GetProxyGeneration(), status, reason));
+            new NEvKesus::TEvDestroySessionResult(Record.GetProxyGeneration(), status, reason));
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -61,7 +61,7 @@ struct TKesusTablet::TTxSessionDestroy : public TTxBase {
         if (session->OwnerProxy != proxy && session->LastOwnerProxy) {
             // Notify the last owner, unless it's this proxy
             Events.emplace_back(session->LastOwnerProxy, 0,
-                new TEvKesus::TEvSessionExpired(sessionId));
+                new NEvKesus::TEvSessionExpired(sessionId));
         }
 
         ReplyOk();
@@ -81,7 +81,7 @@ struct TKesusTablet::TTxSessionDestroy : public TTxBase {
     }
 };
 
-void TKesusTablet::Handle(TEvKesus::TEvDestroySession::TPtr& ev) {
+void TKesusTablet::Handle(NEvKesus::TEvDestroySession::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     VerifyKesusPath(record.GetKesusPath());
     TabletCounters->Cumulative()[COUNTER_REQS_SESSION_DESTROY].Increment(1);

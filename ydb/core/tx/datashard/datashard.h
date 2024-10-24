@@ -192,7 +192,7 @@ namespace NTxDataShard {
     using NDataShard::TTxFlags;
 }
 
-namespace TEvDataShard {
+namespace NEvDataShard {
     enum EEv {
         EvProposeTransaction = EventSpaceBegin(TKikimrEvents::ES_TX_DATASHARD),
         EvCancelTransactionProposal,
@@ -343,7 +343,7 @@ namespace TEvDataShard {
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_DATASHARD), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_DATASHARD)");
     struct TEvGetShardState : public TEventPB<TEvGetShardState, NKikimrTxDataShard::TEvGetShardState,
-        TEvDataShard::EvGetShardState> {
+        NEvDataShard::EvGetShardState> {
         TEvGetShardState()
         {
         }
@@ -359,7 +359,7 @@ namespace TEvDataShard {
     };
 
     struct TEvGetShardStateResult : public TEventPB<TEvGetShardStateResult, NKikimrTxDataShard::TEvGetShardStateResult,
-        TEvDataShard::EvGetShardStateResult> {
+        NEvDataShard::EvGetShardStateResult> {
         TEvGetShardStateResult()
         {
         }
@@ -380,7 +380,7 @@ namespace TEvDataShard {
     };
 
     struct TEvSchemaChanged : public TEventPB<TEvSchemaChanged, NKikimrTxDataShard::TEvSchemaChanged,
-                                        TEvDataShard::EvSchemaChanged> {
+                                        NEvDataShard::EvSchemaChanged> {
         TEvSchemaChanged()
         {}
 
@@ -403,7 +403,7 @@ namespace TEvDataShard {
     };
 
     struct TEvSchemaChangedResult : public TEventPB<TEvSchemaChangedResult, NKikimrTxDataShard::TEvSchemaChangedResult,
-                                                TEvDataShard::EvSchemaChangedResult> {
+                                                NEvDataShard::EvSchemaChangedResult> {
         TEvSchemaChangedResult()
         {}
 
@@ -413,7 +413,7 @@ namespace TEvDataShard {
     };
 
     struct TEvStateChanged : public TEventPB<TEvStateChanged, NKikimrTxDataShard::TEvStateChanged,
-                                        TEvDataShard::EvStateChanged> {
+                                        NEvDataShard::EvStateChanged> {
         TEvStateChanged()
         {}
 
@@ -429,7 +429,7 @@ namespace TEvDataShard {
     };
 
     struct TEvStateChangedResult : public TEventPB<TEvStateChangedResult, NKikimrTxDataShard::TEvStateChangedResult,
-                                        TEvDataShard::EvStateChangedResult> {
+                                        NEvDataShard::EvStateChangedResult> {
         TEvStateChangedResult()
         {}
 
@@ -440,7 +440,7 @@ namespace TEvDataShard {
     };
 
     struct TEvProposeTransaction : public TEventPB<TEvProposeTransaction, NKikimrTxDataShard::TEvProposeTransaction,
-        TEvDataShard::EvProposeTransaction> {
+        NEvDataShard::EvProposeTransaction> {
         TEvProposeTransaction()
         {
         }
@@ -509,7 +509,7 @@ namespace TEvDataShard {
         NLWTrace::TOrbit Orbit;
     };
 
-    struct TEvCancelTransactionProposal : public TEventPB<TEvCancelTransactionProposal, NKikimrTxDataShard::TEvCancelTransactionProposal, TEvDataShard::EvCancelTransactionProposal> {
+    struct TEvCancelTransactionProposal : public TEventPB<TEvCancelTransactionProposal, NKikimrTxDataShard::TEvCancelTransactionProposal, NEvDataShard::EvCancelTransactionProposal> {
         TEvCancelTransactionProposal()
         {}
 
@@ -520,7 +520,7 @@ namespace TEvDataShard {
     };
 
     struct TEvProposeTransactionResult : public TEventPB<TEvProposeTransactionResult, NKikimrTxDataShard::TEvProposeTransactionResult,
-        TEvDataShard::EvProposeTransactionResult> {
+        NEvDataShard::EvProposeTransactionResult> {
 
         TEvProposeTransactionResult() = default;
 
@@ -683,7 +683,7 @@ namespace TEvDataShard {
         NLWTrace::TOrbit Orbit;
     };
 
-    struct TEvProposeTransactionRestart : public TEventPB<TEvProposeTransactionRestart, NKikimrTxDataShard::TEvProposeTransactionRestart, TEvDataShard::EvProposeTransactionRestart> {
+    struct TEvProposeTransactionRestart : public TEventPB<TEvProposeTransactionRestart, NKikimrTxDataShard::TEvProposeTransactionRestart, NEvDataShard::EvProposeTransactionRestart> {
         TEvProposeTransactionRestart() = default;
         TEvProposeTransactionRestart(ui64 tabletId, ui64 txId) {
             Record.SetTabletId(tabletId);
@@ -691,7 +691,7 @@ namespace TEvDataShard {
         }
     };
 
-    struct TEvProposeTransactionAttach : public TEventPB<TEvProposeTransactionAttach, NKikimrTxDataShard::TEvProposeTransactionAttach, TEvDataShard::EvProposeTransactionAttach> {
+    struct TEvProposeTransactionAttach : public TEventPB<TEvProposeTransactionAttach, NKikimrTxDataShard::TEvProposeTransactionAttach, NEvDataShard::EvProposeTransactionAttach> {
         TEvProposeTransactionAttach() = default;
         TEvProposeTransactionAttach(ui64 tabletId, ui64 txId) {
             Record.SetTabletId(tabletId);
@@ -699,7 +699,7 @@ namespace TEvDataShard {
         }
     };
 
-    struct TEvProposeTransactionAttachResult : public TEventPB<TEvProposeTransactionAttachResult, NKikimrTxDataShard::TEvProposeTransactionAttachResult, TEvDataShard::EvProposeTransactionAttachResult> {
+    struct TEvProposeTransactionAttachResult : public TEventPB<TEvProposeTransactionAttachResult, NKikimrTxDataShard::TEvProposeTransactionAttachResult, NEvDataShard::EvProposeTransactionAttachResult> {
         TEvProposeTransactionAttachResult() = default;
         TEvProposeTransactionAttachResult(ui64 tabletId, ui64 txId, NKikimrProto::EReplyStatus status) {
             Record.SetTabletId(tabletId);
@@ -708,7 +708,7 @@ namespace TEvDataShard {
         }
     };
 
-    struct TEvReturnBorrowedPart : public TEventPB<TEvReturnBorrowedPart, NKikimrTxDataShard::TEvReturnBorrowedPart, TEvDataShard::EvReturnBorrowedPart> {
+    struct TEvReturnBorrowedPart : public TEventPB<TEvReturnBorrowedPart, NKikimrTxDataShard::TEvReturnBorrowedPart, NEvDataShard::EvReturnBorrowedPart> {
         TEvReturnBorrowedPart() = default;
         TEvReturnBorrowedPart(ui64 tabletId, const TVector<TLogoBlobID>& partMetaVec) {
             Record.SetFromTabletId(tabletId);
@@ -718,7 +718,7 @@ namespace TEvDataShard {
         }
     };
 
-    struct TEvReturnBorrowedPartAck : public TEventPB<TEvReturnBorrowedPartAck, NKikimrTxDataShard::TEvReturnBorrowedPartAck, TEvDataShard::EvReturnBorrowedPartAck> {
+    struct TEvReturnBorrowedPartAck : public TEventPB<TEvReturnBorrowedPartAck, NKikimrTxDataShard::TEvReturnBorrowedPartAck, NEvDataShard::EvReturnBorrowedPartAck> {
         TEvReturnBorrowedPartAck() = default;
         explicit TEvReturnBorrowedPartAck(const TVector<TLogoBlobID>& partMetaVec) {
             for (const auto& partMeta : partMetaVec) {
@@ -730,7 +730,7 @@ namespace TEvDataShard {
 
     struct TEvInitSplitMergeDestination : public TEventPB<TEvInitSplitMergeDestination,
                                                         NKikimrTxDataShard::TEvInitSplitMergeDestination,
-                                                        TEvDataShard::EvInitSplitMergeDestination> {
+                                                        NEvDataShard::EvInitSplitMergeDestination> {
         TEvInitSplitMergeDestination() = default;
         TEvInitSplitMergeDestination(ui64 opId, ui64 schemeshardTabletId, ui64 subDomainPathId,
                                      const NKikimrTxDataShard::TSplitMergeDescription &splitDesc,
@@ -745,7 +745,7 @@ namespace TEvDataShard {
 
     struct TEvInitSplitMergeDestinationAck : public TEventPB<TEvInitSplitMergeDestinationAck,
                                                         NKikimrTxDataShard::TEvInitSplitMergeDestinationAck,
-                                                        TEvDataShard::EvInitSplitMergeDestinationAck> {
+                                                        NEvDataShard::EvInitSplitMergeDestinationAck> {
         TEvInitSplitMergeDestinationAck() = default;
         explicit TEvInitSplitMergeDestinationAck(ui64 opId, ui64 tabletId) {
             Record.SetOperationCookie(opId);
@@ -753,14 +753,14 @@ namespace TEvDataShard {
         }
     };
 
-    struct TEvSplit : public TEventPB<TEvSplit, NKikimrTxDataShard::TEvSplit, TEvDataShard::EvSplit> {
+    struct TEvSplit : public TEventPB<TEvSplit, NKikimrTxDataShard::TEvSplit, NEvDataShard::EvSplit> {
         TEvSplit() = default;
         explicit TEvSplit(ui64 opId) {
             Record.SetOperationCookie(opId);
         }
     };
 
-    struct TEvSplitAck : public TEventPB<TEvSplitAck, NKikimrTxDataShard::TEvSplitAck, TEvDataShard::EvSplitAck> {
+    struct TEvSplitAck : public TEventPB<TEvSplitAck, NKikimrTxDataShard::TEvSplitAck, NEvDataShard::EvSplitAck> {
         TEvSplitAck() = default;
         explicit TEvSplitAck(ui64 opId, ui64 tabletId) {
             Record.SetOperationCookie(opId);
@@ -770,7 +770,7 @@ namespace TEvDataShard {
 
     struct TEvSplitTransferSnapshot : public TEventPB<TEvSplitTransferSnapshot,
                                                         NKikimrTxDataShard::TEvSplitTransferSnapshot,
-                                                        TEvDataShard::EvSplitTransferSnapshot> {
+                                                        NEvDataShard::EvSplitTransferSnapshot> {
         TEvSplitTransferSnapshot() = default;
         explicit TEvSplitTransferSnapshot(ui64 opId) {
             Record.SetOperationCookie(opId);
@@ -779,7 +779,7 @@ namespace TEvDataShard {
 
     struct TEvSplitTransferSnapshotAck : public TEventPB<TEvSplitTransferSnapshotAck,
                                                         NKikimrTxDataShard::TEvSplitTransferSnapshotAck,
-                                                        TEvDataShard::EvSplitTransferSnapshotAck> {
+                                                        NEvDataShard::EvSplitTransferSnapshotAck> {
         TEvSplitTransferSnapshotAck() = default;
         explicit TEvSplitTransferSnapshotAck(ui64 opId, ui64 tabletId) {
             Record.SetOperationCookie(opId);
@@ -789,7 +789,7 @@ namespace TEvDataShard {
 
     struct TEvSplitPartitioningChanged : public TEventPB<TEvSplitPartitioningChanged,
                                                         NKikimrTxDataShard::TEvSplitPartitioningChanged,
-                                                        TEvDataShard::EvSplitPartitioningChanged> {
+                                                        NEvDataShard::EvSplitPartitioningChanged> {
         TEvSplitPartitioningChanged() = default;
         explicit TEvSplitPartitioningChanged(ui64 opId) {
             Record.SetOperationCookie(opId);
@@ -798,7 +798,7 @@ namespace TEvDataShard {
 
     struct TEvSplitPartitioningChangedAck : public TEventPB<TEvSplitPartitioningChangedAck,
                                                         NKikimrTxDataShard::TEvSplitPartitioningChangedAck,
-                                                        TEvDataShard::EvSplitPartitioningChangedAck> {
+                                                        NEvDataShard::EvSplitPartitioningChangedAck> {
         TEvSplitPartitioningChangedAck() = default;
         explicit TEvSplitPartitioningChangedAck(ui64 opId, ui64 tabletId) {
             Record.SetOperationCookie(opId);
@@ -809,7 +809,7 @@ namespace TEvDataShard {
     struct TEvCancelBackup
         : public TEventPB<TEvCancelBackup,
                           NKikimrTxDataShard::TEvCancelBackup,
-                          TEvDataShard::EvCancelBackup>
+                          NEvDataShard::EvCancelBackup>
     {
         TEvCancelBackup() = default;
 
@@ -822,7 +822,7 @@ namespace TEvDataShard {
     struct TEvCancelRestore
         : public TEventPB<TEvCancelRestore,
                           NKikimrTxDataShard::TEvCancelRestore,
-                          TEvDataShard::EvCancelRestore>
+                          NEvDataShard::EvCancelRestore>
     {
         TEvCancelRestore() = default;
 
@@ -834,7 +834,7 @@ namespace TEvDataShard {
 
     struct TEvGetTableStats : public TEventPB<TEvGetTableStats,
                                                         NKikimrTxDataShard::TEvGetTableStats,
-                                                        TEvDataShard::EvGetTableStats> {
+                                                        NEvDataShard::EvGetTableStats> {
         TEvGetTableStats() = default;
         explicit TEvGetTableStats(ui64 tableId) {
             Record.SetTableId(tableId);
@@ -843,7 +843,7 @@ namespace TEvDataShard {
 
     struct TEvGetTableStatsResult : public TEventPB<TEvGetTableStatsResult,
                                                         NKikimrTxDataShard::TEvGetTableStatsResult,
-                                                        TEvDataShard::EvGetTableStatsResult> {
+                                                        NEvDataShard::EvGetTableStatsResult> {
         TEvGetTableStatsResult() = default;
         TEvGetTableStatsResult(ui64 datashardId, ui64 tableOwnerId, ui64 tableLocalId) {
             Record.SetDatashardId(datashardId);
@@ -854,7 +854,7 @@ namespace TEvDataShard {
 
     struct TEvPeriodicTableStats : public TEventPB<TEvPeriodicTableStats,
                                                         NKikimrTxDataShard::TEvPeriodicTableStats,
-                                                        TEvDataShard::EvPeriodicTableStats> {
+                                                        NEvDataShard::EvPeriodicTableStats> {
         TEvPeriodicTableStats() = default;
         TEvPeriodicTableStats(ui64 datashardId, ui64 tableOwnerId, ui64 tableLocalId) {
             Record.SetDatashardId(datashardId);
@@ -870,14 +870,14 @@ namespace TEvDataShard {
 
     struct TEvUploadRowsRequest : public TEventPBWithArena<TEvUploadRowsRequest,
                                                         NKikimrTxDataShard::TEvUploadRowsRequest,
-                                                        TEvDataShard::EvUploadRowsRequest,
+                                                        NEvDataShard::EvUploadRowsRequest,
                                                         16*1024, 32*1024> {
         TEvUploadRowsRequest() = default;
     };
 
     struct TEvUploadRowsResponse : public TEventPB<TEvUploadRowsResponse,
                                                         NKikimrTxDataShard::TEvUploadRowsResponse,
-                                                        TEvDataShard::EvUploadRowsResponse> {
+                                                        NEvDataShard::EvUploadRowsResponse> {
         TEvUploadRowsResponse() = default;
 
         explicit TEvUploadRowsResponse(ui64 tabletId, ui32 status = NKikimrTxDataShard::TError::OK) {
@@ -919,10 +919,10 @@ namespace TEvDataShard {
     // be serialized and deserialized.
     struct TEvRead : public TEventPB<TEvRead,
                                      NKikimrTxDataShard::TEvRead,
-                                     TEvDataShard::EvRead> {
+                                     NEvDataShard::EvRead> {
         using TBase = TEventPB<TEvRead,
                                NKikimrTxDataShard::TEvRead,
-                               TEvDataShard::EvRead>;
+                               NEvDataShard::EvRead>;
 
         TEvRead() = default;
 
@@ -965,10 +965,10 @@ namespace TEvDataShard {
 
     struct TEvReadResult : public TEventPB<TEvReadResult,
                                            NKikimrTxDataShard::TEvReadResult,
-                                           TEvDataShard::EvReadResult> {
+                                           NEvDataShard::EvReadResult> {
         using TBase = TEventPB<TEvReadResult,
                                NKikimrTxDataShard::TEvReadResult,
-                               TEvDataShard::EvReadResult>;
+                               NEvDataShard::EvReadResult>;
 
         TEvReadResult() = default;
 
@@ -1041,7 +1041,7 @@ namespace TEvDataShard {
         std::shared_ptr<arrow::RecordBatch> ArrowBatch;
     };
 
-    struct TEvReadContinue : public TEventLocal<TEvReadContinue, TEvDataShard::EvReadContinue> {
+    struct TEvReadContinue : public TEventLocal<TEvReadContinue, NEvDataShard::EvReadContinue> {
         TActorId Reader;
         ui64 ReadId;
 
@@ -1053,25 +1053,25 @@ namespace TEvDataShard {
 
     struct TEvReadAck : public TEventPB<TEvReadAck,
                                         NKikimrTxDataShard::TEvReadAck,
-                                        TEvDataShard::EvReadAck> {
+                                        NEvDataShard::EvReadAck> {
         TEvReadAck() = default;
     };
 
     struct TEvReadCancel : public TEventPB<TEvReadCancel,
                                            NKikimrTxDataShard::TEvReadCancel,
-                                           TEvDataShard::EvReadCancel> {
+                                           NEvDataShard::EvReadCancel> {
         TEvReadCancel() = default;
     };
 
     struct TEvReadColumnsRequest : public TEventPB<TEvReadColumnsRequest,
                                                    NKikimrTxDataShard::TEvReadColumnsRequest,
-                                                   TEvDataShard::EvReadColumnsRequest> {
+                                                   NEvDataShard::EvReadColumnsRequest> {
         TEvReadColumnsRequest() = default;
     };
 
     struct TEvReadColumnsResponse : public TEventPB<TEvReadColumnsResponse,
                                                     NKikimrTxDataShard::TEvReadColumnsResponse,
-                                                    TEvDataShard::EvReadColumnsResponse> {
+                                                    NEvDataShard::EvReadColumnsResponse> {
         TEvReadColumnsResponse() = default;
 
         explicit TEvReadColumnsResponse(ui64 tabletId, ui32 status = NKikimrTxDataShard::TError::OK) {
@@ -1082,105 +1082,105 @@ namespace TEvDataShard {
 
     struct TEvGetInfoRequest : public TEventPB<TEvGetInfoRequest,
                                                NKikimrTxDataShard::TEvGetInfoRequest,
-                                               TEvDataShard::EvGetInfoRequest> {
+                                               NEvDataShard::EvGetInfoRequest> {
     };
 
     struct TEvGetInfoResponse : public TEventPB<TEvGetInfoResponse,
                                                 NKikimrTxDataShard::TEvGetInfoResponse,
-                                                TEvDataShard::EvGetInfoResponse> {
+                                                NEvDataShard::EvGetInfoResponse> {
     };
 
     struct TEvListOperationsRequest : public TEventPB<TEvListOperationsRequest,
                                                       NKikimrTxDataShard::TEvListOperationsRequest,
-                                                      TEvDataShard::EvListOperationsRequest> {
+                                                      NEvDataShard::EvListOperationsRequest> {
     };
 
     struct TEvListOperationsResponse : public TEventPB<TEvListOperationsResponse,
                                                        NKikimrTxDataShard::TEvListOperationsResponse,
-                                                       TEvDataShard::EvListOperationsResponse> {
+                                                       NEvDataShard::EvListOperationsResponse> {
     };
 
     struct TEvGetOperationRequest : public TEventPB<TEvGetOperationRequest,
                                                     NKikimrTxDataShard::TEvGetOperationRequest,
-                                                    TEvDataShard::EvGetOperationRequest> {
+                                                    NEvDataShard::EvGetOperationRequest> {
     };
 
     struct TEvGetOperationResponse : public TEventPB<TEvGetOperationResponse,
                                                      NKikimrTxDataShard::TEvGetOperationResponse,
-                                                     TEvDataShard::EvGetOperationResponse> {
+                                                     NEvDataShard::EvGetOperationResponse> {
     };
 
     struct TEvGetReadTableSinkStateRequest : public TEventPB<TEvGetReadTableSinkStateRequest,
                                                              NKikimrTxDataShard::TEvGetReadTableSinkStateRequest,
-                                                             TEvDataShard::EvGetReadTableSinkStateRequest> {
+                                                             NEvDataShard::EvGetReadTableSinkStateRequest> {
     };
 
     struct TEvGetReadTableSinkStateResponse : public TEventPB<TEvGetReadTableSinkStateResponse,
                                                               NKikimrTxDataShard::TEvGetReadTableSinkStateResponse,
-                                                              TEvDataShard::EvGetReadTableSinkStateResponse> {
+                                                              NEvDataShard::EvGetReadTableSinkStateResponse> {
     };
 
     struct TEvGetReadTableScanStateRequest : public TEventPB<TEvGetReadTableScanStateRequest,
                                                              NKikimrTxDataShard::TEvGetReadTableScanStateRequest,
-                                                             TEvDataShard::EvGetReadTableScanStateRequest> {
+                                                             NEvDataShard::EvGetReadTableScanStateRequest> {
     };
 
     struct TEvGetReadTableScanStateResponse : public TEventPB<TEvGetReadTableScanStateResponse,
                                                               NKikimrTxDataShard::TEvGetReadTableScanStateResponse,
-                                                              TEvDataShard::EvGetReadTableScanStateResponse> {
+                                                              NEvDataShard::EvGetReadTableScanStateResponse> {
     };
 
     struct TEvGetReadTableStreamStateRequest : public TEventPB<TEvGetReadTableStreamStateRequest,
                                                                NKikimrTxDataShard::TEvGetReadTableStreamStateRequest,
-                                                               TEvDataShard::EvGetReadTableStreamStateRequest> {
+                                                               NEvDataShard::EvGetReadTableStreamStateRequest> {
     };
 
     struct TEvGetReadTableStreamStateResponse : public TEventPB<TEvGetReadTableStreamStateResponse,
                                                                 NKikimrTxDataShard::TEvGetReadTableStreamStateResponse,
-                                                                TEvDataShard::EvGetReadTableStreamStateResponse> {
+                                                                NEvDataShard::EvGetReadTableStreamStateResponse> {
     };
 
     struct TEvGetSlowOpProfilesRequest : public TEventPB<TEvGetSlowOpProfilesRequest,
                                                          NKikimrTxDataShard::TEvGetSlowOpProfilesRequest,
-                                                         TEvDataShard::EvGetSlowOpProfilesRequest> {
+                                                         NEvDataShard::EvGetSlowOpProfilesRequest> {
     };
 
     struct TEvGetSlowOpProfilesResponse : public TEventPB<TEvGetSlowOpProfilesResponse,
                                                           NKikimrTxDataShard::TEvGetSlowOpProfilesResponse,
-                                                          TEvDataShard::EvGetSlowOpProfilesResponse> {
+                                                          NEvDataShard::EvGetSlowOpProfilesResponse> {
     };
 
     struct TEvGetRSInfoRequest : public TEventPB<TEvGetRSInfoRequest,
                                                  NKikimrTxDataShard::TEvGetRSInfoRequest,
-                                                 TEvDataShard::EvGetRSInfoRequest> {
+                                                 NEvDataShard::EvGetRSInfoRequest> {
     };
 
     struct TEvGetRSInfoResponse : public TEventPB<TEvGetRSInfoResponse,
                                                   NKikimrTxDataShard::TEvGetRSInfoResponse,
-                                                  TEvDataShard::EvGetRSInfoResponse> {
+                                                  NEvDataShard::EvGetRSInfoResponse> {
     };
 
     struct TEvGetDataHistogramRequest : public TEventPB<TEvGetDataHistogramRequest,
                                                         NKikimrTxDataShard::TEvGetDataHistogramRequest,
-                                                        TEvDataShard::EvGetDataHistogramRequest> {
+                                                        NEvDataShard::EvGetDataHistogramRequest> {
     };
 
     struct TEvGetDataHistogramResponse : public TEventPB<TEvGetDataHistogramResponse,
                                                          NKikimrTxDataShard::TEvGetDataHistogramResponse,
-                                                         TEvDataShard::EvGetDataHistogramResponse> {
+                                                         NEvDataShard::EvGetDataHistogramResponse> {
     };
 
     struct TEvRefreshVolatileSnapshotRequest
         : public TEventPB<TEvRefreshVolatileSnapshotRequest,
                           NKikimrTxDataShard::TEvRefreshVolatileSnapshotRequest,
-                          TEvDataShard::EvRefreshVolatileSnapshotRequest>
+                          NEvDataShard::EvRefreshVolatileSnapshotRequest>
     {
     };
 
     struct TEvRefreshVolatileSnapshotResponse
         : public TEventPB<TEvRefreshVolatileSnapshotResponse,
                           NKikimrTxDataShard::TEvRefreshVolatileSnapshotResponse,
-                          TEvDataShard::EvRefreshVolatileSnapshotResponse>
+                          NEvDataShard::EvRefreshVolatileSnapshotResponse>
     {
         using EStatus = NKikimrTxDataShard::TEvRefreshVolatileSnapshotResponse::EStatus;
     };
@@ -1188,14 +1188,14 @@ namespace TEvDataShard {
     struct TEvDiscardVolatileSnapshotRequest
         : public TEventPB<TEvDiscardVolatileSnapshotRequest,
                           NKikimrTxDataShard::TEvDiscardVolatileSnapshotRequest,
-                          TEvDataShard::EvDiscardVolatileSnapshotRequest>
+                          NEvDataShard::EvDiscardVolatileSnapshotRequest>
     {
     };
 
     struct TEvDiscardVolatileSnapshotResponse
         : public TEventPB<TEvDiscardVolatileSnapshotResponse,
                           NKikimrTxDataShard::TEvDiscardVolatileSnapshotResponse,
-                          TEvDataShard::EvDiscardVolatileSnapshotResponse>
+                          NEvDataShard::EvDiscardVolatileSnapshotResponse>
     {
         using EStatus = NKikimrTxDataShard::TEvDiscardVolatileSnapshotResponse::EStatus;
     };
@@ -1203,7 +1203,7 @@ namespace TEvDataShard {
     struct TEvMigrateSchemeShardRequest
         : public TEventPB<TEvMigrateSchemeShardRequest,
                           NKikimrTxDataShard::TEvMigrateSchemeShardRequest,
-                          TEvDataShard::EvMigrateSchemeShardRequest>
+                          NEvDataShard::EvMigrateSchemeShardRequest>
     {
         ui64 GetDatashardId() const {
             return Record.GetTabletId();
@@ -1213,13 +1213,13 @@ namespace TEvDataShard {
     struct TEvMigrateSchemeShardResponse
         : public TEventPB<TEvMigrateSchemeShardResponse,
                           NKikimrTxDataShard::TEvMigrateSchemeShardResponse,
-                          TEvDataShard::EvMigrateSchemeShardResponse>
+                          NEvDataShard::EvMigrateSchemeShardResponse>
     {
         using EStatus = NKikimrTxDataShard::TEvMigrateSchemeShardResponse::EStatus;
     };
 
     struct TEvGetS3Upload
-        : public TEventLocal<TEvGetS3Upload, TEvDataShard::EvGetS3Upload>
+        : public TEventLocal<TEvGetS3Upload, NEvDataShard::EvGetS3Upload>
     {
         TActorId ReplyTo;
         ui64 TxId;
@@ -1232,7 +1232,7 @@ namespace TEvDataShard {
     };
 
     struct TEvStoreS3UploadId
-        : public TEventLocal<TEvStoreS3UploadId, TEvDataShard::EvStoreS3UploadId>
+        : public TEventLocal<TEvStoreS3UploadId, NEvDataShard::EvStoreS3UploadId>
     {
         TActorId ReplyTo;
         ui64 TxId;
@@ -1247,7 +1247,7 @@ namespace TEvDataShard {
     };
 
     struct TEvChangeS3UploadStatus
-        : public TEventLocal<TEvChangeS3UploadStatus, TEvDataShard::EvChangeS3UploadStatus>
+        : public TEventLocal<TEvChangeS3UploadStatus, NEvDataShard::EvChangeS3UploadStatus>
     {
         using EStatus = NDataShard::TS3Upload::EStatus;
 
@@ -1275,7 +1275,7 @@ namespace TEvDataShard {
     };
 
     struct TEvS3Upload
-        : public TEventLocal<TEvS3Upload, TEvDataShard::EvS3Upload>
+        : public TEventLocal<TEvS3Upload, NEvDataShard::EvS3Upload>
     {
         using TS3Upload = NDataShard::TS3Upload;
 
@@ -1290,7 +1290,7 @@ namespace TEvDataShard {
     };
 
     struct TEvGetS3DownloadInfo
-        : public TEventLocal<TEvGetS3DownloadInfo, TEvDataShard::EvGetS3DownloadInfo>
+        : public TEventLocal<TEvGetS3DownloadInfo, NEvDataShard::EvGetS3DownloadInfo>
     {
         ui64 TxId;
 
@@ -1301,7 +1301,7 @@ namespace TEvDataShard {
     };
 
     struct TEvStoreS3DownloadInfo
-        : public TEventLocal<TEvStoreS3DownloadInfo, TEvDataShard::EvStoreS3DownloadInfo>
+        : public TEventLocal<TEvStoreS3DownloadInfo, NEvDataShard::EvStoreS3DownloadInfo>
     {
         ui64 TxId;
         NDataShard::TS3Download Info;
@@ -1322,7 +1322,7 @@ namespace TEvDataShard {
     };
 
     struct TEvS3DownloadInfo
-        : public TEventLocal<TEvS3DownloadInfo, TEvDataShard::EvS3DownloadInfo>
+        : public TEventLocal<TEvS3DownloadInfo, NEvDataShard::EvS3DownloadInfo>
     {
         NDataShard::TS3Download Info;
 
@@ -1341,7 +1341,7 @@ namespace TEvDataShard {
     };
 
     struct TEvS3UploadRowsRequest
-        : public TEventLocal<TEvS3UploadRowsRequest, TEvDataShard::EvS3UploadRowsRequest>
+        : public TEventLocal<TEvS3UploadRowsRequest, NEvDataShard::EvS3UploadRowsRequest>
     {
         ui64 TxId;
         std::shared_ptr<NKikimrTxDataShard::TEvUploadRowsRequest> RecordHolder;
@@ -1369,7 +1369,7 @@ namespace TEvDataShard {
     };
 
     struct TEvS3UploadRowsResponse
-        : public TEventLocal<TEvS3UploadRowsResponse, TEvDataShard::EvS3UploadRowsResponse>
+        : public TEventLocal<TEvS3UploadRowsResponse, NEvDataShard::EvS3UploadRowsResponse>
     {
         NKikimrTxDataShard::TEvUploadRowsResponse Record;
         NDataShard::TS3Download Info;
@@ -1390,14 +1390,14 @@ namespace TEvDataShard {
     struct TEvObjectStorageListingRequest
         : public TEventPB<TEvObjectStorageListingRequest,
                             NKikimrTxDataShard::TEvObjectStorageListingRequest,
-                            TEvDataShard::EvObjectStorageListingRequest> {
+                            NEvDataShard::EvObjectStorageListingRequest> {
         TEvObjectStorageListingRequest() = default;
     };
 
     struct TEvObjectStorageListingResponse
          : public TEventPB<TEvObjectStorageListingResponse,
                             NKikimrTxDataShard::TEvObjectStorageListingResponse,
-                            TEvDataShard::EvObjectStorageListingResponse> {
+                            NEvDataShard::EvObjectStorageListingResponse> {
         TEvObjectStorageListingResponse() = default;
 
         explicit TEvObjectStorageListingResponse(ui64 tabletId, ui32 status = NKikimrTxDataShard::TError::OK) {
@@ -1409,85 +1409,85 @@ namespace TEvDataShard {
     struct TEvEraseRowsRequest
         : public TEventPB<TEvEraseRowsRequest,
                           NKikimrTxDataShard::TEvEraseRowsRequest,
-                          TEvDataShard::EvEraseRowsRequest>
+                          NEvDataShard::EvEraseRowsRequest>
     {
     };
 
     struct TEvEraseRowsResponse
         : public TEventPB<TEvEraseRowsResponse,
                           NKikimrTxDataShard::TEvEraseRowsResponse,
-                          TEvDataShard::EvEraseRowsResponse>
+                          NEvDataShard::EvEraseRowsResponse>
     {
     };
 
     struct TEvConditionalEraseRowsRequest
         : public TEventPB<TEvConditionalEraseRowsRequest,
                           NKikimrTxDataShard::TEvConditionalEraseRowsRequest,
-                          TEvDataShard::EvConditionalEraseRowsRequest>
+                          NEvDataShard::EvConditionalEraseRowsRequest>
     {
     };
 
     struct TEvConditionalEraseRowsResponse
         : public TEventPB<TEvConditionalEraseRowsResponse,
                           NKikimrTxDataShard::TEvConditionalEraseRowsResponse,
-                          TEvDataShard::EvConditionalEraseRowsResponse>
+                          NEvDataShard::EvConditionalEraseRowsResponse>
     {
     };
 
     struct TEvBuildIndexCreateRequest
         : public TEventPB<TEvBuildIndexCreateRequest,
                           NKikimrTxDataShard::TEvBuildIndexCreateRequest,
-                          TEvDataShard::EvBuildIndexCreateRequest>
+                          NEvDataShard::EvBuildIndexCreateRequest>
     {
     };
 
     struct TEvBuildIndexProgressResponse
         : public TEventPB<TEvBuildIndexProgressResponse,
                           NKikimrTxDataShard::TEvBuildIndexProgressResponse,
-                          TEvDataShard::EvBuildIndexProgressResponse>
+                          NEvDataShard::EvBuildIndexProgressResponse>
     {
     };
 
     struct TEvSampleKRequest
         : public TEventPB<TEvSampleKRequest,
                           NKikimrTxDataShard::TEvSampleKRequest,
-                          TEvDataShard::EvSampleKRequest> {
+                          NEvDataShard::EvSampleKRequest> {
     };
 
     struct TEvSampleKResponse
         : public TEventPB<TEvSampleKResponse,
                           NKikimrTxDataShard::TEvSampleKResponse,
-                          TEvDataShard::EvSampleKResponse> {
+                          NEvDataShard::EvSampleKResponse> {
     };
 
     struct TEvReshuffleKMeansRequest
         : public TEventPB<TEvReshuffleKMeansRequest,
                           NKikimrTxDataShard::TEvReshuffleKMeansRequest,
-                          TEvDataShard::EvReshuffleKMeansRequest> {
+                          NEvDataShard::EvReshuffleKMeansRequest> {
     };
 
     struct TEvReshuffleKMeansResponse
         : public TEventPB<TEvReshuffleKMeansResponse,
                           NKikimrTxDataShard::TEvReshuffleKMeansResponse,
-                          TEvDataShard::EvReshuffleKMeansResponse> {
+                          NEvDataShard::EvReshuffleKMeansResponse> {
     };
 
     struct TEvLocalKMeansRequest
         : public TEventPB<TEvLocalKMeansRequest,
                           NKikimrTxDataShard::TEvLocalKMeansRequest,
-                          TEvDataShard::EvLocalKMeansRequest> {
+                          NEvDataShard::EvLocalKMeansRequest> {
     };
 
     struct TEvLocalKMeansResponse
         : public TEventPB<TEvLocalKMeansResponse,
                           NKikimrTxDataShard::TEvLocalKMeansResponse,
-                          TEvDataShard::EvLocalKMeansResponse> {
+                          NEvDataShard::EvLocalKMeansResponse> {
     };
 
     struct TEvKqpScan
         : public TEventPB<TEvKqpScan,
                           NKikimrTxDataShard::TEvKqpScan,
-                          TEvDataShard::EvKqpScan>
+                          NEvDataShard::EvKqpScan>
     {
     };
 
@@ -1508,7 +1508,7 @@ namespace TEvDataShard {
     };
 
     struct TEvCompactTable : public TEventPB<TEvCompactTable, NKikimrTxDataShard::TEvCompactTable,
-                                             TEvDataShard::EvCompactTable> {
+                                             NEvDataShard::EvCompactTable> {
         TEvCompactTable() = default;
         TEvCompactTable(ui64 ownerId, ui64 localId) {
             Record.MutablePathId()->SetOwnerId(ownerId);
@@ -1520,7 +1520,7 @@ namespace TEvDataShard {
     };
 
     struct TEvCompactTableResult : public TEventPB<TEvCompactTableResult, NKikimrTxDataShard::TEvCompactTableResult,
-                                                   TEvDataShard::EvCompactTableResult> {
+                                                   NEvDataShard::EvCompactTableResult> {
         TEvCompactTableResult() = default;
 
         TEvCompactTableResult(ui64 tabletId, const TPathId& pathId, NKikimrTxDataShard::TEvCompactTableResult::EStatus status)
@@ -1579,7 +1579,7 @@ namespace TEvDataShard {
     };
 
     struct TEvGetCompactTableStats : public TEventPB<TEvGetCompactTableStats, NKikimrTxDataShard::TEvGetCompactTableStats,
-                                                     TEvDataShard::EvGetCompactTableStats> {
+                                                     NEvDataShard::EvGetCompactTableStats> {
         TEvGetCompactTableStats() = default;
         TEvGetCompactTableStats(ui64 ownerId, ui64 localId) {
             Record.MutablePathId()->SetOwnerId(ownerId);
@@ -1588,7 +1588,7 @@ namespace TEvDataShard {
     };
 
     struct TEvGetCompactTableStatsResult : public TEventPB<TEvGetCompactTableStatsResult, NKikimrTxDataShard::TEvGetCompactTableStatsResult,
-                                                           TEvDataShard::EvGetCompactTableStatsResult> {
+                                                           NEvDataShard::EvGetCompactTableStatsResult> {
         TEvGetCompactTableStatsResult() = default;
     };
 

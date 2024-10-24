@@ -40,7 +40,7 @@ namespace NSequenceShard {
         const ui64 Round;
     };
 
-    void TSequenceShard::Handle(TEvSequenceShard::TEvMarkSchemeShardPipe::TPtr& ev, const TActorContext& ctx) {
+    void TSequenceShard::Handle(NEvSequenceShard::TEvMarkSchemeShardPipe::TPtr& ev, const TActorContext& ctx) {
         auto* msg = ev->Get();
         auto serverId = ev->Recipient;
         ui64 schemeShardId = msg->Record.GetSchemeShardId();

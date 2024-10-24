@@ -5,14 +5,14 @@ namespace NKikimr {
 namespace NHive {
 
 class TTxReleaseTablets : public TTransactionBase<THive> {
-    THolder<TEvHive::TEvReleaseTablets::THandle> Request;
-    THolder<TEvHive::TEvReleaseTabletsReply> Response = MakeHolder<TEvHive::TEvReleaseTabletsReply>();
+    THolder<NEvHive::TEvReleaseTablets::THandle> Request;
+    THolder<NEvHive::TEvReleaseTabletsReply> Response = MakeHolder<NEvHive::TEvReleaseTabletsReply>();
     TVector<std::pair<TTabletId, TActorId>> UnlockedFromActor;
     bool NeedToProcessPendingOperations = false;
     TSideEffects SideEffects;
 
 public:
-    TTxReleaseTablets(THolder<TEvHive::TEvReleaseTablets::THandle> event, THive *hive)
+    TTxReleaseTablets(THolder<NEvHive::TEvReleaseTablets::THandle> event, THive *hive)
         : TBase(hive)
         , Request(std::move(event))
     {}
@@ -82,7 +82,7 @@ public:
         SideEffects.Complete(ctx);
         for (const auto& unlockedFromActor : UnlockedFromActor) {
             // Notify lock owner that lock has been lost
-            ctx.Send(unlockedFromActor.second, new TEvHive::TEvLockTabletExecutionLost(unlockedFromActor.first));
+            ctx.Send(unlockedFromActor.second, new NEvHive::TEvLockTabletExecutionLost(unlockedFromActor.first));
         }
         ctx.Send(Request->Sender, Response.Release());
         if (NeedToProcessPendingOperations) {
@@ -92,7 +92,7 @@ public:
     }
 };
 
-ITransaction* THive::CreateReleaseTablets(TEvHive::TEvReleaseTablets::TPtr event) {
+ITransaction* THive::CreateReleaseTablets(NEvHive::TEvReleaseTablets::TPtr event) {
     return new TTxReleaseTablets(THolder(std::move(event.Release())), this);
 }
 

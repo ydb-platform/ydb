@@ -125,7 +125,7 @@ public:
     std::unordered_map<TPathId, TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> NavigateKeySetResult;
     ui64 NavigateKeySetInFlight = 0;
     std::unordered_map<TPathId, TTabletId> PathId2HiveId;
-    std::unordered_map<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveStorageStats>> HiveStorageStats;
+    std::unordered_map<TTabletId, TRequestResponse<NEvHive::TEvResponseHiveStorageStats>> HiveStorageStats;
     ui64 HiveStorageStatsInFlight = 0;
 
     // BSC
@@ -1511,7 +1511,7 @@ public:
         RequestDone();
     }
 
-    void Handle(TEvHive::TEvResponseHiveStorageStats::TPtr& ev) {
+    void Handle(NEvHive::TEvResponseHiveStorageStats::TPtr& ev) {
         auto itHiveStorageStats = HiveStorageStats.find(ev->Cookie);
         if (itHiveStorageStats != HiveStorageStats.end()) {
             itHiveStorageStats->second.Set(std::move(ev));
@@ -1933,7 +1933,7 @@ public:
             hFunc(NSysView::TEvSysView::TEvGetVSlotsResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetPDisksResponse, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            hFunc(TEvHive::TEvResponseHiveStorageStats, Handle);
+            hFunc(NEvHive::TEvResponseHiveStorageStats, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvents::TEvWakeup, HandleTimeout);
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);

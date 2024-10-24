@@ -16,7 +16,7 @@ namespace {
 // TReadIteratorScan
 
 class TReadIteratorScan : public TActorBootstrapped<TReadIteratorScan> {
-    std::unique_ptr<TEvDataShard::TEvRead> Request;
+    std::unique_ptr<NEvDataShard::TEvRead> Request;
     const NKikimrDataEvents::EDataFormat Format;
     const ui64 TabletId;
     const TActorId Parent;
@@ -33,7 +33,7 @@ class TReadIteratorScan : public TActorBootstrapped<TReadIteratorScan> {
     TVector<TOwnedCellVec> SampledKeys;
 
 public:
-    TReadIteratorScan(TEvDataShard::TEvRead* request,
+    TReadIteratorScan(NEvDataShard::TEvRead* request,
                       ui64 tablet,
                       const TActorId& parent,
                       const TSubLoadId& id,
@@ -99,7 +99,7 @@ private:
         return StopWithError(ctx, "delivery failed");
     }
 
-    void Handle(const TEvDataShard::TEvReadResult::TPtr& ev, const TActorContext& ctx) {
+    void Handle(const NEvDataShard::TEvReadResult::TPtr& ev, const TActorContext& ctx) {
         const auto* msg = ev->Get();
         const auto& record = msg->Record;
 
@@ -179,7 +179,7 @@ private:
         HFunc(TEvents::TEvUndelivered, Handle)
         HFunc(TEvTabletPipe::TEvClientConnected, Handle)
         HFunc(TEvTabletPipe::TEvClientDestroyed, Handle)
-        HFunc(TEvDataShard::TEvReadResult, Handle)
+        HFunc(NEvDataShard::TEvReadResult, Handle)
     )
 };
 
@@ -199,7 +199,7 @@ TVector<TCell> ToCells(const std::vector<TString> &keys) {
 }
 
 void AddRangeQuery(
-    TEvDataShard::TEvRead &request,
+    NEvDataShard::TEvRead &request,
     const std::vector<TString> &from,
     bool fromInclusive,
     const std::vector<TString> &to,
@@ -216,14 +216,14 @@ void AddRangeQuery(
 }
 
 void AddKeyQuery(
-    TEvDataShard::TEvRead &request,
+    NEvDataShard::TEvRead &request,
     const TOwnedCellVec &key)
 {
     request.Keys.emplace_back(key);
 }
 
 IActor *CreateReadIteratorScan(
-    TEvDataShard::TEvRead* request,
+    NEvDataShard::TEvRead* request,
     ui64 tablet,
     const TActorId& parent,
     const TSubLoadId& id,

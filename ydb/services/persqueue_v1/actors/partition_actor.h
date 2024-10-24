@@ -98,8 +98,8 @@ private:
 
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-            HFunc(TEvPersQueue::TEvResponse, Handle);
-            HFunc(TEvPersQueue::TEvHasDataInfoResponse, Handle);
+            HFunc(NEvPersQueue::TEvResponse, Handle);
+            HFunc(NEvPersQueue::TEvHasDataInfoResponse, Handle);
         default:
             break;
         };
@@ -120,8 +120,8 @@ private:
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const NActors::TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const NActors::TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvResponse::TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, const NActors::TActorContext& ctx);
 
     void HandlePoison(NActors::TEvents::TEvPoisonPill::TPtr& ev, const NActors::TActorContext& ctx);
     void HandleWakeup(const NActors::TActorContext& ctx);

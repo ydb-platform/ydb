@@ -8,7 +8,7 @@ using namespace NTabletFlatExecutor;
 
 TDataShard::TTxMigrateSchemeShard::TTxMigrateSchemeShard(
     TDataShard* ds,
-    TEvDataShard::TEvMigrateSchemeShardRequest::TPtr ev)
+    NEvDataShard::TEvMigrateSchemeShardRequest::TPtr ev)
     : TBase(ds)
     , Ev(std::move(ev))
 { }
@@ -23,7 +23,7 @@ bool TDataShard::TTxMigrateSchemeShard::Execute(TTransactionContext& txc, const 
     const auto& currentId = record.GetCurrentSchemeShardId();
     const auto& newId = record.GetNewSchemeShardId();
 
-    Reply.Reset(new TEvDataShard::TEvMigrateSchemeShardResponse);
+    Reply.Reset(new NEvDataShard::TEvMigrateSchemeShardResponse);
     Reply->Record.SetTabletId(Self->TabletID());
 
     if (tabletId != Self->TabletID()) {

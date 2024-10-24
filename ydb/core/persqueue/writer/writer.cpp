@@ -126,8 +126,8 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     template <typename... Args>
-    static THolder<TEvPersQueue::TEvRequest> MakeRequest(Args&&... args) {
-        auto ev = MakeHolder<TEvPersQueue::TEvRequest>();
+    static THolder<NEvPersQueue::TEvRequest> MakeRequest(Args&&... args) {
+        auto ev = MakeHolder<NEvPersQueue::TEvRequest>();
         FillHeader(*ev->Record.MutablePartitionRequest(), std::forward<Args>(args)...);
 
         return ev;
@@ -333,7 +333,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
     STATEFN(StateGetOwnership) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvPersQueue::TEvResponse, HandleOwnership);
+            hFunc(NEvPersQueue::TEvResponse, HandleOwnership);
             hFunc(TEvPartitionWriter::TEvWriteRequest, HoldPending);
             HFunc(NKqp::TEvKqp::TEvQueryResponse, HandlePartitionIdSaved);
             SFunc(TEvents::TEvWakeup, SavePartitionId);
@@ -342,7 +342,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         }
     }
 
-    void HandleOwnership(TEvPersQueue::TEvResponse::TPtr& ev) {
+    void HandleOwnership(NEvPersQueue::TEvResponse::TPtr& ev) {
         auto& record = ev->Get()->Record;
 
         TString error;
@@ -409,14 +409,14 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
     STATEFN(StateGetMaxSeqNo) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPersQueue::TEvResponse, HandleMaxSeqNo);
+            HFunc(NEvPersQueue::TEvResponse, HandleMaxSeqNo);
             hFunc(TEvPartitionWriter::TEvWriteRequest, HoldPending);
         default:
             return StateBase(ev);
         }
     }
 
-    void HandleMaxSeqNo(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+    void HandleMaxSeqNo(NEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
 
         TString error;
@@ -485,14 +485,14 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
     STATEFN(StateRegisterMessageGroup) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvPersQueue::TEvResponse, HandleRegisterMessageGroup);
+            hFunc(NEvPersQueue::TEvResponse, HandleRegisterMessageGroup);
             hFunc(TEvPartitionWriter::TEvWriteRequest, HoldPending);
         default:
             return StateBase(ev);
         }
     }
 
-    void HandleRegisterMessageGroup(TEvPersQueue::TEvResponse::TPtr& ev) {
+    void HandleRegisterMessageGroup(NEvPersQueue::TEvResponse::TPtr& ev) {
         auto& record = ev->Get()->Record;
 
         TString error;
@@ -510,7 +510,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         DEBUG("Received event: " << (*ev.Get()).GetTypeName())
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPartitionWriter::TEvWriteRequest, Handle);
-            hFunc(TEvPersQueue::TEvResponse, Handle);
+            hFunc(NEvPersQueue::TEvResponse, Handle);
             HFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
@@ -673,7 +673,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void Write(ui64 cookie, NKikimrClient::TPersQueueRequest&& req) {
-        auto ev = MakeHolder<TEvPersQueue::TEvRequest>();
+        auto ev = MakeHolder<NEvPersQueue::TEvRequest>();
         ev->Record = std::move(req);
 
         auto& request = *ev->Record.MutablePartitionRequest();
@@ -693,7 +693,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         PendingWrite.emplace_back(cookie);
     }
 
-    void Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
+    void Handle(NEvPersQueue::TEvResponse::TPtr& ev) {
         auto& record = ev->Get()->Record;
 
         TString error;

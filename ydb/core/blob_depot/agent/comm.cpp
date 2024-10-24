@@ -30,7 +30,7 @@ namespace NKikimr::NBlobDepot {
         NextTabletRequestId = 1;
         const ui64 id = NextTabletRequestId++;
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA05, "ConnectToBlobDepot", (AgentId, LogId), (PipeId, PipeId), (RequestId, id));
-        NTabletPipe::SendData(SelfId(), PipeId, new TEvBlobDepot::TEvRegisterAgent(VirtualGroupId, AgentInstanceId), id);
+        NTabletPipe::SendData(SelfId(), PipeId, new NEvBlobDepot::TEvRegisterAgent(VirtualGroupId, AgentInstanceId), id);
         RegisterRequest(id, this, nullptr, {}, true);
     }
 
@@ -96,7 +96,7 @@ namespace NKikimr::NBlobDepot {
                 (ChannelKind, NKikimrBlobDepot::TChannelKind::E_Name(kind.Kind)),
                 (IdAllocInFlight, kind.IdAllocInFlight), (NumAvailableItems, kind.GetNumAvailableItems()),
                 (RequestId, id));
-            NTabletPipe::SendData(SelfId(), PipeId, new TEvBlobDepot::TEvAllocateIds(kind.Kind, 100), id);
+            NTabletPipe::SendData(SelfId(), PipeId, new NEvBlobDepot::TEvAllocateIds(kind.Kind, 100), id);
             RegisterRequest(id, this, std::make_shared<TAllocateIdsContext>(kind.Kind), {}, true);
             kind.IdAllocInFlight = true;
         }
@@ -149,8 +149,8 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) {
         std::visit([&](auto&& response) {
             using T = std::decay_t<decltype(response)>;
-            if constexpr (std::is_same_v<T, TEvBlobDepot::TEvRegisterAgentResult*>
-                    || std::is_same_v<T, TEvBlobDepot::TEvAllocateIdsResult*>) {
+            if constexpr (std::is_same_v<T, NEvBlobDepot::TEvRegisterAgentResult*>
+                    || std::is_same_v<T, NEvBlobDepot::TEvAllocateIdsResult*>) {
                 Handle(std::move(context), response->Record);
             } else if constexpr (!std::is_same_v<T, TTabletDisconnected>) {
                 Y_FAIL_S("unexpected response received Type# " << TypeName<T>());
@@ -180,7 +180,7 @@ namespace NKikimr::NBlobDepot {
         return id;
     }
 
-    void TBlobDepotAgent::Handle(TEvBlobDepot::TEvPushNotify::TPtr ev) {
+    void TBlobDepotAgent::Handle(NEvBlobDepot::TEvPushNotify::TPtr ev) {
         auto& msg = ev->Get()->Record;
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA11, "TEvPushNotify", (AgentId, LogId), (Msg, msg),
             (Id, ev->Cookie), (Sender, ev->Sender), (PipeServerId, PipeServerId), (Match, ev->Sender == PipeServerId));
@@ -188,7 +188,7 @@ namespace NKikimr::NBlobDepot {
             return; // race with previous connection
         }
 
-        auto response = std::make_unique<TEvBlobDepot::TEvPushNotifyResult>();
+        auto response = std::make_unique<NEvBlobDepot::TEvPushNotifyResult>();
         response->Record.SetId(ev->Cookie);
 
         BlocksManager.OnBlockedTablets(msg.GetBlockedTablets());

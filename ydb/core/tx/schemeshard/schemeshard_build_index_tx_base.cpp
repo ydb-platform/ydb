@@ -45,7 +45,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplySchedule(const TActorContext& ct
     for (const auto& rec: ToScheduleBilling) {
         ctx.Schedule(
             std::get<1>(rec),
-            new TEvPrivate::TEvIndexBuildingMakeABill(
+            new NEvPrivate::TEvIndexBuildingMakeABill(
                 ui64(std::get<0>(rec)),
                 ctx.Now()));
     }
@@ -319,7 +319,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::SendNotificationsIfFinished(TIndexBui
     TSet<TActorId> toAnswer;
     toAnswer.swap(indexInfo.Subscribers);
     for (auto& actorId: toAnswer) {
-        Send(actorId, MakeHolder<TEvSchemeShard::TEvNotifyTxCompletionResult>(ui64(indexInfo.Id)));
+        Send(actorId, MakeHolder<NEvSchemeShard::TEvNotifyTxCompletionResult>(ui64(indexInfo.Id)));
     }
 }
 

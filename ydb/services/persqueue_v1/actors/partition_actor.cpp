@@ -173,7 +173,7 @@ void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TAc
                         << " committing to position " << offset << " prev " << CommittedOffset
                         << " end " << EndOffset << " by cookie " << readId);
 
-    TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+    TAutoPtr<NEvPersQueue::TEvRequest> req(new NEvPersQueue::TEvRequest);
     req->Record.Swap(&request);
 
     NTabletPipe::SendData(ctx, PipeClient, req.Release());
@@ -198,7 +198,7 @@ void TPartitionActor::SendPublishDirectRead(const ui64 directReadId, const TActo
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                         << " publishing direct read with id " << directReadId);
 
-    TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+    TAutoPtr<NEvPersQueue::TEvRequest> req(new NEvPersQueue::TEvRequest);
     req->Record.Swap(&request);
 
     NTabletPipe::SendData(ctx, PipeClient, req.Release());
@@ -223,7 +223,7 @@ void TPartitionActor::SendForgetDirectRead(const ui64 directReadId, const TActor
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                         << " forgetting " << directReadId);
 
-    TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+    TAutoPtr<NEvPersQueue::TEvRequest> req(new NEvPersQueue::TEvRequest);
     req->Record.Swap(&request);
 
     NTabletPipe::SendData(ctx, PipeClient, req.Release());
@@ -305,7 +305,7 @@ void TPartitionActor::Handle(const TEvPQProxy::TEvRestartPipe::TPtr&, const TAct
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                             << " resend " << CurrentRequest);
 
-        TAutoPtr<TEvPersQueue::TEvRequest> event(new TEvPersQueue::TEvRequest);
+        TAutoPtr<NEvPersQueue::TEvRequest> event(new NEvPersQueue::TEvRequest);
         event->Record = CurrentRequest;
 
         ActorIdToProto(PipeClient, event->Record.MutablePartitionRequest()->MutablePipeClient());
@@ -517,7 +517,7 @@ bool FillBatchedData(
 }
 
 
-void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+void TPartitionActor::Handle(NEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
 
     if (ev->Get()->Record.HasErrorCode() && ev->Get()->Record.GetErrorCode() != NPersQueue::NErrorCode::OK) {
         const auto errorCode = ev->Get()->Record.GetErrorCode();
@@ -979,7 +979,7 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
 
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " INITING " << Partition);
 
-        TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+        TAutoPtr<NEvPersQueue::TEvRequest> req(new NEvPersQueue::TEvRequest);
         Y_ABORT_UNLESS(!RequestInfly);
         CurrentRequest = request;
         RequestInfly = true;
@@ -1010,7 +1010,7 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     Y_ABORT_UNLESS(PipeClient);
     Y_ABORT_UNLESS(ReadOffset >= EndOffset);
 
-    TAutoPtr<TEvPersQueue::TEvHasDataInfo> event(new TEvPersQueue::TEvHasDataInfo());
+    TAutoPtr<NEvPersQueue::TEvHasDataInfo> event(new NEvPersQueue::TEvHasDataInfo());
     event->Record.SetPartition(Partition.Partition);
     event->Record.SetOffset(ReadOffset);
     event->Record.SetCookie(++WaitDataCookie);
@@ -1028,7 +1028,7 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     WaitDataInfly.insert(WaitDataCookie);
 }
 
-void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, const TActorContext& ctx) {
+void TPartitionActor::Handle(NEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
 
     WriteTimestampEstimateMs = record.GetWriteTimestampEstimateMS();
@@ -1141,7 +1141,7 @@ void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext&
     if (!PipeClient) //Pipe will be recreated soon
         return;
 
-    TAutoPtr<TEvPersQueue::TEvRequest> event(new TEvPersQueue::TEvRequest);
+    TAutoPtr<NEvPersQueue::TEvRequest> event(new NEvPersQueue::TEvRequest);
     event->Record.Swap(&request);
 
     NTabletPipe::SendData(ctx, PipeClient, event.Release());

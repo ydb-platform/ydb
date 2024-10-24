@@ -113,7 +113,7 @@ void TKesusTablet::VerifyKesusPath(const TString& kesusPath) {
 void TKesusTablet::Handle(TEvents::TEvUndelivered::TPtr& ev) {
     const auto* msg = ev->Get();
     switch (msg->SourceType) {
-        case TEvKesus::EvRegisterProxyResult:
+        case NEvKesus::EvRegisterProxyResult:
             if (auto* proxy = Proxies.FindPtr(ev->Sender)) {
                 ClearProxy(proxy, TActivationContext::AsActorContext());
                 ForgetProxy(proxy);
@@ -149,11 +149,11 @@ void TKesusTablet::Handle(TEvents::TEvWakeup::TPtr& ev) {
     }
 }
 
-void TKesusTablet::Handle(TEvKesus::TEvDescribeProxies::TPtr& ev) {
+void TKesusTablet::Handle(NEvKesus::TEvDescribeProxies::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     VerifyKesusPath(record.GetKesusPath());
 
-    auto event = MakeHolder<TEvKesus::TEvDescribeProxiesResult>();
+    auto event = MakeHolder<NEvKesus::TEvDescribeProxiesResult>();
     for (const auto& kv : Proxies) {
         const auto* proxy = &kv.second;
         auto* proxyInfo = event->Record.AddProxies();
@@ -166,7 +166,7 @@ void TKesusTablet::Handle(TEvKesus::TEvDescribeProxies::TPtr& ev) {
     Send(ev->Sender, event.Release(), 0, ev->Cookie);
 }
 
-void TKesusTablet::Handle(TEvKesus::TEvRegisterProxy::TPtr& ev) {
+void TKesusTablet::Handle(NEvKesus::TEvRegisterProxy::TPtr& ev) {
     Y_ABORT_UNLESS(ev->Sender);
     const auto& record = ev->Get()->Record;
     VerifyKesusPath(record.GetKesusPath());
@@ -174,7 +174,7 @@ void TKesusTablet::Handle(TEvKesus::TEvRegisterProxy::TPtr& ev) {
 
     if (record.GetProxyGeneration() <= 0) {
         Send(ev->Sender,
-            new TEvKesus::TEvRegisterProxyResult(
+            new NEvKesus::TEvRegisterProxyResult(
                 record.GetProxyGeneration(),
                 Ydb::StatusIds::BAD_REQUEST,
                 "ProxyGeneration must be greater than zero"),
@@ -185,7 +185,7 @@ void TKesusTablet::Handle(TEvKesus::TEvRegisterProxy::TPtr& ev) {
     auto* proxy = &Proxies[ev->Sender];
     if (record.GetProxyGeneration() <= proxy->Generation) {
         Send(ev->Sender,
-            new TEvKesus::TEvRegisterProxyResult(
+            new NEvKesus::TEvRegisterProxyResult(
                 record.GetProxyGeneration(),
                 Ydb::StatusIds::BAD_REQUEST,
                 "ProxyGeneration is expected to always increase"),
@@ -201,12 +201,12 @@ void TKesusTablet::Handle(TEvKesus::TEvRegisterProxy::TPtr& ev) {
     ClearProxy(proxy, TActivationContext::AsActorContext());
     ProxiesByNode[ev->Sender.NodeId()].insert(proxy);
     Send(ev->Sender,
-        new TEvKesus::TEvRegisterProxyResult(record.GetProxyGeneration()),
+        new NEvKesus::TEvRegisterProxyResult(record.GetProxyGeneration()),
         IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
         ev->Cookie);
 }
 
-void TKesusTablet::Handle(TEvKesus::TEvUnregisterProxy::TPtr& ev) {
+void TKesusTablet::Handle(NEvKesus::TEvUnregisterProxy::TPtr& ev) {
     Y_ABORT_UNLESS(ev->Sender);
     const auto& record = ev->Get()->Record;
     VerifyKesusPath(record.GetKesusPath());
@@ -215,7 +215,7 @@ void TKesusTablet::Handle(TEvKesus::TEvUnregisterProxy::TPtr& ev) {
     auto* proxy = Proxies.FindPtr(ev->Sender);
     if (!proxy || proxy->Generation != record.GetProxyGeneration()) {
         Send(ev->Sender,
-            new TEvKesus::TEvUnregisterProxyResult(
+            new NEvKesus::TEvUnregisterProxyResult(
                 record.GetProxyGeneration(),
                 Ydb::StatusIds::BAD_SESSION,
                 proxy ? "ProxyGeneration mismatch" : "Proxy is not registered"),
@@ -226,7 +226,7 @@ void TKesusTablet::Handle(TEvKesus::TEvUnregisterProxy::TPtr& ev) {
     ClearProxy(proxy, TActivationContext::AsActorContext());
     ForgetProxy(proxy);
     Send(ev->Sender,
-        new TEvKesus::TEvUnregisterProxyResult(record.GetProxyGeneration()),
+        new NEvKesus::TEvUnregisterProxyResult(record.GetProxyGeneration()),
         0, ev->Cookie);
 }
 
@@ -244,45 +244,45 @@ STFUNC(TKesusTablet::StateWork) {
         hFunc(TEvInterconnect::TEvNodeConnected, Handle);
         hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
 
-        hFunc(TEvKesus::TEvDummyRequest, Handle);
+        hFunc(NEvKesus::TEvDummyRequest, Handle);
 
-        hFunc(TEvKesus::TEvSetConfig, Handle);
-        hFunc(TEvKesus::TEvGetConfig, Handle);
+        hFunc(NEvKesus::TEvSetConfig, Handle);
+        hFunc(NEvKesus::TEvGetConfig, Handle);
 
-        hFunc(TEvKesus::TEvDescribeProxies, Handle);
-        hFunc(TEvKesus::TEvRegisterProxy, Handle);
-        hFunc(TEvKesus::TEvUnregisterProxy, Handle);
+        hFunc(NEvKesus::TEvDescribeProxies, Handle);
+        hFunc(NEvKesus::TEvRegisterProxy, Handle);
+        hFunc(NEvKesus::TEvUnregisterProxy, Handle);
 
-        hFunc(TEvKesus::TEvAttachSession, Handle);
-        hFunc(TEvKesus::TEvDetachSession, Handle);
-        hFunc(TEvKesus::TEvDestroySession, Handle);
-        hFunc(TEvKesus::TEvDescribeSessions, Handle);
+        hFunc(NEvKesus::TEvAttachSession, Handle);
+        hFunc(NEvKesus::TEvDetachSession, Handle);
+        hFunc(NEvKesus::TEvDestroySession, Handle);
+        hFunc(NEvKesus::TEvDescribeSessions, Handle);
         hFunc(TEvPrivate::TEvSessionTimeout, Handle);
 
-        hFunc(TEvKesus::TEvAcquireSemaphore, Handle);
-        hFunc(TEvKesus::TEvCreateSemaphore, Handle);
-        hFunc(TEvKesus::TEvDescribeSemaphore, Handle);
-        hFunc(TEvKesus::TEvDeleteSemaphore, Handle);
-        hFunc(TEvKesus::TEvReleaseSemaphore, Handle);
-        hFunc(TEvKesus::TEvUpdateSemaphore, Handle);
+        hFunc(NEvKesus::TEvAcquireSemaphore, Handle);
+        hFunc(NEvKesus::TEvCreateSemaphore, Handle);
+        hFunc(NEvKesus::TEvDescribeSemaphore, Handle);
+        hFunc(NEvKesus::TEvDeleteSemaphore, Handle);
+        hFunc(NEvKesus::TEvReleaseSemaphore, Handle);
+        hFunc(NEvKesus::TEvUpdateSemaphore, Handle);
         hFunc(TEvPrivate::TEvAcquireSemaphoreTimeout, Handle);
 
-        cFunc(TEvKesus::Deprecated_EvCreateTask, HandleIgnored);
-        cFunc(TEvKesus::Deprecated_EvUpdateTask, HandleIgnored);
-        cFunc(TEvKesus::Deprecated_EvDeleteTask, HandleIgnored);
-        cFunc(TEvKesus::Deprecated_EvClientReady, HandleIgnored);
-        cFunc(TEvKesus::Deprecated_EvJobStatus, HandleIgnored);
+        cFunc(NEvKesus::Deprecated_EvCreateTask, HandleIgnored);
+        cFunc(NEvKesus::Deprecated_EvUpdateTask, HandleIgnored);
+        cFunc(NEvKesus::Deprecated_EvDeleteTask, HandleIgnored);
+        cFunc(NEvKesus::Deprecated_EvClientReady, HandleIgnored);
+        cFunc(NEvKesus::Deprecated_EvJobStatus, HandleIgnored);
 
-        hFunc(TEvKesus::TEvDescribeQuoterResources, Handle);
-        hFunc(TEvKesus::TEvAddQuoterResource, Handle);
-        hFunc(TEvKesus::TEvUpdateQuoterResource, Handle);
-        hFunc(TEvKesus::TEvDeleteQuoterResource, Handle);
-        hFunc(TEvKesus::TEvSubscribeOnResources, Handle);
-        hFunc(TEvKesus::TEvUpdateConsumptionState, Handle);
-        hFunc(TEvKesus::TEvAccountResources, Handle);
-        hFunc(TEvKesus::TEvReportResources, Handle);
-        hFunc(TEvKesus::TEvResourcesAllocatedAck, Handle);
-        hFunc(TEvKesus::TEvGetQuoterResourceCounters, Handle);
+        hFunc(NEvKesus::TEvDescribeQuoterResources, Handle);
+        hFunc(NEvKesus::TEvAddQuoterResource, Handle);
+        hFunc(NEvKesus::TEvUpdateQuoterResource, Handle);
+        hFunc(NEvKesus::TEvDeleteQuoterResource, Handle);
+        hFunc(NEvKesus::TEvSubscribeOnResources, Handle);
+        hFunc(NEvKesus::TEvUpdateConsumptionState, Handle);
+        hFunc(NEvKesus::TEvAccountResources, Handle);
+        hFunc(NEvKesus::TEvReportResources, Handle);
+        hFunc(NEvKesus::TEvResourcesAllocatedAck, Handle);
+        hFunc(NEvKesus::TEvGetQuoterResourceCounters, Handle);
         hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
 
@@ -290,7 +290,7 @@ STFUNC(TKesusTablet::StateWork) {
         hFunc(TEvPrivate::TEvSelfCheckTimeout, Handle);
 
         IgnoreFunc(TEvTabletPipe::TEvServerConnected);
-        IgnoreFunc(NKesus::TEvKesus::TEvSyncResourcesAck);
+        IgnoreFunc(NKesus::NEvKesus::TEvSyncResourcesAck);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {

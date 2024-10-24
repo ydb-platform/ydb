@@ -82,17 +82,17 @@ void TConfigsManager::Bootstrap(const TActorContext &ctx)
 
     ui32 item = (ui32)NKikimrConsole::TConfigItem::AllowEditYamlInUiItem;
     ctx.Send(MakeConfigsDispatcherID(SelfId().NodeId()),
-             new TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(item));
+             new NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(item));
 }
 
-void TConfigsManager::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
+void TConfigsManager::Handle(NEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                                             const TActorContext &ctx)
 {
     auto &rec = ev->Get()->Record;
 
     YamlReadOnly = !rec.GetConfig().GetAllowEditYamlInUi();
 
-    auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
+    auto resp = MakeHolder<NEvConsole::TEvConfigNotificationResponse>(rec);
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
 
@@ -568,29 +568,29 @@ void TConfigsManager::DbUpdateSubscriptionLastProvidedConfig(ui64 id,
         .Update(NIceDb::TUpdate<Schema::ConfigSubscriptions::LastProvidedConfig>(configId.ItemIds));
 }
 
-void TConfigsManager::Handle(TEvConsole::TEvGetLogTailRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsManager::Handle(NEvConsole::TEvGetLogTailRequest::TPtr &ev, const TActorContext &ctx)
 {
     TxProcessor->ProcessTx(CreateTxGetLogTail(ev), ctx);
 }
 
-void TConfigsManager::Handle(TEvConsole::TEvAddConfigSubscriptionRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsManager::Handle(NEvConsole::TEvAddConfigSubscriptionRequest::TPtr &ev, const TActorContext &ctx)
 {
     TxProcessor->ProcessTx(CreateTxAddConfigSubscription(ev), ctx);
 }
 
-void TConfigsManager::Handle(TEvConsole::TEvConfigNotificationResponse::TPtr &ev, const TActorContext &ctx)
+void TConfigsManager::Handle(NEvConsole::TEvConfigNotificationResponse::TPtr &ev, const TActorContext &ctx)
 {
     TxProcessor->ProcessTx(CreateTxUpdateLastProvidedConfig(ev), ctx);
 }
 
-void TConfigsManager::Handle(TEvConsole::TEvConfigureRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsManager::Handle(NEvConsole::TEvConfigureRequest::TPtr &ev, const TActorContext &ctx)
 {
     TxProcessor->ProcessTx(CreateTxConfigure(ev), ctx);
 }
 
-void TConfigsManager::Handle(TEvConsole::TEvListConfigValidatorsRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsManager::Handle(NEvConsole::TEvListConfigValidatorsRequest::TPtr &ev, const TActorContext &ctx)
 {
-    auto response = MakeHolder<TEvConsole::TEvListConfigValidatorsResponse>();
+    auto response = MakeHolder<NEvConsole::TEvListConfigValidatorsResponse>();
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
     auto registry = TValidatorsRegistry::Instance();
@@ -609,69 +609,69 @@ void TConfigsManager::Handle(TEvConsole::TEvListConfigValidatorsRequest::TPtr &e
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
 
-void TConfigsManager::Handle(TEvConsole::TEvRemoveConfigSubscriptionRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsManager::Handle(NEvConsole::TEvRemoveConfigSubscriptionRequest::TPtr &ev, const TActorContext &ctx)
 {
     TxProcessor->ProcessTx(CreateTxRemoveConfigSubscription(ev), ctx);
 }
 
-void TConfigsManager::Handle(TEvConsole::TEvRemoveConfigSubscriptionsRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsManager::Handle(NEvConsole::TEvRemoveConfigSubscriptionsRequest::TPtr &ev, const TActorContext &ctx)
 {
     TxProcessor->ProcessTx(CreateTxRemoveConfigSubscriptions(ev), ctx);
 }
 
-void TConfigsManager::Handle(TEvConsole::TEvReplaceConfigSubscriptionsRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsManager::Handle(NEvConsole::TEvReplaceConfigSubscriptionsRequest::TPtr &ev, const TActorContext &ctx)
 {
     TxProcessor->ProcessTx(CreateTxReplaceConfigSubscriptions(ev), ctx);
 }
 
-void TConfigsManager::Handle(TEvConsole::TEvToggleConfigValidatorRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsManager::Handle(NEvConsole::TEvToggleConfigValidatorRequest::TPtr &ev, const TActorContext &ctx)
 {
     TxProcessor->ProcessTx(CreateTxToggleConfigValidator(ev), ctx);
 }
 
-void TConfigsManager::Handle(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsManager::Handle(NEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev, const TActorContext &ctx)
 {
     TxProcessor->ProcessTx(CreateTxReplaceYamlConfig(ev), ctx);
 }
 
-void TConfigsManager::Handle(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsManager::Handle(NEvConsole::TEvSetYamlConfigRequest::TPtr &ev, const TActorContext &ctx)
 {
     TxProcessor->ProcessTx(CreateTxSetYamlConfig(ev), ctx);
 }
 
-void TConfigsManager::Handle(TEvConsole::TEvDropConfigRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsManager::Handle(NEvConsole::TEvDropConfigRequest::TPtr &ev, const TActorContext &ctx)
 {
     TxProcessor->ProcessTx(CreateTxDropYamlConfig(ev), ctx);
 }
 
-void TConfigsManager::Handle(TEvConsole::TEvIsYamlReadOnlyRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsManager::Handle(NEvConsole::TEvIsYamlReadOnlyRequest::TPtr &ev, const TActorContext &ctx)
 {
-    auto response = MakeHolder<TEvConsole::TEvIsYamlReadOnlyResponse>();
+    auto response = MakeHolder<NEvConsole::TEvIsYamlReadOnlyResponse>();
     response->Record.SetReadOnly(YamlReadOnly);
     ctx.Send(ev->Sender, response.Release());
 }
 
-void TConfigsManager::Handle(TEvConsole::TEvGetAllConfigsRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsManager::Handle(NEvConsole::TEvGetAllConfigsRequest::TPtr &ev, const TActorContext &ctx)
 {
     TxProcessor->ProcessTx(CreateTxGetYamlConfig(ev), ctx);
 }
 
-void TConfigsManager::Handle(TEvConsole::TEvGetNodeLabelsRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsManager::Handle(NEvConsole::TEvGetNodeLabelsRequest::TPtr &ev, const TActorContext &ctx)
 {
     if (!AppData()->FeatureFlags.GetEnableGetNodeLabels()) {
-        auto response = MakeHolder<TEvConsole::TEvDisabled>();
+        auto response = MakeHolder<NEvConsole::TEvDisabled>();
         ctx.Send(ev->Sender, response.Release());
     } else {
         ctx.Send(ev->Forward(MakeConfigsDispatcherID(ev->Get()->Record.GetRequest().node_id())));
     }
 }
 
-void TConfigsManager::Handle(TEvConsole::TEvGetAllMetadataRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsManager::Handle(NEvConsole::TEvGetAllMetadataRequest::TPtr &ev, const TActorContext &ctx)
 {
     TxProcessor->ProcessTx(CreateTxGetYamlMetadata(ev), ctx);
 }
 
-void TConfigsManager::Handle(TEvConsole::TEvResolveConfigRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsManager::Handle(NEvConsole::TEvResolveConfigRequest::TPtr &ev, const TActorContext &ctx)
 {
     auto &rec = ev->Get()->Record.GetRequest();
     try {
@@ -696,7 +696,7 @@ void TConfigsManager::Handle(TEvConsole::TEvResolveConfigRequest::TPtr &ev, cons
 
         auto resolved = NYamlConfig::Resolve(tree, namedLabels);
 
-        auto response = MakeHolder<TEvConsole::TEvResolveConfigResponse>();
+        auto response = MakeHolder<NEvConsole::TEvResolveConfigResponse>();
 
         TStringStream resolvedStr;
         resolvedStr << resolved.second;
@@ -705,7 +705,7 @@ void TConfigsManager::Handle(TEvConsole::TEvResolveConfigRequest::TPtr &ev, cons
 
         ctx.Send(ev->Sender, response.Release());
     } catch (const yexception& ex) {
-        auto response = MakeHolder<TEvConsole::TEvGenericError>();
+        auto response = MakeHolder<NEvConsole::TEvGenericError>();
         response->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
         auto *issue = response->Record.AddIssues();
         issue->set_severity(NYql::TSeverityIds::S_ERROR);
@@ -714,7 +714,7 @@ void TConfigsManager::Handle(TEvConsole::TEvResolveConfigRequest::TPtr &ev, cons
     }
 }
 
-void TConfigsManager::Handle(TEvConsole::TEvResolveAllConfigRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsManager::Handle(NEvConsole::TEvResolveAllConfigRequest::TPtr &ev, const TActorContext &ctx)
 {
     auto &rec = ev->Get()->Record.GetRequest();
     try {
@@ -734,7 +734,7 @@ void TConfigsManager::Handle(TEvConsole::TEvResolveAllConfigRequest::TPtr &ev, c
 
         auto resolved = NYamlConfig::ResolveAll(tree);
 
-        auto Response = MakeHolder<TEvConsole::TEvResolveAllConfigResponse>();
+        auto Response = MakeHolder<NEvConsole::TEvResolveAllConfigResponse>();
 
         auto convert = [] (const NYamlConfig::TLabel::EType& label) -> Ydb::DynamicConfig::YamlLabelExt::LabelType {
             switch(label) {
@@ -799,7 +799,7 @@ void TConfigsManager::Handle(TEvConsole::TEvResolveAllConfigRequest::TPtr &ev, c
 
         ctx.Send(ev->Sender, Response.Release());
     } catch (const yexception& ex) {
-        auto response = MakeHolder<TEvConsole::TEvGenericError>();
+        auto response = MakeHolder<NEvConsole::TEvGenericError>();
         response->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
         auto *issue = response->Record.AddIssues();
         issue->set_severity(NYql::TSeverityIds::S_ERROR);
@@ -808,12 +808,12 @@ void TConfigsManager::Handle(TEvConsole::TEvResolveAllConfigRequest::TPtr &ev, c
     }
 }
 
-void TConfigsManager::Handle(TEvConsole::TEvAddVolatileConfigRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsManager::Handle(NEvConsole::TEvAddVolatileConfigRequest::TPtr &ev, const TActorContext &ctx)
 {
     auto &rec = ev->Get()->Record.GetRequest();
 
     try {
-        auto response = MakeHolder<TEvConsole::TEvAddVolatileConfigResponse>();
+        auto response = MakeHolder<NEvConsole::TEvAddVolatileConfigResponse>();
         auto cfg = rec.config();
         auto metadata = NYamlConfig::GetVolatileMetadata(cfg);
 
@@ -869,7 +869,7 @@ void TConfigsManager::Handle(TEvConsole::TEvAddVolatileConfigRequest::TPtr &ev, 
 
         ctx.Send(ev->Sender, response.Release());
     } catch (const yexception& ex) {
-        auto response = MakeHolder<TEvConsole::TEvGenericError>();
+        auto response = MakeHolder<NEvConsole::TEvGenericError>();
         response->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
         auto *issue = response->Record.AddIssues();
         issue->set_severity(NYql::TSeverityIds::S_ERROR);
@@ -878,7 +878,7 @@ void TConfigsManager::Handle(TEvConsole::TEvAddVolatileConfigRequest::TPtr &ev, 
     }
 }
 
-void TConfigsManager::Handle(TEvConsole::TEvRemoveVolatileConfigRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsManager::Handle(NEvConsole::TEvRemoveVolatileConfigRequest::TPtr &ev, const TActorContext &ctx)
 {
     auto &rec = ev->Get()->Record.GetRequest();
 
@@ -914,10 +914,10 @@ void TConfigsManager::Handle(TEvConsole::TEvRemoveVolatileConfigRequest::TPtr &e
             VolatileYamlConfigs);
         ctx.Send(ConfigsProvider, resp.Release());
 
-        auto response = MakeHolder<TEvConsole::TEvRemoveVolatileConfigResponse>();
+        auto response = MakeHolder<NEvConsole::TEvRemoveVolatileConfigResponse>();
         ctx.Send(ev->Sender, response.Release());
     } catch (const yexception& ex) {
-        auto response = MakeHolder<TEvConsole::TEvGenericError>();
+        auto response = MakeHolder<NEvConsole::TEvGenericError>();
         response->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
         auto *issue = response->Record.AddIssues();
         issue->set_severity(NYql::TSeverityIds::S_ERROR);
@@ -976,7 +976,7 @@ void TConfigsManager::ScheduleLogCleanup(const TActorContext &ctx)
                     LogCleanupTimerCookieHolder.Get());
 }
 
-void TConfigsManager::HandleUnauthorized(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev, const TActorContext &) {
+void TConfigsManager::HandleUnauthorized(NEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev, const TActorContext &) {
     AuditLogReplaceConfigTransaction(
         /* peer = */ ev->Get()->Record.GetPeerName(),
         /* userSID = */ ev->Get()->Record.GetUserToken(),
@@ -986,7 +986,7 @@ void TConfigsManager::HandleUnauthorized(TEvConsole::TEvReplaceYamlConfigRequest
         /* success = */ false);
 }
 
-void TConfigsManager::HandleUnauthorized(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev, const TActorContext &) {
+void TConfigsManager::HandleUnauthorized(NEvConsole::TEvSetYamlConfigRequest::TPtr &ev, const TActorContext &) {
     AuditLogReplaceConfigTransaction(
         /* peer = */ ev->Get()->Record.GetPeerName(),
         /* userSID = */ ev->Get()->Record.GetUserToken(),

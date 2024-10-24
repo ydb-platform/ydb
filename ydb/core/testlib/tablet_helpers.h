@@ -95,7 +95,7 @@ namespace NKikimr {
 
     struct TEvFakeHive {
         enum EEv {
-            EvSubscribeToTabletDeletion = TEvHive::EvEnd + 1,
+            EvSubscribeToTabletDeletion = NEvHive::EvEnd + 1,
             EvNotifyTabletDeleted,
             EvRequestDomainInfo,
             EvRequestDomainInfoReply
@@ -124,7 +124,7 @@ namespace NKikimr {
                 : DomainKey(domainKey)
             {}
         };
-        
+
         struct TEvRequestDomainInfoReply: public TEventLocal<TEvRequestDomainInfoReply, EvRequestDomainInfoReply> {
             NHive::TDomainInfo DomainInfo;
 

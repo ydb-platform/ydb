@@ -299,7 +299,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         UNIT_ASSERT(sharedDbSchemeShard != 0
                     && sharedDbSchemeShard != (ui64)-1
                     && sharedDbSchemeShard != TTestTxConfig::SchemeShard);
-                    
+
         TestDescribeResult(DescribePath(runtime, sharedDbSchemeShard, "/MyRoot/SharedDB"),
                            {NLs::PathExist,
                             NLs::ServerlessComputeResourcesMode(EServerlessComputeResourcesModeUnspecified)});
@@ -308,7 +308,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
             R"(
                 ResourcesDomainKey {
                     SchemeShard: %lu
-                    PathId: 2 
+                    PathId: 2
                 }
                 Name: "ServerLess0"
             )",
@@ -348,7 +348,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLess0"),
                            {NLs::PathExist,
                             NLs::ServerlessComputeResourcesMode(EServerlessComputeResourcesModeShared)});
-        
+
         auto checkServerlessComputeResourcesMode = [&](EServerlessComputeResourcesMode serverlessComputeResourcesMode) {
             TString alterData = Sprintf(
                 R"(
@@ -406,7 +406,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
             R"(
                 ResourcesDomainKey {
                     SchemeShard: %lu
-                    PathId: 2 
+                    PathId: 2
                 }
                 Name: "ServerLess0"
             )",
@@ -438,7 +438,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
                 ServerlessComputeResourcesMode: EServerlessComputeResourcesModeShared
                 Name: "SharedDB"
             )",
-            {{ TEvSchemeShard::EStatus::StatusInvalidParameter, "only for serverless" }}
+            {{ NEvSchemeShard::EStatus::StatusInvalidParameter, "only for serverless" }}
         );
 
         // Try to set ServerlessComputeResourcesMode to EServerlessComputeResourcesModeUnspecified
@@ -447,7 +447,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
                 ServerlessComputeResourcesMode: EServerlessComputeResourcesModeUnspecified
                 Name: "ServerLess0"
             )",
-            {{ TEvSchemeShard::EStatus::StatusInvalidParameter, "EServerlessComputeResourcesModeUnspecified" }}
+            {{ NEvSchemeShard::EStatus::StatusInvalidParameter, "EServerlessComputeResourcesModeUnspecified" }}
         );
     }
 
@@ -487,7 +487,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
             R"(
                 ResourcesDomainKey {
                     SchemeShard: %lu
-                    PathId: 2 
+                    PathId: 2
                 }
                 Name: "ServerLess0"
             )",
@@ -518,7 +518,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
                 ServerlessComputeResourcesMode: EServerlessComputeResourcesModeExclusive
                 Name: "ServerLess0"
             )",
-            {{ TEvSchemeShard::EStatus::StatusPreconditionFailed, "Unsupported: feature flag EnableServerlessExclusiveDynamicNodes is off" }}
+            {{ NEvSchemeShard::EStatus::StatusPreconditionFailed, "Unsupported: feature flag EnableServerlessExclusiveDynamicNodes is off" }}
         );
     }
 }

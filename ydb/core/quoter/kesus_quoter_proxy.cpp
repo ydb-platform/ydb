@@ -41,7 +41,7 @@
 namespace NKikimr {
 namespace NQuoter {
 
-namespace TEvKesus = NKesus::TEvKesus;
+namespace NEvKesus = NKesus::NEvKesus;
 
 class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
     struct TResourceState {
@@ -296,9 +296,9 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
     THashMap<ui64, std::vector<TString>> CookieToResourcePath;
     ui64 NextCookie = 1;
 
-    THolder<NKesus::TEvKesus::TEvUpdateConsumptionState> UpdateEv;
-    THolder<NKesus::TEvKesus::TEvAccountResources> AccountEv;
-    THolder<NKesus::TEvKesus::TEvReportResources> ReplicationEv;
+    THolder<NKesus::NEvKesus::TEvUpdateConsumptionState> UpdateEv;
+    THolder<NKesus::NEvKesus::TEvAccountResources> AccountEv;
+    THolder<NKesus::NEvKesus::TEvReportResources> ReplicationEv;
     THolder<TEvQuota::TEvProxyUpdate> ProxyUpdateEv;
     THashMap<TDuration, THolder<TEvPrivate::TEvOfflineResourceAllocation>> OfflineAllocationEvSchedule;
 
@@ -512,7 +512,7 @@ private:
     void InitiateNewSessionToResource(const TString& resourcePath) {
         if (Connected) {
             KESUS_PROXY_LOG_DEBUG("Subscribe on resource \"" << resourcePath << "\"");
-            auto ev = std::make_unique<TEvKesus::TEvSubscribeOnResources>();
+            auto ev = std::make_unique<NEvKesus::TEvSubscribeOnResources>();
             ev->Record.SetProtocolVersion(NKesus::NQuoter::QUOTER_PROTOCOL_VERSION);
             ActorIdToProto(SelfId(), ev->Record.MutableActorID());
             auto* res = ev->Record.AddResources();
@@ -528,7 +528,7 @@ private:
         }
         std::vector<TString> resourcePaths;
         resourcePaths.reserve(Resources.size());
-        auto ev = std::make_unique<TEvKesus::TEvSubscribeOnResources>();
+        auto ev = std::make_unique<NEvKesus::TEvSubscribeOnResources>();
         ev->Record.SetProtocolVersion(NKesus::NQuoter::QUOTER_PROTOCOL_VERSION);
         ActorIdToProto(SelfId(), ev->Record.MutableActorID());
         for (auto&& [resourcePath, resInfo] : Resources) {
@@ -552,21 +552,21 @@ private:
 
     void InitUpdateEv() {
         if (!UpdateEv) {
-            UpdateEv = MakeHolder<NKesus::TEvKesus::TEvUpdateConsumptionState>();
+            UpdateEv = MakeHolder<NKesus::NEvKesus::TEvUpdateConsumptionState>();
             ActorIdToProto(SelfId(), UpdateEv->Record.MutableActorID());
         }
     }
 
     void InitAccountEv() {
         if (!AccountEv) {
-            AccountEv = MakeHolder<NKesus::TEvKesus::TEvAccountResources>();
+            AccountEv = MakeHolder<NKesus::NEvKesus::TEvAccountResources>();
             ActorIdToProto(SelfId(), AccountEv->Record.MutableActorID());
         }
     }
 
     void InitReplicationEv() {
         if (!ReplicationEv) {
-            ReplicationEv = MakeHolder<NKesus::TEvKesus::TEvReportResources>();
+            ReplicationEv = MakeHolder<NKesus::NEvKesus::TEvReportResources>();
             ActorIdToProto(SelfId(), ReplicationEv->Record.MutableActorID());
         }
     }
@@ -821,7 +821,7 @@ private:
         }
     }
 
-    void Handle(NKesus::TEvKesus::TEvSubscribeOnResourcesResult::TPtr& ev) {
+    void Handle(NKesus::NEvKesus::TEvSubscribeOnResourcesResult::TPtr& ev) {
         const std::vector<TString> resourcePaths = PopResourcePathsForRequest(ev->Cookie);
         if (!resourcePaths.empty()) {
             const auto& result = ev->Get()->Record;
@@ -859,7 +859,7 @@ private:
         } // else it was old request that was retried.
     }
 
-    void Handle(NKesus::TEvKesus::TEvResourcesAllocated::TPtr& ev) {
+    void Handle(NKesus::NEvKesus::TEvResourcesAllocated::TPtr& ev) {
         KESUS_PROXY_LOG_TRACE("ResourcesAllocated(" << ev->Get()->Record << ")");
         const TInstant now = TActivationContext::Now();
         for (const NKikimrKesus::TEvResourcesAllocated::TResourceInfo& allocatedInfo : ev->Get()->Record.GetResourcesInfo()) {
@@ -913,10 +913,10 @@ private:
         }
     }
 
-    void Handle(NKesus::TEvKesus::TEvUpdateConsumptionStateAck::TPtr&) {
+    void Handle(NKesus::NEvKesus::TEvUpdateConsumptionStateAck::TPtr&) {
     }
 
-    void Handle(NKesus::TEvKesus::TEvSyncResources::TPtr& ev) {
+    void Handle(NKesus::NEvKesus::TEvSyncResources::TPtr& ev) {
         KESUS_PROXY_LOG_TRACE("SyncResources(" << ev->Get()->Record << ")");
         const TInstant now = TActivationContext::Now();
         for (const NKikimrKesus::TEvSyncResources::TResourceInfo& syncInfo : ev->Get()->Record.GetResourcesInfo()) {
@@ -939,7 +939,7 @@ private:
         }
     }
 
-    void Handle(NKesus::TEvKesus::TEvAccountResourcesAck::TPtr& ev) {
+    void Handle(NKesus::NEvKesus::TEvAccountResourcesAck::TPtr& ev) {
         const auto& result = ev->Get()->Record;
         KESUS_PROXY_LOG_TRACE("AccountResourcesAck(" << result << ")");
         for (int i = 0; i < result.GetResourcesInfo().size(); ++i) {
@@ -1093,13 +1093,13 @@ public:
             hFunc(TEvQuota::TEvProxyCloseSession, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            hFunc(NKesus::TEvKesus::TEvSubscribeOnResourcesResult, Handle);
-            hFunc(NKesus::TEvKesus::TEvResourcesAllocated, Handle);
-            hFunc(NKesus::TEvKesus::TEvUpdateConsumptionStateAck, Handle);
-            hFunc(NKesus::TEvKesus::TEvAccountResourcesAck, Handle);
+            hFunc(NKesus::NEvKesus::TEvSubscribeOnResourcesResult, Handle);
+            hFunc(NKesus::NEvKesus::TEvResourcesAllocated, Handle);
+            hFunc(NKesus::NEvKesus::TEvUpdateConsumptionStateAck, Handle);
+            hFunc(NKesus::NEvKesus::TEvAccountResourcesAck, Handle);
             hFunc(TEvPrivate::TEvOfflineResourceAllocation, Handle);
-            hFunc(NKesus::TEvKesus::TEvSyncResources, Handle);
-            IgnoreFunc(NKesus::TEvKesus::TEvReportResourcesAck);
+            hFunc(NKesus::NEvKesus::TEvSyncResources, Handle);
+            IgnoreFunc(NKesus::NEvKesus::TEvReportResourcesAck);
             default:
                 KESUS_PROXY_LOG_WARN("TKesusQuoterProxy::StateFunc unexpected event type# "
                     << ev->GetTypeRewrite()

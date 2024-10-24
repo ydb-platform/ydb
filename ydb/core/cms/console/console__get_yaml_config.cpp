@@ -9,7 +9,7 @@ using namespace NKikimrConsole;
 class TConfigsManager::TTxGetYamlConfig : public TTransactionBase<TConfigsManager> {
 public:
     TTxGetYamlConfig(TConfigsManager *self,
-                     TEvConsole::TEvGetAllConfigsRequest::TPtr &ev)
+                     NEvConsole::TEvGetAllConfigsRequest::TPtr &ev)
         : TBase(self)
         , Request(std::move(ev))
     {
@@ -17,7 +17,7 @@ public:
 
     bool Execute(TTransactionContext &, const TActorContext &) override
     {
-        Response = MakeHolder<TEvConsole::TEvGetAllConfigsResponse>();
+        Response = MakeHolder<NEvConsole::TEvGetAllConfigsResponse>();
 
         Response->Record.MutableResponse()->mutable_identity()->set_cluster(Self->ClusterName);
         Response->Record.MutableResponse()->mutable_identity()->set_version(Self->YamlVersion);
@@ -42,11 +42,11 @@ public:
     }
 
 private:
-    TEvConsole::TEvGetAllConfigsRequest::TPtr Request;
-    THolder<TEvConsole::TEvGetAllConfigsResponse> Response;
+    NEvConsole::TEvGetAllConfigsRequest::TPtr Request;
+    THolder<NEvConsole::TEvGetAllConfigsResponse> Response;
 };
 
-ITransaction *TConfigsManager::CreateTxGetYamlConfig(TEvConsole::TEvGetAllConfigsRequest::TPtr &ev)
+ITransaction *TConfigsManager::CreateTxGetYamlConfig(NEvConsole::TEvGetAllConfigsRequest::TPtr &ev)
 {
     return new TTxGetYamlConfig(this, ev);
 }

@@ -32,14 +32,14 @@ namespace NKikimr {
 
             STFUNC(StateWork) {
                 switch (ev->GetTypeRewrite()) {
-                    hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest, Handle);
-                    hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle)
-                    hFunc(NConsole::TEvConsole::TEvConfigNotificationResponse, Handle)
-                    hFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest, Handle)
+                    hFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest, Handle);
+                    hFunc(NConsole::NEvConsole::TEvConfigNotificationRequest, Handle)
+                    hFunc(NConsole::NEvConsole::TEvConfigNotificationResponse, Handle)
+                    hFunc(NConsole::NEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest, Handle)
                 }
             }
 
-            void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr& ev) {
+            void Handle(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr& ev) {
                 auto& items = ev->Get()->ConfigItemKinds;
                 if (items.at(0) != NKikimrConsole::TConfigItem::BlobStorageConfigItem) {
                     return;
@@ -47,21 +47,21 @@ namespace NKikimr {
                 Subscribers.emplace(ev->Sender);
             }
 
-            void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+            void Handle(NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
                 EdgeId = ev->Sender;
                 for (auto& id : Subscribers) {
-                    auto update = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+                    auto update = MakeHolder<NConsole::NEvConsole::TEvConfigNotificationRequest>();
                     update->Record.CopyFrom(ev->Get()->Record);
                     Send(id, update.Release());
                 }
             }
 
-            void Handle(NConsole::TEvConsole::TEvConfigNotificationResponse::TPtr& ev) {
+            void Handle(NConsole::NEvConsole::TEvConfigNotificationResponse::TPtr& ev) {
                 Forward(ev, EdgeId);
             }
 
-            void Handle(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest::TPtr& ev) {
-                Send(ev->Sender, MakeHolder<NConsole::TEvConsole::TEvRemoveConfigSubscriptionResponse>().Release());
+            void Handle(NConsole::NEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest::TPtr& ev) {
+                Send(ev->Sender, MakeHolder<NConsole::NEvConsole::TEvRemoveConfigSubscriptionResponse>().Release());
             }
         };
 
@@ -125,18 +125,18 @@ namespace NKikimr {
 
         void ChangeMinHugeBlobSize(ui32 minHugeBlobSize) {
             const TActorId& edge = Runtime->AllocateEdgeActor(NodeId);
-            auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            auto request = MakeHolder<NConsole::NEvConsole::TEvConfigNotificationRequest>();
             auto perfConfig = NKikimrConfig::TBlobStorageConfig_TVDiskPerformanceConfig();
             perfConfig.SetPDiskType(PDiskTypeToPDiskType(VDiskConfig->BaseInfo.DeviceType));
             perfConfig.SetMinHugeBlobSizeInBytes(minHugeBlobSize);
-            
+
             auto* vdiskTypes = request->Record.MutableConfig()->MutableBlobStorageConfig()->MutableVDiskPerformanceSettings()->MutableVDiskTypes();
             vdiskTypes->Add(std::move(perfConfig));
-            
+
             Runtime->Send(new IEventHandle(NConsole::MakeConfigsDispatcherID(NodeId), edge, request.Release()), NodeId);
             auto ev = Runtime->WaitForEdgeActorEvent({edge});
             Runtime->DestroyActor(edge);
-            auto *msg = ev->CastAsLocal<NConsole::TEvConsole::TEvConfigNotificationResponse>();
+            auto *msg = ev->CastAsLocal<NConsole::NEvConsole::TEvConfigNotificationResponse>();
             UNIT_ASSERT(msg);
         }
 

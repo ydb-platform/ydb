@@ -5,10 +5,10 @@ namespace NDataShard {
 
 class TDataShard::TTxCompactTable : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
-    TEvDataShard::TEvCompactTable::TPtr Ev;
+    NEvDataShard::TEvCompactTable::TPtr Ev;
 
 public:
-    TTxCompactTable(TDataShard* ds, TEvDataShard::TEvCompactTable::TPtr ev)
+    TTxCompactTable(TDataShard* ds, NEvDataShard::TEvCompactTable::TPtr ev)
         : TBase(ds)
         , Ev(ev)
     {}
@@ -23,7 +23,7 @@ public:
                 "Background compaction tx at non-ready tablet " << Self->TabletID()
                 << " state " << Self->State
                 << ", requested from " << Ev->Sender);
-            auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
+            auto response = MakeHolder<NEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 record.GetPathId().GetOwnerId(),
                 record.GetPathId().GetLocalId(),
@@ -39,7 +39,7 @@ public:
                 "Background compaction " << Self->TabletID()
                 << " of not owned " << pathId
                 << ", self path owner id# " << Self->GetPathOwnerId());
-            auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
+            auto response = MakeHolder<NEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::FAILED);
@@ -54,7 +54,7 @@ public:
                 "Background compaction " << Self->TabletID()
                 << " of unknown " << pathId
                 << ", requested from " << Ev->Sender);
-            auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
+            auto response = MakeHolder<NEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::FAILED);
@@ -78,7 +78,7 @@ public:
 
             Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION_FAILED_BORROWED);
 
-            auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
+            auto response = MakeHolder<NEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::BORROWED);
@@ -97,7 +97,7 @@ public:
 
             Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION_FAILED_LOANED);
 
-            auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
+            auto response = MakeHolder<NEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::LOANED);
@@ -118,7 +118,7 @@ public:
 
             Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION_NOT_NEEDED);
 
-            auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
+            auto response = MakeHolder<NEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
@@ -145,7 +145,7 @@ public:
         } else {
             // compaction failed, for now we don't care
             Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION_FAILED_START);
-            auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
+            auto response = MakeHolder<NEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::FAILED);
@@ -189,7 +189,7 @@ public:
     }
 };
 
-void TDataShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvCompactTable::TPtr& ev, const TActorContext& ctx) {
     Executor()->Execute(new TTxCompactTable(this, ev), ctx);
 }
 
@@ -246,7 +246,7 @@ void TDataShard::ReplyCompactionWaiters(
         }
 
         const auto& sender = std::get<1>(waiter);
-        auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
+        auto response = MakeHolder<NEvDataShard::TEvCompactTableResult>(
             TabletID(),
             GetPathOwnerId(),
             localPathId,
@@ -270,7 +270,7 @@ void TDataShard::ReplyCompactionWaiters(
                 waiter->CompactingTables.erase(tableId);
 
                 if (waiter->CompactingTables.empty()) { // all requested tables have been compacted
-                    auto response = MakeHolder<TEvDataShard::TEvCompactBorrowedResult>(
+                    auto response = MakeHolder<NEvDataShard::TEvCompactBorrowedResult>(
                         TabletID(),
                         GetPathOwnerId(),
                         waiter->RequestedTable);
@@ -288,9 +288,9 @@ void TDataShard::ReplyCompactionWaiters(
     }
 }
 
-void TDataShard::Handle(TEvDataShard::TEvGetCompactTableStats::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvGetCompactTableStats::TPtr& ev, const TActorContext& ctx) {
     auto &record = ev->Get()->Record;
-    auto response = MakeHolder<TEvDataShard::TEvGetCompactTableStatsResult>();
+    auto response = MakeHolder<NEvDataShard::TEvGetCompactTableStatsResult>();
 
     const auto pathId = PathIdFromPathId(record.GetPathId());
 

@@ -137,9 +137,9 @@ public:
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
-    void Handle(NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NKikimr::NEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NKikimr::NEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPQProxy::TEvRequestTablet::TPtr& ev, const TActorContext& ctx);
 
@@ -160,11 +160,11 @@ public:
 
     virtual void RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode,
                             const Ydb::StatusIds::StatusCode status, const TActorContext& ctx) = 0;
-    virtual void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev,
+    virtual void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::NEvPersQueue::TEvStatusResponse::TPtr& ev,
                                const TActorContext& ctx) = 0;
-    virtual void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev,
+    virtual void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::NEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev,
                                const TActorContext& ctx) = 0;
-    virtual bool ApplyResponse(TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr&, const TActorContext&) = 0;
+    virtual bool ApplyResponse(NEvPersQueue::TEvGetPartitionsLocationResponse::TPtr&, const TActorContext&) = 0;
 
     virtual void Reply(const TActorContext& ctx) = 0;
 
@@ -202,9 +202,9 @@ public:
     void StateWork(TAutoPtr<IEventHandle>& ev);
 
     void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) override;
-    void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) override;
-    void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) override;
-    bool ApplyResponse(TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext& ctx) override;
+    void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::NEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) override;
+    void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::NEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) override;
+    bool ApplyResponse(NEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext& ctx) override;
     virtual void Reply(const TActorContext& ctx) override;
 
 private:
@@ -230,9 +230,9 @@ public:
 
     void RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext& ctx) override;
     void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) override;
-    void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) override;
-    void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) override;
-    bool ApplyResponse(TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext& ctx) override;
+    void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::NEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) override;
+    void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::NEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) override;
+    bool ApplyResponse(NEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext& ctx) override;
     virtual void Reply(const TActorContext& ctx) override;
 
 private:
@@ -258,9 +258,9 @@ public:
     void RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode,
                     const Ydb::StatusIds::StatusCode status, const TActorContext& ctx) override;
     void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) override;
-    void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) override;
-    void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) override;
-    bool ApplyResponse(TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext& ctx) override;
+    void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::NEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) override;
+    void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::NEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) override;
+    bool ApplyResponse(NEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext& ctx) override;
 
     virtual void Reply(const TActorContext& ctx) override;
 
@@ -435,18 +435,18 @@ public:
 
     void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) override;
     void ApplyResponse(TTabletInfo&,
-                      NKikimr::TEvPersQueue::TEvStatusResponse::TPtr&,
+                      NKikimr::NEvPersQueue::TEvStatusResponse::TPtr&,
                       const TActorContext&) override {
         Y_ABORT();
     }
-    virtual void ApplyResponse(TTabletInfo&, TEvPersQueue::TEvReadSessionsInfoResponse::TPtr&,
+    virtual void ApplyResponse(TTabletInfo&, NEvPersQueue::TEvReadSessionsInfoResponse::TPtr&,
                                const TActorContext&) override {
         Y_ABORT();
     }
 
     void Finalize();
 
-    bool ApplyResponse(TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext& ctx) override;
+    bool ApplyResponse(NEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext& ctx) override;
     void Reply(const TActorContext&) override {};
 
     void Handle(NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse::TPtr& ev);

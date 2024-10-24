@@ -292,7 +292,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         state->set_availablesize(limit - used);
     }
 
-    void ChangeDescribeSchemeResult(TEvSchemeShard::TEvDescribeSchemeResult::TPtr* ev, int tabletsTotal) {
+    void ChangeDescribeSchemeResult(NEvSchemeShard::TEvDescribeSchemeResult::TPtr* ev, int tabletsTotal) {
         auto record = (*ev)->Get()->MutableRecord();
         auto params = record->mutable_pathdescription()->mutable_domaindescription()->mutable_processingparams();
 
@@ -344,8 +344,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     ChangeTabletStateResponse(x, tabletsTotal, tabletIdCount, nodeIdCount);
                     break;
                 }
-                case NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult: {
-                    auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
+                case NSchemeShard::NEvSchemeShard::EvDescribeSchemeResult: {
+                    auto *x = reinterpret_cast<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
                     ChangeDescribeSchemeResult(x, nodesTotal * tabletsTotal);
                     break;
                 }
@@ -402,8 +402,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             Y_UNUSED(ev);
             switch (ev->GetTypeRewrite()) {
-                case NConsole::TEvConsole::EvListTenantsResponse: {
-                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
+                case NConsole::NEvConsole::EvListTenantsResponse: {
+                    auto *x = reinterpret_cast<NConsole::NEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
                     Ydb::Cms::ListDatabasesResult listTenantsResult;
                     (*x)->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
                     listTenantsResult.Addpaths("/Root");
@@ -420,8 +420,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     }
                     break;
                 }
-                case TEvHive::EvResponseHiveDomainStats: {
-                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveDomainStats::TPtr*>(&ev);
+                case NEvHive::EvResponseHiveDomainStats: {
+                    auto *x = reinterpret_cast<NEvHive::TEvResponseHiveDomainStats::TPtr*>(&ev);
                     auto &record = (*x)->Get()->Record;
                     auto *domainStats = record.AddDomainStats();
                     for (int i = 1; i <= nodesTotal; i++) {
@@ -648,7 +648,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
     }
 
-    void ChangeResponseHiveNodeStatsServerless(TEvHive::TEvResponseHiveNodeStats::TPtr* ev,
+    void ChangeResponseHiveNodeStatsServerless(NEvHive::TEvResponseHiveNodeStats::TPtr* ev,
                                                size_t sharedDynNode = 0,
                                                size_t exclusiveDynNode = 0,
                                                size_t exclusiveDynNodeWithTablet = 0) {
@@ -733,8 +733,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     ChangeBoardInfoServerless(x, { sharedDynNodeId });
                     break;
                 }
-                case TEvHive::EvResponseHiveNodeStats: {
-                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
+                case NEvHive::EvResponseHiveNodeStats: {
+                    auto *x = reinterpret_cast<NEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
                     ChangeResponseHiveNodeStatsServerless(x, sharedDynNodeId);
                     break;
                 }
@@ -813,8 +813,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     ChangeBoardInfoServerless(x, { sharedDynNodeId }, { exclusiveDynNodeId });
                     break;
                 }
-                case TEvHive::EvResponseHiveNodeStats: {
-                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
+                case NEvHive::EvResponseHiveNodeStats: {
+                    auto *x = reinterpret_cast<NEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
                     ChangeResponseHiveNodeStatsServerless(x, sharedDynNodeId, exclusiveDynNodeId);
                     break;
                 }
@@ -896,8 +896,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     ChangeBoardInfoServerless(x, { sharedDynNodeId }, { exclusiveDynNodeId });
                     break;
                 }
-                case TEvHive::EvResponseHiveNodeStats: {
-                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
+                case NEvHive::EvResponseHiveNodeStats: {
+                    auto *x = reinterpret_cast<NEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
                     ChangeResponseHiveNodeStatsServerless(x, sharedDynNodeId, exclusiveDynNodeId);
                     break;
                 }
@@ -983,8 +983,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     ChangeBoardInfoServerless(x, { sharedDynNodeId }, { exclusiveDynNodeId, secondExclusiveDynNodeId });
                     break;
                 }
-                case TEvHive::EvResponseHiveNodeStats: {
-                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
+                case NEvHive::EvResponseHiveNodeStats: {
+                    auto *x = reinterpret_cast<NEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
                     ChangeResponseHiveNodeStatsServerless(x, sharedDynNodeId, exclusiveDynNodeId, secondExclusiveDynNodeId);
                     break;
                 }
@@ -1137,8 +1137,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             Y_UNUSED(ev);
             switch (ev->GetTypeRewrite()) {
-                case NConsole::TEvConsole::EvListTenantsResponse: {
-                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
+                case NConsole::NEvConsole::EvListTenantsResponse: {
+                    auto *x = reinterpret_cast<NConsole::NEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
                     Ydb::Cms::ListDatabasesResult listTenantsResult;
                     (*x)->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
                     listTenantsResult.Addpaths("/Root/slice");
@@ -1440,8 +1440,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             Y_UNUSED(ev);
             switch (ev->GetTypeRewrite()) {
-                case NConsole::TEvConsole::EvListTenantsResponse: {
-                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
+                case NConsole::NEvConsole::EvListTenantsResponse: {
+                    auto *x = reinterpret_cast<NConsole::NEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
                     Ydb::Cms::ListDatabasesResult listTenantsResult;
                     (*x)->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
                     listTenantsResult.Addpaths("/Root");

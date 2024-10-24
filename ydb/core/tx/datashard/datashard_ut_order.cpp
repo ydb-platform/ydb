@@ -1987,7 +1987,7 @@ Y_UNIT_TEST(TestPlannedTimeoutSplit) {
     size_t observedSplits = 0;
     auto observeSplits = [&](TAutoPtr<IEventHandle> &event) -> auto {
         switch (event->GetTypeRewrite()) {
-            case TEvDataShard::EvSplit: {
+            case NEvDataShard::EvSplit: {
                 Cerr << "---- observed EvSplit ----" << Endl;
                 ++observedSplits;
                 break;
@@ -2080,7 +2080,7 @@ Y_UNIT_TEST(TestPlannedHalfOverloadedSplit) {
     TVector<THolder<IEventHandle>> txProposeResults;
     auto captureMessages = [&](TAutoPtr<IEventHandle> &event) -> auto {
         switch (event->GetTypeRewrite()) {
-            case TEvDataShard::EvProposeTransaction: {
+            case NEvDataShard::EvProposeTransaction: {
                 Cerr << "---- observed EvProposeTransactionResult ----" << Endl;
                 if (txProposes.size() == 0) {
                     // Capture the first propose
@@ -2089,7 +2089,7 @@ Y_UNIT_TEST(TestPlannedHalfOverloadedSplit) {
                 }
                 break;
             }
-            case TEvDataShard::EvProposeTransactionResult: {
+            case NEvDataShard::EvProposeTransactionResult: {
                 Cerr << "---- observed EvProposeTransactionResult ----" << Endl;
                 if (txProposes.size() > 0) {
                     // Capture all propose results
@@ -2124,7 +2124,7 @@ Y_UNIT_TEST(TestPlannedHalfOverloadedSplit) {
     size_t observedSplits = 0;
     auto observeSplits = [&](TAutoPtr<IEventHandle> &event) -> auto {
         switch (event->GetTypeRewrite()) {
-            case TEvDataShard::EvSplit: {
+            case NEvDataShard::EvSplit: {
                 Cerr << "---- observed EvSplit ----" << Endl;
                 ++observedSplits;
                 break;
@@ -2509,21 +2509,21 @@ Y_UNIT_TEST(TestImmediateQueueThenSplit) {
     TVector<THolder<IEventHandle>> eventsDelayedPropose;
     auto captureEvents = [&](TAutoPtr<IEventHandle> &event) -> auto {
         switch (event->GetTypeRewrite()) {
-            case TEvDataShard::EvSplit:
+            case NEvDataShard::EvSplit:
                 if (captureSplit) {
                     Cerr << "---- captured EvSplit ----" << Endl;
                     eventsSplit.emplace_back(event.Release());
                     return TTestActorRuntime::EEventAction::DROP;
                 }
                 break;
-            case TEvDataShard::EvSplitPartitioningChanged:
+            case NEvDataShard::EvSplitPartitioningChanged:
                 if (captureSplitChanged) {
                     Cerr << "---- captured EvSplitPartitioningChanged ----" << Endl;
                     eventsSplitChanged.emplace_back(event.Release());
                     return TTestActorRuntime::EEventAction::DROP;
                 }
                 break;
-            case TEvDataShard::EvProposeTransaction:
+            case NEvDataShard::EvProposeTransaction:
                 if (capturePropose) {
                     Cerr << "---- capture EvProposeTransaction ----" << Endl;
                     eventsPropose.emplace_back(event.Release());
@@ -2686,8 +2686,8 @@ void TestLateKqpQueryAfterColumnDrop(bool dataQuery, const TString& query) {
         //     Cerr << "Stream sender got " << ev->GetTypeRewrite() << " " << ev->GetBase()->ToStringHeader() << Endl;
         // }
         switch (ev->GetTypeRewrite()) {
-            case TEvDataShard::EvProposeTransaction: {
-                auto &rec = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+            case NEvDataShard::EvProposeTransaction: {
+                auto &rec = ev->Get<NEvDataShard::TEvProposeTransaction>()->Record;
                 if (capturePropose && rec.GetTxKind() != NKikimrTxDataShard::TX_KIND_SNAPSHOT) {
                     Cerr << "---- capture EvProposeTransaction ---- type=" << rec.GetTxKind() << Endl;
                     eventsPropose.emplace_back(ev.Release());
@@ -2696,7 +2696,7 @@ void TestLateKqpQueryAfterColumnDrop(bool dataQuery, const TString& query) {
                 break;
             }
 
-            case TEvDataShard::EvKqpScan: {
+            case NEvDataShard::EvKqpScan: {
                 if (capturePropose) {
                     Cerr << "---- capture EvKqpScan ----" << Endl;
                     eventsPropose.emplace_back(ev.Release());
@@ -3207,7 +3207,7 @@ Y_UNIT_TEST(TestShardSnapshotReadNoEarlyReply) {
                 }
                 break;
             }
-            case TEvDataShard::TEvProposeTransactionResult::EventType: {
+            case NEvDataShard::TEvProposeTransactionResult::EventType: {
                 Cerr << "... observed propose transaction result" << Endl;
                 ++seenProposeResults;
                 break;
@@ -3954,9 +3954,9 @@ Y_UNIT_TEST(TestUnprotectedReadsThenWriteVisibility) {
     auto table1shards = GetTableShards(server, sender, "/Root/table-1");
 
     // Make sure tablet is at node 1
-    runtime.SendToPipe(hiveTabletId, sender, new TEvHive::TEvFillNode(runtime.GetNodeId(0)));
+    runtime.SendToPipe(hiveTabletId, sender, new NEvHive::TEvFillNode(runtime.GetNodeId(0)));
     {
-        auto ev = runtime.GrabEdgeEventRethrow<TEvHive::TEvFillNodeResult>(sender);
+        auto ev = runtime.GrabEdgeEventRethrow<NEvHive::TEvFillNodeResult>(sender);
         UNIT_ASSERT(ev->Get()->Record.GetStatus() == NKikimrProto::OK);
     }
 
@@ -4007,9 +4007,9 @@ Y_UNIT_TEST(TestUnprotectedReadsThenWriteVisibility) {
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2)"));
 
     // Make sure tablet is at node 2
-    runtime.SendToPipe(hiveTabletId, sender, new TEvHive::TEvFillNode(runtime.GetNodeId(1)));
+    runtime.SendToPipe(hiveTabletId, sender, new NEvHive::TEvFillNode(runtime.GetNodeId(1)));
     {
-        auto ev = runtime.GrabEdgeEventRethrow<TEvHive::TEvFillNodeResult>(sender);
+        auto ev = runtime.GrabEdgeEventRethrow<NEvHive::TEvFillNodeResult>(sender);
         UNIT_ASSERT(ev->Get()->Record.GetStatus() == NKikimrProto::OK);
     }
 
@@ -4067,9 +4067,9 @@ Y_UNIT_TEST(UncommittedReadSetAck) {
     auto table2shards = GetTableShards(server, sender, "/Root/table-2");
 
     // Make sure these tablets are at node 1
-    runtime.SendToPipe(hiveTabletId, sender, new TEvHive::TEvFillNode(runtime.GetNodeId(0)));
+    runtime.SendToPipe(hiveTabletId, sender, new NEvHive::TEvFillNode(runtime.GetNodeId(0)));
     {
-        auto ev = runtime.GrabEdgeEventRethrow<TEvHive::TEvFillNodeResult>(sender);
+        auto ev = runtime.GrabEdgeEventRethrow<NEvHive::TEvFillNodeResult>(sender);
         UNIT_ASSERT(ev->Get()->Record.GetStatus() == NKikimrProto::OK);
     }
 
@@ -4329,7 +4329,7 @@ Y_UNIT_TEST(UncommittedReads) {
                 }
                 break;
             }
-            case TEvDataShard::TEvProposeTransactionResult::EventType: {
+            case NEvDataShard::TEvProposeTransactionResult::EventType: {
                 Cerr << "... observed propose transaction result" << Endl;
                 ++seenProposeResults;
                 break;

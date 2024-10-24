@@ -358,7 +358,7 @@ void TCreateUserSchemaActor::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
     }
 }
 
-void TCreateUserSchemaActor::HandleAddQuoterResource(NKesus::TEvKesus::TEvAddQuoterResourceResult::TPtr& ev) {
+void TCreateUserSchemaActor::HandleAddQuoterResource(NKesus::NEvKesus::TEvAddQuoterResourceResult::TPtr& ev) {
     AddQuoterResourceActor_ = TActorId();
     auto status = ev->Get()->Record.GetError().GetStatus();
     if (status == Ydb::StatusIds::SUCCESS || status == Ydb::StatusIds::ALREADY_EXISTS) {
@@ -544,7 +544,7 @@ private:
         this->Send(MakeTxProxyID(), std::move(request));
     }
 
-    void HandleDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+    void HandleDescribeSchemeResult(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         RLOG_SQS_TRACE("HandleDescribeSchemeResult for quoter: " << ev->Get()->GetRecord());
         const auto& pathDescription = ev->Get()->GetRecord().GetPathDescription();
         if (ev->Get()->GetRecord().GetStatus() != NKikimrScheme::StatusSuccess || !pathDescription.GetKesus().GetKesusTabletId()) {
@@ -606,7 +606,7 @@ private:
 
     STATEFN(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleDescribeSchemeResult);
+            hFunc(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult, HandleDescribeSchemeResult);
             hFunc(TEvCmdResult, HandleCmdResult);
             hFunc(TEvTabletPipe::TEvClientDestroyed, HandlePipeClientDisconnected);
             hFunc(TEvTabletPipe::TEvClientConnected, HandlePipeClientConnected);
@@ -627,7 +627,7 @@ private:
 
 TActorId RunAddQuoterResource(ui64 quoterSchemeShardId, ui64 quoterPathId, const NKikimrKesus::TEvAddQuoterResource& cmd, const TString& requestId) {
     return TActivationContext::Register(
-        new TQuoterCmdRunner<NKesus::TEvKesus::TEvAddQuoterResource, NKesus::TEvKesus::TEvAddQuoterResourceResult>(
+        new TQuoterCmdRunner<NKesus::NEvKesus::TEvAddQuoterResource, NKesus::NEvKesus::TEvAddQuoterResourceResult>(
             quoterSchemeShardId, quoterPathId, cmd, requestId, TActivationContext::AsActorContext().SelfID
         )
     );
@@ -635,7 +635,7 @@ TActorId RunAddQuoterResource(ui64 quoterSchemeShardId, ui64 quoterPathId, const
 
 TActorId RunAddQuoterResource(const TString& quoterPath, const NKikimrKesus::TEvAddQuoterResource& cmd, const TString& requestId) {
     return TActivationContext::Register(
-        new TQuoterCmdRunner<NKesus::TEvKesus::TEvAddQuoterResource, NKesus::TEvKesus::TEvAddQuoterResourceResult>(
+        new TQuoterCmdRunner<NKesus::NEvKesus::TEvAddQuoterResource, NKesus::NEvKesus::TEvAddQuoterResourceResult>(
             quoterPath, cmd, requestId, TActivationContext::AsActorContext().SelfID
         )
     );
@@ -643,7 +643,7 @@ TActorId RunAddQuoterResource(const TString& quoterPath, const NKikimrKesus::TEv
 
 TActorId RunDeleteQuoterResource(const TString& quoterPath, const NKikimrKesus::TEvDeleteQuoterResource& cmd, const TString& requestId) {
     return TActivationContext::Register(
-        new TQuoterCmdRunner<NKesus::TEvKesus::TEvDeleteQuoterResource, NKesus::TEvKesus::TEvDeleteQuoterResourceResult>(
+        new TQuoterCmdRunner<NKesus::NEvKesus::TEvDeleteQuoterResource, NKesus::NEvKesus::TEvDeleteQuoterResourceResult>(
             quoterPath, cmd, requestId, TActivationContext::AsActorContext().SelfID
         )
     );

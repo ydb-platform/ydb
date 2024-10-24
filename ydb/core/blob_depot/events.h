@@ -6,7 +6,7 @@
 
 namespace NKikimr {
 
-    namespace TEvBlobDepot {
+    namespace NEvBlobDepot {
         enum {
             EvApplyConfig = EventSpaceBegin(TKikimrEvents::ES_BLOB_DEPOT),
             EvApplyConfigResult,

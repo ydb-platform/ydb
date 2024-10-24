@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
         TTableId tableId = ResolveTableId(server, sender, tableFrom);
 
         for (auto tid: datashards) {
-            auto ev = new TEvDataShard::TEvBuildIndexCreateRequest;
+            auto ev = new NEvDataShard::TEvBuildIndexCreateRequest;
             NKikimrTxDataShard::TEvBuildIndexCreateRequest& rec = ev->Record;
             rec.SetBuildIndexId(1);
 
@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
 
             while (true) {
                 TAutoPtr<IEventHandle> handle;
-                auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvBuildIndexProgressResponse>(handle);
+                auto reply = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvBuildIndexProgressResponse>(handle);
 
                 if (expected == NKikimrIndexBuilder::EBuildStatus::DONE
                     && reply->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::ACCEPTED) {
@@ -162,7 +162,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
 
         CreateShardedTableForIndex(server, sender, "/Root", "table-2", 1, false);
 
-        TBlockEvents<TEvDataShard::TEvCompactBorrowed> block(runtime, [&](const TEvDataShard::TEvCompactBorrowed::TPtr& event) {
+        TBlockEvents<NEvDataShard::TEvCompactBorrowed> block(runtime, [&](const NEvDataShard::TEvCompactBorrowed::TPtr& event) {
             return runtime.FindActorName(event->Sender) == "FLAT_SCHEMESHARD_ACTOR";
         });
 
@@ -197,7 +197,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
             THashSet<ui64> owners(stats.GetUserTablePartOwners().begin(), stats.GetUserTablePartOwners().end());
             // Note: datashard always adds current shard to part owners, even if there are no parts
             UNIT_ASSERT_VALUES_EQUAL(owners, (THashSet<ui64>{shards1.at(0), shards2.at(shardIndex)}));
-            
+
             auto tableId = ResolveTableId(server, sender, "/Root/table-2");
             auto result = CompactBorrowed(runtime, shards2.at(shardIndex), tableId);
             // Cerr << "Compact result " << result.DebugString() << Endl;

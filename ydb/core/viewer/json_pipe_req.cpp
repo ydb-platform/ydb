@@ -205,7 +205,7 @@ TString TViewerPipeClient::GetError(const std::unique_ptr<TEvStateStorage::TEvBo
 
 void TViewerPipeClient::RequestHiveDomainStats(NNodeWhiteboard::TTabletId hiveId) {
     TActorId pipeClient = ConnectTabletPipe(hiveId);
-    THolder<TEvHive::TEvRequestHiveDomainStats> request = MakeHolder<TEvHive::TEvRequestHiveDomainStats>();
+    THolder<NEvHive::TEvRequestHiveDomainStats> request = MakeHolder<NEvHive::TEvRequestHiveDomainStats>();
     request->Record.SetReturnFollowers(Followers);
     request->Record.SetReturnMetrics(Metrics);
     SendRequestToPipe(pipeClient, request.Release(), hiveId);
@@ -213,7 +213,7 @@ void TViewerPipeClient::RequestHiveDomainStats(NNodeWhiteboard::TTabletId hiveId
 
 void TViewerPipeClient::RequestHiveNodeStats(NNodeWhiteboard::TTabletId hiveId, TPathId pathId) {
     TActorId pipeClient = ConnectTabletPipe(hiveId);
-    THolder<TEvHive::TEvRequestHiveNodeStats> request = MakeHolder<TEvHive::TEvRequestHiveNodeStats>();
+    THolder<NEvHive::TEvRequestHiveNodeStats> request = MakeHolder<NEvHive::TEvRequestHiveNodeStats>();
     request->Record.SetReturnMetrics(Metrics);
     if (pathId != TPathId()) {
         request->Record.SetReturnExtendedTabletInfo(true);
@@ -225,7 +225,7 @@ void TViewerPipeClient::RequestHiveNodeStats(NNodeWhiteboard::TTabletId hiveId, 
 
 void TViewerPipeClient::RequestHiveStorageStats(NNodeWhiteboard::TTabletId hiveId) {
     TActorId pipeClient = ConnectTabletPipe(hiveId);
-    THolder<TEvHive::TEvRequestHiveStorageStats> request = MakeHolder<TEvHive::TEvRequestHiveStorageStats>();
+    THolder<NEvHive::TEvRequestHiveStorageStats> request = MakeHolder<NEvHive::TEvRequestHiveStorageStats>();
     SendRequestToPipe(pipeClient, request.Release(), hiveId);
 }
 
@@ -272,12 +272,12 @@ TViewerPipeClient::TRequestResponse<TEvViewer::TEvViewerResponse> TViewerPipeCli
     return response;
 }
 
-TViewerPipeClient::TRequestResponse<TEvHive::TEvResponseHiveDomainStats> TViewerPipeClient::MakeRequestHiveDomainStats(NNodeWhiteboard::TTabletId hiveId) {
+TViewerPipeClient::TRequestResponse<NEvHive::TEvResponseHiveDomainStats> TViewerPipeClient::MakeRequestHiveDomainStats(NNodeWhiteboard::TTabletId hiveId) {
     TActorId pipeClient = ConnectTabletPipe(hiveId);
-    THolder<TEvHive::TEvRequestHiveDomainStats> request = MakeHolder<TEvHive::TEvRequestHiveDomainStats>();
+    THolder<NEvHive::TEvRequestHiveDomainStats> request = MakeHolder<NEvHive::TEvRequestHiveDomainStats>();
     request->Record.SetReturnFollowers(Followers);
     request->Record.SetReturnMetrics(Metrics);
-    auto response = MakeRequestToPipe<TEvHive::TEvResponseHiveDomainStats>(pipeClient, request.Release(), hiveId);
+    auto response = MakeRequestToPipe<NEvHive::TEvResponseHiveDomainStats>(pipeClient, request.Release(), hiveId);
     if (response.Span) {
         auto hive_id = "#" + ::ToString(hiveId);
         response.Span.Attribute("hive_id", hive_id);
@@ -285,10 +285,10 @@ TViewerPipeClient::TRequestResponse<TEvHive::TEvResponseHiveDomainStats> TViewer
     return response;
 }
 
-TViewerPipeClient::TRequestResponse<TEvHive::TEvResponseHiveStorageStats> TViewerPipeClient::MakeRequestHiveStorageStats(NNodeWhiteboard::TTabletId hiveId) {
+TViewerPipeClient::TRequestResponse<NEvHive::TEvResponseHiveStorageStats> TViewerPipeClient::MakeRequestHiveStorageStats(NNodeWhiteboard::TTabletId hiveId) {
     TActorId pipeClient = ConnectTabletPipe(hiveId);
-    THolder<TEvHive::TEvRequestHiveStorageStats> request = MakeHolder<TEvHive::TEvRequestHiveStorageStats>();
-    auto response = MakeRequestToPipe<TEvHive::TEvResponseHiveStorageStats>(pipeClient, request.Release(), hiveId);
+    THolder<NEvHive::TEvRequestHiveStorageStats> request = MakeHolder<NEvHive::TEvRequestHiveStorageStats>();
+    auto response = MakeRequestToPipe<NEvHive::TEvResponseHiveStorageStats>(pipeClient, request.Release(), hiveId);
     if (response.Span) {
         auto hive_id = "#" + ::ToString(hiveId);
         response.Span.Attribute("hive_id", hive_id);
@@ -296,9 +296,9 @@ TViewerPipeClient::TRequestResponse<TEvHive::TEvResponseHiveStorageStats> TViewe
     return response;
 }
 
-TViewerPipeClient::TRequestResponse<TEvHive::TEvResponseHiveNodeStats> TViewerPipeClient::MakeRequestHiveNodeStats(TTabletId hiveId, TEvHive::TEvRequestHiveNodeStats* request) {
+TViewerPipeClient::TRequestResponse<NEvHive::TEvResponseHiveNodeStats> TViewerPipeClient::MakeRequestHiveNodeStats(TTabletId hiveId, NEvHive::TEvRequestHiveNodeStats* request) {
     TActorId pipeClient = ConnectTabletPipe(hiveId);
-    auto response = MakeRequestToPipe<TEvHive::TEvResponseHiveNodeStats>(pipeClient, request, hiveId);
+    auto response = MakeRequestToPipe<NEvHive::TEvResponseHiveNodeStats>(pipeClient, request, hiveId);
     if (response.Span) {
         auto hive_id = "#" + ::ToString(hiveId);
         response.Span.Attribute("hive_id", hive_id);
@@ -338,41 +338,41 @@ TViewerPipeClient::TRequestResponse<TEvViewer::TEvViewerResponse> TViewerPipeCli
 
 void TViewerPipeClient::RequestConsoleListTenants() {
     TActorId pipeClient = ConnectTabletPipe(GetConsoleId());
-    THolder<NConsole::TEvConsole::TEvListTenantsRequest> request = MakeHolder<NConsole::TEvConsole::TEvListTenantsRequest>();
+    THolder<NConsole::NEvConsole::TEvListTenantsRequest> request = MakeHolder<NConsole::NEvConsole::TEvListTenantsRequest>();
     SendRequestToPipe(pipeClient, request.Release());
 }
 
-TViewerPipeClient::TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse> TViewerPipeClient::MakeRequestConsoleListTenants() {
+TViewerPipeClient::TRequestResponse<NConsole::NEvConsole::TEvListTenantsResponse> TViewerPipeClient::MakeRequestConsoleListTenants() {
     TActorId pipeClient = ConnectTabletPipe(GetConsoleId());
-    THolder<NConsole::TEvConsole::TEvListTenantsRequest> request = MakeHolder<NConsole::TEvConsole::TEvListTenantsRequest>();
-    return MakeRequestToPipe<NConsole::TEvConsole::TEvListTenantsResponse>(pipeClient, request.Release());
+    THolder<NConsole::NEvConsole::TEvListTenantsRequest> request = MakeHolder<NConsole::NEvConsole::TEvListTenantsRequest>();
+    return MakeRequestToPipe<NConsole::NEvConsole::TEvListTenantsResponse>(pipeClient, request.Release());
 }
 
-TViewerPipeClient::TRequestResponse<NConsole::TEvConsole::TEvGetNodeConfigResponse> TViewerPipeClient::MakeRequestConsoleNodeConfigByTenant(TString tenant, ui64 cookie) {
+TViewerPipeClient::TRequestResponse<NConsole::NEvConsole::TEvGetNodeConfigResponse> TViewerPipeClient::MakeRequestConsoleNodeConfigByTenant(TString tenant, ui64 cookie) {
     TActorId pipeClient = ConnectTabletPipe(GetConsoleId());
-    auto request = MakeHolder<NConsole::TEvConsole::TEvGetNodeConfigRequest>();
+    auto request = MakeHolder<NConsole::NEvConsole::TEvGetNodeConfigRequest>();
     request->Record.MutableNode()->SetTenant(tenant);
     request->Record.AddItemKinds(static_cast<ui32>(NKikimrConsole::TConfigItem::FeatureFlagsItem));
-    return MakeRequestToPipe<NConsole::TEvConsole::TEvGetNodeConfigResponse>(pipeClient, request.Release(), cookie);
+    return MakeRequestToPipe<NConsole::NEvConsole::TEvGetNodeConfigResponse>(pipeClient, request.Release(), cookie);
 }
 
-TViewerPipeClient::TRequestResponse<NConsole::TEvConsole::TEvGetAllConfigsResponse> TViewerPipeClient::MakeRequestConsoleGetAllConfigs() {
+TViewerPipeClient::TRequestResponse<NConsole::NEvConsole::TEvGetAllConfigsResponse> TViewerPipeClient::MakeRequestConsoleGetAllConfigs() {
     TActorId pipeClient = ConnectTabletPipe(GetConsoleId());
-    return MakeRequestToPipe<NConsole::TEvConsole::TEvGetAllConfigsResponse>(pipeClient, new NConsole::TEvConsole::TEvGetAllConfigsRequest());
+    return MakeRequestToPipe<NConsole::NEvConsole::TEvGetAllConfigsResponse>(pipeClient, new NConsole::NEvConsole::TEvGetAllConfigsRequest());
 }
 
 void TViewerPipeClient::RequestConsoleGetTenantStatus(const TString& path) {
     TActorId pipeClient = ConnectTabletPipe(GetConsoleId());
-    THolder<NConsole::TEvConsole::TEvGetTenantStatusRequest> request = MakeHolder<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
+    THolder<NConsole::NEvConsole::TEvGetTenantStatusRequest> request = MakeHolder<NConsole::NEvConsole::TEvGetTenantStatusRequest>();
     request->Record.MutableRequest()->set_path(path);
     SendRequestToPipe(pipeClient, request.Release());
 }
 
-TViewerPipeClient::TRequestResponse<NConsole::TEvConsole::TEvGetTenantStatusResponse> TViewerPipeClient::MakeRequestConsoleGetTenantStatus(const TString& path) {
+TViewerPipeClient::TRequestResponse<NConsole::NEvConsole::TEvGetTenantStatusResponse> TViewerPipeClient::MakeRequestConsoleGetTenantStatus(const TString& path) {
     TActorId pipeClient = ConnectTabletPipe(GetConsoleId());
-    THolder<NConsole::TEvConsole::TEvGetTenantStatusRequest> request = MakeHolder<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
+    THolder<NConsole::NEvConsole::TEvGetTenantStatusRequest> request = MakeHolder<NConsole::NEvConsole::TEvGetTenantStatusRequest>();
     request->Record.MutableRequest()->set_path(path);
-    auto response = MakeRequestToPipe<NConsole::TEvConsole::TEvGetTenantStatusResponse>(pipeClient, request.Release());
+    auto response = MakeRequestToPipe<NConsole::NEvConsole::TEvGetTenantStatusResponse>(pipeClient, request.Release());
     if (response.Span) {
         response.Span.Attribute("path", path);
     }

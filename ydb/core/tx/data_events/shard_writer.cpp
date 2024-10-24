@@ -66,7 +66,7 @@ namespace NKikimr::NEvWrite {
             DataForShard->Serialize(*ev, TableId, SchemaVersion);
             SendToTablet(std::move(ev));
         } else {
-            auto ev = MakeHolder<TEvColumnShard::TEvWrite>(SelfId(), ExternalController->GetLongTxId(), TableId, DedupId, "", WritePartIdx, ModificationType);
+            auto ev = MakeHolder<NEvColumnShard::TEvWrite>(SelfId(), ExternalController->GetLongTxId(), TableId, DedupId, "", WritePartIdx, ModificationType);
             DataForShard->Serialize(*ev);
             SendToTablet(std::move(ev));
         }
@@ -103,7 +103,7 @@ namespace NKikimr::NEvWrite {
         ExternalController->OnSuccess(ShardId, 0, WritePartIdx);
     }
 
-    void TShardWriter::Handle(TEvColumnShard::TEvWriteResult::TPtr& ev) {
+    void TShardWriter::Handle(NEvColumnShard::TEvWriteResult::TPtr& ev) {
         const auto* msg = ev->Get();
         Y_ABORT_UNLESS(msg->Record.GetOrigin() == ShardId);
 
@@ -143,7 +143,7 @@ namespace NKikimr::NEvWrite {
             ExternalController->OnFail(Ydb::StatusIds::UNDETERMINED, errMsg);
         }
     }
-    
+
     void TShardWriter::Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
         if (ev->Get()->Tag) {
             auto gPassAway = PassAwayGuard();

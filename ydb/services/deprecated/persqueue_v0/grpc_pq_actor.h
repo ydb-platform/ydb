@@ -642,9 +642,9 @@ private:
             HFunc(TEvPQProxy::TEvCommitDone, Handle) //from PartitionActor
             HFunc(TEvPQProxy::TEvPartitionStatus, Handle) //from partitionActor
 
-            HFunc(TEvPersQueue::TEvLockPartition, Handle) //from Balancer
-            HFunc(TEvPersQueue::TEvReleasePartition, Handle) //from Balancer
-            HFunc(TEvPersQueue::TEvError, Handle) //from Balancer
+            HFunc(NEvPersQueue::TEvLockPartition, Handle) //from Balancer
+            HFunc(NEvPersQueue::TEvReleasePartition, Handle) //from Balancer
+            HFunc(NEvPersQueue::TEvError, Handle) //from Balancer
 
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
@@ -677,9 +677,9 @@ private:
     void AnswerForCommitsIfCan(const NActors::TActorContext& ctx);
     void Handle(TEvPQProxy::TEvPartitionStatus::TPtr& ev, const NActors::TActorContext& ctx);
 
-    void Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const NActors::TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, const NActors::TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvError::TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvLockPartition::TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvReleasePartition::TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvError::TPtr& ev, const NActors::TActorContext& ctx);
 
     void Handle(TEvPQProxy::TEvReadingStarted::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const TActorContext& ctx);

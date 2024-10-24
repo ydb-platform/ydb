@@ -29,8 +29,8 @@ public:
 
 class TDirectTransaction : public TOperation {
 public:
-    TDirectTransaction(TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvUploadRowsRequest::TPtr& ev);
-    TDirectTransaction(TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvEraseRowsRequest::TPtr& ev);
+    TDirectTransaction(TInstant receivedAt, ui64 tieBreakerIndex, NEvDataShard::TEvUploadRowsRequest::TPtr& ev);
+    TDirectTransaction(TInstant receivedAt, ui64 tieBreakerIndex, NEvDataShard::TEvEraseRowsRequest::TPtr& ev);
 
     void BuildExecutionPlan(bool) override;
 

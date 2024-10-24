@@ -47,19 +47,19 @@ public:
                 for (const TActorId& subscriber : storageInfoSubscribers) {
                     SideEffects.Send(
                         subscriber,
-                        new TEvHive::TEvGetTabletStorageInfoResult(TabletId, NKikimrProto::ERROR, "Tablet deleted"));
+                        new NEvHive::TEvGetTabletStorageInfoResult(TabletId, NKikimrProto::ERROR, "Tablet deleted"));
                 }
                 TActorId unlockedFromActor = tablet->ClearLockedToActor();
                 if (unlockedFromActor) {
                     // Notify lock owner that lock has been lost
-                    SideEffects.Send(unlockedFromActor, new TEvHive::TEvLockTabletExecutionLost(TabletId));
+                    SideEffects.Send(unlockedFromActor, new NEvHive::TEvLockTabletExecutionLost(TabletId));
                 }
                 Self->PendingCreateTablets.erase({tablet->Owner.first, tablet->Owner.second});
                 Self->DeleteTablet(tablet->Id);
             } else {
                 BLOG_W("THive::TTxDeleteTabletResult retrying for " << TabletId << " because of " << NKikimrProto::EReplyStatus_Name(msg->Status));
                 Y_ENSURE_LOG(tablet->IsDeleting(), " tablet " << tablet->Id);
-                SideEffects.Schedule(TDuration::MilliSeconds(1000), new TEvHive::TEvInitiateDeleteStorage(tablet->Id));
+                SideEffects.Schedule(TDuration::MilliSeconds(1000), new NEvHive::TEvInitiateDeleteStorage(tablet->Id));
             }
         }
         return true;

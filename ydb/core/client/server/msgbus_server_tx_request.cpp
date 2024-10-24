@@ -5,7 +5,7 @@
 namespace NKikimr {
 namespace NMsgBusProxy {
 
-class TMessageBusTxStatusRequestActor : public TMessageBusSimpleTabletRequest<TMessageBusTxStatusRequestActor, NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, NKikimrServices::TActivity::FRONT_SCHEME_TXSTATUS> {
+class TMessageBusTxStatusRequestActor : public TMessageBusSimpleTabletRequest<TMessageBusTxStatusRequestActor, NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult, NKikimrServices::TActivity::FRONT_SCHEME_TXSTATUS> {
     const ui64 TxId;
     const ui64 PathId;
     bool InProgress;
@@ -22,7 +22,7 @@ public:
         : TMessageBusTxStatusRequestActor(msg, static_cast<TBusSchemeOperationStatus*>(msg.GetMessage()))
     {}
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&, const TActorContext& ctx) {
+    void Handle(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&, const TActorContext& ctx) {
         TAutoPtr<NMsgBusProxy::TBusResponse> response(new NMsgBusProxy::TBusResponse());
         response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
         response->Record.MutableFlatTxId()->SetTxId(TxId);
@@ -31,7 +31,7 @@ public:
         SendReplyAndDie(response.Release(), ctx);
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&, const TActorContext&) {
+    void Handle(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&, const TActorContext&) {
         InProgress = true;
     }
 
@@ -50,8 +50,8 @@ public:
         SendReplyAndDie(response.Release(), ctx);
     }
 
-    NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion* MakeReq(const TActorContext&) {
-        THolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion> request(new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion());
+    NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletion* MakeReq(const TActorContext&) {
+        THolder<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletion> request(new NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletion());
         request->Record.SetTxId(TxId);
         return request.Release();
     }
@@ -59,8 +59,8 @@ public:
     void StateFunc(TAutoPtr<NActors::IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvents::TEvUndelivered, HandleUndelivered);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
+            HFunc(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
+            HFunc(NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }

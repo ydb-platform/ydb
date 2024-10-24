@@ -222,12 +222,12 @@ private:
         void SendAll(const TActorContext& ctx, ui64 tabletId);
 
         struct TSendInfo {
-            THolder<TEvKesus::TEvResourcesAllocated> Event;
+            THolder<NEvKesus::TEvResourcesAllocated> Event;
             THashMap<ui64, size_t> ResIdIndex;
         };
 
         struct TSendSyncInfo {
-            THolder<TEvKesus::TEvSyncResources> Event;
+            THolder<NEvKesus::TEvSyncResources> Event;
             THashMap<ui64, size_t> ResIdIndex;
         };
 
@@ -388,35 +388,35 @@ private:
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
     void Handle(TEvents::TEvWakeup::TPtr& ev);
 
-    void Handle(TEvKesus::TEvDummyRequest::TPtr& ev);
-    void Handle(TEvKesus::TEvSetConfig::TPtr& ev);
-    void Handle(TEvKesus::TEvGetConfig::TPtr& ev);
-    void Handle(TEvKesus::TEvDescribeSemaphore::TPtr& ev);
-    void Handle(TEvKesus::TEvDescribeProxies::TPtr& ev);
-    void Handle(TEvKesus::TEvDescribeSessions::TPtr& ev);
-    void Handle(TEvKesus::TEvRegisterProxy::TPtr& ev);
-    void Handle(TEvKesus::TEvUnregisterProxy::TPtr& ev);
-    void Handle(TEvKesus::TEvAttachSession::TPtr& ev);
-    void Handle(TEvKesus::TEvDetachSession::TPtr& ev);
-    void Handle(TEvKesus::TEvDestroySession::TPtr& ev);
-    void Handle(TEvKesus::TEvAcquireSemaphore::TPtr& ev);
-    void Handle(TEvKesus::TEvReleaseSemaphore::TPtr& ev);
-    void Handle(TEvKesus::TEvCreateSemaphore::TPtr& ev);
-    void Handle(TEvKesus::TEvUpdateSemaphore::TPtr& ev);
-    void Handle(TEvKesus::TEvDeleteSemaphore::TPtr& ev);
+    void Handle(NEvKesus::TEvDummyRequest::TPtr& ev);
+    void Handle(NEvKesus::TEvSetConfig::TPtr& ev);
+    void Handle(NEvKesus::TEvGetConfig::TPtr& ev);
+    void Handle(NEvKesus::TEvDescribeSemaphore::TPtr& ev);
+    void Handle(NEvKesus::TEvDescribeProxies::TPtr& ev);
+    void Handle(NEvKesus::TEvDescribeSessions::TPtr& ev);
+    void Handle(NEvKesus::TEvRegisterProxy::TPtr& ev);
+    void Handle(NEvKesus::TEvUnregisterProxy::TPtr& ev);
+    void Handle(NEvKesus::TEvAttachSession::TPtr& ev);
+    void Handle(NEvKesus::TEvDetachSession::TPtr& ev);
+    void Handle(NEvKesus::TEvDestroySession::TPtr& ev);
+    void Handle(NEvKesus::TEvAcquireSemaphore::TPtr& ev);
+    void Handle(NEvKesus::TEvReleaseSemaphore::TPtr& ev);
+    void Handle(NEvKesus::TEvCreateSemaphore::TPtr& ev);
+    void Handle(NEvKesus::TEvUpdateSemaphore::TPtr& ev);
+    void Handle(NEvKesus::TEvDeleteSemaphore::TPtr& ev);
 
     // Quoter API
-    void Handle(TEvKesus::TEvDescribeQuoterResources::TPtr& ev);
-    void Handle(TEvKesus::TEvAddQuoterResource::TPtr& ev);
-    void Handle(TEvKesus::TEvUpdateQuoterResource::TPtr& ev);
-    void Handle(TEvKesus::TEvDeleteQuoterResource::TPtr& ev);
+    void Handle(NEvKesus::TEvDescribeQuoterResources::TPtr& ev);
+    void Handle(NEvKesus::TEvAddQuoterResource::TPtr& ev);
+    void Handle(NEvKesus::TEvUpdateQuoterResource::TPtr& ev);
+    void Handle(NEvKesus::TEvDeleteQuoterResource::TPtr& ev);
     // Quoter runtime
-    void Handle(TEvKesus::TEvSubscribeOnResources::TPtr& ev);
-    void Handle(TEvKesus::TEvUpdateConsumptionState::TPtr& ev);
-    void Handle(TEvKesus::TEvAccountResources::TPtr& ev);
-    void Handle(TEvKesus::TEvReportResources::TPtr& ev);
-    void Handle(TEvKesus::TEvResourcesAllocatedAck::TPtr& ev);
-    void Handle(TEvKesus::TEvGetQuoterResourceCounters::TPtr& ev);
+    void Handle(NEvKesus::TEvSubscribeOnResources::TPtr& ev);
+    void Handle(NEvKesus::TEvUpdateConsumptionState::TPtr& ev);
+    void Handle(NEvKesus::TEvAccountResources::TPtr& ev);
+    void Handle(NEvKesus::TEvReportResources::TPtr& ev);
+    void Handle(NEvKesus::TEvResourcesAllocatedAck::TPtr& ev);
+    void Handle(NEvKesus::TEvGetQuoterResourceCounters::TPtr& ev);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev);
     void HandleQuoterTick();
 

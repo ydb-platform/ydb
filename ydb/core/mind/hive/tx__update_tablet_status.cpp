@@ -139,7 +139,7 @@ public:
                                 NIceDb::TUpdate<Schema::TabletFollowerTablet::Statistics>(tablet->Statistics));
                 }
                 for (const TActorId& actor : tablet->ActorsToNotify) {
-                    SideEffects.Send(actor, new TEvHive::TEvTabletCreationResult(NKikimrProto::OK, TabletId));
+                    SideEffects.Send(actor, new NEvHive::TEvTabletCreationResult(NKikimrProto::OK, TabletId));
                 }
                 tablet->ActorsToNotify.clear();
                 db.Table<Schema::Tablet>().Key(TabletId).UpdateToNull<Schema::Tablet::ActorsToNotify>();
@@ -189,7 +189,7 @@ public:
                 case ETabletState::Stopping:
                     if (tablet->IsLeader()) {
                         for (const TActorId& actor : tablet->GetLeader().ActorsToNotify) {
-                            SideEffects.Send(actor, new TEvHive::TEvStopTabletResult(NKikimrProto::OK, TabletId));
+                            SideEffects.Send(actor, new NEvHive::TEvStopTabletResult(NKikimrProto::OK, TabletId));
                         }
                         tablet->GetLeader().ActorsToNotify.clear();
                     }

@@ -7,7 +7,7 @@
 namespace NKikimr {
 namespace NSequenceShard {
 
-    namespace TEvSequenceShard {
+    namespace NEvSequenceShard {
         enum EEv {
             EvMarkSchemeShardPipe = EventSpaceBegin(TKikimrEvents::ES_SEQUENCESHARD),
             EvCreateSequence,

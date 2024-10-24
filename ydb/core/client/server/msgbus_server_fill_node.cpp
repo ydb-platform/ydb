@@ -5,7 +5,7 @@
 namespace NKikimr {
 namespace NMsgBusProxy {
 
-class TMessageBusFillNode : public TMessageBusSecureRequest<TMessageBusTabletRequest<TMessageBusFillNode, TEvHive::TEvFillNodeResult>> {
+class TMessageBusFillNode : public TMessageBusSecureRequest<TMessageBusTabletRequest<TMessageBusFillNode, NEvHive::TEvFillNodeResult>> {
     THolder<TBusFillNode> Request;
     ui32 NodeId;
 public:
@@ -25,10 +25,10 @@ public:
 
     std::pair<ui64, TAutoPtr<IEventBase>> MakeReqPair(const TActorContext& ctx) {
         ui64 TabletId = GetHiveTabletId(ctx);
-        return std::make_pair(TabletId, new TEvHive::TEvFillNode(NodeId));
+        return std::make_pair(TabletId, new NEvHive::TEvFillNode(NodeId));
     }
 
-    void Handle(TEvHive::TEvFillNodeResult::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NEvHive::TEvFillNodeResult::TPtr& ev, const TActorContext& ctx) {
         NMsgBusProxy::EResponseStatus status;
         switch (ev->Get()->Record.GetStatus()) {
         case NKikimrProto::OK:

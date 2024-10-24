@@ -92,7 +92,7 @@ struct TRowWriter : public NArrow::IRowWriter {
 
 std::vector<TOwnedCellVec> GetRows(
     const TVector<std::pair<TString, NScheme::TTypeInfo>>& batchSchema,
-    const TEvDataShard::TEvReadResult& result)
+    const NEvDataShard::TEvReadResult& result)
 {
     UNIT_ASSERT(result.GetArrowBatch());
 
@@ -132,7 +132,7 @@ void CheckRows(
 
 void CheckResultCellVec(
     const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
-    const TEvDataShard::TEvReadResult& result,
+    const NEvDataShard::TEvReadResult& result,
     const std::vector<TCellVec>& gold,
     const std::vector<NScheme::TTypeInfoOrder>& goldTypes,
     std::vector<NTable::TTag> columns = {})
@@ -155,7 +155,7 @@ void CheckResultCellVec(
 
 void CheckResultArrow(
     const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
-    const TEvDataShard::TEvReadResult& result,
+    const NEvDataShard::TEvReadResult& result,
     const std::vector<TCellVec>& gold,
     const std::vector<NScheme::TTypeInfoOrder>& goldTypes,
     std::vector<NTable::TTag> columns = {})
@@ -188,7 +188,7 @@ void CheckResultArrow(
 
 void CheckResult(
     const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
-    const TEvDataShard::TEvReadResult& result,
+    const NEvDataShard::TEvReadResult& result,
     const std::vector<TCellVec>& gold,
     const std::vector<NScheme::TTypeInfoOrder>& goldTypes,
     std::vector<NTable::TTag> columns = {})
@@ -222,7 +222,7 @@ void CheckResult(
 
 void CheckResult(
     const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
-    const TEvDataShard::TEvReadResult& result,
+    const NEvDataShard::TEvReadResult& result,
     const std::vector<std::vector<ui32>>& gold,
     std::vector<NTable::TTag> columns = {})
 {
@@ -250,7 +250,7 @@ void CheckResult(
 }
 
 void CheckContinuationToken(
-    const TEvDataShard::TEvReadResult& result,
+    const NEvDataShard::TEvReadResult& result,
     ui32 firstUprocessedQuery,
     const std::vector<ui32>& gold)
 {
@@ -397,7 +397,7 @@ struct TTestHelper {
         auto endRow = startRow + rowCount;
 
         for (ui32 key = startRow; key < endRow;) {
-            auto request = std::make_unique<TEvDataShard::TEvUploadRowsRequest>();
+            auto request = std::make_unique<NEvDataShard::TEvUploadRowsRequest>();
             auto& record = request->Record;
             record.SetTableId(table.UserTable.GetPathId());
 
@@ -446,9 +446,9 @@ struct TTestHelper {
                 table.ClientId);
 
             TAutoPtr<IEventHandle> handle;
-            runtime.GrabEdgeEventRethrow<TEvDataShard::TEvUploadRowsResponse>(handle);
+            runtime.GrabEdgeEventRethrow<NEvDataShard::TEvUploadRowsResponse>(handle);
             UNIT_ASSERT(handle);
-            auto event = handle->CastAsLocal<TEvDataShard::TEvUploadRowsResponse>();
+            auto event = handle->CastAsLocal<NEvDataShard::TEvUploadRowsResponse>();
             UNIT_ASSERT(event->Record.GetStatus() == 0);
         }
     }
@@ -460,7 +460,7 @@ struct TTestHelper {
         WaitTxNotification(Server, Sender, txId);
     }
 
-    std::unique_ptr<TEvDataShard::TEvRead> GetBaseReadRequest(
+    std::unique_ptr<NEvDataShard::TEvRead> GetBaseReadRequest(
         const TString& tableName,
         ui64 readId,
         NKikimrDataEvents::EDataFormat format = NKikimrDataEvents::FORMAT_ARROW,
@@ -487,14 +487,14 @@ struct TTestHelper {
         );
     }
 
-    std::unique_ptr<TEvDataShard::TEvRead> GetUserTablesRequest(
+    std::unique_ptr<NEvDataShard::TEvRead> GetUserTablesRequest(
         const TString& tableName,
         ui64 localTid,
         ui64 readId)
     {
         const auto& table = Tables[tableName];
 
-        std::unique_ptr<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
+        std::unique_ptr<NEvDataShard::TEvRead> request(new NEvDataShard::TEvRead());
         auto& record = request->Record;
 
         record.SetReadId(readId);
@@ -510,13 +510,13 @@ struct TTestHelper {
         return request;
     }
 
-    std::unique_ptr<TEvDataShard::TEvReadResult> WaitReadResult(TDuration timeout = TDuration::Max()) {
+    std::unique_ptr<NEvDataShard::TEvReadResult> WaitReadResult(TDuration timeout = TDuration::Max()) {
         return ::NKikimr::WaitReadResult(Server, timeout);
     }
 
     void SendReadAsync(
         const TString& tableName,
-        TEvDataShard::TEvRead* request,
+        NEvDataShard::TEvRead* request,
         ui32 node = 0,
         TActorId sender = {})
     {
@@ -536,9 +536,9 @@ struct TTestHelper {
         );
     }
 
-    std::unique_ptr<TEvDataShard::TEvReadResult> SendRead(
+    std::unique_ptr<NEvDataShard::TEvReadResult> SendRead(
         const TString& tableName,
-        TEvDataShard::TEvRead* request,
+        NEvDataShard::TEvRead* request,
         ui32 node = 0,
         TActorId sender = {},
         TDuration timeout = TDuration::Max())
@@ -573,7 +573,7 @@ struct TTestHelper {
         }
 
         const auto& table = Tables[tableName];
-        auto* request = new TEvDataShard::TEvReadAck();
+        auto* request = new NEvDataShard::TEvReadAck();
         request->Record.SetReadId(readResult.GetReadId());
         request->Record.SetSeqNo(readResult.GetSeqNo());
         request->Record.SetMaxRows(rows);
@@ -591,7 +591,7 @@ struct TTestHelper {
 
     void SendCancel(const TString& tableName, ui64 readId) {
         const auto& table = Tables[tableName];
-        auto* request = new TEvDataShard::TEvReadCancel();
+        auto* request = new NEvDataShard::TEvReadCancel();
         request->Record.SetReadId(readId);
 
         auto &runtime = *Server->GetRuntime();
@@ -620,7 +620,7 @@ struct TTestHelper {
         ui64 readId,
         const std::vector<ui32>& key,
         ui64 lockTxId,
-        const TEvDataShard::TEvReadResult& prevResult)
+        const NEvDataShard::TEvReadResult& prevResult)
     {
         auto request = GetBaseReadRequest(tableName, readId);
         request->Record.SetLockTxId(lockTxId);
@@ -721,7 +721,7 @@ struct TTestHelper {
         if(isEvWrite)
             WriteRow(tableName, values);
         else
-            ExecSQL(Server, Sender, TStringBuilder() 
+            ExecSQL(Server, Sender, TStringBuilder()
                 << "UPSERT INTO `/Root/" << tableName << "`\n"
                 << "(" << JoinSeq(",", MakeMappedRange(Tables[tableName].Columns, [](const auto& col) { return col.Name; })) << ")\n"
                 << "VALUES\n(" << JoinSeq(",", values) << ");");
@@ -1209,7 +1209,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         ui32 continueCounter = 0;
         helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
+            if (ev->GetTypeRewrite() == NEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
 
@@ -1268,7 +1268,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         ui32 continueCounter = 0;
         helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
+            if (ev->GetTypeRewrite() == NEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
 
@@ -1328,7 +1328,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         ui32 continueCounter = 0;
         helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
+            if (ev->GetTypeRewrite() == NEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
 
@@ -1385,7 +1385,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         ui32 continueCounter = 0;
         helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
+            if (ev->GetTypeRewrite() == NEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
 
@@ -1540,7 +1540,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         ui32 continueCounter = 0;
         helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
+            if (ev->GetTypeRewrite() == NEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
 
@@ -1584,7 +1584,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         ui32 continueCounter = 0;
         helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
+            if (ev->GetTypeRewrite() == NEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
 
@@ -1625,7 +1625,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         ui32 continueCounter = 0;
         helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
+            if (ev->GetTypeRewrite() == NEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
 
@@ -1682,7 +1682,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         ui32 continueCounter = 0;
         helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
+            if (ev->GetTypeRewrite() == NEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
 
@@ -1732,7 +1732,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         ui32 continueCounter = 0;
         helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
+            if (ev->GetTypeRewrite() == NEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
 
@@ -2247,7 +2247,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // now set our observer backed up by original
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvDataShard::EvReadContinue: {
+            case NEvDataShard::EvReadContinue: {
                 if (shouldDrop) {
                     continueEvent = ev.Release();
                     return TTestActorRuntime::EEventAction::DROP;
@@ -2273,7 +2273,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         // now allow to continue read
         shouldDrop = false;
-        TAutoPtr<TEvDataShard::TEvReadContinue> request = IEventHandle::Release<TEvDataShard::TEvReadContinue>(continueEvent);
+        TAutoPtr<NEvDataShard::TEvReadContinue> request = IEventHandle::Release<NEvDataShard::TEvReadContinue>(continueEvent);
         UNIT_ASSERT_VALUES_EQUAL(request->ReadId, 1UL);
 
         const auto& table = helper.Tables["table-1"];
@@ -2286,7 +2286,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             table.ClientId);
 
         TDispatchOptions options;
-        options.FinalEvents.emplace_back(TEvDataShard::EvReadContinue, 1);
+        options.FinalEvents.emplace_back(NEvDataShard::EvReadContinue, 1);
         runtime.DispatchEvents(options);
 
         auto readResult2 = helper.WaitReadResult();
@@ -2336,7 +2336,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // now set our observer backed up by original
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvDataShard::EvReadContinue: {
+            case NEvDataShard::EvReadContinue: {
                 if (shouldDrop) {
                     continueEvent = ev.Release();
                     return TTestActorRuntime::EEventAction::DROP;
@@ -2367,7 +2367,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         // now allow to continue read and check we don't get extra read result with error
         shouldDrop = false;
-        TAutoPtr<TEvDataShard::TEvReadContinue> request = IEventHandle::Release<TEvDataShard::TEvReadContinue>(continueEvent);
+        TAutoPtr<NEvDataShard::TEvReadContinue> request = IEventHandle::Release<NEvDataShard::TEvReadContinue>(continueEvent);
         UNIT_ASSERT_VALUES_EQUAL(request->ReadId, 1UL);
 
         const auto& table = helper.Tables["table-1"];
@@ -2380,7 +2380,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             table.ClientId);
 
         TDispatchOptions options;
-        options.FinalEvents.emplace_back(TEvDataShard::EvReadContinue, 1);
+        options.FinalEvents.emplace_back(NEvDataShard::EvReadContinue, 1);
         runtime.DispatchEvents(options);
 
         auto readResult3 = helper.WaitReadResult(TDuration::MilliSeconds(10));
@@ -2483,7 +2483,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         ui32 serverConnectedCount = 0;
         runtime.SetObserverFunc([&continueCounter, &connectedFromDifferentNode, &serverConnectedCount](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvDataShard::EvReadContinue:
+            case NEvDataShard::EvReadContinue:
                 ++continueCounter;
                 break;
             case TEvTabletPipe::EvServerConnected: {
@@ -3074,7 +3074,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
                     }
                     break;
                 }
-                case TEvDataShard::EvReadResult: {
+                case NEvDataShard::EvReadResult: {
                     ++readResults;
                     break;
                 }
@@ -3248,7 +3248,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         Cerr << "===== Commit locks on table 1" << Endl;
         {
-            auto writeRequest = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(++helper.TxId, 
+            auto writeRequest = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(++helper.TxId,
                 Volatile ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
 
             NKikimrDataEvents::TKqpLocks& kqpLocks = *writeRequest->Record.MutableLocks();
@@ -3268,7 +3268,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         Cerr << "===== Write and commit locks on table 2" << Endl;
         {
-            auto writeRequest = helper.MakeWriteRequest(tableName2, helper.TxId, {1, 1, 1, 1001}, 
+            auto writeRequest = helper.MakeWriteRequest(tableName2, helper.TxId, {1, 1, 1, 1001},
                 Volatile ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
 
             NKikimrDataEvents::TKqpLocks& kqpLocks = *writeRequest->Record.MutableLocks();
@@ -3296,7 +3296,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         Cerr << "========= Wait for completed transactions" << Endl;
         for (ui8 i = 0; i < 1; ++i)
         {
-            auto expectedStatus = BreakLocks ? 
+            auto expectedStatus = BreakLocks ?
                 NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN :
                 NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED;
 
@@ -3366,7 +3366,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // Read in separate transaction. No dirty-read.
         helper.TestReadOneKey(tableName, {1, 1, 1}, 100);
 
-        // Commit locks in first transaction. 
+        // Commit locks in first transaction.
         auto writeRequest2 = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(++helper.TxId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
         NKikimrDataEvents::TKqpLocks& kqpLocks2 = *writeRequest2->Record.MutableLocks();
         kqpLocks2.MutableLocks()->CopyFrom(writeResult.GetTxLocks());
@@ -3426,7 +3426,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         // Read origin data.
         helper.TestReadOneKey(tableName, {1, 1, 1}, 100);
-    }    
+    }
 
     Y_UNIT_TEST_TWIN(ShouldReturnBrokenLockWhenWriteInSeparateTransactions, EvWrite) {
         TTestHelper helper;
@@ -4110,8 +4110,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorPageFaults) {
         std::vector<std::unique_ptr<IEventHandle>> capturedCacheRequests;
         auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
-                case TEvDataShard::TEvReadResult::EventType: {
-                    auto* msg = ev->Get<TEvDataShard::TEvReadResult>();
+                case NEvDataShard::TEvReadResult::EventType: {
+                    auto* msg = ev->Get<NEvDataShard::TEvReadResult>();
                     Cerr << "... observed TEvReadResult:\n" << msg->ToString() << Endl;
                     observedReadResults++;
                     break;
@@ -4132,7 +4132,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorPageFaults) {
         auto readSender = runtime.AllocateEdgeActor();
         auto tabletPipe = runtime.ConnectToPipe(shard1, readSender, 0, NTabletPipe::TClientConfig());
         {
-            auto request = std::make_unique<TEvDataShard::TEvRead>();
+            auto request = std::make_unique<NEvDataShard::TEvRead>();
             request->Record.SetReadId(1);
             request->Record.MutableTableId()->SetOwnerId(tableId1.PathId.OwnerId);
             request->Record.MutableTableId()->SetTableId(tableId1.PathId.LocalPathId);
@@ -4147,7 +4147,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorPageFaults) {
         UNIT_ASSERT_C(capturedCacheRequests.size() > 0, "cache request was not captured");
 
         {
-            auto request = std::make_unique<TEvDataShard::TEvReadCancel>();
+            auto request = std::make_unique<NEvDataShard::TEvReadCancel>();
             request->Record.SetReadId(1);
             runtime.SendToPipe(tabletPipe, readSender, request.release());
         }
@@ -4266,8 +4266,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 10), (3, 30), (5, 50), (7, 70), (9, 90);");
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 20), (4, 40), (6, 60), (8, 80);");
 
-        std::vector<TEvDataShard::TEvRead::TPtr> reads;
-        auto captureReads = runtime.AddObserver<TEvDataShard::TEvRead>([&](TEvDataShard::TEvRead::TPtr& ev) {
+        std::vector<NEvDataShard::TEvRead::TPtr> reads;
+        auto captureReads = runtime.AddObserver<NEvDataShard::TEvRead>([&](NEvDataShard::TEvRead::TPtr& ev) {
             if (ev->GetRecipientRewrite() == shardActor) {
                 Cerr << "... captured TEvRead for " << shardActor << Endl;
                 reads.push_back(std::move(ev));
@@ -4318,8 +4318,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
         }
         reads.clear();
 
-        std::vector<TEvDataShard::TEvReadContinue::TPtr> readContinues;
-        auto captureReadContinues = runtime.AddObserver<TEvDataShard::TEvReadContinue>([&](TEvDataShard::TEvReadContinue::TPtr& ev) {
+        std::vector<NEvDataShard::TEvReadContinue::TPtr> readContinues;
+        auto captureReadContinues = runtime.AddObserver<NEvDataShard::TEvReadContinue>([&](NEvDataShard::TEvReadContinue::TPtr& ev) {
             if (ev->GetRecipientRewrite() == shardActor) {
                 Cerr << "... captured TEvReadContinue for " << shardActor << Endl;
                 readContinues.push_back(std::move(ev));
@@ -4394,7 +4394,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
 
         captureReadSets.Remove();
 
-        auto modifyReads = runtime.AddObserver<TEvDataShard::TEvRead>([&](TEvDataShard::TEvRead::TPtr& ev) {
+        auto modifyReads = runtime.AddObserver<NEvDataShard::TEvRead>([&](NEvDataShard::TEvRead::TPtr& ev) {
             if (ev->GetRecipientRewrite() == shardActor) {
                 Cerr << "... modifying TEvRead for " << shardActor << Endl;
                 auto* msg = ev->Get();
@@ -4478,7 +4478,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
 
         captureReadSets.Remove();
 
-        auto modifyReads = runtime.AddObserver<TEvDataShard::TEvRead>([&](TEvDataShard::TEvRead::TPtr& ev) {
+        auto modifyReads = runtime.AddObserver<NEvDataShard::TEvRead>([&](NEvDataShard::TEvRead::TPtr& ev) {
             if (ev->GetRecipientRewrite() == shardActor) {
                 Cerr << "... modifying TEvRead for " << shardActor << Endl;
                 auto* msg = ev->Get();
@@ -4593,7 +4593,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
         WaitFor(runtime, [&]{ return txVersion != TRowVersion::Min(); }, "plan step");
 
         observePlanSteps.Remove();
-        auto forceSnapshotRead = runtime.AddObserver<TEvDataShard::TEvRead>([&](TEvDataShard::TEvRead::TPtr& ev) {
+        auto forceSnapshotRead = runtime.AddObserver<NEvDataShard::TEvRead>([&](NEvDataShard::TEvRead::TPtr& ev) {
             if (ev->GetRecipientRewrite() == shardActor) {
                 auto* msg = ev->Get();
                 if (!msg->Record.HasSnapshot()) {
@@ -4657,16 +4657,16 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (6, 60), (7, 70), (8, 80), (9, 90), (10, 100);");
         runtime.SimulateSleep(TDuration::Seconds(1));
 
-        auto forceSmallChunks = runtime.AddObserver<TEvDataShard::TEvRead>(
-            [&](TEvDataShard::TEvRead::TPtr& ev) {
+        auto forceSmallChunks = runtime.AddObserver<NEvDataShard::TEvRead>(
+            [&](NEvDataShard::TEvRead::TPtr& ev) {
                 auto* msg = ev->Get();
                 // Force chunks of at most 3 rows
                 msg->Record.SetMaxRowsInResult(3);
             });
 
-        TBlockEvents<TEvDataShard::TEvReadAck> blockedAcks(runtime);
-        TBlockEvents<TEvDataShard::TEvReadResult> blockedResults(runtime);
-        TBlockEvents<TEvDataShard::TEvReadContinue> blockedContinue(runtime);
+        TBlockEvents<NEvDataShard::TEvReadAck> blockedAcks(runtime);
+        TBlockEvents<NEvDataShard::TEvReadResult> blockedResults(runtime);
+        TBlockEvents<NEvDataShard::TEvReadContinue> blockedContinue(runtime);
 
         auto waitFor = [&](const TString& description, const auto& condition, size_t count = 1) {
             while (!condition()) {

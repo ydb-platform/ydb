@@ -1406,7 +1406,7 @@ void TPipeline::ForgetTx(ui64 txId) {
     }
 }
 
-TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::TPtr &ev,
+TOperation::TPtr TPipeline::BuildOperation(NEvDataShard::TEvProposeTransaction::TPtr &ev,
                                            TInstant receivedAt, ui64 tieBreakerIndex,
                                            NTabletFlatExecutor::TTransactionContext &txc,
                                            const TActorContext &ctx, NWilson::TSpan &&operationSpan)
@@ -1437,7 +1437,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
             << " parsed tx body " << txBody;
 
         tx->SetAbortedFlag();
-        tx->Result().Reset(new TEvDataShard::TEvProposeTransactionResult(
+        tx->Result().Reset(new NEvDataShard::TEvProposeTransactionResult(
             rec.GetTxKind(), Self->TabletID(), tx->GetTxId(), NKikimrTxDataShard::TEvProposeTransactionResult::ERROR));
         tx->Result()->SetProcessError(NKikimrTxDataShard::TError::BAD_ARGUMENT, error);
 
@@ -1446,7 +1446,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
 
     auto badRequest = [&](const TString& error) {
         tx->SetAbortedFlag();
-        tx->Result().Reset(new TEvDataShard::TEvProposeTransactionResult(
+        tx->Result().Reset(new NEvDataShard::TEvProposeTransactionResult(
             rec.GetTxKind(), Self->TabletID(), tx->GetTxId(), NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST));
         tx->Result()->SetProcessError(NKikimrTxDataShard::TError::BAD_ARGUMENT, error);
 
@@ -1532,7 +1532,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
 
         if (!dataTx->Ready() && !dataTx->RequirePrepare()) {
             tx->SetAbortedFlag();
-            tx->Result().Reset(new TEvDataShard::TEvProposeTransactionResult(rec.GetTxKind(),
+            tx->Result().Reset(new NEvDataShard::TEvProposeTransactionResult(rec.GetTxKind(),
                                                                          Self->TabletID(),
                                                                          tx->GetTxId(),
                                                                          NKikimrTxDataShard::TEvProposeTransactionResult::ERROR));
@@ -1819,11 +1819,11 @@ EExecutionStatus TPipeline::RunExecutionPlan(TOperation::TPtr op,
         }
 
         NWilson::TSpan unitSpan(TWilsonTablet::TabletDetailed, txc.TransactionExecutionSpan.GetTraceId(), "Datashard.Unit");
-        
+
         NCpuTime::TCpuTimer timer;
         auto status = unit.Execute(op, txc, ctx);
         op->AddExecutionTime(timer.GetTime());
-        
+
         if (unitSpan) {
             unitSpan.Attribute("Type", TypeName(unit))
                     .Attribute("Status", static_cast<int>(status))
@@ -2023,13 +2023,13 @@ TPipeline::TWaitingDataTxOp::TWaitingDataTxOp(TAutoPtr<IEventHandle>&& ev)
     }
 }
 
-bool TPipeline::AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx) {
+bool TPipeline::AddWaitingTxOp(NEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx) {
     if (!CheckInflightLimit())
         return false;
 
     Y_DEBUG_ABORT_UNLESS(ev->Get()->Record.HasMvccSnapshot());
     TRowVersion snapshot(ev->Get()->Record.GetMvccSnapshot().GetStep(), ev->Get()->Record.GetMvccSnapshot().GetTxId());
-    WaitingDataTxOps.emplace(snapshot, IEventHandle::Upcast<TEvDataShard::TEvProposeTransaction>(std::move(ev)));
+    WaitingDataTxOps.emplace(snapshot, IEventHandle::Upcast<NEvDataShard::TEvProposeTransaction>(std::move(ev)));
     const ui64 waitStep = snapshot.Step;
     TRowVersion unreadableEdge;
     if (!Self->WaitPlanStep(waitStep) && snapshot < (unreadableEdge = GetUnreadableEdge())) {
@@ -2114,7 +2114,7 @@ void TPipeline::ActivateWaitingTxOps(const TActorContext& ctx) {
     ActivateWaitingTxOps(GetUnreadableEdge(), ctx);
 }
 
-TPipeline::TWaitingReadIterator::TWaitingReadIterator(TEvDataShard::TEvRead::TPtr&& ev)
+TPipeline::TWaitingReadIterator::TWaitingReadIterator(NEvDataShard::TEvRead::TPtr&& ev)
     : Event(std::move(ev))
 {
     if (Event->TraceId) {
@@ -2125,7 +2125,7 @@ TPipeline::TWaitingReadIterator::TWaitingReadIterator(TEvDataShard::TEvRead::TPt
 
 void TPipeline::AddWaitingReadIterator(
     const TRowVersion& version,
-    TEvDataShard::TEvRead::TPtr ev,
+    NEvDataShard::TEvRead::TPtr ev,
     const TActorContext& ctx)
 {
     // Combined with registration for convenience
@@ -2162,12 +2162,12 @@ bool TPipeline::CancelWaitingReadIterator(const TReadIteratorId& readId) {
     return false;
 }
 
-void TPipeline::RegisterWaitingReadIterator(const TReadIteratorId& readId, TEvDataShard::TEvRead* event) {
+void TPipeline::RegisterWaitingReadIterator(const TReadIteratorId& readId, NEvDataShard::TEvRead* event) {
     auto res = WaitingReadIteratorsById.emplace(readId, event);
     Y_ABORT_UNLESS(res.second);
 }
 
-bool TPipeline::HandleWaitingReadIterator(const TReadIteratorId& readId, TEvDataShard::TEvRead* event) {
+bool TPipeline::HandleWaitingReadIterator(const TReadIteratorId& readId, NEvDataShard::TEvRead* event) {
     auto it = WaitingReadIteratorsById.find(readId);
     if (it != WaitingReadIteratorsById.end() && it->second == event) {
         WaitingReadIteratorsById.erase(it);

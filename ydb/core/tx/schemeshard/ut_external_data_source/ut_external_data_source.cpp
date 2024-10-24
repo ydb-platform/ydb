@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
         dropFn(runtime, ++txId);
         TestModificationResult(runtime, txId - 1);
 
-        auto ev = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>();
+        auto ev = runtime.GrabEdgeEvent<NEvSchemeShard::TEvModifySchemeTransactionResult>();
         UNIT_ASSERT(ev);
 
         const auto& record = ev->Record;

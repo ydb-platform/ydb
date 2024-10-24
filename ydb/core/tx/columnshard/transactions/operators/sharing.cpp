@@ -58,7 +58,7 @@ bool TSharingTransactionOperator::ProgressOnExecute(
 
 bool TSharingTransactionOperator::ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) {
     for (TActorId subscriber : NotifySubscribers) {
-        auto event = MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(owner.TabletID(), GetTxId());
+        auto event = MakeHolder<NEvColumnShard::TEvNotifyTxCompletionResult>(owner.TabletID(), GetTxId());
         ctx.Send(subscriber, event.Release(), 0, 0);
     }
     return true;

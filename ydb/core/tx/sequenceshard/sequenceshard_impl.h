@@ -93,15 +93,15 @@ namespace NSequenceShard {
 
         void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev);
         void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev);
-        void Handle(TEvSequenceShard::TEvMarkSchemeShardPipe::TPtr& ev, const TActorContext& ctx);
-        void Handle(TEvSequenceShard::TEvCreateSequence::TPtr& ev, const TActorContext& ctx);
-        void Handle(TEvSequenceShard::TEvAllocateSequence::TPtr& ev, const TActorContext& ctx);
-        void Handle(TEvSequenceShard::TEvDropSequence::TPtr& ev, const TActorContext& ctx);
-        void Handle(TEvSequenceShard::TEvUpdateSequence::TPtr& ev, const TActorContext& ctx);
-        void Handle(TEvSequenceShard::TEvFreezeSequence::TPtr& ev, const TActorContext& ctx);
-        void Handle(TEvSequenceShard::TEvRestoreSequence::TPtr& ev, const TActorContext& ctx);
-        void Handle(TEvSequenceShard::TEvRedirectSequence::TPtr& ev, const TActorContext& ctx);
-        void Handle(TEvSequenceShard::TEvGetSequence::TPtr& ev, const TActorContext& ctx);
+        void Handle(NEvSequenceShard::TEvMarkSchemeShardPipe::TPtr& ev, const TActorContext& ctx);
+        void Handle(NEvSequenceShard::TEvCreateSequence::TPtr& ev, const TActorContext& ctx);
+        void Handle(NEvSequenceShard::TEvAllocateSequence::TPtr& ev, const TActorContext& ctx);
+        void Handle(NEvSequenceShard::TEvDropSequence::TPtr& ev, const TActorContext& ctx);
+        void Handle(NEvSequenceShard::TEvUpdateSequence::TPtr& ev, const TActorContext& ctx);
+        void Handle(NEvSequenceShard::TEvFreezeSequence::TPtr& ev, const TActorContext& ctx);
+        void Handle(NEvSequenceShard::TEvRestoreSequence::TPtr& ev, const TActorContext& ctx);
+        void Handle(NEvSequenceShard::TEvRedirectSequence::TPtr& ev, const TActorContext& ctx);
+        void Handle(NEvSequenceShard::TEvGetSequence::TPtr& ev, const TActorContext& ctx);
 
     private:
         struct TPipeInfo {

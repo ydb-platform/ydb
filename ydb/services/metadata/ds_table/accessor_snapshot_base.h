@@ -105,7 +105,7 @@ public:
             hFunc(TTableExistsActor::TEvController::TEvError, Handle);
             hFunc(TTableExistsActor::TEvController::TEvResult, Handle);
             hFunc(TEvRecheckExistence, Handle);
-            
+
             default:
                 break;
         }

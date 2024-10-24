@@ -5,7 +5,7 @@ namespace NDataShard {
 
 class TDataShard::TTxCompactBorrowed : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxCompactBorrowed(TDataShard* self, TEvDataShard::TEvCompactBorrowed::TPtr&& ev)
+    TTxCompactBorrowed(TDataShard* self, NEvDataShard::TEvCompactBorrowed::TPtr&& ev)
         : TTransactionBase(self)
         , Ev(std::move(ev))
     {}
@@ -21,7 +21,7 @@ public:
             << " for table " << pathId
             << " at tablet " << Self->TabletID());
 
-        auto nothingToCompactResult = MakeHolder<TEvDataShard::TEvCompactBorrowedResult>(Self->TabletID(), pathId);
+        auto nothingToCompactResult = MakeHolder<NEvDataShard::TEvCompactBorrowedResult>(Self->TabletID(), pathId);
 
         if (pathId.OwnerId != Self->GetPathOwnerId()) { // ignore unexpected owner
             ctx.Send(Ev->Sender, std::move(nothingToCompactResult));
@@ -33,7 +33,7 @@ public:
             return true;
         }
         const TUserTable& tableInfo = *it->second;
-     
+
         THashSet<ui32> tablesToCompact;
         if (txc.DB.HasBorrowed(tableInfo.LocalTid, Self->TabletID())) {
             tablesToCompact.insert(tableInfo.LocalTid);
@@ -83,10 +83,10 @@ public:
     }
 
 private:
-    TEvDataShard::TEvCompactBorrowed::TPtr Ev;
+    NEvDataShard::TEvCompactBorrowed::TPtr Ev;
 };
 
-void TDataShard::Handle(TEvDataShard::TEvCompactBorrowed::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NEvDataShard::TEvCompactBorrowed::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxCompactBorrowed(this, std::move(ev)), ctx);
 }
 

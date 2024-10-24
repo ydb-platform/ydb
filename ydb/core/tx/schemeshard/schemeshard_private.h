@@ -6,7 +6,7 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-namespace TEvPrivate {
+namespace NEvPrivate {
     enum EEv {
         EvProgressOperation = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
         EvOperationPlanStep,
@@ -192,7 +192,7 @@ namespace TEvPrivate {
             : NodeId(nodeId)
         { }
     };
-}; // TEvPrivate
+}; // NEvPrivate
 
 } // NSchemeShard
 } // NKikimr

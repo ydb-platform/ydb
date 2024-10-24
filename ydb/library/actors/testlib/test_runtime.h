@@ -391,7 +391,7 @@ namespace NActors {
 
         // An example of using AddObserver in unit tests
         /*
-            auto observerHolder = runtime.AddObserver<TEvDataShard::TEvRead>([&](TEvDataShard::TEvRead::TPtr& event) {
+            auto observerHolder = runtime.AddObserver<NEvDataShard::TEvRead>([&](NEvDataShard::TEvRead::TPtr& event) {
                 // Do something with the event inside the callback
                 Cout << "An event is observed " << event->Get()->Record.ShortDebugString() << Endl;
 

@@ -30,7 +30,7 @@ public:
     }
 
     bool HandleReply(
-        TEvPrivate::TEvOperationPlan::TPtr& ev,
+        NEvPrivate::TEvOperationPlan::TPtr& ev,
         TOperationContext& context) override
     {
         const auto step = TStepId(ev->Get()->StepId);

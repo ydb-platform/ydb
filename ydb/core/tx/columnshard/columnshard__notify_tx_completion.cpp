@@ -4,7 +4,7 @@ namespace NKikimr::NColumnShard {
 
 class TTxNotifyTxCompletion : public TTransactionBase<TColumnShard> {
 public:
-    TTxNotifyTxCompletion(TColumnShard* self, TEvColumnShard::TEvNotifyTxCompletion::TPtr& ev)
+    TTxNotifyTxCompletion(TColumnShard* self, NEvColumnShard::TEvNotifyTxCompletion::TPtr& ev)
         : TBase(self)
         , Ev(ev)
     {}
@@ -19,7 +19,7 @@ public:
             txOperator->RegisterSubscriber(Ev->Sender);
             return true;
         }
-        Result.reset(new TEvColumnShard::TEvNotifyTxCompletionResult(Self->TabletID(), txId));
+        Result.reset(new NEvColumnShard::TEvNotifyTxCompletionResult(Self->TabletID(), txId));
         return true;
     }
 
@@ -32,11 +32,11 @@ public:
     TTxType GetTxType() const override { return TXTYPE_NOTIFY_TX_COMPLETION; }
 
 private:
-    TEvColumnShard::TEvNotifyTxCompletion::TPtr Ev;
-    std::unique_ptr<TEvColumnShard::TEvNotifyTxCompletionResult> Result;
+    NEvColumnShard::TEvNotifyTxCompletion::TPtr Ev;
+    std::unique_ptr<NEvColumnShard::TEvNotifyTxCompletionResult> Result;
 };
 
-void TColumnShard::Handle(TEvColumnShard::TEvNotifyTxCompletion::TPtr& ev, const TActorContext& ctx) {
+void TColumnShard::Handle(NEvColumnShard::TEvNotifyTxCompletion::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxNotifyTxCompletion(this, ev), ctx);
 }
 

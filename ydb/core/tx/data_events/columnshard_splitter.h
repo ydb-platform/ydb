@@ -39,7 +39,7 @@ class TColumnShardShardsSplitter: public IShardsSplitter {
             return Data;
         }
 
-        virtual void Serialize(TEvColumnShard::TEvWrite& evWrite) const override {
+        virtual void Serialize(NEvColumnShard::TEvWrite& evWrite) const override {
             evWrite.SetArrowData(SchemaData, Data);
             evWrite.Record.SetGranuleShardingVersion(GranuleShardingVersion);
         }

@@ -8,7 +8,7 @@ struct TKesusTablet::TTxQuoterResourceUpdate : public TTxBase {
     const ui64 Cookie;
     NKikimrKesus::TEvUpdateQuoterResource Record;
 
-    THolder<TEvKesus::TEvUpdateQuoterResourceResult> Reply;
+    THolder<NEvKesus::TEvUpdateQuoterResourceResult> Reply;
 
     TTxQuoterResourceUpdate(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvUpdateQuoterResource& record)
         : TTxBase(self)
@@ -24,7 +24,7 @@ struct TKesusTablet::TTxQuoterResourceUpdate : public TTxBase {
         NKikimrKesus::TEvUpdateQuoterResourceResult result;
         result.SetResourceId(quoterResourceId);
         result.MutableError()->SetStatus(Ydb::StatusIds::SUCCESS);
-        Reply = MakeHolder<TEvKesus::TEvUpdateQuoterResourceResult>(result);
+        Reply = MakeHolder<NEvKesus::TEvUpdateQuoterResourceResult>(result);
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -38,14 +38,14 @@ struct TKesusTablet::TTxQuoterResourceUpdate : public TTxBase {
             Self->QuoterResources.FindId(resourceDesc.GetResourceId()) :
             Self->QuoterResources.FindPath(resourceDesc.GetResourcePath());
         if (!resource) {
-            Reply = MakeHolder<TEvKesus::TEvUpdateQuoterResourceResult>(
+            Reply = MakeHolder<NEvKesus::TEvUpdateQuoterResourceResult>(
                     Ydb::StatusIds::NOT_FOUND,
                     "No resource found.");
             return true;
         }
         TString errorMessage;
         if (!resource->Update(resourceDesc, errorMessage)) {
-            Reply = MakeHolder<TEvKesus::TEvUpdateQuoterResourceResult>(
+            Reply = MakeHolder<NEvKesus::TEvUpdateQuoterResourceResult>(
                     Ydb::StatusIds::BAD_REQUEST,
                     errorMessage);
             return true;
@@ -79,14 +79,14 @@ struct TKesusTablet::TTxQuoterResourceUpdate : public TTxBase {
     }
 };
 
-void TKesusTablet::Handle(TEvKesus::TEvUpdateQuoterResource::TPtr& ev) {
+void TKesusTablet::Handle(NEvKesus::TEvUpdateQuoterResource::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     TabletCounters->Cumulative()[COUNTER_REQS_QUOTER_RESOURCE_UPDATE].Increment(1);
 
     const auto& resourceDesc = record.GetResource();
     if (resourceDesc.GetResourcePath().empty() && !resourceDesc.GetResourceId()) {
         Send(ev->Sender,
-            new TEvKesus::TEvUpdateQuoterResourceResult(
+            new NEvKesus::TEvUpdateQuoterResourceResult(
                 Ydb::StatusIds::BAD_REQUEST,
                 "You should specify resource path or resource id."),
             0, ev->Cookie);
@@ -95,7 +95,7 @@ void TKesusTablet::Handle(TEvKesus::TEvUpdateQuoterResource::TPtr& ev) {
 
     if (!resourceDesc.GetResourcePath().empty() && !TQuoterResources::IsResourcePathValid(resourceDesc.GetResourcePath())) {
         Send(ev->Sender,
-            new TEvKesus::TEvUpdateQuoterResourceResult(
+            new NEvKesus::TEvUpdateQuoterResourceResult(
                 Ydb::StatusIds::BAD_REQUEST,
                 "Invalid resource path."),
             0, ev->Cookie);
@@ -104,7 +104,7 @@ void TKesusTablet::Handle(TEvKesus::TEvUpdateQuoterResource::TPtr& ev) {
 
     if (!resourceDesc.HasHierarchicalDRRResourceConfig()) {
         Send(ev->Sender,
-            new TEvKesus::TEvUpdateQuoterResourceResult(
+            new NEvKesus::TEvUpdateQuoterResourceResult(
                 Ydb::StatusIds::BAD_REQUEST,
                 "No resource config."),
             0, ev->Cookie);

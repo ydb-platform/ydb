@@ -152,7 +152,7 @@ struct TTopicInfo {
     THashSet<ui32> PartitionsToRequest;
 
     //fetchRequest part
-    THashMap<ui32, TAutoPtr<TEvPersQueue::TEvHasDataInfo>> FetchInfo;
+    THashMap<ui32, TAutoPtr<NEvPersQueue::TEvHasDataInfo>> FetchInfo;
 };
 
 struct TTabletInfo {
@@ -218,13 +218,13 @@ STFUNC(TPersQueueBaseRequestProcessor::StateFunc) {
         HFunc(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse, Handle);
         HFunc(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse, Handle);
         HFunc(NPqMetaCacheV2::TEvPqNewMetaCache::TEvGetNodesMappingResponse, Handle);
-        HFunc(TEvPersQueue::TEvResponse, Handle);
+        HFunc(NEvPersQueue::TEvResponse, Handle);
         CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
     }
 }
 
-void TPersQueueBaseRequestProcessor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+void TPersQueueBaseRequestProcessor::Handle(NEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     if (ev->Get()->Record.GetStatus() != MSTATUS_OK) {
         return SendReplyAndDie(std::move(ev->Get()->Record), ctx);
     }
@@ -630,7 +630,7 @@ public:
                     ErrorReason = "same partition specified multiple times";
                     return;
                 }
-                TAutoPtr<TEvPersQueue::TEvHasDataInfo> fetchInfo(new TEvPersQueue::TEvHasDataInfo());
+                TAutoPtr<NEvPersQueue::TEvHasDataInfo> fetchInfo(new NEvPersQueue::TEvHasDataInfo());
                 fetchInfo->Record.SetPartition(part.GetPartition());
                 fetchInfo->Record.SetOffset(part.GetOffset());
                 fetchInfo->Record.SetDeadline(deadline);
@@ -886,7 +886,7 @@ public:
         Y_ABORT("UNKNOWN request");
     }
 
-    void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
         if (IsFetchRequest) {
             ProcessFetchRequestResult(ev, ctx);
             return;
@@ -894,7 +894,7 @@ public:
         SendReplyAndDie(std::move(ev->Get()->Record), ctx);
     }
 
-    void Handle(TEvPersQueue::TEvOffsetsResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NEvPersQueue::TEvOffsetsResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& response = ev->Get()->Record;
         Y_ABORT_UNLESS(response.HasTabletId());
         auto it = TabletInfo.find(response.GetTabletId());
@@ -906,7 +906,7 @@ public:
         AnswerIfCanForMeta(ctx);
     }
 
-    void Handle(TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& response = ev->Get()->Record;
         Y_ABORT_UNLESS(response.HasTabletId());
         auto it = TabletInfo.find(response.GetTabletId());
@@ -922,7 +922,7 @@ public:
 
 
 
-    void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& response = ev->Get()->Record;
         Y_ABORT_UNLESS(response.HasTabletId());
         auto it = TabletInfo.find(response.GetTabletId());
@@ -935,7 +935,7 @@ public:
         AnswerIfCanForMeta(ctx);
     }
 
-    void Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr&, const TActorContext& ctx) {
+    void Handle(NEvPersQueue::TEvHasDataInfoResponse::TPtr&, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "got HasDatainfoResponse");
         ProceedFetchRequest(ctx);
     }
@@ -1064,7 +1064,7 @@ public:
             PQClient.push_back(ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig)));
             ActorIdToProto(PQClient.back(), RequestProto.MutablePartitionRequest()->MutablePipeClient());
 
-            TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+            TAutoPtr<NEvPersQueue::TEvRequest> req(new NEvPersQueue::TEvRequest);
             req->Record.Swap(&RequestProto);
             NTabletPipe::SendData(ctx, PQClient.back(), req.Release());
             return;
@@ -1113,7 +1113,7 @@ public:
                 tabletInfo.PipeClient = pipeClient;
                 PQClient.push_back(pipeClient);
 
-                THolder<TEvPersQueue::TEvGetReadSessionsInfo> ev(new TEvPersQueue::TEvGetReadSessionsInfo());
+                THolder<NEvPersQueue::TEvGetReadSessionsInfo> ev(new NEvPersQueue::TEvGetReadSessionsInfo());
                 ev->Record.SetClientId(RequestProto.GetMetaRequest().GetCmdGetReadSessionsInfo().GetClientId());
                 NTabletPipe::SendData(ctx, pipeClient, ev.Release());
             }
@@ -1140,7 +1140,7 @@ public:
                     tabletInfo.PipeClient = pipeClient;
                     PQClient.push_back(pipeClient);
                     if (needAskOffset) {
-                        THolder<TEvPersQueue::TEvOffsets> ev(new TEvPersQueue::TEvOffsets());
+                        THolder<NEvPersQueue::TEvOffsets> ev(new NEvPersQueue::TEvOffsets());
                         TString clientId;
                         if (RequestProto.GetMetaRequest().HasCmdGetPartitionOffsets()
                             && RequestProto.GetMetaRequest().GetCmdGetPartitionOffsets().HasClientId())
@@ -1151,7 +1151,7 @@ public:
                             ev->Record.SetClientId(clientId);
                         NTabletPipe::SendData(ctx, pipeClient, ev.Release());
                     } else if (needAskStatus) {
-                        TAutoPtr<TEvPersQueue::TEvStatus> ev = new TEvPersQueue::TEvStatus();
+                        TAutoPtr<NEvPersQueue::TEvStatus> ev = new NEvPersQueue::TEvStatus();
                         if (RequestProto.GetMetaRequest().GetCmdGetPartitionStatus().HasClientId())
                             ev->Record.SetClientId(RequestProto.GetMetaRequest().GetCmdGetPartitionStatus().GetClientId());
                         NTabletPipe::SendData(ctx, pipeClient, ev.Release());
@@ -1260,8 +1260,8 @@ public:
         TActorBootstrapped<TMessageBusServerPersQueueImpl>::Die(ctx);
     }
 
-    TAutoPtr<TEvPersQueue::TEvResponse> FormEmptyCurrentRead(ui64 cookie) {
-        TAutoPtr<TEvPersQueue::TEvResponse> req(new TEvPersQueue::TEvResponse);
+    TAutoPtr<NEvPersQueue::TEvResponse> FormEmptyCurrentRead(ui64 cookie) {
+        TAutoPtr<NEvPersQueue::TEvResponse> req(new NEvPersQueue::TEvResponse);
         auto read = req->Record.MutablePartitionResponse()->MutableCmdReadResult();
         req->Record.MutablePartitionResponse()->SetCookie(cookie);
         read->SetErrorCode(NPersQueue::NErrorCode::READ_NOT_DONE);
@@ -1308,7 +1308,7 @@ public:
         }
 
         //Form read request
-        TAutoPtr<TEvPersQueue::TEvRequest> preq(new TEvPersQueue::TEvRequest);
+        TAutoPtr<NEvPersQueue::TEvRequest> preq(new NEvPersQueue::TEvRequest);
         TStringBuilder reqId;
         reqId << RequestId << "-id-" << FetchRequestReadsDone << "-" << fetch.PartitionSize();
         preq->Record.SetRequestId(reqId);
@@ -1326,7 +1326,7 @@ public:
         NTabletPipe::SendData(ctx, jt->second.PipeClient, preq.Release());
     }
 
-    void ProcessFetchRequestResult(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+    void ProcessFetchRequestResult(NEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
         Y_ABORT_UNLESS(record.HasPartitionResponse());
         if (record.GetPartitionResponse().GetCookie() != CurrentCookie || FetchRequestCurrentReadTablet == 0) {
@@ -1387,7 +1387,7 @@ public:
         }
         if (IsFetchRequest) {
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "scheduling HasDataInfoResponse in " << RequestProto.GetFetchRequest().GetWaitMs());
-            ctx.Schedule(TDuration::MilliSeconds(Min<ui32>(RequestProto.GetFetchRequest().GetWaitMs(), 30000)), new TEvPersQueue::TEvHasDataInfoResponse);
+            ctx.Schedule(TDuration::MilliSeconds(Min<ui32>(RequestProto.GetFetchRequest().GetWaitMs(), 30000)), new NEvPersQueue::TEvHasDataInfoResponse);
         }
 
         auto* request = new TEvDescribeAllTopicsRequest();
@@ -1409,11 +1409,11 @@ public:
             HFunc(TEvDescribeAllTopicsResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-            HFunc(TEvPersQueue::TEvResponse, Handle);
-            HFunc(TEvPersQueue::TEvOffsetsResponse, Handle);
-            HFunc(TEvPersQueue::TEvStatusResponse, Handle);
-            HFunc(TEvPersQueue::TEvHasDataInfoResponse, Handle);
-            HFunc(TEvPersQueue::TEvReadSessionsInfoResponse, Handle);
+            HFunc(NEvPersQueue::TEvResponse, Handle);
+            HFunc(NEvPersQueue::TEvOffsetsResponse, Handle);
+            HFunc(NEvPersQueue::TEvStatusResponse, Handle);
+            HFunc(NEvPersQueue::TEvHasDataInfoResponse, Handle);
+            HFunc(NEvPersQueue::TEvReadSessionsInfoResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
     )

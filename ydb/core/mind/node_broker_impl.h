@@ -23,7 +23,7 @@ using NTabletFlatExecutor::TTabletExecutedFlat;
 using NTabletFlatExecutor::ITransaction;
 using NTabletFlatExecutor::TTransactionBase;
 using NTabletFlatExecutor::TTransactionContext;
-namespace TEvConsole = NConsole::TEvConsole;
+namespace NEvConsole = NConsole::NEvConsole;
 using NConsole::ITxExecutor;
 using NConsole::TTxProcessor;
 
@@ -156,9 +156,9 @@ private:
     ITransaction *CreateTxInitScheme();
     ITransaction *CreateTxLoadState();
     ITransaction *CreateTxRegisterNode(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev);
-    ITransaction *CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
+    ITransaction *CreateTxUpdateConfig(NEvConsole::TEvConfigNotificationRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfig(TEvNodeBroker::TEvSetConfigRequest::TPtr &ev);
-    ITransaction *CreateTxUpdateConfigSubscription(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev);
+    ITransaction *CreateTxUpdateConfigSubscription(NEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev);
     ITransaction *CreateTxUpdateEpoch();
 
     void OnActivateExecutor(const TActorContext &ctx) override;
@@ -197,8 +197,8 @@ private:
     {
         TRACE_EVENT(NKikimrServices::NODE_BROKER);
         switch (ev->GetTypeRewrite()) {
-            HFuncTraced(TEvConsole::TEvConfigNotificationRequest, Handle);
-            HFuncTraced(TEvConsole::TEvReplaceConfigSubscriptionsResponse, Handle);
+            HFuncTraced(NEvConsole::TEvConfigNotificationRequest, Handle);
+            HFuncTraced(NEvConsole::TEvReplaceConfigSubscriptionsResponse, Handle);
             HFuncTraced(TEvNodeBroker::TEvListNodes, Handle);
             HFuncTraced(TEvNodeBroker::TEvResolveNode, Handle);
             HFuncTraced(TEvNodeBroker::TEvRegistrationRequest, Handle);
@@ -210,8 +210,8 @@ private:
             HFuncTraced(TEvPrivate::TEvResolvedRegistrationRequest, Handle);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
-            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
-            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse);
+            IgnoreFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            IgnoreFunc(NConsole::NEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
@@ -289,9 +289,9 @@ private:
     void DbUpdateNodeLocation(const TNodeInfo &node,
                               TTransactionContext &txc);
 
-    void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
+    void Handle(NEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                 const TActorContext &ctx);
-    void Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
+    void Handle(NEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvNodeBroker::TEvListNodes::TPtr &ev,
                 const TActorContext &ctx);

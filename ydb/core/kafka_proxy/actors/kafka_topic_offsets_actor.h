@@ -32,16 +32,16 @@ public:
 
     void HandleCacheNavigateResponse(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) override;
 
-    virtual void ApplyResponse(TTabletInfo&, NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr&,
+    virtual void ApplyResponse(TTabletInfo&, NKikimr::NEvPersQueue::TEvReadSessionsInfoResponse::TPtr&,
                                const TActorContext&) override {
         Y_ABORT();
     }
 
-    bool ApplyResponse(NKikimr::TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr&, const TActorContext&) override {
+    bool ApplyResponse(NKikimr::NEvPersQueue::TEvGetPartitionsLocationResponse::TPtr&, const TActorContext&) override {
         Y_ABORT();
     }
 
-    void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) override;
+    void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::NEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) override;
 
     void Reply(const TActorContext&) override;
 

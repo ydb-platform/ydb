@@ -40,12 +40,12 @@ class TEnv {
     }
 
     void Login(ui64 schemeShardId, const TString& user, const TString& password) {
-        auto req = MakeHolder<NSchemeShard::TEvSchemeShard::TEvLogin>();
+        auto req = MakeHolder<NSchemeShard::NEvSchemeShard::TEvLogin>();
         req->Record.SetUser(user);
         req->Record.SetPassword(password);
         ForwardToTablet(*Server.GetRuntime(), schemeShardId, Sender, req.Release());
 
-        auto resp = Server.GetRuntime()->GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvLoginResult>(Sender);
+        auto resp = Server.GetRuntime()->GrabEdgeEvent<NSchemeShard::NEvSchemeShard::TEvLoginResult>(Sender);
         UNIT_ASSERT(resp->Get()->Record.GetError().empty());
         UNIT_ASSERT(!resp->Get()->Record.GetToken().empty());
     }

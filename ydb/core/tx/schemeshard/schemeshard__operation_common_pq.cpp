@@ -151,7 +151,7 @@ public:
     }
 };
 
-THolder<TEvPersQueue::TEvProposeTransaction> MakeEvProposeTransaction(
+THolder<NEvPersQueue::TEvProposeTransaction> MakeEvProposeTransaction(
         TTxId txId,
         const TTopicInfo& pqGroup,
         const TTopicTabletInfo& pqShard,
@@ -166,7 +166,7 @@ THolder<TEvPersQueue::TEvProposeTransaction> MakeEvProposeTransaction(
         const TOperationContext& context
     )
 {
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
+    auto event = MakeHolder<NEvPersQueue::TEvProposeTransactionBuilder>();
     event->Record.SetTxId(ui64(txId));
     ActorIdToProto(context.SS->SelfId(), event->Record.MutableSourceActor());
 
@@ -192,7 +192,7 @@ THolder<TEvPersQueue::TEvProposeTransaction> MakeEvProposeTransaction(
     return event;
 }
 
-THolder<TEvPersQueue::TEvUpdateConfig> MakeEvUpdateConfig(
+THolder<NEvPersQueue::TEvUpdateConfig> MakeEvUpdateConfig(
         TTxId txId,
         const TTopicInfo& pqGroup,
         const TTopicTabletInfo& pqShard,
@@ -207,7 +207,7 @@ THolder<TEvPersQueue::TEvUpdateConfig> MakeEvUpdateConfig(
         const TOperationContext& context
     )
 {
-    auto event = MakeHolder<TEvPersQueue::TEvUpdateConfigBuilder>();
+    auto event = MakeHolder<NEvPersQueue::TEvUpdateConfigBuilder>();
     event->Record.SetTxId(ui64(txId));
 
     MakePQTabletConfig(context,
@@ -236,7 +236,7 @@ THolder<TEvPersQueue::TEvUpdateConfig> MakeEvUpdateConfig(
 
 
 bool CollectPQConfigChanged(const TOperationId& operationId,
-                            const TEvPersQueue::TEvProposeTransactionResult::TPtr& ev,
+                            const NEvPersQueue::TEvProposeTransactionResult::TPtr& ev,
                             TOperationContext& context)
 {
     Y_ABORT_UNLESS(context.SS->FindTx(operationId));
@@ -255,7 +255,7 @@ bool CollectPQConfigChanged(const TOperationId& operationId,
         txState.ShardsInProgress.erase(shardIdx);
 
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "CollectPQConfigChanged accept TEvPersQueue::TEvProposeTransactionResult"
+                    "CollectPQConfigChanged accept NEvPersQueue::TEvProposeTransactionResult"
                     << ", operationId: " << operationId
                     << ", shardIdx: " << shardIdx
                     << ", shard: " << shardId
@@ -269,7 +269,7 @@ bool CollectPQConfigChanged(const TOperationId& operationId,
 }
 
 bool CollectPQConfigChanged(const TOperationId& operationId,
-                            const TEvPersQueue::TEvProposeTransactionAttachResult::TPtr& ev,
+                            const NEvPersQueue::TEvProposeTransactionAttachResult::TPtr& ev,
                             TOperationContext& context)
 {
     Y_ABORT_UNLESS(context.SS->FindTx(operationId));
@@ -307,7 +307,7 @@ bool CollectPQConfigChanged(const TOperationId& operationId,
     txState.ShardsInProgress.erase(shardIdx);
 
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "CollectPQConfigChanged accept TEvPersQueue::TEvProposeTransactionAttachResult"
+                "CollectPQConfigChanged accept NEvPersQueue::TEvProposeTransactionAttachResult"
                 << ", operationId: " << operationId
                 << ", shardIdx: " << shardIdx
                 << ", shard: " << shardId
@@ -325,10 +325,10 @@ bool CollectPQConfigChanged(const TOperationId& operationId,
 TConfigureParts::TConfigureParts(TOperationId id)
     : OperationId(id)
 {
-    IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
+    IgnoreMessages(DebugHint(), {NEvHive::TEvCreateTabletReply::EventType});
 }
 
-bool TConfigureParts::HandleReply(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context)
+bool TConfigureParts::HandleReply(NEvPersQueue::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context)
 {
     const TTabletId ssId = context.SS->SelfTabletId();
 
@@ -339,7 +339,7 @@ bool TConfigureParts::HandleReply(TEvPersQueue::TEvProposeTransactionResult::TPt
     return NPQState::CollectProposeTransactionResults(OperationId, ev, context);
 }
 
-bool TConfigureParts::HandleReply(TEvPersQueue::TEvUpdateConfigResponse::TPtr& ev, TOperationContext& context) {
+bool TConfigureParts::HandleReply(NEvPersQueue::TEvUpdateConfigResponse::TPtr& ev, TOperationContext& context) {
     TTabletId ssId = context.SS->SelfTabletId();
 
     LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -537,7 +537,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                 pqGroup->AlterData->BalancerShardIdx = idx;
             }
 
-            TAutoPtr<TEvPersQueue::TEvUpdateBalancerConfig> event(new TEvPersQueue::TEvUpdateBalancerConfig());
+            TAutoPtr<NEvPersQueue::TEvUpdateBalancerConfig> event(new NEvPersQueue::TEvUpdateBalancerConfig());
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
 
             ParsePQTabletConfig(*event->Record.MutableTabletConfig(), *pqGroup);
@@ -609,10 +609,10 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
 TPropose::TPropose(TOperationId id)
     : OperationId(id)
 {
-    IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvPersQueue::TEvUpdateConfigResponse::EventType});
+    IgnoreMessages(DebugHint(), {NEvHive::TEvCreateTabletReply::EventType, NEvPersQueue::TEvUpdateConfigResponse::EventType});
 }
 
-bool TPropose::HandleReply(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context)
+bool TPropose::HandleReply(NEvPersQueue::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context)
 {
     const TTabletId ssId = context.SS->SelfTabletId();
     const auto& evRecord = ev->Get()->Record;
@@ -631,7 +631,7 @@ bool TPropose::HandleReply(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, 
     return TryPersistState(context);
 }
 
-bool TPropose::HandleReply(TEvPersQueue::TEvProposeTransactionAttachResult::TPtr& ev, TOperationContext& context)
+bool TPropose::HandleReply(NEvPersQueue::TEvProposeTransactionAttachResult::TPtr& ev, TOperationContext& context)
 {
     const auto ssId = context.SS->SelfTabletId();
     const auto& evRecord = ev->Get()->Record;
@@ -650,7 +650,7 @@ bool TPropose::HandleReply(TEvPersQueue::TEvProposeTransactionAttachResult::TPtr
     return TryPersistState(context);
 }
 
-bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context)
+bool TPropose::HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context)
 {
     TStepId step = TStepId(ev->Get()->StepId);
     TTabletId ssId = context.SS->SelfTabletId();
@@ -740,7 +740,7 @@ void TPropose::SendEvProposeTransactionAttach(TShardIdx shard, TTabletId tablet,
                                               TOperationContext& context)
 {
     auto event =
-        MakeHolder<TEvPersQueue::TEvProposeTransactionAttach>(ui64(tablet),
+        MakeHolder<NEvPersQueue::TEvProposeTransactionAttach>(ui64(tablet),
                                                               ui64(OperationId.GetTxId()));
     context.OnComplete.BindMsgToPipe(OperationId, tablet, shard, event.Release());
 }

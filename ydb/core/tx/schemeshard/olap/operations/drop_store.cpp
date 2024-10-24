@@ -63,10 +63,10 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(),
-            {TEvColumnShard::TEvProposeTransactionResult::EventType});
+            {NEvColumnShard::TEvProposeTransactionResult::EventType});
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
@@ -147,11 +147,11 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(),
-            {TEvColumnShard::TEvProposeTransactionResult::EventType,
-             TEvPrivate::TEvOperationPlan::EventType});
+            {NEvColumnShard::TEvProposeTransactionResult::EventType,
+             NEvPrivate::TEvOperationPlan::EventType});
     }
 
-    bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropOlapStore);
@@ -191,7 +191,7 @@ public:
             Y_ABORT_UNLESS(shard.TabletType == ETabletType::ColumnShard);
 
             TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
-            auto event = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(ui64(OperationId.GetTxId()));
+            auto event = std::make_unique<NEvColumnShard::TEvNotifyTxCompletion>(ui64(OperationId.GetTxId()));
 
             context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
             txState->ShardsInProgress.insert(shard.Idx);
@@ -222,9 +222,9 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(),
-            {TEvColumnShard::TEvProposeTransactionResult::EventType,
-             TEvColumnShard::TEvNotifyTxCompletionResult::EventType,
-             TEvPrivate::TEvOperationPlan::EventType});
+            {NEvColumnShard::TEvProposeTransactionResult::EventType,
+             NEvColumnShard::TEvNotifyTxCompletionResult::EventType,
+             NEvPrivate::TEvOperationPlan::EventType});
     }
 
     bool ProgressState(TOperationContext& context) override {

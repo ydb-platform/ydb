@@ -44,7 +44,7 @@ class TCdcPartitionWorker: public TActorBootstrapped<TCdcPartitionWorker> {
         PassAway();
     }
 
-    void Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
+    void Handle(NEvPersQueue::TEvResponse::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
         const auto& response = ev->Get()->Record;
@@ -116,7 +116,7 @@ public:
 
         PipeClient = RegisterWithSameMailbox(NTabletPipe::CreateClient(SelfId(), TabletId, config));
 
-        auto ev = MakeHolder<TEvPersQueue::TEvRequest>();
+        auto ev = MakeHolder<NEvPersQueue::TEvRequest>();
         auto& request = *ev->Record.MutablePartitionRequest();
         request.SetPartition(PartitionId);
         ActorIdToProto(PipeClient, request.MutablePipeClient());
@@ -137,7 +137,7 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvPersQueue::TEvResponse, Handle);
+            hFunc(NEvPersQueue::TEvResponse, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             sFunc(TEvents::TEvPoison, PassAway);

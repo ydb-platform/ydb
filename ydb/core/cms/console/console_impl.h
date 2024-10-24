@@ -52,7 +52,7 @@ private:
 
     ITransaction *CreateTxInitScheme();
     ITransaction *CreateTxLoadState();
-    ITransaction *CreateTxSetConfig(TEvConsole::TEvSetConfigRequest::TPtr &ev);
+    ITransaction *CreateTxSetConfig(NEvConsole::TEvSetConfigRequest::TPtr &ev);
 
     void DefaultSignalTabletActive(const TActorContext &ctx) override;
     void OnActivateExecutor(const TActorContext &ctx) override;
@@ -71,8 +71,8 @@ private:
 
     void ForwardToConfigsManager(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx);
     void ForwardToTenantsManager(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx);
-    void Handle(TEvConsole::TEvGetConfigRequest::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvConsole::TEvSetConfigRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvConsole::TEvGetConfigRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvConsole::TEvSetConfigRequest::TPtr &ev, const TActorContext &ctx);
 
     STFUNC(StateInit)
     {
@@ -83,45 +83,45 @@ private:
     {
         TRACE_EVENT(NKikimrServices::CMS);
         switch (ev->GetTypeRewrite()) {
-            FFunc(TEvConsole::EvConfigSubscriptionRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvConfigSubscriptionCanceled, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvAddConfigSubscriptionRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvAlterTenantRequest, ForwardToTenantsManager);
-            FFunc(TEvConsole::EvCheckConfigUpdatesRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvConfigNotificationResponse, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvIsYamlReadOnlyRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvConfigureRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvGetAllConfigsRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvGetAllMetadataRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvAddVolatileConfigRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvRemoveVolatileConfigRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvGetLogTailRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvCreateTenantRequest, ForwardToTenantsManager);
-            FFunc(TEvConsole::EvDescribeTenantOptionsRequest, ForwardToTenantsManager);
-            FFunc(TEvConsole::EvGetConfigItemsRequest, ForwardToConfigsManager);
-            HFuncTraced(TEvConsole::TEvGetConfigRequest, Handle);
-            FFunc(TEvConsole::EvReplaceYamlConfigRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvGetNodeLabelsRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvSetYamlConfigRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvDropConfigRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvResolveConfigRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvResolveAllConfigRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvGetConfigSubscriptionRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvGetNodeConfigItemsRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvGetNodeConfigRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvGetOperationRequest, ForwardToTenantsManager);
-            FFunc(TEvConsole::EvGetTenantStatusRequest, ForwardToTenantsManager);
-            FFunc(TEvConsole::EvListConfigSubscriptionsRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvListConfigValidatorsRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvListTenantsRequest, ForwardToTenantsManager);
-            FFunc(TEvConsole::EvNotifyOperationCompletionRequest, ForwardToTenantsManager);
-            FFunc(TEvConsole::EvRemoveConfigSubscriptionRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvRemoveConfigSubscriptionsRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvRemoveTenantRequest, ForwardToTenantsManager);
-            FFunc(TEvConsole::EvReplaceConfigSubscriptionsRequest, ForwardToConfigsManager);
-            HFuncTraced(TEvConsole::TEvSetConfigRequest, Handle);
-            FFunc(TEvConsole::EvToggleConfigValidatorRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvUpdateTenantPoolConfig, ForwardToTenantsManager);
+            FFunc(NEvConsole::EvConfigSubscriptionRequest, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvConfigSubscriptionCanceled, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvAddConfigSubscriptionRequest, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvAlterTenantRequest, ForwardToTenantsManager);
+            FFunc(NEvConsole::EvCheckConfigUpdatesRequest, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvConfigNotificationResponse, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvIsYamlReadOnlyRequest, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvConfigureRequest, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvGetAllConfigsRequest, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvGetAllMetadataRequest, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvAddVolatileConfigRequest, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvRemoveVolatileConfigRequest, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvGetLogTailRequest, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvCreateTenantRequest, ForwardToTenantsManager);
+            FFunc(NEvConsole::EvDescribeTenantOptionsRequest, ForwardToTenantsManager);
+            FFunc(NEvConsole::EvGetConfigItemsRequest, ForwardToConfigsManager);
+            HFuncTraced(NEvConsole::TEvGetConfigRequest, Handle);
+            FFunc(NEvConsole::EvReplaceYamlConfigRequest, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvGetNodeLabelsRequest, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvSetYamlConfigRequest, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvDropConfigRequest, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvResolveConfigRequest, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvResolveAllConfigRequest, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvGetConfigSubscriptionRequest, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvGetNodeConfigItemsRequest, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvGetNodeConfigRequest, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvGetOperationRequest, ForwardToTenantsManager);
+            FFunc(NEvConsole::EvGetTenantStatusRequest, ForwardToTenantsManager);
+            FFunc(NEvConsole::EvListConfigSubscriptionsRequest, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvListConfigValidatorsRequest, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvListTenantsRequest, ForwardToTenantsManager);
+            FFunc(NEvConsole::EvNotifyOperationCompletionRequest, ForwardToTenantsManager);
+            FFunc(NEvConsole::EvRemoveConfigSubscriptionRequest, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvRemoveConfigSubscriptionsRequest, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvRemoveTenantRequest, ForwardToTenantsManager);
+            FFunc(NEvConsole::EvReplaceConfigSubscriptionsRequest, ForwardToConfigsManager);
+            HFuncTraced(NEvConsole::TEvSetConfigRequest, Handle);
+            FFunc(NEvConsole::EvToggleConfigValidatorRequest, ForwardToConfigsManager);
+            FFunc(NEvConsole::EvUpdateTenantPoolConfig, ForwardToTenantsManager);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
 

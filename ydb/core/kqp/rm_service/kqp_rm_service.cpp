@@ -592,7 +592,7 @@ public:
         ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;
 
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
+             new NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
              IEventHandle::FlagTrackDelivery);
 
         ToBroker(new TEvResourceBroker::TEvResourceBrokerRequest);
@@ -651,8 +651,8 @@ private:
             hFunc(TEvResourceBroker::TEvConfigResponse, HandleWork);
             hFunc(TEvResourceBroker::TEvResourceBrokerResponse, HandleWork);
             hFunc(TEvTenantPool::TEvTenantPoolStatus, HandleWork);
-            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleWork);
-            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleWork);
+            hFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleWork);
+            hFunc(NConsole::NEvConsole::TEvConfigNotificationRequest, HandleWork);
             hFunc(TEvents::TEvUndelivered, HandleWork);
             hFunc(TEvents::TEvPoison, HandleWork);
             hFunc(NMon::TEvHttpInfo, HandleWork);
@@ -742,13 +742,13 @@ private:
         PublishResourceUsage("tenant updated");
     }
 
-    static void HandleWork(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
+    static void HandleWork(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
         LOG_D("Subscribed for config changes");
     }
 
-    void HandleWork(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    void HandleWork(NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto& event = ev->Get()->Record;
-        Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(event), IEventHandle::FlagTrackDelivery, ev->Cookie);
+        Send(ev->Sender, new NConsole::NEvConsole::TEvConfigNotificationResponse(event), IEventHandle::FlagTrackDelivery, ev->Cookie);
 
         auto& config = *event.MutableConfig()->MutableTableServiceConfig()->MutableResourceManager();
         ResourceManager->UpdatePatternCache(config.GetKqpPatternCacheCapacityBytes(),
@@ -779,11 +779,11 @@ private:
 
     static void HandleWork(TEvents::TEvUndelivered::TPtr& ev) {
         switch (ev->Get()->SourceType) {
-            case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
+            case NConsole::NEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
                 LOG_C("Failed to deliver subscription request to config dispatcher");
                 break;
 
-            case NConsole::TEvConsole::EvConfigNotificationResponse:
+            case NConsole::NEvConsole::EvConfigNotificationResponse:
                 LOG_E("Failed to deliver config notification response");
                 break;
 

@@ -230,7 +230,7 @@ void TFixture::SetUp(NUnitTest::TTestContext&)
 
 void TFixture::NotifySchemeShard(const TFeatureFlags& flags)
 {
-    auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+    auto request = std::make_unique<NConsole::NEvConsole::TEvConfigNotificationRequest>();
     *request->Record.MutableConfig() = *Setup->GetServer().ServerSettings.AppConfig;
     request->Record.MutableConfig()->MutableFeatureFlags()->SetEnablePQConfigTransactionsAtSchemeShard(flags.EnablePQConfigTransactionsAtSchemeShard);
 
@@ -240,7 +240,7 @@ void TFixture::NotifySchemeShard(const TFeatureFlags& flags)
     ui64 ssId = GetSchemeShardTabletId(actorId);
 
     runtime.SendToPipe(ssId, actorId, request.release());
-    runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>();
+    runtime.GrabEdgeEvent<NConsole::NEvConsole::TEvConfigNotificationResponse>();
 }
 
 NTable::TSession TFixture::CreateTableSession()

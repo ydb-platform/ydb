@@ -12,8 +12,8 @@ struct TDebugEvent {
 };
 
 template <>
-struct TDebugEvent<TEvPrivate::TEvOperationPlan> {
-    static TString ToString(const TEvPrivate::TEvOperationPlan::TPtr& ev) {
+struct TDebugEvent<NEvPrivate::TEvOperationPlan> {
+    static TString ToString(const NEvPrivate::TEvOperationPlan::TPtr& ev) {
         return TStringBuilder() << "TEvOperationPlan {"
                                 << " StepId: " << ev->Get()->StepId
                                 << " TxId: " << ev->Get()->TxId
@@ -22,29 +22,29 @@ struct TDebugEvent<TEvPrivate::TEvOperationPlan> {
 };
 
 template <>
-struct TDebugEvent<TEvPrivate::TEvCompletePublication> {
-    static TString ToString(const TEvPrivate::TEvCompletePublication::TPtr& ev) {
+struct TDebugEvent<NEvPrivate::TEvCompletePublication> {
+    static TString ToString(const NEvPrivate::TEvCompletePublication::TPtr& ev) {
         return ev->Get()->ToString();
     }
 };
 
 template <>
-struct TDebugEvent<TEvPrivate::TEvCompleteBarrier> {
-    static TString ToString(const TEvPrivate::TEvCompleteBarrier::TPtr& ev) {
+struct TDebugEvent<NEvPrivate::TEvCompleteBarrier> {
+    static TString ToString(const NEvPrivate::TEvCompleteBarrier::TPtr& ev) {
         return ev->Get()->ToString();
     }
 };
 
 template <>
-struct TDebugEvent<TEvPrivate::TEvCommitTenantUpdate> {
-    static TString ToString(const TEvPrivate::TEvCommitTenantUpdate::TPtr&) {
+struct TDebugEvent<NEvPrivate::TEvCommitTenantUpdate> {
+    static TString ToString(const NEvPrivate::TEvCommitTenantUpdate::TPtr&) {
         return "TEvCommitTenantUpdate { }";
     }
 };
 
 template <>
-struct TDebugEvent<TEvPrivate::TEvUndoTenantUpdate> {
-    static TString ToString(const TEvPrivate::TEvUndoTenantUpdate::TPtr&) {
+struct TDebugEvent<NEvPrivate::TEvUndoTenantUpdate> {
+    static TString ToString(const NEvPrivate::TEvUndoTenantUpdate::TPtr&) {
         return "TEvUndoTenantUpdate { }";
     }
 };
@@ -152,7 +152,7 @@ ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& resul
         }
 
         for (auto& [implName, implPathId] : child.Base()->GetChildren()) {
-            Y_ABORT_UNLESS(NTableIndex::IsImplTable(implName) 
+            Y_ABORT_UNLESS(NTableIndex::IsImplTable(implName)
                         || implName == "streamImpl"
                 , "unexpected name %s", implName.c_str());
 

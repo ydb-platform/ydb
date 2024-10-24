@@ -33,7 +33,7 @@ using NTabletFlatExecutor::TTabletExecutedFlat;
 using NTabletFlatExecutor::ITransaction;
 using NTabletFlatExecutor::TTransactionBase;
 using NTabletFlatExecutor::TTransactionContext;
-namespace TEvSchemeShard = NSchemeShard::TEvSchemeShard;
+namespace NEvSchemeShard = NSchemeShard::NEvSchemeShard;
 using NTenantSlotBroker::TEvTenantSlotBroker;
 using NTenantSlotBroker::TSlotDescription;
 using ::NMonitoring::TDynamicCounterPtr;
@@ -719,10 +719,10 @@ public:
     class TTxUpdateTenantState;
     class TTxUpdateTenantPoolConfig;
 
-    ITransaction *CreateTxAlterTenant(TEvConsole::TEvAlterTenantRequest::TPtr &ev);
-    ITransaction *CreateTxCreateTenant(TEvConsole::TEvCreateTenantRequest::TPtr &ev);
+    ITransaction *CreateTxAlterTenant(NEvConsole::TEvAlterTenantRequest::TPtr &ev);
+    ITransaction *CreateTxCreateTenant(NEvConsole::TEvCreateTenantRequest::TPtr &ev);
     ITransaction *CreateTxRemoveComputationalUnits(TTenant::TPtr tenant);
-    ITransaction *CreateTxRemoveTenant(TEvConsole::TEvRemoveTenantRequest::TPtr &ev);
+    ITransaction *CreateTxRemoveTenant(NEvConsole::TEvRemoveTenantRequest::TPtr &ev);
     ITransaction *CreateTxRemoveTenantDone(TTenant::TPtr tenant);
     ITransaction *CreateTxRemoveTenantFailed(TTenant::TPtr tenant,
                                              Ydb::StatusIds::StatusCode code);
@@ -743,7 +743,7 @@ public:
     ITransaction *CreateTxRevertPoolState(TTenant::TPtr tenant,
                                           TStoragePool::TPtr pool,
                                           TActorId worker);
-    ITransaction *CreateTxUpdateTenantPoolConfig(TEvConsole::TEvUpdateTenantPoolConfig::TPtr &ev);
+    ITransaction *CreateTxUpdateTenantPoolConfig(NEvConsole::TEvUpdateTenantPoolConfig::TPtr &ev);
 
     void ClearState();
     void SetConfig(const NKikimrConsole::TTenantsConfig &config);
@@ -915,15 +915,15 @@ public:
                                 TTransactionContext &txc,
                                 const TActorContext &ctx);
 
-    void Handle(TEvConsole::TEvAlterTenantRequest::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvConsole::TEvCreateTenantRequest::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvConsole::TEvDescribeTenantOptionsRequest::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvConsole::TEvGetOperationRequest::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvConsole::TEvGetTenantStatusRequest::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvConsole::TEvListTenantsRequest::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvConsole::TEvNotifyOperationCompletionRequest::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvConsole::TEvRemoveTenantRequest::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvConsole::TEvUpdateTenantPoolConfig::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvConsole::TEvAlterTenantRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvConsole::TEvCreateTenantRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvConsole::TEvDescribeTenantOptionsRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvConsole::TEvGetOperationRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvConsole::TEvGetTenantStatusRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvConsole::TEvListTenantsRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvConsole::TEvNotifyOperationCompletionRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvConsole::TEvRemoveTenantRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvConsole::TEvUpdateTenantPoolConfig::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvPoolAllocated::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvPoolDeleted::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvPoolFailed::TPtr &ev, const TActorContext &ctx);
@@ -943,15 +943,15 @@ public:
     {
         TRACE_EVENT(NKikimrServices::CMS_TENANTS);
         switch (ev->GetTypeRewrite()) {
-            HFuncTraced(TEvConsole::TEvAlterTenantRequest, Handle);
-            HFuncTraced(TEvConsole::TEvCreateTenantRequest, Handle);
-            HFuncTraced(TEvConsole::TEvDescribeTenantOptionsRequest, Handle);
-            HFuncTraced(TEvConsole::TEvGetOperationRequest, Handle);
-            HFuncTraced(TEvConsole::TEvGetTenantStatusRequest, Handle);
-            HFuncTraced(TEvConsole::TEvListTenantsRequest, Handle);
-            HFuncTraced(TEvConsole::TEvNotifyOperationCompletionRequest, Handle);
-            HFuncTraced(TEvConsole::TEvRemoveTenantRequest, Handle);
-            HFuncTraced(TEvConsole::TEvUpdateTenantPoolConfig, Handle);
+            HFuncTraced(NEvConsole::TEvAlterTenantRequest, Handle);
+            HFuncTraced(NEvConsole::TEvCreateTenantRequest, Handle);
+            HFuncTraced(NEvConsole::TEvDescribeTenantOptionsRequest, Handle);
+            HFuncTraced(NEvConsole::TEvGetOperationRequest, Handle);
+            HFuncTraced(NEvConsole::TEvGetTenantStatusRequest, Handle);
+            HFuncTraced(NEvConsole::TEvListTenantsRequest, Handle);
+            HFuncTraced(NEvConsole::TEvNotifyOperationCompletionRequest, Handle);
+            HFuncTraced(NEvConsole::TEvRemoveTenantRequest, Handle);
+            HFuncTraced(NEvConsole::TEvUpdateTenantPoolConfig, Handle);
             HFuncTraced(TEvPrivate::TEvStateLoaded, Handle);
             HFuncTraced(TEvPrivate::TEvPoolAllocated, Handle);
             HFuncTraced(TEvPrivate::TEvPoolDeleted, Handle);

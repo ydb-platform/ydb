@@ -70,8 +70,8 @@ public:
     }
 
 private:
-    void HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev);
-    void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
+    void HandleConfig(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev);
+    void HandleConfig(NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr& ev);
     void HandleProxyService(TEvTxUserProxy::TEvGetProxyServicesResponse::TPtr& ev);
     void HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev);
     void HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev, const TActorContext& ctx);
@@ -335,7 +335,7 @@ void TGRpcRequestProxyImpl::Bootstrap(const TActorContext& ctx) {
     // Subscribe for TableService config changes
     ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;
     Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-         new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
+         new NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
          IEventHandle::FlagTrackDelivery);
 
     Send(MakeTxProxyID(), new TEvTxUserProxy::TEvGetProxyServicesRequest);
@@ -380,18 +380,18 @@ void TGRpcRequestProxyImpl::ReplayEvents(const TString& databaseName, const TAct
     }
 }
 
-void TGRpcRequestProxyImpl::HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
+void TGRpcRequestProxyImpl::HandleConfig(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
     LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Subscribed for config changes");
 }
 
-void TGRpcRequestProxyImpl::HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+void TGRpcRequestProxyImpl::HandleConfig(NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
     auto &event = ev->Get()->Record;
 
     ChannelBufferSize.store(
         event.GetConfig().GetTableServiceConfig().GetResourceManager().GetChannelBufferSize());
     LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Updated app config");
 
-    auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
+    auto responseEv = MakeHolder<NConsole::NEvConsole::TEvConfigNotificationResponse>(event);
     Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
 }
 
@@ -403,11 +403,11 @@ void TGRpcRequestProxyImpl::HandleProxyService(TEvTxUserProxy::TEvGetProxyServic
 
 void TGRpcRequestProxyImpl::HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) {
     switch (ev->Get()->SourceType) {
-        case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
+        case NConsole::NEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
             LOG_CRIT(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
                 "Failed to deliver subscription request to config dispatcher");
             break;
-        case NConsole::TEvConsole::EvConfigNotificationResponse:
+        case NConsole::NEvConsole::EvConfigNotificationResponse:
             LOG_ERROR(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
                 "Failed to deliver config notification response");
             break;
@@ -576,8 +576,8 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {
     // handle internal events
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvTxUserProxy::TEvGetProxyServicesResponse, HandleProxyService);
-        hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleConfig);
-        hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig);
+        hFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleConfig);
+        hFunc(NConsole::NEvConsole::TEvConfigNotificationRequest, HandleConfig);
         hFunc(TEvents::TEvUndelivered, HandleUndelivery);
         HFunc(TSchemeBoardEvents::TEvNotifyUpdate, HandleSchemeBoard);
         hFunc(TSchemeBoardEvents::TEvNotifyDelete, HandleSchemeBoard);

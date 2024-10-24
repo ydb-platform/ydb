@@ -69,7 +69,7 @@ public:
         if (!Pipe)
             OpenPipe(ctx);
 
-        auto request = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
+        auto request = MakeHolder<NEvConsole::TEvConfigNotificationRequest>();
         request->Record.SetSubscriptionId(Subscription->Id);
         Subscription->CurrentConfigId.Serialize(*request->Record.MutableConfigId());
         request->Record.MutableConfig()->CopyFrom(Subscription->CurrentConfig);
@@ -96,7 +96,7 @@ public:
                         TimeoutTimerCookieHolder.Get());
     }
 
-    void Handle(TEvConsole::TEvConfigNotificationResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NEvConsole::TEvConfigNotificationResponse::TPtr& ev, const TActorContext& ctx) {
         ctx.Send(ev->Forward(OwnerId));
         Die(ctx);
     }
@@ -136,7 +136,7 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvConsole::TEvConfigNotificationResponse, Handle);
+            HFunc(NEvConsole::TEvConfigNotificationResponse, Handle);
             HFunc(TEvents::TEvPoisonPill, Handle);
             HFunc(TConfigsProvider::TEvPrivate::TEvNotificationTimeout, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
@@ -187,7 +187,7 @@ public:
 
     void SendNotifyRequest(const TActorContext &ctx)
     {
-        auto request = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
+        auto request = MakeHolder<NEvConsole::TEvConfigNotificationRequest>();
         request->Record.SetSubscriptionId(Subscription->Id);
         Subscription->CurrentConfigId.Serialize(*request->Record.MutableConfigId());
         request->Record.MutableConfig()->CopyFrom(Subscription->CurrentConfig);
@@ -218,7 +218,7 @@ public:
                         TimeoutTimerCookieHolder.Get());
     }
 
-    void Handle(TEvConsole::TEvConfigNotificationResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NEvConsole::TEvConfigNotificationResponse::TPtr& ev, const TActorContext& ctx) {
         ctx.Send(ev->Forward(OwnerId));
         Die(ctx);
     }
@@ -274,7 +274,7 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvConsole::TEvConfigNotificationResponse, Handle);
+            HFunc(NEvConsole::TEvConfigNotificationResponse, Handle);
             HFunc(TEvents::TEvPoisonPill, Handle);
             HFunc(TEvents::TEvUndelivered, Handle);
             CFunc(TEvents::TSystem::Wakeup, SendNotifyRequest);
@@ -311,7 +311,7 @@ public:
         LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
                     "TSubscriptionClientSender(" << Subscription->Subscriber.ToString() << ") send TEvConfigSubscriptionResponse");
 
-        Send(Subscription->Subscriber, new TEvConsole::TEvConfigSubscriptionResponse(Subscription->Generation, Ydb::StatusIds::SUCCESS),
+        Send(Subscription->Subscriber, new NEvConsole::TEvConfigSubscriptionResponse(Subscription->Generation, Ydb::StatusIds::SUCCESS),
              IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
         Become(&TThis::StateWork);
     }
@@ -320,7 +320,7 @@ public:
         TRACE_EVENT(NKikimrServices::CMS_CONFIGS);
 
         switch (ev->GetTypeRewrite()) {
-            HFuncTraced(TEvConsole::TEvConfigSubscriptionNotification, Handle);
+            HFuncTraced(NEvConsole::TEvConfigSubscriptionNotification, Handle);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
             HFuncTraced(TEvents::TEvUndelivered, Handle);
             HFuncTraced(TEvInterconnect::TEvNodeDisconnected, Handle);
@@ -361,9 +361,9 @@ public:
         Die(ctx);
     }
 
-    void Handle(NConsole::TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev, const TActorContext& ctx)
+    void Handle(NConsole::NEvConsole::TEvConfigSubscriptionNotification::TPtr &ev, const TActorContext& ctx)
     {
-        TAutoPtr<NConsole::TEvConsole::TEvConfigSubscriptionNotification> notification = ev->Release();
+        TAutoPtr<NConsole::NEvConsole::TEvConfigSubscriptionNotification> notification = ev->Release();
         notification.Get()->Record.SetOrder(NextOrder++);
 
         LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
@@ -399,7 +399,7 @@ void TConfigsProvider::Bootstrap(const TActorContext &ctx)
 void TConfigsProvider::Die(const TActorContext &ctx)
 {
     for (auto &it : InMemoryIndex.GetSubscriptions()) {
-        Send(it.second->Subscriber, new TEvConsole::TEvConfigSubscriptionCanceled(it.second->Generation));
+        Send(it.second->Subscriber, new NEvConsole::TEvConfigSubscriptionCanceled(it.second->Generation));
         Send(it.second->Worker, new TEvents::TEvPoisonPill());
     }
 
@@ -678,7 +678,7 @@ void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
     NKikimrConfig::TAppConfig appConfig;
     config->ComputeConfig(affectedKinds, appConfig, true);
 
-    auto request = MakeHolder<TEvConsole::TEvConfigSubscriptionNotification>(
+    auto request = MakeHolder<NEvConsole::TEvConfigSubscriptionNotification>(
             subscription->Generation,
             std::move(appConfig),
             affectedKinds);
@@ -775,7 +775,7 @@ void TConfigsProvider::Handle(NMon::TEvHttpInfo::TPtr &ev)
     Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
 }
 
-void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsProvider::Handle(NEvConsole::TEvConfigSubscriptionRequest::TPtr &ev, const TActorContext &ctx)
 {
     auto subscriber = ev->Sender;
     auto &rec = ev->Get()->Record;
@@ -826,7 +826,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev
     CheckSubscription(subscription, ctx);
 }
 
-void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionCanceled::TPtr &ev, const TActorContext &ctx)
+void TConfigsProvider::Handle(NEvConsole::TEvConfigSubscriptionCanceled::TPtr &ev, const TActorContext &ctx)
 {
     auto subscriber = ev->Sender;
     auto &rec = ev->Get()->Record;
@@ -851,18 +851,18 @@ void TConfigsProvider::Handle(TEvPrivate::TEvWorkerDisconnected::TPtr &ev, const
     auto existing = InMemoryIndex.GetSubscription(subscription->Subscriber);
     if (existing == subscription) {
         InMemoryIndex.RemoveSubscription(subscription->Subscriber);
-        Send(subscription->Subscriber, new TEvConsole::TEvConfigSubscriptionCanceled(subscription->Generation));
+        Send(subscription->Subscriber, new NEvConsole::TEvConfigSubscriptionCanceled(subscription->Generation));
 
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "TConfigsProvider removed subscription "
                     << subscription->Subscriber<< ":" << subscription->Generation << " (subscription worker died)");
     }
 }
 
-void TConfigsProvider::Handle(TEvConsole::TEvCheckConfigUpdatesRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsProvider::Handle(NEvConsole::TEvCheckConfigUpdatesRequest::TPtr &ev, const TActorContext &ctx)
 {
     auto &rec = ev->Get()->Record;
 
-    auto response = MakeHolder<TEvConsole::TEvCheckConfigUpdatesResponse>();
+    auto response = MakeHolder<NEvConsole::TEvCheckConfigUpdatesResponse>();
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
     THashSet<ui64> base;
@@ -893,11 +893,11 @@ void TConfigsProvider::Handle(TEvConsole::TEvCheckConfigUpdatesRequest::TPtr &ev
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
 
-void TConfigsProvider::Handle(TEvConsole::TEvGetConfigItemsRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsProvider::Handle(NEvConsole::TEvGetConfigItemsRequest::TPtr &ev, const TActorContext &ctx)
 {
     auto &rec = ev->Get()->Record;
 
-    auto response = MakeHolder<TEvConsole::TEvGetConfigItemsResponse>();
+    auto response = MakeHolder<NEvConsole::TEvGetConfigItemsResponse>();
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
     THashSet<ui32> kinds;
@@ -986,7 +986,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetConfigItemsRequest::TPtr &ev, co
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
 
-void TConfigsProvider::Handle(TEvConsole::TEvConfigNotificationResponse::TPtr &ev, const TActorContext &ctx)
+void TConfigsProvider::Handle(NEvConsole::TEvConfigNotificationResponse::TPtr &ev, const TActorContext &ctx)
 {
     auto &rec = ev->Get()->Record;
     auto subscription = SubscriptionIndex.GetSubscription(rec.GetSubscriptionId());
@@ -1015,10 +1015,10 @@ void TConfigsProvider::Handle(TEvConsole::TEvConfigNotificationResponse::TPtr &e
     ctx.Send(ev->Forward(ConfigsManager));
 }
 
-void TConfigsProvider::Handle(TEvConsole::TEvGetConfigSubscriptionRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsProvider::Handle(NEvConsole::TEvGetConfigSubscriptionRequest::TPtr &ev, const TActorContext &ctx)
 {
     ui64 id = ev->Get()->Record.GetSubscriptionId();
-    auto resp = MakeHolder<TEvConsole::TEvGetConfigSubscriptionResponse>();
+    auto resp = MakeHolder<NEvConsole::TEvGetConfigSubscriptionResponse>();
     auto subscription = SubscriptionIndex.GetSubscription(id);
     if (subscription) {
         resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
@@ -1034,11 +1034,11 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetConfigSubscriptionRequest::TPtr 
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
 
-void TConfigsProvider::Handle(TEvConsole::TEvGetNodeConfigItemsRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsProvider::Handle(NEvConsole::TEvGetNodeConfigItemsRequest::TPtr &ev, const TActorContext &ctx)
 {
     auto &rec = ev->Get()->Record;
 
-    auto response = MakeHolder<TEvConsole::TEvGetNodeConfigItemsResponse>();
+    auto response = MakeHolder<NEvConsole::TEvGetNodeConfigItemsResponse>();
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
     THashSet<ui32> kinds;
@@ -1057,11 +1057,11 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetNodeConfigItemsRequest::TPtr &ev
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
 
-void TConfigsProvider::Handle(TEvConsole::TEvGetNodeConfigRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsProvider::Handle(NEvConsole::TEvGetNodeConfigRequest::TPtr &ev, const TActorContext &ctx)
 {
     auto &rec = ev->Get()->Record;
 
-    auto response = MakeHolder<TEvConsole::TEvGetNodeConfigResponse>();
+    auto response = MakeHolder<NEvConsole::TEvGetNodeConfigResponse>();
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
     THashSet<ui32> kinds;
@@ -1104,11 +1104,11 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetNodeConfigRequest::TPtr &ev, con
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
 
-void TConfigsProvider::Handle(TEvConsole::TEvListConfigSubscriptionsRequest::TPtr &ev, const TActorContext &ctx)
+void TConfigsProvider::Handle(NEvConsole::TEvListConfigSubscriptionsRequest::TPtr &ev, const TActorContext &ctx)
 {
     auto &rec = ev->Get()->Record;
 
-    auto response = MakeHolder<TEvConsole::TEvListConfigSubscriptionsResponse>();
+    auto response = MakeHolder<NEvConsole::TEvListConfigSubscriptionsResponse>();
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
     if (rec.HasSubscriber()) {
@@ -1239,7 +1239,7 @@ void TConfigsProvider::Handle(TEvPrivate::TEvUpdateYamlConfig::TPtr &ev, const T
 
     for (auto &[_, subscription] : InMemoryIndex.GetSubscriptions()) {
         if (subscription->ServeYaml) {
-            auto request = MakeHolder<TEvConsole::TEvConfigSubscriptionNotification>(
+            auto request = MakeHolder<NEvConsole::TEvConfigSubscriptionNotification>(
                     subscription->Generation,
                     NKikimrConfig::TAppConfig{},
                     THashSet<ui32>{});

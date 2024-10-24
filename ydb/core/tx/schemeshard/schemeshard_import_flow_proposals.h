@@ -5,7 +5,7 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
+THolder<NEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     TSchemeShard* ss,
     TTxId txId,
     TImportInfo::TPtr importInfo,
@@ -13,21 +13,21 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     TString& error
 );
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
+THolder<NEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     TSchemeShard* ss,
     TTxId txId,
     TImportInfo::TPtr importInfo,
     ui32 itemIdx
 );
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
+THolder<NEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
     TSchemeShard* ss,
     TTxId txId,
     TImportInfo::TPtr importInfo,
     ui32 itemIdx
 );
 
-THolder<TEvSchemeShard::TEvCancelTx> CancelRestorePropose(
+THolder<NEvSchemeShard::TEvCancelTx> CancelRestorePropose(
     TImportInfo::TPtr importInfo,
     TTxId restoreTxId
 );

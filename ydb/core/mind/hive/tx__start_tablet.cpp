@@ -105,7 +105,7 @@ public:
             // Always send some reply for external start requests
             BLOG_W("THive::TTxStartTablet::Execute, Aborting external boot of " << TabletId.first << "." << TabletId.second);
             SideEffects.Send(Local,
-                     new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::ERROR),
+                     new NEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::ERROR),
                      0,
                      Cookie);
         }

@@ -27,8 +27,8 @@ NOperationQueue::EStartStatus TSchemeShard::StartBorrowedCompaction(const TShard
         << ", running# " << BorrowedCompactionQueue->RunningSize() << " shards"
         << " at schemeshard " << TabletID());
 
-    std::unique_ptr<TEvDataShard::TEvCompactBorrowed> request(
-        new TEvDataShard::TEvCompactBorrowed(pathId.OwnerId, pathId.LocalPathId));
+    std::unique_ptr<NEvDataShard::TEvCompactBorrowed> request(
+        new NEvDataShard::TEvCompactBorrowed(pathId.OwnerId, pathId.LocalPathId));
 
     RunningBorrowedCompactions[shardIdx] = PipeClientCache->Send(
         ctx,
@@ -119,7 +119,7 @@ void TSchemeShard::UpdateBorrowedCompactionQueueMetrics() {
     TabletCounters->Simple()[COUNTER_BORROWED_COMPACTION_QUEUE_RUNNING].Set(BorrowedCompactionQueue->RunningSize());
 }
 
-void TSchemeShard::Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, const TActorContext &ctx) {
+void TSchemeShard::Handle(NEvDataShard::TEvCompactBorrowedResult::TPtr &ev, const TActorContext &ctx) {
     const auto& record = ev->Get()->Record;
 
     const TTabletId tabletId(record.GetTabletId());

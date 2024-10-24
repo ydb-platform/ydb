@@ -10,11 +10,11 @@ namespace NSchemeShard {
 using namespace NTabletFlatExecutor;
 
 struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
-    TEvSchemeShard::TEvLogin::TPtr Request;
+    NEvSchemeShard::TEvLogin::TPtr Request;
     TPathId SubDomainPathId;
     bool NeedPublishOnComplete = false;
 
-    TTxLogin(TSelf *self, TEvSchemeShard::TEvLogin::TPtr &ev)
+    TTxLogin(TSelf *self, NEvSchemeShard::TEvLogin::TPtr &ev)
         : TRwTxBase(self)
         , Request(std::move(ev))
     {}
@@ -75,7 +75,7 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
             Self->PublishToSchemeBoard(TTxId(), {SubDomainPathId}, ctx);
         }
 
-        THolder<TEvSchemeShard::TEvLoginResult> result = MakeHolder<TEvSchemeShard::TEvLoginResult>();
+        THolder<NEvSchemeShard::TEvLoginResult> result = MakeHolder<NEvSchemeShard::TEvLoginResult>();
         const auto& loginRequest = GetLoginRequest();
         if (loginRequest.ExternalAuth || AppData(ctx)->AuthConfig.GetEnableLoginAuthentication()) {
             NLogin::TLoginProvider::TLoginUserResponse loginResponse = Self->LoginProvider.LoginUser(loginRequest);
@@ -102,7 +102,7 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
 
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxLogin(TEvSchemeShard::TEvLogin::TPtr &ev) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxLogin(NEvSchemeShard::TEvLogin::TPtr &ev) {
     return new TTxLogin(this, ev);
 }
 

@@ -17,7 +17,7 @@ class TTenantsManager::TTxCreateTenant : public TTransactionBase<TTenantsManager
     }
 
 public:
-    TTxCreateTenant(TEvConsole::TEvCreateTenantRequest::TPtr ev, TTenantsManager *self)
+    TTxCreateTenant(NEvConsole::TEvCreateTenantRequest::TPtr ev, TTenantsManager *self)
         : TBase(self)
         , Path(CanonizePath(ev->Get()->Record.GetRequest().path()))
         , Request(std::move(ev))
@@ -68,7 +68,7 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "TTxCreateTenant: "
                     << Request->Get()->Record.ShortDebugString());
 
-        Response = new TEvConsole::TEvCreateTenantResponse;
+        Response = new NEvConsole::TEvCreateTenantResponse;
 
         if (!Self->CheckAccess(token, code, error, ctx))
             return Error(code, error, ctx);
@@ -339,12 +339,12 @@ public:
 
 private:
     TString Path;
-    TEvConsole::TEvCreateTenantRequest::TPtr Request;
-    TAutoPtr<TEvConsole::TEvCreateTenantResponse> Response;
+    NEvConsole::TEvCreateTenantRequest::TPtr Request;
+    TAutoPtr<NEvConsole::TEvCreateTenantResponse> Response;
     TTenant::TPtr Tenant;
 };
 
-ITransaction *TTenantsManager::CreateTxCreateTenant(TEvConsole::TEvCreateTenantRequest::TPtr &ev)
+ITransaction *TTenantsManager::CreateTxCreateTenant(NEvConsole::TEvCreateTenantRequest::TPtr &ev)
 {
     return new TTxCreateTenant(ev, this);
 }

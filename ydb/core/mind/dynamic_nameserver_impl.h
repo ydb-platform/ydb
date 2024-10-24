@@ -212,8 +212,8 @@ public:
             HFunc(NMon::TEvHttpInfo, Handle);
             hFunc(TEvents::TEvUnsubscribe, Handle);
 
-            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
-            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+            hFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
+            hFunc(NConsole::NEvConsole::TEvConfigNotificationRequest, Handle);
 
             hFunc(TEvNodeWardenStorageConfig, Handle);
         }
@@ -249,8 +249,8 @@ private:
     void Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev, const TActorContext &ctx);
     void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx);
 
-    void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr ev);
-    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr ev);
+    void Handle(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr ev);
+    void Handle(NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr ev);
 
     void Handle(TEvents::TEvUnsubscribe::TPtr ev);
 

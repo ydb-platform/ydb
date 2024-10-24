@@ -10,7 +10,7 @@ struct TKesusTablet::TTxQuoterResourceAdd : public TTxBase {
     const ui64 Cookie;
     NKikimrKesus::TEvAddQuoterResource Record;
 
-    THolder<TEvKesus::TEvAddQuoterResourceResult> Reply;
+    THolder<NEvKesus::TEvAddQuoterResourceResult> Reply;
 
     TTxQuoterResourceAdd(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvAddQuoterResource& record)
         : TTxBase(self)
@@ -26,7 +26,7 @@ struct TKesusTablet::TTxQuoterResourceAdd : public TTxBase {
         NKikimrKesus::TEvAddQuoterResourceResult result;
         result.SetResourceId(quoterResourceId);
         result.MutableError()->SetStatus(Ydb::StatusIds::SUCCESS);
-        Reply = MakeHolder<TEvKesus::TEvAddQuoterResourceResult>(result);
+        Reply = MakeHolder<NEvKesus::TEvAddQuoterResourceResult>(result);
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -38,14 +38,14 @@ struct TKesusTablet::TTxQuoterResourceAdd : public TTxBase {
         const auto& resourceDesc = Record.GetResource();
         if (const TQuoterResourceTree* resource = Self->QuoterResources.FindPath(resourceDesc.GetResourcePath())) {
             if (NProtoBuf::IsEqual(resource->GetProps().GetHierarchicalDRRResourceConfig(), resourceDesc.GetHierarchicalDRRResourceConfig())) {
-                THolder<TEvKesus::TEvAddQuoterResourceResult> reply =
-                    MakeHolder<TEvKesus::TEvAddQuoterResourceResult>(
+                THolder<NEvKesus::TEvAddQuoterResourceResult> reply =
+                    MakeHolder<NEvKesus::TEvAddQuoterResourceResult>(
                         Ydb::StatusIds::ALREADY_EXISTS,
                         "Resource already exists and has same settings.");
                 reply->Record.SetResourceId(resource->GetResourceId());
                 Reply = std::move(reply);
             } else {
-                Reply = MakeHolder<TEvKesus::TEvAddQuoterResourceResult>(
+                Reply = MakeHolder<NEvKesus::TEvAddQuoterResourceResult>(
                     Ydb::StatusIds::BAD_REQUEST,
                     "Resource already exists and has different settings.");
             }
@@ -57,7 +57,7 @@ struct TKesusTablet::TTxQuoterResourceAdd : public TTxBase {
         TString errorMessage;
         TQuoterResourceTree* resource = Self->QuoterResources.AddResource(Self->NextQuoterResourceId, Record.GetResource(), errorMessage);
         if (!resource) {
-            Reply = MakeHolder<TEvKesus::TEvAddQuoterResourceResult>(
+            Reply = MakeHolder<NEvKesus::TEvAddQuoterResourceResult>(
                     Ydb::StatusIds::BAD_REQUEST,
                     errorMessage);
             return true;
@@ -89,14 +89,14 @@ struct TKesusTablet::TTxQuoterResourceAdd : public TTxBase {
     }
 };
 
-void TKesusTablet::Handle(TEvKesus::TEvAddQuoterResource::TPtr& ev) {
+void TKesusTablet::Handle(NEvKesus::TEvAddQuoterResource::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     TabletCounters->Cumulative()[COUNTER_REQS_QUOTER_RESOURCE_ADD].Increment(1);
 
     const auto& resourceDesc = record.GetResource();
     if (!TQuoterResources::IsResourcePathValid(resourceDesc.GetResourcePath())) {
         Send(ev->Sender,
-            new TEvKesus::TEvAddQuoterResourceResult(
+            new NEvKesus::TEvAddQuoterResourceResult(
                 Ydb::StatusIds::BAD_REQUEST,
                 "Invalid resource path."),
             0, ev->Cookie);
@@ -105,7 +105,7 @@ void TKesusTablet::Handle(TEvKesus::TEvAddQuoterResource::TPtr& ev) {
 
     if (!resourceDesc.HasHierarchicalDRRResourceConfig()) {
         Send(ev->Sender,
-            new TEvKesus::TEvAddQuoterResourceResult(
+            new NEvKesus::TEvAddQuoterResourceResult(
                 Ydb::StatusIds::BAD_REQUEST,
                 "Not supported resource type. Today's only supported resource type is hierarchical DRR resource."),
             0, ev->Cookie);
@@ -114,7 +114,7 @@ void TKesusTablet::Handle(TEvKesus::TEvAddQuoterResource::TPtr& ev) {
 
     if (resourceDesc.GetResourceId()) {
         Send(ev->Sender,
-            new TEvKesus::TEvAddQuoterResourceResult(
+            new NEvKesus::TEvAddQuoterResourceResult(
                 Ydb::StatusIds::BAD_REQUEST,
                 "ResourceId specified."),
             0, ev->Cookie);

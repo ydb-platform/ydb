@@ -5,7 +5,7 @@ namespace NSchemeShard {
 
 class TTxFindTabletSubDomainPathId : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
 public:
-    TTxFindTabletSubDomainPathId(TSchemeShard* self, TEvSchemeShard::TEvFindTabletSubDomainPathId::TPtr& ev)
+    TTxFindTabletSubDomainPathId(TSchemeShard* self, NEvSchemeShard::TEvFindTabletSubDomainPathId::TPtr& ev)
         : TTransactionBase(self)
         , Ev(ev)
     { }
@@ -21,7 +21,7 @@ public:
 
         auto it1 = Self->TabletIdToShardIdx.find(TTabletId(tabletId));
         if (it1 == Self->TabletIdToShardIdx.end()) {
-            Result = MakeHolder<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(
+            Result = MakeHolder<NEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(
                 tabletId, NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SHARD_NOT_FOUND);
             return true;
         }
@@ -29,7 +29,7 @@ public:
         auto shardIdx = it1->second;
         auto it2 = Self->ShardInfos.find(shardIdx);
         if (it2 == Self->ShardInfos.end()) {
-            Result = MakeHolder<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(
+            Result = MakeHolder<NEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(
                 tabletId, NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SHARD_NOT_FOUND);
             return true;
         }
@@ -37,13 +37,13 @@ public:
         auto& shardInfo = it2->second;
         auto path = TPath::Init(shardInfo.PathId, Self);
         if (!path) {
-            Result = MakeHolder<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(
+            Result = MakeHolder<NEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(
                 tabletId, NKikimrScheme::TEvFindTabletSubDomainPathIdResult::PATH_NOT_FOUND);
             return true;
         }
 
         auto domainPathId = path.GetPathIdForDomain();
-        Result = MakeHolder<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(
+        Result = MakeHolder<NEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(
             tabletId, domainPathId.OwnerId, domainPathId.LocalPathId);
         return true;
     }
@@ -54,11 +54,11 @@ public:
     }
 
 private:
-    TEvSchemeShard::TEvFindTabletSubDomainPathId::TPtr Ev;
-    THolder<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult> Result;
+    NEvSchemeShard::TEvFindTabletSubDomainPathId::TPtr Ev;
+    THolder<NEvSchemeShard::TEvFindTabletSubDomainPathIdResult> Result;
 };
 
-void TSchemeShard::Handle(TEvSchemeShard::TEvFindTabletSubDomainPathId::TPtr& ev, const TActorContext& ctx) {
+void TSchemeShard::Handle(NEvSchemeShard::TEvFindTabletSubDomainPathId::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxFindTabletSubDomainPathId(this, ev), ctx);
 }
 
@@ -113,7 +113,7 @@ private:
         Timer = { };
         SchemeShardPipe = Register(NTabletPipe::CreateClient(SelfId(), SchemeShardId));
         NTabletPipe::SendData(SelfId(), SchemeShardPipe,
-            new NSchemeShard::TEvSchemeShard::TEvFindTabletSubDomainPathId(TabletId));
+            new NSchemeShard::NEvSchemeShard::TEvFindTabletSubDomainPathId(TabletId));
         Become(&TThis::StateWork);
     }
 
@@ -123,7 +123,7 @@ private:
             sFunc(TEvents::TEvPoison, PassAway);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            hFunc(NSchemeShard::TEvSchemeShard::TEvFindTabletSubDomainPathIdResult, Handle);
+            hFunc(NSchemeShard::NEvSchemeShard::TEvFindTabletSubDomainPathIdResult, Handle);
         }
     }
 
@@ -149,7 +149,7 @@ private:
         }
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvFindTabletSubDomainPathIdResult::TPtr& ev) {
+    void Handle(NSchemeShard::NEvSchemeShard::TEvFindTabletSubDomainPathIdResult::TPtr& ev) {
         const auto* msg = ev->Get();
 
         if (msg->Record.GetStatus() != NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SUCCESS) {
@@ -158,7 +158,7 @@ private:
             return;
         }
 
-        Send(Parent, new NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound(msg->Record.GetSchemeShardId(), msg->Record.GetSubDomainPathId()));
+        Send(Parent, new NSchemeShard::NEvSchemeShard::TEvSubDomainPathIdFound(msg->Record.GetSchemeShardId(), msg->Record.GetSubDomainPathId()));
         PassAway();
     }
 

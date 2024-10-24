@@ -36,7 +36,7 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
     TActorId BootstrapperInstance;
     TString CurrentConfig;
 
-    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr &ev) {
+    void Handle(NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr &ev) {
         const auto &record = ev->Get()->Record;
 
         NKikimrConfig::TBootstrap::TTablet tabletConfig;
@@ -51,7 +51,7 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
 
         CheckChanged(tabletConfig);
 
-        Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
+        Send(ev->Sender, new NConsole::NEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
     }
 
     void CheckChanged(const NKikimrConfig::TBootstrap::TTablet &config) {
@@ -112,13 +112,13 @@ public:
 
         // and subscribe for changes
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-            new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(NKikimrConsole::TConfigItem::BootstrapConfigItem));
+            new NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(NKikimrConsole::TConfigItem::BootstrapConfigItem));
         Become(&TThis::StateWork);
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+            hFunc(NConsole::NEvConsole::TEvConfigNotificationRequest, Handle);
         }
     }
 };

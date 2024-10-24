@@ -112,7 +112,7 @@ private:
         std::optional<TYamlVersion> YamlVersion;
 
         // Config update which is currently delivered to subscribers.
-        THolder<TEvConsole::TEvConfigNotificationRequest> UpdateInProcess = nullptr;
+        THolder<NEvConsole::TEvConfigNotificationRequest> UpdateInProcess = nullptr;
         NKikimrConfig::TConfigVersion UpdateInProcessConfigVersion;
         ui64 UpdateInProcessCookie;
         std::optional<TYamlVersion> UpdateInProcessYamlVersion;
@@ -169,18 +169,18 @@ public:
 
     TDynBitMap FilterKinds(const TDynBitMap& in);
 
-    void UpdateCandidateStartupConfig(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev);
+    void UpdateCandidateStartupConfig(NEvConsole::TEvConfigSubscriptionNotification::TPtr &ev);
 
     void Handle(NMon::TEvHttpInfo::TPtr &ev);
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev);
-    void Handle(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev);
-    void Handle(TEvConsole::TEvConfigSubscriptionError::TPtr &ev);
-    void Handle(TEvConsole::TEvConfigNotificationResponse::TPtr &ev);
-    void Handle(TEvConfigsDispatcher::TEvGetConfigRequest::TPtr &ev);
-    void Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr &ev);
-    void Handle(TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest::TPtr &ev);
-    void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
-    void Handle(TEvConsole::TEvGetNodeLabelsRequest::TPtr &ev);
+    void Handle(NEvConsole::TEvConfigSubscriptionNotification::TPtr &ev);
+    void Handle(NEvConsole::TEvConfigSubscriptionError::TPtr &ev);
+    void Handle(NEvConsole::TEvConfigNotificationResponse::TPtr &ev);
+    void Handle(NEvConfigsDispatcher::TEvGetConfigRequest::TPtr &ev);
+    void Handle(NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr &ev);
+    void Handle(NEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest::TPtr &ev);
+    void Handle(NEvConsole::TEvConfigNotificationRequest::TPtr &ev);
+    void Handle(NEvConsole::TEvGetNodeLabelsRequest::TPtr &ev);
 
     void ReplyMonJson(TActorId mailbox);
 
@@ -192,13 +192,13 @@ public:
             hFuncTraced(NMon::TEvHttpInfo, Handle);
             hFuncTraced(TEvInterconnect::TEvNodesInfo, Handle);
             // Updates from console
-            hFuncTraced(TEvConsole::TEvConfigSubscriptionNotification, Handle);
-            hFuncTraced(TEvConsole::TEvConfigSubscriptionError, Handle);
+            hFuncTraced(NEvConsole::TEvConfigSubscriptionNotification, Handle);
+            hFuncTraced(NEvConsole::TEvConfigSubscriptionError, Handle);
             // Events from clients
-            hFuncTraced(TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest, Handle);
-            hFuncTraced(TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest, Handle);
+            hFuncTraced(NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest, Handle);
+            hFuncTraced(NEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest, Handle);
             // Resolve
-            hFunc(TEvConsole::TEvGetNodeLabelsRequest, Handle);
+            hFunc(NEvConsole::TEvGetNodeLabelsRequest, Handle);
         default:
             EnqueueEvent(ev);
             break;
@@ -213,22 +213,22 @@ public:
             hFuncTraced(NMon::TEvHttpInfo, Handle);
             hFuncTraced(TEvInterconnect::TEvNodesInfo, Handle);
             // Updates from console
-            hFuncTraced(TEvConsole::TEvConfigSubscriptionNotification, Handle);
-            hFuncTraced(TEvConsole::TEvConfigSubscriptionError, Handle);
+            hFuncTraced(NEvConsole::TEvConfigSubscriptionNotification, Handle);
+            hFuncTraced(NEvConsole::TEvConfigSubscriptionError, Handle);
             // Events from clients
-            hFuncTraced(TEvConfigsDispatcher::TEvGetConfigRequest, Handle);
-            hFuncTraced(TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest, Handle);
-            hFuncTraced(TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest, Handle);
-            hFuncTraced(TEvConsole::TEvConfigNotificationResponse, Handle);
-            IgnoreFunc(TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            hFuncTraced(NEvConfigsDispatcher::TEvGetConfigRequest, Handle);
+            hFuncTraced(NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest, Handle);
+            hFuncTraced(NEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest, Handle);
+            hFuncTraced(NEvConsole::TEvConfigNotificationResponse, Handle);
+            IgnoreFunc(NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
             // Resolve
-            hFunc(TEvConsole::TEvGetNodeLabelsRequest, Handle);
+            hFunc(NEvConsole::TEvGetNodeLabelsRequest, Handle);
 
             // Ignore these console requests until we get rid of persistent subscriptions-related code
-            IgnoreFunc(TEvConsole::TEvAddConfigSubscriptionResponse);
-            IgnoreFunc(TEvConsole::TEvGetNodeConfigResponse);
+            IgnoreFunc(NEvConsole::TEvAddConfigSubscriptionResponse);
+            IgnoreFunc(NEvConsole::TEvGetNodeConfigResponse);
             // Pretend we got this
-            hFuncTraced(TEvConsole::TEvConfigNotificationRequest, Handle);
+            hFuncTraced(NEvConsole::TEvConfigNotificationRequest, Handle);
         default:
             Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
@@ -329,10 +329,10 @@ void TConfigsDispatcher::SendUpdateToSubscriber(TSubscription::TPtr subscription
 
     subscription->SubscribersToUpdate.insert(subscriber);
 
-    auto notification = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
+    auto notification = MakeHolder<NEvConsole::TEvConfigNotificationRequest>();
     notification->Record.CopyFrom(subscription->UpdateInProcess->Record);
 
-    BLOG_TRACE("Send TEvConsole::TEvConfigNotificationRequest to " << subscriber
+    BLOG_TRACE("Send NEvConsole::TEvConfigNotificationRequest to " << subscriber
                 << ": " << notification->Record.ShortDebugString());
 
     Send(subscriber, notification.Release(), 0, subscription->UpdateInProcessCookie);
@@ -431,10 +431,10 @@ void TConfigsDispatcher::ReplyMonJson(TActorId mailbox) {
     Send(mailbox, new NMon::TEvHttpInfoRes(str.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
 }
 
-void TConfigsDispatcher::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev)
+void TConfigsDispatcher::Handle(NEvConsole::TEvConfigNotificationRequest::TPtr &ev)
 {
     const auto &rec = ev->Get()->Record;
-    auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
+    auto resp = MakeHolder<NEvConsole::TEvConfigNotificationResponse>(rec);
 
     BLOG_TRACE("Send TEvConfigNotificationResponse: " << resp->Record.ShortDebugString());
 
@@ -782,7 +782,7 @@ public:
     TMap<ui64, TString> VolatileYamlConfigs;
 };
 
-void TConfigsDispatcher::UpdateCandidateStartupConfig(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev)
+void TConfigsDispatcher::UpdateCandidateStartupConfig(NEvConsole::TEvConfigSubscriptionNotification::TPtr &ev)
 try {
     if (!RecordedInitialConfiguratorDeps) {
         CandidateStartupConfig = {};
@@ -856,7 +856,7 @@ catch (...) {
     *StartupConfigChanged = 1;
 }
 
-void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev)
+void TConfigsDispatcher::Handle(NEvConsole::TEvConfigSubscriptionNotification::TPtr &ev)
 {
     auto &rec = ev->Get()->Record;
 
@@ -943,7 +943,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
         }
 
         if (hasAffectedKinds || !CompareConfigs(subscription->CurrentConfig.Config, trunc, FilterKinds(kinds)) || CurrentStateFunc() == &TThis::StateInit) {
-            subscription->UpdateInProcess = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
+            subscription->UpdateInProcess = MakeHolder<NEvConsole::TEvConfigNotificationRequest>();
             subscription->UpdateInProcess->Record.MutableConfig()->CopyFrom(trunc);
             subscription->UpdateInProcess->Record.SetLocal(true);
             Y_FOR_EACH_BIT(kind, FilterKinds(kinds)) {
@@ -985,7 +985,7 @@ void TConfigsDispatcher::UpdateYamlVersion(const TSubscription::TPtr &subscripti
     subscription->UpdateInProcessYamlVersion = yamlVersion;
 }
 
-void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionError::TPtr &ev)
+void TConfigsDispatcher::Handle(NEvConsole::TEvConfigSubscriptionError::TPtr &ev)
 {
     // The only reason we can get this response is ambiguous domain
     // So it is okay to fail here
@@ -993,9 +993,9 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionError::TPtr &ev
             ev->Get()->Record.GetReason().c_str());
 }
 
-void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvGetConfigRequest::TPtr &ev)
+void TConfigsDispatcher::Handle(NEvConfigsDispatcher::TEvGetConfigRequest::TPtr &ev)
 {
-    auto resp = MakeHolder<TEvConfigsDispatcher::TEvGetConfigResponse>();
+    auto resp = MakeHolder<NEvConfigsDispatcher::TEvGetConfigResponse>();
 
     auto [yamlKinds, _] = CheckKinds(
         ev->Get()->ConfigItemKinds,
@@ -1010,7 +1010,7 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvGetConfigRequest::TPtr 
     }
     resp->Config = trunc;
 
-    BLOG_TRACE("Send TEvConfigsDispatcher::TEvGetConfigResponse"
+    BLOG_TRACE("Send NEvConfigsDispatcher::TEvGetConfigResponse"
         " to " << ev->Sender << ": " << resp->Config->ShortDebugString());
 
     Send(ev->Sender, std::move(resp), 0, ev->Cookie);
@@ -1040,7 +1040,7 @@ TConfigsDispatcher::TCheckKindsResult TConfigsDispatcher::CheckKinds(const TVect
     return {yamlKinds, nonYamlKinds};
 }
 
-void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr &ev)
+void TConfigsDispatcher::Handle(NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr &ev)
 {
     auto [yamlKinds, nonYamlKinds] = CheckKinds(
         ev->Get()->ConfigItemKinds,
@@ -1075,12 +1075,12 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
     subscriber->Subscriptions.insert(subscription);
 
     // We don't care about versions and kinds here
-    Send(ev->Sender, new TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+    Send(ev->Sender, new NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
 
     if (CurrentStateFunc() != &TThis::StateInit) {
         // first time we send even empty config
         if (!subscription->UpdateInProcess) {
-            subscription->UpdateInProcess = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
+            subscription->UpdateInProcess = MakeHolder<NEvConsole::TEvConfigNotificationRequest>();
             NKikimrConfig::TAppConfig trunc;
             if (YamlConfigEnabled) {
                 ReplaceConfigItems(YamlProtoConfig, trunc, FilterKinds(kinds), BaseConfig);
@@ -1100,7 +1100,7 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
     }
 }
 
-void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest::TPtr &ev)
+void TConfigsDispatcher::Handle(NEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest::TPtr &ev)
 {
     auto subscriberActor = ev->Get()->Subscriber ? ev->Get()->Subscriber : ev->Sender;
     auto subscriber = FindSubscriber(subscriberActor);
@@ -1129,11 +1129,11 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvRemoveConfigSubscriptio
     Subscribers.erase(subscriberActor);
     SubscriptionsBySubscriber.erase(subscriberActor);
 
-    Send(ev->Sender, new TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse);
+    Send(ev->Sender, new NEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse);
 }
 
 
-void TConfigsDispatcher::Handle(TEvConsole::TEvConfigNotificationResponse::TPtr &ev)
+void TConfigsDispatcher::Handle(NEvConsole::TEvConfigNotificationResponse::TPtr &ev)
 {
     auto rec = ev->Get()->Record;
     auto subscription = FindSubscription(ev->Sender);
@@ -1175,8 +1175,8 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigNotificationResponse::TPtr 
 }
 
 
-void TConfigsDispatcher::Handle(TEvConsole::TEvGetNodeLabelsRequest::TPtr &ev) {
-    auto Response = MakeHolder<TEvConsole::TEvGetNodeLabelsResponse>();
+void TConfigsDispatcher::Handle(NEvConsole::TEvGetNodeLabelsRequest::TPtr &ev) {
+    auto Response = MakeHolder<NEvConsole::TEvGetNodeLabelsResponse>();
 
     for (const auto& [label, value] : Labels) {
         auto *labelSer = Response->Record.MutableResponse()->add_labels();

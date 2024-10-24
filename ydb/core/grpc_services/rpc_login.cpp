@@ -28,7 +28,7 @@ private:
 public:
     using TRpcRequestActor::TRpcRequestActor;
 
-    THolder<TEvSchemeShard::TEvLoginResult> Result;
+    THolder<NEvSchemeShard::TEvLoginResult> Result;
     Ydb::StatusIds_StatusCode Status = Ydb::StatusIds::SUCCESS;
     TDuration Timeout = TDuration::MilliSeconds(60000);
     TActorId PipeClient;
@@ -61,7 +61,7 @@ public:
             if (domainInfo != nullptr) {
                 IActor* pipe = NTabletPipe::CreateClient(SelfId(), domainInfo->ExtractSchemeShard(), GetPipeClientConfig());
                 PipeClient = RegisterWithSameMailbox(pipe);
-                THolder<TEvSchemeShard::TEvLogin> request = MakeHolder<TEvSchemeShard::TEvLogin>();
+                THolder<NEvSchemeShard::TEvLogin> request = MakeHolder<NEvSchemeShard::TEvLogin>();
                 request.Get()->Record = CreateLoginRequest(Credentials, AppData()->AuthConfig);
                 request.Get()->Record.SetPeerName(Request->GetPeerName());
                 NTabletPipe::SendData(SelfId(), PipeClient, request.Release());
@@ -89,7 +89,7 @@ public:
         }
     }
 
-    void HandleResult(TEvSchemeShard::TEvLoginResult::TPtr& ev) {
+    void HandleResult(NEvSchemeShard::TEvLoginResult::TPtr& ev) {
         Status = Ydb::StatusIds::SUCCESS;
         Result = ev->Release();
         ReplyAndPassAway();
@@ -112,7 +112,7 @@ public:
             hFunc(TEvents::TEvUndelivered, HandleUndelivered);
             hFunc(TEvTabletPipe::TEvClientConnected, HandleConnect);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigate);
-            hFunc(TEvSchemeShard::TEvLoginResult, HandleResult);
+            hFunc(NEvSchemeShard::TEvLoginResult, HandleResult);
             hFunc(TEvLdapAuthProvider::TEvAuthenticateResponse, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }

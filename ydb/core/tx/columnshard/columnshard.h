@@ -56,7 +56,7 @@ inline Ydb::StatusIds::StatusCode ConvertToYdbStatus(NKikimrTxColumnShard::EResu
 }
 }
 
-namespace TEvColumnShard {
+namespace NEvColumnShard {
     enum EEv {
         EvProposeTransaction = EventSpaceBegin(TKikimrEvents::ES_TX_COLUMNSHARD),
         EvCancelTransactionProposal,
@@ -195,7 +195,7 @@ namespace TEvColumnShard {
 
     struct TEvProposeTransactionResult : public TEventPB<TEvProposeTransactionResult,
                                             NKikimrTxColumnShard::TEvProposeTransactionResult,
-                                            TEvColumnShard::EvProposeTransactionResult> {
+                                            NEvColumnShard::EvProposeTransactionResult> {
         TEvProposeTransactionResult() = default;
 
         TEvProposeTransactionResult(ui64 origin, NKikimrTxColumnShard::ETransactionKind txKind, ui64 txId,
@@ -238,7 +238,7 @@ namespace TEvColumnShard {
         }
     };
 
-    struct TEvWrite : public TEventPB<TEvWrite, NKikimrTxColumnShard::TEvWrite, TEvColumnShard::EvWrite> {
+    struct TEvWrite : public TEventPB<TEvWrite, NKikimrTxColumnShard::TEvWrite, NEvColumnShard::EvWrite> {
         TEvWrite() = default;
 
         TEvWrite(const TActorId& source, const NLongTxService::TLongTxId& longTxId, ui64 tableId,
@@ -266,7 +266,7 @@ namespace TEvColumnShard {
         }
     };
 
-    struct TEvWriteResult : public TEventPB<TEvWriteResult, NKikimrTxColumnShard::TEvWriteResult, TEvColumnShard::EvWriteResult> {
+    struct TEvWriteResult : public TEventPB<TEvWriteResult, NKikimrTxColumnShard::TEvWriteResult, NEvColumnShard::EvWriteResult> {
         TEvWriteResult() = default;
 
         TEvWriteResult(ui64 origin, const NEvWrite::TWriteMeta& writeMeta, ui32 status)
@@ -289,26 +289,26 @@ namespace TEvColumnShard {
         }
     };
 
-    using TEvScan = TEvDataShard::TEvKqpScan;
+    using TEvScan = NEvDataShard::TEvKqpScan;
 };
 
-inline auto& Proto(TEvColumnShard::TEvProposeTransaction* ev) {
+inline auto& Proto(NEvColumnShard::TEvProposeTransaction* ev) {
     return ev->Record;
 }
 
-inline auto& Proto(TEvColumnShard::TEvCheckPlannedTransaction* ev) {
+inline auto& Proto(NEvColumnShard::TEvCheckPlannedTransaction* ev) {
     return ev->Record;
 }
 
-inline auto& Proto(TEvColumnShard::TEvProposeTransactionResult* ev) {
+inline auto& Proto(NEvColumnShard::TEvProposeTransactionResult* ev) {
     return ev->Record;
 }
 
-inline auto& Proto(TEvColumnShard::TEvWrite* ev) {
+inline auto& Proto(NEvColumnShard::TEvWrite* ev) {
     return ev->Record;
 }
 
-inline auto& Proto(TEvColumnShard::TEvWriteResult* ev) {
+inline auto& Proto(NEvColumnShard::TEvWriteResult* ev) {
     return ev->Record;
 }
 

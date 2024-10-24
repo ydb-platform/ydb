@@ -12,10 +12,10 @@ namespace NKikimr::NSchemeShard::NBSVState {
 TConfigureParts::TConfigureParts(TOperationId id)
     : OperationId(id)
 {
-    IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
+    IgnoreMessages(DebugHint(), {NEvHive::TEvCreateTabletReply::EventType});
 }
 
-bool TConfigureParts::HandleReply(TEvBlockStore::TEvUpdateVolumeConfigResponse::TPtr& ev, TOperationContext& context) {
+bool TConfigureParts::HandleReply(NEvBlockStore::TEvUpdateVolumeConfigResponse::TPtr& ev, TOperationContext& context) {
     TTabletId ssId = context.SS->SelfTabletId();
 
     LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -100,7 +100,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
             volume->AlterData->VolumeShardIdx = shardIdx;
         }
 
-        TAutoPtr<TEvBlockStore::TEvUpdateVolumeConfig> event(new TEvBlockStore::TEvUpdateVolumeConfig());
+        TAutoPtr<NEvBlockStore::TEvUpdateVolumeConfig> event(new NEvBlockStore::TEvUpdateVolumeConfig());
         event->Record.SetTxId(ui64(OperationId.GetTxId()));
 
         event->Record.MutableVolumeConfig()->CopyFrom(*volumeConfig);
@@ -129,10 +129,10 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
 TPropose::TPropose(TOperationId id)
     : OperationId(id)
 {
-    IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvBlockStore::TEvUpdateVolumeConfigResponse::EventType});
+    IgnoreMessages(DebugHint(), {NEvHive::TEvCreateTabletReply::EventType, NEvBlockStore::TEvUpdateVolumeConfigResponse::EventType});
 }
 
-bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) {
+bool TPropose::HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) {
     TStepId step = TStepId(ev->Get()->StepId);
     TTabletId ssId = context.SS->SelfTabletId();
 

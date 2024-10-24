@@ -6,12 +6,12 @@ namespace NHive {
 
 class TTxResponseTabletSequence : public TTransactionBase<THive> {
 protected:
-    TEvHive::TEvResponseTabletIdSequence::TPtr Event;
+    NEvHive::TEvResponseTabletIdSequence::TPtr Event;
     TSequencer::TOwnerType Owner;
     TSequencer::TSequence Sequence;
 
 public:
-    TTxResponseTabletSequence(TEvHive::TEvResponseTabletIdSequence::TPtr event, THive *hive)
+    TTxResponseTabletSequence(NEvHive::TEvResponseTabletIdSequence::TPtr event, THive *hive)
         : TBase(hive)
         , Event(std::move(event))
     {}
@@ -61,7 +61,7 @@ public:
     }
 };
 
-ITransaction* THive::CreateResponseTabletSequence(TEvHive::TEvResponseTabletIdSequence::TPtr event) {
+ITransaction* THive::CreateResponseTabletSequence(NEvHive::TEvResponseTabletIdSequence::TPtr event) {
     return new TTxResponseTabletSequence(std::move(event), this);
 }
 

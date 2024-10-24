@@ -701,22 +701,22 @@ partitioning_settings {
 
     Y_UNIT_TEST(CancelUponCreatingExportDirShouldSucceed) {
         CancelShouldSucceed([](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
+            if (ev->GetTypeRewrite() != NEvSchemeShard::EvModifySchemeTransaction) {
                 return false;
             }
 
-            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
+            return ev->Get<NEvSchemeShard::TEvModifySchemeTransaction>()->Record
                 .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpMkDir;
         });
     }
 
     Y_UNIT_TEST(CancelUponCopyingTablesShouldSucceed) {
         CancelShouldSucceed([](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
+            if (ev->GetTypeRewrite() != NEvSchemeShard::EvModifySchemeTransaction) {
                 return false;
             }
 
-            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
+            return ev->Get<NEvSchemeShard::TEvModifySchemeTransaction>()->Record
                 .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables;
         });
     }
@@ -729,11 +729,11 @@ partitioning_settings {
         UNIT_ASSERT(s3Mock.Start());
 
         Cancel(tables, Sprintf(request.c_str(), port), [](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
+            if (ev->GetTypeRewrite() != NEvSchemeShard::EvModifySchemeTransaction) {
                 return false;
             }
 
-            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
+            return ev->Get<NEvSchemeShard::TEvModifySchemeTransaction>()->Record
                 .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpBackup;
         });
     }
@@ -833,9 +833,9 @@ partitioning_settings {
         THolder<IEventHandle> delayed;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvSchemeShard::EvModifySchemeTransaction:
+            case NEvSchemeShard::EvModifySchemeTransaction:
                 break;
-            case TEvSchemeShard::EvNotifyTxCompletionResult:
+            case NEvSchemeShard::EvNotifyTxCompletionResult:
                 if (dropNotification) {
                     delayed.Reset(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
@@ -845,7 +845,7 @@ partitioning_settings {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
 
-            const auto* msg = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>();
+            const auto* msg = ev->Get<NEvSchemeShard::TEvModifySchemeTransaction>();
             if (msg->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) {
                 dropNotification = true;
             }
@@ -917,9 +917,9 @@ partitioning_settings {
         THolder<IEventHandle> delayed;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvSchemeShard::EvModifySchemeTransaction:
+            case NEvSchemeShard::EvModifySchemeTransaction:
                 break;
-            case TEvSchemeShard::EvNotifyTxCompletionResult:
+            case NEvSchemeShard::EvNotifyTxCompletionResult:
                 if (dropNotification) {
                     delayed.Reset(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
@@ -929,7 +929,7 @@ partitioning_settings {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
 
-            const auto* msg = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>();
+            const auto* msg = ev->Get<NEvSchemeShard::TEvModifySchemeTransaction>();
             if (msg->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) {
                 dropNotification = true;
             }
@@ -1020,8 +1020,8 @@ partitioning_settings {
 
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                case TEvDataShard::EvProposeTransaction: {
-                    auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                case NEvDataShard::EvProposeTransaction: {
+                    auto& record = ev->Get<NEvDataShard::TEvProposeTransaction>()->Record;
                     if (record.GetTxKind() != NKikimrTxDataShard::ETransactionKind::TX_KIND_SCHEME) {
                         return TTestActorRuntime::EEventAction::PROCESS;
                     }
@@ -1039,12 +1039,12 @@ partitioning_settings {
                     return TTestActorRuntime::EEventAction::PROCESS;
                 }
 
-                case TEvDataShard::EvProposeTransactionResult: {
+                case NEvDataShard::EvProposeTransactionResult: {
                     if (!backupTxId) {
                         return TTestActorRuntime::EEventAction::PROCESS;
                     }
 
-                    const auto& record = ev->Get<TEvDataShard::TEvProposeTransactionResult>()->Record;
+                    const auto& record = ev->Get<NEvDataShard::TEvProposeTransactionResult>()->Record;
                     if (record.GetTxId() != *backupTxId) {
                         return TTestActorRuntime::EEventAction::PROCESS;
                     }
@@ -1117,8 +1117,8 @@ partitioning_settings {
 
         THashSet<ui64> statsCollected;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::EvPeriodicTableStats) {
-                statsCollected.insert(ev->Get<TEvDataShard::TEvPeriodicTableStats>()->Record.GetDatashardId());
+            if (ev->GetTypeRewrite() == NEvDataShard::EvPeriodicTableStats) {
+                statsCollected.insert(ev->Get<NEvDataShard::TEvPeriodicTableStats>()->Record.GetDatashardId());
             }
 
             return TTestActorRuntime::EEventAction::PROCESS;
@@ -1316,8 +1316,8 @@ partitioning_settings {
 
         THolder<IEventHandle> copyTables;
         auto origObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
-                const auto& record = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record;
+            if (ev->GetTypeRewrite() == NEvSchemeShard::EvModifySchemeTransaction) {
+                const auto& record = ev->Get<NEvSchemeShard::TEvModifySchemeTransaction>()->Record;
                 if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) {
                     copyTables.Reset(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
@@ -1348,7 +1348,7 @@ partitioning_settings {
 
         THolder<IEventHandle> proposeTxResult;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::EvProposeTransactionResult) {
+            if (ev->GetTypeRewrite() == NEvDataShard::EvProposeTransactionResult) {
                 proposeTxResult.Reset(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
             }
@@ -1398,8 +1398,8 @@ partitioning_settings {
 
         TVector<THolder<IEventHandle>> copyTables;
         auto origObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
-                const auto& record = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record;
+            if (ev->GetTypeRewrite() == NEvSchemeShard::EvModifySchemeTransaction) {
+                const auto& record = ev->Get<NEvSchemeShard::TEvModifySchemeTransaction>()->Record;
                 if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) {
                     copyTables.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
@@ -1479,8 +1479,8 @@ partitioning_settings {
 
         TVector<THolder<IEventHandle>> delayed;
         auto origObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
-                const auto& record = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record;
+            if (ev->GetTypeRewrite() == NEvSchemeShard::EvModifySchemeTransaction) {
+                const auto& record = ev->Get<NEvSchemeShard::TEvModifySchemeTransaction>()->Record;
                 const auto opType = record.GetTransaction(0).GetOperationType();
                 switch (opType) {
                 case NKikimrSchemeOp::ESchemeOpRestore:
@@ -1610,8 +1610,8 @@ partitioning_settings {
         THolder<IEventHandle> injectResult;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                case TEvDataShard::EvProposeTransaction: {
-                    auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                case NEvDataShard::EvProposeTransaction: {
+                    auto& record = ev->Get<NEvDataShard::TEvProposeTransaction>()->Record;
                     if (record.GetTxKind() != NKikimrTxDataShard::ETransactionKind::TX_KIND_SCHEME) {
                         return TTestActorRuntime::EEventAction::PROCESS;
                     }
@@ -1853,11 +1853,11 @@ partitioning_settings {
         env.TestWaitNotification(runtime, txId);
 
         auto delayFunc = [](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
+            if (ev->GetTypeRewrite() != NEvSchemeShard::EvModifySchemeTransaction) {
                 return false;
             }
 
-            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
+            return ev->Get<NEvSchemeShard::TEvModifySchemeTransaction>()->Record
                 .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpBackup;
         };
 
@@ -2034,11 +2034,11 @@ partitioning_settings {
         env.TestWaitNotification(runtime, txId);
 
         auto delayFunc = [](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
+            if (ev->GetTypeRewrite() != NEvSchemeShard::EvModifySchemeTransaction) {
                 return false;
             }
 
-            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
+            return ev->Get<NEvSchemeShard::TEvModifySchemeTransaction>()->Record
                 .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpBackup;
         };
 

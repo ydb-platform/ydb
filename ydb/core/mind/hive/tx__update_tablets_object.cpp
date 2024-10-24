@@ -5,11 +5,11 @@ namespace NKikimr {
 namespace NHive {
 
 class TTxUpdateTabletsObject : public TTransactionBase<THive> {
-    TEvHive::TEvUpdateTabletsObject::TPtr Event;
+    NEvHive::TEvUpdateTabletsObject::TPtr Event;
     TSideEffects SideEffects;
 
 public:
-    TTxUpdateTabletsObject(TEvHive::TEvUpdateTabletsObject::TPtr ev, THive* hive)
+    TTxUpdateTabletsObject(NEvHive::TEvUpdateTabletsObject::TPtr ev, THive* hive)
         : TBase(hive)
         , Event(ev)
     {}
@@ -18,7 +18,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         SideEffects.Reset(Self->SelfId());
-        TEvHive::TEvUpdateTabletsObject* msg = Event->Get();
+        NEvHive::TEvUpdateTabletsObject* msg = Event->Get();
         auto objectId = msg->Record.GetObjectId();
 
         BLOG_D("THive::TTxUpdateTabletsObject::Execute(" << objectId << ")");
@@ -73,7 +73,7 @@ public:
             newObjectMetrics->IncreaseCount(tabletsUpdated);
         }
 
-        auto response = std::make_unique<TEvHive::TEvUpdateTabletsObjectReply>(NKikimrProto::OK);
+        auto response = std::make_unique<NEvHive::TEvUpdateTabletsObjectReply>(NKikimrProto::OK);
         response->Record.SetTxId(Event->Get()->Record.GetTxId());
         response->Record.SetTxPartId(Event->Get()->Record.GetTxPartId());
         SideEffects.Send(Event->Sender, response.release(), 0, Event->Cookie);
@@ -86,7 +86,7 @@ public:
     }
 };
 
-ITransaction* THive::CreateUpdateTabletsObject(TEvHive::TEvUpdateTabletsObject::TPtr ev) {
+ITransaction* THive::CreateUpdateTabletsObject(NEvHive::TEvUpdateTabletsObject::TPtr ev) {
     return new TTxUpdateTabletsObject(std::move(ev), this);
 }
 

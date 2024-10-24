@@ -14,7 +14,7 @@
 
 namespace NKikimr {
 
-namespace TEvPersQueue {
+namespace NEvPersQueue {
     enum EEv {
         EvRequest = EventSpaceBegin(TKikimrEvents::ES_PQ),
         EvUpdateConfig, //change config for all partitions and count of partitions
@@ -270,8 +270,8 @@ namespace TEvPersQueue {
     struct TEvPeriodicTopicStats : public TEventPB<TEvPeriodicTopicStats, NKikimrPQ::TEvPeriodicTopicStats, EvPeriodicTopicStats> {
     };
 
-    using TEvProposeTransactionAttach = TEvDataShard::TEvProposeTransactionAttach;
-    using TEvProposeTransactionAttachResult = TEvDataShard::TEvProposeTransactionAttachResult;
+    using TEvProposeTransactionAttach = NEvDataShard::TEvProposeTransactionAttach;
+    using TEvProposeTransactionAttachResult = NEvDataShard::TEvProposeTransactionAttachResult;
 
     struct TEvReadingPartitionFinishedRequest : public TEventPB<TEvReadingPartitionFinishedRequest, NKikimrPQ::TEvReadingPartitionFinishedRequest, EvReadingPartitionFinished> {
         TEvReadingPartitionFinishedRequest() = default;

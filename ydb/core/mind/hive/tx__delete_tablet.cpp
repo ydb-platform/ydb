@@ -52,17 +52,17 @@ public:
 };
 
 class TTxDeleteTablet : public TTxDeleteBase {
-    TEvHive::TEvDeleteTablet::TPtr Event;
+    NEvHive::TEvDeleteTablet::TPtr Event;
 
 public:
-    TTxDeleteTablet(TEvHive::TEvDeleteTablet::TPtr& ev, THive* hive)
+    TTxDeleteTablet(NEvHive::TEvDeleteTablet::TPtr& ev, THive* hive)
         : TTxDeleteBase(hive)
         , Event(ev)
     {}
 
     void RespondToSender(NKikimrProto::EReplyStatus status, const NKikimrHive::TForwardRequest& forwardRequest = {}) {
         const NKikimrHive::TEvDeleteTablet& rec = Event->Get()->Record;
-        auto response = MakeHolder<TEvHive::TEvDeleteTabletReply>(status, Self->TabletID(), rec);
+        auto response = MakeHolder<NEvHive::TEvDeleteTabletReply>(status, Self->TabletID(), rec);
         if (forwardRequest.GetHiveTabletId() != 0) {
             response->Record.MutableForwardRequest()->CopyFrom(forwardRequest);
         }
@@ -141,17 +141,17 @@ public:
 };
 
 class TTxDeleteOwnerTablets : public TTxDeleteBase {
-    TEvHive::TEvDeleteOwnerTablets::TPtr Event;
+    NEvHive::TEvDeleteOwnerTablets::TPtr Event;
 
 public:
-    TTxDeleteOwnerTablets(TEvHive::TEvDeleteOwnerTablets::TPtr& ev, THive* hive)
+    TTxDeleteOwnerTablets(NEvHive::TEvDeleteOwnerTablets::TPtr& ev, THive* hive)
         : TTxDeleteBase(hive)
         , Event(ev)
     {}
 
     void RespondToSender(NKikimrProto::EReplyStatus status) {
         const NKikimrHive::TEvDeleteOwnerTablets& rec = Event->Get()->Record;
-        auto response = MakeHolder<TEvHive::TEvDeleteOwnerTabletsReply>(status, Self->TabletID(), rec.GetOwner(), rec.GetTxId());
+        auto response = MakeHolder<NEvHive::TEvDeleteOwnerTabletsReply>(status, Self->TabletID(), rec.GetOwner(), rec.GetTxId());
         BLOG_D("THive::TTxDeleteOwnerTablets::Execute() result " << response->Record.ShortDebugString());
         SideEffects.Send(Event->Sender, response.Release(), 0, Event->Cookie);
     }
@@ -200,11 +200,11 @@ public:
     }
 };
 
-ITransaction* THive::CreateDeleteTablet(TEvHive::TEvDeleteTablet::TPtr& ev) {
+ITransaction* THive::CreateDeleteTablet(NEvHive::TEvDeleteTablet::TPtr& ev) {
     return new TTxDeleteTablet(ev, this);
 }
 
-ITransaction* THive::CreateDeleteOwnerTablets(TEvHive::TEvDeleteOwnerTablets::TPtr& ev) {
+ITransaction* THive::CreateDeleteOwnerTablets(NEvHive::TEvDeleteOwnerTablets::TPtr& ev) {
     return new TTxDeleteOwnerTablets(ev, this);
 }
 

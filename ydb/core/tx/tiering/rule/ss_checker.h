@@ -28,10 +28,10 @@ public:
     }
 
     virtual void FetchingProblem(const TString& errorMessage) const override {
-        ActorId.Send(ActorId, new NSchemeShard::TEvSchemeShard::TEvProcessingResponse(errorMessage));
+        ActorId.Send(ActorId, new NSchemeShard::NEvSchemeShard::TEvProcessingResponse(errorMessage));
     }
     virtual void FetchingResult(const NKikimrScheme::TEvProcessingResponse& result) const override {
-        ActorId.Send(ActorId, new NSchemeShard::TEvSchemeShard::TEvProcessingResponse(result));
+        ActorId.Send(ActorId, new NSchemeShard::NEvSchemeShard::TEvProcessingResponse(result));
     }
 };
 
@@ -40,7 +40,7 @@ private:
     using TBase = NMetadata::NInternal::TSSDialogActor;
     NSchemeShard::ISSDataProcessor::TPtr Processor;
     ISSFetchingController::TPtr Controller;
-    void Handle(NSchemeShard::TEvSchemeShard::TEvProcessingResponse::TPtr& ev);
+    void Handle(NSchemeShard::NEvSchemeShard::TEvProcessingResponse::TPtr& ev);
 protected:
     virtual void OnBootstrap() override {
         UnsafeBecome(&TSSFetchingActor::StateMain);
@@ -50,14 +50,14 @@ protected:
         Controller->FetchingProblem(errorMessage);
     }
     virtual void Execute() override {
-        auto req = std::make_unique<NSchemeShard::TEvSchemeShard::TEvProcessingRequest>(*Processor);
+        auto req = std::make_unique<NSchemeShard::NEvSchemeShard::TEvProcessingRequest>(*Processor);
         Send(SchemeShardPipe, new TEvPipeCache::TEvForward(req.release(), SchemeShardId, false));
     }
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType();
     STFUNC(StateMain) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NSchemeShard::TEvSchemeShard::TEvProcessingResponse, Handle);
+            hFunc(NSchemeShard::NEvSchemeShard::TEvProcessingResponse, Handle);
             default:
                 TBase::StateMain(ev);
         }

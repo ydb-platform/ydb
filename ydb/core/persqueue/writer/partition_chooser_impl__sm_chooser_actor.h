@@ -160,7 +160,7 @@ private:
         TThis::PartitionHelper.SendMaxSeqNoRequest(oldNode->Id, TThis::SourceId, ctx);
     }
 
-    void HandleMaxSeqNo(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+    void HandleMaxSeqNo(NEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
 
         TString error;
@@ -195,7 +195,7 @@ private:
 
     STATEFN(StateGetMaxSeqNo) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPersQueue::TEvResponse, HandleMaxSeqNo);
+            HFunc(NEvPersQueue::TEvResponse, HandleMaxSeqNo);
             SFunc(TEvents::TEvPoison, TThis::Die);
             HFunc(TEvTabletPipe::TEvClientConnected, TThis::HandleOwnership);
             HFunc(TEvTabletPipe::TEvClientDestroyed, TThis::HandleOwnership);

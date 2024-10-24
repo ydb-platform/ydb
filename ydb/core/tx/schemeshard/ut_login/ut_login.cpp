@@ -16,7 +16,7 @@ namespace NSchemeShardUT_Private {
 
 // convert into generic test helper?
 void TestCreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TString& password, const TVector<TExpectedResult>& expectedResults) {
-    std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> modifyTx(CreateAlterLoginCreateUser(txId, user, password));
+    std::unique_ptr<NEvSchemeShard::TEvModifySchemeTransaction> modifyTx(CreateAlterLoginCreateUser(txId, user, password));
     //TODO: move setting of TModifyScheme.WorkingDir into CreateAlterLoginCreateUser()
     //NOTE: TModifyScheme.Name isn't set, intentionally
     modifyTx->Record.MutableTransaction(0)->SetWorkingDir(database);

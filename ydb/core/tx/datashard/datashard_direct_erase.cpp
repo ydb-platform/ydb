@@ -11,7 +11,7 @@
 namespace NKikimr {
 namespace NDataShard {
 
-TDirectTxErase::TDirectTxErase(TEvDataShard::TEvEraseRowsRequest::TPtr& ev)
+TDirectTxErase::TDirectTxErase(NEvDataShard::TEvEraseRowsRequest::TPtr& ev)
     : Ev(ev)
 {
 }
@@ -243,7 +243,7 @@ bool TDirectTxErase::Execute(TDataShard* self, TTransactionContext& txc,
 {
     const auto& record = Ev->Get()->Record;
 
-    Result = MakeHolder<TEvDataShard::TEvEraseRowsResponse>();
+    Result = MakeHolder<NEvDataShard::TEvEraseRowsResponse>();
     Result->Record.SetTabletID(self->TabletID());
 
     const auto params = TExecuteParams::ForExecute(this, &txc, readVersion, writeVersion,

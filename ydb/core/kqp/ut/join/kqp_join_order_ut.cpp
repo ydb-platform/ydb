@@ -325,6 +325,75 @@ Y_UNIT_TEST_SUITE(OlapEstimationRowsCorrectness) {
 }
 
 Y_UNIT_TEST_SUITE(KqpJoinOrder) {
+    Y_UNIT_TEST(OlapBug) {
+        auto kikimr = GetKikimrWithJoinSettings(false, "");
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TString createQuery = R"(
+            CREATE TABLE foo (
+                timestamp	Timestamp NOT NULL,
+                resource_type	Utf8,
+                resource_id	Utf8,
+                partition	Uint32 NOT NULL,
+                offset	Uint64 NOT NULL,
+                index	Uint32 NOT NULL,
+                primary key (timestamp, partition, offset, index)
+            )
+            PARTITION BY HASH (timestamp, partition, offset, index)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);
+        )";
+
+        auto res = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+
+        auto r = session.ExecuteDataQuery(R"(
+            REPLACE INTO `/Root/foo` (timestamp, resource_type, resource_id, partition, offset, index) VALUES
+                ("1999-10-10:10:10:10", "A", "A", 1, 1, 1)
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+        TString query = R"(
+        PRAGMA kikimr.KqpPushOlapProcess="true";
+        PRAGMA kikimr.OptEnablePredicateExtract="true";
+        PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+        DECLARE $param0 AS Timestamp;
+        DECLARE $resourceTypes AS List<Utf8>;
+
+
+
+$since = (CurrentUtcDatetime()-DateTime::IntervalFromHours(1));
+$until = (CurrentUtcDatetime());
+
+SELECT timestamp 
+FROM (
+    SELECT timestamp, resource_type
+    FROM `/Root/foo`
+    WHERE (`timestamp`) >= $since
+		and (`timestamp`) < $until
+		and `resource_type` IN $resourceTypes
+)
+WHERE 
+`resource_type` IN $resourceTypes
+	and (`timestamp` > $param0)
+        ;
+        )";
+
+        auto q = session.PrepareDataQuery(query).ExtractValueSync().GetQuery();
+        auto params = kikimr.GetTableClient().GetParamsBuilder()
+            .AddParam("$param0")
+                .Datetime(TInstant::Now())
+                .Build()
+            .AddParam("$resourceTypes")
+                .BeginList()
+                .AddListItem().Utf8("A")
+                .EndList()
+                .Build()
+            .Build();
+
+        auto result = q.Execute(
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+            std::move(params)).ExtractValueSync();
+    }
+
     Y_UNIT_TEST(Chain65Nodes) {
         TChainTester(65).Test();
     }

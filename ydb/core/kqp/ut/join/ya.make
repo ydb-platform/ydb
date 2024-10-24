@@ -31,6 +31,7 @@ DATA (
     arcadia/ydb/core/kqp/ut/join
 )
 
+CFLAGS(-DSSA_RUNTIME_VERSION=4)
 YQL_LAST_ABI_VERSION()
 
 END()

@@ -243,6 +243,10 @@ void TTopicOperationsScenario::StartConsumerThreads(std::vector<std::future<void
     }
 }
 
+/*!
+ * This method starts producers for number of threads specified in -t option. All producers will start in one thread.
+ * Yes this is ambigius, we will fix it in later major release to preserve backward API compatibility.
+ * */
 void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void>>& threads,
                                                     ui32 partitionCount,
                                                     ui32 partitionSeed,
@@ -265,17 +269,18 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .GeneratedMessages = generatedMessages,
             .Database = database,
             .TopicName = TopicName,
-            .ByteRate = MessageRate != 0 ? MessageRate * MessageSize : ByteRate,
+            .BytesPerSec = MessageRate != 0 ? MessageRate * MessageSize : ByteRate,
             .MessageSize = MessageSize,
             .ProducerThreadCount = ProducerThreadCount,
+            .ProducersPerThread = ProducersPerThread,
             .WriterIdx = writerIdx,
-            .ProducerId = TGUID::CreateTimebased().AsGuidString(),
-            .PartitionId = (partitionSeed + writerIdx) % partitionCount,
+            .PartitionCount = partitionCount,
+            .PartitionSeed = partitionSeed,
             .Direct = Direct,
             .Codec = Codec,
             .UseTransactions = UseTransactions,
             .UseAutoPartitioning = useAutoPartitioning,
-            .CommitPeriod = CommitPeriod,
+            .CommitPeriodMs = CommitPeriod,
             .CommitMessages = CommitMessages
         };
 

@@ -65,7 +65,7 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params, TInsta
 
     (*params.StartedCount)++;
 
-    TInstant commitTime = Now() + TDuration::Seconds(params.CommitPeriod);
+    TInstant commitTime = Now() + TDuration::MilliSeconds(params.CommitPeriod);
 
     TVector<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent> stopPartitionSessionEvents;
 
@@ -183,7 +183,7 @@ void TTopicWorkloadReader::TryCommitTx(TTopicWorkloadReaderParams& params,
     TryCommitTableChanges(params, txSupport);
     GracefullShutdown(stopPartitionSessionEvents);
 
-    commitTime += TDuration::Seconds(params.CommitPeriod);
+    commitTime += TDuration::MilliSeconds(params.CommitPeriod);
 }
 
 void TTopicWorkloadReader::TryCommitTableChanges(TTopicWorkloadReaderParams& params,

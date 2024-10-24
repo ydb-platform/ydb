@@ -23,24 +23,27 @@ namespace NYdb {
             const std::vector<TString>& GeneratedMessages;
             TString Database;
             TString TopicName;
-            size_t ByteRate;
+            size_t BytesPerSec;
             size_t MessageSize;
             ui32 ProducerThreadCount;
+            ui32 ProducersPerThread;
             ui32 WriterIdx;
-            TString ProducerId;
-            ui32 PartitionId;
+            ui32 PartitionCount;
+            ui32 PartitionSeed;
             bool Direct;
             ui32 Codec = 0;
             bool UseTransactions = false;
             bool UseAutoPartitioning = false;
             bool UseTableSelect = false;
             bool UseTableUpsert = false;
-            size_t CommitPeriod = 15;
+            size_t CommitPeriodMs = 15'000;
             size_t CommitMessages = 1'000'000;
         };
 
+        class TTopicWorkloadWriterProducer;
         class TTopicWorkloadWriterWorker {
         public:
+            static const size_t GENERATED_MESSAGES_COUNT = 32;
             static void RetryableWriterLoop(TTopicWorkloadWriterParams& params);
             static void WriterLoop(TTopicWorkloadWriterParams& params, TInstant endTime);
             static std::vector<TString> GenerateMessages(size_t messageSize);
@@ -50,42 +53,30 @@ namespace NYdb {
 
             void Close();
 
+            void WaitTillNextMessageExpectedCreateTimeAndContinuationToken(TTopicWorkloadWriterProducer& producer);
+
             void Process(TInstant endTime);
 
-            void CreateWorker();
-
-            bool ProcessAckEvent(const NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event);
-
-            bool ProcessReadyToAcceptEvent(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent& event);
-            bool ProcessSessionClosedEvent(const NYdb::NTopic::TSessionClosedEvent& event);
-
-            bool ProcessEvent(NYdb::NTopic::TWriteSessionEvent::TEvent& event);
-
-            bool WaitForInitSeqNo();
-
-            TString GetGeneratedMessage() const;
-
-            TInstant GetCreateTimestamp() const;
+            TInstant GetExpectedCurrMessageCreationTimestamp() const;
 
             void TryCommitTx(TTopicWorkloadWriterParams& params,
                              TInstant& commitTime);
             void TryCommitTableChanges(TTopicWorkloadWriterParams& params);
 
+            size_t InflightMessagesSize();
+            bool InflightMessagesEmpty();
+
             TTopicWorkloadWriterParams Params;
-            ui64 MessageId = 0;
-            ui64 AckedMessageId = 0;
             ui64 BytesWritten = 0;
             std::optional<TTransactionSupport> TxSupport;
-            std::shared_ptr<NYdb::NTopic::IWriteSession> WriteSession;
             TInstant StartTimestamp;
 
-            TMaybe<NTopic::TContinuationToken> ContinuationToken;
+            std::vector<TTopicWorkloadWriterProducer> Producers;
+            ui64 ProducerIndex;
 
             std::shared_ptr<std::atomic<bool>> Closed;
             std::shared_ptr<TTopicWorkloadStatsCollector> StatsCollector;
 
-            // SeqNo - CreateTime
-            THashMap<ui64, TInstant> InflightMessages;
             bool WaitForCommitTx = false;
         };
     }

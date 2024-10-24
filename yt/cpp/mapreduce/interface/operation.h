@@ -17,11 +17,12 @@
 #include <library/cpp/type_info/type_info.h>
 
 #include <util/datetime/base.h>
-#include <util/generic/variant.h>
 #include <util/generic/vector.h>
 #include <util/generic/maybe.h>
 #include <util/system/file.h>
 #include <util/system/types.h>
+
+#include <variant>
 
 namespace NYT {
 

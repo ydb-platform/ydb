@@ -13,7 +13,7 @@ PEERDIR(
     ydb/public/api/protos
 )
 
-GENERATE_ENUM_SERIALIZATION(workload.h)
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(workload.h)
 
 END()
 

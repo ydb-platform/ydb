@@ -3,12 +3,13 @@
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/data_sharing/source/transactions/tx_data_ack_to_source.h>
 #include <ydb/core/tx/columnshard/data_sharing/source/transactions/tx_finish_ack_to_source.h>
+#include <ydb/core/tx/columnshard/data_sharing/source/transactions/tx_transfer_scheme_history.h>
 #include <ydb/core/tx/columnshard/data_sharing/source/transactions/tx_write_source_cursor.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 
 namespace NKikimr::NOlap::NDataSharing {
 
-NKikimr::TConclusionStatus TSourceSession::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession& proto, 
+NKikimr::TConclusionStatus TSourceSession::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession& proto,
     const std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic>& protoCursor,
     const std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic>& protoCursorStatic) {
     auto parseBase = TBase::DeserializeFromProto(proto);
@@ -73,6 +74,13 @@ void TSourceSession::SaveCursorToDatabase(NIceDb::TNiceDb& db) {
     GetCursorVerified()->SaveToDatabase(db, GetSessionId());
 }
 
+void TSourceSession::AckTransferSchemeHistory(
+    NColumnShard::TColumnShard* self) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TSourceSession::AckTransferSchemeHistory")("session", GetSessionId());
+
+    ActualizeDestination(*self, self->GetDataLocksManager());
+}
+
 void TSourceSession::ActualizeDestination(const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) {
     AFL_VERIFY(IsInProgress() || IsPrepared());
     AFL_VERIFY(Cursor);
@@ -102,14 +110,24 @@ void TSourceSession::ActualizeDestination(const NColumnShard::TColumnShard& shar
     }
 }
 
-bool TSourceSession::DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions) {
+std::unique_ptr<NTabletFlatExecutor::ITransaction> TSourceSession::TransferSchemeHistory(NColumnShard::TColumnShard* self) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TSourceSession::TransferSchemeHistory")("session", GetSessionId());
+
+    return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxTransferSchemeHistory(self, GetSessionId(), SelfTabletId, DestinationTabletId, GetRuntimeId(), "transfer_scheme_history"));
+}
+
+bool TSourceSession::DoStart(
+    const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TSourceSession::DoStart")("session", GetSessionId());
     AFL_VERIFY(Cursor);
     if (Cursor->Start(shard.GetStoragesManager(), portions, shard.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex())) {
-        ActualizeDestination(shard, shard.GetDataLocksManager());
+        auto ev = std::make_unique<NEvents::TEvStartTransferSchemeHistory>(GetSessionId());
+        NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
+            new TEvPipeCache::TEvForward(ev.release(), (ui64)SelfTabletId, true), IEventHandle::FlagTrackDelivery, GetRuntimeId());
+
         return true;
     } else {
         return false;
     }
 }
-
 }

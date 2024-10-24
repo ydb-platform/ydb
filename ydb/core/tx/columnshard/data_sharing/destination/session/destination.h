@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/data_sharing/common/session/common.h>
 #include <ydb/core/tx/columnshard/data_sharing/initiator/controller/abstract.h>
+#include <ydb/core/tx/columnshard/data_sharing/protos/events.pb.h>
 #include <ydb/core/tx/columnshard/data_sharing/protos/sessions.pb.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 
@@ -112,6 +113,8 @@ public:
     }
 
     [[nodiscard]] TConclusionStatus DataReceived(THashMap<ui64, NEvents::TPathIdData>&& data, TColumnEngineForLogs& index, const std::shared_ptr<IStoragesManager>& manager);
+
+    void TransferSchema(NColumnShard::TColumnShard* columnShard, const std::vector<NKikimrColumnShardDataSharingProto::TSchemeHistoryEntry>& schemeHistory, const TTabletId sourceTabletId);
 
     ui32 GetSourcesInProgressCount() const;
     void SendCurrentCursorAck(const NColumnShard::TColumnShard& shard, const std::optional<TTabletId> tabletId);

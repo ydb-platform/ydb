@@ -162,7 +162,6 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
             std::unordered_set<std::string>(hint.JoinLabels.begin(), hint.JoinLabels.end()) ==
             std::unordered_set<std::string>(subtreeLabels.begin(), subtreeLabels.end())
         ) {
-            Cout << "OK" << Endl;
             linkSettings.JoinAlgo = hint.Algo;
             hint.Applied = true;   
         }

@@ -83,8 +83,8 @@ void TCommandWorkloadTransferTopicToTableRun::Config(TConfig& config)
 
     config.Opts->MutuallyExclusive("message-rate", "byte-rate");
 
-    config.Opts->AddLongOption("commit-period", "Waiting time between commit.")
-        .DefaultValue(10)
+    config.Opts->AddLongOption("commit-period", "Waiting time between commit in milliseconds.")
+        .DefaultValue(10'000)
         .StoreResult(&Scenario.CommitPeriod);
     config.Opts->AddLongOption("commit-messages", "Number of messages per transaction")
         .DefaultValue(1'000'000)

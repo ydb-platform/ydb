@@ -59,6 +59,7 @@ public:
     ui32 UpUtilizationPercent = 90;
     ui32 DownUtilizationPercent = 30;
     ui32 ProducerThreadCount = 0;
+    ui32 ProducersPerThread = 0;
     ui32 ConsumerThreadCount = 0;
     ui32 ConsumerCount = 0;
     bool Direct = false;
@@ -70,7 +71,7 @@ public:
     TString TableName;
     ui32 TablePartitionCount = 1;
     bool UseTransactions = false;
-    size_t CommitPeriod = 10;
+    size_t CommitPeriod = 100;
     size_t CommitMessages = 1'000'000;
     bool OnlyTopicInTx = false;
     bool OnlyTableInTx = false;

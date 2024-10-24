@@ -31,9 +31,9 @@ void InitTpcdsGen(int scale, int processCount, int processIndex) {
     static char scale_str[10];
     static char parallel_str[10];
     static char child_str[10];
-    sprintf(scale_str, "%d", scale);
-    sprintf(parallel_str, "%d", processCount);
-    sprintf(child_str, "%d", processIndex + 1);
+    snprintf(scale_str, sizeof(scale_str), "%d", scale);
+    snprintf(parallel_str, sizeof(parallel_str), "%d", processCount);
+    snprintf(child_str, sizeof(child_str), "%d", processIndex + 1);
     options[0].dflt = scale_str;
     options[1].dflt = parallel_str;
     options[2].dflt = child_str;

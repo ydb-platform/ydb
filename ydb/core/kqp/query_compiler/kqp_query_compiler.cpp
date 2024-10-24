@@ -141,7 +141,6 @@ void FillTablesMap(const TKqpTable& table, const TCoAtomList& columns,
     THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
 {
     FillTablesMap(table, tablesMap);
-
     for (const auto& column : columns) {
         tablesMap[table.Path()].emplace(column);
     }

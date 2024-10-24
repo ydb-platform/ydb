@@ -3,6 +3,8 @@
 #include "hive.h"
 #include "leader_tablet_info.h"
 
+#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+
 namespace NKikimr {
 namespace NHive {
 
@@ -42,7 +44,7 @@ struct TChannelHash {
 struct TStorageGroupInfo {
     const TStoragePoolInfo& StoragePool;
     TStorageGroupId Id;
-    std::unordered_set<TLeaderTabletInfo::TChannel, TChannelHash> Units;
+    absl::flat_hash_set<TLeaderTabletInfo::TChannel, TChannelHash> Units;
     TStorageResources AcquiredResources;
     TStorageResources MaximumResources;
     NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters GroupParameters;

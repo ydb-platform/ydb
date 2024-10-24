@@ -10,7 +10,7 @@
 #include <arrow/result.h>
 #include <arrow/buffer.h>
 
-namespace NYql::NDqs {
+namespace NYql {
 
 class IYtColumnConverter {
 public:

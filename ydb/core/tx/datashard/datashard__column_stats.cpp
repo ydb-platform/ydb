@@ -78,7 +78,7 @@ public:
             auto countMinSketch = CountMinSketches[t]->AsStringBuf();
             auto* statCMS = column->AddStatistics();
             statCMS->SetType(NKikimr::NStat::COUNT_MIN_SKETCH);
-            statCMS->SetData(countMinSketch.Data(), countMinSketch.Size());
+            statCMS->SetData(countMinSketch.data(), countMinSketch.size());
         }
 
         TlsActivationContext->Send(new IEventHandle(ReplyTo, TActorId(), response.release(), 0, Cookie));

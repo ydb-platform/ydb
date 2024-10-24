@@ -108,7 +108,7 @@ public:
     struct TCreateArgs {
         const NActors::TActorId& ExecuterId;
         const ui64 TxId;
-        const ui64 LockTxId;
+        const TMaybe<ui64> LockTxId;
         const ui32 LockNodeId;
         NYql::NDqProto::TDqTask* Task;
         TIntrusivePtr<NRm::TTxState> TxInfo;
@@ -124,6 +124,7 @@ public:
         const TInstant& Deadline;
         const bool ShareMailbox;
         const TMaybe<NYql::NDqProto::TRlPath>& RlPath;
+        const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
 
         TComputeStagesWithScan* ComputesByStages = nullptr;
         std::shared_ptr<IKqpNodeState> State = nullptr;

@@ -1,0 +1,12 @@
+--- contrib/python/pythran/pythran/config.py	(index)
++++ contrib/python/pythran/pythran/config.py	(working tree)
+@@ -79,6 +79,9 @@ def init_cfg(sys_file, platform_file, user_file, config_args=None):
+     cfgp = ConfigParser()
+     for required in (sys_config_path, platform_config_path):
+         cfgp.read([required])
++    import pkgutil
++    for required in (sys_config_path, platform_config_path):
++        cfgp.read_string(pkgutil.get_data(__package__, os.path.basename(required)).decode("utf-8"))
+ 
+     if user_config_path:
+         cfgp.read([user_config_path])

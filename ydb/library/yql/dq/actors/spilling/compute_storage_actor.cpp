@@ -9,6 +9,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <util/generic/set.h>
 
 namespace NYql::NDq {
 
@@ -76,7 +77,7 @@ protected:
         if (!ErrorCallback_) Y_ABORT("Error: %s", error.c_str());
 
         LOG_E("Error: " << error);
-        ErrorCallback_(error);
+        ErrorCallback_(TStringBuilder() << "[Compute spilling]" << error);
         SendInternal(SpillingActorId_, new TEvents::TEvPoison);
         PassAway();
     }

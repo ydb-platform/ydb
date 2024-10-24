@@ -35,6 +35,7 @@
 #include <ydb/core/protos/filestore_config.pb.h>
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/core/protos/yql_translation_settings.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
@@ -198,7 +199,7 @@ struct TPartitionConfigMerger {
         );
 
     static bool VerifyCompactionPolicy(
-        const NKikimrSchemeOp::TCompactionPolicy& policy,
+        const NKikimrCompaction::TCompactionPolicy& policy,
         TString& err);
 
     static bool VerifyCommandOnFrozenTable(
@@ -569,13 +570,18 @@ public:
         return copy;
     }
 
+    struct TCreateAlterDataFeatureFlags {
+        bool EnableTablePgTypes;
+        bool EnableTableDatetime64;
+        bool EnableParameterizedDecimal;
+    };
+
     static TAlterDataPtr CreateAlterData(
         TPtr source,
         NKikimrSchemeOp::TTableDescription& descr,
         const NScheme::TTypeRegistry& typeRegistry,
         const TSchemeLimits& limits, const TSubDomainInfo& subDomain,
-        bool pgTypesEnabled,
-        bool datetime64TypesEnabled,
+        const TCreateAlterDataFeatureFlags& featureFlags,
         TString& errStr, const THashSet<TString>& localSequences = {});
 
     static ui32 ShardsToCreate(const NKikimrSchemeOp::TTableDescription& descr) {
@@ -958,6 +964,8 @@ struct TTopicTabletInfo : TSimpleRefCount<TTopicTabletInfo> {
         THashSet<ui32> ParentPartitionIds;
         THashSet<ui32> ChildPartitionIds;
 
+        TShardIdx ShardIdx;
+
         void SetStatus(const TActorContext& ctx, ui32 value) {
             if (value >= NKikimrPQ::ETopicPartitionStatus::Active &&
                 value <= NKikimrPQ::ETopicPartitionStatus::Deleted) {
@@ -1151,6 +1159,8 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
     TTopicStats Stats;
 
     void AddPartition(TShardIdx shardIdx, TTopicTabletInfo::TTopicPartitionInfo* partition) {
+        partition->ShardIdx = shardIdx;
+
         TTopicTabletInfo::TPtr& pqShard = Shards[shardIdx];
         if (!pqShard) {
             pqShard.Reset(new TTopicTabletInfo());
@@ -2462,6 +2472,20 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
         return result;
     }
 
+    void FinishAlter() {
+        Y_ABORT_UNLESS(AlterData);
+
+        AlterVersion = AlterData->AlterVersion;
+        Mode = AlterData->Mode;
+        Format = AlterData->Format;
+        VirtualTimestamps = AlterData->VirtualTimestamps;
+        ResolvedTimestamps = AlterData->ResolvedTimestamps;
+        AwsRegion = AlterData->AwsRegion;
+        State = AlterData->State;
+
+        AlterData.Reset();
+    }
+
     ui64 AlterVersion = 1;
     EMode Mode;
     EFormat Format;
@@ -2633,12 +2657,13 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         static bool IsDropped(const TItem& item);
     };
 
-    ui64 Id;
+    ui64 Id;  // TxId from the original TEvCreateExportRequest
     TString Uid;
     EKind Kind;
     TString Settings;
     TPathId DomainPathId;
     TMaybe<TString> UserSID;
+    TString PeerName;  // required for making audit log records
     TVector<TItem> Items;
 
     TPathId ExportPathId = InvalidPathId;
@@ -2663,12 +2688,14 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
             const TString& uid,
             const EKind kind,
             const TString& settings,
-            const TPathId domainPathId)
+            const TPathId domainPathId,
+            const TString& peerName)
         : Id(id)
         , Uid(uid)
         , Kind(kind)
         , Settings(settings)
         , DomainPathId(domainPathId)
+        , PeerName(peerName)
     {
     }
 
@@ -2678,8 +2705,9 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
             const TString& uid,
             const EKind kind,
             const TSettingsPB& settingsPb,
-            const TPathId domainPathId)
-        : TExportInfo(id, uid, kind, SerializeSettings(settingsPb), domainPathId)
+            const TPathId domainPathId,
+            const TString& peerName)
+        : TExportInfo(id, uid, kind, SerializeSettings(settingsPb), domainPathId, peerName)
     {
     }
 
@@ -2765,6 +2793,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TString DstPathName;
         TPathId DstPathId;
         Ydb::Table::CreateTableRequest Scheme;
+        TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
 
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;
@@ -2790,12 +2819,13 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         static bool IsDone(const TItem& item);
     };
 
-    ui64 Id;
+    ui64 Id;  // TxId from the original TEvCreateImportRequest
     TString Uid;
     EKind Kind;
     Ydb::Import::ImportFromS3Settings Settings;
     TPathId DomainPathId;
     TMaybe<TString> UserSID;
+    TString PeerName;  // required for making audit log records
 
     EState State = EState::Invalid;
     TString Issue;
@@ -2811,12 +2841,14 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
             const TString& uid,
             const EKind kind,
             const Ydb::Import::ImportFromS3Settings& settings,
-            const TPathId domainPathId)
+            const TPathId domainPathId,
+            const TString& peerName)
         : Id(id)
         , Uid(uid)
         , Kind(kind)
         , Settings(settings)
         , DomainPathId(domainPathId)
+        , PeerName(peerName)
     {
     }
 
@@ -2878,7 +2910,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         GatheringStatistics = 20,
         Initiating = 30,
         Filling = 40,
-        // TODO(mbkkt) TruncateTmpTables = 45,
+        DropBuild = 45,
+        CreateBuild = 46,
         Applying = 50,
         Unlocking = 60,
         Done = 200,
@@ -2924,7 +2957,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     enum class EBuildKind : ui32 {
         BuildKindUnspecified = 0,
-        BuildIndex = 10,
+        BuildSecondaryIndex = 10,
+        BuildVectorIndex = 11,
         BuildColumns = 20,
     };
 
@@ -2953,6 +2987,97 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     std::variant<std::monostate, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription> SpecializedIndexDescription;
 
+    struct TKMeans {
+        // TODO(mbkkt) move to TVectorIndexKmeansTreeDescription
+        ui32 K = 4;
+        ui32 Levels = 5;
+
+        // progress
+        enum EState : ui32 {
+            Sample = 0,
+            // Recompute,
+            Reshuffle,
+            // Local,
+        };
+        ui32 Level = 0;
+
+        ui32 Parent = 0;
+        ui32 ParentEnd = 0;  // included
+
+        EState State = Sample;
+
+        ui32 ChildBegin = 1;  // included
+
+        static ui32 BinPow(ui32 k, ui32 l) {
+            ui32 r = 1;
+            while (l != 0) {
+                if (l % 2 != 0) {
+                    r *= k;
+                }
+                k *= k;
+                l /= 2;
+            }
+            return r;
+        }
+
+        bool NeedsAnotherLevel() const {
+            return Level < Levels;
+        }
+        bool NeedsAnotherParent() const {
+            return Parent < ParentEnd;
+        }
+        bool NeedsAnotherState() const {
+            return State == Sample /*|| State == Recompute*/;
+        }
+
+        bool NextState() {
+            if (!NeedsAnotherState()) {
+                return false;
+            }
+            State = static_cast<EState>(static_cast<ui32>(State) + 1);
+            return true;
+        }
+
+        bool NextParent() {
+            if (!NeedsAnotherParent()) {
+                return false;
+            }
+            ChildBegin += K;
+            State = Sample;
+            ++Parent;
+            return true;
+        }
+
+        bool NextLevel() {
+            if (!NeedsAnotherLevel()) {
+                return false;
+            }
+            ChildBegin += K;
+            State = Sample;
+            ++Parent;
+            ParentEnd += BinPow(K, Level);
+            ++Level;
+            return true;
+        }
+
+        NKikimrTxDataShard::TEvLocalKMeansRequest::EState GetUpload() const {
+            if (Level == 0) {
+                if (NeedsAnotherLevel()) {
+                    return NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_BUILD;
+                } else {
+                    return NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_POSTING;
+                }
+            } else {
+                if (NeedsAnotherLevel()) {
+                    return NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_BUILD;
+                } else {
+                    return NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING;
+                }
+            }
+        }
+    };
+    TKMeans KMeans;
+
     EState State = EState::Invalid;
     TString Issue;
 
@@ -2960,30 +3085,29 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     bool CancelRequested = false;
 
-    TTxId AlterMainTableTxId = TTxId();
-    NKikimrScheme::EStatus AlterMainTableTxStatus = NKikimrScheme::StatusSuccess;
     bool AlterMainTableTxDone = false;
-
-    TTxId LockTxId = TTxId();
-    NKikimrScheme::EStatus LockTxStatus = NKikimrScheme::StatusSuccess;
     bool LockTxDone = false;
-
-    TTxId InitiateTxId = TTxId();
-    NKikimrScheme::EStatus InitiateTxStatus = NKikimrScheme::StatusSuccess;
     bool InitiateTxDone = false;
+    bool ApplyTxDone = false;
+    bool UnlockTxDone = false;
+
+    bool BillingEventIsScheduled = false;
+
+    TTxId AlterMainTableTxId = TTxId();
+    TTxId LockTxId = TTxId();
+    TTxId InitiateTxId = TTxId();
+    TTxId ApplyTxId = TTxId();
+    TTxId UnlockTxId = TTxId();
+
+    NKikimrScheme::EStatus AlterMainTableTxStatus = NKikimrScheme::StatusSuccess;
+    NKikimrScheme::EStatus LockTxStatus = NKikimrScheme::StatusSuccess;
+    NKikimrScheme::EStatus InitiateTxStatus = NKikimrScheme::StatusSuccess;
+    NKikimrScheme::EStatus ApplyTxStatus = NKikimrScheme::StatusSuccess;
+    NKikimrScheme::EStatus UnlockTxStatus = NKikimrScheme::StatusSuccess;
 
     TStepId SnapshotStep;
     TTxId SnapshotTxId;
 
-    TTxId ApplyTxId = TTxId();
-    NKikimrScheme::EStatus ApplyTxStatus = NKikimrScheme::StatusSuccess;
-    bool ApplyTxDone = false;
-
-    TTxId UnlockTxId = TTxId();
-    NKikimrScheme::EStatus UnlockTxStatus = NKikimrScheme::StatusSuccess;
-    bool UnlockTxDone = false;
-
-    bool BillingEventIsScheduled = false;
     TDuration ReBillPeriod = TDuration::Seconds(10);
 
     struct TShardStatus {
@@ -3013,7 +3137,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             result << " DebugMessage: " << DebugMessage;
             result << " SeqNoRound: " << SeqNoRound;
             result << " Processed: " << Processed.ToString();
-            
+
             result << " }";
 
             return result;
@@ -3029,6 +3153,73 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     TBillingStats Processed;
     TBillingStats Billed;
+
+    struct TSampleK {
+        struct TRow {
+            ui64 P = 0;
+            TString Row;
+
+            explicit TRow(ui64 p, TString&& row)
+                : P{p}
+                , Row{std::move(row)}
+            {
+            }
+
+            bool operator<(const TRow& other) const {
+                return P < other.P;
+            }
+        };
+        using TRows = TVector<TRow>;
+
+        TRows Rows;
+        ui64 MaxProbability = std::numeric_limits<ui64>::max();
+        bool Sent = false;
+
+        void MakeWeakTop(ui64 k) {
+            // 2 * k is needed to make it linear, 2 * N at all.
+            // x * k approximately is x / (x - 1) * N, but with larger x more memory used
+            if (Rows.size() < 2 * k) {
+                return;
+            }
+            MakeTop(k);
+        }
+
+        void MakeStrictTop(ui64 k) {
+            // The idea is send to shards smallest possible max probability
+            // Even if only single element was pushed from last time,
+            // we want to account it and decrease max possible probability.
+            // to potentially decrease counts of serialized and sent by network rows
+            if (Rows.size() < k) {
+                return;
+            }
+            if (Rows.size() == k) {
+                if (Y_UNLIKELY(MaxProbability == std::numeric_limits<ui64>::max())) {
+                    MaxProbability = std::max_element(Rows.begin(), Rows.end())->P;
+                }
+                return;
+            }
+            MakeTop(k);
+        }
+
+        void Clear() {
+            Rows.clear();
+            MaxProbability = std::numeric_limits<ui64>::max();
+            Sent = false;
+        }
+
+    private:
+        void MakeTop(ui64 k) {
+            Y_ASSERT(k > 0);
+            auto kth = Rows.begin() + k - 1;
+            // TODO(mbkkt) use floyd rivest
+            std::nth_element(Rows.begin(), kth, Rows.end());
+            Rows.erase(kth + 1, Rows.end());
+            Y_ASSERT(kth->P < MaxProbability);
+            MaxProbability = kth->P;
+        }
+    };
+
+    TSampleK Sample;
 
     TIndexBuildInfo(TIndexBuildId id, TString uid)
         : Id(id)
@@ -3091,7 +3282,26 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         indexInfo->IndexName = row.template GetValue<Schema::IndexBuild::IndexName>();
         indexInfo->IndexType = row.template GetValue<Schema::IndexBuild::IndexType>();
 
-        // TODO load indexInfo->ImplTableDescriptions
+        // Restore the operation details: ImplTableDescriptions and SpecializedIndexDescription.
+        if (row.template HaveValue<Schema::IndexBuild::CreationConfig>()) {
+            NKikimrSchemeOp::TIndexCreationConfig creationConfig;
+            Y_ABORT_UNLESS(creationConfig.ParseFromString(row.template GetValue<Schema::IndexBuild::CreationConfig>()));
+
+            auto& descriptions = *creationConfig.MutableIndexImplTableDescriptions();
+            indexInfo->ImplTableDescriptions.reserve(descriptions.size());
+            for (auto& description : descriptions) {
+                indexInfo->ImplTableDescriptions.emplace_back(std::move(description));
+            }
+
+            switch (creationConfig.GetSpecializedIndexDescriptionCase()) {
+                case NKikimrSchemeOp::TIndexCreationConfig::kVectorIndexKmeansTreeDescription:
+                    indexInfo->SpecializedIndexDescription = std::move(*creationConfig.MutableVectorIndexKmeansTreeDescription());
+                    break;
+                case NKikimrSchemeOp::TIndexCreationConfig::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
+                    /* do nothing */
+                    break;
+            }
+        }
 
         indexInfo->State = TIndexBuildInfo::EState(
             row.template GetValue<Schema::IndexBuild::State>());
@@ -3150,11 +3360,11 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             row.template GetValueOrDefault<Schema::IndexBuild::UnlockTxDone>(
                 indexInfo->UnlockTxDone);
 
-        // note: please note that here we specify BuildIndex as operation default,
-        // because previosly this table was dedicated for build index operations only.
+        // note: please note that here we specify BuildSecondaryIndex as operation default,
+        // because previosly this table was dedicated for build secondary index operations only.
         indexInfo->BuildKind = TIndexBuildInfo::EBuildKind(
             row.template GetValueOrDefault<Schema::IndexBuild::BuildKind>(
-                ui32(TIndexBuildInfo::EBuildKind::BuildIndex)));
+                ui32(TIndexBuildInfo::EBuildKind::BuildSecondaryIndex)));
 
         indexInfo->AlterMainTableTxId =
             row.template GetValueOrDefault<Schema::IndexBuild::AlterMainTableTxId>(
@@ -3214,8 +3424,16 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         return CancelRequested;
     }
 
+    bool IsBuildSecondaryIndex() const {
+        return BuildKind == EBuildKind::BuildSecondaryIndex;
+    }
+
+    bool IsBuildVectorIndex() const {
+        return BuildKind == EBuildKind::BuildVectorIndex;
+    }
+
     bool IsBuildIndex() const {
-        return BuildKind == EBuildKind::BuildIndex;
+        return IsBuildSecondaryIndex() || IsBuildVectorIndex();
     }
 
     bool IsBuildColumns() const {
@@ -3240,7 +3458,13 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     }
 
     float CalcProgressPercent() const {
-        // TODO(mbkkt) different calculation for vector index
+        if (IsBuildVectorIndex()) {
+            // TODO(mbkkt) better calculation for vector index
+            if (KMeans.Level == 0) {
+                return 0.0;
+            }
+            return KMeans.Levels * 100. / KMeans.Level;
+        }
         if (Shards) {
             float totalShards = Shards.size();
             return 100.0 * DoneShardsSize / totalShards;
@@ -3282,6 +3506,7 @@ struct TViewInfo : TSimpleRefCount<TViewInfo> {
 
     ui64 AlterVersion = 0;
     TString QueryText;
+    NYql::NProto::TTranslationSettings CapturedContext;
 };
 
 struct TResourcePoolInfo : TSimpleRefCount<TResourcePoolInfo> {
@@ -3289,6 +3514,25 @@ struct TResourcePoolInfo : TSimpleRefCount<TResourcePoolInfo> {
 
     ui64 AlterVersion = 0;
     NKikimrSchemeOp::TResourcePoolProperties Properties;
+};
+
+struct TBackupCollectionInfo : TSimpleRefCount<TBackupCollectionInfo> {
+    using TPtr = TIntrusivePtr<TBackupCollectionInfo>;
+
+    static TPtr New() {
+        return new TBackupCollectionInfo();
+    }
+
+    static TPtr Create(const NKikimrSchemeOp::TBackupCollectionDescription& desc) {
+        TPtr result = New();
+
+        result->Description = desc;
+
+        return result;
+    }
+
+    ui64 AlterVersion = 0;
+    NKikimrSchemeOp::TBackupCollectionDescription Description;
 };
 
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,

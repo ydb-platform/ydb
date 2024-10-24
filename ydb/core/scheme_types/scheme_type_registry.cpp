@@ -2,9 +2,12 @@
 #include "scheme_types.h"
 #include "scheme_types_defs.h"
 
+#include "scheme_decimal_type.h"
+#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
+
 #include <util/digest/murmur.h>
 #include <util/generic/algorithm.h>
-
+#include <util/string/printf.h>
 
 #define REGISTER_TYPE(name, size, ...) RegisterType<T##name>();
 
@@ -33,7 +36,6 @@ TTypeRegistry::TTypeRegistry()
     RegisterType<TYson>();
     RegisterType<TJson>();
     RegisterType<TJsonDocument>();
-    RegisterType<TDecimal>();
     RegisterType<TDate>();
     RegisterType<TDatetime>();
     RegisterType<TTimestamp>();

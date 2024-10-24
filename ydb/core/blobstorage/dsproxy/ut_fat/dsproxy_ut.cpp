@@ -35,6 +35,7 @@
 #include <ydb/library/actors/interconnect/mock/ic_mock.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/library/actors/util/affinity.h>
+#include <ydb/library/pdisk_io/aio.h>
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -3410,7 +3411,7 @@ class TTestBlobStorageProxyBatchedPutRequestDoesNotContainAHugeBlob : public TTe
                                 .GroupInfo = BsInfo,
                                 .GroupQueues = GroupQueues,
                                 .Mon = Mon,
-                                .Now = TInstant::Now(),
+                                .Now = TMonotonic::Now(),
                                 .StoragePoolCounters = StoragePoolCounters,
                                 .RestartCounter = TBlobStorageGroupMultiPutParameters::CalculateRestartCounter(batched),
                                 .LatencyQueueKind = kind,

@@ -17,10 +17,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLDecimalTest) {
         const auto data2 = pb.NewOptional(pb.NewDecimalLiteral(+NYql::NDecimal::Inf(), 13, 5));
         const auto data3 = pb.NewOptional(pb.NewDecimalLiteral(-NYql::NDecimal::Inf(), 13, 5));
         const auto data4 = pb.NewEmptyOptional(type);
-        const auto data5 = pb.NewOptional(pb.NewDecimalLiteral(-NYql::NDecimal::Nan(), 13, 5));
         const auto data = pb.NewDecimalLiteral(314159, 13, 5);
 
-        const auto list = pb.NewList(type, {data0, data1, data2, data3, data4, data5});
+        const auto list = pb.NewList(type, {data0, data1, data2, data3, data4});
 
         const auto pgmReturn = pb.Map(list,
         [&](TRuntimeNode item) {
@@ -40,8 +39,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLDecimalTest) {
         UNIT_ASSERT(item.GetInt128() == -NYql::NDecimal::Inf());
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
-        UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT(item.GetInt128() == 314159);
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
@@ -870,7 +867,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLDecimalTest) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto data1 = pb.NewDecimalLiteral(-NYql::NDecimal::Nan(), 13, 2);
+        const auto data1 = pb.NewDecimalLiteral(NYql::NDecimal::Nan(), 13, 2);
         const auto data2 = pb.NewDecimalLiteral(+NYql::NDecimal::Inf(), 13, 2);
         const auto data3 = pb.NewDecimalLiteral(314, 13, 2);
         const auto data4 = pb.NewDecimalLiteral(-213, 13, 2);
@@ -890,8 +887,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLDecimalTest) {
         NUdf::TUnboxedValue item;
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Nan());
-        UNIT_ASSERT(item.GetElement(1).GetInt128() == -NYql::NDecimal::Nan());
+        UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Nan());
+        UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
 
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(item.GetElement(0).GetInt128() ==  +NYql::NDecimal::Inf());
@@ -1124,7 +1121,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLDecimalTest) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto data1 = pb.NewDecimalLiteral(-NYql::NDecimal::Nan(), 13, 2);
+        const auto data1 = pb.NewDecimalLiteral(NYql::NDecimal::Nan(), 13, 2);
         const auto data2 = pb.NewDecimalLiteral(+NYql::NDecimal::Inf(), 13, 2);
         const auto data3 = pb.NewDecimalLiteral(314, 13, 2);
         const auto data4 = pb.NewDecimalLiteral(-213, 13, 2);
@@ -2115,15 +2112,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLDecimalTest) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto data0 = pb.NewDecimalLiteral(-NYql::NDecimal::Nan(), 10, 1);
         const auto data1 = pb.NewDecimalLiteral(-NYql::NDecimal::Inf(), 10, 1);
         const auto data3 = pb.NewDecimalLiteral(-7, 10, 1);
         const auto data4 = pb.NewDecimalLiteral(0, 10, 1);
         const auto data5 = pb.NewDecimalLiteral(13, 10, 1);
         const auto data7 = pb.NewDecimalLiteral(+NYql::NDecimal::Inf(), 10, 1);
-        const auto data8 = pb.NewDecimalLiteral(+NYql::NDecimal::Nan(), 10, 1);
+        const auto data8 = pb.NewDecimalLiteral(NYql::NDecimal::Nan(), 10, 1);
 
-        const auto list = pb.NewList(pb.NewDecimalType(10, 1), {data0, data1, data3, data4, data5, data7, data8});
+        const auto list = pb.NewList(pb.NewDecimalType(10, 1), {data1, data3, data4, data5, data7, data8});
 
         const auto pgmReturn = pb.Map(list,
             [&](TRuntimeNode item) {
@@ -2133,10 +2129,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLDecimalTest) {
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
-
-        UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Nan());
-        UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
 
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Inf());

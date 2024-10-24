@@ -104,7 +104,7 @@ public:
         const auto& entry = navigate->ResultSet.front();
 
         for (const auto& attr : entry.Attributes) {
-            if (attr.first == "folderId") FolderId = attr.second;
+            if (attr.first == "folder_id") FolderId = attr.second;
             else if (attr.first == "database_id") DatabaseId = attr.second;
         }
 

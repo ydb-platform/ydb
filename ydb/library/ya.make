@@ -11,9 +11,12 @@ RECURSE(
     chunks_limiter
     dynumber
     folder_service
+    formats
+    fyamlcpp
     grpc
     http_proxy
     keys
+    lockfree_bucket
     logger
     login
     mkql_proto
@@ -24,6 +27,7 @@ RECURSE(
     persqueue
     pretty_types_print
     protobuf_printer
+    rewrapper
     query_actor
     schlab
     security

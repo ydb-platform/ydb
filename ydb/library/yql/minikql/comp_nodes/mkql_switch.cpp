@@ -166,7 +166,7 @@ public:
         for (ui32 handlerIndex = 0; handlerIndex < handlersSize; ++handlerIndex) {
             Handlers[handlerIndex].Item->SetGetter([stateIndex = mutables.CurValueIndex - 1, handlerIndex, this](TComputationContext & context) {
                 NUdf::TUnboxedValue& state = context.MutableValues[stateIndex];
-                if (!state.HasValue()) {
+                if (state.IsInvalid()) {
                     MakeState(context, state);
                 }
 
@@ -183,7 +183,7 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             MakeState(ctx, state);
         }
 
@@ -393,7 +393,7 @@ public:
         const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
         const auto result = PHINode::Create(valueType, Handlers.size() + 2U, "result", exit);
 
-        BranchInst::Create(main, make, HasValue(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));

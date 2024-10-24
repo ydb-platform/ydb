@@ -1,4 +1,9 @@
+#include "node_warden.h"
 #include "node_warden_impl.h"
+
+#include <ydb/core/blobstorage/dsproxy/dsproxy.h>
+#include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
+#include <ydb/core/blob_depot/agent/agent.h>
 
 using namespace NKikimr;
 using namespace NStorage;
@@ -42,6 +47,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                             .EnableVPatch = EnableVPatch,
                             .SlowDiskThreshold = SlowDiskThreshold,
                             .PredictedDelayMultiplier = PredictedDelayMultiplier,
+                            .MaxNumOfSlowDisks = MaxNumOfSlowDisks,
                         }), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
                     [[fallthrough]];
                 case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
@@ -57,10 +63,12 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
             // create proxy with configuration
             proxy.reset(CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>(info), false, 
                 DsProxyNodeMon, getCounters(info), TBlobStorageProxyParameters{
+                        .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
                         .EnablePutBatching = EnablePutBatching,
                         .EnableVPatch = EnableVPatch,
                         .SlowDiskThreshold = SlowDiskThreshold,
                         .PredictedDelayMultiplier = PredictedDelayMultiplier,
+                        .MaxNumOfSlowDisks = MaxNumOfSlowDisks,
                     }
                 )
             );
@@ -68,10 +76,12 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
     } else {
         // create proxy without configuration
         proxy.reset(CreateBlobStorageGroupProxyUnconfigured(groupId, DsProxyNodeMon, TBlobStorageProxyParameters{
+            .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
             .EnablePutBatching = EnablePutBatching,
             .EnableVPatch = EnableVPatch,
             .SlowDiskThreshold = SlowDiskThreshold,
             .PredictedDelayMultiplier = PredictedDelayMultiplier,
+            .MaxNumOfSlowDisks = MaxNumOfSlowDisks,
         }));
     }
 

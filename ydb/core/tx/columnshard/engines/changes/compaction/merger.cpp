@@ -6,9 +6,10 @@
 
 #include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
-#include <ydb/core/formats/arrow/simple_builder/array.h>
-#include <ydb/core/formats/arrow/simple_builder/filler.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
+
+#include <ydb/library/formats/arrow/simple_builder/array.h>
+#include <ydb/library/formats/arrow/simple_builder/filler.h>
 
 namespace NKikimr::NOlap::NCompaction {
 
@@ -76,6 +77,10 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
     TMergingContext mergingContext(batchResults, Batches);
 
     for (auto&& [columnId, columnData] : columnsData) {
+        if (columnId == (ui32)IIndexInfo::ESpecialColumn::WRITE_ID &&
+            (!HasAppData() || !AppDataVerified().FeatureFlags.GetEnableInsertWriteIdSpecialColumnCompatibility())) {
+            continue;
+        }
         const TString& columnName = resultFiltered->GetIndexInfo().GetColumnName(columnId);
         NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("field_name", columnName));
         auto columnInfo = stats->GetColumnInfo(columnId);
@@ -125,13 +130,6 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             AFL_VERIFY(i.second.size() == columnChunks.begin()->second.size())("first", columnChunks.begin()->second.size())(
                                               "current", i.second.size())("first_name", columnChunks.begin()->first)("current_name", i.first);
         }
-        auto columnSnapshotPlanStepIdx = batchResult->GetColumnByName(TIndexInfo::SPEC_COL_PLAN_STEP);
-        auto columnSnapshotTxIdx = batchResult->GetColumnByName(TIndexInfo::SPEC_COL_TX_ID);
-        Y_ABORT_UNLESS(columnSnapshotPlanStepIdx);
-        Y_ABORT_UNLESS(columnSnapshotTxIdx);
-        Y_ABORT_UNLESS(columnSnapshotPlanStepIdx->type_id() == arrow::UInt64Type::type_id);
-        Y_ABORT_UNLESS(columnSnapshotTxIdx->type_id() == arrow::UInt64Type::type_id);
-
         std::vector<TGeneralSerializedSlice> batchSlices;
         std::shared_ptr<TDefaultSchemaDetails> schemaDetails(new TDefaultSchemaDetails(resultFiltered, stats));
 
@@ -142,7 +140,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             }
             batchSlices.emplace_back(portionColumns, schemaDetails, Context.Counters.SplitterCounters);
         }
-        NArrow::NSplitter::TSimilarPacker slicer(NSplitter::TSplitSettings().GetExpectedPortionSize());
+        NArrow::NSplitter::TSimilarPacker slicer(PortionExpectedSize);
         auto packs = slicer.Split(batchSlices);
 
         ui32 recordIdx = 0;

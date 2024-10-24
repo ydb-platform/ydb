@@ -30,8 +30,6 @@ public:
             return;
         }
 
-        anchor->Enabled.store(true);
-
         auto guard = Guard(Mutex_);
         anchor->SourceLocation = sourceLocation;
         anchor->AnchorMessage = anchorMessage;

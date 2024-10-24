@@ -36,6 +36,7 @@ message TRspPassCall
 message TReqAllocationCall
 {
     required int64 size = 1;
+    optional bool wait_on_latch = 2 [default = true];
 }
 
 message TRspAllocationCall
@@ -125,6 +126,17 @@ message TReqSlowCanceledCall
 }
 
 message TRspSlowCanceledCall
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqLatchedCall
+{
+    optional bool wait_on_latch = 1 [default = true];
+}
+
+message TRspLatchedCall
 {
 }
 

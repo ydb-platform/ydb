@@ -5,6 +5,7 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/yson/json2yson.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
@@ -477,10 +478,7 @@ TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* time
     if (timeline) {
         TPlanVisualizer planViz;
         planViz.LoadPlans(plan);
-        *timeline = planViz.PrintSvgSafe();
-        // remove json "timeline" field after migration
-        writer.OnKeyedItem("timeline");
-        writer.OnStringScalar(*timeline);
+        *timeline = planViz.PrintSvg();
     }
     writer.OnEndMap();
     return NJson2Yson::ConvertYson2Json(out.Str());
@@ -1240,8 +1238,12 @@ std::unique_ptr<IPlanStatProcessor> CreateStatProcessor(const TString& statViewN
 
 PingTaskRequestBuilder::PingTaskRequestBuilder(const NConfig::TCommonConfig& commonConfig, std::unique_ptr<IPlanStatProcessor>&& processor) 
     : Compressor(commonConfig.GetQueryArtifactsCompressionMethod(), commonConfig.GetQueryArtifactsCompressionMinSize())
-    , Processor(std::move(processor)), ShowQueryTimeline(commonConfig.GetShowQueryTimeline())
-{}
+    , Processor(std::move(processor)), ShowQueryTimeline(commonConfig.GetShowQueryTimeline()), MaxQueryTimelineSize(commonConfig.GetMaxQueryTimelineSize())
+{
+    if (!MaxQueryTimelineSize) {
+        MaxQueryTimelineSize = 200_KB;
+    }
+}
 
 Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(
     const NYdb::NQuery::TExecStats& queryStats,
@@ -1251,8 +1253,16 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(
 ) {
     Fq::Private::PingTaskRequest pingTaskRequest = Build(queryStats);
 
+    // Application-level issues, pass as is
     if (issues) {
         NYql::IssuesToMessage(issues, pingTaskRequest.mutable_issues());
+    }
+
+    // Builder own (internal) issues will be logged later, just warn the user
+    if (Issues) {
+        auto* issue = pingTaskRequest.add_issues();
+        issue->set_message("There are minor issues with query statistics processing. You can supply query ID and ask support for the information.");
+        issue->set_severity(NYql::TSeverityIds::S_WARNING);
     }
 
     if (computeStatus) {
@@ -1308,6 +1318,12 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryP
     try {
         TString timeline;
         auto stat = Processor->GetQueryStat(plan, CpuUsage, ShowQueryTimeline ? &timeline : nullptr);
+
+        if (MaxQueryTimelineSize && timeline.size() > MaxQueryTimelineSize) {
+            Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Timeline size  " << timeline.size() << " exceeds limit of " << MaxQueryTimelineSize));
+            timeline = "";
+        }
+
         pingTaskRequest.set_statistics(stat);
         pingTaskRequest.set_dump_raw_statistics(true);
         if (timeline) {
@@ -1318,8 +1334,8 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryP
         flatStat["ComputeTimeUs"] = computeTimeUs;
         SerializeStats(*pingTaskRequest.mutable_flat_stats(), flatStat);
         PublicStat = Processor->GetPublicStat(stat);
-    } catch(const NJson::TJsonException& ex) {
-        Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Error stat conversion: " << ex.what()));
+    } catch (const std::exception& e) {
+        Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Error stat processing: " << e.what()));
     }
 
     return pingTaskRequest;

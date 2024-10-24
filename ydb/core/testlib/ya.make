@@ -89,6 +89,7 @@ PEERDIR(
     ydb/library/yql/providers/yt/codec/codegen
     ydb/library/yql/providers/yt/comp_nodes/llvm14
     ydb/library/yql/public/udf/service/exception_policy
+    ydb/public/api/protos
     ydb/public/lib/base
     ydb/public/lib/deprecated/kicli
     ydb/public/sdk/cpp/client/ydb_driver
@@ -102,6 +103,7 @@ PEERDIR(
     ydb/services/ext_index/service
     ydb/services/ymq
     ydb/core/tx/conveyor/service
+    ydb/core/tx/priorities/service
     ydb/core/tx/limiter/grouped_memory/usage
     ydb/services/fq
     ydb/services/kesus

@@ -479,7 +479,9 @@ namespace NTypeAnnImpl {
         }
 
         for (auto& import : imports) {
-            RegisterResolvedImport(*import);
+            if (import->Modules) {
+                RegisterResolvedImport(*import);
+            }
         }
 
         return true;
@@ -2719,7 +2721,7 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus DecimalBinaryWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus DecimalBinaryWrapperBase(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx, bool blocks) {
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -2727,6 +2729,7 @@ namespace NTypeAnnImpl {
         const TDataExprType* dataType[2];
         bool isOptional[2];
         bool haveOptional = false;
+        bool allScalars = true;
         const TDataExprType* commonType = nullptr;
         for (ui32 i = 0; i < 2; ++i) {
             if (IsNull(*input->Child(i))) {
@@ -2734,7 +2737,17 @@ namespace NTypeAnnImpl {
                 return IGraphTransformer::TStatus::Repeat;
             }
 
-            if (!EnsureDataOrOptionalOfData(*input->Child(i), isOptional[i], dataType[i], ctx.Expr)) {
+            const TTypeAnnotationNode* itemType = input->Child(i)->GetTypeAnn();
+            if (blocks) {
+                if (!EnsureBlockOrScalarType(*input->Child(i), ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+                bool isScalar;
+                itemType = GetBlockItemType(*itemType, isScalar);
+                allScalars = allScalars && isScalar;
+            }
+
+            if (!EnsureDataOrOptionalOfData(input->Child(i)->Pos(), itemType, isOptional[i], dataType[i], ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
@@ -2780,8 +2793,20 @@ namespace NTypeAnnImpl {
             resultType = ctx.Expr.MakeType<TOptionalExprType>(resultType);
         }
 
-        input->SetTypeAnn(resultType);
+        if (blocks) {
+            if (allScalars) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TScalarExprType>(resultType));
+            } else {
+                input->SetTypeAnn(ctx.Expr.MakeType<TBlockExprType>(resultType));
+            }
+        } else {
+            input->SetTypeAnn(resultType);
+        }
         return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus DecimalBinaryWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        return DecimalBinaryWrapperBase(input, output, ctx, /*block = */ false);
     }
 
     IGraphTransformer::TStatus CountBitsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -3948,9 +3973,9 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus FromBytesWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus FromBytesWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
-        if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -3968,25 +3993,33 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto dataTypeName = input->Child(1)->Content();
-        auto slot = NKikimr::NUdf::FindDataSlot(dataTypeName);
-        if (!slot) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), TStringBuilder() << "Unknown datatype: " << dataTypeName));
-            return IGraphTransformer::TStatus::Error;
+        auto targetDataTypeName = input->Child(1)->Content();
+        const TDataExprType* targetDataType = nullptr;
+        auto targetSlot = NKikimr::NUdf::FindDataSlot(targetDataTypeName);
+        if (!targetSlot) {
+            auto typeExpr = ctx.Expr.Builder(input->Child(1)->Pos()).Callable("ParseType")
+                    .Add(0, input->ChildPtr(1))
+                .Seal().Build();
+            auto parseTypeResult = ParseTypeWrapper(typeExpr, typeExpr, ctx);
+            if (parseTypeResult == IGraphTransformer::TStatus::Error) {
+                return parseTypeResult;
+            }
+
+            if (!EnsureType(*typeExpr, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            auto type = typeExpr->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            if (!EnsureDataType(input->Child(1)->Pos(), *type, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            targetDataType = type->Cast<TDataExprType>();
+            targetSlot = targetDataType->GetSlot();
         }
 
-        const bool isDecimal = IsDataTypeDecimal(*slot);
-        if (!EnsureArgsCount(*input, isDecimal ? 4 : 2, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        auto dataTypeAnn = isDecimal ?
-            ctx.Expr.MakeType<TDataExprParamsType>(*slot, input->Child(2)->Content(), input->Child(3)->Content()):
-            ctx.Expr.MakeType<TDataExprType>(*slot);
+        auto dataTypeAnn = targetDataType ? targetDataType : ctx.Expr.MakeType<TDataExprType>(*targetSlot);
         input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(dataTypeAnn));
-        if (isDecimal && !input->GetTypeAnn()->Cast<TDataExprParamsType>()->Validate(input->Pos(), ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -5416,9 +5449,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     }
 
     IGraphTransformer::TStatus ToBytesWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (IsNull(input->Head())) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
         }
 
         bool isOptional;
@@ -12184,7 +12221,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["SessionWindowTraits"] = &SessionWindowTraitsWrapper;
         Functions["FromString"] = &FromStringWrapper;
         Functions["StrictFromString"] = &StrictFromStringWrapper;
-        Functions["FromBytes"] = &FromBytesWrapper;
         Functions["Convert"] = &ConvertWrapper;
         Functions["AlterTo"] = &AlterToWrapper;
         Functions["ToIntegral"] = &ToIntegralWrapper;
@@ -12600,6 +12636,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ReplicateScalar"] = &ReplicateScalarWrapper;
         Functions["BlockPgResolvedOp"] = &BlockPgOpWrapper;
         Functions["BlockPgResolvedCall"] = &BlockPgCallWrapper;
+        Functions["BlockDecimalMul"] = &BlockDecimalBinaryWrapper;
+        Functions["BlockDecimalMod"] = &BlockDecimalBinaryWrapper;
+        Functions["BlockDecimalDiv"] = &BlockDecimalBinaryWrapper;
+
         ExtFunctions["BlockFunc"] = &BlockFuncWrapper;
         ExtFunctions["BlockBitCast"] = &BlockBitCastWrapper;
 
@@ -12696,6 +12736,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["SafeCast"] = &CastWrapper<false>;
         ExtFunctions["StrictCast"] = &CastWrapper<true>;
         ExtFunctions["Version"] = &VersionWrapper;
+        ExtFunctions["FromBytes"] = &FromBytesWrapper;
 
         ExtFunctions["Aggregate"] = &AggregateWrapper;
         ExtFunctions["AggregateCombine"] = &AggregateWrapper;
@@ -12715,7 +12756,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         ColumnOrderFunctions["Merge"] = ColumnOrderFunctions["Extend"] = &OrderForMergeExtend;
         ColumnOrderFunctions[RightName] = &OrderFromFirst;
-        ColumnOrderFunctions["UnionAll"] = &OrderForUnionAll;
+        ColumnOrderFunctions["UnionMerge"] = ColumnOrderFunctions["UnionAll"] = &OrderForUnionAll;
         ColumnOrderFunctions["Union"] = &OrderForUnionAll;
         ColumnOrderFunctions["EquiJoin"] = &OrderForEquiJoin;
         ColumnOrderFunctions["CalcOverWindow"] = &OrderForCalcOverWindow;

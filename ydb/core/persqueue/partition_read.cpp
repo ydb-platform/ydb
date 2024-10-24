@@ -626,13 +626,13 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
         Y_ABORT_UNLESS(pos != Max<ui32>());
     }
     ui32 lastBlobSize = 0;
-    for (;pos < Head.Batches.size(); ++pos) {
+    for (;pos < Head.GetBatches().size(); ++pos) {
 
         TVector<TClientBlob> blobs;
-        Head.Batches[pos].UnpackTo(&blobs);
+        Head.GetBatch(pos).UnpackTo(&blobs);
         ui32 i = 0;
-        ui64 offset = Head.Batches[pos].GetOffset();
-        ui16 pno = Head.Batches[pos].GetPartNo();
+        ui64 offset = Head.GetBatch(pos).GetOffset();
+        ui16 pno = Head.GetBatch(pos).GetPartNo();
         for (; i < blobs.size(); ++i) {
 
             ui64 curOffset = offset;
@@ -1001,7 +1001,9 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
             ctx, EndOffset, Partition, &UsersInfoStorage->GetOrCreate(info.User, ctx),
             info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode()
         ));
-        const auto& resp = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get())->Response;
+        const auto* ev = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get());
+        Y_ABORT_UNLESS(ev);
+        const auto& resp = ev->Response;
         if (info.IsSubscription) {
             TabletCounters.Cumulative()[COUNTER_PQ_READ_SUBSCRIPTION_OK].Increment(1);
         }

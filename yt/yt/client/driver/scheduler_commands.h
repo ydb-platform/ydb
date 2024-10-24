@@ -132,6 +132,21 @@ private:
     NJobTrackerClient::TJobId JobId;
 
     void DoExecute(ICommandContextPtr context) override;
+    bool HasResponseParameters() const override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TGetJobTraceCommand
+    : public TSimpleOperationCommandBase<NApi::TGetJobTraceOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetJobTraceCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    void DoExecute(ICommandContextPtr context) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

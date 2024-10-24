@@ -1,9 +1,5 @@
 UNITTEST_FOR(ydb/core/tablet_flat)
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32)
-ENDIF()
-
 IF (WITH_VALGRIND)
     TIMEOUT(2400)
     TAG(ya:fat)

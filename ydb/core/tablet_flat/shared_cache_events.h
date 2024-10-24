@@ -3,6 +3,7 @@
 #include "defs.h"
 #include "flat_bio_events.h"
 #include "shared_handle.h"
+#include <ydb/core/protos/shared_cache.pb.h>
 
 #include <util/generic/map.h>
 #include <util/generic/set.h>

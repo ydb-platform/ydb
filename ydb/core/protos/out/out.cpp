@@ -25,6 +25,7 @@
 #include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/protos/statistics.pb.h>
+#include <ydb/core/protos/index_builder.pb.h>
 
 #include <util/stream/output.h>
 
@@ -250,4 +251,12 @@ Y_DECLARE_OUT_SPEC(, NKikimrStat::TEvAnalyzeStatusResponse_EStatus, stream, valu
 
 Y_DECLARE_OUT_SPEC(, NKikimrStat::TEvStatisticsResponse::EStatus, stream, value) {
     stream << NKikimrStat::TEvStatisticsResponse::EStatus_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimrIndexBuilder::EBuildStatus, stream, value) {
+    stream << NKikimrIndexBuilder::EBuildStatus_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimrTxDataShard::TEvLocalKMeansRequest_EState, stream, value) {
+    stream << NKikimrTxDataShard::TEvLocalKMeansRequest_EState_Name(value);
 }

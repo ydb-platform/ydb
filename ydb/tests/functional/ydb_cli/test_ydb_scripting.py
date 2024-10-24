@@ -136,16 +136,6 @@ class TestExecuteScriptWithParams(BaseTestScriptingServiceWithDatabase):
         return self.canonical_result(output, self.tmp_path)
 
 
-class TestScriptingServiceHelp(BaseTestScriptingService):
-    def test_help(self, tmp_path):
-        output = self.execute_ydb_cli_command(["scripting", "yql", "--help"])
-        return self.canonical_result(output, tmp_path)
-
-    def test_help_ex(self, tmp_path):
-        output = self.execute_ydb_cli_command(["scripting", "yql", "--help-ex"])
-        return self.canonical_result(output, tmp_path)
-
-
 class TestExecuteScriptWithFormats(BaseTestScriptingServiceWithDatabase):
     @classmethod
     def setup_class(cls):

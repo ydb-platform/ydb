@@ -471,6 +471,13 @@ void IsResourcePool(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeResourcePool);
 }
 
+void IsBackupCollection(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
+    const auto& pathDescr = record.GetPathDescription();
+    const auto& selfPath = pathDescr.GetSelf();
+    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeBackupCollection);
+}
+
 TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns, bool strictCount) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT(record.HasPathDescription());
@@ -505,6 +512,21 @@ TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const
         }
     };
 }
+
+TCheckFunc CheckColumnType(const ui64 columnIndex, const TString& columnTypename) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT(record.HasPathDescription());
+        NKikimrSchemeOp::TPathDescription descr = record.GetPathDescription();
+
+        UNIT_ASSERT(descr.HasTable());
+        NKikimrSchemeOp::TTableDescription table = descr.GetTable();
+        UNIT_ASSERT(table.ColumnsSize());
+
+        const auto& col = table.GetColumns(columnIndex);
+        UNIT_ASSERT_VALUES_EQUAL(col.GetType(), columnTypename);
+    };
+}
+
 
 void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult &record) {
     const NKikimrSchemeOp::TPathDescription& descr = record.GetPathDescription();
@@ -831,18 +853,16 @@ TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames) {
     };
 }
 
-TCheckFunc VectorIndexDescription(Ydb::Table::VectorIndexSettings_Distance dist, 
-                                  Ydb::Table::VectorIndexSettings_Similarity similarity, 
+TCheckFunc VectorIndexDescription(Ydb::Table::VectorIndexSettings_Metric metric,
                                   Ydb::Table::VectorIndexSettings_VectorType vectorType,
                                   ui32 vectorDimension
                                   ) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         if (record.GetPathDescription().GetTableIndex().HasVectorIndexKmeansTreeDescription()) {
             const auto& settings = record.GetPathDescription().GetTableIndex().GetVectorIndexKmeansTreeDescription().GetSettings();
-            UNIT_ASSERT_VALUES_EQUAL(settings.distance(), dist);
-            UNIT_ASSERT_VALUES_EQUAL(settings.similarity(), similarity);
-            UNIT_ASSERT_VALUES_EQUAL(settings.vector_type(), vectorType);
-            UNIT_ASSERT_VALUES_EQUAL(settings.vector_dimension(), vectorDimension);
+            UNIT_ASSERT_VALUES_EQUAL(settings.settings().metric(), metric);
+            UNIT_ASSERT_VALUES_EQUAL(settings.settings().vector_type(), vectorType);
+            UNIT_ASSERT_VALUES_EQUAL(settings.settings().vector_dimension(), vectorDimension);
         } else {
             UNIT_FAIL("oneof SpecializedIndexDescription should be set.");
         }
@@ -1207,9 +1227,9 @@ TCheckFunc HasOwner(const TString& owner) {
     };
 }
 
-void CheckEffectiveRight(const NKikimrScheme::TEvDescribeSchemeResult& record, const TString& right, bool mustHave) {
+void CheckRight(const NKikimrScheme::TEvDescribeSchemeResult& record, const TString& right, bool mustHave, bool isEffective) {
     const auto& self = record.GetPathDescription().GetSelf();
-    TSecurityObject src(self.GetOwner(), self.GetEffectiveACL(), false);
+    TSecurityObject src(self.GetOwner(), isEffective ? self.GetEffectiveACL() : self.GetACL(), false);
 
     NACLib::TSecurityObject required;
     required.FromString(right);
@@ -1233,13 +1253,29 @@ void CheckEffectiveRight(const NKikimrScheme::TEvDescribeSchemeResult& record, c
     }
 }
 
+TCheckFunc HasRight(const TString& right) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        CheckRight(record, right, true, true);
+    };
+}
+
+TCheckFunc HasNoRight(const TString& right) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        CheckRight(record, right, false, true);
+    };
+}
+
+void CheckEffectiveRight(const NKikimrScheme::TEvDescribeSchemeResult& record, const TString& right, bool mustHave) {
+    CheckRight(record, right, mustHave, true);
+}
+
 TCheckFunc HasEffectiveRight(const TString& right) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         CheckEffectiveRight(record, right, true);
     };
 }
 
-TCheckFunc HasNotEffectiveRight(const TString& right) {
+TCheckFunc HasNoEffectiveRight(const TString& right) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         CheckEffectiveRight(record, right, false);
     };
@@ -1273,10 +1309,62 @@ TCheckFunc PartitionKeys(TVector<TString> lastShardKeys) {
         const auto& pathDescr = record.GetPathDescription();
         UNIT_ASSERT_VALUES_EQUAL(lastShardKeys.size(), pathDescr.TablePartitionsSize());
         for (size_t i = 0; i < lastShardKeys.size(); ++i) {
-            UNIT_ASSERT_STRING_CONTAINS(pathDescr.GetTablePartitions(i).GetEndOfRangeKeyPrefix(), lastShardKeys[i]);
+            const auto& partition = pathDescr.GetTablePartitions(i);
+            UNIT_ASSERT_STRING_CONTAINS_C(
+                partition.GetEndOfRangeKeyPrefix(), lastShardKeys[i],
+                "partition index: " << i << '\n'
+                    << "actual key prefix: " << partition.GetEndOfRangeKeyPrefix().Quote() << '\n'
+                    << "expected key prefix: " << lastShardKeys[i].Quote() << '\n'
+            );
         }
     };
 }
+
+namespace {
+
+// Serializes / deserializes a value of type T to a cell vector string representation.
+template <typename T>
+struct TSplitBoundarySerializer {
+    static TString Serialize(T splitBoundary) {
+        const auto cell = TCell::Make(splitBoundary);
+        TSerializedCellVec cellVec(TArrayRef<const TCell>(&cell, 1));
+        return cellVec.ReleaseBuffer();
+    }
+
+    static TVector<T> Deserialize(const TString& serializedCells) {
+        TSerializedCellVec cells(serializedCells);
+        TVector<T> values;
+        for (const auto& cell : cells.GetCells()) {
+            if (cell.IsNull()) {
+                // the last cell
+                break;
+            }
+            values.emplace_back(cell.AsValue<T>());
+        }
+        return values;
+    }
+};
+
+}
+
+template <typename T>
+TCheckFunc SplitBoundaries(TVector<T>&& expectedBoundaries) {
+    return [expectedBoundaries = std::move(expectedBoundaries)] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        const auto& pathDescr = record.GetPathDescription();
+        UNIT_ASSERT_VALUES_EQUAL(pathDescr.TablePartitionsSize(), expectedBoundaries.size() + 1);
+        for (size_t i = 0; i < expectedBoundaries.size(); ++i) {
+            const auto& partition = pathDescr.GetTablePartitions(i);
+            const auto actualBoundary = TSplitBoundarySerializer<T>::Deserialize(partition.GetEndOfRangeKeyPrefix()).at(0);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                actualBoundary, expectedBoundaries[i],
+                "partition index: " << i << '\n'
+                    << "actual key prefix: " << partition.GetEndOfRangeKeyPrefix().Quote() << '\n'
+            );
+        }
+    };
+}
+
+template TCheckFunc SplitBoundaries<ui32>(TVector<ui32>&&);
 
 TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {

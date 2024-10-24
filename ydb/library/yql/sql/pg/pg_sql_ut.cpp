@@ -331,6 +331,21 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
     }
 
+    Y_UNIT_TEST(AlterTableSetDefaultNextvalStmtWithSchemaname) {
+        auto res = PgSqlToYql("ALTER TABLE public.t ALTER COLUMN id SET DEFAULT nextval('public.seq'::regclass);");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+        TString program = R"(
+            (
+                (let world (Configure! world (DataSource 'config) 'OrderedColumns)) 
+                (let world (Write! world (DataSink '"kikimr" '"") 
+                    (Key '('tablescheme (String '"t"))) (Void) '('('mode 'alter) '('actions '('('alterColumns '('('"id" '('setDefault '('nextval 'seq)))))))))) 
+                (let world (CommitAll! world)) (return world)
+            )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
     Y_UNIT_TEST(AlterTableStmtWithCast) {
         auto res = PgSqlToYql("ALTER TABLE public.t ALTER COLUMN id SET DEFAULT nextval('seq'::regclass);");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
@@ -671,7 +686,7 @@ Y_UNIT_TEST_SUITE(PgExtensions) {
             );
         )";
 
-        h.Write(sql.Data(), sql.Size());
+        h.Write(sql.data(), sql.size());
         desc.Name = "MyExt";
         desc.InstallName = "$libdir/MyExt";
         desc.SqlPaths.push_back(h.Name());
@@ -717,7 +732,7 @@ Y_UNIT_TEST_SUITE(PgExtensions) {
             VALUES ('a', 1, null),('b', null, -3.4);
         )";
 
-        h.Write(sql.Data(), sql.Size());
+        h.Write(sql.data(), sql.size());
         desc.Name = "MyExt";
         desc.InstallName = "$libdir/MyExt";
         desc.SqlPaths.push_back(h.Name());
@@ -770,7 +785,7 @@ Y_UNIT_TEST_SUITE(PgExtensions) {
             CREATE CAST (foo AS bar) WITH FUNCTION bar(foo);
         )";
 
-        h.Write(sql.Data(), sql.Size());
+        h.Write(sql.data(), sql.size());
         desc.Name = "MyExt";
         desc.InstallName = "$libdir/MyExt";
         desc.SqlPaths.push_back(h.Name());
@@ -849,7 +864,7 @@ Y_UNIT_TEST_SUITE(PgExtensions) {
             );
         )";
 
-        h.Write(sql.Data(), sql.Size());
+        h.Write(sql.data(), sql.size());
         desc.Name = "MyExt";
         desc.InstallName = "$libdir/MyExt";
         desc.SqlPaths.push_back(h.Name());
@@ -952,7 +967,7 @@ Y_UNIT_TEST_SUITE(PgExtensions) {
             );
         )";
 
-        h.Write(sql.Data(), sql.Size());
+        h.Write(sql.data(), sql.size());
         desc.Name = "MyExt";
         desc.InstallName = "$libdir/MyExt";
         desc.SqlPaths.push_back(h.Name());
@@ -1067,7 +1082,7 @@ Y_UNIT_TEST_SUITE(PgExtensions) {
                 FUNCTION    1   foo_hash(foo);
         )";
 
-        h.Write(sql.Data(), sql.Size());
+        h.Write(sql.data(), sql.size());
         desc.Name = "MyExt";
         desc.InstallName = "$libdir/MyExt";
         desc.SqlPaths.push_back(h.Name());

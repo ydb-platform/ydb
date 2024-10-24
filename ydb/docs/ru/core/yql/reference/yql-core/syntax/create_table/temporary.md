@@ -8,7 +8,7 @@
 
 {% endif %}
 
-```sql
+```yql
 CREATE TEMPORARY TABLE table_name (
     ...
 );

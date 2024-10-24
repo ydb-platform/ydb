@@ -2,13 +2,14 @@ import os
 import sys
 import logging
 import subprocess
+import queue
 
 
 logger = logging.getLogger(__name__)
 
 
 class Nodes(object):
-    def __init__(self, nodes, dry_run=False, ssh_user=None):
+    def __init__(self, nodes, dry_run=False, ssh_user=None, queue_size=0):
         assert isinstance(nodes, list)
         assert len(nodes) > 0
         assert isinstance(nodes[0], str)
@@ -16,6 +17,8 @@ class Nodes(object):
         self._dry_run = bool(dry_run)
         self._ssh_user = ssh_user
         self._logger = logger.getChild(self.__class__.__name__)
+        self._queue = queue.Queue(queue_size)
+        self._qsize = queue_size
 
     @property
     def nodes_list(self):
@@ -83,7 +86,23 @@ class Nodes(object):
 
             actual_cmd = self._get_ssh_command_prefix() + [host, cmd]
             process = subprocess.Popen(actual_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+            if self._qsize > 0:
+                self._queue.put((actual_cmd, process, host))
+                if not self._queue.full():
+                    continue
+                if not self._queue.empty():
+                    actual_cmd, process, host = self._queue.get()
+                    process.wait()
+
             running_jobs.append((actual_cmd, process, host))
+
+        if self._qsize > 0:
+            while not self._queue.empty():
+                actual_cmd, process, host = self._queue.get()
+                process.wait()
+                running_jobs.append((actual_cmd, process, host))
+
         return running_jobs
 
     def execute_async(self, cmd, check_retcode=True, nodes=None, results=None):

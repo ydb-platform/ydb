@@ -181,6 +181,21 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
 
             return IGraphTransformer::TStatus::Repeat;
         }
+    } else if (expectedType.GetKind() == ETypeAnnotationKind::Resource && sourceType.GetKind() == ETypeAnnotationKind::Resource) {
+        const auto from = sourceType.Cast<TResourceExprType>()->GetTag();
+        const auto to = expectedType.Cast<TResourceExprType>()->GetTag();
+        if (from == "DateTime2.TM" && to == "DateTime2.TM64") {
+            node = ctx.Builder(node->Pos())
+                .Callable("Apply")
+                    .Callable(0, "Udf")
+                        .Atom(0, "DateTime2.Convert", TNodeFlags::Default)
+                    .Seal()
+                    .Add(1, std::move(node))
+                .Seal()
+                .Build();
+
+            return IGraphTransformer::TStatus::Repeat;
+        }
     } else if (expectedType.GetKind() == ETypeAnnotationKind::Resource && sourceType.GetKind() == ETypeAnnotationKind::Data) {
         const auto fromSlot = sourceType.Cast<TDataExprType>()->GetSlot();
         const auto to = expectedType.Cast<TResourceExprType>()->GetTag();
@@ -232,8 +247,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                 .Build();
 
             return IGraphTransformer::TStatus::Repeat;
-
-        } else if ((GetDataTypeInfo(fromSlot).Features & (NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType)) && to == "DateTime2.TM") {
+        } else if ((GetDataTypeInfo(fromSlot).Features & (NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType)) && (to == "DateTime2.TM" || to == "DateTime2.TM64")) {
             node = ctx.Builder(node->Pos())
                 .Callable("Apply")
                     .Callable(0, "Udf")
@@ -4910,21 +4924,53 @@ bool IsSqlInCollectionItemsNullable(const NNodes::TCoSqlIn& node) {
         collectionType = collectionType->Cast<TOptionalExprType>()->GetItemType();
     }
 
+    auto lookupType = node.Lookup().Ref().GetTypeAnn();
+
     const auto collectionKind = collectionType->GetKind();
     bool result = false;
     switch (collectionKind) {
         case ETypeAnnotationKind::Tuple:
         {
             const auto tupleType = collectionType->Cast<TTupleExprType>();
-            result = AnyOf(tupleType->GetItems(), [](const auto& item) { return item->HasOptionalOrNull(); } );
+            for (const auto& item : tupleType->GetItems()) {
+                if (item->HasOptionalOrNull()) {
+                    result = true;
+                    break;
+                }
+
+                auto cmp = CanCompare<true>(lookupType, item);
+                if (cmp == ECompareOptions::Optional || cmp == ECompareOptions::Null) {
+                    result = true;
+                    break;
+                }
+            }
+            
             break;
         }
-        case ETypeAnnotationKind::Dict:
-            result = collectionType->Cast<TDictExprType>()->GetKeyType()->HasOptionalOrNull();
+        case ETypeAnnotationKind::Dict: {
+            if (collectionType->Cast<TDictExprType>()->GetKeyType()->HasOptionalOrNull()) {
+                result = true;
+            } else {
+                auto cmp = CanCompare<true>(lookupType, collectionType->Cast<TDictExprType>()->GetKeyType());
+                if (cmp == ECompareOptions::Optional || cmp == ECompareOptions::Null) {
+                    result = true;
+                }
+            }
+
             break;
-        case ETypeAnnotationKind::List:
-            result = collectionType->Cast<TListExprType>()->GetItemType()->HasOptionalOrNull();
+        }
+        case ETypeAnnotationKind::List: {
+            if (collectionType->Cast<TListExprType>()->GetItemType()->HasOptionalOrNull()) {
+                result = true;
+            } else {
+                auto cmp = CanCompare<true>(lookupType, collectionType->Cast<TListExprType>()->GetItemType());
+                if (cmp == ECompareOptions::Optional || cmp == ECompareOptions::Null) {
+                    result = true;
+                }
+            }
+
             break;
+        }
         case ETypeAnnotationKind::EmptyDict:
         case ETypeAnnotationKind::EmptyList:
         case ETypeAnnotationKind::Null:

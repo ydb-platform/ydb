@@ -192,7 +192,7 @@ namespace NYql::NDq::NWorker {
         auto forceIPv4 = IsTrue(GetEnv(TString("YT_SECURE_VAULT_") + NCommonJobVars::YT_FORCE_IPV4, ""));
 
         auto addressResolverStr = GetEnv(NCommonJobVars::ADDRESS_RESOLVER_CONFIG, "");
-        if (!addressResolverStr.Empty()) {
+        if (!addressResolverStr.empty()) {
             auto addressResolverConfig = NYT::NYTree::ConvertTo<NYT::NNet::TAddressResolverConfigPtr>(NYT::NYson::TYsonString(addressResolverStr));
             NYT::NNet::TAddressResolver::Get()->Configure(addressResolverConfig);
         } else if (forceIPv4) {
@@ -222,6 +222,11 @@ namespace NYql::NDq::NWorker {
                 auto archive = layerPath.substr(pos+1);
                 TShellCommand cmd("tar", {"xf", archive, "-C", layerDir});
                 cmd.Run().Wait();
+                TMaybe<int> exitCode = cmd.GetExitCode();
+                if (!exitCode.Defined() || exitCode != 0) {
+                    const TString msg = TStringBuilder() << "'tar' exited with non-zero code, stderr: " << cmd.GetError();
+                    YQL_LOG(ERROR) << msg;
+                }
             }
         } else {
             NFs::MakeDirectoryRecursive("mnt/work");

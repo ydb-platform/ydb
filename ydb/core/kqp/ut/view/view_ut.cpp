@@ -56,6 +56,20 @@ TString ReadWholeFile(const TString& path) {
     return file.ReadAll();
 }
 
+NQuery::TExecuteQueryResult  ExecuteQuery(NQuery::TSession& session, const TString& query) {
+    const auto result = session.ExecuteQuery(
+        query,
+        NQuery::TTxControl::NoTx()
+    ).ExtractValueSync();
+
+    UNIT_ASSERT_C(result.IsSuccess(),
+        "Failed to execute the following query:\n" << query << '\n'
+        << "The issues:\n" << result.GetIssues().ToString()
+    );
+
+    return result;
+}
+
 void ExecuteDataDefinitionQuery(TSession& session, const TString& script) {
     const auto result = session.ExecuteSchemeQuery(script).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), "Failed to execute the following DDL script:\n"
@@ -110,20 +124,25 @@ void AssertFromCache(const TMaybe<TQueryStats>& stats, bool expectedValue) {
     UNIT_ASSERT_VALUES_EQUAL_C(*isFromCache, expectedValue, stats->ToString());
 }
 
-void CompareResults(const TDataQueryResult& first, const TDataQueryResult& second) {
-    const auto& firstResults = first.GetResultSets();
-    const auto& secondResults = second.GetResultSets();
-
+void CompareResults(const TVector<TResultSet>& firstResults, const TVector<TResultSet>& secondResults) {
     UNIT_ASSERT_VALUES_EQUAL(firstResults.size(), secondResults.size());
     for (size_t i = 0; i < firstResults.size(); ++i) {
         CompareYson(FormatResultSetYson(firstResults[i]), FormatResultSetYson(secondResults[i]));
     }
 }
 
-void InitializeTablesAndSecondaryViews(TSession& session) {
+void CompareResults(const TDataQueryResult& first, const TDataQueryResult& second) {
+    CompareResults(first.GetResultSets(), second.GetResultSets());
+}
+
+void CompareResults(const NQuery::TExecuteQueryResult& first, const NQuery::TExecuteQueryResult& second) {
+    CompareResults(first.GetResultSets(), second.GetResultSets());
+}
+
+void InitializeTablesAndSecondaryViews(NQuery::TSession& session) {
     const auto inputFolder = ArcadiaFromCurrentLocation(__SOURCE_FILE__, "input");
-    ExecuteDataDefinitionQuery(session, ReadWholeFile(inputFolder + "/create_tables_and_secondary_views.sql"));
-    ExecuteDataModificationQuery(session, ReadWholeFile(inputFolder + "/fill_tables.sql"));
+    ExecuteQuery(session, ReadWholeFile(inputFolder + "/create_tables_and_secondary_views.sql"));
+    ExecuteQuery(session, ReadWholeFile(inputFolder + "/fill_tables.sql"));
 }
 
 }
@@ -192,6 +211,90 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         const auto creationResult = session.ExecuteSchemeQuery(creationQuery).ExtractValueSync();
         UNIT_ASSERT(!creationResult.IsSuccess());
         UNIT_ASSERT_STRING_CONTAINS(creationResult.GetIssues().ToString(), "Error: Cannot divide type String and String");
+    }
+
+    Y_UNIT_TEST(ParsingSecurityInvoker) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        EnableViewsFeatureFlag(kikimr);
+        auto session = kikimr.GetQueryClient().GetSession().ExtractValueSync().GetSession();
+
+        constexpr const char* path = "TheView";
+        constexpr const char* query = "SELECT 1";
+
+        auto fail = [&](const char* options) {
+            const TString creationQuery = std::format(R"(
+                    CREATE VIEW {} {} AS {};
+                )",
+                path,
+                options,
+                query
+            );
+
+            const auto creationResult = session.ExecuteQuery(
+                creationQuery,
+                NQuery::TTxControl::NoTx()
+            ).ExtractValueSync();
+
+            UNIT_ASSERT_C(!creationResult.IsSuccess(), creationQuery);
+            UNIT_ASSERT_STRING_CONTAINS(
+                creationResult.GetIssues().ToString(), "security_invoker option must be explicitly enabled"
+            );
+        };
+        fail("");
+        fail("WITH security_invoker");
+        fail("WITH security_invoker = false");
+        fail("WITH SECURITY_INVOKER = true"); // option name is case-sensitive
+        fail("WITH (security_invoker)");
+        fail("WITH (security_invoker = false)");
+        fail("WITH (security_invoker = true, security_invoker = false)");
+
+        auto succeed = [&](const char* options) {
+            const TString creationQuery = std::format(R"(
+                    CREATE VIEW {} {} AS {};
+                    DROP VIEW {};
+                )",
+                path,
+                options,
+                query,
+                path
+            );
+            ExecuteQuery(session, creationQuery);
+        };
+        succeed("WITH security_invoker = true");
+        succeed("WITH (security_invoker = true)");
+        succeed("WITH (security_invoker = tRuE)"); // bool parsing is flexible enough
+        succeed("WITH (security_invoker = false, security_invoker = true)");
+
+        {
+            // literal named expression
+            const TString creationQuery = std::format(R"(
+                    $value = "true";
+                    CREATE VIEW {} WITH security_invoker = $value AS {};
+                    DROP VIEW {};
+                )",
+                path,
+                query,
+                path
+            );
+            ExecuteQuery(session, creationQuery);
+        }
+        {
+            // evaluated expression
+            const TString creationQuery = std::format(R"(
+                    $lambda = ($x) -> {{
+                        RETURN CAST($x as String)
+                    }};
+                    $value = $lambda(true);
+
+                    CREATE VIEW {} WITH security_invoker = $value AS {};
+                    DROP VIEW {};
+                )",
+                path,
+                query,
+                path
+            );
+            ExecuteQuery(session, creationQuery);
+        }
     }
 
     Y_UNIT_TEST(ListCreatedView) {
@@ -408,6 +511,46 @@ Y_UNIT_TEST_SUITE(TSelectFromViewTest) {
         CompareResults(etalonResults, selectFromViewResults);
     }
 
+    Y_UNIT_TEST(OneTableUsingRelativeName) {
+        TKikimrRunner kikimr;
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+
+        EnableViewsFeatureFlag(kikimr);
+        auto session = kikimr.GetQueryClient().GetSession().ExtractValueSync().GetSession();
+
+        constexpr const char* viewName = "TheView";
+        constexpr const char* testTable = "Test";
+        const auto innerQuery = std::format(R"(
+                SELECT * FROM {}
+            )",
+            testTable
+        );
+
+        const TString creationQuery = std::format(R"(
+                CREATE VIEW {} WITH (security_invoker = true) AS {};
+            )",
+            viewName,
+            innerQuery
+        );
+        ExecuteQuery(session, creationQuery);
+
+        const auto etalonResults = ExecuteQuery(session, std::format(R"(
+                    SELECT * FROM ({});
+                )",
+                innerQuery
+            )
+        );
+        const auto selectFromViewResults = ExecuteQuery(session, std::format(R"(
+                    SELECT * FROM {};
+                )",
+                viewName
+            )
+        );
+        CompareResults(etalonResults, selectFromViewResults);
+    }
+
     Y_UNIT_TEST(DisabledFeatureFlag) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
@@ -439,7 +582,7 @@ Y_UNIT_TEST_SUITE(TSelectFromViewTest) {
     Y_UNIT_TEST(ReadTestCasesFromFiles) {
         TKikimrRunner kikimr;
         EnableViewsFeatureFlag(kikimr);
-        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto session = kikimr.GetQueryClient().GetSession().ExtractValueSync().GetSession();
 
         InitializeTablesAndSecondaryViews(session);
         EnableLogging();
@@ -450,13 +593,13 @@ Y_UNIT_TEST_SUITE(TSelectFromViewTest) {
         TString testcase;
         while (testcase = testcases.Next()) {
             const auto pathPrefix = TStringBuilder() << testcasesFolder << '/' << testcase << '/';
-            ExecuteDataDefinitionQuery(session, ReadWholeFile(pathPrefix + "create_view.sql"));
+            ExecuteQuery(session, ReadWholeFile(pathPrefix + "create_view.sql"));
 
-            const auto etalonResults = ExecuteDataModificationQuery(session, ReadWholeFile(pathPrefix + "etalon_query.sql"));
-            const auto selectFromViewResults = ExecuteDataModificationQuery(session, ReadWholeFile(pathPrefix + "select_from_view.sql"));
+            const auto etalonResults = ExecuteQuery(session, ReadWholeFile(pathPrefix + "etalon_query.sql"));
+            const auto selectFromViewResults = ExecuteQuery(session, ReadWholeFile(pathPrefix + "select_from_view.sql"));
             CompareResults(etalonResults, selectFromViewResults);
 
-            ExecuteDataDefinitionQuery(session, ReadWholeFile(pathPrefix + "drop_view.sql"));
+            ExecuteQuery(session, ReadWholeFile(pathPrefix + "drop_view.sql"));
         }
     }
 

@@ -24,7 +24,7 @@
 #include <yt/yt/core/logging/formatter.h>
 #include <yt/yt/core/logging/system_log_event_provider.h>
 
-#include <yt/yt/core/misc/atomic_object.h>
+#include <library/cpp/yt/threading/atomic_object.h>
 #include <yt/yt/core/misc/proc.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
@@ -379,10 +379,11 @@ public:
         ILogWriterHost* /*host*/) noexcept override
     {
         auto config = ParseConfig(configNode);
+        auto eventProvider = CreateDefaultSystemLogEventProvider(config);
         return New<TDynamicTableLogWriter>(
             ClientHolder_,
             std::move(formatter),
-            CreateDefaultSystemLogEventProvider(config),
+            std::move(eventProvider),
             std::move(config),
             std::move(name),
             WriteQueue_->GetInvoker());

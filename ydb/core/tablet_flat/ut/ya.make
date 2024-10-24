@@ -12,8 +12,6 @@ ELSE()
 ENDIF()
 
 SRCS(
-    datetime_ut.cpp
-    decimal_ut.cpp
     flat_cxx_database_ut.cpp
     ut_db_iface.cpp
     ut_db_scheme.cpp
@@ -27,6 +25,9 @@ SRCS(
     flat_test_db.h
     flat_test_db.cpp
     flat_test_db_helpers.h
+    shared_cache_s3fifo_ut.cpp
+    shared_cache_clock_pro_ut.cpp
+    shared_cache_switchable_ut.cpp
     shared_handle_ut.cpp
     ut_btree_index_nodes.cpp
     ut_btree_index_iter_charge.cpp
@@ -38,6 +39,8 @@ SRCS(
     ut_comp_gen.cpp
     ut_compaction.cpp
     ut_compaction_multi.cpp
+    ut_datetime.cpp
+    ut_decimal.cpp    
     ut_charge.cpp
     ut_part.cpp
     ut_part_multi.cpp

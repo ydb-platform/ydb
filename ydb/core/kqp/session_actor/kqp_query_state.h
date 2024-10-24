@@ -64,6 +64,7 @@ public:
         , StartTime(TInstant::Now())
         , KeepSession(ev->Get()->GetKeepSession() || longSession)
         , UserToken(ev->Get()->GetUserToken())
+        , ClientAddress(ev->Get()->GetClientAddress())
         , StartedAt(startedAt)
     {
         RequestEv.reset(ev->Release().Release());
@@ -91,6 +92,7 @@ public:
         }
         UserRequestContext->PoolId = RequestEv->GetPoolId();
         UserRequestContext->PoolConfig = RequestEv->GetPoolConfig();
+        UserRequestContext->DatabaseId = RequestEv->GetDatabaseId();
     }
 
     // the monotonously growing counter, the ordinal number of the query,
@@ -127,7 +129,9 @@ public:
     TKqpQueryStats QueryStats;
     bool KeepSession = false;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TString ClientAddress;
     NActors::TMonotonic StartedAt;
+    bool CompilationRunning = false;
 
     THashMap<NKikimr::TTableId, ui64> TableVersions;
 
@@ -345,6 +349,11 @@ public:
 
         if (HasTxSinkInTx(tx)) {
             // At current time transactional internal sinks require separate tnx with commit.
+            return false;
+        }
+
+        if (TxCtx->HasOlapTable) {
+            // HTAP/OLAP transactions always use separate commit.
             return false;
         }
 
@@ -568,11 +577,6 @@ public:
     TDuration GetCpuTime() {
         ResetTimer();
         return CpuTime;
-    }
-
-    // Returns nullptr in case of no local event
-    google::protobuf::Arena* GetArena() {
-        return RequestEv->GetArena();
     }
 
     bool GetCollectDiagnostics() {

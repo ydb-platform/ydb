@@ -87,22 +87,22 @@ void TYPathRequest::RequireServerFeature(int featureId)
     Header_.add_required_server_feature_ids(featureId);
 }
 
-const TString& TYPathRequest::GetUser() const
+const std::string& TYPathRequest::GetUser() const
 {
     YT_ABORT();
 }
 
-void TYPathRequest::SetUser(const TString& /*user*/)
+void TYPathRequest::SetUser(const std::string& /*user*/)
 {
     YT_ABORT();
 }
 
-const TString& TYPathRequest::GetUserTag() const
+const std::string& TYPathRequest::GetUserTag() const
 {
     YT_ABORT();
 }
 
-void TYPathRequest::SetUserTag(const TString& /*tag*/)
+void TYPathRequest::SetUserTag(const std::string& /*tag*/)
 {
     YT_ABORT();
 }
@@ -285,7 +285,10 @@ void ResolveYPath(
 
     auto currentService = rootService;
 
-    const auto& originalPath = GetOriginalRequestTargetYPath(context->RequestHeader());
+    // NB: of course, we could use reference here. But Resolve() can change
+    // request header due to master compat.
+    // COMPAT(kvk1920): use const reference.
+    auto originalPath = GetOriginalRequestTargetYPath(context->RequestHeader());
     auto currentPath = GetRequestTargetYPath(context->RequestHeader());
 
     int iteration = 0;
@@ -396,11 +399,15 @@ void ExecuteVerb(
 TFuture<TYsonString> AsyncYPathGet(
     const IYPathServicePtr& service,
     const TYPath& path,
-    const TAttributeFilter& attributeFilter)
+    const TAttributeFilter& attributeFilter,
+    const IAttributeDictionaryPtr& options)
 {
     auto request = TYPathProxy::Get(path);
     if (attributeFilter) {
         ToProto(request->mutable_attributes(), attributeFilter);
+    }
+    if (options) {
+        ToProto(request->mutable_options(), *options);
     }
     return ExecuteVerb(service, request)
         .Apply(BIND([] (TYPathProxy::TRspGetPtr response) {
@@ -420,9 +427,10 @@ TString SyncYPathGetKey(const IYPathServicePtr& service, const TYPath& path)
 TYsonString SyncYPathGet(
     const IYPathServicePtr& service,
     const TYPath& path,
-    const TAttributeFilter& attributeFilter)
+    const TAttributeFilter& attributeFilter,
+    const IAttributeDictionaryPtr& options)
 {
-    auto future = AsyncYPathGet(service, path, attributeFilter);
+    auto future = AsyncYPathGet(service, path, attributeFilter, options);
     auto optionalResult = future.TryGetUnique();
     YT_VERIFY(optionalResult);
     return optionalResult->ValueOrThrow();

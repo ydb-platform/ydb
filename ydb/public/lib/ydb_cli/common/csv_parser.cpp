@@ -41,12 +41,12 @@ public:
         size_t cnt;
         try {
             auto value = StringToArithmetic<T>(token, cnt);
-            if (cnt != token.Size() || value < std::numeric_limits<T>::lowest() || value > std::numeric_limits<T>::max()) {
+            if (cnt != token.size() || value < std::numeric_limits<T>::lowest() || value > std::numeric_limits<T>::max()) {
                 throw yexception();
             }
             return static_cast<T>(value);
         } catch (std::exception& e) {
-            throw TCsvParseException() << "Expected " << Parser.GetPrimitive() << " value, recieved: \"" << token << "\".";
+            throw TCsvParseException() << "Expected " << Parser.GetPrimitive() << " value, received: \"" << token << "\".";
         }
     }
 
@@ -184,7 +184,7 @@ public:
             break;
         }
         case TTypeParser::ETypeKind::Decimal: {
-            Builder.Decimal(TString(token));
+            Builder.Decimal(TDecimalValue(TString(token), Parser.GetDecimal().Precision, Parser.GetDecimal().Scale));
             break;
         }
         case TTypeParser::ETypeKind::Optional: {
@@ -276,7 +276,7 @@ public:
         if (token == "false") {
             return false;
         }
-        throw TCsvParseException() << "Expected bool value: \"true\" or \"false\", recieved: \"" << token << "\".";
+        throw TCsvParseException() << "Expected bool value: \"true\" or \"false\", received: \"" << token << "\".";
     }
 
     void EnsureNull(TStringBuf token) const {
@@ -284,7 +284,7 @@ public:
             throw TCsvParseException() << "Expected null value instead of \"" << token << "\", but null value is not set.";
         }
         if (token != NullValue) {
-            throw TCsvParseException() << "Expected null value: \"" << NullValue << "\", recieved: \"" << token << "\".";
+            throw TCsvParseException() << "Expected null value: \"" << NullValue << "\", received: \"" << token << "\".";
         }
     }
 

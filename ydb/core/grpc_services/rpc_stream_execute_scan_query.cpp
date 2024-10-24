@@ -1,7 +1,6 @@
 #include "service_table.h"
 #include <ydb/core/grpc_services/base/base.h>
 
-#include "rpc_common/rpc_common.h"
 #include "rpc_kqp_base.h"
 #include "service_table.h"
 
@@ -280,7 +279,7 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
-        auto& record = ev->Get()->Record.GetRef();
+        auto& record = ev->Get()->Record;
 
         NYql::TIssues issues;
         const auto& issueMessage = record.GetResponse().GetQueryIssues();
@@ -493,11 +492,17 @@ private:
 
 } // namespace
 
-void DoExecuteScanQueryRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
-    ui64 rpcBufferSize = f.GetChannelBufferSize();
-    auto* req = dynamic_cast<TEvStreamExecuteScanQueryRequest*>(p.release());
+template<>
+template<>
+IActor* TEvStreamExecuteScanQueryRequest::CreateRpcActor(IRequestNoOpCtx* msg, ui64 rpcBufferSize) {
+    auto* req = dynamic_cast<TEvStreamExecuteScanQueryRequest*>(msg);
     Y_ABORT_UNLESS(req != nullptr, "Wrong using of TGRpcRequestWrapper");
-    f.RegisterActor(new TStreamExecuteScanQueryRPC(req, rpcBufferSize));
+    return new TStreamExecuteScanQueryRPC(req, rpcBufferSize);
+}
+
+void DoExecuteScanQueryRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    auto actor = TEvStreamExecuteScanQueryRequest::CreateRpcActor(p.release(), f.GetChannelBufferSize());
+    f.RegisterActor(actor);
 }
 
 } // namespace NGRpcService

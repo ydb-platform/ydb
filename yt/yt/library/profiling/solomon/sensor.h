@@ -62,7 +62,7 @@ private:
     std::atomic<i64> Value_ = 0;
 };
 
-static_assert(sizeof(TSimpleCounter) == 24);
+static_assert(sizeof(TSimpleCounter) == 32);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -75,10 +75,10 @@ public:
     TDuration GetValue() override;
 
 private:
-    std::atomic<TDuration::TValue> Value_{0};
+    std::atomic<TDuration::TValue> Value_ = 0;
 };
 
-static_assert(sizeof(TSimpleTimeCounter) == 24);
+static_assert(sizeof(TSimpleTimeCounter) == 32);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -108,7 +108,7 @@ class THistogram
     , public IHistogramImpl
 {
 public:
-    THistogram(const TSensorOptions& options);
+    explicit THistogram(const TSensorOptions& options);
 
     void Record(TDuration value) override;
 
@@ -121,7 +121,7 @@ public:
 
 private:
     std::vector<double> Bounds_;
-    std::vector<std::atomic<int>> Buckets_;
+    std::vector<std::atomic<i64>> Buckets_;
 
     // These two methods are not used.
     TSummarySnapshot<TDuration> GetSummary() override;

@@ -24,7 +24,7 @@ from google.protobuf.internal.containers import RepeatedCompositeFieldContainer
 from google.protobuf.internal.well_known_types import WKTBASES
 from . import extensions_pb2
 
-__version__ = "3.3.0"
+__version__ = "3.6.0"
 
 # SourceCodeLocation is defined by `message Location` here
 # https://github.com/protocolbuffers/protobuf/blob/master/src/google/protobuf/descriptor.proto
@@ -169,7 +169,6 @@ class PkgWriter(object):
         """
         if path == "typing_extensions":
             stabilization = {
-                "Literal": (3, 8),
                 "TypeAlias": (3, 10),
             }
             assert name in stabilization
@@ -345,7 +344,7 @@ class PkgWriter(object):
                 wl("V: {} = ValueType", self._import("typing_extensions", "TypeAlias"))
             wl("")
             wl(
-                "class {}({}[{}], {}):  # noqa: F821",
+                "class {}({}[{}], {}):",
                 etw_helper_class,
                 self._import("google.protobuf.internal.enum_type_wrapper", "_EnumTypeWrapper"),
                 value_type_helper_fq,
@@ -406,6 +405,7 @@ class PkgWriter(object):
 
             class_name = desc.name if desc.name not in PYTHON_RESERVED else "_r_" + desc.name
             message_class = self._import("google.protobuf.message", "Message")
+            wl("@{}", self._import("typing", "final"))
             wl(f"class {class_name}({message_class}{addl_base}):")
             with self._indent():
                 scl = scl_prefix + [i]
@@ -436,12 +436,16 @@ class PkgWriter(object):
                     if field.name in PYTHON_RESERVED:
                         continue
                     field_type = self.python_type(field)
-
                     if is_scalar(field) and field.label != d.FieldDescriptorProto.LABEL_REPEATED:
                         # Scalar non repeated fields are r/w
                         wl(f"{field.name}: {field_type}")
                         self._write_comments(scl + [d.DescriptorProto.FIELD_FIELD_NUMBER, idx])
-                    else:
+
+                for idx, field in enumerate(desc.field):
+                    if field.name in PYTHON_RESERVED:
+                        continue
+                    field_type = self.python_type(field)
+                    if not (is_scalar(field) and field.label != d.FieldDescriptorProto.LABEL_REPEATED):
                         # r/o Getters for non-scalar fields and scalar-repeated fields
                         scl_field = scl + [d.DescriptorProto.FIELD_FIELD_NUMBER, idx]
                         wl("@property")
@@ -450,6 +454,7 @@ class PkgWriter(object):
                         if self._has_comments(scl_field):
                             with self._indent():
                                 self._write_comments(scl_field)
+                            wl("")
 
                 self.write_extensions(desc.extension, scl + [d.DescriptorProto.EXTENSION_FIELD_NUMBER])
 
@@ -457,8 +462,7 @@ class PkgWriter(object):
                 wl("def __init__(")
                 with self._indent():
                     if any(f.name == "self" for f in desc.field):
-                        wl("# pyright: reportSelfClsParameterName=false")
-                        wl("self_,")
+                        wl("self_,  # pyright: ignore[reportSelfClsParameterName]")
                     else:
                         wl("self,")
                 with self._indent():
@@ -505,14 +509,14 @@ class PkgWriter(object):
         if hf_fields:
             wl(
                 "def HasField(self, field_name: {}[{}]) -> {}: ...",
-                self._import("typing_extensions", "Literal"),
+                self._import("typing", "Literal"),
                 hf_fields_text,
                 self._builtin("bool"),
             )
         if cf_fields:
             wl(
                 "def ClearField(self, field_name: {}[{}]) -> None: ...",
-                self._import("typing_extensions", "Literal"),
+                self._import("typing", "Literal"),
                 cf_fields_text,
             )
 
@@ -521,10 +525,10 @@ class PkgWriter(object):
                 wl("@{}", self._import("typing", "overload"))
             wl(
                 "def WhichOneof(self, oneof_group: {}[{}]) -> {}[{}] | None: ...",
-                self._import("typing_extensions", "Literal"),
+                self._import("typing", "Literal"),
                 # Accepts both str and bytes
                 f'"{wo_field}", b"{wo_field}"',
-                self._import("typing_extensions", "Literal"),
+                self._import("typing", "Literal"),
                 # Returns `str`
                 ", ".join(f'"{m}"' for m in members),
             )
@@ -574,7 +578,7 @@ class PkgWriter(object):
                 wl("@{}", self._import("abc", "abstractmethod"))
             wl(f"def {method.name}(")
             with self._indent():
-                wl(f"inst: {class_name},")
+                wl(f"inst: {class_name},  # pyright: ignore[reportSelfClsParameterName]")
                 wl(
                     "rpc_controller: {},",
                     self._import("google.protobuf.service", "RpcController"),
@@ -598,6 +602,7 @@ class PkgWriter(object):
                 with self._indent():
                     if not self._write_comments(scl_method):
                         wl("...")
+            wl("")
 
     def write_services(
         self,
@@ -619,7 +624,6 @@ class PkgWriter(object):
                 if self._write_comments(scl):
                     wl("")
                 self.write_methods(service, class_name, is_abstract=True, scl_prefix=scl)
-            wl("")
 
             # The stub client
             stub_class_name = service.name + "_Stub"
@@ -632,7 +636,6 @@ class PkgWriter(object):
                     self._import("google.protobuf.service", "RpcChannel"),
                 )
                 self.write_methods(service, stub_class_name, is_abstract=False, scl_prefix=scl)
-            wl("")
 
     def _import_casttype(self, casttype: str) -> str:
         split = casttype.split(".")
@@ -660,29 +663,74 @@ class PkgWriter(object):
 
         return ktype, vtype
 
-    def _callable_type(self, method: d.MethodDescriptorProto) -> str:
+    def _callable_type(self, method: d.MethodDescriptorProto, is_async: bool = False) -> str:
+        module = "grpc.aio" if is_async else "grpc"
         if method.client_streaming:
             if method.server_streaming:
-                return self._import("grpc", "StreamStreamMultiCallable")
+                return self._import(module, "StreamStreamMultiCallable")
             else:
-                return self._import("grpc", "StreamUnaryMultiCallable")
+                return self._import(module, "StreamUnaryMultiCallable")
         else:
             if method.server_streaming:
-                return self._import("grpc", "UnaryStreamMultiCallable")
+                return self._import(module, "UnaryStreamMultiCallable")
             else:
-                return self._import("grpc", "UnaryUnaryMultiCallable")
+                return self._import(module, "UnaryUnaryMultiCallable")
 
-    def _input_type(self, method: d.MethodDescriptorProto, use_stream_iterator: bool = True) -> str:
+    def _input_type(self, method: d.MethodDescriptorProto) -> str:
         result = self._import_message(method.input_type)
-        if use_stream_iterator and method.client_streaming:
-            result = f"{self._import('collections.abc', 'Iterator')}[{result}]"
         return result
 
-    def _output_type(self, method: d.MethodDescriptorProto, use_stream_iterator: bool = True) -> str:
-        result = self._import_message(method.output_type)
-        if use_stream_iterator and method.server_streaming:
-            result = f"{self._import('collections.abc', 'Iterator')}[{result}]"
+    def _servicer_input_type(self, method: d.MethodDescriptorProto) -> str:
+        result = self._import_message(method.input_type)
+        if method.client_streaming:
+            # See write_grpc_async_hacks().
+            result = f"_MaybeAsyncIterator[{result}]"
         return result
+
+    def _output_type(self, method: d.MethodDescriptorProto) -> str:
+        result = self._import_message(method.output_type)
+        return result
+
+    def _servicer_output_type(self, method: d.MethodDescriptorProto) -> str:
+        result = self._import_message(method.output_type)
+        if method.server_streaming:
+            # Union[Iterator[Resp], AsyncIterator[Resp]] is subtyped by Iterator[Resp] and AsyncIterator[Resp].
+            # So both can be used in the covariant function return position.
+            iterator = f"{self._import('collections.abc', 'Iterator')}[{result}]"
+            aiterator = f"{self._import('collections.abc', 'AsyncIterator')}[{result}]"
+            result = f"{self._import('typing', 'Union')}[{iterator}, {aiterator}]"
+        else:
+            # Union[Resp, Awaitable[Resp]] is subtyped by Resp and Awaitable[Resp].
+            # So both can be used in the covariant function return position.
+            # Awaitable[Resp] is equivalent to async def.
+            awaitable = f"{self._import('collections.abc', 'Awaitable')}[{result}]"
+            result = f"{self._import('typing', 'Union')}[{result}, {awaitable}]"
+        return result
+
+    def write_grpc_async_hacks(self) -> None:
+        wl = self._write_line
+        # _MaybeAsyncIterator[Req] is supertyped by Iterator[Req] and AsyncIterator[Req].
+        # So both can be used in the contravariant function parameter position.
+        wl('_T = {}("_T")', self._import("typing", "TypeVar"))
+        wl("")
+        wl(
+            "class _MaybeAsyncIterator({}[_T], {}[_T], metaclass={}): ...",
+            self._import("collections.abc", "AsyncIterator"),
+            self._import("collections.abc", "Iterator"),
+            self._import("abc", "ABCMeta"),
+        )
+        wl("")
+
+        # _ServicerContext is supertyped by grpc.ServicerContext and grpc.aio.ServicerContext
+        # So both can be used in the contravariant function parameter position.
+        wl(
+            "class _ServicerContext({}, {}):  # type: ignore[misc, type-arg]",
+            self._import("grpc", "ServicerContext"),
+            self._import("grpc.aio", "ServicerContext"),
+        )
+        with self._indent():
+            wl("...")
+        wl("")
 
     def write_grpc_methods(self, service: d.ServiceDescriptorProto, scl_prefix: SourceCodeLocation) -> None:
         wl = self._write_line
@@ -698,20 +746,21 @@ class PkgWriter(object):
             with self._indent():
                 wl("self,")
                 input_name = "request_iterator" if method.client_streaming else "request"
-                input_type = self._input_type(method)
+                input_type = self._servicer_input_type(method)
                 wl(f"{input_name}: {input_type},")
-                wl("context: {},", self._import("grpc", "ServicerContext"))
+                wl("context: _ServicerContext,")
             wl(
                 ") -> {}:{}",
-                self._output_type(method),
+                self._servicer_output_type(method),
                 " ..." if not self._has_comments(scl) else "",
-            ),
+            )
             if self._has_comments(scl):
                 with self._indent():
                     if not self._write_comments(scl):
                         wl("...")
+            wl("")
 
-    def write_grpc_stub_methods(self, service: d.ServiceDescriptorProto, scl_prefix: SourceCodeLocation) -> None:
+    def write_grpc_stub_methods(self, service: d.ServiceDescriptorProto, scl_prefix: SourceCodeLocation, is_async: bool = False) -> None:
         wl = self._write_line
         methods = [(i, m) for i, m in enumerate(service.method) if m.name not in PYTHON_RESERVED]
         if not methods:
@@ -720,12 +769,13 @@ class PkgWriter(object):
         for i, method in methods:
             scl = scl_prefix + [d.ServiceDescriptorProto.METHOD_FIELD_NUMBER, i]
 
-            wl("{}: {}[", method.name, self._callable_type(method))
+            wl("{}: {}[", method.name, self._callable_type(method, is_async=is_async))
             with self._indent():
-                wl("{},", self._input_type(method, False))
-                wl("{},", self._output_type(method, False))
+                wl("{},", self._input_type(method))
+                wl("{},", self._output_type(method))
             wl("]")
             self._write_comments(scl)
+            wl("")
 
     def write_grpc_services(
         self,
@@ -740,16 +790,28 @@ class PkgWriter(object):
             scl = scl_prefix + [i]
 
             # The stub client
-            wl(f"class {service.name}Stub:")
+            wl(
+                "class {}Stub:",
+                service.name,
+            )
             with self._indent():
                 if self._write_comments(scl):
                     wl("")
-                wl(
-                    "def __init__(self, channel: {}) -> None: ...",
-                    self._import("grpc", "Channel"),
-                )
+                # To support casting into FooAsyncStub, allow both Channel and aio.Channel here.
+                channel = f"{self._import('typing', 'Union')}[{self._import('grpc', 'Channel')}, {self._import('grpc.aio', 'Channel')}]"
+                wl("def __init__(self, channel: {}) -> None: ...", channel)
                 self.write_grpc_stub_methods(service, scl)
-            wl("")
+
+            # The (fake) async stub client
+            wl(
+                "class {}AsyncStub:",
+                service.name,
+            )
+            with self._indent():
+                if self._write_comments(scl):
+                    wl("")
+                # No __init__ since this isn't a real class (yet), and requires manual casting to work.
+                self.write_grpc_stub_methods(service, scl, is_async=True)
 
             # The service definition interface
             wl(
@@ -761,12 +823,13 @@ class PkgWriter(object):
                 if self._write_comments(scl):
                     wl("")
                 self.write_grpc_methods(service, scl)
-            wl("")
+            server = self._import("grpc", "Server")
+            aserver = self._import("grpc.aio", "Server")
             wl(
                 "def add_{}Servicer_to_server(servicer: {}Servicer, server: {}) -> None: ...",
                 service.name,
                 service.name,
-                self._import("grpc", "Server"),
+                f"{self._import('typing', 'Union')}[{server}, {aserver}]",
             )
             wl("")
 
@@ -861,8 +924,9 @@ class PkgWriter(object):
         if self.lines:
             assert self.lines[0].startswith('"""')
             self.lines[0] = f'"""{HEADER}{self.lines[0][3:]}'
+            self._write_line("")
         else:
-            self._write_line(f'"""{HEADER}"""')
+            self._write_line(f'"""{HEADER}"""\n')
 
         for reexport_idx in self.fd.public_dependency:
             reexport_file = self.fd.dependency[reexport_idx]
@@ -889,7 +953,7 @@ class PkgWriter(object):
 
         for pkg, items in sorted(self.from_imports.items()):
             self._write_line(f"from {pkg} import (")
-            for (name, reexport_name) in sorted(items):
+            for name, reexport_name in sorted(items):
                 if reexport_name is None:
                     self._write_line(f"    {name},")
                 else:
@@ -955,6 +1019,7 @@ def generate_mypy_grpc_stubs(
             relax_strict_optional_primitives,
             grpc=True,
         )
+        pkg_writer.write_grpc_async_hacks()
         pkg_writer.write_grpc_services(fd.service, [d.FileDescriptorProto.SERVICE_FIELD_NUMBER])
 
         assert name == fd.name
@@ -965,9 +1030,7 @@ def generate_mypy_grpc_stubs(
 
 
 @contextmanager
-def code_generation() -> Iterator[
-    Tuple[plugin_pb2.CodeGeneratorRequest, plugin_pb2.CodeGeneratorResponse],
-]:
+def code_generation() -> Iterator[Tuple[plugin_pb2.CodeGeneratorRequest, plugin_pb2.CodeGeneratorResponse],]:
     if len(sys.argv) > 1 and sys.argv[1] in ("-V", "--version"):
         print("mypy-protobuf " + __version__)
         sys.exit(0)

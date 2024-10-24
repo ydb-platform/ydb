@@ -27,6 +27,11 @@ items:
   href: limits-ydb.md
 - name: Multi-Version Concurrency Control (MVCC)
   href: mvcc.md
+- name: Asynchronous replication
+  href: async-replication.md
+  when: feature_async_replication
+- name: Query optimizer
+  href: optimizer.md
 - name: Federated query
   include:
     path: federated_query/toc_p.yaml

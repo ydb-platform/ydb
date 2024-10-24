@@ -1,0 +1,120 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 37edcc5203bf2cbf44c6f524b2dd14d6
+BELONGS ya.make
+    License text:
+        // (C) Copyright Tobias Schwinger
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/function_types/components.hpp [2:2]
+        include/boost/function_types/config/cc_names.hpp [2:2]
+        include/boost/function_types/config/compiler.hpp [2:2]
+        include/boost/function_types/config/config.hpp [2:2]
+        include/boost/function_types/detail/class_transform.hpp [2:2]
+        include/boost/function_types/detail/classifier.hpp [2:2]
+        include/boost/function_types/detail/classifier_impl/arity10_0.hpp [2:2]
+        include/boost/function_types/detail/classifier_impl/arity10_1.hpp [2:2]
+        include/boost/function_types/detail/classifier_impl/arity20_0.hpp [2:2]
+        include/boost/function_types/detail/classifier_impl/arity20_1.hpp [2:2]
+        include/boost/function_types/detail/classifier_impl/arity30_0.hpp [2:2]
+        include/boost/function_types/detail/classifier_impl/arity30_1.hpp [2:2]
+        include/boost/function_types/detail/classifier_impl/arity40_0.hpp [2:2]
+        include/boost/function_types/detail/classifier_impl/arity40_1.hpp [2:2]
+        include/boost/function_types/detail/classifier_impl/arity50_0.hpp [2:2]
+        include/boost/function_types/detail/classifier_impl/arity50_1.hpp [2:2]
+        include/boost/function_types/detail/classifier_impl/master.hpp [2:2]
+        include/boost/function_types/detail/components_as_mpl_sequence.hpp [2:2]
+        include/boost/function_types/detail/components_impl/arity10_0.hpp [2:2]
+        include/boost/function_types/detail/components_impl/arity10_1.hpp [2:2]
+        include/boost/function_types/detail/components_impl/arity20_0.hpp [2:2]
+        include/boost/function_types/detail/components_impl/arity20_1.hpp [2:2]
+        include/boost/function_types/detail/components_impl/arity30_0.hpp [2:2]
+        include/boost/function_types/detail/components_impl/arity30_1.hpp [2:2]
+        include/boost/function_types/detail/components_impl/arity40_0.hpp [2:2]
+        include/boost/function_types/detail/components_impl/arity40_1.hpp [2:2]
+        include/boost/function_types/detail/components_impl/arity50_0.hpp [2:2]
+        include/boost/function_types/detail/components_impl/arity50_1.hpp [2:2]
+        include/boost/function_types/detail/components_impl/master.hpp [2:2]
+        include/boost/function_types/detail/cv_traits.hpp [2:2]
+        include/boost/function_types/detail/encoding/aliases_def.hpp [2:2]
+        include/boost/function_types/detail/encoding/aliases_undef.hpp [2:2]
+        include/boost/function_types/detail/encoding/def.hpp [2:2]
+        include/boost/function_types/detail/encoding/undef.hpp [2:2]
+        include/boost/function_types/detail/pp_arity_loop.hpp [2:2]
+        include/boost/function_types/detail/pp_cc_loop/master.hpp [2:2]
+        include/boost/function_types/detail/pp_cc_loop/preprocessed.hpp [2:2]
+        include/boost/function_types/detail/pp_loop.hpp [2:2]
+        include/boost/function_types/detail/pp_retag_default_cc/master.hpp [2:2]
+        include/boost/function_types/detail/pp_retag_default_cc/preprocessed.hpp [2:2]
+        include/boost/function_types/detail/pp_tags/cc_tag.hpp [2:2]
+        include/boost/function_types/detail/pp_tags/master.hpp [2:2]
+        include/boost/function_types/detail/pp_tags/preprocessed.hpp [2:2]
+        include/boost/function_types/detail/pp_variate_loop/master.hpp [2:2]
+        include/boost/function_types/detail/pp_variate_loop/preprocessed.hpp [2:2]
+        include/boost/function_types/detail/retag_default_cc.hpp [2:2]
+        include/boost/function_types/detail/synthesize.hpp [2:2]
+        include/boost/function_types/detail/synthesize_impl/arity10_0.hpp [2:2]
+        include/boost/function_types/detail/synthesize_impl/arity10_1.hpp [2:2]
+        include/boost/function_types/detail/synthesize_impl/arity20_0.hpp [2:2]
+        include/boost/function_types/detail/synthesize_impl/arity20_1.hpp [2:2]
+        include/boost/function_types/detail/synthesize_impl/arity30_0.hpp [2:2]
+        include/boost/function_types/detail/synthesize_impl/arity30_1.hpp [2:2]
+        include/boost/function_types/detail/synthesize_impl/arity40_0.hpp [2:2]
+        include/boost/function_types/detail/synthesize_impl/arity40_1.hpp [2:2]
+        include/boost/function_types/detail/synthesize_impl/arity50_0.hpp [2:2]
+        include/boost/function_types/detail/synthesize_impl/arity50_1.hpp [2:2]
+        include/boost/function_types/detail/synthesize_impl/master.hpp [2:2]
+        include/boost/function_types/detail/to_sequence.hpp [2:2]
+        include/boost/function_types/function_arity.hpp [2:2]
+        include/boost/function_types/function_pointer.hpp [2:2]
+        include/boost/function_types/function_reference.hpp [2:2]
+        include/boost/function_types/function_type.hpp [2:2]
+        include/boost/function_types/is_callable_builtin.hpp [2:2]
+        include/boost/function_types/is_function.hpp [2:2]
+        include/boost/function_types/is_function_pointer.hpp [2:2]
+        include/boost/function_types/is_function_reference.hpp [2:2]
+        include/boost/function_types/is_member_function_pointer.hpp [2:2]
+        include/boost/function_types/is_member_object_pointer.hpp [2:2]
+        include/boost/function_types/is_member_pointer.hpp [2:2]
+        include/boost/function_types/is_nonmember_callable_builtin.hpp [2:2]
+        include/boost/function_types/member_function_pointer.hpp [2:2]
+        include/boost/function_types/member_object_pointer.hpp [2:2]
+        include/boost/function_types/parameter_types.hpp [2:2]
+        include/boost/function_types/property_tags.hpp [2:2]
+        include/boost/function_types/result_type.hpp [2:2]

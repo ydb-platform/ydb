@@ -257,6 +257,12 @@ TString GetJobStderrWithRetries(
     const TJobId& jobId,
     const TGetJobStderrOptions& options = TGetJobStderrOptions());
 
+std::vector<TJobTraceEvent> GetJobTrace(
+    const IRequestRetryPolicyPtr& retryPolicy,
+    const TClientContext& context,
+    const TOperationId& operationId,
+    const TGetJobTraceOptions& options = TGetJobTraceOptions());
+
 //
 // File cache
 //

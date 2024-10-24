@@ -28,7 +28,7 @@ protected:
 };
 
 class TCommandGetOperation : public TCommandWithOperationId,
-                             public TCommandWithFormat {
+                             public TCommandWithOutput {
 public:
     TCommandGetOperation();
     virtual void Config(TConfig& config) override;
@@ -49,10 +49,10 @@ public:
 };
 
 class TCommandListOperations : public TYdbCommand,
-                               public TCommandWithFormat {
+                               public TCommandWithOutput {
 
     struct THandlerWrapper {
-        using THandler = std::function<void(NOperation::TOperationClient&, ui64, const TString&, EOutputFormat)>;
+        using THandler = std::function<void(NOperation::TOperationClient&, ui64, const TString&, EDataFormat)>;
 
         THandler Handler;
         bool Hidden;

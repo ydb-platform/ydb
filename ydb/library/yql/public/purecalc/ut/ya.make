@@ -12,6 +12,7 @@ SRCS(
     test_user_data.cpp
     test_eval.cpp
     test_pool.cpp
+    test_mixed_allocators.cpp
 )
 
 PEERDIR(

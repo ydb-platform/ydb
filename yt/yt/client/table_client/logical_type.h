@@ -2,7 +2,7 @@
 
 #include "public.h"
 
-#include <yt/yt/client/table_client/row_base.h>
+#include "row_base.h"
 
 #include <yt/yt/core/yson/public.h>
 #include <yt/yt/core/ytree/public.h>
@@ -170,7 +170,7 @@ class TDecimalLogicalType
 {
 public:
     static constexpr int MinPrecision = 1;
-    static constexpr int MaxPrecision = 35;
+    static constexpr int MaxPrecision = 76;
 
 public:
     TDecimalLogicalType(int precision, int scale);

@@ -1,4 +1,9 @@
+#include "node_warden.h"
 #include "node_warden_impl.h"
+
+#include <ydb/core/blob_depot/agent/agent.h>
+
+#include <ydb/core/util/random.h>
 
 namespace NKikimr::NStorage {
 
@@ -57,7 +62,7 @@ namespace NKikimr::NStorage {
         ui8 *keyBytes = nullptr;
         ui32 keySizeBytes = 0;
         groupKey.MutableKeyBytes(&keyBytes, &keySizeBytes);
-        EntropyPool().Read(keyBytes, keySizeBytes);
+        SafeEntropyPoolRead(keyBytes, keySizeBytes);
         TString encryptedGroupKey;
         ui32 h = Crc32c(keyBytes, keySizeBytes);
         encryptedGroupKey.resize(keySizeBytes + sizeof(ui32));

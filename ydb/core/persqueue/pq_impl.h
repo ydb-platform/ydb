@@ -286,6 +286,8 @@ private:
     THashSet<ui64> ChangedTxs;
     TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfigTx;
     TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfigTx;
+    TMaybe<NKikimrPQ::TPartitions> PartitionsDataConfigTx;
+
     bool WriteTxsInProgress = false;
 
     struct TReplyToActor;
@@ -387,6 +389,7 @@ private:
     void AddCmdWriteConfig(TEvKeyValue::TEvRequest* request,
                            const NKikimrPQ::TPQTabletConfig& cfg,
                            const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
+                           const NKikimrPQ::TPartitions& partitionsData,
                            const TActorContext& ctx);
 
     void ClearNewConfig();
@@ -495,11 +498,12 @@ private:
 
     bool AllOriginalPartitionsInited() const;
 
-    void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
+    void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev);
     void Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvTransactionCompleted::TPtr& ev, const TActorContext& ctx);
 
     void BeginDeletePartitions(TTxWriteInfo& writeInfo);
+    void BeginDeletePartitions(const TDistributedTransaction& tx);
 
     bool CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& operation,
                                const TWriteId& writeId) const;
@@ -527,8 +531,10 @@ private:
     void AddCmdDeleteTx(NKikimrClient::TKeyValueRequest& request,
                         ui64 txId);
 
-    bool WriteIdIsDisabled(const TMaybe<TWriteId>& writeId) const;
+    bool AllSupportivePartitionsHaveBeenDeleted(const TMaybe<TWriteId>& writeId) const;
     void DeleteWriteId(const TMaybe<TWriteId>& writeId);
+
+    void UpdateReadRuleGenerations(NKikimrPQ::TPQTabletConfig& cfg) const;
 };
 
 

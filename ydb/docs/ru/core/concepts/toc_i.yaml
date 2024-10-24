@@ -27,10 +27,11 @@ items:
   href: limits-ydb.md
 - name: Многоверсионное управление конкурентным доступом (MVCC)
   href: mvcc.md
-
 - name: Асинхронная репликация
   href: async-replication.md
   when: feature_async_replication
+- name: Оптимизатор запросов
+  href: optimizer.md
 - name: Федеративные запросы
   include:
     path: federated_query/toc_p.yaml

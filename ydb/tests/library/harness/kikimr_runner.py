@@ -87,7 +87,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 }
 
         daemon.Daemon.__init__(self, self.command, cwd=self.cwd, timeout=180, stderr_on_error_lines=240, **kwargs)
-        self.__binary_path = None
 
     @property
     def cwd(self):
@@ -107,17 +106,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
     @property
     def binary_path(self):
-        if self.__binary_path:
-            return self.__binary_path
-        return self.__configurator.binary_path
+        return self.__binary_path
 
     @property
     def command(self):
         return self.__make_run_command()
-
-    def set_binary_path(self, binary_path):
-        self.__binary_path = binary_path
-        return self.__binary_path
 
     def format_pdisk(self, pdisk_path, disk_size, **kwargs):
         logger.debug("Formatting pdisk %s on node %s, disk_size %s" % (pdisk_path, self, disk_size))
@@ -220,10 +213,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         return 'localhost'
 
     @property
-    def hostname(self):
-        return kikimr_config.get_fqdn()
-
-    @property
     def port(self):
         return self.grpc_port
 
@@ -280,7 +269,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
     def __call_kikimr_new_cli(self, cmd, connect_to_server=True):
         server = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
-        full_command = [self.__configurator.binary_path]
+        binary_path = self.__configurator.get_binary_path(0)
+        full_command = [binary_path]
         if connect_to_server:
             full_command += ["--server={server}".format(server=server)]
         full_command += cmd
@@ -380,23 +370,21 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             configurator=self.__configurator,
             udfs_dir=self.__common_udfs_dir,
             tenant_affiliation=self.__configurator.yq_tenant,
+            binary_path=self.__configurator.get_binary_path(node_index),
             data_center=data_center,
         )
         return self._nodes[node_index]
 
-    def register_slots(self, database, count=1, encryption_key=None):
-        return [self.register_slot(database, encryption_key) for _ in range(count)]
+    def __register_slots(self, database, count=1, encryption_key=None):
+        return [self.__register_slot(database, encryption_key) for _ in range(count)]
 
     def register_and_start_slots(self, database, count=1, encryption_key=None):
-        slots = self.register_slots(database, count, encryption_key)
+        slots = self.__register_slots(database, count, encryption_key)
         for slot in slots:
             slot.start()
         return slots
 
-    def register_slot(self, tenant_affiliation=None, encryption_key=None):
-        return self._register_slot(tenant_affiliation, encryption_key)
-
-    def _register_slot(self, tenant_affiliation=None, encryption_key=None):
+    def __register_slot(self, tenant_affiliation=None, encryption_key=None):
         slot_index = next(self._slot_index_allocator)
         node_broker_port = (
             self.nodes[1].grpc_ssl_port if self.__configurator.grpc_ssl_enable
@@ -413,15 +401,16 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             node_broker_port=node_broker_port,
             tenant_affiliation=tenant_affiliation if tenant_affiliation is not None else 'dynamic',
             encryption_key=encryption_key,
+            binary_path=self.__configurator.get_binary_path(slot_index),
         )
         return self._slots[slot_index]
 
-    def unregister_slots(self, slots):
+    def __unregister_slots(self, slots):
         for i in slots:
             del self._slots[i.node_id]
 
     def unregister_and_stop_slots(self, slots):
-        self.unregister_slots(slots)
+        self.__unregister_slots(slots)
         for i in slots:
             i.stop()
 

@@ -422,7 +422,7 @@ struct TShardedTableOptions {
 
     static TVector<TColumn> DefaultColumns() {
         return {
-            {"key",   "Uint32", true,  false}, 
+            {"key",   "Uint32", true,  false},
             {"value", "Uint32", false, false}
         };
     }
@@ -448,6 +448,7 @@ struct TShardedTableOptions {
         bool VirtualTimestamps = false;
         TMaybe<TDuration> ResolvedTimestamps;
         TMaybe<TString> AwsRegion;
+        bool TopicAutoPartitioning = false;
     };
 
     struct TFamily {
@@ -723,6 +724,7 @@ void WaitTxNotification(Tests::TServer::TPtr server, TActorId sender, ui64 txId)
 void WaitTxNotification(Tests::TServer::TPtr server, ui64 txId);
 
 NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runtime, ui64 tabletId, ui64 minPartCount = 0, ui64 minRows = 0);
+NKikimrTxDataShard::TEvPeriodicTableStats WaitTableFollowerStats(TTestActorRuntime& runtime, ui64 tabletId, ui64 minRowReads = 0, ui64 minRangeReadRows = 0);
 
 void SimulateSleep(Tests::TServer::TPtr server, TDuration duration);
 void SimulateSleep(TTestActorRuntime& runtime, TDuration duration);

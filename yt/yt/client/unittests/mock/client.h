@@ -2,7 +2,7 @@
 
 #include <yt/yt/client/api/connection.h>
 #include <yt/yt/client/api/client.h>
-#include <yt/yt/client/api/distributed_table_sessions.h>
+#include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/file_writer.h>
 #include <yt/yt/client/api/journal_reader.h>
 #include <yt/yt/client/api/journal_writer.h>
@@ -534,14 +534,14 @@ public:
         (override));
 
     MOCK_METHOD(TFuture<TCheckPermissionResponse>, CheckPermission, (
-        const TString& user,
+        const std::string& user,
         const NYPath::TYPath& path,
         NYTree::EPermission permission,
         const TCheckPermissionOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TCheckPermissionByAclResult>, CheckPermissionByAcl, (
-        const std::optional<TString>& user,
+        const std::optional<std::string>& user,
         NYTree::EPermission permission,
         NYTree::INodePtr acl,
         const TCheckPermissionByAclOptions& options),
@@ -620,10 +620,15 @@ public:
         const TGetJobSpecOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TSharedRef>, GetJobStderr, (
+    MOCK_METHOD(TFuture<TGetJobStderrResponse>, GetJobStderr, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
         const TGetJobStderrOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<std::vector<TJobTraceEvent>>, GetJobTrace, (
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const TGetJobTraceOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TSharedRef>, GetJobFailContext, (
@@ -704,27 +709,27 @@ public:
         (override));
 
     MOCK_METHOD(TFuture<void>, SetUserPassword, (
-        const TString& user,
+        const std::string& user,
         const TString& currentPasswordSha256,
         const TString& newPasswordSha256,
         const TSetUserPasswordOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TIssueTokenResult>, IssueToken, (
-        const TString& user,
+        const std::string& user,
         const TString& passwordSha256,
         const TIssueTokenOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<void>, RevokeToken, (
-        const TString& user,
+        const std::string& user,
         const TString& passwordSha256,
         const TString& tokenSha256,
         const TRevokeTokenOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TListUserTokensResult>, ListUserTokens, (
-        const TString& user,
+        const std::string& user,
         const TString& passwordSha256,
         const TListUserTokensOptions& options),
         (override));
@@ -836,9 +841,32 @@ public:
         const TDistributedWriteSessionFinishOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<ITableWriterPtr>, CreateParticipantTableWriter, (
-        const TDistributedWriteCookiePtr& cookie,
-        const TParticipantTableWriterOptions& options),
+    MOCK_METHOD(TFuture<ITableWriterPtr>, CreateFragmentTableWriter, (
+        const TFragmentWriteCookiePtr& cookie,
+        const TFragmentTableWriterOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<TShuffleHandlePtr>, StartShuffle, (
+        const TString& account,
+        int partitionCount,
+        const TStartShuffleOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<void>, FinishShuffle, (
+        const TShuffleHandlePtr& shuffleHandle,
+        const TFinishShuffleOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (
+        const TShuffleHandlePtr& shuffleHandle,
+        int partitionIndex,
+        const NTableClient::TTableReaderConfigPtr& config),
+        (override));
+
+    MOCK_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (
+        const TShuffleHandlePtr& shuffleHandle,
+        const TString& partitionColumn,
+        const NTableClient::TTableWriterConfigPtr& config),
         (override));
 
 private:

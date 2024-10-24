@@ -2,13 +2,12 @@
 
 #include "composite_compare.h"
 #include "helpers.h"
+#include "name_table.h"
+#include "row_buffer.h"
+#include "schema.h"
 #include "serialize.h"
 #include "unversioned_value.h"
 #include "validate_logical_type.h"
-
-#include <yt/yt/client/table_client/name_table.h>
-#include <yt/yt/client/table_client/row_buffer.h>
-#include <yt/yt/client/table_client/schema.h>
 
 #include <yt/yt/library/decimal/decimal.h>
 
@@ -31,6 +30,7 @@
 #include <util/generic/ymath.h>
 
 #include <util/charset/utf8.h>
+
 #include <util/stream/str.h>
 
 #include <cmath>

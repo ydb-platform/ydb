@@ -95,8 +95,7 @@ namespace {
         }
 
         static TRawIp6 MaskFromPrefix(ui8 prefix) {
-            ui128 x = ui128(-1) << int(128 - prefix);
-            if (prefix == 0) x = 0;
+            ui128 x = prefix == 0 ? ui128(0) : ui128(-1) << int(128 - prefix);
             return FromIpAddress({x, TIpv6Address::Ipv6});
         }
 

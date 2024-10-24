@@ -31,17 +31,24 @@ struct ITreeBuilder
     virtual void OnNode(INodePtr node) = 0;
 };
 
-//! Creates a builder that makes explicit calls to the factory.
+// COMPAT(omgronny): There are two different functions for creating a builder
+// due to UDFs that depend on this code.
+//! Creates a builder that makes explicit calls to the factory with limit of tree size.
 /*!
  *  \param factory A factory used for materializing the nodes.
+ *
+ *  \param treeSizeLimit The maximum size of the tree.
  */
 std::unique_ptr<ITreeBuilder> CreateBuilderFromFactory(
     INodeFactory* factory,
     int treeSizeLimit);
 
+//! Creates a builder that makes explicit calls to the factory.
+/*!
+ *  \param factory A factory used for materializing the nodes.
+ */
 std::unique_ptr<ITreeBuilder> CreateBuilderFromFactory(INodeFactory* factory);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NYTree
-

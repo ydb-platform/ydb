@@ -21,7 +21,7 @@ select
 from
     $customers
 where
-    cntrycode = '31' or cntrycode = '29' or cntrycode = '30' or cntrycode = '26' or cntrycode = '28' or cntrycode = '25' or cntrycode = '15'
+    cntrycode = '13' or cntrycode = '31' or cntrycode = '23' or cntrycode = '29' or cntrycode = '30' or cntrycode = '18' or cntrycode = '17'
 );
 
 $avg = (

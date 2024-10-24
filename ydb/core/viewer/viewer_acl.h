@@ -22,28 +22,17 @@ public:
     {}
 
     void Bootstrap() override {
+        if (NeedToRedirect()) {
+            return;
+        }
         const auto& params(Event->Get()->Request.GetParams());
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-        TString database;
-        if (params.Has("database")) {
-            database = params.Get("database");
-        }
-        bool direct = false;;
-        if (params.Has("direct")) {
-            direct = FromStringWithDefault<bool>(params.Get("direct"), direct);
-        }
-        direct |= !TBase::Event->Get()->Request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
-        direct |= (database == AppData()->TenantName); // we're already on the right node or don't use database filter
-        if (database && !direct) {
-            return RedirectToDatabase(database); // to find some dynamic node and redirect query there
+        if (params.Has("path")) {
+            RequestSchemeCacheNavigate(params.Get("path"));
         } else {
-            if (params.Has("path")) {
-                RequestSchemeCacheNavigate(params.Get("path"));
-            } else {
-                return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'path' is required"));
-            }
-            MergeRules = FromStringWithDefault<bool>(params.Get("merge_rules"), MergeRules);
+            return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'path' is required"));
         }
+        MergeRules = FromStringWithDefault<bool>(params.Get("merge_rules"), MergeRules);
 
         Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }

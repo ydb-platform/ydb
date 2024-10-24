@@ -84,6 +84,8 @@ protected:
                 return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TTabletControls::descriptor(), ctx);
             else if (name == ".NKikimrConfig.TImmediateControlsConfig.TDSProxyControls")
                 return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TDSProxyControls::descriptor(), ctx);
+            else if (name == ".NKikimrConfig.TImmediateControlsConfig.TBlobStorageControllerControls")
+                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TBlobStorageControllerControls::descriptor(), ctx);
         }
 
         ctx.Send(RequestEvent->Sender,
@@ -96,7 +98,7 @@ protected:
         NJson::TJsonValue json;
 
         if (settings) {
-            for (NLog::EComponent i = settings->MinVal; i < settings->MaxVal; i++) {
+            for (NLog::EComponent i = settings->MinVal; i <= settings->MaxVal; i++) {
                 auto name = settings->ComponentName(i);
                 if (!*name) {
                     continue;

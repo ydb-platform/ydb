@@ -135,7 +135,12 @@ Y_UNIT_TEST(HandleErrorsCorrectly) {
     Cerr << planres.GetStats()->GetAst() << Endl;
 
     auto result = db.ExecuteQuery(SimpleGraceJoinWithSpillingQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
+    const auto errorMsg = result.GetIssues().ToString();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, errorMsg);
+
+    const auto spillingPrefix = "[Compute spilling]";
+    const auto pos = errorMsg.find(spillingPrefix);
+    UNIT_ASSERT_VALUES_UNEQUAL_C(pos, std::string::npos, "Spilling prefix not found in error message");
 }
 
 Y_UNIT_TEST(SelfJoinQueryService) {

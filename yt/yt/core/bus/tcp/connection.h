@@ -15,7 +15,7 @@
 
 #include <yt/yt/core/net/address.h>
 
-#include <yt/yt/core/misc/atomic_object.h>
+#include <library/cpp/yt/threading/atomic_object.h>
 #include <yt/yt/core/misc/blob.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
 #include <yt/yt/core/misc/ring_queue.h>
@@ -80,7 +80,7 @@ public:
         TConnectionId id,
         SOCKET socket,
         EMultiplexingBand multiplexingBand,
-        const TString& endpointDescription,
+        const std::string& endpointDescription,
         const NYTree::IAttributeDictionary& endpointAttributes,
         const NNet::TNetworkAddress& endpointNetworkAddress,
         const std::optional<std::string>& endpointAddress,
@@ -104,7 +104,7 @@ public:
     void OnShutdown() override;
 
     // IBus implementation.
-    const TString& GetEndpointDescription() const override;
+    const std::string& GetEndpointDescription() const override;
     const NYTree::IAttributeDictionary& GetEndpointAttributes() const override;
     const std::string& GetEndpointAddress() const override;
     const NNet::TNetworkAddress& GetEndpointNetworkAddress() const override;
@@ -187,7 +187,7 @@ private:
     const TBusConfigPtr Config_;
     const EConnectionType ConnectionType_;
     const TConnectionId Id_;
-    const TString EndpointDescription_;
+    const std::string EndpointDescription_;
     const NYTree::IAttributeDictionaryPtr EndpointAttributes_;
     const NNet::TNetworkAddress EndpointNetworkAddress_;
     const std::optional<TString> EndpointAddress_;
@@ -297,7 +297,7 @@ private:
     int GetSocketPort();
 
     void ConnectSocket(const NNet::TNetworkAddress& address);
-    void OnDialerFinished(const TErrorOr<SOCKET>& socketOrError);
+    void OnDialerFinished(const TErrorOr<TFileDescriptor>& fdOrError);
 
     void ResolveAddress();
     void OnAddressResolveFinished(const TErrorOr<NNet::TNetworkAddress>& result);

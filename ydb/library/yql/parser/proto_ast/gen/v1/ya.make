@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR (
     ydb/library/yql/parser/proto_ast/gen/v1_proto_split
+    ydb/library/yql/parser/proto_ast/antlr3
 )
 
 SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})
@@ -14,19 +15,24 @@ SET(PROTOBUF_SUFFIX_PATH .pb.main.h)
 
 SET(LEXER_PARSER_NAMESPACE NALPDefault)
 
-SET(GRAMMAR_STRING_CORE_SINGLE "\"~(QUOTE_SINGLE | BACKSLASH) | (BACKSLASH .)\"")
-SET(GRAMMAR_STRING_CORE_DOUBLE "\"~(QUOTE_DOUBLE | BACKSLASH) | (BACKSLASH .)\"")
-SET(GRAMMAR_MULTILINE_COMMENT_CORE       "\".\"")
-
 CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/Cpp/Cpp.stg.in ${antlr_templates}/Cpp/Cpp.stg)
 
 IF(EXPORT_CMAKE)
     MANUAL_GENERATION(${sql_grammar})
 ELSE()
+    # For exporting CMake this vars fill in epilogue.cmake
+    SET(GRAMMAR_STRING_CORE_SINGLE "\"~(QUOTE_SINGLE | BACKSLASH) | (BACKSLASH .)\"")
+    SET(GRAMMAR_STRING_CORE_DOUBLE "\"~(QUOTE_DOUBLE | BACKSLASH) | (BACKSLASH .)\"")
+    SET(GRAMMAR_MULTILINE_COMMENT_CORE "\".\"")
+
     CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/sql/v1/SQLv1.g.in ${sql_grammar})
 ENDIF()
 
 NO_COMPILER_WARNINGS()
+
+ADDINCL(
+    GLOBAL contrib/libs/antlr4_cpp_runtime/src
+)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/ya.make.incl)
 

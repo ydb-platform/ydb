@@ -3,12 +3,16 @@
 В этом разделе описана основная информация про работу с внешней базой данных [Microsoft SQL Server](https://learn.microsoft.com/ru-ru/sql/?view=sql-server-ver16).
 
 Для работы с внешней базой данных Microsoft SQL Server необходимо выполнить следующие шаги:
+
 1. Создать [секрет](../datamodel/secrets.md), содержащий пароль для подключения к базе данных.
-    ```sql
+
+    ```yql
     CREATE OBJECT ms_sql_server_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
     ```
+
 1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий определённую базу данных Microsoft SQL Server. Параметр `LOCATION` содержит сетевой адрес экземпляра Microsoft SQL Server, к которому осуществляется подключение. В `DATABASE_NAME` указывается имя базы данных (например, `master`). Для аутентификации во внешнюю базу используются значения параметров `LOGIN` и `PASSWORD_SECRET_NAME`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`.
-    ```sql
+
+    ```yql
     CREATE EXTERNAL DATA SOURCE ms_sql_server_datasource WITH (
         SOURCE_TYPE="MsSQLServer",
         LOCATION="<host>:<port>",
@@ -19,17 +23,20 @@
         USE_TLS="TRUE"
     );
     ```
+
 1. {% include [!](_includes/connector_deployment.md) %}
 1. [Выполнить запрос](#query) к базе данных.
 
-## Синтаксис запросов { #query }
+## Синтаксис запросов {#query}
+
 Для работы с Microsoft SQL Server используется следующая форма SQL-запроса:
 
-```sql
+```yql
 SELECT * FROM ms_sql_server_datasource.<table_name>
 ```
 
 где:
+
 - `ms_sql_server_datasource` - идентификатор внешнего источника данных;
 - `<table_name>` - имя таблицы внутри внешнего источника данных.
 
@@ -40,6 +47,16 @@ SELECT * FROM ms_sql_server_datasource.<table_name>
 1. {% include [!](_includes/supported_requests.md) %}
 1. {% include [!](_includes/datetime_limits.md) %}
 1. {% include [!](_includes/predicate_pushdown.md) %}
+
+    |Тип данных {{ ydb-short-name }}|
+    |----|
+    |`Bool`|
+    |`Int8`|
+    |`Int16`|
+    |`Int32`|
+    |`Int64`|
+    |`Float`|
+    |`Double`|
 
 ## Поддерживаемые типы данных
 

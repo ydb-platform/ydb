@@ -8,7 +8,7 @@
 
 {% include [temp-table-description.md](../../../../_includes/temp-table-description.md) %}
 
- ```sql
+```yql
  CREATE TEMPORARY TABLE table_name (
      ...
  );

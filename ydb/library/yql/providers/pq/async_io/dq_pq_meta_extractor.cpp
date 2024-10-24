@@ -44,8 +44,8 @@ namespace {
             "_yql_sys_message_group_id", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
                 const auto& data = message.GetMessageGroupId();
                 return std::make_pair(
-                    NKikimr::NMiniKQL::MakeString(NYql::NUdf::TStringRef(data.Data(), data.Size())),
-                    data.Size()
+                    NKikimr::NMiniKQL::MakeString(NYql::NUdf::TStringRef(data.data(), data.size())),
+                    data.size()
                 );
             }
         },

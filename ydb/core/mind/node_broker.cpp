@@ -8,6 +8,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/cms/console/config_helpers.h>
 #include <ydb/core/protos/counters_node_broker.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -59,8 +60,6 @@ void TNodeBroker::OnActivateExecutor(const TActorContext &ctx)
     }
 
     const auto *appData = AppData(ctx);
-
-    Y_ABORT_UNLESS(appData->FeatureFlags.GetEnableNodeBrokerSingleDomainMode());
 
     MaxStaticId = Min(appData->DynamicNameserviceConfig->MaxStaticNodeId, TActorId::MaxNodeId);
     MinDynamicId = Max(MaxStaticId + 1, (ui64)Min(appData->DynamicNameserviceConfig->MinDynamicNodeId, TActorId::MaxNodeId));
@@ -290,14 +289,45 @@ void TNodeBroker::AddDelayedListNodesRequest(ui64 epoch,
 
 void TNodeBroker::ProcessListNodesRequest(TEvNodeBroker::TEvListNodes::TPtr &ev)
 {
-    ui64 version = ev->Get()->Record.GetCachedVersion();
+    auto *msg = ev->Get();
 
     NKikimrNodeBroker::TNodesInfo info;
     Epoch.Serialize(*info.MutableEpoch());
     info.SetDomain(AppData()->DomainsInfo->GetDomain()->DomainUid);
     TAutoPtr<TEvNodeBroker::TEvNodesInfo> resp = new TEvNodeBroker::TEvNodesInfo(info);
-    if (version != Epoch.Version)
+
+    bool optimized = false;
+
+    if (msg->Record.HasCachedVersion()) {
+        if (msg->Record.GetCachedVersion() == Epoch.Version) {
+            // Client has an up-to-date list already
+            optimized = true;
+        } else {
+            // We may be able to only send added nodes in the same epoch when
+            // all deltas are cached up to the current epoch inclusive.
+            ui64 neededFirstVersion = msg->Record.GetCachedVersion() + 1;
+            if (!EpochDeltasVersions.empty() &&
+                EpochDeltasVersions.front() <= neededFirstVersion &&
+                EpochDeltasVersions.back() == Epoch.Version &&
+                neededFirstVersion <= Epoch.Version)
+            {
+                ui64 firstIndex = neededFirstVersion - EpochDeltasVersions.front();
+                if (firstIndex > 0) {
+                    // Note: usually there is a small number of nodes added
+                    // between subsequent requests, so this substr should be
+                    // very cheap.
+                    resp->PreSerializedData = EpochDeltasCache.substr(EpochDeltasEndOffsets[firstIndex - 1]);
+                } else {
+                    resp->PreSerializedData = EpochDeltasCache;
+                }
+                optimized = true;
+            }
+        }
+    }
+
+    if (!optimized) {
         resp->PreSerializedData = EpochCache;
+    }
 
     TabletCounters->Percentile()[COUNTER_LIST_NODES_BYTES].IncrementFor(resp->GetCachedByteSize());
     LOG_TRACE_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
@@ -308,12 +338,16 @@ void TNodeBroker::ProcessListNodesRequest(TEvNodeBroker::TEvListNodes::TPtr &ev)
 
 void TNodeBroker::ProcessDelayedListNodesRequests()
 {
+    THashSet<TActorId> processed;
     while (!DelayedListNodesRequests.empty()) {
         auto it = DelayedListNodesRequests.begin();
         if (it->first > Epoch.Id)
             break;
 
-        ProcessListNodesRequest(it->second);
+        // Avoid processing more than one request from the same sender
+        if (processed.insert(it->second->Sender).second) {
+            ProcessListNodesRequest(it->second);
+        }
         DelayedListNodesRequests.erase(it);
     }
 }
@@ -431,7 +465,12 @@ void TNodeBroker::PrepareEpochCache()
         FillNodeInfo(entry.second, *info.AddExpiredNodes());
 
     Y_PROTOBUF_SUPPRESS_NODISCARD info.SerializeToString(&EpochCache);
-    TabletCounters->Simple()[COUNTER_EPOCH_SIZE_BYTES].Set(EpochCache.Size());
+    TabletCounters->Simple()[COUNTER_EPOCH_SIZE_BYTES].Set(EpochCache.size());
+
+    EpochDeltasCache.clear();
+    EpochDeltasVersions.clear();
+    EpochDeltasEndOffsets.clear();
+    TabletCounters->Simple()[COUNTER_EPOCH_DELTAS_SIZE_BYTES].Set(EpochDeltasCache.size());
 }
 
 void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
@@ -446,7 +485,18 @@ void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
     Y_PROTOBUF_SUPPRESS_NODISCARD info.SerializeToString(&delta);
 
     EpochCache += delta;
-    TabletCounters->Simple()[COUNTER_EPOCH_SIZE_BYTES].Set(EpochCache.Size());
+    TabletCounters->Simple()[COUNTER_EPOCH_SIZE_BYTES].Set(EpochCache.size());
+
+    if (!EpochDeltasVersions.empty() && EpochDeltasVersions.back() + 1 != Epoch.Version) {
+        EpochDeltasCache.clear();
+        EpochDeltasVersions.clear();
+        EpochDeltasEndOffsets.clear();
+    }
+
+    EpochDeltasCache += delta;
+    EpochDeltasVersions.push_back(Epoch.Version);
+    EpochDeltasEndOffsets.push_back(EpochDeltasCache.size());
+    TabletCounters->Simple()[COUNTER_EPOCH_DELTAS_SIZE_BYTES].Set(EpochDeltasCache.size());
 }
 
 void TNodeBroker::SubscribeForConfigUpdates(const TActorContext &ctx)

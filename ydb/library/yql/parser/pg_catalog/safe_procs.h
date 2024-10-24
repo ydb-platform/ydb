@@ -6,7 +6,25 @@
 "version",
 "pow",
 
-"set_config",//pgadmin
+// some json/jsonb functions
+"json_build_object",
+"jsonb_build_object",
+"jsonb_object",
+"jsonb_array_elements",
+"jsonb_array_elements_text",
+"jsonb_each",
+"jsonb_each_text",
+"jsonb_extract_path",
+"jsonb_extract_path_text",
+"jsonb_object_keys",
+"jsonb_strip_nulls",
+"jsonb_path_match_tz",
+"jsonb_path_query_tz",
+"jsonb_path_query_array_tz",
+"jsonb_path_query_first_tz",
+"jsonb_typeof",
+
+"pg_show_all_settings",//pgadmin
 "pg_is_in_recovery",//pgadmin
 "pg_is_wal_replay_paused",//pgadmin
 "has_database_privilege",//pgadmin

@@ -14,7 +14,7 @@
 namespace NYql {
 
 bool TYtTableDescription::Fill(
-    const TString& cluster, const TString& table, TExprContext& ctx,
+    const TString& cluster, const TString& table, const TQContext& qContext, TExprContext& ctx,
     IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
     bool allowViewIsolation, IUdfResolver::TPtr udfResolver) {
     const TStructExprType* type = RowSpec ? RowSpec->GetType() : nullptr;
@@ -29,7 +29,7 @@ bool TYtTableDescription::Fill(
     }
 
     if (!TYtTableDescriptionBase::Fill(TString{YtProviderName}, cluster,
-        table, type, Meta->SqlView, Meta->SqlViewSyntaxVersion, Meta->Attrs, ctx,
+        table, type, Meta->SqlView, Meta->SqlViewSyntaxVersion, qContext, Meta->Attrs, ctx,
         moduleResolver, urlListerManager, randomProvider, allowViewIsolation, udfResolver)) {
         return false;
     }
@@ -244,11 +244,11 @@ void TYtTableDescription::SetConstraintsReady() {
 }
 
 bool TYtTableDescription::FillViews(
-    const TString& cluster, const TString& table, TExprContext& ctx,
+    const TString& cluster, const TString& table, const TQContext& qContext, TExprContext& ctx,
     IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
     bool allowViewIsolation, IUdfResolver::TPtr udfResolver) {
     return TYtTableDescriptionBase::FillViews(
-        TString{YtProviderName}, cluster, table, Meta->Attrs, ctx,
+        TString{YtProviderName}, cluster, table, Meta->Attrs, qContext, ctx,
         moduleResolver, urlListerManager, randomProvider, allowViewIsolation, udfResolver);
 }
 
@@ -309,6 +309,7 @@ void TYtState::Reset() {
     Checkpoints.clear();
     WalkFoldersState.clear();
     NextEpochId = 1;
+    FlowDependsOnId = 0;
 }
 
 void TYtState::EnterEvaluation(ui64 id) {
@@ -336,10 +337,9 @@ void TYtState::LeaveEvaluation(ui64 id) {
 }
 
 std::pair<TIntrusivePtr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway::TPtr gateway, const TString& userName, const TString& sessionId, const TYtGatewayConfig* ytGatewayConfig, TIntrusivePtr<TTypeAnnotationContext> typeCtx) {
-    auto ytState = MakeIntrusive<TYtState>();
+    auto ytState = MakeIntrusive<TYtState>(typeCtx.Get());
     ytState->SessionId = sessionId;
     ytState->Gateway = gateway;
-    ytState->Types = typeCtx.Get();
     ytState->DqIntegration_ = CreateYtDqIntegration(ytState.Get());
 
     if (ytGatewayConfig) {

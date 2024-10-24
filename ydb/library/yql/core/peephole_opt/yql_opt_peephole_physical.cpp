@@ -1974,13 +1974,12 @@ TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {
     auto collection = input->HeadPtr();
     auto lookup = input->ChildPtr(1);
     auto options = input->ChildPtr(2);
+    const bool nullableCollectionItems = IsSqlInCollectionItemsNullable(NNodes::TCoSqlIn(input));
 
     const bool ansiIn = HasSetting(*options, "ansi");
     const bool tableSource = HasSetting(*options, "tableSource");
     static const size_t MaxCollectionItemsToExpandAsOrChain = 5;
-    const bool hasOptionals = collection->GetTypeAnn()->HasOptionalOrNull() ||
-                              lookup->GetTypeAnn()->HasOptionalOrNull();
-    if (ansiIn || !hasOptionals) {
+    if (ansiIn || !nullableCollectionItems) {
         const size_t collectionSize = collection->ChildrenSize();
         if ((collection->IsCallable("AsList") || collection->IsList()) &&
             collectionSize <= MaxCollectionItemsToExpandAsOrChain &&
@@ -2068,7 +2067,6 @@ TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {
             .Build();
     }
 
-    const bool nullableCollectionItems = IsSqlInCollectionItemsNullable(NNodes::TCoSqlIn(input));
     if (ansiIn && (nullableCollectionItems || lookupType->HasOptionalOrNull())) {
         YQL_CLOG(DEBUG, CorePeepHole) << "ANSI IN: with nullable items in collection or lookup";
         YQL_ENSURE(dict);
@@ -5760,7 +5758,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         std::string_view arrowFunctionName;
         const bool rewriteAsIs = node->IsCallable({"AssumeStrict", "AssumeNonStrict", "Likely"});
         if (node->IsList() || rewriteAsIs ||
-            node->IsCallable({"And", "Or", "Xor", "Not", "Coalesce", "Exists", "If", "Just", "AsStruct", "Member", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"}))
+            node->IsCallable({"DecimalMul", "DecimalDiv", "DecimalMod", "And", "Or", "Xor", "Not", "Coalesce", "Exists", "If", "Just", "AsStruct", "Member", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"}))
         {
             if (node->IsCallable() && !IsSupportedAsBlockType(node->Pos(), *node->GetTypeAnn(), ctx, types, true)) {
                 return true;

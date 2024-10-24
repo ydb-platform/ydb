@@ -1,0 +1,11 @@
+--- a/parsedata.cpp
++++ b/parsedata.cpp
+@@ -115,7 +115,7 @@ Key makeFsmKeyHex( char *str, const InputLoc &loc, ParseData *pd )
+ 	}
+ 
+ 	if ( unusedBits && keyOps->alphType->isSigned && ul >> (size * 8 - 1) )
+-		ul |= ( -1L >> (size*8) ) << (size*8);
++		ul |= ( (unsigned long)(-1L) >> (size*8) ) << (size*8);
+ 
+ 	return Key( (long)ul );
+ }

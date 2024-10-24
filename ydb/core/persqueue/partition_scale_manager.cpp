@@ -8,14 +8,18 @@ namespace NPQ {
 
 TPartitionScaleManager::TPartitionScaleManager(
     const TString& topicName,
+    const TString& topicPath,
     const TString& databasePath,
     ui64 pathId,
     int version,
-    const NKikimrPQ::TPQTabletConfig& config
+    const NKikimrPQ::TPQTabletConfig& config,
+    const TPartitionGraph& partitionGraph
 )
     : TopicName(topicName)
+    , TopicPath(topicPath)
     , DatabasePath(databasePath)
-    , BalancerConfig(pathId, version, config) {
+    , BalancerConfig(pathId, version, config)
+    , PartitionGraph(partitionGraph) {
     }
 
 void TPartitionScaleManager::HandleScaleStatusChange(const ui32 partitionId, NKikimrPQ::EScaleStatus scaleStatus, const TActorContext& ctx) {
@@ -45,6 +49,7 @@ void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
         << "send split request");
     CurrentScaleRequest = ctx.Register(new TPartitionScaleRequest(
         TopicName,
+        TopicPath,
         DatabasePath,
         BalancerConfig.PathId,
         BalancerConfig.PathVersion,
@@ -69,7 +74,7 @@ std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> TPartition
     size_t allowedSplitsCount = BalancerConfig.MaxActivePartitions > BalancerConfig.CurPartitions ? BalancerConfig.MaxActivePartitions - BalancerConfig.CurPartitions : 0;
     auto partitionId = PartitionsToSplit.begin();
     while (allowedSplitsCount > 0 && partitionId != PartitionsToSplit.end()) {
-        auto* node = BalancerConfig.PartitionGraph.GetPartition(*partitionId);
+        auto* node = PartitionGraph.GetPartition(*partitionId);
         if (node->Children.empty()) {
             auto from = node->From;
             auto to = node->To;

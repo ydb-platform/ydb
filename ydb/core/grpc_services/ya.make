@@ -43,6 +43,7 @@ SRCS(
     rpc_fq_internal.cpp
     rpc_fq.cpp
     rpc_get_operation.cpp
+    rpc_get_scale_recommendation.cpp
     rpc_get_shard_locations.cpp
     rpc_import.cpp
     rpc_import_data.cpp
@@ -74,6 +75,7 @@ SRCS(
     rpc_stream_execute_yql_script.cpp
     rpc_whoami.cpp
     rpc_object_storage.cpp
+    rpc_view.cpp
     table_settings.cpp
 
     rpc_common/rpc_common_kqp_session.cpp

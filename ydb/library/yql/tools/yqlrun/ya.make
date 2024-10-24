@@ -54,6 +54,7 @@ ELSE()
         ydb/library/yql/core/url_preprocessing
         ydb/library/yql/tools/yqlrun/http
         ydb/library/yql/parser/pg_wrapper
+        ydb/library/yql/public/result_format
     )
 
     YQL_LAST_ABI_VERSION()

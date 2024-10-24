@@ -19,6 +19,7 @@
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
 #include <util/stream/null.h>
+#include <util/string/cast.h>
 
 #include <array>
 
@@ -504,6 +505,10 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"DecimalDiv", &TProgramBuilder::DecimalDiv},
         {"DecimalMod", &TProgramBuilder::DecimalMod},
 
+        {"BlockDecimalMul", &TProgramBuilder::BlockDecimalMul},
+        {"BlockDecimalDiv", &TProgramBuilder::BlockDecimalDiv},
+        {"BlockDecimalMod", &TProgramBuilder::BlockDecimalMod},
+
         {"==", &TProgramBuilder::Equals},
         {"!=", &TProgramBuilder::NotEquals},
         {"<", &TProgramBuilder::Less},
@@ -874,6 +879,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
         //explore params
         const auto& measures = params->ChildRef(0);
+        const auto& skipTo = params->ChildRef(2);
         const auto& pattern = params->ChildRef(3);
         const auto& defines = params->ChildRef(4);
 
@@ -916,6 +922,12 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             };
         }
 
+        auto stringTo = skipTo->Child(0)->Content();
+        auto var = skipTo->Child(1)->Content();
+        MKQL_ENSURE(stringTo.SkipPrefix("AfterMatchSkip_"), R"(MATCH_RECOGNIZE: <row pattern skip to> should start with "AfterMatchSkip_")");
+        NYql::NMatchRecognize::EAfterMatchSkipTo to;
+        MKQL_ENSURE(TryFromString<NYql::NMatchRecognize::EAfterMatchSkipTo>(stringTo, to), "MATCH_RECOGNIZE: <row pattern skip to> cannot parse AfterMatchSkipTo mode");
+
         const auto streamingMode = FromString<bool>(settings->Child(0)->Child(1)->Content());
 
         return ctx.ProgramBuilder.MatchRecognizeCore(
@@ -925,7 +937,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
                 getMeasures,
                 NYql::NMatchRecognize::ConvertPattern(pattern, ctx.ExprCtx),
                 getDefines,
-                streamingMode
+                streamingMode,
+                NYql::NMatchRecognize::TAfterMatchSkipTo{to, TString{var}}
                 );
     });
 
@@ -1363,8 +1376,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
     AddCallable("FromBytes", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto arg = MkqlBuildExpr(node.Head(), ctx);
-        const auto schemeType = ParseDataType(node, node.Tail().Content());
-        return ctx.ProgramBuilder.FromBytes(arg, schemeType);
+        const auto type = BuildType(node, *node.GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType(), ctx.ProgramBuilder);
+        return ctx.ProgramBuilder.FromBytes(arg, type);
     });
 
     AddCallable("Convert", [](const TExprNode& node, TMkqlBuildContext& ctx) {

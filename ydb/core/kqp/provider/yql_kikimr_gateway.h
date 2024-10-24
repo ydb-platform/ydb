@@ -22,6 +22,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
+#include <ydb/core/protos/yql_translation_settings.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -209,6 +210,7 @@ struct TColumnFamily {
     TString Name;
     TMaybe<TString> Data;
     TMaybe<TString> Compression;
+    TMaybe<i32> CompressionLevel;
 };
 
 struct TTtlSettings {
@@ -251,6 +253,52 @@ struct TTableSettings {
     bool IsSet() const;
 };
 
+struct TKikimrPathId {
+
+    static const ui64 InvalidOwnerId = Max<ui64>();
+    static const ui64 InvalidTableId = Max<ui64>();
+
+    explicit TKikimrPathId(const std::pair<ui64, ui64>& raw)
+        : Raw(raw) {}
+
+    TKikimrPathId(ui64 ownerId, ui64 tableId)
+        : TKikimrPathId(std::make_pair(ownerId, tableId)) {}
+
+    TKikimrPathId(const NKikimrKqp::TKqpPathIdProto* message)
+        : TKikimrPathId(std::make_pair(message->GetOwnerId(), message->GetTableId())) {}
+
+    TKikimrPathId()
+        : TKikimrPathId(InvalidOwnerId, InvalidTableId) {}
+
+    ui64 OwnerId() const { return Raw.first; }
+    ui64 TableId() const { return Raw.second; }
+
+    TString ToString() const {
+        return ::ToString(OwnerId()) + ':' + ::ToString(TableId());
+    }
+
+    bool operator==(const TKikimrPathId& x) const {
+        return Raw == x.Raw;
+    }
+
+    bool operator!=(const TKikimrPathId& x) const {
+        return !operator==(x);
+    }
+
+    ui64 Hash() const noexcept {
+        return THash<decltype(Raw)>()(Raw);
+    }
+
+    static TKikimrPathId Parse(const TStringBuf& str);
+
+    std::pair<ui64, ui64> Raw;
+
+    void ToMessage(NKikimrKqp::TKqpPathIdProto* message) const {
+        message->SetOwnerId(OwnerId());
+        message->SetTableId(TableId());
+    }
+};
+
 struct TKikimrColumnMetadata {
 
     TString Name;
@@ -262,6 +310,7 @@ struct TKikimrColumnMetadata {
     TVector<TString> Families;
     NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED;
     TString DefaultFromSequence;
+    TKikimrPathId DefaultFromSequencePathId;
     Ydb::TypedValue DefaultFromLiteral;
     bool IsBuildInProgress = false;
 
@@ -269,7 +318,7 @@ struct TKikimrColumnMetadata {
 
     TKikimrColumnMetadata(const TString& name, ui32 id, const TString& type, bool notNull,
         NKikimr::NScheme::TTypeInfo typeInfo = {}, const TString& typeMod = {}, const TString& defaultFromSequence = {},
-        NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED,
+        const TKikimrPathId& defaultFromSequencePathId = {}, NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED,
         const Ydb::TypedValue& defaultFromLiteral = {}, bool isBuildInProgress = false)
         : Name(name)
         , Id(id)
@@ -279,6 +328,7 @@ struct TKikimrColumnMetadata {
         , TypeMod(typeMod)
         , DefaultKind(defaultKind)
         , DefaultFromSequence(defaultFromSequence)
+        , DefaultFromSequencePathId(defaultFromSequencePathId)
         , DefaultFromLiteral(defaultFromLiteral)
         , IsBuildInProgress(isBuildInProgress)
     {}
@@ -291,6 +341,7 @@ struct TKikimrColumnMetadata {
         , Families(message->GetFamily().begin(), message->GetFamily().end())
         , DefaultKind(message->GetDefaultKind())
         , DefaultFromSequence(message->GetDefaultFromSequence())
+        , DefaultFromSequencePathId(&message->GetDefaultFromSequencePathId())
         , DefaultFromLiteral(message->GetDefaultFromLiteral())
         , IsBuildInProgress(message->GetIsBuildInProgress())
     {
@@ -328,6 +379,7 @@ struct TKikimrColumnMetadata {
         auto columnType = NKikimr::NScheme::ProtoColumnTypeFromTypeInfoMod(TypeInfo, TypeMod);
         message->SetTypeId(columnType.TypeId);
         message->SetDefaultFromSequence(DefaultFromSequence);
+        DefaultFromSequencePathId.ToMessage(message->MutableDefaultFromSequencePathId());
         message->SetDefaultKind(DefaultKind);
         message->MutableDefaultFromLiteral()->CopyFrom(DefaultFromLiteral);
         message->SetIsBuildInProgress(IsBuildInProgress);
@@ -345,45 +397,6 @@ struct TKikimrColumnMetadata {
 
     void SetNotNull() {
         NotNull = true;
-    }
-};
-
-struct TKikimrPathId {
-    explicit TKikimrPathId(const std::pair<ui64, ui64>& raw)
-        : Raw(raw) {}
-
-    TKikimrPathId(ui64 ownerId, ui64 tableId)
-        : TKikimrPathId(std::make_pair(ownerId, tableId)) {}
-
-    TKikimrPathId(const NKikimrKqp::TKqpPathIdProto* message)
-        : TKikimrPathId(std::make_pair(message->GetOwnerId(), message->GetTableId())) {}
-
-    ui64 OwnerId() const { return Raw.first; }
-    ui64 TableId() const { return Raw.second; }
-
-    TString ToString() const {
-        return ::ToString(OwnerId()) + ':' + ::ToString(TableId());
-    }
-
-    bool operator==(const TKikimrPathId& x) const {
-        return Raw == x.Raw;
-    }
-
-    bool operator!=(const TKikimrPathId& x) const {
-        return !operator==(x);
-    }
-
-    ui64 Hash() const noexcept {
-        return THash<decltype(Raw)>()(Raw);
-    }
-
-    static TKikimrPathId Parse(const TStringBuf& str);
-
-    std::pair<ui64, ui64> Raw;
-
-    void ToMessage(NKikimrKqp::TKqpPathIdProto* message) const {
-        message->SetOwnerId(OwnerId());
-        message->SetTableId(TableId());
     }
 };
 
@@ -446,6 +459,7 @@ enum EMetaSerializationType : ui64 {
 
 struct TViewPersistedData {
     TString QueryText;
+    NYql::NProto::TTranslationSettings CapturedContext;
 };
 
 struct TKikimrTableMetadata : public TThrRefBase {
@@ -899,14 +913,18 @@ public:
     };
 
     struct TQueryResult : public TGenericResult {
+        TQueryResult()
+            : ProtobufArenaPtr(MakeIntrusive<NActors::TProtoArenaHolder>())
+        {}
+
         TString SessionId;
-        TVector<NKikimrMiniKQL::TResult*> Results;
+        TVector<Ydb::ResultSet*> Results;
         NKqpProto::TKqpStatsQuery QueryStats;
         std::unique_ptr<NKikimrKqp::TPreparedQuery> PreparingQuery;
         std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;
         TString QueryAst;
         TString QueryPlan;
-        std::shared_ptr<google::protobuf::Arena> ProtobufArenaPtr;
+        TIntrusivePtr<NActors::TProtoArenaHolder> ProtobufArenaPtr;
         TMaybe<ui16> SqlVersion;
         google::protobuf::RepeatedPtrField<NKqpProto::TResultSetMeta> ResultSetsMeta;
         bool NeedToSplit = false;
@@ -975,6 +993,7 @@ public:
     virtual TMaybe<TString> GetSetting(const TString& cluster, const TString& name) = 0;
 
     virtual void SetToken(const TString& cluster, const TIntrusiveConstPtr<NACLib::TUserToken>& token) = 0;
+    virtual void SetClientAddress(const TString& clientAddress) = 0;
 
     virtual NThreading::TFuture<TListPathResult> ListPath(const TString& cluster, const TString& path) = 0;
 
@@ -1042,7 +1061,7 @@ public:
     virtual NThreading::TFuture<TGenericResult> CreateColumnTable(
         TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> AlterColumnTable(const TString& cluster, const TAlterColumnTableSettings& settings) = 0;
+    virtual NThreading::TFuture<TGenericResult> AlterColumnTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateTableStore(const TString& cluster,
         const TCreateTableStoreSettings& settings, bool existingOk = false) = 0;
@@ -1073,7 +1092,7 @@ public:
 EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus);
 Ydb::FeatureFlag::Status GetFlagValue(const TMaybe<bool>& value);
 
-void SetColumnType(Ydb::Type& protoType, const TString& typeName, bool notNull);
+bool SetColumnType(const TTypeAnnotationNode* typeNode, bool notNull, Ydb::Type& protoType, TString& error);
 bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::ReadReplicasSettings& proto,
     Ydb::StatusIds::StatusCode& code, TString& error);
 void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::TtlSettings& proto);

@@ -32,6 +32,10 @@ private:
     }
 
 public:
+    ui64 GetGeneralPriority() const {
+        return ((ui64)Level << 56) + InternalLevelWeight;
+    }
+
     bool operator<(const TOptimizationPriority& item) const {
         return std::tie(Level, InternalLevelWeight) < std::tie(item.Level, item.InternalLevelWeight);
     }
@@ -135,9 +139,6 @@ public:
     }
 
     virtual NArrow::NMerger::TIntervalPositions GetBucketPositions() const = 0;
-    bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
-        return DoIsLocked(dataLocksManager);
-    }
 
     NJson::TJsonValue SerializeToJsonVisual() const {
         return DoSerializeToJsonVisual();

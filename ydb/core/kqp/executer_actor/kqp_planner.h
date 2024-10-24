@@ -43,7 +43,7 @@ public:
     struct TArgs {
         TKqpTasksGraph& TasksGraph;
         const ui64 TxId;
-        const ui64 LockTxId;
+        const TMaybe<ui64> LockTxId;
         const ui32 LockNodeId;
         const TActorId& Executer;
         const IKqpGateway::TKqpSnapshot& Snapshot;
@@ -68,6 +68,7 @@ public:
         const bool MayRunTasksLocally = false;
         const std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager>& ResourceManager_;
         const std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory>& CaFactory_;
+        const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     };
 
     TKqpPlanner(TKqpPlanner::TArgs&& args);
@@ -103,7 +104,7 @@ private:
 
 private:
     const ui64 TxId;
-    const ui64 LockTxId;
+    const TMaybe<ui64> LockTxId;
     const ui32 LockNodeId;
     const TActorId ExecuterId;
     TVector<ui64> ComputeTasks;
@@ -144,6 +145,7 @@ private:
     std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
     TIntrusivePtr<NRm::TTxState> TxInfo;
     TVector<TProgressStat> LastStats;
+    const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
 
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error

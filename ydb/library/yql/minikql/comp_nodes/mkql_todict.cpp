@@ -923,7 +923,7 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsFinish()) {
             return state.Release();
-        } else if (!state.HasValue()) {
+        } else if (state.IsInvalid()) {
             MakeState(ctx, state);
         }
 
@@ -1108,7 +1108,7 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsFinish()) {
             return state.Release();
-        } else if (!state.HasValue()) {
+        } else if (state.IsInvalid()) {
             MakeState(ctx, state);
         }
         auto** fields = ctx.WideFields.data() + WideFieldsIndex;
@@ -1432,7 +1432,7 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsFinish()) {
             return state;
-        } else if (!state.HasValue()) {
+        } else if (state.IsInvalid()) {
             MakeState(ctx, state);
         }
 
@@ -1625,7 +1625,7 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsFinish()) {
             return state;
-        } else if (!state.HasValue()) {
+        } else if (state.IsInvalid()) {
             MakeState(ctx, state);
         }
         auto** fields = ctx.WideFields.data() + WideFieldsIndex;

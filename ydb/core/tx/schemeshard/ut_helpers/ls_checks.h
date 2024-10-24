@@ -96,10 +96,16 @@ namespace NLs {
     void IsExternalDataSource(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsView(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsResourcePool(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsBackupCollection(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns, bool strictCount = false);
+    TCheckFunc CheckColumnType(const ui64 columnIndex, const TString& columnTypename);
     void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc PartitionCount(ui32 count);
     TCheckFunc PartitionKeys(TVector<TString> lastShardKeys);
+    // Checks if the serialized representation of an expected boundary is a prefix of the actual one.
+    // Similar to PartitionKeys check, but does not require you to pass split boundaries in a serialized form.
+    template <typename T>
+    TCheckFunc SplitBoundaries(TVector<T>&& expectedBoundaries);
     TCheckFunc FollowerCount(ui32 count);
     TCheckFunc CrossDataCenterFollowerCount(ui32 count);
     TCheckFunc AllowFollowerPromotion(bool val);
@@ -139,9 +145,8 @@ namespace NLs {
     TCheckFunc IndexState(NKikimrSchemeOp::EIndexState state);
     TCheckFunc IndexKeys(const TVector<TString>& keyNames);
     TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames);
-    
-    TCheckFunc VectorIndexDescription(Ydb::Table::VectorIndexSettings_Distance dist,
-                                      Ydb::Table::VectorIndexSettings_Similarity similarity,
+
+    TCheckFunc VectorIndexDescription(Ydb::Table::VectorIndexSettings_Metric metric,
                                       Ydb::Table::VectorIndexSettings_VectorType vectorType,
                                       ui32 vectorDimension
                                   );
@@ -168,8 +173,10 @@ namespace NLs {
     TCheckFunc BackupHistoryCount(ui64 count);
 
     TCheckFunc HasOwner(const TString& owner);
+    TCheckFunc HasRight(const TString& right);
+    TCheckFunc HasNoRight(const TString& right);
     TCheckFunc HasEffectiveRight(const TString& right);
-    TCheckFunc HasNotEffectiveRight(const TString& right);
+    TCheckFunc HasNoEffectiveRight(const TString& right);
 
     TCheckFunc KesusConfigIs(ui64 self_check_period_millis, ui64 session_grace_period_millis);
     TCheckFunc DatabaseQuotas(ui64 dataStreamShards);

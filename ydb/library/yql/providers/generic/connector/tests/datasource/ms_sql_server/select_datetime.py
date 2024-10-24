@@ -80,7 +80,13 @@ class Factory:
                 datetime.datetime(2023, 3, 21, 11, 21, 31, 0),
                 datetime.datetime(2023, 3, 21, 11, 21, 31, 0),
             ],
-            [3, None, None, None, None],
+            [
+                3,
+                datetime.date(2079, 6, 6),
+                datetime.datetime(2079, 6, 6, 23, 59),
+                datetime.datetime(2079, 6, 7, 0, 0),
+                None,
+            ],
         ]
 
         return TestCase(
@@ -112,7 +118,13 @@ class Factory:
                 '2023-03-21T11:21:31Z',
                 '2023-03-21T11:21:31Z',
             ],
-            [3, '2079-06-06', '2079-06-06T23:59:00Z', '2079-06-06T23:59:59.999Z', '2079-06-06T23:59:59.9999999Z'],
+            [
+                3,
+                '2079-06-06',
+                '2079-06-06T23:59:00Z',
+                '2079-06-07T00:00:00Z',  # For a some reason server rounds it to the first second of the next day
+                '9999-12-31T23:59:59.9999999Z',
+            ],
         ]
 
         return TestCase(

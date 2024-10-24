@@ -70,12 +70,13 @@ public:
         } else {
             throw TMisuseException() << "\"" << settings.Scheme_ << "\" scheme type is not supported";
         }
+        config.useVirtualAddressing = settings.UseVirtualAddressing_;
 
         Client = std::make_unique<Aws::S3::S3Client>(
             Aws::Auth::AWSCredentials(settings.AccessKey_, settings.SecretKey_),
             config,
             Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
-            true);
+            settings.UseVirtualAddressing_);
     }
 
     TListS3Result ListObjectKeys(const TString& prefix, const std::optional<TString>& token) override {

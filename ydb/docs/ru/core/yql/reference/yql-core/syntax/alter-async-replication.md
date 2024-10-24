@@ -4,11 +4,12 @@
 
 ## Синтаксис {#syntax}
 
-```sql
+```yql
 ALTER ASYNC REPLICATION <name> SET (option = value [, ...])
 ```
 
 где:
+
 * `name` — имя экземпляра асинхронной репликации.
 * `SET (option = value [, ...])` — [параметры](#params) асинхронной репликации.
 
@@ -23,8 +24,8 @@ ALTER ASYNC REPLICATION <name> SET (option = value [, ...])
 
 Следующий запрос принудительно завершит процесс асинхронной репликации:
 
-```sql
-ALTER ASYNC REPLICATION `my_replication` SET (STATE = "DONE", FAILOVER_MODE = "FORCE");
+```yql
+ALTER ASYNC REPLICATION my_replication SET (STATE = "DONE", FAILOVER_MODE = "FORCE");
 ```
 
 ## См. также

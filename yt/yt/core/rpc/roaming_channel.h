@@ -14,7 +14,7 @@ struct IRoamingChannelProvider
     : public virtual TRefCounted
 {
     //! Cf. IChannel::GetEndpointDescription.
-    virtual const TString& GetEndpointDescription() const = 0;
+    virtual const std::string& GetEndpointDescription() const = 0;
 
     //! Cf. IChannel::GetEndpointAttributes.
     virtual const NYTree::IAttributeDictionary& GetEndpointAttributes() const = 0;

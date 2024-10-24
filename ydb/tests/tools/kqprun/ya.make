@@ -1,4 +1,4 @@
-PROGRAM()
+PROGRAM(kqprun)
 
 SRCS(
     kqprun.cpp
@@ -24,3 +24,11 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE(
+    recipe
+)
+
+RECURSE_FOR_TESTS(
+    tests
+)

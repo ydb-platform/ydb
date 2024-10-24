@@ -20,6 +20,11 @@ struct TQueryRequest {
     ui64 ResultSizeLimit;
 };
 
+struct TCreateSessionRequest {
+    std::unique_ptr<NKikimr::NKqp::TEvKqp::TEvCreateSessionRequest> Event;
+    ui32 TargetNode;
+};
+
 struct TEvPrivate {
     enum EEv : ui32 {
         EvStartAsyncQuery = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
@@ -77,5 +82,7 @@ NActors::IActor* CreateRunScriptActorMock(TQueryRequest request, NThreading::TPr
 NActors::IActor* CreateAsyncQueryRunnerActor(const TAsyncQueriesSettings& settings);
 
 NActors::IActor* CreateResourcesWaiterActor(NThreading::TPromise<void> promise, i32 expectedNodeCount);
+
+NActors::IActor* CreateSessionHolderActor(TCreateSessionRequest request, NThreading::TPromise<TString> openPromise, NThreading::TPromise<void> closePromise);
 
 }  // namespace NKqpRun

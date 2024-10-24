@@ -304,6 +304,7 @@ protected:
     ITransaction* CreateUpdateTabletsObject(TEvHive::TEvUpdateTabletsObject::TPtr event);
     ITransaction* CreateUpdateDomain(TSubDomainKey subdomainKey, TEvHive::TEvUpdateDomain::TPtr event = {});
     ITransaction* CreateUpdateDcFollowers(const TDataCenterId& dc);
+    ITransaction* CreateDeleteNode(TNodeId nodeId);
 
 public:
     TDomainsView DomainsView;
@@ -578,6 +579,7 @@ protected:
     void Handle(TEvPrivate::TEvDeleteNode::TPtr& ev);
     void Handle(TEvHive::TEvRequestTabletDistribution::TPtr& ev);
     void Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev);
+    void Handle(TEvHive::TEvRequestScaleRecommendation::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);
@@ -658,6 +660,7 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void UpdateCounterNodesConnected(i64 nodesConnectedDiff);
     void UpdateCounterTabletsStarting(i64 tabletsStartingDiff);
     void UpdateCounterPingQueueSize();
+    void UpdateCounterTabletChannelHistorySize();
     void RecordTabletMove(const TTabletMoveInfo& info);
     bool DomainHasNodes(const TSubDomainKey &domainKey) const;
     void ProcessBootQueue();

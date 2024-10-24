@@ -365,7 +365,7 @@ public:
     }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             const auto count = Count->GetValue(ctx).Get<ui64>();
             std::vector<bool> dirs(Directions.size());
             std::transform(Directions.cbegin(), Directions.cend(), dirs.begin(), [&ctx](IComputationNode* dir){ return dir->GetValue(ctx).Get<bool>(); });
@@ -435,7 +435,7 @@ public:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         const auto more = BasicBlock::Create(context, "more", ctx.Func);
 
-        annotate(BranchInst::Create(main, make, HasValue(statePtr, block), block));
+        annotate(BranchInst::Create(make, main, IsInvalid(statePtr, block), block));
         block = make;
 
         const auto count = GetNodeValue(Count, ctx, block);
@@ -885,7 +885,7 @@ public:
     }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             std::vector<bool> dirs(Directions.size());
             std::transform(Directions.cbegin(), Directions.cend(), dirs.begin(), [&ctx](IComputationNode* dir){ return dir->GetValue(ctx).Get<bool>(); });
             MakeState(ctx, state, dirs.data());
@@ -958,7 +958,7 @@ public:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         const auto more = BasicBlock::Create(context, "more", ctx.Func);
 
-        annotate(BranchInst::Create(main, make, HasValue(statePtr, block), block));
+        annotate(BranchInst::Create(make, main, IsInvalid(statePtr, block), block));
         block = make;
 
         const auto arrayType = ArrayType::get(Type::getInt1Ty(context), Directions.size());

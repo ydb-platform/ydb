@@ -1,6 +1,6 @@
 #pragma once
 
-#include "public.h"
+#include "private.h"
 
 #include <yt/yt/core/net/public.h>
 
@@ -9,7 +9,7 @@ namespace NYT::NHttp::NDetail {
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Responsible for returning the connection to the owning pool
-//! if it could be reused
+//! if it could be reused.
 struct TReusableConnectionState final
 {
     std::atomic<bool> Reusable = true;
@@ -20,10 +20,12 @@ struct TReusableConnectionState final
     ~TReusableConnectionState();
 };
 
-using TReusableConnectionStatePtr = TIntrusivePtr<TReusableConnectionState>;
+DEFINE_REFCOUNTED_TYPE(TReusableConnectionState)
+
+////////////////////////////////////////////////////////////////////////////////
 
 //! Reports to the shared state whether the connection could be reused
-//! (by calling T::IsSafeToReuse() in the destructor)
+//! (by calling T::IsSafeToReuse() in the destructor).
 template <class T>
 class TConnectionReuseWrapper
     : public T
@@ -31,7 +33,7 @@ class TConnectionReuseWrapper
 public:
     using T::T;
 
-    ~TConnectionReuseWrapper() override;
+    ~TConnectionReuseWrapper();
 
     void SetReusableState(TReusableConnectionStatePtr reusableState);
 

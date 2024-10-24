@@ -2,7 +2,7 @@
 #include "common.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/common/validation.h>
+#include <ydb/library/formats/arrow/common/validation.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
@@ -174,7 +174,7 @@ public:
     [[nodiscard]] bool Add(const std::shared_ptr<TTierInfo>& tier) {
         AFL_VERIFY(tier);
         if (!TTLColumnName) {
-            if (tier->GetEvictColumnName().Empty()) {
+            if (tier->GetEvictColumnName().empty()) {
                 AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "empty_evict_column_name");
                 return false;
             }

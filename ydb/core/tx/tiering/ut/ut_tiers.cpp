@@ -330,7 +330,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         serverSettings.GrpcPort = grpcPort;
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableMetadataProvider(true);
+            .SetEnableMetadataProvider(true)
+            .SetEnableTieringInColumnShard(true)
         ;
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
@@ -420,6 +421,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
+            .SetEnableTieringInColumnShard(true)
             .SetAppConfig(appConfig);
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
@@ -550,6 +552,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
+            .SetEnableTieringInColumnShard(true)
         ;
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
@@ -603,9 +606,10 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         runtime.UpdateCurrentTime(now);
         const TInstant pkStart = now - TDuration::Days(15);
 
-        auto batch = lHelper.TestArrowBatch(0, pkStart.GetValue(), 6000);
+        auto batch1 = lHelper.TestArrowBatch(0, pkStart.GetValue(), 6000);
+        auto batch2 = lHelper.TestArrowBatch(0, pkStart.GetValue() - 100, 6000);
         auto batchSmall = lHelper.TestArrowBatch(0, now.GetValue(), 1);
-        auto batchSize = NArrow::GetBatchDataSize(batch);
+        auto batchSize = NArrow::GetBatchDataSize(batch1);
         Cerr << "Inserting " << batchSize << " bytes..." << Endl;
         UNIT_ASSERT(batchSize > 4 * 1024 * 1024); // NColumnShard::TLimits::MIN_BYTES_TO_INSERT
         UNIT_ASSERT(batchSize < 8 * 1024 * 1024);
@@ -614,7 +618,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             TAtomic unusedPrev;
             runtime.GetAppData().Icb->SetValue("ColumnShardControls.GranuleIndexedPortionsCountLimit", 1, unusedPrev);
         }
-        lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch);
+        lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch1);
+        lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch2);
         {
             const TInstant start = Now();
             bool check = false;

@@ -456,7 +456,7 @@ private:
         return std::make_pair(true, "");
     }
 
-    std::pair<bool, TString> MaybeUpload(bool isForwarded, const TVector<TFileResource>& files, bool useCache = false) {
+    std::pair<bool, TString> MaybeUploadUnsafe(bool isForwarded, const TVector<TFileResource>& files, bool useCache = false) {
         if (isForwarded) {
             return std::make_pair(false, "");
         }
@@ -556,6 +556,15 @@ private:
 
         return std::make_pair(flag, "");
     }
+
+    std::pair<bool, TString> MaybeUpload(bool isForwarded, const TVector<TFileResource>& files, bool useCache = false) {
+        try {
+            return MaybeUploadUnsafe(isForwarded, files, useCache);
+        } catch (...) {
+            return {false, CurrentExceptionMessage()};
+        }
+    }
+
 
     void StartUploadAndForward(TEvAllocateWorkersRequest::TPtr& ev, const TActorContext& ctx)
     {
@@ -674,7 +683,7 @@ private:
 
     void UpdateLeaderInfo(THashMap<TString, NYT::TNode>& attributes) {
         LeaderHost = attributes.at(NCommonAttrs::HOSTNAME_ATTR).AsString();
-        LeaderPort = std::stoi(attributes.at(NCommonAttrs::GRPCPORT_ATTR).AsString().Data());
+        LeaderPort = std::stoi(attributes.at(NCommonAttrs::GRPCPORT_ATTR).AsString().data());
     }
 
     void Bootstrap(const TActorContext& ctx) {

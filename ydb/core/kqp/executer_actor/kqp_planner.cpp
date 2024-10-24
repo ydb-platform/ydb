@@ -1,7 +1,6 @@
 #include "kqp_executer_stats.h"
 #include "kqp_planner.h"
 #include "kqp_planner_strategy.h"
-#include "kqp_shards_resolver.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/base/appdata.h>
@@ -93,6 +92,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , MayRunTasksLocally(args.MayRunTasksLocally)
     , ResourceManager_(args.ResourceManager_)
     , CaFactory_(args.CaFactory_)
+    , BlockTrackingMode(args.BlockTrackingMode)
 {
     if (GUCSettings) {
         SerializedGUCSettings = GUCSettings->SerializeToString();
@@ -185,7 +185,9 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     auto result = std::make_unique<TEvKqpNode::TEvStartKqpTasksRequest>(TasksGraph.GetMeta().GetArenaIntrusivePtr());
     auto& request = result->Record;
     request.SetTxId(TxId);
-    request.SetLockTxId(LockTxId);
+    if (LockTxId) {
+        request.SetLockTxId(*LockTxId);
+    }
     request.SetLockNodeId(LockNodeId);
     ActorIdToProto(ExecuterId, request.MutableExecuterActorId());
 
@@ -234,9 +236,13 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
 
     request.SetSchedulerGroup(UserRequestContext->PoolId);
     request.SetDatabase(Database);
+    request.SetDatabaseId(UserRequestContext->DatabaseId);
     if (UserRequestContext->PoolConfig.has_value()) {
         request.SetMemoryPoolPercent(UserRequestContext->PoolConfig->QueryMemoryLimitPercentPerNode);
-        request.SetMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
+        request.SetPoolMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
+        if (UserRequestContext->PoolConfig->QueryCpuLimitPercentPerNode >= 0) {
+            request.SetQueryCpuShare(UserRequestContext->PoolConfig->QueryCpuLimitPercentPerNode / 100.0);
+        }
     }
 
     return result;
@@ -277,8 +283,14 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
 
     auto placingOptions = ResourceManager_->GetPlacingOptions();
 
+    ui64 nonParallelLimit = placingOptions.MaxNonParallelTasksExecutionLimit;
+    if (MayRunTasksLocally) {
+        // not applied to column shards and external sources
+        nonParallelLimit = placingOptions.MaxNonParallelDataQueryTasksLimit;
+    }
+
     bool singleNodeExecutionMakeSence = (
-        ResourceEstimations.size() <= placingOptions.MaxNonParallelTasksExecutionLimit ||
+        ResourceEstimations.size() <= nonParallelLimit ||
         // all readers are located on the one node.
         TasksPerNode.size() == 1
     );
@@ -456,6 +468,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .Deadline = Deadline,
         .ShareMailbox = (computeTasksSize <= 1),
         .RlPath = Nothing(),
+        .BlockTrackingMode = BlockTrackingMode
     });
 
     if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&startResult)) {

@@ -18,12 +18,13 @@ protected:
     std::unique_ptr<TKikimrRunner> Kikimr;
     YDB_ACCESSOR(bool, IsOlap, false);
     YDB_ACCESSOR(bool, FastSnapshotExpiration, false);
+    YDB_ACCESSOR(bool, DisableSinks, false);
 
     virtual void DoExecute() = 0;
 public:
     void Execute() {
-        AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(!DisableSinks);
+        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(!DisableSinks);
         AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
         auto settings = TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false);
         if (FastSnapshotExpiration) {
@@ -44,8 +45,8 @@ public:
             auto type = IsOlap ? "COLUMN" : "ROW";
             auto result = client.ExecuteQuery(Sprintf(R"(
                 CREATE TABLE `/Root/Test` (
-                    Group Uint32,
-                    Name String,
+                    Group Uint32 not null,
+                    Name String not null,
                     Amount Uint64,
                     Comment String,
                     PRIMARY KEY (Group, Name)
@@ -55,7 +56,7 @@ public:
                 );
 
                 CREATE TABLE `/Root/KV` (
-                    Key Uint32,
+                    Key Uint32 not null,
                     Value String,
                     PRIMARY KEY (Key)
                 ) WITH (
@@ -67,7 +68,7 @@ public:
                 );
 
                 CREATE TABLE `/Root/KV2` (
-                    Key Uint32,
+                    Key Uint32 not null,
                     Value String,
                     PRIMARY KEY (Key)
                 ) WITH (

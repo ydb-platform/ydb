@@ -27,10 +27,12 @@
 namespace NKikimr::NOlap {
 
 TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager,
-    const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema)
+    const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<TVersionCounters>& versionCounters)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
     , StoragesManager(storagesManager)
+    , VersionedIndex(versionCounters)
     , TabletId(tabletId)
+    , VersionCounters(versionCounters)
     , LastPortion(0)
     , LastGranule(0)
 {
@@ -39,12 +41,15 @@ TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<
 }
 
 TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager,
-    const TSnapshot& snapshot, TIndexInfo&& schema)
+    const TSnapshot& snapshot, TIndexInfo&& schema, const std::shared_ptr<TVersionCounters>& versionCounters)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
     , StoragesManager(storagesManager)
+    , VersionedIndex(versionCounters)
     , TabletId(tabletId)
+    , VersionCounters(versionCounters)
     , LastPortion(0)
-    , LastGranule(0) {
+    , LastGranule(0)
+{
     ActualizationController = std::make_shared<NActualizer::TController>();
     RegisterSchemaVersion(snapshot, std::move(schema));
 }
@@ -599,7 +604,7 @@ void TColumnEngineForLogs::OnTieringModified(const std::shared_ptr<NColumnShard:
 }
 
 void TColumnEngineForLogs::DoRegisterTable(const ui64 pathId) {
-    std::shared_ptr<TGranuleMeta> g = GranulesStorage->RegisterTable(pathId, SignalCounters.RegisterGranuleDataCounters(), VersionedIndex);
+    std::shared_ptr<TGranuleMeta> g = GranulesStorage->RegisterTable(pathId, SignalCounters.RegisterGranuleDataCounters(), VersionedIndex, VersionCounters);
     if (ActualizationStarted) {
         g->StartActualizationIndex();
         g->RefreshScheme();

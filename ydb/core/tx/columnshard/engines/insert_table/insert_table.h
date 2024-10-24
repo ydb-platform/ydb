@@ -8,6 +8,8 @@
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/columnshard/counters/common_data.h>
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
+#include <ydb/core/tx/columnshard/common/schema_versions.h>
+#include <ydb/core/tx/columnshard/counters/insert_table.h>
 
 namespace NKikimr::NOlap {
 class TPKRangesFilter;
@@ -15,6 +17,7 @@ class IDbWrapper;
 
 class TInsertTableAccessor {
 protected:
+    std::shared_ptr<NOlap::TVersionCounters> VersionCounters;
     TInsertionSummary Summary;
     THashMap<TUnifiedBlobId, ui32> BlobLinks;
 
@@ -26,6 +29,11 @@ protected:
     bool RemoveBlobLinkOnComplete(const TUnifiedBlobId& blobId);
 
 public:
+    TInsertTableAccessor(const std::shared_ptr<NOlap::TVersionCounters>& versionCounters)
+        : VersionCounters(versionCounters)
+        , Summary(VersionCounters)
+    {
+    }
     TPathInfo& RegisterPathInfo(const ui64 pathId) {
         return Summary.RegisterPathInfo(pathId);
     }
@@ -97,6 +105,10 @@ private:
     TInsertWriteId LastWriteId = TInsertWriteId{ 0 };
 
 public:
+    TInsertTable(const std::shared_ptr<NOlap::TVersionCounters>& versionCounters)
+        : TInsertTableAccessor(versionCounters)
+    {
+    }
     static constexpr const TDuration WaitCommitDelay = TDuration::Minutes(10);
     static constexpr ui64 CleanupPackageSize = 10000;
 

@@ -13,6 +13,7 @@
 
 #include "blobs_reader/actor.h"
 #include "blobs_action/storages_manager/manager.h"
+#include "blobs_action/transaction/tx_clean_versions.h"
 #include "blobs_action/transaction/tx_remove_blobs.h"
 #include "blobs_action/transaction/tx_gc_insert_table.h"
 #include "blobs_action/transaction/tx_gc_indexed.h"
@@ -80,10 +81,11 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , PeriodicWakeupActivationPeriod(NYDBTest::TControllers::GetColumnShardController()->GetPeriodicWakeupActivationPeriod())
     , StatsReportInterval(NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval())
     , InFlightReadsTracker(StoragesManager, Counters.GetRequestsTracingCounters())
-    , TablesManager(StoragesManager, info->TabletID)
+    , VersionCounters(std::make_shared<NOlap::TVersionCounters>())
+    , TablesManager(StoragesManager, info->TabletID, VersionCounters)
     , Subscribers(std::make_shared<NSubscriber::TManager>(*this))
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
-    , InsertTable(std::make_unique<NOlap::TInsertTable>())
+    , InsertTable(std::make_unique<NOlap::TInsertTable>(VersionCounters))
     , InsertTaskSubscription(NOlap::TInsertColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , CompactTaskSubscription(NOlap::TCompactColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
@@ -521,6 +523,7 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     SetupTtl();
     SetupGC();
     SetupCleanupInsertTable();
+    SetupCleanupUnusedSchemaVersions();
 }
 
 class TChangesTask: public NConveyor::ITask {
@@ -890,6 +893,18 @@ void TColumnShard::SetupGC() {
 
 void TColumnShard::Handle(TEvPrivate::TEvStartCompaction::TPtr& ev, const TActorContext& /*ctx*/) {
     StartCompaction(ev->Get()->GetGuard());
+}
+
+void TColumnShard::SetupCleanupUnusedSchemaVersions() {
+    if (!VersionCounters->HasUnusedSchemaVersions()) {
+        return;
+    }
+    if (BackgroundController.IsActiveCleanupUnusedSchemaVersions()) {
+        ACFL_DEBUG("background", "cleanup_unused_schema_versions")("skip_reason", "in_progress");
+        return;
+    }
+    BackgroundController.StartActiveCleanupUnusedSchemaVersions();
+    Execute(new TTxSchemaVersionsCleanup(this));
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, const TActorContext& ctx) {

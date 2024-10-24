@@ -2,6 +2,7 @@
 #include "storage.h"
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/common/schema_versions.h>
 #include <ydb/core/tx/columnshard/engines/changes/actualization/construction/context.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 
@@ -23,6 +24,10 @@ void TGranuleMeta::UpsertPortion(const TPortionInfo& info) {
         OnBeforeChangePortion(nullptr);
         auto portionNew = std::make_shared<TPortionInfo>(info);
         it = Portions.emplace(portionNew->GetPortion(), portionNew).first;
+        auto schemaVersionOpt = info.GetSchemaVersionOptional();
+        if (schemaVersionOpt.has_value()) {
+            VersionCounters->VersionAddRef(*schemaVersionOpt);
+        }
     } else {
         OnBeforeChangePortion(it->second);
         it->second = std::make_shared<TPortionInfo>(info);
@@ -37,6 +42,10 @@ bool TGranuleMeta::ErasePortion(const ui64 portion) {
         return false;
     } else {
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased")("portion_info", it->second->DebugString())("pathId", PathId);
+        auto schemaVersionOpt = it->second->GetSchemaVersionOptional();
+        if (schemaVersionOpt.has_value()) {
+            VersionCounters->VersionRemoveRef(*schemaVersionOpt);
+        }
     }
     OnBeforeChangePortion(it->second);
     Portions.erase(it);
@@ -127,13 +136,15 @@ const NKikimr::NOlap::TGranuleAdditiveSummary& TGranuleMeta::GetAdditiveSummary(
 }
 
 TGranuleMeta::TGranuleMeta(
-    const ui64 pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex)
+    const ui64 pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex, const std::shared_ptr<TVersionCounters>& versionCounters)
     : PathId(pathId)
     , Counters(counters)
     , PortionInfoGuard(owner.GetCounters().BuildPortionBlobsGuard())
     , Stats(owner.GetStats())
     , StoragesManager(owner.GetStoragesManager())
-    , PortionsIndex(*this, Counters.GetPortionsIndexCounters()) {
+    , PortionsIndex(*this, Counters.GetPortionsIndexCounters())
+    , VersionCounters(versionCounters)
+{
     NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(
         PathId, owner.GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetPrimaryKey());
     OptimizerPlanner = versionedIndex.GetLastSchema()->GetIndexInfo().GetCompactionPlannerConstructor()->BuildPlanner(context).DetachResult();
@@ -142,6 +153,10 @@ TGranuleMeta::TGranuleMeta(
 }
 
 std::shared_ptr<TPortionInfo> TGranuleMeta::UpsertPortionOnLoad(TPortionInfo&& portion) {
+    auto schemaVersionOpt = portion.GetSchemaVersionOptional();
+    if (schemaVersionOpt.has_value()) {
+        VersionCounters->VersionAddRef(*schemaVersionOpt);
+    }
     if (portion.HasInsertWriteId() && !portion.HasCommitSnapshot()) {
         const TInsertWriteId insertWriteId = portion.GetInsertWriteIdVerified();
         auto emplaceInfo = InsertedPortions.emplace(insertWriteId, std::make_shared<TPortionInfo>(std::move(portion)));

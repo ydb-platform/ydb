@@ -22,6 +22,7 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/repl
     ydb/core/tx/scheme_board
     ydb/core/util
+    ydb/core/util/actorsys_test
 )
 
 END()

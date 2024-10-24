@@ -8,7 +8,7 @@
 #include <ydb/core/blobstorage/vdisk/vdisk_actor.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include <ydb/core/util/testactorsys.h>
+#include <ydb/core/util/actorsys_test/testactorsys.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <util/system/env.h>
 #include <random>

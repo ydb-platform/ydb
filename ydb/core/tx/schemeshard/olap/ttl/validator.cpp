@@ -1,4 +1,6 @@
 #include "validator.h"
+#include <ydb/core/tx/schemeshard/common/validation.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 
 namespace NKikimr::NSchemeShard {
 

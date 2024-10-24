@@ -1,6 +1,5 @@
 #include "schema.h"
 #include <ydb/core/tx/schemeshard/common/validation.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 #include <ydb/core/tx/schemeshard/olap/ttl/validator.h>
 
 namespace NKikimr::NSchemeShard {

@@ -1,7 +1,6 @@
 #pragma once
 #include "common/owner.h"
 
-#include <ydb/library/services/services.pb.h>
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NColumnShard {
@@ -92,9 +91,9 @@ public:
         : TBase("Startup")
         , Type(type)
     {
-        LoadingTimeCounter = TBase::GetValue("Startup/" + type + "LoadingTime");;
-        FailedLoadingTimeCounter = TBase::GetValue("Startup/" + type + "FailedLoadingTime");;
-        LoadingFailCounter = TBase::GetValue("Startup/" + type + "LoadingFailCount");;
+        LoadingTimeCounter = TBase::GetValue("Startup/" + type + "LoadingTime");
+        FailedLoadingTimeCounter = TBase::GetValue("Startup/" + type + "FailedLoadingTime");
+        LoadingFailCounter = TBase::GetValue("Startup/" + type + "LoadingFailCount");
     }
 
     TLoadTimer StartGuard() const {

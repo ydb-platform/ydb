@@ -1,10 +1,17 @@
 import os
 import re
 import requests
+from github import Github
+from urllib.parse import quote, urlencode
+
 
 ORG_NAME = 'ydb-platform'
+REPO_NAME = f'{ORG_NAME}/ydb'
 PROJECT_ID = '45'
-query_template = """
+TEST_HISTORY_DASHBOARD = "https://datalens.yandex/4un3zdm0zcnyr"
+CURRENT_TEST_HISTORY_DASHBOARD = "https://datalens.yandex/34xnbsom67hcq?"
+
+project_issues_query = """
 {
   organization(login: "%s") {
     projectV2(number: %s) {
@@ -89,7 +96,7 @@ def fetch_all_issues(org_name, project_id):
     end_cursor = "null"
 
     while has_next_page:
-        query = query_template % (org_name, project_id, end_cursor)
+        query = project_issues_query % (org_name, project_id, end_cursor)
         GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
         headers = {"Authorization": f"Bearer {GITHUB_TOKEN}"}
         result = run_query(query, headers)
@@ -106,7 +113,45 @@ def fetch_all_issues(org_name, project_id):
 
     return issues
 
+def generate_github_issue_title_and_body( test_names, owner, summary_history):
+    base_url = "https://github.com/ydb-platform/ydb/issues/new"
 
+    # Кодируем заголовок
+    title = f'Mute {len(test_names)} tests'
+    title_encoded = quote(title)
+
+    # Преобразование списка тестов в строку и кодирование
+    test_list = "\n".join(test_names)
+    test_list_encoded = quote(test_list, safe='')
+    
+    # Создаем ссылку на историю тестов, кодируя параметры
+    
+    test_run_history_params = "&".join(
+        urlencode({"full_name": f"__in_{test}"})
+        for test in test_names
+    )
+    test_run_history_link = f"{CURRENT_TEST_HISTORY_DASHBOARD}{test_run_history_params}"
+
+    # Тело сообщения и кодирование
+    body_template = (
+        f"Mute:<!--mute_list_start-->\n"
+        f"{test_list}\n"
+        f"<!--mute_list_end-->\n\n"
+        f"**Add line to [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt):**\n"
+        "```\n"
+        f"{test_list}\n"
+        "```\n\n"
+        f"Owner: {owner}\n\n"
+        "**Read more in [mute_rules.md](https://github.com/ydb-platform/ydb/blob/main/.github/config/mute_rules.md)**\n\n"
+        f"**Summary history:** in window {summary_history}\n"
+        "\n\n"
+        f"**Test run history:** [link]({test_run_history_link})\n\n"
+        f"More info in [dashboard]({TEST_HISTORY_DASHBOARD})"
+    )
+    
+    body_encoded = quote(body_template, safe='')
+    return title_encoded, body_encoded,
+  
 def parse_body(body):
     tests = []
     branches = []
@@ -144,7 +189,7 @@ def parse_body(body):
 
 def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
     issues = fetch_all_issues(ORG_NAME, PROJECT_ID)
-    issues_prepared = {}
+    all_issues_with_contet = {}
     for issue in issues:
         content = issue['content']
         if content:
@@ -177,23 +222,23 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
             print(f"Owner: {owner}")
             print("Tests:")
 
-            issues_prepared[content['id']] = {}
-            issues_prepared[content['id']]['title'] = content['title']
-            issues_prepared[content['id']]['url'] = content['url']
-            issues_prepared[content['id']]['state'] = content['state']
-            issues_prepared[content['id']]['createdAt'] = content['createdAt']
-            issues_prepared[content['id']]['status_updated'] = status_updated
-            issues_prepared[content['id']]['status'] = status
-            issues_prepared[content['id']]['owner'] = owner
-            issues_prepared[content['id']]['tests'] = []
-            issues_prepared[content['id']]['branches'] = branches
+            all_issues_with_contet[content['id']] = {}
+            all_issues_with_contet[content['id']]['title'] = content['title']
+            all_issues_with_contet[content['id']]['url'] = content['url']
+            all_issues_with_contet[content['id']]['state'] = content['state']
+            all_issues_with_contet[content['id']]['createdAt'] = content['createdAt']
+            all_issues_with_contet[content['id']]['status_updated'] = status_updated
+            all_issues_with_contet[content['id']]['status'] = status
+            all_issues_with_contet[content['id']]['owner'] = owner
+            all_issues_with_contet[content['id']]['tests'] = []
+            all_issues_with_contet[content['id']]['branches'] = branches
 
             for test in tests:
-                issues_prepared[content['id']]['tests'].append(test)
+                all_issues_with_contet[content['id']]['tests'].append(test)
                 print(f"- {test}")
             print('\n')
 
-    return issues_prepared
+    return all_issues_with_contet
 
 
 def get_muted_tests():
@@ -209,18 +254,66 @@ def get_muted_tests():
                             'url': issues[issue]['url'],
                             'createdAt': issues[issue]['createdAt'],
                             'status_updated': issues[issue]['status_updated'],
+                            'status': issues[issue]['status'],
+                            'state': issues[issue]['state'],
+                            'branches': issues[issue]['branches'],
                         }
                     )
 
     return muted_tests
 
+def create_github_issues(tests, github_token, REPO_NAME):
+    """Создает issue в GitHub репозитории для каждого теста в словаре.
+
+    Args:
+        tests (dict): Словарь тестов, где ключ - название теста, значение - body issue.
+        github_token (str): Токен доступа к GitHub.
+        REPO_NAME (str): Имя репозитория.
+
+    Returns:
+        None
+    """
+
+    g = Github(github_token)
+    repo = g.get_repo(REPO_NAME)
+
+    for test_name, test_body in tests.items():
+        issue = repo.create_issue(
+            title=f"Тест: {test_name}",
+            body=test_body
+        )
+        print(f"Создан issue для теста {test_name}: {issue.html_url}")
+
+
+def update_issue_state(muted_tests, github_token, new_state="closed"):
+    """Обновляет состояние issue для muted тестов.
+
+    Args:
+        muted_tests (dict): Словарь замученных тестов.
+        github_token (str): Токен доступа к GitHub.
+        new_state (str): Новое состояние issue (по умолчанию "closed").
+
+    Returns:
+        None
+    """
+    g = Github(github_token)
+    repo = g.get_repo(REPO_NAME)
+
+    for test_name, issues in muted_tests.items():
+        for issue_data in issues:
+            issue_url = issue_data['url']
+            issue = repo.get_issue(int(issue_url.split('/')[-1]))
+            issue.edit(state=new_state)
+            print(f"Обновлено состояние issue {issue_url} на {new_state}")
 
 def main():
     if "GITHUB_TOKEN" not in os.environ:
         print("Error: Env variable GITHUB_TOKEN is missing, skipping")
         return 1
-    get_muted_tests()
-
+    #muted_tests = get_muted_tests()
+    github_token = os.environ["GITHUB_TOKEN"]
+    create_github_issues(tests, github_token, REPO_NAME)
+    #update_issue_state(muted_tests, github_token, "closed")
 
 if __name__ == "__main__":
     main()

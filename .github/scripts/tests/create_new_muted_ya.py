@@ -35,7 +35,6 @@ def execute_query(driver):
         CASE WHEN flaky.full_name IS NOT NULL THEN True ELSE False END AS flaky_today,
         CASE WHEN muted_stable.full_name IS NOT NULL THEN True ELSE False END AS muted_stable_today,
         CASE WHEN muted_stable_n_days.full_name IS NOT NULL THEN True ELSE False END AS muted_stable_n_days_today,
-        CASE WHEN muted_flaky.full_name IS NOT NULL THEN True ELSE False END AS muted_flaky_today,
         CASE WHEN deleted.full_name IS NOT NULL THEN True ELSE False END AS deleted_today
 
         FROM
@@ -79,24 +78,14 @@ def execute_query(driver):
             WHERE state= 'Muted Stable'
             AND days_in_state >= 14
             AND date_window = CurrentUtcDate()
+            and is_test_chunk = 0
             )as muted_stable_n_days
 
         ON 
             data.full_name = muted_stable_n_days.full_name
             and data.build_type = muted_stable_n_days.build_type
             and data.branch = muted_stable_n_days.branch
-        LEFT JOIN 
-        (SELECT full_name, build_type, branch
-            FROM `test_results/analytics/tests_monitor_test_with_filtered_states`
-            WHERE state = 'Muted Flaky'
-            AND days_in_state >= 5
-            AND date_window = CurrentUtcDate()
-            )as muted_flaky
-
-        ON 
-            data.full_name = muted_flaky.full_name
-            and data.build_type = muted_flaky.build_type
-            and data.branch = muted_flaky.branch
+       
         LEFT JOIN 
         (SELECT full_name, build_type, branch
             FROM `test_results/analytics/tests_monitor_test_with_filtered_states`
@@ -185,9 +174,9 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
         flaky_tests = set(
             f"{test.get('suite_folder')} {test.get('test_name')}\n"
             for test in all_tests
-            if test.get('days_in_state') >= 2
+            if test.get('days_in_state') >= 1
             and test.get('flaky_today')
-            and (test.get('pass_count') + test.get('fail_count')) > 4
+            and (test.get('pass_count') + test.get('fail_count')) > 3
             and test.get('fail_count') > 2
         )
         flaky_tests = sorted(flaky_tests)
@@ -196,9 +185,9 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
         flaky_tests_debug = set(
             f"{test.get('suite_folder')} {test.get('test_name')} # owner {test.get('owner')} success_rate {test.get('success_rate')}%, state {test.get('state')}, days in state {test.get('days_in_state')}, pass_count {test.get('pass_count')}, fail count {test.get('fail_count')}\n"
             for test in all_tests
-            if test.get('days_in_state') >= 2
+            if test.get('days_in_state') >= 1
             and test.get('flaky_today')
-            and (test.get('pass_count') + test.get('fail_count')) > 4
+            and (test.get('pass_count') + test.get('fail_count')) > 3
             and test.get('fail_count') > 2
         )
         flaky_tests_debug = sorted(flaky_tests_debug)

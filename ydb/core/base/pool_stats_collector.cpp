@@ -51,14 +51,27 @@ private:
     };
 
     void OnWakeup(const TActorContext &ctx) override {
+        static auto whiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
         MiniKQLPoolStats.Update();
 
-        TVector<std::tuple<TString, double, ui32, ui32>> pools;
+        auto systemUpdate = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate>();
+        ui32 coresTotal = 0;
+        double coresUsed = 0;
         for (const auto& pool : PoolCounters) {
-            pools.emplace_back(pool.Name, pool.Usage, pool.Threads, pool.LimitThreads);
+            auto& pb = *systemUpdate->Record.AddPoolStats();
+            pb.SetName(pool.Name);
+            pb.SetUsage(pool.Usage);
+            pb.SetThreads(static_cast<ui32>(pool.Threads));
+            pb.SetLimit(static_cast<ui32>(pool.LimitThreads));
+            if (pool.Name != "IO") {
+                coresTotal += static_cast<ui32>(pool.DefaultThreads);
+            }
+            coresUsed += pool.Usage * pool.LimitThreads;
         }
+        systemUpdate->Record.SetCoresTotal(coresTotal);
+        systemUpdate->Record.SetCoresUsed(coresUsed);
 
-        ctx.Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId()), new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(pools));
+        ctx.Send(whiteboardId, systemUpdate.release());
     }
 
 private:

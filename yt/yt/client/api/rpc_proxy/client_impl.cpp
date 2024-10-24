@@ -3,6 +3,8 @@
 #include "config.h"
 #include "helpers.h"
 #include "private.h"
+#include "row_batch_reader.h"
+#include "row_batch_writer.h"
 #include "table_mount_cache.h"
 #include "table_writer.h"
 #include "timestamp_provider.h"
@@ -106,13 +108,13 @@ void TClient::Terminate()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IChannelPtr TClient::CreateSequoiaAwareRetryingChannel(NRpc::IChannelPtr channel, bool retryProxyBanned) const
+IChannelPtr TClient::CreateSequoiaAwareRetryingChannel(IChannelPtr channel, bool retryProxyBanned) const
 {
     const auto& config = Connection_->GetConfig();
     bool retrySequoiaErrorsOnly = !config->EnableRetries;
     // NB: even if client's retries are disabled Sequoia transient failures are
     // still retriable. See IsRetriableError().
-    return NRpc::CreateRetryingChannel(
+    return CreateRetryingChannel(
         config->RetryingChannel,
         std::move(channel),
         BIND([=] (const TError& error) {
@@ -123,7 +125,7 @@ IChannelPtr TClient::CreateSequoiaAwareRetryingChannel(NRpc::IChannelPtr channel
 IChannelPtr TClient::CreateNonRetryingChannelByAddress(const std::string& address) const
 {
     return CreateCredentialsInjectingChannel(
-        Connection_->CreateChannelByAddress(address),
+        Connection_->CreateChannelByAddress(TString(address)),
         ClientOptions_);
 }
 
@@ -766,7 +768,7 @@ TFuture<ITableWriterPtr> TClient::CreateFragmentTableWriter(
     FillRequest(req.Get(), cookie, options);
 
     auto schema = New<TTableSchema>();
-    return NRpc::CreateRpcClientOutputStream(
+    return CreateRpcClientOutputStream(
         std::move(req),
         BIND ([=] (const TSharedRef& metaRef) {
             NApi::NRpcProxy::NProto::TWriteTableMeta meta;
@@ -2678,34 +2680,74 @@ TFuture<TGetFlowViewResult> TClient::GetFlowView(
 }
 
 TFuture<TShuffleHandlePtr> TClient::StartShuffle(
-    const TString& /*account*/,
-    int /*partitionCount*/,
-    const TStartShuffleOptions& /*options*/)
+    const TString& account,
+    int partitionCount,
+    const TStartShuffleOptions& options)
 {
-    YT_UNIMPLEMENTED();
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.StartShuffle();
+    SetTimeoutOptions(*req, options);
+
+    req->set_account(account);
+    req->set_partition_count(partitionCount);
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspStartShufflePtr& rsp) {
+        return ConvertTo<TShuffleHandlePtr>(TYsonString(rsp->shuffle_handle()));
+    }));
 }
 
 TFuture<void> TClient::FinishShuffle(
-    const TShuffleHandlePtr& /*shuffleHandle*/,
-    const TFinishShuffleOptions& /*options*/)
+    const TShuffleHandlePtr& shuffleHandle,
+    const TFinishShuffleOptions& options)
 {
-    YT_UNIMPLEMENTED();
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.FinishShuffle();
+    SetTimeoutOptions(*req, options);
+
+    req->set_shuffle_handle(ConvertToYsonString(shuffleHandle).ToString());
+
+    return req->Invoke().AsVoid();
 }
 
 TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
-    const TShuffleHandlePtr& /*shuffleHandle*/,
-    int /*partitionIndex*/,
-    const TTableReaderConfigPtr& /*config*/)
+    const TShuffleHandlePtr& shuffleHandle,
+    int partitionIndex,
+    const TTableReaderConfigPtr& config)
 {
-    YT_UNIMPLEMENTED();
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.ReadShuffleData();
+    InitStreamingRequest(*req);
+
+    req->set_shuffle_handle(ConvertToYsonString(shuffleHandle).ToString());
+    req->set_partition_index(partitionIndex);
+    req->set_reader_config(ConvertToYsonString(config).ToString());
+
+    return CreateRpcClientInputStream(std::move(req))
+        .ApplyUnique(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
+            return CreateRowBatchReader(std::move(inputStream), false);
+        }));
 }
 
 TFuture<IRowBatchWriterPtr> TClient::CreateShuffleWriter(
-    const TShuffleHandlePtr& /*shuffleHandle*/,
-    const TString& /*partitionColumn*/,
-    const TTableWriterConfigPtr& /*config*/)
+    const TShuffleHandlePtr& shuffleHandle,
+    const TString& partitionColumn,
+    const TTableWriterConfigPtr& config)
 {
-    YT_UNIMPLEMENTED();
+    auto proxy = CreateApiServiceProxy();
+    auto req = proxy.WriteShuffleData();
+    InitStreamingRequest(*req);
+
+    req->set_shuffle_handle(ConvertToYsonString(shuffleHandle).ToString());
+    req->set_partition_column(partitionColumn);
+    req->set_writer_config(ConvertToYsonString(config).ToString());
+
+    return CreateRpcClientOutputStream(std::move(req))
+        .ApplyUnique(BIND([] (IAsyncZeroCopyOutputStreamPtr&& outputStream) {
+            return CreateRowBatchWriter(std::move(outputStream));
+        }));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

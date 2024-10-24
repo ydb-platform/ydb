@@ -290,9 +290,9 @@ IChannelPtr TConnection::CreateChannel(bool sticky)
     return CreateRoamingChannel(std::move(provider));
 }
 
-IChannelPtr TConnection::CreateChannelByAddress(const std::string& address)
+IChannelPtr TConnection::CreateChannelByAddress(const TString& address)
 {
-    return CachingChannelFactory_->CreateChannel(address);
+    return CachingChannelFactory_->CreateChannel(address.ConstRef());
 }
 
 TClusterTag TConnection::GetClusterTag() const

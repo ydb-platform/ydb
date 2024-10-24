@@ -2,13 +2,10 @@ LIBRARY()
 
 SRCS(
     async_http_mon.cpp
-    async_http_mon.h
-    mon.cpp
-    mon.h
-    sync_http_mon.cpp
-    sync_http_mon.h
     crossref.cpp
-    crossref.h
+    dynamic_counters_page.cpp
+    mon.cpp
+    sync_http_mon.cpp
 )
 
 PEERDIR(

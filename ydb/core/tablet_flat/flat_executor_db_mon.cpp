@@ -238,7 +238,7 @@ public:
                                         }
                                         case NScheme::NTypeIds::Pg: {
                                             auto convert = NPg::PgNativeTextFromNativeBinary(tuple.Columns[i].AsBuf(), tuple.Types[i].GetPgTypeDesc());
-                                            str << (!convert.Error ? convert.Str : *convert.Error);
+                                            str << EncodeHtmlPcdata(!convert.Error ? convert.Str : *convert.Error);
                                             break;
                                         }
                                         default:

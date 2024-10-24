@@ -225,7 +225,7 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
             }
             return (void)Send(ev->Get()->Sender, new TEvYdbProxy::TEvReadTopicResponse(*x), 0, ev->Get()->Cookie);
         } else if (auto* x = std::get_if<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&*event)) {
-            PartitionEndWatcher.SetCommittedOffset(x->GetCommittedOffset(), ev->Get()->Sender);
+            PartitionEndWatcher.SetCommittedOffset(x->GetCommittedOffset() - 1, ev->Get()->Sender);
             return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
         } else if (std::get_if<TReadSessionEvent::TPartitionSessionStatusEvent>(&*event)) {
             return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);

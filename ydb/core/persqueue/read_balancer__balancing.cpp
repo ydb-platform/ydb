@@ -955,12 +955,6 @@ void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext&
             if (family->Reset(targetStatus, ctx)) {
                 UnreadableFamilies[family->Id] = family;
                 FamiliesRequireBalancing.erase(family->Id);
-
-                if (special && !WithCommonSessions && !family->WantedPartitions.empty()) {
-                    if (!family->CanAttach(family->WantedPartitions)) {
-                        family->WantedPartitions.clear();
-                    }
-                }
             } else {
                 for (auto& r : roots) {
                     if (IsReadable(r)) {

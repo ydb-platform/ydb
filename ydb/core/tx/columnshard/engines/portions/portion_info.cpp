@@ -17,21 +17,6 @@
 
 namespace NKikimr::NOlap {
 
-std::shared_ptr<arrow::Scalar> TPortionInfo::MaxValue(ui32 columnId) const {
-    std::shared_ptr<arrow::Scalar> result;
-    for (auto&& i : Records) {
-        if (i.ColumnId == columnId) {
-            if (!i.GetMeta().GetMax()) {
-                return nullptr;
-            }
-            if (!result || NArrow::ScalarCompare(result, i.GetMeta().GetMax()) < 0) {
-                result = i.GetMeta().GetMax();
-            }
-        }
-    }
-    return result;
-}
-
 ui64 TPortionInfo::GetColumnRawBytes(const std::set<ui32>& entityIds, const bool validation) const {
     ui64 sum = 0;
     const auto aggr = [&](const TColumnRecord& r) {

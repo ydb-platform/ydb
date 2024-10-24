@@ -496,8 +496,6 @@ public:
         return visible;
     }
 
-    std::shared_ptr<arrow::Scalar> MaxValue(ui32 columnId) const;
-
     const NArrow::TReplaceKey& IndexKeyStart() const {
         return Meta.IndexKeyStart;
     }

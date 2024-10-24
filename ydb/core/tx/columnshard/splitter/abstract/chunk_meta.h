@@ -14,12 +14,11 @@ namespace NKikimr::NOlap {
 
 class TSimpleChunkMeta {
 protected:
-    std::shared_ptr<arrow::Scalar> Max;
     ui32 NumRows = 0;
     ui32 RawBytes = 0;
     TSimpleChunkMeta() = default;
 public:
-    TSimpleChunkMeta(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column, const bool needMinMax, const bool isSortedColumn);
+    TSimpleChunkMeta(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column);
 
     ui64 GetMetadataSize() const {
         return sizeof(ui32) + sizeof(ui32) + 8 * 3 * 2;

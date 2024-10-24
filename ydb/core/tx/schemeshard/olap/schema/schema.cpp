@@ -15,7 +15,7 @@ static inline NScheme::TTypeInfo GetType(const TOlapColumnsDescription::TColumn&
 
 }
 
-static bool ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& ttl,
+static bool ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& ttl, const TOlapIndexesDescription& indexes,
     const THashMap<ui32, TOlapColumnsDescription::TColumn>& sourceColumns,
     const THashMap<ui32, TOlapColumnsDescription::TColumn>& alterColumns,
     const THashMap<TString, ui32>& colName2Id,
@@ -70,6 +70,27 @@ static bool ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::
         errors.AddError(errStr);
         return false;
     }
+    {
+        bool correct = false;
+        if (column->GetKeyOrder() && *column->GetKeyOrder() == 0) {
+            correct = true;
+        } else {
+            for (auto&& [_, i] : indexes.GetIndexes()) {
+                auto meta = std::dynamic_pointer_cast<NKikimr::NOlap::NIndexes::NMax::TIndexMeta>i.GetIndexMeta();
+                if (!meta) {
+                    continue;
+                } else if (meta->GetColumnId() == column->GetId()) {
+                    correct = true;
+                    break;
+                }
+            }
+        }
+        if (!correct) {
+            errors.AddError("Haven't MAX-index for TTL column and TTL column is not first column in primary key");
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -83,7 +104,7 @@ bool TOlapSchema::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycl
                 errors.AddError("Incorrect ttl column - not found in scheme");
                 return false;
             }
-            return ValidateColumnTableTtl(ttl.GetEnabled(), {}, Columns.GetColumns(), Columns.GetColumnsByName(), errors);
+            return ValidateColumnTableTtl(ttl.GetEnabled(), {}, Indexes, Columns.GetColumns(), Columns.GetColumnsByName(), errors);
         }
         case TTtlProto::kDisabled:
         default:

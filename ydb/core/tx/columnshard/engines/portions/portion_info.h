@@ -141,6 +141,10 @@ public:
 
     bool NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) const;
 
+    ui64 GetChunksCount() const {
+        return Records.size() + Indexes.size();
+    }
+
     NSplitter::TEntityGroups GetEntityGroupsByStorageId(
         const TString& specialTier, const IStoragesManager& storages, const TIndexInfo& indexInfo) const;
 

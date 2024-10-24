@@ -4,14 +4,14 @@
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 
-namespace NKikimr::NSchemeShard::NOlap::NAlter {
+namespace NKikimr::NSchemeShard::NOperations {
 
 class ISSEntityUpdate;
 
 class ISSEntity {
 private:
     YDB_READONLY_DEF(TPathId, PathId);
-    bool Initialized = false;
+    YDB_READONLY_FLAG(Initialized, false);
 protected:
     [[nodiscard]] virtual TConclusionStatus DoInitialize(const TEntityInitializationContext& context) = 0;
     virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> DoCreateUpdate(const TUpdateInitializationContext& context) const = 0;
@@ -34,8 +34,8 @@ public:
     }
 
     [[nodiscard]] TConclusionStatus Initialize(const TEntityInitializationContext& context) {
-        AFL_VERIFY(!Initialized);
-        Initialized = true;
+        AFL_VERIFY(!IsInitialized());
+        InitializedFlag = true;
         return DoInitialize(context);
     }
 
@@ -44,8 +44,6 @@ public:
     {
 
     }
-
-    static std::shared_ptr<ISSEntity> GetEntityVerified(TOperationContext& context, const TPath& path);
 };
 
 }

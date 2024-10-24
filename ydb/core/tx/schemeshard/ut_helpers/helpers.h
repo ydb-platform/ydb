@@ -300,6 +300,12 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropBackupCollection);
     DROP_BY_PATH_ID_HELPERS(DropBackupCollection);
 
+    // metadata object
+    GENERIC_HELPERS(CreateMetadataObject);
+    GENERIC_HELPERS(AlterMetadataObject);
+    GENERIC_HELPERS(DropMetadataObject);
+    DROP_BY_PATH_ID_HELPERS(DropMetadataObject);
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS

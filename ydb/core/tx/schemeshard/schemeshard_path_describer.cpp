@@ -1104,6 +1104,18 @@ void TPathDescriber::DescribeBackupCollection(TPathId pathId, TPathElement::TPtr
     entry->CopyFrom(backupCollectionInfo->Description);
 }
 
+void TPathDescriber::DescribeTieringRule(TPathId pathId, TPathElement::TPtr pathEl) {
+    auto it = Self->MetadataObjects.FindPtr(pathId);
+    Y_ABORT_UNLESS(it, "TieringRule is not found");
+    TMetadataObjectInfo::TPtr tieringRuleInfo = *it;
+
+    auto entry = Result->Record.MutablePathDescription()->MutableTieringRuleDescription();
+    entry->SetName(pathEl->Name);
+    PathIdFromPathId(pathId, entry->MutablePathId());
+    entry->SetVersion(tieringRuleInfo->GetAlterVersion());
+    *entry->MutableProperties() = tieringRuleInfo->GetProperties()->SerializeToProto();
+}
+
 static bool ConsiderAsDropped(const TPath& path) {
     Y_ABORT_UNLESS(path.IsResolved());
 
@@ -1261,6 +1273,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
         case NKikimrSchemeOp::EPathTypeBackupCollection:
             DescribeDir(path);
             DescribeBackupCollection(base->PathId, base);
+            break;
+        case NKikimrSchemeOp::EPathTypeTieringRule:
+            DescribeTieringRule(base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();

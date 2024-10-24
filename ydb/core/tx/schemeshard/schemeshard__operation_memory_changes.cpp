@@ -112,6 +112,10 @@ void TMemoryChanges::GrabBackupCollection(TSchemeShard* ss, const TPathId& pathI
     Grab<TBackupCollectionInfo>(pathId, ss->BackupCollections, BackupCollections);
 }
 
+void TMemoryChanges::GrabMetadataObject(TSchemeShard* ss, const TPathId& pathId) {
+    Grab<TMetadataObjectInfo>(pathId, ss->MetadataObjects, MetadataObjects);
+}
+
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // be aware of the order of grab & undo ops
     // stack is the best way to manage it right
@@ -247,6 +251,16 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->ResourcePools.erase(id);
         }
         ResourcePools.pop();
+    }
+
+    while (MetadataObjects) {
+        const auto& [id, elem] = MetadataObjects.top();
+        if (elem) {
+            ss->MetadataObjects[id] = elem;
+        } else {
+            ss->MetadataObjects.erase(id);
+        }
+        MetadataObjects.pop();
     }
 }
 

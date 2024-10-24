@@ -8,9 +8,11 @@ SRCS(
     checker.cpp
     ss_checker.cpp
     GLOBAL ss_fetcher.cpp
+    GLOBAL update.cpp
 )
 
 PEERDIR(
+    ydb/services/metadata
     ydb/services/metadata/abstract
     ydb/services/metadata/common
     ydb/services/metadata/initializer

@@ -715,6 +715,7 @@ message TKqpTableSinkSettings {
     optional bool InconsistentTx = 8; // Write each batch in it's own single immediate tx
     optional EType Type = 9;
     optional NActorsProto.TActorId BufferActorId = 10;
+    optional int64 Priority = 11;
 }
 
 message TKqpStreamLookupSettings {

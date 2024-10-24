@@ -245,12 +245,14 @@ public:
 
     TWriteToken Open(
         NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
-        TVector<NKikimrKqp::TKqpColumnMetadataProto>&& columnsMetadata) {
+        TVector<NKikimrKqp::TKqpColumnMetadataProto>&& columnsMetadata,
+        i64 priority) {
         YQL_ENSURE(!Closed);
         auto token = ShardedWriteController->Open(
             TableId,
             operationType,
-            std::move(columnsMetadata));
+            std::move(columnsMetadata),
+            priority);
         CA_LOG_D("Open write to " << TableId << " token=" << token);
         return token;
     }
@@ -733,6 +735,10 @@ public:
         }
     }
 
+    void FlushBuffers() {
+        ShardedWriteController->FlushBuffers();
+    }
+
     void Flush() {
         for (const auto& shardInfo : ShardedWriteController->GetPendingShards()) {
             SendDataToShard(shardInfo.ShardId);
@@ -971,7 +977,8 @@ public:
         for (const auto & column : Settings.GetColumns()) {
             columnsMetadata.push_back(column);
         }
-        WriteToken = WriteTableActor->Open(GetOperation(Settings.GetType()), std::move(columnsMetadata));
+        YQL_ENSURE(Settings.GetPriority() == 0);
+        WriteToken = WriteTableActor->Open(GetOperation(Settings.GetType()), std::move(columnsMetadata), Settings.GetPriority());
         WaitingForTableActor = true;
 
         CA_LOG_D("New TKqpDirectWriteActor for table `" << Settings.GetTable().GetPath() << "` (" << TableId << ").");
@@ -1149,6 +1156,7 @@ struct TWriteSettings {
     NKikimrDataEvents::TEvWrite::TOperation::EOperationType OperationType;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> Columns;
     TTransactionSettings TransactionSettings;
+    i64 Priority;
 };
 
 struct TBufferWriteMessage {
@@ -1268,7 +1276,7 @@ public:
                 CA_LOG_D("Create new TableWriteActor for table `" << settings.TablePath << "` (" << settings.TableId << "). lockId=" << LockTxId << " " << writeInfo.WriteTableActorId);
             }
 
-            auto cookie = writeInfo.WriteTableActor->Open(settings.OperationType, std::move(settings.Columns));
+            auto cookie = writeInfo.WriteTableActor->Open(settings.OperationType, std::move(settings.Columns), settings.Priority);
             token = TWriteToken{settings.TableId, cookie};
         } else {
             token = *ev->Get()->Token;
@@ -1382,6 +1390,9 @@ public:
         State = EState::FLUSHING;
         for (auto& [_, queue] : DataQueues) {
             Y_ABORT_UNLESS(queue.empty());
+        }
+        for (auto& [_, info] : WriteInfos) {
+            info.WriteTableActor->FlushBuffers();
         }
         Process();
     }
@@ -2032,6 +2043,7 @@ private:
                     .LockNodeId = Settings.GetLockNodeId(),
                     .InconsistentTx = Settings.GetInconsistentTx(),
                 },
+                .Priority = Settings.GetPriority(),
             };
         }
 

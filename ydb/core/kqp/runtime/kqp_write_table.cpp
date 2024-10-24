@@ -861,6 +861,7 @@ struct TMetadata {
     const TTableId TableId;
     const NKikimrDataEvents::TEvWrite::TOperation::EOperationType OperationType;
     const TVector<NKikimrKqp::TKqpColumnMetadataProto> InputColumnsMetadata;
+    const i64 Priority;
 };
 
 struct TBatchWithMetadata {
@@ -1132,7 +1133,8 @@ public:
     TWriteToken Open(
         const TTableId tableId,
         const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
-        TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns) override {
+        TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
+        const i64 priority) override {
         auto token = CurrentWriteToken++;
         auto iter = WriteInfos.emplace(
             token,
@@ -1141,6 +1143,7 @@ public:
                     .TableId = tableId,
                     .OperationType = operationType,
                     .InputColumnsMetadata = std::move(inputColumns),
+                    .Priority = priority,
                 },
                 .Serializer = nullptr,
                 .Closed = false,
@@ -1167,7 +1170,11 @@ public:
         YQL_ENSURE(info.Serializer);
         info.Serializer->AddData(data);
 
-        FlushSerializer(token, GetMemory() >= Settings.MemoryLimitTotal);
+        if (info.Metadata.Priority == 0) {
+            FlushSerializer(token, GetMemory() >= Settings.MemoryLimitTotal);
+        } else {
+            YQL_ENSURE(GetMemory() <= Settings.MemoryLimitTotal);
+        }
     }
 
     void Close(TWriteToken token) override {
@@ -1176,8 +1183,38 @@ public:
         YQL_ENSURE(info.Serializer);
         info.Closed = true;
         info.Serializer->Close();
-        FlushSerializer(token, true);
-        YQL_ENSURE(info.Serializer->IsFinished());
+        if (info.Metadata.Priority == 0) {
+            FlushSerializer(token, true);
+            YQL_ENSURE(info.Serializer->IsFinished());
+        }
+    }
+
+    void FlushBuffers() override {
+        TVector<TWriteToken> writeTokensFoFlush;
+        for (TWriteToken token = 0; token < CurrentWriteToken; ++token) {
+            const auto& writeInfo = WriteInfos.at(token);
+            YQL_ENSURE(writeInfo.Closed);
+            if (writeInfo.Metadata.Priority != 0) {
+                YQL_ENSURE(!writeInfo.Serializer->IsFinished());
+                writeTokensFoFlush.push_back(token);
+            } else {
+                YQL_ENSURE(writeInfo.Serializer->IsFinished());
+            }
+        }
+
+        std::sort(
+            std::begin(writeTokensFoFlush),
+            std::end(writeTokensFoFlush),
+            [&](const TWriteToken& lhs, const TWriteToken& rhs) {
+                const auto& leftWriteInfo = WriteInfos.at(lhs);
+                const auto& rightWriteInfo = WriteInfos.at(rhs);
+                return leftWriteInfo.Metadata.Priority < rightWriteInfo.Metadata.Priority;
+            });
+        
+        for (const TWriteToken token : writeTokensFoFlush) {
+            FlushSerializer(token, true);
+            YQL_ENSURE(WriteInfos.at(token).Serializer->IsFinished());
+        }
     }
 
     void Close() override {

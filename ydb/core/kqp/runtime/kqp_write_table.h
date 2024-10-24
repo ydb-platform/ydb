@@ -22,14 +22,17 @@ public:
 
     // Data ordering invariant:
     // For two writes A and B:
-    // A happend before B <=> Close(A) happend before Open(B).
+    // A happend before B <=> Close(A) happend before Open(B) otherwise Priority(A) < Priority(B).
 
     virtual TWriteToken Open(
         const TTableId TableId,
         const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
-        TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns) = 0;
+        TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
+        const i64 priority) = 0;
     virtual void Write(TWriteToken token, const NMiniKQL::TUnboxedValueBatch& data) = 0;
     virtual void Close(TWriteToken token) = 0;
+
+    virtual void FlushBuffers() = 0;
 
     virtual void Close() = 0;
 

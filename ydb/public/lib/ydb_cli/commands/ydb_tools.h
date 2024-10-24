@@ -7,7 +7,7 @@
 #include <ydb/public/lib/ydb_cli/common/examples.h>
 #include <ydb/public/lib/ydb_cli/common/parseable_struct.h>
 
-#include <library/cpp/regex/pcre/regexp.h>
+class TRegExMatch;
 
 namespace NYdb {
 namespace NConsoleClient {

@@ -255,6 +255,9 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._nodes = {}
         self._slots = {}
         self.__server = 'localhost'
+        self.__client = None
+        self.__kv_client = None
+        self.__scheme_client = None
         self.__storage_pool_id_allocator = itertools.count(1)
         if self.__configurator.separate_node_configs:
             self.__config_base_path = ensure_path_exists(
@@ -335,6 +338,9 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             return
 
         self.__initialy_prepared = True
+        self.__client = None
+        self.__kv_client = None
+        self.__scheme_client = None
         self.__instantiate_udfs_dir()
         self.__write_configs()
         for _ in self.__configurator.all_node_ids():

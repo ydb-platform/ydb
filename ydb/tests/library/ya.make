@@ -23,6 +23,9 @@ PY_SRCS(
     kv/helpers.py
     harness/__init__.py
     harness/daemon.py
+    harness/kikimr_client.py
+    harness/kikimr_keyvalue_client.py
+    harness/kikimr_scheme_client.py
     harness/kikimr_node_interface.py
     harness/kikimr_cluster_interface.py
     harness/kikimr_cluster.py

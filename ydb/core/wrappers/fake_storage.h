@@ -138,7 +138,7 @@ private:
     template <class TEvent>
     void ExecuteImpl(TEvent& ev) const {
         ev->Get()->MutableRequest().WithBucket(Bucket);
-        Y_ABORT_UNLESS(SecretKey == Singleton<TFakeExternalStorage>()->GetSecretKey());
+        Y_ABORT_UNLESS(SecretKey == Singleton<TFakeExternalStorage>()->GetSecretKey(), "%s != %s", SecretKey.data(), Singleton<TFakeExternalStorage>()->GetSecretKey().data());
         if (OwnedStorage) {
             OwnedStorage->Execute(ev, ReplyAdapter);
         } else {

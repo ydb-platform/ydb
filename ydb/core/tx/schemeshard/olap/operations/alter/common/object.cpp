@@ -3,7 +3,7 @@
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
-TConclusion<std::shared_ptr<ISSEntityUpdate>> TColumnTableEntity::DoRestoreUpdate(const TUpdateRestoreContext& context) const {
+TConclusion<std::shared_ptr<NOperations::ISSEntityUpdate>> TColumnTableEntity::DoRestoreUpdate(const NOperations::TUpdateRestoreContext& context) const {
     auto& ssContext = *context.GetSSOperationContext();
     auto tableInfo = ssContext.SS->ColumnTables.GetVerifiedPtr(GetPathId());
     if (!tableInfo) {
@@ -18,16 +18,16 @@ TConclusion<std::shared_ptr<ISSEntityUpdate>> TColumnTableEntity::DoRestoreUpdat
     NKikimrSchemeOp::TModifyScheme mScheme;
     *mScheme.MutableAlterColumnTable() = *tableInfo->AlterData->AlterBody;
     mScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnTable);
-    TUpdateInitializationContext uContext(&context.GetOriginalEntity(), context.GetSSOperationContext(), &mScheme, context.GetTxId());
+    NOperations::TUpdateInitializationContext uContext(&context.GetOriginalEntity(), context.GetSSOperationContext(), &mScheme, context.GetOperationId());
     return DoCreateUpdateImpl(uContext);
 }
 
-TConclusionStatus TColumnTableEntity::DoInitialize(const TEntityInitializationContext& context) {
+TConclusionStatus TColumnTableEntity::DoInitialize(const NOperations::TEntityInitializationContext& context) {
     TableInfo = context.GetSSOperationContext()->SS->ColumnTables.GetVerifiedPtr(GetPathId());
     return DoInitializeImpl(context);
 }
 
-TConclusion<std::shared_ptr<ISSEntityUpdate>> TColumnTableEntity::DoCreateUpdate(const TUpdateInitializationContext& context) const {
+TConclusion<std::shared_ptr<NOperations::ISSEntityUpdate>> TColumnTableEntity::DoCreateUpdate(const NOperations::TUpdateInitializationContext& context) const {
     if (GetTableInfo()->AlterVersion == 0) {
         return NKikimr::TConclusionStatus::Fail("Table is not created yet");
     }
@@ -35,6 +35,13 @@ TConclusion<std::shared_ptr<ISSEntityUpdate>> TColumnTableEntity::DoCreateUpdate
         return NKikimr::TConclusionStatus::Fail("There's another Alter in flight");
     }
     return DoCreateUpdateImpl(context);
+}
+
+std::shared_ptr<NKikimr::NSchemeShard::NOperations::ISSEntity> TColumnTableEntity::GetEntityVerified(TOperationContext& context, const TPath& path) {
+    AFL_VERIFY(path->IsColumnTable());
+    auto readGuard = context.SS->ColumnTables.GetVerified(path.Base()->PathId);
+    NOperations::TEntityInitializationContext iContext(&context);
+    return readGuard->BuildEntity(path.Base()->PathId, iContext).DetachResult();
 }
 
 }

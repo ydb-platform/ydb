@@ -1,4 +1,5 @@
 #include "activation.h"
+#include <ydb/services/metadata/manager/ydb_value_operator.h>
 #include <ydb/services/metadata/request/request_actor_cb.h>
 
 namespace NKikimr::NCSIndex {

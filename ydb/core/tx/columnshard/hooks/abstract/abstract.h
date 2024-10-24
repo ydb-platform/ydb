@@ -1,10 +1,11 @@
 #pragma once
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
-#include <ydb/core/tx/tiering/snapshot.h>
-#include <ydb/core/tx/columnshard/common/limits.h>
+#include <ydb/core/tx/tiering/rule/object.h>
+#include <ydb/core/tx/tiering/tier/snapshot.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/services/metadata/abstract/fetcher.h>
@@ -272,10 +273,9 @@ public:
         return nullptr;
     }
 
-    virtual NMetadata::NFetcher::ISnapshot::TPtr GetFallbackTiersSnapshot() const {
-        static std::shared_ptr<NColumnShard::NTiers::TConfigsSnapshot> result =
-            std::make_shared<NColumnShard::NTiers::TConfigsSnapshot>(TInstant::Now());
-        return result;
+    virtual bool OverrideTieringSnapshot(std::shared_ptr<NColumnShard::NTiers::TTiersSnapshot>& /*tiers*/,
+        THashMap<TString, NColumnShard::NTiers::TTieringRule>& /*tieringRules*/) const {
+        return false;
     }
 
     virtual void OnSwitchToWork(const ui64 tabletId) {

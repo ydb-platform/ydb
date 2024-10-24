@@ -1572,7 +1572,11 @@ bool StoreString(const TRule_family_setting_value& from, TNodePtr& to, TContext&
         case TRule_family_setting_value::kAltFamilySettingValue1: {
             // STRING_VALUE
             const TString stringValue(ctx.Token(from.GetAlt_family_setting_value1().GetToken1()));
-            to = BuildLiteralSmartString(ctx, stringValue);
+            TNodePtr literal = BuildLiteralSmartString(ctx, stringValue);
+            if (literal->IsNull()) {
+                return false;
+            }
+            to = literal;
             break;
         }
         default:
@@ -1585,7 +1589,11 @@ bool StoreInt(const TRule_family_setting_value& from, TNodePtr& to, TContext& ct
     switch (from.Alt_case()) {
         case TRule_family_setting_value::kAltFamilySettingValue2: {
             // integer
-            to = LiteralNumber(ctx, from.GetAlt_family_setting_value2().GetRule_integer1());
+            TNodePtr literal = LiteralNumber(ctx, from.GetAlt_family_setting_value2().GetRule_integer1());
+            if (literal->IsNull()) {
+                return false;
+            }
+            to = literal;
             break;
         }
         default:

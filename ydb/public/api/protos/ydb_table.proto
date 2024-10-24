@@ -536,7 +536,7 @@ message ColumnFamily {
 
     // Not all compression algorithms support
     // Set if want to change default value
-    optional sint32 compression_level = 5;
+    optional int32 compression_level = 5;
 }
 
 message PartitioningSettings {

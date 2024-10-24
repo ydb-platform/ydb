@@ -15,9 +15,6 @@
 #include <util/stream/format.h>
 #include <util/string/split.h>
 
-#include <algorithm>
-#include <queue>
-
 namespace NYdb::NConsoleClient {
 
 TCommandTools::TCommandTools()

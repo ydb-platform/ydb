@@ -56,6 +56,10 @@ bool IsSupportedPredicate(const TCoCompare& predicate, const TSettings& settings
         return true;
     } else if (settings.IsEnabled(TSettings::EFeatureFlag::LikeOperator) && IsLikeOperator(predicate)) {
         return true;
+    } else if (predicate.Maybe<TCoAggrEqual>()) {
+        return true;
+    } else if (predicate.Maybe<TCoAggrNotEqual>()) {
+        return true;
     }
 
     return false;

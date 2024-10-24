@@ -410,6 +410,8 @@ message TPredicate {
             NE = 4; // "$column != value"
             GE = 5; // "$column >= value"
             G = 6;  // "$column > value"
+            IND = 7;// "$column IS NOT DISTINCT value"
+            ID = 8; // "$column IS DISTINCT value"
         }
 
         EOperation operation = 1;

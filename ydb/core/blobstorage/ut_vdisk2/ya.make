@@ -13,6 +13,8 @@ SRCS(
     defs.h
     env.h
     huge.cpp
+    testactorsys.h
+    testactorsys.cpp
 )
 
 PEERDIR(

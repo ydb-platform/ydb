@@ -1,6 +1,6 @@
 #include "dq_serialized_batch.h"
 
-#include <ydb/library/yql/utils/rope_over_buffer.h>
+#include <ydb/library/yql/utils/rope/rope_over_buffer.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <util/system/unaligned_mem.h>
@@ -39,7 +39,27 @@ void TDqSerializedBatch::SetPayload(TRope&& payload) {
             payload.Erase(it, it + it.ContiguousSize());
         }
     }
- }
+}
+
+void TDqSerializedBatch::ConvertToNoOOB() {
+    if (!IsOOB()) {
+        return;
+    }
+
+    YQL_ENSURE(Proto.GetRaw().empty());
+    Proto.SetRaw(Payload.ConvertToString());
+    Payload.clear();
+    switch ((NDqProto::EDataTransportVersion)Proto.GetTransportVersion()) {
+    case NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0:
+        Proto.SetTransportVersion(NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0);
+        break;
+    case NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_PICKLE_1_0:
+        Proto.SetTransportVersion(NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0);
+        break;
+    default:
+        YQL_ENSURE(false, "Unexpected transport version" << Proto.GetTransportVersion());
+    }
+}
 
 TRope SaveForSpilling(TDqSerializedBatch&& batch) {
     TRope result;

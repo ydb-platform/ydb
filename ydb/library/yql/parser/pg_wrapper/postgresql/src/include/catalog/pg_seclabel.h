@@ -3,7 +3,7 @@
  * pg_seclabel.h
  *	  definition of the "security label" system catalog (pg_seclabel)
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_seclabel.h
@@ -40,7 +40,6 @@ CATALOG(pg_seclabel,3596,SecLabelRelationId)
 
 DECLARE_TOAST(pg_seclabel, 3598, 3599);
 
-DECLARE_UNIQUE_INDEX_PKEY(pg_seclabel_object_index, 3597, on pg_seclabel using btree(objoid oid_ops, classoid oid_ops, objsubid int4_ops, provider text_ops));
-#define SecLabelObjectIndexId				3597
+DECLARE_UNIQUE_INDEX_PKEY(pg_seclabel_object_index, 3597, SecLabelObjectIndexId, on pg_seclabel using btree(objoid oid_ops, classoid oid_ops, objsubid int4_ops, provider text_ops));
 
 #endif							/* PG_SECLABEL_H */

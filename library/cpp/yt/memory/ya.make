@@ -2,7 +2,12 @@ LIBRARY()
 
 INCLUDE(${ARCADIA_ROOT}/library/cpp/yt/ya_cpp.make.inc)
 
+IF (YT_DISABLE_REF_COUNTED_TRACKING)
+    CXXFLAGS(-DYT_DISABLE_REF_COUNTED_TRACKING)
+ENDIF()
+
 SRCS(
+    allocation_tags_hooks.cpp
     blob.cpp
     chunked_input_stream.cpp
     chunked_memory_allocator.cpp
@@ -21,6 +26,7 @@ PEERDIR(
     library/cpp/yt/assert
     library/cpp/yt/misc
     library/cpp/yt/malloc
+    library/cpp/yt/system
 )
 
 CHECK_DEPENDENT_DIRS(

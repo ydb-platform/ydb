@@ -32,23 +32,30 @@ private:
         void Init(::NMonitoring::TDynamicCounters* group) {
             CounterGroup = group->GetSubgroup("subsystem", "mkqlalloc");
             TotalBytes = CounterGroup->GetCounter("GlobalPoolTotalBytes", false);
+            TotalMmapped = CounterGroup->GetCounter("TotalMmappedBytes", false);
+            TotalFreeList = CounterGroup->GetCounter("TotalFreeListBytes", false);
         }
 
         void Update() {
+            TAlignedPagePool::DoCleanupGlobalFreeList();
             *TotalBytes = TAlignedPagePool::GetGlobalPagePoolSize();
+            *TotalMmapped = ::NKikimr::GetTotalMmapedBytes();
+            *TotalFreeList = ::NKikimr::GetTotalFreeListBytes();
         }
 
     private:
         TIntrusivePtr<::NMonitoring::TDynamicCounters> CounterGroup;
         ::NMonitoring::TDynamicCounters::TCounterPtr TotalBytes;
+        ::NMonitoring::TDynamicCounters::TCounterPtr TotalMmapped;
+        ::NMonitoring::TDynamicCounters::TCounterPtr TotalFreeList;
     };
 
     void OnWakeup(const TActorContext &ctx) override {
         MiniKQLPoolStats.Update();
 
-        TVector<std::tuple<TString, double, ui32>> pools;
+        TVector<std::tuple<TString, double, ui32, ui32>> pools;
         for (const auto& pool : PoolCounters) {
-            pools.emplace_back(pool.Name, pool.Usage, pool.Threads);
+            pools.emplace_back(pool.Name, pool.Usage, pool.Threads, pool.LimitThreads);
         }
 
         ctx.Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId()), new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(pools));

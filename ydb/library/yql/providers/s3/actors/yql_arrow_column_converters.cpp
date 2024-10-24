@@ -208,7 +208,7 @@ std::shared_ptr<arrow::Array> ArrowTypeAsYqlString(const std::shared_ptr<arrow::
 
         const ui64 v = baseValue * multiplier;
         TString result = format ? TInstant::FromValue(v).FormatGmTime(format.c_str()) : TInstant::FromValue(v).ToString();
-        builder.Add(NUdf::TBlockItem(NUdf::TStringRef(result.c_str(), result.Size())));
+        builder.Add(NUdf::TBlockItem(NUdf::TStringRef(result.c_str(), result.size())));
     }
     return builder.Build(true).make_array();
 }
@@ -557,6 +557,24 @@ TColumnConverter BuildCustomConverter(const std::shared_ptr<arrow::DataType>& or
                     return ArrowStringAsYqlDateTime(targetType, isOptional, formatSettings);
                 case NUdf::EDataSlot::Timestamp:
                     return ArrowStringAsYqlTimestamp(targetType, isOptional, formatSettings);
+                default:
+                    return {};
+            }
+        }
+        case arrow::Type::DECIMAL128: {
+            switch (slotItem) {
+                case NUdf::EDataSlot::Decimal: {
+                    if (targetType->id() == arrow::Type::FIXED_SIZE_BINARY && 
+                        (static_cast<arrow::FixedSizeBinaryType&>(*targetType)).byte_width() == 16
+                    ) {
+                        return [](const std::shared_ptr<arrow::Array>& value) {
+                            auto decimals = std::static_pointer_cast<arrow::Decimal128Array>(value);
+                            auto output = std::make_shared<arrow::FixedSizeBinaryArray>(arrow::fixed_size_binary(16), decimals->length(), decimals->values());
+                            return output;
+                        };
+                    }
+                    return {};
+                }
                 default:
                     return {};
             }

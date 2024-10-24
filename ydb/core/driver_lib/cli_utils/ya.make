@@ -29,6 +29,8 @@ SRCS(
     cli_minikql_compile_and_exec.cpp
     cli_scheme_cache_append.cpp
     cli_scheme_initroot.cpp
+    melancholic_gopher.cpp
+    melancholic_gopher.h
 )
 
 PEERDIR(
@@ -55,9 +57,8 @@ PEERDIR(
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/lib/deprecated/client
-    ydb/public/lib/ydb_cli/common
-    ydb/public/sdk/cpp/client/ydb_discovery
     ydb/public/sdk/cpp/client/ydb_driver
+    ydb/public/lib/ydb_cli/commands/ydb_discovery
 )
 
 YQL_LAST_ABI_VERSION()

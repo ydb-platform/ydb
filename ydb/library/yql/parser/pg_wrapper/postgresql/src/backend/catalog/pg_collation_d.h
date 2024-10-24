@@ -3,7 +3,7 @@
  * pg_collation_d.h
  *    Macro definitions for pg_collation
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -19,6 +19,8 @@
 #define PG_COLLATION_D_H
 
 #define CollationRelationId 3456
+#define CollationNameEncNspIndexId 3164
+#define CollationOidIndexId 3085
 
 #define Anum_pg_collation_oid 1
 #define Anum_pg_collation_collname 2
@@ -29,14 +31,30 @@
 #define Anum_pg_collation_collencoding 7
 #define Anum_pg_collation_collcollate 8
 #define Anum_pg_collation_collctype 9
-#define Anum_pg_collation_collversion 10
+#define Anum_pg_collation_colliculocale 10
+#define Anum_pg_collation_collicurules 11
+#define Anum_pg_collation_collversion 12
 
-#define Natts_pg_collation 10
+#define Natts_pg_collation 12
 
 
 #define COLLPROVIDER_DEFAULT	'd'
 #define COLLPROVIDER_ICU		'i'
 #define COLLPROVIDER_LIBC		'c'
+
+static inline const char *
+collprovider_name(char c)
+{
+	switch (c)
+	{
+		case COLLPROVIDER_ICU:
+			return "icu";
+		case COLLPROVIDER_LIBC:
+			return "libc";
+		default:
+			return "???";
+	}
+}
 
 #define DEFAULT_COLLATION_OID 100
 #define C_COLLATION_OID 950

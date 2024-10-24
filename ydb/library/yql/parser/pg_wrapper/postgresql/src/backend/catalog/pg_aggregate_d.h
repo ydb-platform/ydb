@@ -3,7 +3,7 @@
  * pg_aggregate_d.h
  *    Macro definitions for pg_aggregate
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -19,6 +19,7 @@
 #define PG_AGGREGATE_D_H
 
 #define AggregateRelationId 2600
+#define AggregateFnoidIndexId 2650
 
 #define Anum_pg_aggregate_aggfnoid 1
 #define Anum_pg_aggregate_aggkind 2

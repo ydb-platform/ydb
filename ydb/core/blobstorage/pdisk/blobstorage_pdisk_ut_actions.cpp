@@ -172,7 +172,7 @@ void TTestIncorrectRequests::TestFSM(const TActorContext &ctx) {
     case 70:
         TEST_RESPONSE(EvChunkReadResult, ERROR);
         VERBOSE_COUT(" Sending TEvChunkRead");
-        ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, 3, 100500, 128, 1, nullptr));
+        ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx0 + 1, 100500, 128, 1, nullptr));
         break;
     case 80:
     {
@@ -190,7 +190,7 @@ void TTestIncorrectRequests::TestFSM(const TActorContext &ctx) {
         TEST_RESPONSE(EvLogResult, ERROR);
         VERBOSE_COUT(" Sending TEvLog to commit");
         NPDisk::TCommitRecord commitRecord;
-        commitRecord.CommitChunks.push_back(3);
+        commitRecord.CommitChunks.push_back(ChunkIdx0 + 1);
         auto lsn = NextLsn();
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, TRcBuf(), TLsnSeg(lsn, lsn),
                     (void*)43));
@@ -223,7 +223,7 @@ void TTestIncorrectRequests::TestFSM(const TActorContext &ctx) {
         TEST_RESPONSE(EvLogResult, ERROR);
         VERBOSE_COUT(" Sending TEvLog to commit");
         NPDisk::TCommitRecord commitRecord;
-        commitRecord.DeleteChunks.push_back(3);
+        commitRecord.DeleteChunks.push_back(ChunkIdx0 + 1);
         auto lsn = NextLsn();
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, TRcBuf(), TLsnSeg(lsn, lsn),
                     (void*)43));

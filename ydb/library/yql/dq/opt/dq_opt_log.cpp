@@ -17,12 +17,14 @@ using namespace NYql::NNodes;
 namespace NYql::NDq {
 
 TExprBase DqRewriteAggregate(TExprBase node, TExprContext& ctx, TTypeAnnotationContext& typesCtx, bool compactForDistinct,
-    bool usePhases, const bool useFinalizeByKey)
+    bool usePhases, const bool useFinalizeByKey, const bool allowSpilling)
 {
     if (!node.Maybe<TCoAggregateBase>()) {
         return node;
     }
-    TAggregateExpander aggExpander(!typesCtx.IsBlockEngineEnabled() && !useFinalizeByKey, useFinalizeByKey, node.Ptr(), ctx, typesCtx, false, compactForDistinct, usePhases);
+    TAggregateExpander aggExpander(!typesCtx.IsBlockEngineEnabled() && !useFinalizeByKey,
+        useFinalizeByKey, node.Ptr(), ctx, typesCtx, false, compactForDistinct, usePhases,
+        typesCtx.IsBlockEngineEnabled() && !allowSpilling);
     auto result = aggExpander.ExpandAggregate();
     YQL_ENSURE(result);
 
@@ -182,32 +184,18 @@ static void CollectSinkStages(const NNodes::TDqQuery& dqQuery, THashSet<TExprNod
 }
 
 NNodes::TExprBase DqMergeQueriesWithSinks(NNodes::TExprBase dqQueryNode, TExprContext& ctx) {
-    NNodes::TDqQuery dqQuery = dqQueryNode.Cast<NNodes::TDqQuery>();
+    auto maybeDqQuery = dqQueryNode.Maybe<NNodes::TDqQuery>();
+    YQL_ENSURE(maybeDqQuery, "Expected DqQuery!");
+    auto dqQuery = maybeDqQuery.Cast();
 
-    THashSet<TExprNode::TPtr, TExprNode::TPtrHash> sinkStages;
-    CollectSinkStages(dqQuery, sinkStages);
-    TOptimizeExprSettings settings{nullptr};
-    settings.VisitLambdas = false;
-    bool deletedDqQueryChild = false;
-    TExprNode::TPtr newDqQueryNode;
-    auto status = OptimizeExpr(dqQueryNode.Ptr(), newDqQueryNode, [&sinkStages, &deletedDqQueryChild](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-        for (ui32 childIndex = 0; childIndex < node->ChildrenSize(); ++childIndex) {
-            TExprNode* child = node->Child(childIndex);
-            if (child->IsCallable(NNodes::TDqQuery::CallableName())) {
-                NNodes::TDqQuery dqQueryChild(child);
-                CollectSinkStages(dqQueryChild, sinkStages);
-                deletedDqQueryChild = true;
-                return ctx.ChangeChild(*node, childIndex, dqQueryChild.World().Ptr());
-            }
-        }
-        return node;
-    }, ctx, settings);
-    YQL_ENSURE(status != IGraphTransformer::TStatus::Error, "Failed to merge DqQuery nodes: " << status);
+    if (auto maybeDqQueryChild = dqQuery.World().Maybe<NNodes::TDqQuery>()) {
+        auto dqQueryChild = maybeDqQueryChild.Cast();
+        auto dqQueryBuilder = Build<TDqQuery>(ctx, dqQuery.Pos())
+            .World(dqQueryChild.World());
 
-    if (deletedDqQueryChild) {
-        auto dqQueryBuilder = Build<TDqQuery>(ctx, dqQuery.Pos());
-        dqQueryBuilder.World(newDqQueryNode->ChildPtr(TDqQuery::idx_World));
-
+        THashSet<TExprNode::TPtr, TExprNode::TPtrHash> sinkStages;
+        CollectSinkStages(dqQuery, sinkStages);
+        CollectSinkStages(maybeDqQueryChild.Cast(), sinkStages);
         auto sinkStagesBuilder = dqQueryBuilder.SinkStages();
         for (const TExprNode::TPtr& stage : sinkStages) {
             sinkStagesBuilder.Add(stage);
@@ -348,7 +336,7 @@ NNodes::TExprBase DqReplicateFieldSubset(NNodes::TExprBase node, TExprContext& c
     return node;
 }
 
-IGraphTransformer::TStatus DqWrapRead(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, TTypeAnnotationContext& typesCtx, const TDqSettings& config) {
+IGraphTransformer::TStatus DqWrapIO(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, TTypeAnnotationContext& typesCtx, const TDqSettings& config) {
     TOptimizeExprSettings settings{&typesCtx};
     auto status = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) {
         if (auto maybeRead = TMaybeNode<TCoRight>(node).Input()) {
@@ -363,6 +351,16 @@ IGraphTransformer::TStatus DqWrapRead(const TExprNode::TPtr& input, TExprNode::T
                     }
                 }
             }
+        } else if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::World
+            && !TCoCommit::Match(node.Get())
+            && node->ChildrenSize() > 1
+            && TCoDataSink::Match(node->Child(1))) {
+            auto dataSinkName = node->Child(1)->Child(0)->Content();
+            auto dataSink = typesCtx.DataSinkMap.FindPtr(dataSinkName);
+            YQL_ENSURE(dataSink);
+            if (auto dqIntegration = (*dataSink)->GetDqIntegration()) {
+                return dqIntegration->RecaptureWrite(node, ctx);
+            }
         }
 
         return node;
@@ -373,16 +371,6 @@ IGraphTransformer::TStatus DqWrapRead(const TExprNode::TPtr& input, TExprNode::T
 TExprBase DqExpandMatchRecognize(TExprBase node, TExprContext& ctx, TTypeAnnotationContext& typeAnnCtx) {
     YQL_ENSURE(node.Maybe<TCoMatchRecognize>(), "Expected MatchRecognize");
     return TExprBase(ExpandMatchRecognize(node.Ptr(), ctx, typeAnnCtx));
-}
-
-IDqOptimization* GetDqOptCallback(const TExprBase& providerRead, TTypeAnnotationContext& typeAnnCtx) {
-    if (providerRead.Ref().ChildrenSize() > 1 && TCoDataSource::Match(providerRead.Ref().Child(1))) {
-        auto dataSourceName = providerRead.Ref().Child(1)->Child(0)->Content();
-        auto datasource = typeAnnCtx.DataSourceMap.FindPtr(dataSourceName);
-        YQL_ENSURE(datasource);
-        return (*datasource)->GetDqOptimization();
-    }
-    return nullptr;
 }
 
 TMaybeNode<TExprBase> UnorderedOverDqReadWrap(TExprBase node, TExprContext& ctx, const std::function<const TParentsMap*()>& getParents, bool enableDqReplicate, TTypeAnnotationContext& typeAnnCtx) {

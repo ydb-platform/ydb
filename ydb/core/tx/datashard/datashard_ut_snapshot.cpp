@@ -6,6 +6,7 @@
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
+#include <ydb/core/testlib/actors/block_events.h>
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h> // Y_UNIT_TEST_(TWIN|QUAD)
 #include <ydb/core/mind/local.h>
@@ -358,7 +359,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -444,7 +444,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -495,8 +494,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
-
         InitRoot(server, sender);
 
         CreateShardedTable(server, sender, "/Root", "table-1", 2);
@@ -537,7 +534,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -608,7 +604,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -671,7 +666,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -813,6 +807,9 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
+
+        // Don't allow granular timecast side-stepping mediator time hacks in this test
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockGranularUpdate(runtime);
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
@@ -1984,7 +1981,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -3328,7 +3324,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -3614,7 +3609,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
     Y_UNIT_TEST(ReadIteratorLocalSnapshotThenRestart) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -3730,7 +3724,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
     Y_UNIT_TEST(ReadIteratorLocalSnapshotThenWrite) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -3742,6 +3735,9 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
+
+        // Don't allow granular timecast side-stepping mediator time hacks in this test
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockGranularUpdate(runtime);
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
@@ -3815,7 +3811,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
     Y_UNIT_TEST(UncommittedWriteRestartDuringCommit) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -4162,6 +4157,9 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         auto &runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
+        // Don't allow granular timecast side-stepping mediator time hacks in this test
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockGranularUpdate(runtime);
+
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_TRACE);
@@ -4276,6 +4274,9 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
+
+        // Don't allow granular timecast side-stepping mediator time hacks in this test
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockGranularUpdate(runtime);
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
@@ -4413,6 +4414,9 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
+
+        // Don't allow granular timecast side-stepping mediator time hacks in this test
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockGranularUpdate(runtime);
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_COORDINATOR, NLog::PRI_TRACE);

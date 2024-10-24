@@ -11,11 +11,12 @@ namespace NKikimr::NKqp {
     struct TUserRequestContext : public TAtomicRefCount<TUserRequestContext> {
         TString TraceId;
         TString Database;
+        TString DatabaseId;
         TString SessionId;
         TString CurrentExecutionId;
         TString CustomerSuppliedId;
         TString PoolId;
-        NResourcePool::TPoolSettings PoolConfig;
+        std::optional<NResourcePool::TPoolSettings> PoolConfig;
 
         TUserRequestContext() = default;
 

@@ -254,9 +254,11 @@ public:
         }
 
         TKqpQuerySettings settings(queryType);
+        const auto& database = ReplayDetails["query_database"].GetStringSafe();
         Query = std::make_unique<NKikimr::NKqp::TKqpQueryId>(
             ReplayDetails["query_cluster"].GetStringSafe(),
-            ReplayDetails["query_database"].GetStringSafe(),
+            database,
+            database,
             queryText,
             settings,
             !queryParameterTypes.empty()
@@ -288,11 +290,11 @@ public:
         counters->Counters = new TKqpCounters(c);
         counters->TxProxyMon = new NTxProxy::TTxProxyMon(c);
 
-        Gateway = CreateKikimrIcGateway(Query->Cluster, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, Query->Database, std::move(loader),
+        Gateway = CreateKikimrIcGateway(Query->Cluster, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, Query->Database, Query->DatabaseId, std::move(loader),
             TlsActivationContext->ExecutorThread.ActorSystem, SelfId().NodeId(), counters);
-        auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, nullptr});
+        auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, nullptr, {}});
         KqpHost = CreateKqpHost(Gateway, Query->Cluster, Query->Database, Config, ModuleResolverState->ModuleResolver,
-            federatedQuerySetup, nullptr, GUCSettings, Nothing(), FunctionRegistry, false);
+            federatedQuerySetup, nullptr, GUCSettings, NKikimrConfig::TQueryServiceConfig(), Nothing(), FunctionRegistry, false);
 
         IKqpHost::TPrepareSettings prepareSettings;
         prepareSettings.DocumentApiRestricted = false;

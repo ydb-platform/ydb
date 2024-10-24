@@ -1,5 +1,4 @@
 #include "abstract.h"
-#include <ydb/core/tx/columnshard/engines/scheme/statistics/abstract/constructor.h>
 
 namespace NKikimr::NKqp {
 
@@ -12,9 +11,7 @@ private:
     static inline const auto Registrator = TFactory::TRegistrator<TAlterShardingOperation>(GetTypeName());
 private:
     std::optional<bool> Increase;
-    virtual void DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchema& /*scheme*/) const override {
-        AFL_VERIFY(false);
-    }
+    virtual void DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchema& /*scheme*/) const override;
     virtual void DoSerializeScheme(NKikimrSchemeOp::TModifyScheme& scheme, const bool isStandalone) const override;
 
 public:

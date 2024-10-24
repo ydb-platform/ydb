@@ -6,7 +6,7 @@
  * See utils/resowner/README for more info.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/resowner_private.h
@@ -29,6 +29,11 @@
 extern void ResourceOwnerEnlargeBuffers(ResourceOwner owner);
 extern void ResourceOwnerRememberBuffer(ResourceOwner owner, Buffer buffer);
 extern void ResourceOwnerForgetBuffer(ResourceOwner owner, Buffer buffer);
+
+/* support for IO-in-progress management */
+extern void ResourceOwnerEnlargeBufferIOs(ResourceOwner owner);
+extern void ResourceOwnerRememberBufferIO(ResourceOwner owner, Buffer buffer);
+extern void ResourceOwnerForgetBufferIO(ResourceOwner owner, Buffer buffer);
 
 /* support for local lock management */
 extern void ResourceOwnerRememberLock(ResourceOwner owner, LOCALLOCK *locallock);

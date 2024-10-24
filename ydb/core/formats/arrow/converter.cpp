@@ -1,5 +1,5 @@
 #include "converter.h"
-#include "switch_type.h"
+#include "switch/switch_type.h"
 
 #include <ydb/library/binary_json/read.h>
 #include <ydb/library/binary_json/write.h>
@@ -31,8 +31,8 @@ static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryP
         }
         case NScheme::NTypeIds::JsonDocument: {
             const auto binaryJson = NBinaryJson::SerializeToBinaryJson(cell.AsBuf());
-            if (!binaryJson.Defined()) {
-                errorMessage = "Invalid JSON for JsonDocument provided";
+            if (binaryJson.IsFail()) {
+                errorMessage = "Invalid JSON for JsonDocument provided: " + binaryJson.GetErrorMessage();
                 return false;
             }
             const auto saved = memPool.AppendString(TStringBuf(binaryJson->Data(), binaryJson->Size()));
@@ -98,8 +98,9 @@ static arrow::Status ConvertColumn(const NScheme::TTypeInfo colType, std::shared
                     }
                 } else {
                     const auto binaryJson = NBinaryJson::SerializeToBinaryJson(valueBuf);
-                    if (!binaryJson.Defined()) {
-                        return arrow::Status::SerializationError("Cannot serialize json: ", valueBuf);
+                    if (binaryJson.IsFail()) {
+                        return arrow::Status::SerializationError(
+                            "Cannot serialize json (", binaryJson.GetErrorMessage(), "): ", valueBuf.SubStr(0, Min(valueBuf.Size(), 1024ul)));
                     }
                     auto appendResult = builder.Append(binaryJson->Data(), binaryJson->Size());
                     if (!appendResult.ok()) {
@@ -297,9 +298,6 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
     for (; row < rowsUnroll; row += unroll) {
         ui32 col = 0;
         for (auto& [colName, colType] : YdbSchema_) {
-            // TODO: support pg types
-            Y_ABORT_UNLESS(colType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
-
             auto& column = allColumns[col];
             bool success = SwitchYqlTypeToArrowType(colType, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
                 Y_UNUSED(typeHolder);
@@ -347,9 +345,6 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
 
         ui32 col = 0;
         for (auto& [colName, colType] : YdbSchema_) {
-            // TODO: support pg types
-            Y_ABORT_UNLESS(colType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
-
             auto& column = allColumns[col];
             auto& curCell = cells[0][col];
             if (column->IsNull(row)) {

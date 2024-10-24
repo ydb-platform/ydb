@@ -30,6 +30,7 @@ SRCS(
     downtime.cpp
     erasure_checkers.h
     erasure_checkers.cpp
+    error_info.h
     http.cpp
     http.h
     info_collector.cpp
@@ -238,4 +239,5 @@ RECURSE(
 RECURSE_FOR_TESTS(
     ut
     ut_sentinel
+    ut_sentinel_unstable
 )

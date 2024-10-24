@@ -228,13 +228,14 @@ public:
         Fq::Private::PingTaskRequest pingTaskRequest = Builder.Build(QueryStats, Issues);
         if (Builder.Issues) {
             LOG_W(Builder.Issues.ToOneLineString());
+            GetStepCountersSubgroup()->GetCounter("StatIssues", true)->Inc();
         }
         ReportPublicCounters(Builder.PublicStat);
         Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest), 0, 1);
     }
 
     void UpdateCpuQuota(double cpuUsage) {
-        TDuration duration = TDuration::MicroSeconds(QueryStats.total_duration_us());
+        TDuration duration = QueryStats.GetTotalDuration();
         if (cpuUsage && duration) {
             Send(NFq::ComputeDatabaseControlPlaneServiceActorId(), new TEvYdbCompute::TEvCpuQuotaAdjust(Params.Scope.ToString(), duration, cpuUsage)); 
         }
@@ -248,6 +249,7 @@ public:
         Fq::Private::PingTaskRequest pingTaskRequest = Builder.Build(QueryStats, Issues, std::nullopt, StatusCode);
         if (Builder.Issues) {
             LOG_W(Builder.Issues.ToOneLineString());
+            GetStepCountersSubgroup()->GetCounter("StatIssues", true)->Inc();
         }
         ReportPublicCounters(Builder.PublicStat);
         UpdateCpuQuota(Builder.CpuUsage);
@@ -263,6 +265,7 @@ public:
         Fq::Private::PingTaskRequest pingTaskRequest = Builder.Build(QueryStats, Issues, ComputeStatus, std::nullopt);
         if (Builder.Issues) {
             LOG_W(Builder.Issues.ToOneLineString());
+            GetStepCountersSubgroup()->GetCounter("StatIssues", true)->Inc();
         }
         ReportPublicCounters(Builder.PublicStat);
         UpdateCpuQuota(Builder.CpuUsage);
@@ -282,7 +285,7 @@ private:
     NYdb::EStatus Status = NYdb::EStatus::SUCCESS;
     NYdb::NQuery::EExecStatus ExecStatus = NYdb::NQuery::EExecStatus::Unspecified;
     NYql::NDqProto::StatusIds::StatusCode StatusCode = NYql::NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_UNSPECIFIED;
-    Ydb::TableStats::QueryStats QueryStats;
+    NYdb::NQuery::TExecStats QueryStats;
     NKikimr::TBackoffTimer BackoffTimer;
     NFq::TStatusCodeByScopeCounters::TPtr FailedStatusCodeCounters;
     FederatedQuery::QueryMeta::ComputeStatus ComputeStatus = FederatedQuery::QueryMeta::RUNNING;

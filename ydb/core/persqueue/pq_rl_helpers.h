@@ -3,6 +3,7 @@
 #include <ydb/core/grpc_services/local_rate_limiter.h>
 #include <ydb/core/metering/stream_ru_calculator.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/tx/scheme_board/events.h>
 
 #include <util/datetime/base.h>
 
@@ -30,7 +31,7 @@ public:
         : Path({coordinationNode, resourcePath, databaseName, token}) {
     }
 
-    operator bool() const { return !Path.ResourcePath.Empty() && !Path.CoordinationNode.Empty(); };
+    operator bool() const { return !Path.ResourcePath.empty() && !Path.CoordinationNode.empty(); };
     const NRpcService::TRlFullPath GetPath() const { return Path; }
 
 private:

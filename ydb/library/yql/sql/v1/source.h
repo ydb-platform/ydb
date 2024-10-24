@@ -172,6 +172,7 @@ namespace NSQLTranslationV1 {
             ForceGrace
         };
         EStrategy Strategy = EStrategy::Default;
+        bool Compact = false;
     };
 
     class IJoin: public ISource {
@@ -310,6 +311,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildDropTable(TPosition pos, const TTableRef& table, bool missingOk, ETableType tableType, TScopedStatePtr scoped);
     TNodePtr BuildWriteTable(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode, TNodePtr options,
         TScopedStatePtr scoped);
+    TNodePtr BuildAnalyze(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TAnalyzeParams& params, TScopedStatePtr scoped);
     TSourcePtr TryMakeSourceFromExpression(TPosition pos, TContext& ctx, const TString& currService, const TDeferredAtom& currCluster,
         TNodePtr node, const TString& view = {});
     void MakeTableFromExpression(TPosition pos, TContext& ctx, TNodePtr node, TDeferredAtom& table, const TString& prefix = {});

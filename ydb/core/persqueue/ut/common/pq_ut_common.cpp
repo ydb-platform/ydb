@@ -44,7 +44,7 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
         try {
             runtime.ResetScheduledCount();
 
-            THolder<TEvPersQueue::TEvUpdateConfig> request(new TEvPersQueue::TEvUpdateConfig());
+            auto request = MakeHolder<TEvPersQueue::TEvUpdateConfigBuilder>();
             for (ui32 i = 0; i < parameters.partitions; ++i) {
                 request->Record.MutableTabletConfig()->AddPartitionIds(i);
             }
@@ -176,7 +176,8 @@ void CmdGetOffset(const ui32 partition, const TString& user, i64 expectedOffset,
                     }
                 }
             }
-            UNIT_ASSERT((expectedOffset == -1 && !resp.HasOffset()) || (i64)resp.GetOffset() == expectedOffset);
+            UNIT_ASSERT_C((expectedOffset == -1 && !resp.HasOffset()) || (i64)resp.GetOffset() == expectedOffset,
+                    "expectedOffset=" << expectedOffset << " resp.HasOffset()=" << resp.HasOffset() << " resp.GetOffset()=" << resp.GetOffset());
             if (writeTime > 0) {
                 UNIT_ASSERT(resp.HasWriteTimestampEstimateMS());
                 UNIT_ASSERT(resp.GetWriteTimestampEstimateMS() >= writeTime);
@@ -721,11 +722,14 @@ void CmdSetOffset(const ui32 partition, const TString& user, ui64 offset, bool e
 
 
 TActorId CmdCreateSession(const TPQCmdSettings& settings, TTestContext& tc) {
-
     TActorId pipeClient = tc.Runtime->ConnectToPipe(tc.BalancerTabletId, tc.Edge, 0, GetPipeConfigWithRetries());
     TActorId tabletPipe = tc.Runtime->ConnectToPipe(tc.TabletId, tc.Edge, 0, GetPipeConfigWithRetries());
-
     TAutoPtr<IEventHandle> handle;
+    {
+        auto predicate = [&](const auto& ev) { return ev.TabletId == tc.TabletId; };
+        auto ev = tc.Runtime->GrabEdgeEventIf<TEvTabletPipe::TEvClientConnected>(handle, predicate);
+        UNIT_ASSERT(ev);
+    }
     TEvPersQueue::TEvResponse *result;
     THolder<TEvPersQueue::TEvRequest> request;
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {

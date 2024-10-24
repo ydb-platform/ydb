@@ -19,7 +19,6 @@ void TTTLColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     auto& engine = self.MutableIndexAs<TColumnEngineForLogs>();
     auto& index = engine.GetVersionedIndex();
     for (const auto& p : PortionsToEvict) {
-        Y_ABORT_UNLESS(!p.GetPortionInfo().Empty());
         p.GetPortionInfo().FillBlobRangesByStorage(blobRanges, index);
     }
     for (auto&& i : blobRanges) {
@@ -46,7 +45,7 @@ void TTTLColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChan
     }
 }
 
-std::optional<TWritePortionInfoWithBlobs> TTTLColumnEngineChanges::UpdateEvictedPortion(TPortionForEviction& info, NBlobOperations::NRead::TCompositeReadBlobs& srcBlobs,
+std::optional<TWritePortionInfoWithBlobsResult> TTTLColumnEngineChanges::UpdateEvictedPortion(TPortionForEviction& info, NBlobOperations::NRead::TCompositeReadBlobs& srcBlobs,
     TConstructionContext& context) const
 {
     const TPortionInfo& portionInfo = info.GetPortionInfo();
@@ -55,7 +54,7 @@ std::optional<TWritePortionInfoWithBlobs> TTTLColumnEngineChanges::UpdateEvicted
     Y_ABORT_UNLESS(portionInfo.GetMeta().GetTierName() != evictFeatures.GetTargetTierName() || blobSchema->GetVersion() < evictFeatures.GetTargetScheme()->GetVersion());
 
     auto portionWithBlobs = TReadPortionInfoWithBlobs::RestorePortion(portionInfo, srcBlobs, blobSchema->GetIndexInfo());
-    std::optional<TWritePortionInfoWithBlobs> result = TReadPortionInfoWithBlobs::SyncPortion(
+    std::optional<TWritePortionInfoWithBlobsResult> result = TReadPortionInfoWithBlobs::SyncPortion(
         std::move(portionWithBlobs), blobSchema, evictFeatures.GetTargetScheme(), evictFeatures.GetTargetTierName(), SaverContext.GetStoragesManager(), context.Counters.SplitterCounters);
     return std::move(result);
 }

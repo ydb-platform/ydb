@@ -31,7 +31,7 @@ public:
     protected:
         class TContext {
         public:
-            TContext(const TBulkDataGenerator& owner, int tableNum);
+            TContext(const TBulkDataGenerator& owner, int tableNum, TGeneratorStateProcessor* state);
             NYdb::TValueBuilder& GetBuilder();
             TStringBuilder& GetCsv();
             void AppendPortions(TDataPortions& result);
@@ -43,16 +43,16 @@ public:
             TStringBuilder Csv;
             const TBulkDataGenerator& Owner;
             int TableNum;
+            TGeneratorStateProcessor* State;
         };
 
         using TContexts = TVector<TContext>;
 
-        virtual void GenerateRows(TContexts& ctxs) = 0;
+        virtual void GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) = 0;
 
         int TableNum;
         ui64 Generated = 0;
-        TAdaptiveLock NumbersLock;
-        TAdaptiveLock DriverLock;
+        TAdaptiveLock Lock;
 
     private:
         TString GetFullTableName(const char* table) const;

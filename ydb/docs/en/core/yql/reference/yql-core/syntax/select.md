@@ -1,7 +1,5 @@
 # SELECT syntax
 
-<!-- File split by includable blocks as part of YQL docs preparation for YQL/YDB opensource -->
-
 {% include [x](_includes/select/calc.md) %}
 
 {% include [x](_includes/select/from.md) %}
@@ -50,7 +48,7 @@
 
 {% include [x](_includes/select/from_select.md) %}
 
-{% if feature_map_reduce %}
+{% if feature_mapreduce %}
 
   {% include [x](_includes/select/view.md) %}
 

@@ -35,7 +35,7 @@ public:
         : Partition(partition)
     {
         Resize(UnmarkedSize());
-        SetType(type);
+        SetTypeImpl(type, IsServicePartition());
         memcpy(PtrPartition(), Sprintf("%.10" PRIu32, Partition.InternalPartitionId).data(), 10);
     }
 
@@ -53,6 +53,10 @@ public:
     virtual ~TKeyPrefix()
     {}
 
+    TString ToString() const {
+        return TString(Data(), Size());
+    }
+
     bool Marked(EMark mark) {
         if (Size() >= MarkedSize())
             return *PtrMark() == mark;
@@ -64,34 +68,8 @@ public:
 
 
     void SetType(EType type) {
-        if (!IsServicePartition()) {
-            *PtrType() = type;
-            return;
-        }
-        switch (type) {
-            case TypeNone:
-                *PtrType() = TypeNone;
-                return;
-	    case TypeData:
-                *PtrType() = ServiceTypeData;
-                return;
-            case TypeTmpData:
-                *PtrType() = ServiceTypeTmpData;
-                return;
-            case TypeInfo:
-                *PtrType() = ServiceTypeInfo;
-                return;
-            case TypeMeta:
-                *PtrType() = ServiceTypeMeta;
-                return;
-            case TypeTxMeta:
-               *PtrType() = ServiceTypeTxMeta;
-                return;
-            default:
-                Y_ABORT();
-        }
+        SetTypeImpl(type, IsServicePartition() || HasServiceType());
     }
-
 
     EType GetType() const {
         switch (*PtrType()) {
@@ -130,6 +108,7 @@ protected:
         Partition.InternalPartitionId = Partition.OriginalPartitionId;
     }
 
+    bool HasServiceType() const;
 
 private:
     enum EServiceType : char {
@@ -140,6 +119,8 @@ private:
         ServiceTypeTxMeta = 'K'
     };
 
+    void SetTypeImpl(EType, bool isServicePartition);
+
     char* PtrType() { return Data(); }
     char* PtrMark() { return Data() + UnmarkedSize(); }
     char* PtrPartition() { return Data() + 1; }
@@ -149,7 +130,6 @@ private:
     const char* PtrPartition() const { return Data() + 1; }
 
     TPartitionId Partition;
-
 };
 
 std::pair<TKeyPrefix, TKeyPrefix> MakeKeyPrefixRange(TKeyPrefix::EType type, const TPartitionId& partition);
@@ -318,7 +298,7 @@ TKey MakeKeyFromString(const TString& s, const TPartitionId& partition);
 inline
 TString GetTxKey(ui64 txId)
 {
-    return Sprintf("tx_%" PRIu64, txId);
+    return Sprintf("tx_%020" PRIu64, txId);
 }
 
 

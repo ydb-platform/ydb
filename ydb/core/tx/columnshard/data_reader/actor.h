@@ -12,6 +12,7 @@ private:
     YDB_READONLY_DEF(NActors::TActorId, TabletActorId);
     virtual TConclusionStatus DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) = 0;
     virtual TConclusionStatus DoOnFinished() = 0;
+    virtual void DoOnError(const TString& errorMessage) = 0;
     virtual std::unique_ptr<TEvColumnShard::TEvInternalScan> DoBuildRequestInitiator() const = 0;
 
 public:
@@ -22,6 +23,10 @@ public:
 
     TConclusionStatus OnFinished() {
         return DoOnFinished();
+    }
+
+    void OnError(const TString& errorMessage) {
+        DoOnError(errorMessage);
     }
 
     std::unique_ptr<TEvColumnShard::TEvInternalScan> BuildRequestInitiator() const {
@@ -62,9 +67,7 @@ private:
 protected:
     void HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev);
     void HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev);
-    void HandleExecute(NKqp::TEvKqpCompute::TEvScanError::TPtr& /*ev*/) {
-        AFL_VERIFY(false);
-    }
+    void HandleExecute(NKqp::TEvKqpCompute::TEvScanError::TPtr& ev);
 
 public:
     TActor(const std::shared_ptr<IRestoreTask>& rTask)

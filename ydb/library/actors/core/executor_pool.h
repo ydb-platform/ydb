@@ -9,6 +9,7 @@ namespace NActors {
     struct TMailboxHeader;
     struct TWorkerContext;
     struct TExecutorPoolStats;
+    struct TExecutorPoolState;
     struct TExecutorThreadStats;
     class TExecutorPoolJail;
     class ISchedulerCookie;
@@ -106,6 +107,10 @@ namespace NActors {
             // TODO: make pure virtual and override everywhere
             Y_UNUSED(poolStats);
             Y_UNUSED(statsCopy);
+        }
+
+        virtual void GetExecutorPoolState(TExecutorPoolState &poolState) const {
+            Y_UNUSED(poolState);
         }
 
         virtual TString GetName() const {

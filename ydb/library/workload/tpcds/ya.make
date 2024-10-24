@@ -1,9 +1,39 @@
 LIBRARY()
 
+IF(OS_WINDOWS)
+    CONLYFLAGS(-DWIN32 -DUSE_STDLIB_H)
+ELSEIF(OS_DARWIN OR OS_MACOS)
+    CONLYFLAGS(-DUSE_STDLIB_H)
+    CFLAGS(-DINTERIX)
+ELSE()
+    CFLAGS(-DLINUX)
+ENDIF()
+
 SRCS(
-#    driver.c
-#    driver.cpp
-#    GLOBAL data_generator.cpp
+    driver.c
+    driver.cpp
+    data_generator.cpp
+    dg_call_center.cpp
+    dg_catalog_sales.cpp
+    dg_catalog_page.cpp
+    dg_customer.cpp
+    dg_customer_address.cpp
+    dg_customer_demographics.cpp
+    dg_date_dim.cpp
+    dg_household_demographics.cpp
+    dg_income_band.cpp
+    dg_inventory.cpp
+    dg_item.cpp
+    dg_promotion.cpp
+    dg_reason.cpp
+    dg_ship_mode.cpp
+    dg_store.cpp
+    dg_store_sales.cpp
+    dg_time_dim.cpp
+    dg_warehouse.cpp
+    dg_web_page.cpp
+    dg_web_sales.cpp
+    dg_web_site.cpp
     GLOBAL registrar.cpp
     tpcds.cpp
 )
@@ -19,16 +49,16 @@ RESOURCE(
     ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q7.sql tpcds/yql/q7.sql
     ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q8.sql tpcds/yql/q8.sql
     ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q9.sql tpcds/yql/q9.sql
-    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q20.sql tpcds/yql/q10.sql
-    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q21.sql tpcds/yql/q11.sql
-    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q22.sql tpcds/yql/q12.sql
-    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q23.sql tpcds/yql/q13.sql
-    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q24.sql tpcds/yql/q14.sql
-    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q25.sql tpcds/yql/q15.sql
-    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q26.sql tpcds/yql/q16.sql
-    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q27.sql tpcds/yql/q17.sql
-    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q28.sql tpcds/yql/q18.sql
-    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q29.sql tpcds/yql/q19.sql
+    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q10.sql tpcds/yql/q10.sql
+    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q11.sql tpcds/yql/q11.sql
+    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q12.sql tpcds/yql/q12.sql
+    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q13.sql tpcds/yql/q13.sql
+    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q14.sql tpcds/yql/q14.sql
+    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q15.sql tpcds/yql/q15.sql
+    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q16.sql tpcds/yql/q16.sql
+    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q17.sql tpcds/yql/q17.sql
+    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q18.sql tpcds/yql/q18.sql
+    ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q19.sql tpcds/yql/q19.sql
     ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q20.sql tpcds/yql/q20.sql
     ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q21.sql tpcds/yql/q21.sql
     ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/yql/q22.sql tpcds/yql/q22.sql
@@ -112,9 +142,11 @@ RESOURCE(
 )
 
 PEERDIR(
-    ydb/library/accessor
+    library/cpp/charset
     library/cpp/resource
-    ydb/library/workload/benchmark_base
+    ydb/library/accessor
+    ydb/library/workload/tpc_base
+    ydb/library/benchmarks/gen/tpcds-dbgen
 )
 
 END()

@@ -54,7 +54,7 @@ public:
         , Logger(logger)
     { }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         return EndpointAddress_;
     }
@@ -64,7 +64,7 @@ public:
         return *EndpointAttributes_;
     }
 
-    const TString& GetEndpointAddress() const override
+    const std::string& GetEndpointAddress() const override
     {
         return EndpointAddress_;
     }
@@ -238,12 +238,12 @@ private:
         }
 
         const auto& url = req->GetUrl();
-        if (url.Path.Size() <= BaseUrl_.Size()) {
+        if (url.Path.size() <= BaseUrl_.size()) {
             return TError("Invalid URL");
         }
 
         ToProto(rpcHeader->mutable_service(), Underlying_->GetServiceId().ServiceName);
-        ToProto(rpcHeader->mutable_method(), url.Path.substr(BaseUrl_.Size()));
+        ToProto(rpcHeader->mutable_method(), url.Path.substr(BaseUrl_.size()));
 
         const auto& httpHeaders = req->GetHeaders();
 

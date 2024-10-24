@@ -4,7 +4,7 @@ Sometimes, the same data queries need to be executed regularly. To avoid specify
 
 Example query for reading data:
 
-```sql
+```yql
 SELECT
     *
 FROM
@@ -17,7 +17,7 @@ WHERE
 
 To create an external table describing the S3 bucket ({{ objstorage-name }}), execute the following SQL query. The query creates an external table named `s3_test_data`, containing files in the `CSV` format with string fields `key` and `value`, located inside the bucket at the path `test_folder`, using the connection credentials specified by the [external data source](../../datamodel/external_data_source.md) object `bucket`:
 
-```sql
+```yql
 CREATE EXTERNAL TABLE `s3_test_data` (
   key Utf8 NOT NULL,
   value Utf8 NOT NULL
@@ -30,6 +30,7 @@ CREATE EXTERNAL TABLE `s3_test_data` (
 ```
 
 Where:
+
 - `key, value` - list of data columns and their types;
 - `bucket` - name of the [external data source](../../datamodel/external_data_source.md) to S3 ({{ objstorage-name }});
 - `folder` - path within the bucket containing the data;
@@ -40,13 +41,13 @@ Where:
 
 Reading data using external tables from S3 ({{ objstorage-name }}) is done with regular SQL queries as if querying a normal table.
 
-```sql
+```yql
 SELECT
-    <expression>
+  <expression>
 FROM
-    `s3_test_data`
+  `s3_test_data`
 WHERE
-    <filter>;
+  <filter>;
 ```
 
 ## Limitations
@@ -54,5 +55,6 @@ WHERE
 There are a number of limitations when working with S3 buckets ({{ objstorage-name }}).
 
 Limitations:
+
 1. Only data read requests - `SELECT` and `INSERT` are supported; other requests are not.
 1. {% include [!](../_includes/datetime_limits.md)%}

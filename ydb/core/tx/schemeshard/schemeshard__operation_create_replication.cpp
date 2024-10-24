@@ -334,6 +334,10 @@ public:
         parentPath->IncAliveChildren();
         parentPath.DomainInfo()->IncPathsInside();
 
+        if (desc.GetConfig().GetSrcConnectionParams().GetCredentialsCase() == NKikimrReplication::TConnectionParams::CREDENTIALS_NOT_SET) {
+            desc.MutableConfig()->MutableSrcConnectionParams()->MutableOAuthToken()->SetToken(BUILTIN_ACL_ROOT);
+        }
+
         desc.MutableState()->MutableStandBy();
         auto replication = TReplicationInfo::Create(std::move(desc));
         context.SS->Replications[path->PathId] = replication;

@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2024-06-01)
+VERSION(2024-07-02)
 
-ORIGINAL_SOURCE(https://github.com/google/re2/archive/2024-06-01.tar.gz)
+ORIGINAL_SOURCE(https://github.com/google/re2/archive/2024-07-02.tar.gz)
 
 PEERDIR(
     contrib/restricted/abseil-cpp/absl/base

@@ -8,10 +8,16 @@ PY_SRCS(
     docker_compose.py
     generate.py
     log.py
+    one_time_waiter.py
     schema.py
     settings.py
     sql.py
 )
+
+IF (AUTOCHECK)
+    # YQ-3351: enabling python style checks only for opensource
+    NO_LINT()
+ENDIF()
 
 PEERDIR(
     contrib/python/PyYAML

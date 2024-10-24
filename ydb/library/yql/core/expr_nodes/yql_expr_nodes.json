@@ -43,7 +43,8 @@
                 {"Index": 1, "Name": "Type", "Type": "TCoAtom"},
                 {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
                 {"Index": 3, "Name": "DataColumns", "Type": "TCoAtomList"},
-                {"Index": 4, "Name": "TableSettings", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 4, "Name": "TableSettings", "Type": "TCoNameValueTupleList"},
+                {"Index": 5, "Name": "IndexSettings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {
@@ -1035,6 +1036,21 @@
             "Match": {"Type": "Callable", "Name": "Interval"}
         },
         {
+            "Name": "TCoTzDate32",
+            "Base": "TCoTzDateBase",
+            "Match": {"Type": "Callable", "Name": "TzDate32"}
+        },
+        {
+            "Name": "TCoTzDatetime64",
+            "Base": "TCoTzDateBase",
+            "Match": {"Type": "Callable", "Name": "TzDatetime64"}
+        },
+        {
+            "Name": "TCoTzTimestamp64",
+            "Base": "TCoTzDateBase",
+            "Match": {"Type": "Callable", "Name": "TzTimestamp64"}
+        },
+        {
             "Name": "TCoInterval64",
             "Base": "TCoDataCtor",
             "Match": {"Type": "Callable", "Name": "Interval64"}
@@ -1609,7 +1625,7 @@
                 {"Index": 5, "Name": "LeftRenames", "Type": "TCoAtomList"},
                 {"Index": 6, "Name": "RightRenames", "Type": "TCoAtomList"},
                 {"Index": 7, "Name": "LeftKeysColumnNames", "Type": "TCoAtomList"},
-                {"Index": 8, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"},  
+                {"Index": 8, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"},
                 {"Index": 9, "Name": "Flags", "Type": "TCoAtomList"}
             ]
         },
@@ -1625,7 +1641,7 @@
                 {"Index": 4, "Name": "LeftRenames", "Type": "TCoAtomList"},
                 {"Index": 5, "Name": "RightRenames", "Type": "TCoAtomList"},
                 {"Index": 6, "Name": "LeftKeysColumnNames", "Type": "TCoAtomList"},
-                {"Index": 7, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"}, 
+                {"Index": 7, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"},
                 {"Index": 8, "Name": "Flags", "Type": "TCoAtomList"}
             ]
         },
@@ -1846,6 +1862,14 @@
             "Name": "TCoAssumeAllMembersNullableAtOnce",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "AssumeAllMembersNullableAtOnce"}
+        },
+        {
+            "Name": "TCoAssumeConstraints",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "AssumeConstraints"},
+            "Children": [
+                {"Index": 1, "Name": "Value", "Type": "TCoAtom"}
+            ]
         },
         {
             "Name": "TCoListItemType",
@@ -2561,6 +2585,14 @@
         {
             "Name": "TCoReplicationTargetList",
             "ListBase": "TCoReplicationTarget"
+        },
+        {
+            "Name" : "TCoLikely",
+            "Base" : "TCallable",
+            "Match": {"Type": "Callable", "Name": "Likely"},
+            "Children": [
+                {"Index": 0, "Name": "Predicate", "Type": "TExprBase"}
+            ]
         }
     ]
 }

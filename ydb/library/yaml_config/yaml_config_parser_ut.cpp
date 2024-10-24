@@ -90,4 +90,37 @@ pdisk_key_config:
         UNIT_CHECK_GENERATED_EXCEPTION(PdiskCategoryFromString("zzz"), yexception);
         UNIT_CHECK_GENERATED_EXCEPTION(PdiskCategoryFromString("-1"), yexception);
     }
+
+    Y_UNIT_TEST(AllowDefaultHostConfigId) {
+        TString config = "{blob_storage_config: {autoconfig_settings: {erasure_species: block-4-2, pdisk_type: NVME}}, "
+            "host_configs: [{nvme: [disk1, disk2]}], hosts: [{host: fqdn1}, {host: fqdn2}]}";
+        NKikimrConfig::TAppConfig cfg = Parse(config, true);
+        UNIT_ASSERT(cfg.HasBlobStorageConfig());
+        auto& bsConfig = cfg.GetBlobStorageConfig();
+        UNIT_ASSERT(bsConfig.HasAutoconfigSettings());
+        auto& autoconf = bsConfig.GetAutoconfigSettings();
+        UNIT_ASSERT(autoconf.HasDefineBox());
+        UNIT_ASSERT_VALUES_EQUAL(autoconf.DefineHostConfigSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(autoconf.GetDefineBox().HostSize(), 2);
+        for (const auto& host : autoconf.GetDefineBox().GetHost()) {
+            UNIT_ASSERT_VALUES_EQUAL(host.GetHostConfigId(), autoconf.GetDefineHostConfig(0).GetHostConfigId());
+        }
+    }
+
+    Y_UNIT_TEST(IncorrectHostConfigIdFails) {
+        TString config1 = "{blob_storage_config: {autoconfig_settings: {erasure_species: block-4-2, pdisk_type: NVME}}, "
+            "host_configs: [{nvme: [disk1, disk2]}], hosts: [{host: fqdn1, host_config_id: 2}, {host: fqdn2}]}";
+        TString config2 = "{blob_storage_config: {autoconfig_settings: {erasure_species: block-4-2, pdisk_type: NVME}}, "
+            "host_configs: [{host_config_id: 1, nvme: [disk1, disk2]}], hosts: [{host: fqdn1, host_config_id: 2}, "
+            "{host: fqdn2}]}";
+        UNIT_CHECK_GENERATED_EXCEPTION(Parse(config1, false), yexception);
+        UNIT_CHECK_GENERATED_EXCEPTION(Parse(config2, false), yexception);
+    }
+
+    Y_UNIT_TEST(NoMixedHostConfigIds) {
+        TString config = "{blob_storage_config: {autoconfig_settings: {erasure_species: block-4-2, pdisk_type: NVME}}, "
+            "host_configs: [{nvme: [disk1, disk2]}, {host_config_id: 2}], hosts: [{host: fqdn1, host_config_id: 2}, "
+            "{host: fqdn2, host_config_id: 2}]}";
+        UNIT_CHECK_GENERATED_EXCEPTION(Parse(config, false), yexception);
+    }
 }

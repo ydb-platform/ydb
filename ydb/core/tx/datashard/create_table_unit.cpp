@@ -71,13 +71,11 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
     TUserTable::TPtr info = DataShard.CreateUserTable(txc, schemeTx.GetCreateTable());
     DataShard.AddUserTable(tableId, info);
 
-    for (const auto& [indexPathId, indexInfo] : info->Indexes) {
-        if (indexInfo.Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync) {
-            AddSenders.emplace_back(new TEvChangeExchange::TEvAddSender(
-                tableId, TEvChangeExchange::ESenderType::AsyncIndex, indexPathId
-            ));
-        }
-    }
+    info->ForEachAsyncIndex([&](const auto& indexPathId, const auto&) {
+        AddSenders.emplace_back(new TEvChangeExchange::TEvAddSender(
+            tableId, TEvChangeExchange::ESenderType::AsyncIndex, indexPathId
+        ));
+    });
 
     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
     op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
@@ -85,7 +83,9 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
     if (DataShard.GetState() == TShardState::WaitScheme) {
         txc.DB.NoMoreReadsForTx();
         DataShard.SetPersistState(TShardState::Ready, txc);
-        DataShard.CheckMvccStateChangeCanStart(ctx); // Recheck
+        // We could perform snapshot reads after becoming ready
+        // Make sure older versions restore mediator state in that case
+        DataShard.PersistUnprotectedReadsEnabled(txc);
         DataShard.SendRegistrationRequestTimeCast(ctx);
     }
 

@@ -9,6 +9,8 @@
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
 
+#include <ydb/public/api/protos/ydb_table.pb.h>
+
 #include <functional>
 
 namespace NSchemeShardUT_Private {
@@ -94,11 +96,16 @@ namespace NLs {
     void IsExternalDataSource(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsView(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsResourcePool(const NKikimrScheme::TEvDescribeSchemeResult& record);
-    TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns,
-                            NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);
+    void IsBackupCollection(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns, bool strictCount = false);
+    TCheckFunc CheckColumnType(const ui64 columnIndex, const TString& columnTypename);
     void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc PartitionCount(ui32 count);
     TCheckFunc PartitionKeys(TVector<TString> lastShardKeys);
+    // Checks if the serialized representation of an expected boundary is a prefix of the actual one.
+    // Similar to PartitionKeys check, but does not require you to pass split boundaries in a serialized form.
+    template <typename T>
+    TCheckFunc SplitBoundaries(TVector<T>&& expectedBoundaries);
     TCheckFunc FollowerCount(ui32 count);
     TCheckFunc CrossDataCenterFollowerCount(ui32 count);
     TCheckFunc AllowFollowerPromotion(bool val);
@@ -139,6 +146,11 @@ namespace NLs {
     TCheckFunc IndexKeys(const TVector<TString>& keyNames);
     TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames);
 
+    TCheckFunc VectorIndexDescription(Ydb::Table::VectorIndexSettings_Metric metric,
+                                      Ydb::Table::VectorIndexSettings_VectorType vectorType,
+                                      ui32 vectorDimension
+                                  );
+
     TCheckFunc SequenceName(const TString& name);
     TCheckFunc SequenceIncrement(i64 increment);
     TCheckFunc SequenceMaxValue(i64 maxValue);
@@ -153,6 +165,7 @@ namespace NLs {
     TCheckFunc StreamVirtualTimestamps(bool value);
     TCheckFunc StreamResolvedTimestamps(const TDuration& value);
     TCheckFunc StreamAwsRegion(const TString& value);
+    TCheckFunc StreamInitialScanProgress(ui32 total, ui32 completed);
     TCheckFunc RetentionPeriod(const TDuration& value);
 
     TCheckFunc HasBackupInFly(ui64 txId);
@@ -160,13 +173,17 @@ namespace NLs {
     TCheckFunc BackupHistoryCount(ui64 count);
 
     TCheckFunc HasOwner(const TString& owner);
+    TCheckFunc HasRight(const TString& right);
+    TCheckFunc HasNoRight(const TString& right);
     TCheckFunc HasEffectiveRight(const TString& right);
-    TCheckFunc HasNotEffectiveRight(const TString& right);
+    TCheckFunc HasNoEffectiveRight(const TString& right);
 
     TCheckFunc KesusConfigIs(ui64 self_check_period_millis, ui64 session_grace_period_millis);
     TCheckFunc DatabaseQuotas(ui64 dataStreamShards);
     TCheckFunc SharedHive(ui64 sharedHiveId);
     TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode);
+
+    TCheckFunc IncrementalBackup(bool flag);
 
     struct TInverseTag {
         bool Value = false;

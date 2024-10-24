@@ -1,6 +1,6 @@
 #include "yql_generic_match_predicate.h"
 
-namespace NYql {
+namespace NYql::NGenericPushDown {
 
     namespace {
 
@@ -317,10 +317,10 @@ namespace NYql {
             return Triple::Unknown;
         }
 
-    }
+    } // namespace
 
     bool MatchPredicate(const TMap<TString, TColumnStatistics>& columns, const NYql::NConnector::NApi::TPredicate& predicate) {
         return MatchPredicateImpl(columns, predicate) != Triple::False;
     }
 
-} // namespace NYql
+} // namespace NYql::NGenericPushDown

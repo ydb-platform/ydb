@@ -5,6 +5,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -399,7 +400,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
                   Name: "UserDefinedIndex"
                   KeyColumnNames: ["indexed"]
                   Type: EIndexTypeGlobalAsync
-                  IndexImplTableDescription {
+                  IndexImplTableDescriptions: [ {
                     SplitBoundary {
                       KeyPrefix {
                         Tuple { Optional { Uint32: 50 } }
@@ -410,7 +411,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
                         MinPartitionsCount: 1
                       }
                     }
-                  }
+                  } ]
                 }
             )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
@@ -440,7 +441,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
                   Name: "UserDefinedIndex"
                   KeyColumnNames: ["indexed"]
                   Type: EIndexTypeGlobalAsync
-                  IndexImplTableDescription {
+                  IndexImplTableDescriptions: [ {
                     SplitBoundary {
                       KeyPrefix {
                         Tuple { Optional { Uint32: 50 } }
@@ -451,7 +452,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
                         MinPartitionsCount: 1
                       }
                     }
-                  }
+                  } ]
                 }
             )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
@@ -545,6 +546,34 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
                 TTestTxConfig::FakeHiveTablets,
                 TTestTxConfig::FakeHiveTablets + 1,
             });
+        });
+    }
+
+    Y_UNIT_TEST(Decimal) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"_(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Decimal(35,9)" }
+              Columns { Name: "indexed" Type: "Decimal(35,9)" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "UserDefinedIndex"
+              KeyColumnNames: ["indexed"]
+              Type: EIndexTypeGlobalAsync
+            }
+        )_");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex"), {
+      NLs::PathExist,
+      NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
+      NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+      NLs::IndexKeys({"indexed"}),
         });
     }
 }

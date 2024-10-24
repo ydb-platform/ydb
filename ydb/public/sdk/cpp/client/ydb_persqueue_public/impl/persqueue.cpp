@@ -86,10 +86,19 @@ TDescribeTopicResult::TDescribeTopicResult(TStatus status, const Ydb::PersQueue:
 }
 
 TDescribeTopicResult::TTopicSettings::TTopicSettings(const Ydb::PersQueue::V1::TopicSettings& settings) {
-
-    PartitionsCount_ = settings.partitions_count();
     RetentionPeriod_ = TDuration::MilliSeconds(settings.retention_period_ms());
     SupportedFormat_ = static_cast<EFormat>(settings.supported_format());
+
+    if (settings.has_auto_partitioning_settings()) {
+        PartitionsCount_ = settings.auto_partitioning_settings().min_active_partitions();
+        MaxPartitionsCount_ = settings.auto_partitioning_settings().max_active_partitions();
+        StabilizationWindow_ = TDuration::Seconds(settings.auto_partitioning_settings().partition_write_speed().stabilization_window().seconds());
+        UpUtilizationPercent_ = settings.auto_partitioning_settings().partition_write_speed().up_utilization_percent();
+        DownUtilizationPercent_ = settings.auto_partitioning_settings().partition_write_speed().down_utilization_percent();
+        AutoPartitioningStrategy_ = settings.auto_partitioning_settings().strategy();
+    } else {
+        PartitionsCount_ = settings.partitions_count();
+    }
 
     for (const auto& codec : settings.supported_codecs()) {
         SupportedCodecs_.push_back(static_cast<ECodec>(codec));

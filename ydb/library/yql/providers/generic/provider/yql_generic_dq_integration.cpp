@@ -35,6 +35,8 @@ namespace NYql {
                     return "GreenplumGeneric";
                 case NYql::NConnector::NApi::MS_SQL_SERVER:
                     return "MsSQLServerGeneric";
+                case NYql::NConnector::NApi::ORACLE:
+                    return "OracleGeneric";
                 default:
                     ythrow yexception() << "Data source kind is unknown or not specified";
             }
@@ -85,6 +87,7 @@ namespace NYql {
                     // clang-format off
                     return Build<TDqSourceWrap>(ctx, read->Pos())
                         .Input<TGenSourceSettings>()
+                            .World(genReadTable.World())
                             .Cluster(genReadTable.DataSource().Cluster())
                             .Table(genReadTable.Table())
                             .Token<TCoSecureParam>()
@@ -112,7 +115,7 @@ namespace NYql {
             }
 
             void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings,
-                                    TString& sourceType, size_t) override {
+                                    TString& sourceType, size_t, TExprContext&) override {
                 const TDqSource source(&node);
                 if (const auto maybeSettings = source.Settings().Maybe<TGenSourceSettings>()) {
                     const auto settings = maybeSettings.Cast();
@@ -214,6 +217,9 @@ namespace NYql {
                         case NConnector::NApi::MS_SQL_SERVER:
                             properties["SourceType"] = "MsSQLServer";
                             break;
+                        case NConnector::NApi::ORACLE:
+                            properties["SourceType"] = "Oracle";
+                            break;
                         case NConnector::NApi::DATA_SOURCE_KIND_UNSPECIFIED:
                             break;
                         default:
@@ -264,13 +270,6 @@ namespace NYql {
                 const auto& clusterConfig = State_->Configuration->ClusterNamesToClusterConfigs[clusterName];
                 const auto& endpoint = clusterConfig.endpoint();
 
-                // for backward compability full path can be used (cluster_name.`db_name.table`)
-                // TODO: simplify during https://st.yandex-team.ru/YQ-2494
-                TStringBuf db, dbTable;
-                if (!TStringBuf(table).TrySplit('.', db, dbTable)) {
-                    dbTable = table;
-                }
-
                 YQL_CLOG(INFO, ProviderGeneric)
                     << "Filling lookup source settings"
                     << ": cluster: " << clusterName
@@ -283,7 +282,7 @@ namespace NYql {
                 }
 
                 Generic::TLookupSource source;
-                source.set_table(TString(dbTable));
+                source.set_table(table);
                 *source.mutable_data_source_instance() = tableMeta.value()->DataSourceInstance;
 
                 // Managed YDB supports access via IAM token.
@@ -307,10 +306,10 @@ namespace NYql {
             const TGenericState::TPtr State_;
         };
 
-    }
+    } // namespace
 
     THolder<IDqIntegration> CreateGenericDqIntegration(TGenericState::TPtr state) {
         return MakeHolder<TGenericDqIntegration>(state);
     }
 
-}
+} // namespace NYql

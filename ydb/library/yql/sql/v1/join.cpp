@@ -515,6 +515,10 @@ public:
                 linkOptions = L(linkOptions, Q(Y(Q("right"), Q("any"))));
             }
 
+            if (descr.LinkSettings.Compact) {
+                linkOptions = L(linkOptions, Q(Y(Q("compact"))));
+            }
+
             joinTree = Q(Y(
                 Q(descr.Op),
                 leftBranch,

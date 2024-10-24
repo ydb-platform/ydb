@@ -26,15 +26,19 @@ namespace NWilson {
             ui32 Raw;
         };
 
+    public:
+        static constexpr ui8 MAX_VERBOSITY = 15;
+        static constexpr ui32 MAX_TIME_TO_LIVE = 4095;
+
     private:
         TTraceId(TTrace traceId, ui64 spanId, ui8 verbosity, ui32 timeToLive)
             : TraceId(traceId)
         {
             if (timeToLive == Max<ui32>()) {
-                timeToLive = 4095;
+                timeToLive = MAX_TIME_TO_LIVE;
             }
-            Y_ABORT_UNLESS(verbosity <= 15);
-            Y_ABORT_UNLESS(timeToLive <= 4095);
+            Y_ABORT_UNLESS(verbosity <= MAX_VERBOSITY);
+            Y_ABORT_UNLESS(timeToLive <= MAX_TIME_TO_LIVE);
             SpanId = spanId;
             Verbosity = verbosity;
             TimeToLive = timeToLive;
@@ -170,6 +174,7 @@ namespace NWilson {
         }
 
         static TTraceId FromTraceparentHeader(const TStringBuf header, ui8 verbosity = 15);
+        TString ToTraceresponseHeader() const;
 
         TTraceId Span(ui8 verbosity) const {
             Validate();
@@ -201,6 +206,10 @@ namespace NWilson {
 
         ui8 GetVerbosity() const {
             return Verbosity;
+        }
+
+        ui32 GetTimeToLive() const {
+            return TimeToLive;
         }
 
         const void *GetTraceIdPtr() const { return TraceId.data(); }

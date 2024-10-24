@@ -1,9 +1,8 @@
+#include "schema_serialization_helpers.h"
 
 #include "comparator.h"
 
 #include <yt/yt/core/ytree/fluent.h>
-
-#include <yt/yt/client/table_client/schema_serialization_helpers.h>
 
 namespace NYT::NTableClient {
 
@@ -41,6 +40,8 @@ void TSerializableColumnSchema::Register(TRegistrar registrar)
     registrar.BaseClassParameter("lock", &TThis::Lock_)
         .Default();
     registrar.BaseClassParameter("expression", &TThis::Expression_)
+        .Default();
+    registrar.BaseClassParameter("materialized", &TThis::Materialized_)
         .Default();
     registrar.BaseClassParameter("aggregate", &TThis::Aggregate_)
         .Default();
@@ -81,6 +82,9 @@ void TSerializableColumnSchema::DeserializeFromCursor(NYson::TYsonPullParserCurs
         } else if (key == TStringBuf("expression")) {
             cursor->Next();
             SetExpression(ExtractTo<std::optional<TString>>(cursor));
+        } else if (key == TStringBuf("materialized")) {
+            cursor->Next();
+            SetMaterialized(ExtractTo<std::optional<bool>>(cursor));
         } else if (key == TStringBuf("aggregate")) {
             cursor->Next();
             SetAggregate(ExtractTo<std::optional<TString>>(cursor));

@@ -1,3 +1,7 @@
+#pragma once
+
+#include "common.h"
+
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 
@@ -14,6 +18,11 @@ struct TQueryRequest {
     ui32 TargetNode;
     ui64 ResultRowsLimit;
     ui64 ResultSizeLimit;
+};
+
+struct TCreateSessionRequest {
+    std::unique_ptr<NKikimr::NKqp::TEvKqp::TEvCreateSessionRequest> Event;
+    ui32 TargetNode;
 };
 
 struct TEvPrivate {
@@ -70,8 +79,10 @@ using TProgressCallback = std::function<void(const NKikimrKqp::TEvExecuterProgre
 
 NActors::IActor* CreateRunScriptActorMock(TQueryRequest request, NThreading::TPromise<TQueryResponse> promise, TProgressCallback progressCallback);
 
-NActors::IActor* CreateAsyncQueryRunnerActor(ui64 inFlightLimit);
+NActors::IActor* CreateAsyncQueryRunnerActor(const TAsyncQueriesSettings& settings);
 
 NActors::IActor* CreateResourcesWaiterActor(NThreading::TPromise<void> promise, i32 expectedNodeCount);
+
+NActors::IActor* CreateSessionHolderActor(TCreateSessionRequest request, NThreading::TPromise<TString> openPromise, NThreading::TPromise<void> closePromise);
 
 }  // namespace NKqpRun

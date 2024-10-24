@@ -40,7 +40,7 @@ private:
         }
     };
 
-    std::optional<TWritePortionInfoWithBlobs> UpdateEvictedPortion(TPortionForEviction& info, NBlobOperations::NRead::TCompositeReadBlobs& srcBlobs,
+    std::optional<TWritePortionInfoWithBlobsResult> UpdateEvictedPortion(TPortionForEviction& info, NBlobOperations::NRead::TCompositeReadBlobs& srcBlobs,
         TConstructionContext& context) const;
 
     std::vector<TPortionForEviction> PortionsToEvict;
@@ -95,8 +95,7 @@ public:
         return PortionsToEvict.size();
     }
     void AddPortionToEvict(const TPortionInfo& info, TPortionEvictionFeatures&& features) {
-        Y_ABORT_UNLESS(!info.Empty());
-        Y_ABORT_UNLESS(!info.HasRemoveSnapshot());
+        AFL_VERIFY(!info.HasRemoveSnapshot());
         PortionsToEvict.emplace_back(info, std::move(features));
     }
 

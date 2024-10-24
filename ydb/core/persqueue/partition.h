@@ -66,7 +66,6 @@ struct TTransaction {
     explicit TTransaction(TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> proposeConfig)
         : ProposeConfig(proposeConfig)
     {
-
         Y_ABORT_UNLESS(ProposeConfig);
     }
 
@@ -74,8 +73,9 @@ struct TTransaction {
         : ProposeTransaction(proposeTx)
         , State(ECommitState::Committed)
     {
-        if (proposeTx->Record.HasSupportivePartitionActor()) {
-            SupportivePartitionActor = ActorIdFromProto(proposeTx->Record.GetSupportivePartitionActor());
+        const auto& record = proposeTx->GetRecord();
+        if (record.HasSupportivePartitionActor()) {
+            SupportivePartitionActor = ActorIdFromProto(record.GetSupportivePartitionActor());
         }
         Y_ABORT_UNLESS(ProposeTransaction);
     }
@@ -140,12 +140,15 @@ private:
     struct THasDataReq;
     struct THasDataDeadline;
     using TMessageQueue = std::deque<TMessage>;
+    using TGetWriteInfoResp =
+        std::variant<TAutoPtr<TEvPQ::TEvGetWriteInfoResponse>,
+                     TAutoPtr<TEvPQ::TEvGetWriteInfoError>>;
 
     bool IsActive() const;
     bool CanWrite() const;
     bool CanEnqueue() const;
 
-    bool LastOffsetHasBeenCommited(const TUserInfo& userInfo) const;
+    bool LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const;
 
     void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error);
     void ReplyPropose(const TActorContext& ctx, const NKikimrPQ::TEvProposeTransaction& event, NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
@@ -284,6 +287,7 @@ private:
     ui32 NextChannel(bool isHead, ui32 blobSize);
     ui64 GetSizeLag(i64 offset);
     std::pair<TKey, ui32> GetNewWriteKey(bool headCleared);
+    std::pair<TKey, ui32> GetNewWriteKeyImpl(bool headCleared, bool needCompaction, ui32 headSize);
     THashMap<TString, TOwnerInfo>::iterator DropOwner(THashMap<TString, TOwnerInfo>::iterator& it,
                                                       const TActorContext& ctx);
     // will return rcount and rsize also
@@ -328,7 +332,7 @@ private:
 
     void SendWriteInfoRequest(const TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate>& event);
     void WriteInfoResponseHandler(const TActorId& sender,
-                        std::variant<TAutoPtr<TEvPQ::TEvGetWriteInfoResponse>, TAutoPtr<TEvPQ::TEvGetWriteInfoError>>&& ev,
+                        TGetWriteInfoResp&& ev,
                         const TActorContext& ctx);
 
 
@@ -387,6 +391,7 @@ private:
     void OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx);
 
     void EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
+                                  const TEvPQ::TMessageGroupsPtr& explicitMessageGroups,
                                   NPersQueue::TTopicConverterPtr topicConverter,
                                   const TActorContext& ctx);
     TString GetKeyConfig() const;
@@ -454,7 +459,9 @@ public:
     }
 
     // The size of the data realy was persisted in the storage by the partition
-    ui64 MeteringDataSize() const;
+    ui64 UserDataSize() const;
+    // The size of the data was metered to user
+    ui64 MeteringDataSize(TInstant now) const;
     // The size of the storage that was reserved by the partition
     ui64 ReserveSize() const;
     // The size of the storage that usud by the partition. That included combination of the reserver and realy persisted data.
@@ -634,10 +641,16 @@ private:
     TPartitionGraph PartitionGraph;
     TPartitionSourceManager SourceManager;
 
+    struct TSourceIdPostPersistInfo {
+        ui64 SeqNo = 0;
+        ui64 Offset = 0;
+    };
+
     THashSet<TString> TxAffectedSourcesIds;
     THashSet<TString> WriteAffectedSourcesIds;
     THashSet<TString> TxAffectedConsumers;
     THashSet<TString> SetOffsetAffectedConsumers;
+    THashMap<TString, TSourceIdPostPersistInfo> TxSourceIdForPostPersist;
 
     ui32 MaxBlobSize;
     const ui32 TotalLevels = 4;
@@ -773,6 +786,7 @@ private:
     TMaybe<ui64> TxId;
     bool TxIdHasChanged = false;
     TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> ChangeConfig;
+    TEvPQ::TMessageGroupsPtr PendingExplicitMessageGroups;
     TVector<THolder<TEvPQ::TEvSetClientInfo>> ChangeConfigActs;
     bool ChangingConfig = false;
     bool SendChangeConfigReply = true;
@@ -905,6 +919,8 @@ private:
     TDeque<std::unique_ptr<IEventBase>> PendingEvents;
     TRowVersion LastEmittedHeartbeat;
 
+    TLastCounter SourceIdCounter;
+
     const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config);
 
     bool ClosedInternalPartition = false;
@@ -929,7 +945,16 @@ private:
     void DestroyActor(const TActorContext& ctx);
 
     TActorId OffloadActor;
+
+    void AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
+                     TEvKeyValue::TEvRequest* request,
+                     const TActorContext& ctx);
+    void RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,
+                           ProcessParameters& parameters,
+                           ui32 curWrites,
+                           TEvKeyValue::TEvRequest* request,
+                           const TActorContext& ctx);
+    ui32 RenameTmpCmdWrites(TEvKeyValue::TEvRequest* request);
 };
 
 } // namespace NKikimr::NPQ
-

@@ -4,7 +4,7 @@
  *
  *	  Routines for tsearch manipulation commands
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -48,6 +48,12 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
+/* Single entry of List returned by getTokenTypes() */
+typedef struct
+{
+	int			num;			/* token type number */
+	char	   *name;			/* token type name */
+} TSTokenTypeItem;
 
 static void MakeConfigurationMapping(AlterTSConfigurationStmt *stmt,
 									 HeapTuple tup, Relation relMap);
@@ -408,7 +414,7 @@ DefineTSDictionary(List *names, List *parameters)
 	namespaceoid = QualifiedNameGetCreationNamespace(names, &dictname);
 
 	/* Check we have creation rights in target namespace */
-	aclresult = pg_namespace_aclcheck(namespaceoid, GetUserId(), ACL_CREATE);
+	aclresult = object_aclcheck(NamespaceRelationId, namespaceoid, GetUserId(), ACL_CREATE);
 	if (aclresult != ACLCHECK_OK)
 		aclcheck_error(aclresult, OBJECT_SCHEMA,
 					   get_namespace_name(namespaceoid));
@@ -510,7 +516,7 @@ AlterTSDictionary(AlterTSDictionaryStmt *stmt)
 			 dictId);
 
 	/* must be owner */
-	if (!pg_ts_dict_ownercheck(dictId, GetUserId()))
+	if (!object_ownercheck(TSDictionaryRelationId, dictId, GetUserId()))
 		aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_TSDICTIONARY,
 					   NameListToString(stmt->dictname));
 
@@ -911,7 +917,7 @@ DefineTSConfiguration(List *names, List *parameters, ObjectAddress *copied)
 	namespaceoid = QualifiedNameGetCreationNamespace(names, &cfgname);
 
 	/* Check we have creation rights in target namespace */
-	aclresult = pg_namespace_aclcheck(namespaceoid, GetUserId(), ACL_CREATE);
+	aclresult = object_aclcheck(NamespaceRelationId, namespaceoid, GetUserId(), ACL_CREATE);
 	if (aclresult != ACLCHECK_OK)
 		aclcheck_error(aclresult, OBJECT_SCHEMA,
 					   get_namespace_name(namespaceoid));
@@ -1004,8 +1010,24 @@ DefineTSConfiguration(List *names, List *parameters, ObjectAddress *copied)
 		ScanKeyData skey;
 		SysScanDesc scan;
 		HeapTuple	maptup;
+		TupleDesc	mapDesc;
+		TupleTableSlot **slot;
+		CatalogIndexState indstate;
+		int			max_slots,
+					slot_init_count,
+					slot_stored_count;
 
 		mapRel = table_open(TSConfigMapRelationId, RowExclusiveLock);
+		mapDesc = RelationGetDescr(mapRel);
+
+		indstate = CatalogOpenIndexes(mapRel);
+
+		/*
+		 * Allocate the slots to use, but delay costly initialization until we
+		 * know that they will be used.
+		 */
+		max_slots = MAX_CATALOG_MULTI_INSERT_BYTES / sizeof(FormData_pg_ts_config_map);
+		slot = palloc(sizeof(TupleTableSlot *) * max_slots);
 
 		ScanKeyInit(&skey,
 					Anum_pg_ts_config_map_mapcfg,
@@ -1015,29 +1037,54 @@ DefineTSConfiguration(List *names, List *parameters, ObjectAddress *copied)
 		scan = systable_beginscan(mapRel, TSConfigMapIndexId, true,
 								  NULL, 1, &skey);
 
+		/* number of slots currently storing tuples */
+		slot_stored_count = 0;
+		/* number of slots currently initialized */
+		slot_init_count = 0;
+
 		while (HeapTupleIsValid((maptup = systable_getnext(scan))))
 		{
 			Form_pg_ts_config_map cfgmap = (Form_pg_ts_config_map) GETSTRUCT(maptup);
-			HeapTuple	newmaptup;
-			Datum		mapvalues[Natts_pg_ts_config_map];
-			bool		mapnulls[Natts_pg_ts_config_map];
 
-			memset(mapvalues, 0, sizeof(mapvalues));
-			memset(mapnulls, false, sizeof(mapnulls));
+			if (slot_init_count < max_slots)
+			{
+				slot[slot_stored_count] = MakeSingleTupleTableSlot(mapDesc,
+																   &TTSOpsHeapTuple);
+				slot_init_count++;
+			}
 
-			mapvalues[Anum_pg_ts_config_map_mapcfg - 1] = cfgOid;
-			mapvalues[Anum_pg_ts_config_map_maptokentype - 1] = cfgmap->maptokentype;
-			mapvalues[Anum_pg_ts_config_map_mapseqno - 1] = cfgmap->mapseqno;
-			mapvalues[Anum_pg_ts_config_map_mapdict - 1] = cfgmap->mapdict;
+			ExecClearTuple(slot[slot_stored_count]);
 
-			newmaptup = heap_form_tuple(mapRel->rd_att, mapvalues, mapnulls);
+			memset(slot[slot_stored_count]->tts_isnull, false,
+				   slot[slot_stored_count]->tts_tupleDescriptor->natts * sizeof(bool));
 
-			CatalogTupleInsert(mapRel, newmaptup);
+			slot[slot_stored_count]->tts_values[Anum_pg_ts_config_map_mapcfg - 1] = cfgOid;
+			slot[slot_stored_count]->tts_values[Anum_pg_ts_config_map_maptokentype - 1] = cfgmap->maptokentype;
+			slot[slot_stored_count]->tts_values[Anum_pg_ts_config_map_mapseqno - 1] = cfgmap->mapseqno;
+			slot[slot_stored_count]->tts_values[Anum_pg_ts_config_map_mapdict - 1] = cfgmap->mapdict;
 
-			heap_freetuple(newmaptup);
+			ExecStoreVirtualTuple(slot[slot_stored_count]);
+			slot_stored_count++;
+
+			/* If slots are full, insert a batch of tuples */
+			if (slot_stored_count == max_slots)
+			{
+				CatalogTuplesMultiInsertWithInfo(mapRel, slot, slot_stored_count,
+												 indstate);
+				slot_stored_count = 0;
+			}
 		}
 
+		/* Insert any tuples left in the buffer */
+		if (slot_stored_count > 0)
+			CatalogTuplesMultiInsertWithInfo(mapRel, slot, slot_stored_count,
+											 indstate);
+
+		for (int i = 0; i < slot_init_count; i++)
+			ExecDropSingleTupleTableSlot(slot[i]);
+
 		systable_endscan(scan);
+		CatalogCloseIndexes(indstate);
 	}
 
 	address = makeConfigurationDependencies(tup, false, mapRel);
@@ -1124,7 +1171,7 @@ AlterTSConfiguration(AlterTSConfigurationStmt *stmt)
 	cfgId = ((Form_pg_ts_config) GETSTRUCT(tup))->oid;
 
 	/* must be owner */
-	if (!pg_ts_config_ownercheck(cfgId, GetUserId()))
+	if (!object_ownercheck(TSConfigRelationId, cfgId, GetUserId()))
 		aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_TSCONFIGURATION,
 					   NameListToString(stmt->cfgname));
 
@@ -1151,22 +1198,45 @@ AlterTSConfiguration(AlterTSConfigurationStmt *stmt)
 }
 
 /*
- * Translate a list of token type names to an array of token type numbers
+ * Check whether a token type name is a member of a TSTokenTypeItem list.
  */
-static int *
+static bool
+tstoken_list_member(char *token_name, List *tokens)
+{
+	ListCell   *c;
+	bool		found = false;
+
+	foreach(c, tokens)
+	{
+		TSTokenTypeItem *ts = (TSTokenTypeItem *) lfirst(c);
+
+		if (strcmp(token_name, ts->name) == 0)
+		{
+			found = true;
+			break;
+		}
+	}
+
+	return found;
+}
+
+/*
+ * Translate a list of token type names to a list of unique TSTokenTypeItem.
+ *
+ * Duplicated entries list are removed from tokennames.
+ */
+static List *
 getTokenTypes(Oid prsId, List *tokennames)
 {
 	TSParserCacheEntry *prs = lookup_ts_parser_cache(prsId);
 	LexDescr   *list;
-	int		   *res,
-				i,
-				ntoken;
+	List	   *result = NIL;
+	int			ntoken;
 	ListCell   *tn;
 
 	ntoken = list_length(tokennames);
 	if (ntoken == 0)
-		return NULL;
-	res = (int *) palloc(sizeof(int) * ntoken);
+		return NIL;
 
 	if (!OidIsValid(prs->lextypeOid))
 		elog(ERROR, "method lextype isn't defined for text search parser %u",
@@ -1176,19 +1246,26 @@ getTokenTypes(Oid prsId, List *tokennames)
 	list = (LexDescr *) DatumGetPointer(OidFunctionCall1(prs->lextypeOid,
 														 (Datum) 0));
 
-	i = 0;
 	foreach(tn, tokennames)
 	{
-		Value	   *val = (Value *) lfirst(tn);
+		String	   *val = lfirst_node(String, tn);
 		bool		found = false;
 		int			j;
+
+		/* Skip if this token is already in the result */
+		if (tstoken_list_member(strVal(val), result))
+			continue;
 
 		j = 0;
 		while (list && list[j].lexid)
 		{
 			if (strcmp(strVal(val), list[j].alias) == 0)
 			{
-				res[i] = list[j].lexid;
+				TSTokenTypeItem *ts = (TSTokenTypeItem *) palloc0(sizeof(TSTokenTypeItem));
+
+				ts->num = list[j].lexid;
+				ts->name = pstrdup(strVal(val));
+				result = lappend(result, ts);
 				found = true;
 				break;
 			}
@@ -1199,10 +1276,9 @@ getTokenTypes(Oid prsId, List *tokennames)
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("token type \"%s\" does not exist",
 							strVal(val))));
-		i++;
 	}
 
-	return res;
+	return result;
 }
 
 /*
@@ -1220,26 +1296,29 @@ MakeConfigurationMapping(AlterTSConfigurationStmt *stmt,
 	int			i;
 	int			j;
 	Oid			prsId;
-	int		   *tokens,
-				ntoken;
+	List	   *tokens = NIL;
+	int			ntoken;
 	Oid		   *dictIds;
 	int			ndict;
 	ListCell   *c;
+	CatalogIndexState indstate;
 
 	tsform = (Form_pg_ts_config) GETSTRUCT(tup);
 	cfgId = tsform->oid;
 	prsId = tsform->cfgparser;
 
 	tokens = getTokenTypes(prsId, stmt->tokentype);
-	ntoken = list_length(stmt->tokentype);
+	ntoken = list_length(tokens);
 
 	if (stmt->override)
 	{
 		/*
 		 * delete maps for tokens if they exist and command was ALTER
 		 */
-		for (i = 0; i < ntoken; i++)
+		foreach(c, tokens)
 		{
+			TSTokenTypeItem *ts = (TSTokenTypeItem *) lfirst(c);
+
 			ScanKeyInit(&skey[0],
 						Anum_pg_ts_config_map_mapcfg,
 						BTEqualStrategyNumber, F_OIDEQ,
@@ -1247,7 +1326,7 @@ MakeConfigurationMapping(AlterTSConfigurationStmt *stmt,
 			ScanKeyInit(&skey[1],
 						Anum_pg_ts_config_map_maptokentype,
 						BTEqualStrategyNumber, F_INT4EQ,
-						Int32GetDatum(tokens[i]));
+						Int32GetDatum(ts->num));
 
 			scan = systable_beginscan(relMap, TSConfigMapIndexId, true,
 									  NULL, 2, skey);
@@ -1274,6 +1353,8 @@ MakeConfigurationMapping(AlterTSConfigurationStmt *stmt,
 		dictIds[i] = get_ts_dict_oid(names, false);
 		i++;
 	}
+
+	indstate = CatalogOpenIndexes(relMap);
 
 	if (stmt->replace)
 	{
@@ -1302,9 +1383,11 @@ MakeConfigurationMapping(AlterTSConfigurationStmt *stmt,
 			{
 				bool		tokmatch = false;
 
-				for (j = 0; j < ntoken; j++)
+				foreach(c, tokens)
 				{
-					if (cfgmap->maptokentype == tokens[j])
+					TSTokenTypeItem *ts = (TSTokenTypeItem *) lfirst(c);
+
+					if (cfgmap->maptokentype == ts->num)
 					{
 						tokmatch = true;
 						break;
@@ -1334,7 +1417,7 @@ MakeConfigurationMapping(AlterTSConfigurationStmt *stmt,
 				newtup = heap_modify_tuple(maptup,
 										   RelationGetDescr(relMap),
 										   repl_val, repl_null, repl_repl);
-				CatalogTupleUpdate(relMap, &newtup->t_self, newtup);
+				CatalogTupleUpdateWithInfo(relMap, &newtup->t_self, newtup, indstate);
 			}
 		}
 
@@ -1342,29 +1425,61 @@ MakeConfigurationMapping(AlterTSConfigurationStmt *stmt,
 	}
 	else
 	{
+		TupleTableSlot **slot;
+		int			slotCount = 0;
+		int			nslots;
+
+		/* Allocate the slots to use and initialize them */
+		nslots = Min(ntoken * ndict,
+					 MAX_CATALOG_MULTI_INSERT_BYTES / sizeof(FormData_pg_ts_config_map));
+		slot = palloc(sizeof(TupleTableSlot *) * nslots);
+		for (i = 0; i < nslots; i++)
+			slot[i] = MakeSingleTupleTableSlot(RelationGetDescr(relMap),
+											   &TTSOpsHeapTuple);
+
 		/*
 		 * Insertion of new entries
 		 */
-		for (i = 0; i < ntoken; i++)
+		foreach(c, tokens)
 		{
+			TSTokenTypeItem *ts = (TSTokenTypeItem *) lfirst(c);
+
 			for (j = 0; j < ndict; j++)
 			{
-				Datum		values[Natts_pg_ts_config_map];
-				bool		nulls[Natts_pg_ts_config_map];
+				ExecClearTuple(slot[slotCount]);
 
-				memset(nulls, false, sizeof(nulls));
-				values[Anum_pg_ts_config_map_mapcfg - 1] = ObjectIdGetDatum(cfgId);
-				values[Anum_pg_ts_config_map_maptokentype - 1] = Int32GetDatum(tokens[i]);
-				values[Anum_pg_ts_config_map_mapseqno - 1] = Int32GetDatum(j + 1);
-				values[Anum_pg_ts_config_map_mapdict - 1] = ObjectIdGetDatum(dictIds[j]);
+				memset(slot[slotCount]->tts_isnull, false,
+					   slot[slotCount]->tts_tupleDescriptor->natts * sizeof(bool));
 
-				tup = heap_form_tuple(relMap->rd_att, values, nulls);
-				CatalogTupleInsert(relMap, tup);
+				slot[slotCount]->tts_values[Anum_pg_ts_config_map_mapcfg - 1] = ObjectIdGetDatum(cfgId);
+				slot[slotCount]->tts_values[Anum_pg_ts_config_map_maptokentype - 1] = Int32GetDatum(ts->num);
+				slot[slotCount]->tts_values[Anum_pg_ts_config_map_mapseqno - 1] = Int32GetDatum(j + 1);
+				slot[slotCount]->tts_values[Anum_pg_ts_config_map_mapdict - 1] = ObjectIdGetDatum(dictIds[j]);
 
-				heap_freetuple(tup);
+				ExecStoreVirtualTuple(slot[slotCount]);
+				slotCount++;
+
+				/* If slots are full, insert a batch of tuples */
+				if (slotCount == nslots)
+				{
+					CatalogTuplesMultiInsertWithInfo(relMap, slot, slotCount,
+													 indstate);
+					slotCount = 0;
+				}
 			}
 		}
+
+		/* Insert any tuples left in the buffer */
+		if (slotCount > 0)
+			CatalogTuplesMultiInsertWithInfo(relMap, slot, slotCount,
+											 indstate);
+
+		for (i = 0; i < nslots; i++)
+			ExecDropSingleTupleTableSlot(slot[i]);
 	}
+
+	/* clean up */
+	CatalogCloseIndexes(indstate);
 
 	EventTriggerCollectAlterTSConfig(stmt, cfgId, dictIds, ndict);
 }
@@ -1381,9 +1496,8 @@ DropConfigurationMapping(AlterTSConfigurationStmt *stmt,
 	ScanKeyData skey[2];
 	SysScanDesc scan;
 	HeapTuple	maptup;
-	int			i;
 	Oid			prsId;
-	int		   *tokens;
+	List	   *tokens = NIL;
 	ListCell   *c;
 
 	tsform = (Form_pg_ts_config) GETSTRUCT(tup);
@@ -1392,10 +1506,9 @@ DropConfigurationMapping(AlterTSConfigurationStmt *stmt,
 
 	tokens = getTokenTypes(prsId, stmt->tokentype);
 
-	i = 0;
-	foreach(c, stmt->tokentype)
+	foreach(c, tokens)
 	{
-		Value	   *val = (Value *) lfirst(c);
+		TSTokenTypeItem *ts = (TSTokenTypeItem *) lfirst(c);
 		bool		found = false;
 
 		ScanKeyInit(&skey[0],
@@ -1405,7 +1518,7 @@ DropConfigurationMapping(AlterTSConfigurationStmt *stmt,
 		ScanKeyInit(&skey[1],
 					Anum_pg_ts_config_map_maptokentype,
 					BTEqualStrategyNumber, F_INT4EQ,
-					Int32GetDatum(tokens[i]));
+					Int32GetDatum(ts->num));
 
 		scan = systable_beginscan(relMap, TSConfigMapIndexId, true,
 								  NULL, 2, skey);
@@ -1425,17 +1538,15 @@ DropConfigurationMapping(AlterTSConfigurationStmt *stmt,
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_OBJECT),
 						 errmsg("mapping for token type \"%s\" does not exist",
-								strVal(val))));
+								ts->name)));
 			}
 			else
 			{
 				ereport(NOTICE,
 						(errmsg("mapping for token type \"%s\" does not exist, skipping",
-								strVal(val))));
+								ts->name)));
 			}
 		}
-
-		i++;
 	}
 
 	EventTriggerCollectAlterTSConfig(stmt, cfgId, NULL, 0);
@@ -1741,6 +1852,15 @@ buildDefItem(const char *name, const char *val, bool was_quoted)
 		if (errno == 0 && *endptr == '\0')
 			return makeDefElem(pstrdup(name),
 							   (Node *) makeFloat(pstrdup(val)),
+							   -1);
+
+		if (strcmp(val, "true") == 0)
+			return makeDefElem(pstrdup(name),
+							   (Node *) makeBoolean(true),
+							   -1);
+		if (strcmp(val, "false") == 0)
+			return makeDefElem(pstrdup(name),
+							   (Node *) makeBoolean(false),
 							   -1);
 	}
 	/* Just make it a string */

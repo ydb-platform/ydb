@@ -10,6 +10,8 @@
 
 #include <yt/yt/core/yson/token_writer.h>
 
+#include <library/cpp/yt/yson_string/string.h>
+
 #include <library/cpp/yt/misc/wrapper_traits.h>
 
 namespace NYT::NYTree {
@@ -37,7 +39,7 @@ concept CContainerLike = requires {
 template <class T>
 struct TEqualityComparableHelper
 {
-    constexpr static bool Value = std::equality_comparable<T>;
+    static constexpr bool Value = std::equality_comparable<T>;
 };
 
 template <class T, size_t... I>
@@ -49,13 +51,13 @@ constexpr bool IsSequenceEqualityComparable(std::index_sequence<I...> /*sequence
 template <CTupleLike T>
 struct TEqualityComparableHelper<T>
 {
-    constexpr static bool Value = IsSequenceEqualityComparable<T>(std::make_index_sequence<std::tuple_size<T>::value>());
+    static constexpr bool Value = IsSequenceEqualityComparable<T>(std::make_index_sequence<std::tuple_size<T>::value>());
 };
 
 template <CContainerLike T>
 struct TEqualityComparableHelper<T>
 {
-    constexpr static bool Value = TEqualityComparableHelper<typename T::value_type>::Value;
+    static constexpr bool Value = TEqualityComparableHelper<typename T::value_type>::Value;
 };
 
 } // namespace NDetail
@@ -182,7 +184,7 @@ struct TYsonSourceTraits<NYson::TYsonPullParserCursor*>
 // e.g. std::optional<std::vector<T>>.
 
 // std::optional
-template <class T, CYsonStructSource TSource>
+template <CYsonStructSource TSource, class T>
 void LoadFromSource(
     std::optional<T>& parameter,
     TSource source,
@@ -190,7 +192,7 @@ void LoadFromSource(
     std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy);
 
 // std::vector
-template <CStdVector TVector, CYsonStructSource TSource>
+template <CYsonStructSource TSource, CStdVector TVector>
 void LoadFromSource(
     TVector& parameter,
     TSource source,
@@ -198,7 +200,7 @@ void LoadFromSource(
     std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy);
 
 // any map.
-template <CAnyMap TMap, CYsonStructSource TSource>
+template <CYsonStructSource TSource, CAnyMap TMap>
 void LoadFromSource(
     TMap& parameter,
     TSource source,
@@ -208,7 +210,7 @@ void LoadFromSource(
 ////////////////////////////////////////////////////////////////////////////////
 
 // Primitive type
-template <class T, CYsonStructSource TSource>
+template <CYsonStructSource TSource, class T>
 void LoadFromSource(
     T& parameter,
     TSource source,
@@ -221,6 +223,24 @@ void LoadFromSource(
         Deserialize(parameter, TTraits::AsNode(source));
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error reading parameter %v", path)
+            << ex;
+    }
+}
+
+// TYsonString
+template <CYsonStructSource TSource>
+void LoadFromSource(
+    ::NYT::NYson::TYsonString& parameter,
+    TSource source,
+    const NYPath::TYPath& path,
+    std::optional<EUnrecognizedStrategy> /*ignored*/)
+{
+    using TTraits = TYsonSourceTraits<TSource>;
+
+    try {
+        parameter = NYson::ConvertToYsonString(TTraits::AsNode(source));
+    } catch (const std::exception& ex) {
+        THROW_ERROR_EXCEPTION("Error loading parameter %v", path)
             << ex;
     }
 }
@@ -249,7 +269,7 @@ void LoadFromSource(
 }
 
 // TYsonStruct
-template <CYsonStructDerived T, CYsonStructSource TSource>
+template <CYsonStructSource TSource, CYsonStructDerived T>
 void LoadFromSource(
     TIntrusivePtr<T>& parameter,
     TSource source,
@@ -268,7 +288,7 @@ void LoadFromSource(
 }
 
 // YsonStructLite
-template <std::derived_from<TYsonStructLite> T, CYsonStructSource TSource>
+template <CYsonStructSource TSource, std::derived_from<TYsonStructLite> T>
 void LoadFromSource(
     T& parameter,
     TSource source,
@@ -284,7 +304,7 @@ void LoadFromSource(
 }
 
 // ExternalizedYsonStruct
-template <CExternallySerializable T, CYsonStructSource TSource>
+template <CYsonStructSource TSource, CExternallySerializable T>
 void LoadFromSource(
     T& parameter,
     TSource source,
@@ -299,8 +319,29 @@ void LoadFromSource(
     }
 }
 
+// CYsonStructExtension
+template <CYsonStructSource TSource, CYsonStructFieldFor<TSource> TExtension>
+void LoadFromSource(
+    TExtension& parameter,
+    TSource source,
+    const NYPath::TYPath& path,
+    std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
+{
+    try {
+        parameter.Load(
+            std::move(source),
+            /*postprocess*/ false,
+            /*setDefaults*/ false,
+            path,
+            recursiveUnrecognizedStrategy);
+    } catch (const std::exception& ex) {
+        THROW_ERROR_EXCEPTION("Error loading parameter %v", path)
+            << ex;
+    }
+}
+
 // std::optional
-template <class T, CYsonStructSource TSource>
+template <CYsonStructSource TSource, class T>
 void LoadFromSource(
     std::optional<T>& parameter,
     TSource source,
@@ -332,7 +373,7 @@ void LoadFromSource(
 }
 
 // std::vector
-template <CStdVector TVector, CYsonStructSource TSource>
+template <CYsonStructSource TSource, CStdVector TVector>
 void LoadFromSource(
     TVector& parameter,
     TSource source,
@@ -360,7 +401,7 @@ void LoadFromSource(
 }
 
 // any map.
-template <CAnyMap TMap, CYsonStructSource TSource>
+template <CYsonStructSource TSource, CAnyMap TMap>
 void LoadFromSource(
     TMap& parameter,
     TSource source,
@@ -551,6 +592,30 @@ inline void ResetOnLoad(TMap& parameter)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+bool CompareValues(const T& lhs, const T& rhs)
+{
+    if constexpr (CRecursivelyEqualityComparable<typename TWrapperTraits<T>::TRecursiveUnwrapped>) {
+        return lhs == rhs;
+    } else {
+        return false;
+    }
+}
+
+template <class T>
+bool CompareValues(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<T>& rhs)
+{
+    if constexpr (CRecursivelyEqualityComparable<typename TWrapperTraits<T>::TRecursiveUnwrapped>) {
+        if (!lhs || !rhs) {
+            return rhs == lhs;
+        }
+
+        return *lhs == *rhs;
+    } else {
+        return false;
+    }
+}
 
 } // namespace NPrivate
 
@@ -817,6 +882,12 @@ void TYsonStructParameter<TValue>::WriteSchema(const TYsonStructBase* self, NYso
 {
     // TODO(bulatman) What about constraints: minimum, maximum, default and etc?
     NPrivate::WriteSchema(FieldAccessor_->GetValue(self), consumer);
+}
+
+template <class TValue>
+bool TYsonStructParameter<TValue>::CompareParameter(const TYsonStructBase* lhsSelf, const TYsonStructBase* rhsSelf) const
+{
+    return NPrivate::CompareValues(FieldAccessor_->GetValue(lhsSelf), FieldAccessor_->GetValue(rhsSelf));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

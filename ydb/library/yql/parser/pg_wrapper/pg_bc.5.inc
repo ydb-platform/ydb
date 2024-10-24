@@ -1,8 +1,7 @@
 LLVM_BC(
-    postgresql/src/backend/catalog/pg_publication.c
+    postgresql/src/backend/access/brin/brin_inclusion.c
+    postgresql/src/backend/commands/collationcmds.c
     postgresql/src/backend/utils/adt/arrayfuncs.c
-    postgresql/src/backend/utils/adt/rangetypes_gist.c
-    postgresql/src/backend/utils/adt/rangetypes_typanalyze.c
     postgresql/src/backend/utils/adt/tsquery_gist.c
     postgresql/src/backend/utils/adt/tsvector_op.c
     pg_kernels.5.cpp
@@ -37,6 +36,10 @@ LLVM_BC(
     arrow_arraycontained
     arrow_arraycontains
     arrow_arrayoverlap
+    arrow_brin_inclusion_add_value
+    arrow_brin_inclusion_consistent
+    arrow_brin_inclusion_opcinfo
+    arrow_brin_inclusion_union
     arrow_btarraycmp
     arrow_gtsquery_compress
     arrow_gtsquery_consistent
@@ -47,16 +50,8 @@ LLVM_BC(
     arrow_gtsquery_union
     arrow_hash_array
     arrow_hash_array_extended
-    arrow_multirange_gist_compress
-    arrow_multirange_gist_consistent
-    arrow_multirange_typanalyze
-    arrow_pg_relation_is_publishable
-    arrow_range_gist_consistent
-    arrow_range_gist_penalty
-    arrow_range_gist_picksplit
-    arrow_range_gist_same
-    arrow_range_gist_union
-    arrow_range_typanalyze
+    arrow_pg_collation_actual_version
+    arrow_pg_import_system_collations
     arrow_trim_array
     arrow_ts_match_qv
     arrow_ts_match_tq

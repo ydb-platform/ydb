@@ -1643,7 +1643,6 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
     Y_UNIT_TEST_TWIN(DataColumnUpsertMixedSemantic, StreamLookup) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(StreamLookup);
 
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
@@ -1692,7 +1691,6 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
     Y_UNIT_TEST_TWIN(DataColumnWriteNull, StreamLookup) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(StreamLookup);
 
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
@@ -1775,7 +1773,6 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
     Y_UNIT_TEST_TWIN(DataColumnWrite, StreamLookup) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(StreamLookup);
 
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
@@ -2176,7 +2173,6 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
     Y_UNIT_TEST_TWIN(DataColumnSelect, StreamLookup) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(StreamLookup);
 
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
@@ -2274,7 +2270,6 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
     Y_UNIT_TEST_TWIN(DuplicateUpsert, StreamLookup) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(StreamLookup);
 
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
@@ -2311,7 +2306,6 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
     Y_UNIT_TEST_TWIN(SortByPk, StreamLookup) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(StreamLookup);
 
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig);
@@ -2533,10 +2527,8 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
         CheckWriteIntoRenamingIndex(true);
     }
 
-    Y_UNIT_TEST_TWIN(CheckPushTopSort, StreamLookup) {
+    Y_UNIT_TEST(CheckPushTopSort) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(StreamLookup);
-
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig);
 

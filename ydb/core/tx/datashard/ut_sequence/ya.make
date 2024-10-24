@@ -8,7 +8,6 @@ IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
-    REQUIREMENTS(ram:16)
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
@@ -33,7 +32,5 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     datashard_ut_sequence.cpp
 )
-
-REQUIREMENTS(ram:32)
 
 END()

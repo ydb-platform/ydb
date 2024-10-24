@@ -4,7 +4,7 @@ This section provides information about deploying, configuring, maintaining, mon
 
 Main resources:
 
-- [{#T}](../../deploy/index.md)
+- [{#T}](initial-deployment.md)
 - [{#T}](../../maintenance/manual/index.md)
 - [{#T}](../../devops/manual/monitoring.md)
 - [{#T}](logging.md)

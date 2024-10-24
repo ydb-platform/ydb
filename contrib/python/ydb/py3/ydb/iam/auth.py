@@ -21,8 +21,13 @@ except ImportError:
         from ydb.public.api.client.yc_public.iam import iam_token_service_pb2_grpc
         from ydb.public.api.client.yc_public.iam import iam_token_service_pb2
     except ImportError:
-        iam_token_service_pb2_grpc = None
-        iam_token_service_pb2 = None
+        try:
+            # This attempt is to enable the IAM auth inside the YDB repository on Arcadia
+            from contrib.ydb.public.api.client.yc_public.iam import iam_token_service_pb2_grpc
+            from contrib.ydb.public.api.client.yc_public.iam import iam_token_service_pb2
+        except ImportError:
+            iam_token_service_pb2_grpc = None
+            iam_token_service_pb2 = None
 
 try:
     import requests

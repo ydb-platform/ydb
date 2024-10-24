@@ -6,6 +6,7 @@ SRCS(
     readers.cpp
     request_migrator.cpp
     table_client.cpp
+    transaction.cpp
 )
 
 PEERDIR(

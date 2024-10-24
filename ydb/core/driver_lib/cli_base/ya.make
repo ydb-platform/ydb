@@ -4,7 +4,6 @@ SRCS(
     cli_cmds_db.cpp
     cli_cmds_discovery.cpp
     cli_cmds_root.cpp
-    cli_cmds_whoami.cpp
     cli_kicli.cpp
 )
 
@@ -15,6 +14,10 @@ PEERDIR(
     ydb/public/lib/ydb_cli/common
     ydb/public/sdk/cpp/client/resources
     ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/client/ydb_driver
+    ydb/public/sdk/cpp/client/ydb_types/credentials
+    ydb/public/lib/ydb_cli/commands/sdk_core_access
+    ydb/public/lib/ydb_cli/commands/ydb_discovery
 )
 
 YQL_LAST_ABI_VERSION()

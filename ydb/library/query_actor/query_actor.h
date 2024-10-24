@@ -33,14 +33,15 @@ protected:
         using TSelf = TTxControl;
 
         static TTxControl CommitTx();
-        static TTxControl BeginTx();
-        static TTxControl BeginAndCommitTx();
+        static TTxControl BeginTx(bool snapshotRead = false);
+        static TTxControl BeginAndCommitTx(bool snapshotRead = false);
         static TTxControl ContinueTx();
         static TTxControl ContinueAndCommitTx();
 
         FLUENT_SETTING_DEFAULT(bool, Begin, false);
         FLUENT_SETTING_DEFAULT(bool, Commit, false);
         FLUENT_SETTING_DEFAULT(bool, Continue, false);
+        FLUENT_SETTING_DEFAULT(bool, SnapshotRead, false);
     };
 
     using TQueryResultHandler = void (TQueryBase::*)();
@@ -114,7 +115,7 @@ private:
 public:
     static constexpr char ActorName[] = "SQL_QUERY";
 
-    explicit TQueryBase(ui64 logComponent, TString sessionId = {}, TString database = {});
+    explicit TQueryBase(ui64 logComponent, TString sessionId = {}, TString database = {}, bool isSystemUser = false);
 
     void Bootstrap();
 
@@ -198,6 +199,7 @@ protected:
     const ui64 LogComponent;
     TString Database;
     TString SessionId;
+    bool IsSystemUser = false;
     TString TxId;
     bool DeleteSession = false;
     bool RunningQuery = false;

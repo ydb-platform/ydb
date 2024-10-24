@@ -7,7 +7,7 @@
  * contains definition that have to (indirectly) be available when included by
  * FRONTEND code.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/storage/lockdefs.h
@@ -36,8 +36,8 @@ typedef int LOCKMODE;
 #define AccessShareLock			1	/* SELECT */
 #define RowShareLock			2	/* SELECT FOR UPDATE/FOR SHARE */
 #define RowExclusiveLock		3	/* INSERT, UPDATE, DELETE */
-#define ShareUpdateExclusiveLock 4	/* VACUUM (non-FULL),ANALYZE, CREATE INDEX
-									 * CONCURRENTLY */
+#define ShareUpdateExclusiveLock 4	/* VACUUM (non-FULL), ANALYZE, CREATE
+									 * INDEX CONCURRENTLY */
 #define ShareLock				5	/* CREATE INDEX (WITHOUT CONCURRENTLY) */
 #define ShareRowExclusiveLock	6	/* like EXCLUSIVE MODE, but allows ROW
 									 * SHARE */
@@ -45,7 +45,7 @@ typedef int LOCKMODE;
 #define AccessExclusiveLock		8	/* ALTER TABLE, DROP TABLE, VACUUM FULL,
 									 * and unqualified LOCK TABLE */
 
-#define MaxLockMode				8
+#define MaxLockMode				8	/* highest standard lock mode */
 
 
 /* WAL representation of an AccessExclusiveLock on a table */

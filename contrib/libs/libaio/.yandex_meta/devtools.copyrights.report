@@ -1,0 +1,111 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 47eaba028b2e2b60c05f6483b813bf1c
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright 2018 Christoph Hellwig.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/io_pgetevents.c [3:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4b04c47b9f7e1bd2ebf179349270f4f5
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+           Copyright 2002 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/aio_ring.h [3:3]
+        src/io_cancel.c [3:3]
+        src/io_destroy.c [3:3]
+        src/io_getevents.c [3:3]
+        src/io_queue_init.c [3:3]
+        src/io_queue_release.c [3:3]
+        src/io_queue_run.c [3:3]
+        src/io_queue_wait.c [3:3]
+        src/io_setup.c [3:3]
+        src/io_submit.c [3:3]
+        src/vsys_def.h [2:2]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 72f083c0521e4e1b7e9043f5ad949ff1
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         * Copyright 2000,2001,2002 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/libaio.h [3:3]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL c0a580767e4df988cbeb3a33fe57d251
+BELONGS dynamic/ya.make static/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [433:438]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL cea1b82351539a871d540971f218116e
+BELONGS dynamic/ya.make static/ya.make
+    License text:
+         Copyright (C) 1991, 1999 Free Software Foundation, Inc.
+             59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+         Everyone is permitted to copy and distribute verbatim copies
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [5:7]
+    Belongs difference:
+        + dynamic/ya.make static/ya.make
+        - ya.make

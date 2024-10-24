@@ -1,26 +1,28 @@
 LIBRARY()
 
 SRCS(
-    kqp_workload_service_queues.cpp
-    kqp_workload_service_tables.cpp
     kqp_workload_service.cpp
 )
 
 PEERDIR(
     ydb/core/cms/console
-    ydb/core/kqp/common/events
-    ydb/core/protos
-    ydb/core/resource_pools
 
-    ydb/library/actors/core
-    ydb/library/query_actor
-    ydb/library/services
-    ydb/library/table_creator
+    ydb/core/fq/libs/compute/common
+
+    ydb/core/kqp/workload_service/actors
+
+    ydb/library/actors/interconnect
 )
 
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE(
+    actors
+    common
+    tables
+)
 
 RECURSE_FOR_TESTS(
     ut

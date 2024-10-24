@@ -53,7 +53,7 @@ namespace {
         Y_ABORT_UNLESS(cells.size() == types.size());
 
         for (TPos pos = 0; pos < cells.size(); ++pos) {
-            result.emplace_back(tags.at(pos), ECellOp::Set, TRawTypeValue(cells.at(pos).AsRef(), types.at(pos)));
+            result.emplace_back(tags.at(pos), ECellOp::Set, TRawTypeValue(cells.at(pos).AsRef(), types.at(pos).GetTypeId()));
         }
 
         return result;
@@ -227,6 +227,10 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
             case NKikimrSchemeOp::ECdcStreamModeUpdate:
                 Persist(tableId, pathId, ERowOp::Upsert, key, keyTags, MakeUpdates(**initialState, valueTags, valueTypes));
                 break;
+            case NKikimrSchemeOp::ECdcStreamModeRestoreIncrBackup: {
+                Y_FAIL_S("Invariant violation: source table must be locked before restore.");
+                break;
+            }
             case NKikimrSchemeOp::ECdcStreamModeNewImage:
             case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages:
                 Persist(tableId, pathId, ERowOp::Upsert, key, keyTags, nullptr, &*initialState, valueTags);
@@ -246,6 +250,8 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
         case NKikimrSchemeOp::ECdcStreamModeUpdate:
             Persist(tableId, pathId, rop, key, keyTags, updates);
             break;
+        case NKikimrSchemeOp::ECdcStreamModeRestoreIncrBackup:
+            Y_FAIL_S("Invariant violation: source table must be locked before restore.");
         case NKikimrSchemeOp::ECdcStreamModeNewImage:
         case NKikimrSchemeOp::ECdcStreamModeOldImage:
         case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages:

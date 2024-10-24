@@ -4,7 +4,7 @@
  * Postgres write-ahead log manager record pointer and
  * timeline number definitions
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/xlogdefs.h
@@ -65,52 +65,18 @@ typedef uint32 TimeLineID;
 typedef uint16 RepOriginId;
 
 /*
- *	Because O_DIRECT bypasses the kernel buffers, and because we never
- *	read those buffers except during crash recovery or if wal_level != minimal,
- *	it is a win to use it in all cases where we sync on each write().  We could
- *	allow O_DIRECT with fsync(), but it is unclear if fsync() could process
- *	writes not buffered in the kernel.  Also, O_DIRECT is never enough to force
- *	data to the drives, it merely tries to bypass the kernel cache, so we still
- *	need O_SYNC/O_DSYNC.
- */
-#ifdef O_DIRECT
-#define PG_O_DIRECT				O_DIRECT
-#else
-#define PG_O_DIRECT				0
-#endif
-
-/*
  * This chunk of hackery attempts to determine which file sync methods
  * are available on the current platform, and to choose an appropriate
- * default method.  We assume that fsync() is always available, and that
- * configure determined whether fdatasync() is.
+ * default method.
+ *
+ * Note that we define our own O_DSYNC on Windows, but not O_SYNC.
  */
-#if defined(O_SYNC)
-#define OPEN_SYNC_FLAG		O_SYNC
-#elif defined(O_FSYNC)
-#define OPEN_SYNC_FLAG		O_FSYNC
-#endif
-
-#if defined(O_DSYNC)
-#if defined(OPEN_SYNC_FLAG)
-/* O_DSYNC is distinct? */
-#if O_DSYNC != OPEN_SYNC_FLAG
-#define OPEN_DATASYNC_FLAG		O_DSYNC
-#endif
-#else							/* !defined(OPEN_SYNC_FLAG) */
-/* Win32 only has O_DSYNC */
-#define OPEN_DATASYNC_FLAG		O_DSYNC
-#endif
-#endif
-
 #if defined(PLATFORM_DEFAULT_SYNC_METHOD)
 #define DEFAULT_SYNC_METHOD		PLATFORM_DEFAULT_SYNC_METHOD
-#elif defined(OPEN_DATASYNC_FLAG)
+#elif defined(O_DSYNC) && (!defined(O_SYNC) || O_DSYNC != O_SYNC)
 #define DEFAULT_SYNC_METHOD		SYNC_METHOD_OPEN_DSYNC
-#elif defined(HAVE_FDATASYNC)
-#define DEFAULT_SYNC_METHOD		SYNC_METHOD_FDATASYNC
 #else
-#define DEFAULT_SYNC_METHOD		SYNC_METHOD_FSYNC
+#define DEFAULT_SYNC_METHOD		SYNC_METHOD_FDATASYNC
 #endif
 
 #endif							/* XLOG_DEFS_H */

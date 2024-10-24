@@ -10,6 +10,7 @@ using namespace NYql::NPureCalc;
 
 TProgramFactory::TProgramFactory(const TProgramFactoryOptions& options)
     : Options_(options)
+    , ExprOutputStream_(Options_.ExprOutputStream)
     , CountersProvider_(nullptr)
 {
     EnsureLoggingInitialized();
@@ -83,6 +84,7 @@ IPullStreamWorkerFactoryPtr TProgramFactory::MakePullStreamWorkerFactory(
         Modules_,
         Options_.LLVMSettings,
         BlockEngineMode_,
+        ExprOutputStream_,
         CountersProvider_,
         mode,
         syntaxVersion,
@@ -111,6 +113,7 @@ IPullListWorkerFactoryPtr TProgramFactory::MakePullListWorkerFactory(
         Modules_,
         Options_.LLVMSettings,
         BlockEngineMode_,
+        ExprOutputStream_,
         CountersProvider_,
         mode,
         syntaxVersion,
@@ -143,6 +146,7 @@ IPushStreamWorkerFactoryPtr TProgramFactory::MakePushStreamWorkerFactory(
         Modules_,
         Options_.LLVMSettings,
         BlockEngineMode_,
+        ExprOutputStream_,
         CountersProvider_,
         mode,
         syntaxVersion,

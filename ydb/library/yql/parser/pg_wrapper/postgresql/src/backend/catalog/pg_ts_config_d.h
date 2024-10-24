@@ -3,7 +3,7 @@
  * pg_ts_config_d.h
  *    Macro definitions for pg_ts_config
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -19,6 +19,8 @@
 #define PG_TS_CONFIG_D_H
 
 #define TSConfigRelationId 3602
+#define TSConfigNameNspIndexId 3608
+#define TSConfigOidIndexId 3712
 
 #define Anum_pg_ts_config_oid 1
 #define Anum_pg_ts_config_cfgname 2

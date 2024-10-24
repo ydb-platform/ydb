@@ -4,7 +4,7 @@
 
 Assume the data in S3 ({{ objstorage-full-name }}) is stored in the following directory structure:
 
-```
+```text
 year=2021
     month=01
     month=02
@@ -14,12 +14,13 @@ year=2022
 ```
 
 When executing the query below, {{ ydb-full-name }} will perform the following actions:
+
 1. Retrieve a full list of subdirectories within '/'.
 2. Attempt to process the name of each subdirectory in the format `year=<DIGITS>`.
 3. For each subdirectory `year=<DIGITS>`, retrieve a list of all subdirectories in the format `month=<DIGITS>`.
 4. Process the read data.
 
-```sql
+```yql
 SELECT
     *
 FROM
@@ -51,7 +52,7 @@ Advanced partitioning is called "partition projection" and is specified through 
 
 Example of specifying advanced partitioning:
 
-```sql
+```yql
 SELECT
     *
 FROM
@@ -86,7 +87,7 @@ The example above specifies that data exists for each year and each month from 2
 
 In general, the advanced partitioning setup looks as follows:
 
-```sql
+```yql
 SELECT
     *
 FROM
@@ -122,10 +123,10 @@ It is used for columns whose values can be represented as integers ranging from 
 | Field name                 | Mandatory | Description                                            | Example values          |
 |----------------------------|-----------|--------------------------------------------------------|-------------------------|
 | `projection.<field_name>.type` | Yes   | Data type of the field                                 | integer                 |
-| `projection.<field_name>.min`  | Yes   | Specifies the minimum allowable value as an integer    | -100<br>004             |
-| `projection.<field_name>.max`  | Yes   | Specifies the maximum allowable value as an integer    | -10<br>5000             |
-| `projection.<field_name>.interval` | No, default is `1` | Specifies the step between elements within the value range. For example, a step of 3 within the range 2 to 10 will result in the values: 2, 5, 8 | 2<br>11             |
-| `projection.<field_name>.digits` | No, default is `0` | Specifies the number of digits in the number. If the number of significant digits in the number is less than the specified value, the value is padded with leading zeros up to the specified number of digits. For example, if .digits=3 is specified and the number 2 is passed, it will be converted to 002 | 2<br>4 |
+| `projection.<field_name>.min`  | Yes   | Specifies the minimum allowable value as an integer    | -100<br/>004             |
+| `projection.<field_name>.max`  | Yes   | Specifies the maximum allowable value as an integer    | -10<br/>5000             |
+| `projection.<field_name>.interval` | No, default is `1` | Specifies the step between elements within the value range. For example, a step of 3 within the range 2 to 10 will result in the values: 2, 5, 8 | 2<br/>11             |
+| `projection.<field_name>.digits` | No, default is `0` | Specifies the number of digits in the number. If the number of significant digits in the number is less than the specified value, the value is padded with leading zeros up to the specified number of digits. For example, if .digits=3 is specified and the number 2 is passed, it will be converted to 002 | 2<br/>4 |
 
 ### Enum field type { #enum_type }
 
@@ -134,7 +135,7 @@ It is used for columns whose values can be represented as a set of enumerated va
 | Field name                   | Mandatory | Description                                           | Example values          |
 |------------------------------|-----------|-------------------------------------------------------|-------------------------|
 | `projection.<field_name>.type` | Yes     | Data type of the field                                | enum                    |
-| `projection.<field_name>.values` | Yes   | Specifies the allowable values, separated by commas. Spaces are not ignored | 1, 2<br>A,B,C |
+| `projection.<field_name>.values` | Yes   | Specifies the allowable values, separated by commas. Spaces are not ignored | 1, 2<br/>A,B,C |
 
 ### Date field type { #date_type }
 
@@ -155,6 +156,7 @@ It is used for columns whose values can be represented as dates. The allowable d
 2. Allowed interval dimensions: YEARS, MONTHS, WEEKS, DAYS, HOURS, MINUTES, SECONDS, MILLISECONDS.
 3. Only one arithmetic operation is allowed in expressions; expressions like `NOW-5MINUTES+6SECONDS` are not supported.
 4. Working with intervals always results in obtaining a valid date, but depending on the dimension, the final results may vary:
+
    - Adding `MONTHS` to a date adds a calendar month, not a fixed number of days. For example, if the current date is `2023-01-31`, adding `1 MONTHS` will result in the date `2023-02-28`.
    - Adding `30 DAYS` to a date adds a fixed number of days. For example, if the current date is `2023-01-31`, adding `30 DAYS` will result in the date `2023-03-02`.
    - The earliest possible date is `1970-01-01` (time 0 in [Unix time](https://en.wikipedia.org/wiki/Unix_time)). If the result of calculations is a date earlier than the minimum, the entire query fails with an error.

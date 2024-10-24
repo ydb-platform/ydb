@@ -51,6 +51,12 @@ DEFINE_BIT_ENUM(ETestBitEnum,
     ((Green)  (0x0004))
 );
 
+enum class EPlainTestEnum
+{
+    First,
+    Second,
+};
+
 template <typename T>
 T PullParserConvert(TYsonStringBuf s)
 {
@@ -69,7 +75,7 @@ void TestSerializationDeserializationPullParser(const TOriginal& original, EYson
     auto yson = ConvertToYsonString(original);
     if (ysonType != EYsonType::Node) {
         auto buf = yson.AsStringBuf();
-        yson = TYsonString(buf.SubString(1, buf.Size() - 2), ysonType);
+        yson = TYsonString(buf.SubString(1, buf.size() - 2), ysonType);
     }
     auto deserialized = PullParserConvert<TResult>(yson);
     EXPECT_EQ(original, deserialized);
@@ -89,9 +95,9 @@ void TestSerializationDeserializationNode(const TOriginal& original)
 }
 
 template <typename TOriginal, typename TResult = TOriginal>
-void TestSerializationDeserialization(const TOriginal& original, EYsonType /*ysonType*/ = EYsonType::Node)
+void TestSerializationDeserialization(const TOriginal& original, EYsonType ysonType = EYsonType::Node)
 {
-    //TestSerializationDeserializationPullParser<TOriginal, TResult>(original, ysonType);
+    TestSerializationDeserializationPullParser<TOriginal, TResult>(original, ysonType);
     TestSerializationDeserializationNode<TOriginal, TResult>(original);
 }
 
@@ -249,7 +255,6 @@ TEST(TSerializationTest, Simple)
         TestSerializationDeserialization(value);
     }
 }
-
 
 TEST(TSerializationTest, PackRefs)
 {
@@ -426,6 +431,13 @@ TEST(TSerializationTest, SerializableArcadiaEnum)
     for (const auto original : GetEnumAllValues<ESerializableArcadiaEnum>()) {
         TestSerializationDeserialization(original);
     }
+}
+
+TEST(TSerializationTest, PlainEnum)
+{
+    TestSerializationDeserialization(EPlainTestEnum::First);
+
+    TestSerializationDeserialization(static_cast<EPlainTestEnum>(42));
 }
 
 TEST(TYTreeSerializationTest, Protobuf)

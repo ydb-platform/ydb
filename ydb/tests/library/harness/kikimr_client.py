@@ -8,6 +8,7 @@ from ydb.tests.library.common.protobuf_ss import TSchemeOperationStatus
 
 import grpc
 import six
+import functools
 
 from google.protobuf.text_format import Parse
 from ydb.core.protos import blobstorage_config_pb2
@@ -17,6 +18,8 @@ import ydb.core.protos.flat_scheme_op_pb2 as flat_scheme_op_pb2
 import ydb.core.protos.grpc_pb2_grpc as grpc_server
 from ydb.core.protos import flat_scheme_op_pb2 as flat_scheme_op
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
+from ydb.public.api.grpc.draft import ydb_tablet_v1_pb2_grpc as grpc_tablet_service
+from ydb.public.api.protos.draft.ydb_tablet_pb2 import RestartTabletRequest
 from collections import namedtuple
 
 
@@ -52,6 +55,36 @@ def to_bytes(v):
     return v
 
 
+class StubWithRetries(object):
+    __slots__ = ('_stub', '_retry_count', '_retry_min_sleep', '_retry_max_sleep', '__dict__')
+
+    def __init__(self, stub, retry_count=4, retry_min_sleep=0.1, retry_max_sleep=5):
+        self._stub = stub
+        self._retry_count = retry_count
+        self._retry_min_sleep = retry_min_sleep
+        self._retry_max_sleep = retry_max_sleep
+
+    def __getattr__(self, method):
+        target = getattr(self._stub, method)
+
+        @functools.wraps(target)
+        def wrapper(*args, **kwargs):
+            retries = self._retry_count
+            next_sleep = self._retry_min_sleep
+            while True:
+                try:
+                    return target(*args, **kwargs)
+                except (RuntimeError, grpc.RpcError):
+                    retries -= 1
+                    if retries <= 0:
+                        raise
+                    time.sleep(next_sleep)
+                    next_sleep = min(next_sleep * 2, self._retry_max_sleep)
+
+        setattr(self, method, wrapper)
+        return wrapper
+
+
 class KiKiMRMessageBusClient(object):
     def __init__(self, server, port, cluster=None, retry_count=1):
         self.server = server
@@ -66,6 +99,7 @@ class KiKiMRMessageBusClient(object):
         ]
         self._channel = grpc.insecure_channel("%s:%s" % (self.server, self.port), options=self._options)
         self._stub = grpc_server.TGRpcServerStub(self._channel)
+        self.tablet_service = StubWithRetries(grpc_tablet_service.TabletServiceStub(self._channel))
 
     def describe(self, path, token):
         request = msgbus.TSchemeDescribe()
@@ -350,9 +384,14 @@ class KiKiMRMessageBusClient(object):
             request.DeadlineInstantMs = deadline_ms
         return self.invoke(request, 'KeyValue')
 
-    def tablet_kill(self, tablet_id):
-        request = msgbus.TTabletKillRequest(TabletID=tablet_id)
-        return self.invoke(request, 'TabletKillRequest')
+    def tablet_kill(self, tablet_id, assert_success=False):
+        request = RestartTabletRequest(tablet_id=tablet_id)
+        response = self.tablet_service.RestartTablet(request)
+        if assert_success:
+            assert response.status == StatusIds.SUCCESS
+            if response.status != StatusIds.SUCCESS:
+                raise RuntimeError('ERROR: {status} {issues}'.format(status=response.status, issues=response.issues))
+        return response
 
     def tablet_state(self, tablet_type=None, tablet_ids=()):
         request = msgbus.TTabletStateRequest()

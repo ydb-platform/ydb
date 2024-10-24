@@ -65,14 +65,6 @@ private:
         virtual void RemoveOperation(const TOperation::TPtr& op) const noexcept = 0;
     };
 
-    struct TDefaultDependencyTrackingLogic : public TDependencyTrackingLogic {
-        explicit TDefaultDependencyTrackingLogic(TDependencyTracker& parent)
-            : TDependencyTrackingLogic(parent) {}
-
-        void AddOperation(const TOperation::TPtr& op) const noexcept override;
-        void RemoveOperation(const TOperation::TPtr& op) const noexcept override;
-    };
-
     struct TMvccDependencyTrackingLogic : public TDependencyTrackingLogic {
         explicit TMvccDependencyTrackingLogic(TDependencyTracker& parent)
             : TDependencyTrackingLogic(parent) {}
@@ -164,7 +156,6 @@ private:
     TIntrusiveList<TOperation, TOperationDelayedWriteListTag> DelayedPlannedWrites;
     TIntrusiveList<TOperation, TOperationDelayedWriteListTag> DelayedImmediateWrites;
 
-    const TDefaultDependencyTrackingLogic DefaultLogic{ *this };
     const TMvccDependencyTrackingLogic MvccLogic{ *this };
     const TFollowerDependencyTrackingLogic FollowerLogic{ *this };
 };

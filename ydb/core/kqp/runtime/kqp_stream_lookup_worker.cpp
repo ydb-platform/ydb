@@ -1,7 +1,9 @@
 #include "kqp_stream_lookup_worker.h"
 
 #include <ydb/core/kqp/common/kqp_resolve.h>
+#include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -57,16 +59,7 @@ std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TKqpSt
 
 NScheme::TTypeInfo UnpackTypeInfo(NKikimr::NMiniKQL::TType* type) {
     YQL_ENSURE(type);
-
-    if (type->GetKind() == NMiniKQL::TType::EKind::Pg) {
-        auto pgType = static_cast<NMiniKQL::TPgType*>(type);
-        auto pgTypeId = pgType->GetTypeId();
-        return NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(pgTypeId));
-    } else {
-        bool isOptional = false;
-        auto dataType = NMiniKQL::UnpackOptionalData(type, isOptional);
-        return NScheme::TTypeInfo(dataType->GetSchemeType());
-    }
+    return NScheme::TypeInfoFromMiniKQLType(type);
 }
 
 struct THashableKey {
@@ -142,22 +135,20 @@ TKqpStreamLookupWorker::TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSetti
     , HolderFactory(holderFactory)
     , InputDesc(inputDesc)
     , TablePath(settings.GetTable().GetPath())
-    , TableId(MakeTableId(settings.GetTable())) {
+    , TableId(MakeTableId(settings.GetTable()))
+    , Strategy(settings.GetLookupStrategy()) {
 
     KeyColumns.reserve(settings.GetKeyColumns().size());
     i32 keyOrder = 0;
     for (const auto& keyColumn : settings.GetKeyColumns()) {
+        NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(keyColumn.GetTypeId(), keyColumn.GetTypeInfo());
+
         KeyColumns.emplace(
             keyColumn.GetName(),
             TSysTables::TTableColumnInfo{
                 keyColumn.GetName(),
                 keyColumn.GetId(),
-                NScheme::TTypeInfo{
-                    static_cast<NScheme::TTypeId>(keyColumn.GetTypeId()),
-                    keyColumn.GetTypeId() == NScheme::NTypeIds::Pg
-                        ? NPg::TypeDescFromPgTypeId(keyColumn.GetTypeInfo().GetPgTypeId())
-                        : nullptr
-                },
+                typeInfo,
                 keyColumn.GetTypeInfo().GetPgTypeMod(),
                 keyOrder++
             }
@@ -173,14 +164,12 @@ TKqpStreamLookupWorker::TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSetti
 
     Columns.reserve(settings.GetColumns().size());
     for (const auto& column : settings.GetColumns()) {
+        NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(column.GetTypeId(), column.GetTypeInfo());
+
         Columns.emplace_back(TSysTables::TTableColumnInfo{
             column.GetName(),
             column.GetId(),
-            NScheme::TTypeInfo{static_cast<NScheme::TTypeId>(column.GetTypeId()),
-                column.GetTypeId() == NScheme::NTypeIds::Pg
-                    ? NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())
-                    : nullptr,
-            },
+            typeInfo,
             column.GetTypeInfo().GetPgTypeMod()
         });
     }
@@ -748,6 +737,11 @@ public:
                 auto leftRowIt = PendingLeftRowsByKey.find(joinKeyCells);
                 YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
 
+                if (Strategy == NKqpProto::EStreamLookupStrategy::SEMI_JOIN && leftRowIt->second.RightRowExist) {
+                    // Semi join should return one result row per key
+                    continue;
+                }
+
                 TReadResultStats rowStats;
                 i64 availableSpace = freeSpace - (i64)resultStats.ResultBytesCount;
                 auto resultRow = TryBuildResultRow(leftRowIt->second, row, rowStats, availableSpace, result.ShardId);
@@ -962,6 +956,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
         case NKqpProto::EStreamLookupStrategy::LOOKUP:
             return std::make_unique<TKqpLookupRows>(std::move(settings), typeEnv, holderFactory, inputDesc);
         case NKqpProto::EStreamLookupStrategy::JOIN:
+        case NKqpProto::EStreamLookupStrategy::SEMI_JOIN:
             return std::make_unique<TKqpJoinRows>(std::move(settings), typeEnv, holderFactory, inputDesc);
         default:
             return {};

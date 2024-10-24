@@ -317,6 +317,7 @@ private:
             TTableRange range(MinKey.GetCells(), MinKeyInclusive, MaxKey.GetCells(), MaxKeyInclusive);
             auto tableScanActor = NSysView::CreateSystemViewScan(ctx.SelfID, 0,
                 ResolveNamesResult->ResultSet.front().TableId,
+                JoinPath(ResolveNamesResult->ResultSet.front().Path),
                 range,
                 columns);
 

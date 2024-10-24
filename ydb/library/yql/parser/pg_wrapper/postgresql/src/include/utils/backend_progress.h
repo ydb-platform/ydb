@@ -6,7 +6,7 @@
  * backend's command progress counters, without ascribing meaning to the
  * individual fields. See commands/progress.h and system_views.sql for that.
  *
- * Copyright (c) 2001-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2001-2023, PostgreSQL Global Development Group
  *
  * src/include/utils/backend_progress.h
  * ----------
@@ -36,6 +36,7 @@ typedef enum ProgressCommandType
 extern void pgstat_progress_start_command(ProgressCommandType cmdtype,
 										  Oid relid);
 extern void pgstat_progress_update_param(int index, int64 val);
+extern void pgstat_progress_incr_param(int index, int64 incr);
 extern void pgstat_progress_update_multi_param(int nparam, const int *index,
 											   const int64 *val);
 extern void pgstat_progress_end_command(void);

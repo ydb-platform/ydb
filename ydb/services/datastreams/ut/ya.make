@@ -19,10 +19,11 @@ PEERDIR(
     ydb/library/grpc/client
     ydb/public/sdk/cpp/client/ydb_topic
     ydb/services/datastreams
+
+    ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils
+    ydb/public/sdk/cpp/client/ydb_topic/ut/ut_utils
 )
 
 YQL_LAST_ABI_VERSION()
-
-REQUIREMENTS(ram:11)
 
 END()

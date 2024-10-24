@@ -11,10 +11,9 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-static NKikimrConfig::TAppConfig GetAppConfig(bool sourceRead, bool streamLookup = true) {
+static NKikimrConfig::TAppConfig GetAppConfig(bool scanSourceRead = false, bool streamLookup = true) {
     auto app = NKikimrConfig::TAppConfig();
-    app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(sourceRead);
-    app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(sourceRead);
+    app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(scanSourceRead);
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(streamLookup);
     return app;
 }
@@ -43,8 +42,9 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         //runtime->SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_DEBUG);
         //runtime->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
     }
-    Y_UNIT_TEST_TWIN(PointLookup, SourceRead) {
-        TKikimrRunner kikimr(GetAppConfig(SourceRead, false));
+
+    Y_UNIT_TEST(PointLookup) {
+        TKikimrRunner kikimr(GetAppConfig(false, false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -70,8 +70,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 20);
     }
 
-    Y_UNIT_TEST_TWIN(Range, SourceRead) {
-        TKikimrRunner kikimr(GetAppConfig(SourceRead));
+    Y_UNIT_TEST(Range) {
+        TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -97,8 +97,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().bytes(), 40);
     }
 
-    Y_UNIT_TEST_TWIN(RangeFullScan, SourceRead) {
-        TKikimrRunner kikimr(GetAppConfig(SourceRead));
+    Y_UNIT_TEST(RangeFullScan) {
+        TKikimrRunner kikimr(GetAppConfig());
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -172,8 +172,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         CompareYson(Expected, res.ResultSetYson);
     }
 
-    Y_UNIT_TEST_TWIN(QuerySeviceRangeFullScan, SourceRead) {
-        TKikimrRunner kikimr(GetAppConfig(SourceRead));
+    Y_UNIT_TEST(QuerySeviceRangeFullScan) {
+        TKikimrRunner kikimr(GetAppConfig());
 
         NYdb::NQuery::TQueryClient client(kikimr.GetDriver());
         auto query = Q_(Query);

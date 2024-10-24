@@ -1,5 +1,9 @@
 #include "ydb_tools.h"
 
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
+#undef INCLUDE_YDB_INTERNAL_H
+
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/pg_dump_parser.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
@@ -54,7 +58,7 @@ void TCommandDump::Config(TConfig& config) {
     config.Opts->AddLongOption('o', "output", "[Required] Path in a local filesystem to a directory to place dump into."
             " Directory should either not exist or be empty.")
         .StoreResult(&FilePath);
-    config.Opts->AddLongOption("scheme-only", "Dump only scheme")
+    config.Opts->AddLongOption("scheme-only", "Dump only scheme including ACL and owner")
         .StoreTrue(&IsSchemeOnly);
     config.Opts->AddLongOption("avoid-copy", "Avoid copying."
             " By default, YDB makes a copy of a table before dumping it to reduce impact on workload and ensure consistency.\n"
@@ -94,7 +98,9 @@ int TCommandDump::Run(TConfig& config) {
         throw yexception() << "Incorrect consistency level. Available options: \"database\", \"table\"" << Endl;
     }
 
-    NYdb::SetVerbosity(config.IsVerbose());
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
+    log->SetFormatter(GetPrefixLogFormatter(""));
+    NYdb::NBackup::SetLog(std::move(log));
 
     try {
         TString relPath = NYdb::RelPathFromAbsolute(config.Database, Path);
@@ -142,6 +148,9 @@ void TCommandRestore::Config(TConfig& config) {
 
     config.Opts->AddLongOption("restore-indexes", "Whether to restore indexes or not")
         .DefaultValue(defaults.RestoreIndexes_).StoreResult(&RestoreIndexes);
+    
+    config.Opts->AddLongOption("restore-acl", "Whether to restore ACL and owner or not")
+        .DefaultValue(defaults.RestoreACL_).StoreResult(&RestoreACL);
 
     config.Opts->AddLongOption("skip-document-tables", TStringBuilder()
             << "Document API tables cannot be restored for now. "
@@ -177,8 +186,10 @@ void TCommandRestore::Config(TConfig& config) {
         .StoreTrue(&UseBulkUpsert)
         .Hidden(); // Deprecated. Using ImportData should be more effective.
 
-    config.Opts->AddLongOption("import-data", "Use ImportData - a more efficient way to upload data with lower consistency level."
-        " Global secondary indexes are not supported in this mode.")
+    config.Opts->AddLongOption("import-data", "Use ImportData - a more efficient way to upload data."
+        " ImportData will throw an error if you try to upload data into an existing table that has"
+        " secondary indexes or is in the process of building them. If you need to restore a table"
+        " with secondary indexes, make sure it's not already present in the scheme.")
         .StoreTrue(&UseImportData);
 
     config.Opts->MutuallyExclusive("bandwidth", "rps");
@@ -191,12 +202,11 @@ void TCommandRestore::Parse(TConfig& config) {
 }
 
 int TCommandRestore::Run(TConfig& config) {
-    NYdb::SetVerbosity(config.IsVerbose());
-
     auto settings = NDump::TRestoreSettings()
         .DryRun(IsDryRun)
         .RestoreData(RestoreData)
         .RestoreIndexes(RestoreIndexes)
+        .RestoreACL(RestoreACL)
         .SkipDocumentTables(SkipDocumentTables)
         .SavePartialResult(SavePartialResult)
         .RowsPerRequest(NYdb::SizeFromString(RowsPerRequest))
@@ -228,7 +238,10 @@ int TCommandRestore::Run(TConfig& config) {
         settings.Mode(NDump::TRestoreSettings::EMode::ImportData);
     }
 
-    NDump::TClient client(CreateDriver(config));
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
+    log->SetFormatter(GetPrefixLogFormatter(""));
+
+    NDump::TClient client(CreateDriver(config), std::move(log));
     ThrowOnError(client.Restore(FilePath, Path, settings));
 
     return EXIT_SUCCESS;
@@ -295,7 +308,7 @@ int TCommandCopy::Run(TConfig& config) {
 ////////////////////////////////////////////////////////////////////////////////
 
 TCommandRename::TCommandRename()
-    : TTableCommand("rename", {}, "Rename or repalce table(s)")
+    : TTableCommand("rename", {}, "Rename or replace table(s)")
 {
     TItem::DefineFields({
         {"Source", {{"source", "src"}, "Source table path", true}},

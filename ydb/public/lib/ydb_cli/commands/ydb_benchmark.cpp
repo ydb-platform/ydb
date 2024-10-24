@@ -1,7 +1,8 @@
 #include "ydb_benchmark.h"
 #include "benchmark_utils.h"
-#include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
+#include <ydb/public/lib/ydb_cli/common/plan2svg.h>
+#include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/string/printf.h>
 #include <util/folder/path.h>
@@ -10,7 +11,7 @@ namespace NYdb::NConsoleClient {
     TWorkloadCommandBenchmark::TWorkloadCommandBenchmark(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload)
         : TWorkloadCommandBase(workload.CommandName, params, NYdbWorkload::TWorkloadParams::ECommandType::Run, workload.Description, workload.Type)
     {
-        
+
     }
 
 
@@ -82,6 +83,13 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
             "generic - use generic queries.")
         .DefaultValue("generic").StoreResult(&QueryExecuterType);
     config.Opts->AddLongOption('v', "verbose", "Verbose output").NoArgument().StoreValue(&VerboseLevel, 1);
+
+    config.Opts->AddLongOption("global-timeout", "Global timeout for all requests")
+        .StoreResult(&GlobalTimeout);
+
+    config.Opts->AddLongOption("request-timeout", "Timeout for each iteration of each request")
+        .StoreResult(&RequestTimeout);
+
 }
 
 TString TWorkloadCommandBenchmark::PatchQuery(const TStringBuf& original) const {
@@ -93,7 +101,7 @@ TString TWorkloadCommandBenchmark::PatchQuery(const TStringBuf& original) const 
 
     std::vector<TStringBuf> lines;
     for (auto& line : StringSplitter(result).Split('\n').SkipEmpty()) {
-        if (line.StartsWith("--")) {
+        if (line.StartsWith("--") && !line.StartsWith("--!")) {
             continue;
         }
 
@@ -167,21 +175,16 @@ struct TTestInfoProduct {
 };
 
 template<class T>
-auto ValueToDouble(const T& value) {
+double DurationToDouble(const T& value) {
     return value;
 }
 
 template<>
-auto ValueToDouble<double>(const double& value) {
-    return  0.001 * value;
+double DurationToDouble<TDuration>(const TDuration& value) {
+    return value.MillisecondsFloat();
 }
 
-template<>
-auto ValueToDouble<TDuration>(const TDuration& value) {
-    return 0.001 *value.MilliSeconds();
-}
-
-template<class T, bool is_float = std::is_floating_point<T>::value>
+template<class T, bool isDuration>
 struct TValueToTable {
     static void Do(TPrettyTable::TRow& tableRow, ui32 index, const T& value) {
         if (value) {
@@ -193,19 +196,12 @@ struct TValueToTable {
 template<class T>
 struct TValueToTable<T, true>{
     static void Do(TPrettyTable::TRow& tableRow, ui32 index, const T& value) {
-        tableRow.Column(index, Sprintf("%7.3f", value));
+        tableRow.Column(index, Sprintf("%7.3f", 0.001 * DurationToDouble(value)));
     }
 };
 
-template<class T, bool is_integer = std::is_integral<T>::value>
+template<class T, bool isDuration>
 struct TValueToCsv {
-    static void Do(IOutputStream& csv, const T& value) {
-        csv << value;
-    }
-};
-
-template<class T>
-struct TValueToCsv<T, true> {
     static void Do(IOutputStream& csv, const T& value) {
         if (value) {
             csv << value;
@@ -213,7 +209,16 @@ struct TValueToCsv<T, true> {
     }
 };
 
-template<class T, bool is_arr = std::is_arithmetic<T>::value>
+template<class T>
+struct TValueToCsv<T, true> {
+    static void Do(IOutputStream& csv, const T& value) {
+        if (value) {
+            csv << 0.001 * DurationToDouble(value);
+        }
+    }
+};
+
+template<class T, bool isDuration, bool is_arr = std::is_arithmetic<T>::value>
 struct TValueToJson {
     static void Do(NJson::TJsonValue& json, ui32 index, ui32 queryN, const T& value) {
         Y_UNUSED(json);
@@ -223,27 +228,33 @@ struct TValueToJson {
     }
 };
 
+template<class T, bool is_arr>
+struct TValueToJson<T, true, is_arr> {
+    static void Do(NJson::TJsonValue& json, ui32 index, ui32 queryN, const T& value) {
+        json.AppendValue(BenchmarkUtils::GetSensorValue(ColumnNames[index], DurationToDouble(value), queryN));
+    }
+};
+
 template<class T>
-struct TValueToJson<T, true> {
+struct TValueToJson<T, false, true> {
     static void Do(NJson::TJsonValue& json, ui32 index, ui32 queryN, const T& value) {
         json.AppendValue(BenchmarkUtils::GetSensorValue(ColumnNames[index], value, queryN));
     }
 };
 
 
-template <class T>
+template <bool isDuration = false, class T>
 void CollectField(TPrettyTable::TRow& tableRow, ui32 index, IOutputStream* csv, NJson::TJsonValue* json, TStringBuf rowName, const T& value) {
-    auto v = ValueToDouble(value);
-    TValueToTable<decltype(v)>::Do(tableRow, index, v);
+    TValueToTable<T, isDuration>::Do(tableRow, index, value);
     if (csv) {
         if (index) {
             *csv << ",";
         }
-        TValueToCsv<decltype(v)>::Do(*csv, v);
+        TValueToCsv<T, isDuration>::Do(*csv, value);
     }
     auto queryN = rowName;
     if(json && queryN.SkipPrefix("Query")) {
-        TValueToJson<decltype(v)>::Do(*json, index, FromString<ui32>(queryN), v);
+        TValueToJson<T, isDuration>::Do(*json, index, FromString<ui32>(queryN), value);
     }
 }
 
@@ -252,16 +263,16 @@ void CollectStats(TPrettyTable& table, IOutputStream* csv, NJson::TJsonValue* js
     auto& row = table.AddRow();
     ui32 index = 0;
     CollectField(row, index++, csv, json, name, name);
-    CollectField(row, index++, csv, json, name, testInfo.ColdTime);
-    CollectField(row, index++, csv, json, name, testInfo.Min);
-    CollectField(row, index++, csv, json, name, testInfo.Max);
-    CollectField(row, index++, csv, json, name, testInfo.Mean);
-    CollectField(row, index++, csv, json, name, testInfo.Median);
-    CollectField(row, index++, csv, json, name, testInfo.UnixBench);
-    CollectField(row, index++, csv, json, name, testInfo.Std);
-    CollectField(row, index++, csv, json, name, testInfo.RttMin);
-    CollectField(row, index++, csv, json, name, testInfo.RttMax);
-    CollectField(row, index++, csv, json, name, testInfo.RttMean);
+    CollectField<true>(row, index++, csv, json, name, testInfo.ColdTime);
+    CollectField<true>(row, index++, csv, json, name, testInfo.Min);
+    CollectField<true>(row, index++, csv, json, name, testInfo.Max);
+    CollectField<true>(row, index++, csv, json, name, testInfo.Mean);
+    CollectField<true>(row, index++, csv, json, name, testInfo.Median);
+    CollectField<true>(row, index++, csv, json, name, testInfo.UnixBench);
+    CollectField<true>(row, index++, csv, json, name, testInfo.Std);
+    CollectField<true>(row, index++, csv, json, name, testInfo.RttMin);
+    CollectField<true>(row, index++, csv, json, name, testInfo.RttMax);
+    CollectField<true>(row, index++, csv, json, name, testInfo.RttMean);
     CollectField(row, index++, csv, json, name, sCount);
     CollectField(row, index++, csv, json, name, fCount);
     CollectField(row, index++, csv, json, name, dCount);
@@ -300,7 +311,8 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
 
     std::map<ui32, TTestInfo> queryRuns;
     auto qIter = qtokens.cbegin();
-    for (ui32 queryN = 0; queryN < qtokens.size(); ++queryN, ++qIter) {
+    GlobalDeadline = (GlobalTimeout != TDuration::Zero()) ? Now() + GlobalTimeout : TInstant::Max();
+    for (ui32 queryN = 0; queryN < qtokens.size() && Now() < GlobalDeadline; ++queryN, ++qIter) {
         const auto& qInfo = *qIter;
         if (!NeedRun(queryN)) {
             continue;
@@ -327,14 +339,23 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
         ui32 failsCount = 0;
         ui32 diffsCount = 0;
         std::optional<TString> prevResult;
-        bool planSaved = false;
-        for (ui32 i = 0; i < IterationsCount; ++i) {
-            auto t1 = TInstant::Now();
-            TQueryBenchmarkResult res = TQueryBenchmarkResult::Error("undefined");
+        if (PlanFileName) {
+            TQueryBenchmarkResult res = TQueryBenchmarkResult::Error("undefined", "undefined", "undefined");
             try {
-                res = Execute(query, client);
+                res = Explain(query, client, GetDeadline());
             } catch (...) {
-                res = TQueryBenchmarkResult::Error(CurrentExceptionMessage());
+                res = TQueryBenchmarkResult::Error(CurrentExceptionMessage(), "", "");
+            }
+            SavePlans(res, queryN, "explain");
+        }
+
+        for (ui32 i = 0; i < IterationsCount && Now() < GlobalDeadline; ++i) {
+            auto t1 = TInstant::Now();
+            TQueryBenchmarkResult res = TQueryBenchmarkResult::Error("undefined", "undefined", "undefined");
+            try {
+                res = Execute(query, client, GetDeadline());
+            } catch (...) {
+                res = TQueryBenchmarkResult::Error(CurrentExceptionMessage(), "", "");
             }
             auto duration = TInstant::Now() - t1;
 
@@ -361,30 +382,14 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
             } else {
                 ++failsCount;
                 Cout << "failed\t" << duration << " seconds" << Endl;
-                Cerr << queryN << ": " << query << Endl
+                Cerr << queryN << ":" << Endl
+                    << "iteration " << i << Endl
                     << res.GetErrorInfo() << Endl;
                 Cerr << "Query text:" << Endl;
                 Cerr << query << Endl << Endl;
                 Sleep(TDuration::Seconds(1));
             }
-            if (!planSaved && PlanFileName) {
-                TFsPath(PlanFileName).Parent().MkDirs();
-                {
-                    TFileOutput out(PlanFileName + ".table");
-                    TQueryPlanPrinter queryPlanPrinter(EOutputFormat::PrettyTable, true, out, 120);
-                    queryPlanPrinter.Print(res.GetQueryPlan());
-                }
-                {
-                    TFileOutput out(PlanFileName + ".json");
-                    TQueryPlanPrinter queryPlanPrinter(EOutputFormat::JsonBase64, true, out, 120);
-                    queryPlanPrinter.Print(res.GetQueryPlan());
-                }
-                {
-                    TFileOutput out(PlanFileName + ".ast");
-                    out << res.GetPlanAst();
-                }
-                planSaved = true;
-            }
+            SavePlans(res, queryN, ToString(i));
         }
 
         auto [inserted, success] = queryRuns.emplace(queryN, TTestInfo(std::move(clientTimings), std::move(serverTimings)));
@@ -449,6 +454,54 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
     }
 
     return !someFailQueries;
+}
+
+void TWorkloadCommandBenchmark::SavePlans(const BenchmarkUtils::TQueryBenchmarkResult& res, ui32 queryNum, const TStringBuf name) const {
+    if (!PlanFileName) {
+        return;
+    }
+    TFsPath(PlanFileName).Parent().MkDirs();
+    const TString planFName =  TStringBuilder() << PlanFileName << "." << queryNum << "." << name << ".";
+    if (res.GetQueryPlan()) {
+        {
+            TFileOutput out(planFName + "table");
+            TQueryPlanPrinter queryPlanPrinter(EDataFormat::PrettyTable, true, out, 120);
+            queryPlanPrinter.Print(res.GetQueryPlan());
+        }
+        {
+            TFileOutput out(planFName + "json");
+            TQueryPlanPrinter queryPlanPrinter(EDataFormat::JsonBase64, true, out, 120);
+            queryPlanPrinter.Print(res.GetQueryPlan());
+        }
+        {
+            TPlanVisualizer pv;
+            TFileOutput out(planFName + "svg");
+            try {
+                pv.LoadPlans(res.GetQueryPlan());
+                out << pv.PrintSvg();
+            } catch (std::exception& e) {
+                out << "<svg width='1024' height='256' xmlns='http://www.w3.org/2000/svg'><text>" << e.what() << "<text></svg>";
+            }
+        }
+    }
+    if (res.GetPlanAst()) {
+        TFileOutput out(planFName + "ast");
+        out << res.GetPlanAst();
+    }
+}
+
+BenchmarkUtils::TQueryBenchmarkDeadline TWorkloadCommandBenchmark::GetDeadline() const {
+    BenchmarkUtils::TQueryBenchmarkDeadline result;
+    if (GlobalDeadline != TInstant::Max()) {
+        result.Deadline = GlobalDeadline;
+        result.Name = "Global ";
+    }
+    TInstant requestDeadline = (RequestTimeout == TDuration::Zero()) ? TInstant::Max() : (Now() + RequestTimeout);
+    if (requestDeadline < result.Deadline) {
+        result.Deadline = requestDeadline;
+        result.Name = "Request";
+    }
+    return result;
 }
 
 int TWorkloadCommandBenchmark::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& /*config*/) {

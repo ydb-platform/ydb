@@ -39,8 +39,8 @@ void TTopicSdkTestSetup::CreateTopic(const TString& path, const TString& consume
     if (maxPartitionCount.has_value() && maxPartitionCount.value() > partitionCount) {
         topics
             .BeginConfigurePartitioningSettings()
-            .BeginConfigureAutoscalingSettings()
-            .Strategy(EAutoscalingStrategy::ScaleUp);
+            .BeginConfigureAutoPartitioningSettings()
+            .Strategy(EAutoPartitioningStrategy::ScaleUp);
     }
 
     TConsumerSettings<TCreateTopicSettings> consumers(topics, consumer);
@@ -50,6 +50,18 @@ void TTopicSdkTestSetup::CreateTopic(const TString& path, const TString& consume
     UNIT_ASSERT(status.IsSuccess());
 
     Server.WaitInit(path);
+}
+
+void TTopicSdkTestSetup::DescribeTopic(const TString& path)
+{
+    TTopicClient client(MakeDriver());
+
+    TDescribeTopicSettings settings;
+    settings.IncludeStats(true);
+    settings.IncludeLocation(true);
+
+    auto status = client.DescribeTopic(path, settings).GetValueSync();
+    UNIT_ASSERT(status.IsSuccess());
 }
 
 TString TTopicSdkTestSetup::GetEndpoint() const {
@@ -123,4 +135,10 @@ TDriver TTopicSdkTestSetup::MakeDriver(const TDriverConfig& config) const
 TTopicClient TTopicSdkTestSetup::MakeClient() const
 {
     return TTopicClient(MakeDriver());
+}
+
+NYdb::NTable::TTableClient TTopicSdkTestSetup::MakeTableClient() const
+{
+    return NYdb::NTable::TTableClient(MakeDriver(), NYdb::NTable::TClientSettings()
+            .UseQueryCache(false));
 }

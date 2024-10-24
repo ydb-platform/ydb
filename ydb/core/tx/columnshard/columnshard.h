@@ -3,6 +3,7 @@
 #include "blob.h"
 #include "common/snapshot.h"
 
+#include <ydb/core/protos/statistics.pb.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/message_seqno.h>
@@ -97,6 +98,7 @@ struct TEvColumnShard {
     struct TEvInternalScan: public TEventLocal<TEvInternalScan, EvInternalScan> {
     private:
         YDB_READONLY(ui64, PathId, 0);
+        YDB_READONLY_DEF(std::optional<ui64>, LockId);
         YDB_ACCESSOR(bool, Reverse, false);
         YDB_ACCESSOR(ui32, ItemsLimit, 0);
         YDB_READONLY_DEF(std::vector<ui32>, ColumnIds);
@@ -115,8 +117,9 @@ struct TEvColumnShard {
             ColumnNames.emplace_back(columnName);
         }
 
-        TEvInternalScan(const ui64 pathId)
+        TEvInternalScan(const ui64 pathId, const std::optional<ui64> lockId)
             : PathId(pathId)
+            , LockId(lockId)
         {
 
         }
@@ -148,13 +151,11 @@ struct TEvColumnShard {
         }
 
         TEvProposeTransaction(NKikimrTxColumnShard::ETransactionKind txKind, ui64 ssId, const TActorId& source,
-            ui64 txId, TString txBody, const NKikimrSubDomains::TProcessingParams& processingParams, const std::optional<TMessageSeqNo>& seqNo = {}, const ui32 flags = 0)
+            ui64 txId, TString txBody, const TMessageSeqNo& seqNo, const NKikimrSubDomains::TProcessingParams& processingParams, const ui32 flags = 0)
             : TEvProposeTransaction(txKind, ssId, source, txId, std::move(txBody), flags)
         {
             Record.MutableProcessingParams()->CopyFrom(processingParams);
-            if (seqNo) {
-                *Record.MutableSeqNo() = seqNo->SerializeToProto();
-            }
+            *Record.MutableSeqNo() = seqNo.SerializeToProto();
         }
 
         TActorId GetSource() const {
@@ -289,7 +290,6 @@ struct TEvColumnShard {
     };
 
     using TEvScan = TEvDataShard::TEvKqpScan;
-
 };
 
 inline auto& Proto(TEvColumnShard::TEvProposeTransaction* ev) {

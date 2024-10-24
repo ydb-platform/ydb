@@ -306,5 +306,8 @@ namespace NActors {
             return CpuManager->GetBasicExecutorPools();
         }
 
+        void GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const;
+        void GetExecutorPoolStates(std::vector<TExecutorPoolState> &states) const;
+
     };
 }

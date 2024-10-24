@@ -20,6 +20,4 @@ SRCS(
     user_account_service_ut.cpp
 )
 
-REQUIREMENTS(ram:10)
-
 END()

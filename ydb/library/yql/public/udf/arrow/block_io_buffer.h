@@ -2,6 +2,7 @@
 
 #include <util/generic/strbuf.h>
 #include <util/generic/vector.h>
+#include <util/system/unaligned_mem.h>
 
 namespace NYql {
 namespace NUdf {
@@ -14,7 +15,7 @@ public:
 
     char PopChar() {
         Ensure(1);
-        char c = Buf_.Data()[Pos_];
+        char c = Buf_.data()[Pos_];
         ++Pos_;
         return c;
     }
@@ -22,7 +23,7 @@ public:
     template <typename T>
     T PopNumber() {
         Ensure(sizeof(T));
-        T t = *(const T*)(Buf_.Data() + Pos_);
+        T t = ReadUnaligned<T>(Buf_.data() + Pos_);
         Pos_ += sizeof(T);
         return t;
     }
@@ -30,14 +31,14 @@ public:
     std::string_view PopString() {
         ui32 size = PopNumber<ui32>();
         Ensure(size);
-        std::string_view result(Buf_.Data() + Pos_, size);
+        std::string_view result(Buf_.data() + Pos_, size);
         Pos_ += size;
         return result;
     }
 
 private:
     void Ensure(size_t delta) {
-        Y_ENSURE(Pos_ + delta <= Buf_.Size(), "Unexpected end of buffer");
+        Y_ENSURE(Pos_ + delta <= Buf_.size(), "Unexpected end of buffer");
     }
 
 private:
@@ -56,7 +57,7 @@ public:
     template <typename T>
     void PushNumber(T t) {
         Ensure(sizeof(T));
-        *(T*)&Vec_[Pos_] = t;
+        WriteUnaligned<T>(Vec_.data() + Pos_, t);
         Pos_ += sizeof(T);
     }
 

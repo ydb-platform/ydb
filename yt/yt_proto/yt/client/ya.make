@@ -38,6 +38,8 @@ SRCS(
     table_chunk_format/proto/column_meta.proto
     table_chunk_format/proto/wire_protocol.proto
 
+    table_client/proto/versioned_io_options.proto
+
     tablet_client/proto/lock_mask.proto
 
     transaction_client/proto/timestamp_service.proto

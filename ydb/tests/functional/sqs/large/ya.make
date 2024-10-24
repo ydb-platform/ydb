@@ -7,19 +7,12 @@ TEST_SRCS(
     test_leader_start_inflight.py
 )
 
-IF (SANITIZER_TYPE == "thread")
+IF (SANITIZER_TYPE)
     TIMEOUT(2400)
     SIZE(LARGE)
     TAG(ya:fat)
-    REQUIREMENTS(
-        cpu:4
-        ram:32
-    )
+    REQUIREMENTS(ram:32 cpu:4)
 ELSE()
-    REQUIREMENTS(
-        cpu:4
-        ram:32
-    )
     TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()

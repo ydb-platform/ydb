@@ -96,6 +96,12 @@ protected:
                 .DoProcessMethPtr = GetMethodPtr(&TDerived::DoProcess)
             }) {}
 
+#ifndef MKQL_DISABLE_CODEGEN
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtrVal, BasicBlock*& genToBlock) const final {
+        return TSimpleStatefulWideFlowCodegeneratorNodeLLVMBase::DoGenGetValues(ctx, statePtrVal, genToBlock);
+    }
+#endif
+
 public:
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         if (state.IsInvalid()) {

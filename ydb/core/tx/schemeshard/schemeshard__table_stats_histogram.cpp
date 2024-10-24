@@ -34,11 +34,41 @@ static bool IsIntegerType(NScheme::TTypeInfo type) {
     }
 }
 
-TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram& histogram, const TConstArrayRef<NScheme::TTypeInfo> &keyColumnTypes) {
-    ui64 bucketsCount = histogram.BucketsSize();
-    ui64 idxLo = bucketsCount * 0.33;
-    ui64 idxMed = bucketsCount * 0.5;
-    ui64 idxHi = bucketsCount * 0.66;
+TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram& histogram, ui64 total, const TConstArrayRef<NScheme::TTypeInfo> &keyColumnTypes) {
+    if (histogram.GetBuckets().empty()) {
+        return {};
+    }
+
+    ui64 idxLo = Max<ui64>(), idxMed = Max<ui64>(), idxHi = Max<ui64>();
+    { // search for median and acceptable bounds range so that after the split smallest size is >= 25%
+        ui64 idxMedDiff = Max<ui64>(), idx = 0;
+        for (const auto& point : histogram.GetBuckets()) {
+            ui64 leftSize = Min(point.GetValue(), total);
+            ui64 rightSize = total - leftSize;
+            
+            // search for a median point at which abs(leftSize - rightSize) is minimum
+            ui64 sizesDiff = Max(leftSize, rightSize) - Min(leftSize, rightSize);
+            if (idxMedDiff > sizesDiff) {
+                idxMed = idx;
+                idxMedDiff = sizesDiff;
+            }
+
+            if (leftSize * 4 >= total && idxLo == Max<ui64>()) {
+                idxLo = idx; // first point at which leftSize >= 25%
+            }
+            if (rightSize * 4 >= total) {
+                idxHi = idx; // last point at which rightSize >= 25%
+            }
+
+            idx++;
+        }
+
+        bool canSplit = idxLo != Max<ui64>() && idxLo <= idxMed && idxMed <= idxHi && idxHi != Max<ui64>();
+
+        if (!canSplit) {
+            return {};
+        }
+    }
 
     TSerializedCellVec keyLo(histogram.GetBuckets(idxLo).GetKey());
     TSerializedCellVec keyMed(histogram.GetBuckets(idxMed).GetKey());
@@ -302,7 +332,8 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
                     << " for pathId " << tableId
                     << " state '" << DatashardStateName(rec.GetShardState()).data() << "'"
                     << " dataSize " << dataSize
-                    << " rowCount " << rowCount);
+                    << " rowCount " << rowCount
+                    << " dataSizeHistogram buckets " << rec.GetTableStats().GetDataSizeHistogram().BucketsSize());
 
     if (!Self->Tables.contains(tableId))
         return true;
@@ -353,11 +384,14 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
     } else {
         // Choose number of parts and split boundaries
         const auto& histogram = rec.GetTableStats().GetDataSizeHistogram();
-        if (histogram.BucketsSize() < 2) {
+
+        splitKey = ChooseSplitKeyByHistogram(histogram, dataSize, keyColumnTypes);
+        if (splitKey.GetBuffer().empty()) {
+            LOG_WARN(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Failed to find proper split key (initially) for '%s' of datashard %" PRIu64,
+                ToString(splitReason), datashardId);
             return true;
         }
-
-        splitKey = ChooseSplitKeyByHistogram(histogram, keyColumnTypes);
 
         // Split key must not be less than the first key
         TSerializedCellVec lowestKey(histogram.GetBuckets(0).GetKey());
@@ -366,7 +400,7 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
                                     lowestKey.GetCells().size(), splitKey.GetCells().size()))
         {
             LOG_WARN(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "Failed to find proper split key for '%s' of datashard %" PRIu64,
+                     "Failed to find proper split key (less than first) for '%s' of datashard %" PRIu64,
                       ToString(splitReason), datashardId);
             return true;
         }

@@ -298,7 +298,7 @@ void ExportTypeToProtoImpl(TType* type, Ydb::Type& res, const TVector<ui32>* col
         case TType::EKind::Pg: {
             auto* pgType = static_cast<TPgType*>(type);
             auto typeId = pgType->GetTypeId();
-            auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(typeId);
+            auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(typeId);
             MKQL_ENSURE(typeDesc, TStringBuilder() << "Unknown PG type id: " << typeId);
 
             auto* pg = res.mutable_pg_type();
@@ -1382,7 +1382,7 @@ TType* TProtoImporter::ImportTypeFromProto(const Ydb::Type& input) {
             return env.GetTypeOfEmptyDictLazy();
         case Ydb::Type::kPgType: {
             if (const auto& typeName = input.pg_type().type_name()) {
-                auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
+                auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
                 MKQL_ENSURE(typeDesc, TStringBuilder() << "Unknown PG type name: " << typeName);
                 return TPgType::Create(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc), env);
             } else {
@@ -1601,7 +1601,7 @@ Y_FORCE_INLINE NUdf::TUnboxedValue KindDataImport(const TType* type, const Ydb::
         case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
             CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "JsonDocument");
             const auto binaryJson = NBinaryJson::SerializeToBinaryJson(value.text_value());
-            if (!binaryJson.Defined()) {
+            if (binaryJson.IsFail()) {
                 throw yexception() << "Invalid JsonDocument value";
             }
             return MakeString(TStringBuf(binaryJson->Data(), binaryJson->Size()));
@@ -1813,7 +1813,7 @@ NUdf::TUnboxedValue TProtoImporter::ImportValueFromProto(const TType* type, cons
                 return NYql::NCommon::PgValueFromNativeBinary(value.GetBytes(), pgType->GetTypeId());
             }
             if (value.HasText()) {
-                return NYql::NCommon::PgValueFromNativeText(value.GetBytes(), pgType->GetTypeId());
+                return NYql::NCommon::PgValueFromNativeText(value.GetText(), pgType->GetTypeId());
             }
             MKQL_ENSURE(false, "malformed pg value");
         }

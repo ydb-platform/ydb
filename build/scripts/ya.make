@@ -15,7 +15,6 @@ IF (PY2)
         fetch_from.py
         fetch_from_archive.py
         fetch_from_mds.py
-        fetch_from_npm.py
         fetch_from_sandbox.py
         fetch_resource.py
         fix_py2_protobuf.py
@@ -46,7 +45,6 @@ ELSEIF (PY3)
         build_dll_and_java.py
         build_info_gen.py
         build_java_codenav_index.py
-        build_java_with_error_prone.py
         build_java_with_error_prone2.py
         cat.py
         cgo1_wrapper.py

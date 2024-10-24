@@ -40,6 +40,15 @@ using namespace NKikimr::NMiniKQL;
 
 using namespace Yql::DqsProto;
 
+namespace {
+    TString RemoveAliases(TString attributeName) {
+        if (auto idx = attributeName.find_last_of('.'); idx != TString::npos) {
+            return attributeName.substr(idx+1);
+        }
+        return attributeName;
+    }
+}
+
 namespace NYql::NDqs {
     namespace {
         TVector<TDqPhyStage> GetStages(const TExprNode::TPtr& exprRoot) {
@@ -433,7 +442,7 @@ namespace NYql::NDqs {
 
             bool enableSpilling = false;
             if (task.Outputs.size() > 1) {
-                enableSpilling = Settings->IsSpillingEnabled();
+                enableSpilling = Settings->IsSpillingInChannelsEnabled();
             }
             for (auto& output : task.Outputs) {
                 FillOutputDesc(*taskDesc.AddOutputs(), output, enableSpilling);
@@ -448,7 +457,7 @@ namespace NYql::NDqs {
             taskMeta.SetStageId(publicId);
             taskDesc.MutableMeta()->PackFrom(taskMeta);
             taskDesc.SetStageId(stageId);
-            taskDesc.SetEnableSpilling(Settings->IsSpillingEnabled());
+            taskDesc.SetEnableSpilling(Settings->GetEnabledSpillingNodes());
 
             if (Settings->DisableLLVMForBlockStages.Get().GetOrElse(true)) {
                 auto& stage = TasksGraph.GetStageInfo(task.StageId).Meta.Stage;
@@ -540,7 +549,7 @@ namespace NYql::NDqs {
             TString sourceType;
             if (dqSource) {
                 sourceSettings.ConstructInPlace();
-                dqIntegration->FillSourceSettings(*read, *sourceSettings, sourceType, maxPartitions);
+                dqIntegration->FillSourceSettings(*read, *sourceSettings, sourceType, maxPartitions, ExprContext);
                 YQL_ENSURE(!sourceSettings->type_url().empty(), "Data source provider \"" << dataSourceName << "\" did't fill dq source settings for its dq source node");
                 YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceName << "\" did't fill dq source settings type for its dq source node");
             }
@@ -593,10 +602,10 @@ namespace NYql::NDqs {
         settings.SetRightLabel(streamLookup.RightLabel().StringValue());
         settings.SetJoinType(streamLookup.JoinType().StringValue());
         for (const auto& k: streamLookup.LeftJoinKeyNames()) {
-            *settings.AddLeftJoinKeyNames() = k.StringValue();
+            *settings.AddLeftJoinKeyNames() = RemoveAliases(k.StringValue());
         }
         for (const auto& k: streamLookup.RightJoinKeyNames()) {
-            *settings.AddRightJoinKeyNames() = k.StringValue();
+            *settings.AddRightJoinKeyNames() = RemoveAliases(k.StringValue());
         }
         const auto narrowInputRowType = GetSeqItemType(streamLookup.Output().Ptr()->GetTypeAnn());
         Y_ABORT_UNLESS(narrowInputRowType->GetKind() == ETypeAnnotationKind::Struct);
@@ -604,6 +613,9 @@ namespace NYql::NDqs {
         const auto narrowOutputRowType = GetSeqItemType(streamLookup.Ptr()->GetTypeAnn());
         Y_ABORT_UNLESS(narrowOutputRowType->GetKind() == ETypeAnnotationKind::Struct);
         settings.SetNarrowOutputRowType(NYql::NCommon::GetSerializedTypeAnnotation(narrowOutputRowType));
+        settings.SetMaxDelayedRows(1'000'000); //TODO configure me
+        settings.SetCacheLimit(1'000'000); //TODO configure me
+        settings.SetCacheTtlSeconds(60); //TODO configure me
 
         const auto inputRowType = GetSeqItemType(streamLookup.Output().Stage().Program().Ref().GetTypeAnn());
         const auto outputRowType = GetSeqItemType(stage.Program().Args().Arg(inputIndex).Ref().GetTypeAnn());
@@ -676,10 +688,11 @@ namespace NYql::NDqs {
                 Y_ABORT_UNLESS(false);
             }
 */
+            TSpillingSettings spillingSettings{Settings->GetEnabledSpillingNodes()};
             StagePrograms[stageInfo.first] = std::make_tuple(
                 NDq::BuildProgram(
                     stage.Program(), *paramsType, compiler, typeEnv, *FunctionRegistry,
-                    ExprContext, fakeReads),
+                    ExprContext, fakeReads, spillingSettings),
                 stageId, publicId);
         }
     }

@@ -1,4 +1,7 @@
 #include "tpcds.h"
+#include "data_generator.h"
+
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <library/cpp/resource/resource.h>
 #include <util/stream/file.h>
@@ -6,12 +9,30 @@
 namespace NYdbWorkload {
 
 TTpcdsWorkloadGenerator::TTpcdsWorkloadGenerator(const TTpcdsWorkloadParams& params)
-    : TWorkloadGeneratorBase(params)
+    : TTpcBaseWorkloadGenerator(params)
     , Params(params)
 {}
 
 TString TTpcdsWorkloadGenerator::DoGetDDLQueries() const {
     auto schema = NResource::Find("tpcds_schema.sql");
+    TString decimalType_5_2, decimalType_7_2, decimalType_15_2;
+    switch (Params.GetFloatMode()) {
+    case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
+        decimalType_5_2 = decimalType_7_2 = decimalType_15_2 = "Double";
+        break;
+    case TTpcBaseWorkloadParams::EFloatMode::DECIMAL:
+        decimalType_5_2 = "Decimal(5,2)";
+        decimalType_7_2 = "Decimal(7,2)";
+        decimalType_15_2 = "Decimal(15,2)";
+        break;
+    case TTpcBaseWorkloadParams::EFloatMode::DECIMAL_YDB:
+        decimalType_5_2 = decimalType_7_2 = decimalType_15_2 = "Decimal(" + ::ToString(NKikimr::NScheme::DECIMAL_PRECISION)
+                     + "," + ::ToString(NKikimr::NScheme::DECIMAL_SCALE) + ")";
+        break;
+    }
+    SubstGlobal(schema, "{decimal_5_2_type}", decimalType_5_2);
+    SubstGlobal(schema, "{decimal_7_2_type}", decimalType_7_2);
+    SubstGlobal(schema, "{decimal_15_2_type}", decimalType_15_2);
     return schema;
 }
 
@@ -70,8 +91,8 @@ TQueryInfoList TTpcdsWorkloadGenerator::GetWorkload(int type) {
                 TStringBuilder() << "`" << Params.GetFullTableName(name) << "`"
             );
         };
-        SubstGlobal(query, "{% include 'header.sql.jinja' %}", "");
-        SubstGlobal(query, "{path}"      , Params.GetFullTableName(nullptr) + "/");
+        PatchQuery(query);
+        SubstGlobal(query, "{path}", Params.GetFullTableName(nullptr) + "/");
         substTable("customer_address");
         substTable("customer_demographics");
         substTable("date_dim");
@@ -107,7 +128,7 @@ TVector<IWorkloadQueryGenerator::TWorkloadType> TTpcdsWorkloadGenerator::GetSupp
 }
 
 void TTpcdsWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
-    TWorkloadBaseParams::ConfigureOpts(opts, commandType, workloadType);
+    TTpcBaseWorkloadParams::ConfigureOpts(opts, commandType, workloadType);
     switch (commandType) {
     case TWorkloadParams::ECommandType::Run:
         opts.AddLongOption("ext-queries-dir", "Directory with external queries. Naming have to be q[0-N].sql")
@@ -126,9 +147,9 @@ THolder<IWorkloadQueryGenerator> TTpcdsWorkloadParams::CreateGenerator() const {
 TString TTpcdsWorkloadParams::GetWorkloadName() const {
     return "TPC-DS";
 }
-/*
+
 TWorkloadDataInitializer::TList TTpcdsWorkloadParams::CreateDataInitializers() const {
     return {std::make_shared<TTpcdsWorkloadDataInitializerGenerator>(*this)};
 }
-*/
+
 }

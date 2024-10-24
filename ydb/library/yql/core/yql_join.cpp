@@ -332,6 +332,11 @@ namespace {
             else if (option.IsAtom("join_algo")) {
                 //do nothing
             }
+            else if (option.IsAtom("compact")) {
+                if (!EnsureTupleSize(*child, 1, ctx)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
             else {
                 ctx.AddError(TIssue(ctx.GetPosition(option.Pos()), TStringBuilder() <<
                     "Unknown option name: " << option.Content()));
@@ -774,6 +779,8 @@ IGraphTransformer::TStatus ValidateEquiJoinOptions(TPositionHandle positionHandl
             // do nothing
         } else if (optionName == "join_algo") {
             // do nothing
+        } else if (optionName == "compact") {
+            options.Compact = true;
         } else {
             ctx.AddError(TIssue(position, TStringBuilder() <<
                 "Unknown option name: " << optionName));
@@ -1345,8 +1352,12 @@ TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings) {
 
     result.ForceSortedMerge = HasSetting(linkSettings, "forceSortedMerge");
     
-    if(HasSetting(linkSettings, "forceStreamLookup")) {
+    if (HasSetting(linkSettings, "forceStreamLookup")) {
         result.JoinAlgo = EJoinAlgoType::StreamLookupJoin;
+    }
+
+    if (HasSetting(linkSettings, "compact")) {
+        result.Compact = true;
     }
 
     return result;
@@ -1380,6 +1391,10 @@ TExprNode::TPtr BuildEquiJoinLinkSettings(const TEquiJoinLinkSettings& linkSetti
 
     if (linkSettings.RightHints) {
         settings.push_back(builder("right"));
+    }
+
+    if (linkSettings.Compact) {
+        settings.push_back(ctx.NewList(linkSettings.Pos, { ctx.NewAtom(linkSettings.Pos, "compact", TNodeFlags::Default) }));
     }
 
     return ctx.NewList(linkSettings.Pos, std::move(settings));
@@ -1421,8 +1436,20 @@ TExprNode::TPtr RemapNonConvertibleMemberForJoin(TPositionHandle pos, const TExp
     return result;
 }
 
-TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNode::TListType& keyTypes, TExprNode::TListType& keys, TExprNode::TListType& payloads, bool payload, bool optional, bool filter, TExprContext& ctx) {
+TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNode::TListType& keyTypes, TExprNode::TListType& keys, TExprNode::TListType&& payloads, bool payload, bool optional, bool filter, TExprContext& ctx) {
     const auto pos = list->Pos();
+    const auto filterPayloads = [&payloads](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+        if (payloads.empty())
+            parent.Arg(1, "row");
+        else
+            parent.Callable(1, "FilterMembers")
+                .Arg(0, "row")
+                .List(1)
+                    .Add(std::move(payloads))
+                .Seal()
+            .Seal();
+        return parent;
+    };
 
     if (keyTypes.empty() && 1U == keys.size()) {
         return payload ?
@@ -1433,12 +1460,7 @@ TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNo
                         .Param("row")
                         .List()
                             .Add(0, std::move(keys.front()))
-                            .Callable(1, "FilterMembers")
-                                .Arg(0, "row")
-                                .List(1)
-                                    .Add(std::move(payloads))
-                                .Seal()
-                            .Seal()
+                            .Do(filterPayloads)
                         .Seal()
                     .Seal()
                 .Seal()
@@ -1470,12 +1492,7 @@ TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNo
                                 .Seal()
                                 .Add(1, ExpandType(pos, *keyType, ctx))
                             .Seal()
-                            .Callable(1, "FilterMembers")
-                                .Arg(0, "row")
-                                .List(1)
-                                    .Add(std::move(payloads))
-                                .Seal()
-                            .Seal()
+                            .Do(filterPayloads)
                         .Seal()
                     .Seal()
                 .Seal()
@@ -1498,12 +1515,7 @@ TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNo
                                 .Callable("Just")
                                     .List(0)
                                         .Arg(0, "key")
-                                        .Callable(1, "FilterMembers")
-                                            .Arg(0, "row")
-                                            .List(1)
-                                                .Add(std::move(payloads))
-                                            .Seal()
-                                        .Seal()
+                                        .Do(filterPayloads)
                                     .Seal()
                                 .Seal()
                             .Seal()
@@ -1550,12 +1562,7 @@ TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNo
                                 .Seal()
                                 .Add(1, ExpandType(pos, *keyType, ctx))
                             .Seal()
-                            .Callable(1, "FilterMembers")
-                                .Arg(0, "row")
-                                .List(1)
-                                    .Add(std::move(payloads))
-                                .Seal()
-                            .Seal()
+                            .Do(filterPayloads)
                         .Seal()
                     .Seal()
                 .Seal()
@@ -1586,12 +1593,7 @@ TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNo
                                 .Callable("Just")
                                     .List(0)
                                         .Arg(0, "key")
-                                        .Callable(1, "FilterMembers")
-                                            .Arg(0, "row")
-                                            .List(1)
-                                                .Add(std::move(payloads))
-                                            .Seal()
-                                        .Seal()
+                                        .Do(filterPayloads)
                                     .Seal()
                                 .Seal()
                             .Seal()
@@ -1634,7 +1636,7 @@ TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNo
                         .Callable(0, "Exists")
                             .Callable(0, "Nth")
                                 .Arg(0, "row")
-                                .Atom(1, "0", TNodeFlags::Default)
+                                .Atom(1, 0U)
                             .Seal()
                         .Seal()
                     .Seal()
@@ -1666,14 +1668,14 @@ TExprNode::TPtr MakeDictForJoin(TExprNode::TPtr&& list, bool payload, bool multi
                     .Param("row")
                     .Callable("Nth")
                         .Arg(0, "row")
-                        .Atom(1, "0", TNodeFlags::Default)
+                        .Atom(1, 0U)
                     .Seal()
                 .Seal()
                 .Lambda(2)
                     .Param("row")
                     .Callable("Nth")
                         .Arg(0, "row")
-                        .Atom(1, "1", TNodeFlags::Default)
+                        .Atom(1, 1U)
                     .Seal()
                 .Seal()
                 .List(3)

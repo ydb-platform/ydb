@@ -23,7 +23,6 @@ PY_SRCS(
     serializability/__init__.py
     serializability/checker.py
     harness/__init__.py
-    harness/blockstore.py
     harness/daemon.py
     harness/kikimr_client.py
     harness/kikimr_node_interface.py
@@ -96,6 +95,7 @@ PEERDIR(
     contrib/python/PyHamcrest
     contrib/python/PyYAML
     contrib/python/cryptography
+    contrib/python/importlib-resources
     contrib/python/protobuf
     contrib/python/pytest
     contrib/python/setuptools
@@ -115,4 +115,5 @@ PEERDIR(
 
 END()
 
+RECURSE(compatibility)
 RECURSE_FOR_TESTS(ut)

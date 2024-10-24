@@ -626,7 +626,7 @@ static std::optional<TDriveData> GetNvmeDriveData(int fd, TStringStream *outDeta
 
 static std::optional<TDriveData> GetSysfsDriveData(const TString &path, TStringStream *outDetails) {
     char realPath[PATH_MAX];
-    char *res = realpath(path.Data(), realPath);
+    char *res = realpath(path.data(), realPath);
     if (res == NULL) {
         if (errno == ENOENT) {
             ythrow TFileError() << "no such file# " << path;
@@ -668,6 +668,16 @@ std::optional<TDriveData> GetDriveData(const TString &path, TStringStream *outDe
     try {
         TFile f(path, OpenExisting | RdOnly);
         TDriveData data;
+        if (off64_t off = lseek64(f.GetHandle(), 0, SEEK_END); off != (off64_t)-1) {
+            data.Size = off;
+        } else {
+            long size = 0;
+            if (!ioctl(f.GetHandle(), BLKGETSIZE64, &size)) {
+                data.Size = size;
+            } else if (!ioctl(f.GetHandle(), BLKGETSIZE, &size)) {
+                data.Size = size << 9;
+            }
+        }
         EWriteCacheResult res = GetWriteCache(f.GetHandle(), path, &data, outDetails);
         if (res == EWriteCacheResult::WriteCacheResultOk) {
             data.Path = path;
@@ -676,11 +686,13 @@ std::optional<TDriveData> GetDriveData(const TString &path, TStringStream *outDe
         *outDetails << "; ";
         if (std::optional<TDriveData> nvmeData = GetSysfsDriveData(path, outDetails)) {
             nvmeData->Path = path;
+            nvmeData->Size = nvmeData->Size ? nvmeData->Size : data.Size;
             return nvmeData;
         }
         *outDetails << "; ";
         if (std::optional<TDriveData> nvmeData = GetNvmeDriveData(f.GetHandle(), outDetails)) {
             nvmeData->Path = path;
+            nvmeData->Size = nvmeData->Size ? nvmeData->Size : data.Size;
             return nvmeData;
         }
         return std::nullopt;

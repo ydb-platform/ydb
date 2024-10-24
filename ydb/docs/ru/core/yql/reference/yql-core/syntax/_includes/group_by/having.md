@@ -1,10 +1,10 @@
 ## HAVING {#having}
 
-Фильтрация выборки `SELECT` по результатам вычисления [агрегатных функций](../../../builtins/aggregation.md). Синтаксис аналогичен конструкции [`WHERE`](../../select.md#where).
+Фильтрация выборки `SELECT` по результатам вычисления [агрегатных функций](../../../builtins/aggregation.md). Синтаксис аналогичен конструкции [`WHERE`](../../select/where.md).
 
-**Пример**
+### Пример
 
-``` yql
+```yql
 SELECT
     key
 FROM my_table

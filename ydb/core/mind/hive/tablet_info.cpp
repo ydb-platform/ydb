@@ -22,6 +22,7 @@ TTabletInfo::TTabletInfo(ETabletRole role, THive& hive)
     , ResourceMetricsAggregates(Hive.GetDefaultResourceMetricsAggregates())
     , Weight(0)
     , BalancerPolicy(EBalancerPolicy::POLICY_BALANCE)
+    , NodeFilter(hive)
 {}
 
 const TLeaderTabletInfo& TTabletInfo::GetLeader() const {
@@ -335,6 +336,13 @@ bool TTabletInfo::HasAllowedMetric(EResourceToBalance resource) const {
     return HasAllowedMetric(GetTabletAllowedMetricIds(), resource);
 }
 
+bool TTabletInfo::HasMetric(EResourceToBalance resource) const {
+    if (!HasAllowedMetric(resource)) {
+        return false;
+    }
+    return ExtractResourceUsage(GetResourceCurrentValues(), resource) > 0;
+}
+
 void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics) {
     TInstant now = TActivationContext::Now();
     const TVector<i64>& allowedMetricIds(GetTabletAllowedMetricIds());
@@ -485,11 +493,7 @@ void TTabletInfo::ActualizeCounter() {
 }
 
 const TNodeFilter& TTabletInfo::GetNodeFilter() const {
-    if (IsLeader()) {
-        return AsLeader().NodeFilter;
-    } else {
-        return AsFollower().FollowerGroup.NodeFilter;
-    }
+    return NodeFilter;
 }
 
 bool TTabletInfo::InitiateStart(TNodeInfo* node) {

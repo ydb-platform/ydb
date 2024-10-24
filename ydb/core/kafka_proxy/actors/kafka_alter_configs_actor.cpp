@@ -34,14 +34,14 @@ class TAlterConfigsActor : public TAlterTopicActor<TAlterConfigsActor, TKafkaAlt
 public:
 
     TAlterConfigsActor(
-            TActorId requester, 
+            TActorId requester,
             TIntrusiveConstPtr<NACLib::TUserToken> userToken,
             TString topicPath,
             TString databaseName,
             std::optional<ui64> retentionMs,
             std::optional<ui64> retentionBytes)
         : TAlterTopicActor<TAlterConfigsActor, TKafkaAlterConfigsRequest>(
-            requester, 
+            requester,
             userToken,
             topicPath,
             databaseName)
@@ -54,12 +54,12 @@ public:
     ~TAlterConfigsActor() = default;
 
     void ModifyPersqueueConfig(
-            const TActorContext& ctx,
+            NKikimr::TAppData* appData,
             NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
             const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
             const NKikimrSchemeOp::TDirEntry& selfInfo
     ) {
-        Y_UNUSED(ctx);
+        Y_UNUSED(appData);
         Y_UNUSED(pqGroupDescription);
         Y_UNUSED(selfInfo);
 
@@ -150,7 +150,7 @@ void TKafkaAlterConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
             resource.ResourceName.value(),
             Context->DatabasePath,
             convertedRetentions.Ms,
-            convertedRetentions.Bytes 
+            convertedRetentions.Bytes
         ));
 
         InflyTopics++;
@@ -201,7 +201,7 @@ void TKafkaAlterConfigsActor::Reply(const TActorContext& ctx) {
         responseResource.ErrorCode = INVALID_REQUEST;
         response->Responses.push_back(responseResource);
         responseStatus = INVALID_REQUEST;
-    } 
+    }
 
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, responseStatus));
 

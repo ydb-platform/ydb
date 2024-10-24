@@ -26,7 +26,6 @@ public:
     YDB_READONLY(TString, StringType, "Utf8");
     YDB_READONLY(TString, DateType, "Date32");
     YDB_READONLY(TString, TimestampType, "Timestamp64");
-    YDB_READONLY(TString, FloatType, "Double");
 };
 
 class TWorkloadGeneratorBase : public IWorkloadQueryGenerator {
@@ -39,6 +38,8 @@ public:
     static const TString TsvFormatString;
     static const TString CsvDelimiter;
     static const TString CsvFormatString;
+    static const TString PsvDelimiter;
+    static const TString PsvFormatString;
 
 protected:
     virtual TString DoGetDDLQueries() const = 0;

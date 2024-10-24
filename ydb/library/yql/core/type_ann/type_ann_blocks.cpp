@@ -331,6 +331,10 @@ IGraphTransformer::TStatus BlockLogicalWrapper(const TExprNode::TPtr& input, TEx
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus BlockDecimalBinaryWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    return DecimalBinaryWrapperBase(input, output, ctx, /*blocks=*/ true);
+}
+
 IGraphTransformer::TStatus BlockIfWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 3U, ctx.Expr)) {
@@ -787,7 +791,7 @@ IGraphTransformer::TStatus BlockCombineAllWrapper(const TExprNode::TPtr& input, 
     }
 
     TTypeAnnotationNode::TListType blockItemTypes;
-    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
+    if (!EnsureWideStreamBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -813,7 +817,7 @@ IGraphTransformer::TStatus BlockCombineAllWrapper(const TExprNode::TPtr& input, 
     }
 
     auto outputItemType = ctx.Expr.MakeType<TMultiExprType>(retMultiType);
-    input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(outputItemType));
+    input->SetTypeAnn(ctx.Expr.MakeType<TStreamExprType>(outputItemType));
     return IGraphTransformer::TStatus::Ok;
 }
 
@@ -824,7 +828,7 @@ IGraphTransformer::TStatus BlockCombineHashedWrapper(const TExprNode::TPtr& inpu
     }
 
     TTypeAnnotationNode::TListType blockItemTypes;
-    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
+    if (!EnsureWideStreamBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -863,7 +867,7 @@ IGraphTransformer::TStatus BlockCombineHashedWrapper(const TExprNode::TPtr& inpu
 
     retMultiType.push_back(ctx.Expr.MakeType<TScalarExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64)));
     auto outputItemType = ctx.Expr.MakeType<TMultiExprType>(retMultiType);
-    input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(outputItemType));
+    input->SetTypeAnn(ctx.Expr.MakeType<TStreamExprType>(outputItemType));
     return IGraphTransformer::TStatus::Ok;
 }
 
@@ -875,7 +879,7 @@ IGraphTransformer::TStatus BlockMergeFinalizeHashedWrapper(const TExprNode::TPtr
     }
 
     TTypeAnnotationNode::TListType blockItemTypes;
-    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
+    if (!EnsureWideStreamBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
     YQL_ENSURE(blockItemTypes.size() > 0);
@@ -913,7 +917,7 @@ IGraphTransformer::TStatus BlockMergeFinalizeHashedWrapper(const TExprNode::TPtr
         }
 
         // disallow any scalar columns except for streamIndex column
-        auto itemTypes = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
+        auto itemTypes = input->Head().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
         for (ui32 i = 0; i + 1 < itemTypes.size(); ++i) {
             bool isScalar = itemTypes[i]->GetKind() == ETypeAnnotationKind::Scalar;
             if (isScalar && i != streamIndex) {
@@ -925,7 +929,7 @@ IGraphTransformer::TStatus BlockMergeFinalizeHashedWrapper(const TExprNode::TPtr
 
     retMultiType.push_back(ctx.Expr.MakeType<TScalarExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64)));
     auto outputItemType = ctx.Expr.MakeType<TMultiExprType>(retMultiType);
-    input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(outputItemType));
+    input->SetTypeAnn(ctx.Expr.MakeType<TStreamExprType>(outputItemType));
     return IGraphTransformer::TStatus::Ok;
 }
 

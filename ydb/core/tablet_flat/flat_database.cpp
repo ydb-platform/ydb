@@ -323,7 +323,7 @@ void TDatabase::Update(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUp
             if (auto got = annex->Place(table, op.Tag, raw)) {
                 ModifiedRefs[index] = got.Ref;
                 const auto payload = NUtil::NBin::ToRef(ModifiedRefs[index]);
-                op.Value = TRawTypeValue(payload, NScheme::TTypeInfo(op.Value.Type()));
+                op.Value = TRawTypeValue(payload, op.Value.Type());
                 op.Op = ELargeObj::Extern;
             }
         }
@@ -494,7 +494,8 @@ ui64 TDatabase::GetTableMemOpsCount(ui32 tableId) const {
 }
 
 ui64 TDatabase::GetTableIndexSize(ui32 tableId) const {
-    return Require(tableId)->Stat().Parts.IndexBytes;
+    const auto& partStats = Require(tableId)->Stat().Parts;
+    return partStats.FlatIndexBytes + partStats.BTreeIndexBytes;
 }
 
 ui64 TDatabase::GetTableSearchHeight(ui32 tableId) const {

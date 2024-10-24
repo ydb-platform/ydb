@@ -7,6 +7,7 @@ IF (NOT OS_WINDOWS AND NOT ARCH_ARM64)
         crypto.h
         poly1305.cpp
         chacha_vec.cpp
+        chacha_512.cpp
         poly1305_vec.cpp
         secured_block.cpp
     )

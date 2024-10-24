@@ -141,7 +141,7 @@ namespace NKqpHelpers {
     }
 
     inline TString FormatResult(const Ydb::ResultSet& rs) {
-        Cerr << JoinSeq(", ", rs.rows());
+        Cerr << JoinSeq(", ", rs.rows()) << Endl;
         return JoinSeq(", ", rs.rows());
     }
 

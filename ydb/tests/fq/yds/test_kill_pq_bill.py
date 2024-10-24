@@ -3,6 +3,7 @@
 import json
 import os
 import pytest
+import time
 
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
@@ -35,6 +36,14 @@ class TestKillPqBill(TestYdsBase):
         for _ in range(0, message_count):
             self.write_stream(data_1mb)
         self.read_stream(message_count)
+
+        # TODO: fix this place. We need to correct to account for the ingress bytes in case of an aborted query.
+        for _ in range(20):
+            stat = json.loads(client.describe_query(query_id).result.query.statistics.json)
+            graph_name = "Graph=0"
+            if graph_name in stat and "IngressBytes" in stat[graph_name]:
+                break
+            time.sleep(1)
 
         client.abort_query(query_id)
         client.wait_query_status(query_id, fq.QueryMeta.ABORTED_BY_USER)

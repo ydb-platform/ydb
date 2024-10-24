@@ -1,5 +1,6 @@
 #include "constructor.h"
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
@@ -14,7 +15,7 @@ bool TBlobsFetcherTask::DoOnError(const TString& storageId, const TBlobRange& ra
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("error_on_blob_reading", range.ToString())("scan_actor_id", Context->GetCommonContext()->GetScanActorId())
         ("status", status.GetErrorMessage())("status_code", status.GetStatus())("storage_id", storageId);
     NActors::TActorContext::AsActorContext().Send(Context->GetCommonContext()->GetScanActorId(), 
-        std::make_unique<NConveyor::TEvExecution::TEvTaskProcessedResult>(TConclusionStatus::Fail("cannot read blob range " + range.ToString())));
+        std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(TConclusionStatus::Fail("cannot read blob range " + range.ToString())));
     return false;
 }
 

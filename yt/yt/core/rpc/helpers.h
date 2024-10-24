@@ -93,7 +93,7 @@ void WriteAuthenticationIdentityToProto(T* proto, const TAuthenticationIdentity&
 template <class T>
 TAuthenticationIdentity ParseAuthenticationIdentityFromProto(const T& proto);
 
-std::vector<TString> AddressesFromEndpointSet(const NServiceDiscovery::TEndpointSet& endpointSet);
+std::vector<std::string> AddressesFromEndpointSet(const NServiceDiscovery::TEndpointSet& endpointSet);
 
 ////////////////////////////////////////////////////////////////////////////////
 

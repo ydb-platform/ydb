@@ -2,22 +2,6 @@ struct TArgs_array_subscript_handler_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-struct TArgs_brin_desummarize_range_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_brin_summarize_new_values_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-struct TArgs_brin_summarize_range_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_brinhandler_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
 struct TArgs_btboolcmp_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
@@ -186,6 +170,102 @@ struct TArgs_int8range_subdiff_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
+struct TArgs_jsonb_agg_finalfn_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+struct TArgs_jsonb_agg_strict_transfn_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_jsonb_agg_transfn_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_jsonb_bool_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+struct TArgs_jsonb_build_array_noargs_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
+struct TArgs_jsonb_build_object_noargs_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
+struct TArgs_jsonb_float4_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+struct TArgs_jsonb_float8_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+struct TArgs_jsonb_in_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+struct TArgs_jsonb_int2_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+struct TArgs_jsonb_int4_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+struct TArgs_jsonb_int8_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+struct TArgs_jsonb_numeric_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+struct TArgs_jsonb_object_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+struct TArgs_jsonb_object_agg_finalfn_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+struct TArgs_jsonb_object_agg_strict_transfn_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
+};
+struct TArgs_jsonb_object_agg_transfn_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
+};
+struct TArgs_jsonb_object_agg_unique_strict_transfn_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
+};
+struct TArgs_jsonb_object_agg_unique_transfn_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
+};
+struct TArgs_jsonb_object_two_arg_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+struct TArgs_jsonb_out_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+struct TArgs_jsonb_recv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+struct TArgs_jsonb_send_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+struct TArgs_jsonb_typeof_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
 struct TArgs_jsonpath_in_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
@@ -205,6 +285,94 @@ struct TArgs_jsonpath_send_Policy {
 struct TArgs_numrange_subdiff_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+struct TArgs_oideq_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_oidge_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_oidgt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_oidin_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+struct TArgs_oidlarger_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_oidle_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_oidlt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_oidne_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_oidout_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+struct TArgs_oidrecv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+struct TArgs_oidsend_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+struct TArgs_oidsmaller_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_oidvectoreq_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+struct TArgs_oidvectorge_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+struct TArgs_oidvectorgt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+struct TArgs_oidvectorin_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+struct TArgs_oidvectorle_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+struct TArgs_oidvectorlt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+struct TArgs_oidvectorne_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+struct TArgs_oidvectorout_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+struct TArgs_oidvectorrecv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+struct TArgs_oidvectorsend_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
 struct TArgs_pg_last_committed_xact_Policy {
     static constexpr bool VarArgs = false;
@@ -353,6 +521,10 @@ struct TArgs_raw_array_subscript_handler_Policy {
 struct TArgs_text_char_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+struct TArgs_to_jsonb_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
 struct TArgs_tsqueryin_Policy {
     static constexpr bool VarArgs = false;

@@ -1,37 +1,54 @@
 #include "write_data.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/columnshard/defs.h>
-
 
 namespace NKikimr::NColumnShard {
 
 bool TArrowData::Parse(const NKikimrDataEvents::TEvWrite_TOperation& proto, const NEvWrite::IPayloadReader& payload) {
-    if(proto.GetPayloadFormat() != NKikimrDataEvents::FORMAT_ARROW) {
+    if (proto.GetPayloadFormat() != NKikimrDataEvents::FORMAT_ARROW) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "invalid_payload_format")("payload_format", (ui64)proto.GetPayloadFormat());
         return false;
     }
     IncomingData = payload.GetDataFromPayload(proto.GetPayloadIndex());
     if (proto.HasType()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "invalid_modification_type")("proto", proto.DebugString());
         auto type = TEnumOperator<NEvWrite::EModificationType>::DeserializeFromProto(proto.GetType());
         if (!type) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "invalid_modification_type")("proto", proto.DebugString());
             return false;
         }
         ModificationType = *type;
     }
 
-    std::vector<ui32> columns;
-    for (auto&& columnId : proto.GetColumnIds()) {
-        columns.emplace_back(columnId);
+    if (proto.HasPayloadSchema()) {
+        PayloadSchema = NArrow::DeserializeSchema(proto.GetPayloadSchema());
+    } else {
+        std::vector<ui32> columns;
+        for (auto&& columnId : proto.GetColumnIds()) {
+            columns.emplace_back(columnId);
+        }
+        if (columns.empty()) {
+            BatchSchema = IndexSchema;
+        } else {
+            BatchSchema = std::make_shared<NOlap::TFilteredSnapshotSchema>(IndexSchema, columns);
+        }
+        if (BatchSchema->GetColumnsCount() != columns.size()) {
+            return false;
+        }
     }
-    BatchSchema = std::make_shared<NOlap::TFilteredSnapshotSchema>(IndexSchema, columns);
     OriginalDataSize = IncomingData.size();
-    return BatchSchema->GetColumnsCount() == columns.size() && !IncomingData.empty();
+    return !!IncomingData;
 }
 
 TConclusion<std::shared_ptr<arrow::RecordBatch>> TArrowData::ExtractBatch() {
     Y_ABORT_UNLESS(!!IncomingData);
-    auto result = NArrow::DeserializeBatch(IncomingData, BatchSchema->GetSchema());
+    std::shared_ptr<arrow::RecordBatch> result;
+    if (PayloadSchema) {
+        result = NArrow::DeserializeBatch(IncomingData, PayloadSchema);
+    } else {
+        result = NArrow::DeserializeBatch(IncomingData, std::make_shared<arrow::Schema>(BatchSchema->GetSchema()->fields()));
+    }
+
     IncomingData = "";
     return result;
 }
@@ -53,11 +70,20 @@ bool TProtoArrowData::ParseFromProto(const NKikimrTxColumnShard::TEvWrite& proto
         }
         ArrowSchema = NArrow::DeserializeSchema(incomingDataScheme);
         if (!ArrowSchema) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_deserialize_data");
             return false;
         }
     }
     OriginalDataSize = IncomingData.size();
-    return !IncomingData.empty() && IncomingData.size() <= NColumnShard::TLimits::GetMaxBlobSize();
+    if (IncomingData.empty()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "empty_data");
+        return false;
+    }
+    if (NColumnShard::TLimits::GetMaxBlobSize() < IncomingData.size() && !AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "too_big_blob");
+        return false;
+    }
+    return true;
 }
 
 TConclusion<std::shared_ptr<arrow::RecordBatch>> TProtoArrowData::ExtractBatch() {
@@ -71,4 +97,4 @@ ui64 TProtoArrowData::GetSchemaVersion() const {
     return IndexSchema->GetVersion();
 }
 
-}
+}   // namespace NKikimr::NColumnShard

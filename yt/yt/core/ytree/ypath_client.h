@@ -39,11 +39,11 @@ public:
     void DeclareClientFeature(int featureId) override;
     void RequireServerFeature(int featureId) override;
 
-    const TString& GetUser() const override;
-    void SetUser(const TString& user) override;
+    const std::string& GetUser() const override;
+    void SetUser(const std::string& user) override;
 
-    const TString& GetUserTag() const override;
-    void SetUserTag(const TString& tag) override;
+    const std::string& GetUserTag() const override;
+    void SetUserTag(const std::string& tag) override;
 
     void SetUserAgent(const TString& userAgent) override;
 
@@ -258,13 +258,15 @@ TString SyncYPathGetKey(
 TFuture<NYson::TYsonString> AsyncYPathGet(
     const IYPathServicePtr& service,
     const TYPath& path,
-    const TAttributeFilter& attributeFilter = {});
+    const TAttributeFilter& attributeFilter = {},
+    const IAttributeDictionaryPtr& options = {});
 
 //! Executes |Get| verb assuming #service handles requests synchronously. Throws if an error has occurred.
 NYson::TYsonString SyncYPathGet(
     const IYPathServicePtr& service,
     const TYPath& path,
-    const TAttributeFilter& attributeFilter = {});
+    const TAttributeFilter& attributeFilter = {},
+    const IAttributeDictionaryPtr& options = {});
 
 //! Asynchronously executes |Exists| verb.
 TFuture<bool> AsyncYPathExists(
@@ -342,7 +344,7 @@ bool AreNodesEqual(
     const INodePtr& rhs,
     const TNodesEqualityOptions& options = {});
 
-/////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 struct TNodeWalkOptions
 {

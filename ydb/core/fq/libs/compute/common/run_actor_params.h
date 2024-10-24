@@ -77,7 +77,8 @@ struct TRunActorParams { // TODO2 : Change name
         const ::NFq::NConfig::TYdbStorageConfig& computeConnection,
         TDuration resultTtl,
         std::map<TString, Ydb::TypedValue>&& queryParameters,
-        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
+        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
+        const ::NFq::NConfig::TWorkloadManagerConfig& workloadManager
     );
 
     TRunActorParams(const TRunActorParams& params) = default;
@@ -141,6 +142,7 @@ struct TRunActorParams { // TODO2 : Change name
     TDuration ResultTtl;
     std::map<TString, Ydb::TypedValue> QueryParameters;
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory;
+    ::NFq::NConfig::TWorkloadManagerConfig WorkloadManager;
 };
 
 } /* NFq */

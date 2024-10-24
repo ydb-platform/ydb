@@ -11,9 +11,7 @@ namespace NKikimr::NOlap {
 NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto() const {
     NKikimrTxColumnShard::TIndexPortionMeta portionMeta;
     portionMeta.SetTierName(TierName);
-    if (!StatisticsStorage.IsEmpty()) {
-        *portionMeta.MutableStatisticsStorage() = StatisticsStorage.SerializeToProto();
-    }
+    portionMeta.SetCompactionLevel(CompactionLevel);
     portionMeta.SetDeletionsCount(DeletionsCount);
     switch (Produced) {
         case TPortionMeta::EProduced::UNSPECIFIED:
@@ -36,7 +34,7 @@ NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto() const {
             break;
     }
 
-    portionMeta.SetPrimaryKeyBorders(ReplaceKeyEdges.SerializeToStringDataOnlyNoCompression());
+    portionMeta.SetPrimaryKeyBorders(ReplaceKeyEdges.SerializePayloadToString());
 
     RecordSnapshotMin.SerializeToProto(*portionMeta.MutableRecordSnapshotMin());
     RecordSnapshotMax.SerializeToProto(*portionMeta.MutableRecordSnapshotMax());

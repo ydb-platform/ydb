@@ -8,6 +8,7 @@ from ydb.public.api.protos.ydb_value_pb2 import Type
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
 from ydb.library.yql.providers.generic.connector.tests.utils.generate import generate_table_data
 import ydb.library.yql.providers.generic.connector.tests.utils.types.clickhouse as clickhouse
+import ydb.library.yql.providers.generic.connector.tests.utils.types.mysql as mysql
 import ydb.library.yql.providers.generic.connector.tests.utils.types.postgresql as postgresql
 import ydb.library.yql.providers.generic.connector.tests.utils.types.ydb as Ydb
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
@@ -17,6 +18,7 @@ from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     DataSourceType,
     SelectWhat,
     SelectWhere,
+    makeYdbTypeFromTypeID,
 )
 
 from ydb.library.yql.providers.generic.connector.tests.common_test_cases.base import BaseTestCase
@@ -69,12 +71,16 @@ class Factory:
                 Column(
                     name='COL1',
                     ydb_type=Type.INT32,
-                    data_source_type=DataSourceType(ch=clickhouse.Int32(), pg=postgresql.Int4(), ydb=Ydb.Int32()),
+                    data_source_type=DataSourceType(
+                        ch=clickhouse.Int32(), pg=postgresql.Int4(), ydb=Ydb.Int32(), my=mysql.Integer()
+                    ),
                 ),
                 Column(
                     name='col2',
                     ydb_type=Type.INT32,
-                    data_source_type=DataSourceType(ch=clickhouse.Int32(), pg=postgresql.Int4(), ydb=Ydb.Int32()),
+                    data_source_type=DataSourceType(
+                        ch=clickhouse.Int32(), pg=postgresql.Int4(), ydb=Ydb.Int32(), my=mysql.Integer()
+                    ),
                 ),
             )
         )
@@ -92,6 +98,8 @@ class Factory:
                     EDataSourceKind.CLICKHOUSE,
                     EDataSourceKind.POSTGRESQL,
                     EDataSourceKind.YDB,
+                    EDataSourceKind.MYSQL,
+                    EDataSourceKind.MS_SQL_SERVER,
                 ),
             ),
             # SELECT COL1 FROM table
@@ -105,6 +113,8 @@ class Factory:
                     EDataSourceKind.CLICKHOUSE,
                     # NOTE: YQ-2264: doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
                     EDataSourceKind.YDB,
+                    EDataSourceKind.MYSQL,
+                    EDataSourceKind.MS_SQL_SERVER,
                 ),
             ),
             # SELECT col1 FROM table
@@ -127,6 +137,8 @@ class Factory:
                     EDataSourceKind.CLICKHOUSE,
                     EDataSourceKind.POSTGRESQL,
                     EDataSourceKind.YDB,
+                    EDataSourceKind.MYSQL,
+                    EDataSourceKind.MS_SQL_SERVER,
                 ),
             ),
             # SELECT col2, COL1 FROM table
@@ -140,6 +152,8 @@ class Factory:
                     EDataSourceKind.CLICKHOUSE,
                     # NOTE: YQ-2264: doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
                     EDataSourceKind.YDB,
+                    EDataSourceKind.MYSQL,
+                    EDataSourceKind.MS_SQL_SERVER,
                 ),
             ),
             # SELECT col2, col1 FROM table
@@ -163,6 +177,8 @@ class Factory:
                     EDataSourceKind.CLICKHOUSE,
                     # NOTE: YQ-2264: doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
                     EDataSourceKind.YDB,
+                    EDataSourceKind.MYSQL,
+                    EDataSourceKind.MS_SQL_SERVER,
                 ),
             ),
             # Select the same column multiple times with different aliases
@@ -183,6 +199,8 @@ class Factory:
                     EDataSourceKind.CLICKHOUSE,
                     EDataSourceKind.POSTGRESQL,
                     EDataSourceKind.YDB,
+                    EDataSourceKind.MYSQL,
+                    EDataSourceKind.MS_SQL_SERVER,
                 ),
             ),
         )
@@ -229,46 +247,65 @@ class Factory:
         schema = Schema(
             columns=ColumnList(
                 Column(
-                    name='col_01_int64',
-                    ydb_type=Type.INT64,
-                    data_source_type=DataSourceType(ch=clickhouse.Int32(), pg=postgresql.Int8()),
+                    name='col_00_int32',
+                    ydb_type=makeYdbTypeFromTypeID(Type.INT32),
+                    data_source_type=DataSourceType(ch=clickhouse.Int64(), pg=postgresql.Int8()),
                 ),
                 Column(
-                    name='col_02_utf8',
-                    ydb_type=Type.UTF8,
+                    name='col_01_string',
+                    ydb_type=makeYdbTypeFromTypeID(Type.STRING),
                     data_source_type=DataSourceType(ch=clickhouse.String(), pg=postgresql.Text()),
                 ),
             )
         )
 
-        data_in = generate_table_data(schema=schema, bytes_soft_limit=table_size)
+        data_source_kinds = (
+            EDataSourceKind.CLICKHOUSE,
+            EDataSourceKind.POSTGRESQL,
+        )
 
-        # Assuming that request will look something like:
-        #
-        # SELECT * FROM table WHERE id = (SELECT MAX(id) FROM table)
-        #
-        # We expect last line to be the answer
-        data_out = [data_in[-1]]
-
-        data_source_kinds = [EDataSourceKind.CLICKHOUSE, EDataSourceKind.POSTGRESQL]
-
-        test_case_name = 'large_table'
-
+        test_case_name = 'large'
         test_cases = []
+
         for data_source_kind in data_source_kinds:
-            tc = TestCase(
-                name_=test_case_name,
-                data_source_kind=data_source_kind,
-                protocol=EProtocol.NATIVE,
-                data_in=data_in,
-                data_out_=data_out,
-                select_what=SelectWhat.asterisk(schema.columns),
-                select_where=SelectWhere(
-                    expression_='col_01_int64 IN (SELECT MAX(col_01_int64) FROM {cluster_name}.{table_name})'
-                ),
-                schema=schema,
-                pragmas=dict(),
-            )
+            match data_source_kind:
+                case EDataSourceKind.CLICKHOUSE:
+                    tc = TestCase(
+                        name_=test_case_name,
+                        data_source_kind=data_source_kind,
+                        protocol=EProtocol.NATIVE,
+                        data_in=None,
+                        data_out_=[[999999]],  # We put 1M of rows in the large table
+                        select_what=SelectWhat(SelectWhat.Item(name='MAX(col_00_int32)', kind='expr')),
+                        select_where=None,
+                        schema=schema,
+                        pragmas=dict(),
+                    )
+
+                case EDataSourceKind.POSTGRESQL:
+                    # Assuming that request will look something like:
+                    # `SELECT * FROM table WHERE id = (SELECT MAX(id) FROM table)`
+                    # We expect last line to be the answer
+                    data_in = generate_table_data(schema=schema, bytes_soft_limit=table_size)
+                    data_out = [data_in[-1]]
+                    data_source_kinds = [EDataSourceKind.CLICKHOUSE, EDataSourceKind.POSTGRESQL]
+
+                    tc = TestCase(
+                        name_=test_case_name,
+                        data_source_kind=data_source_kind,
+                        protocol=EProtocol.NATIVE,
+                        data_in=data_in,
+                        data_out_=data_out,
+                        select_what=SelectWhat.asterisk(schema.columns),
+                        select_where=SelectWhere(
+                            expression_='col_00_int32 IN (SELECT MAX(col_00_int32) FROM {cluster_name}.{table_name})'
+                        ),
+                        schema=schema,
+                        pragmas=dict(),
+                    )
+
+                case _:
+                    raise ValueError(f'Unknown data source kind: {data_source_kind}')
 
             test_cases.append(tc)
 
@@ -279,19 +316,29 @@ class Factory:
             EDataSourceKind.CLICKHOUSE: [EProtocol.NATIVE, EProtocol.HTTP],
             EDataSourceKind.POSTGRESQL: [EProtocol.NATIVE],
             EDataSourceKind.YDB: [EProtocol.NATIVE],
+            EDataSourceKind.MYSQL: [EProtocol.NATIVE],
+            EDataSourceKind.MS_SQL_SERVER: [EProtocol.NATIVE],
         }
 
         base_test_cases = None
 
-        if data_source_kind == EDataSourceKind.YDB:
+        if data_source_kind in [
+            EDataSourceKind.YDB,
+            EDataSourceKind.MYSQL,
+            EDataSourceKind.MS_SQL_SERVER,
+        ]:
             base_test_cases = self._column_selection()
-        else:
+        elif data_source_kind in [EDataSourceKind.CLICKHOUSE, EDataSourceKind.POSTGRESQL]:
             base_test_cases = list(
                 itertools.chain(
                     self._column_selection(),
                     self._large_table(),
                 )
             )
+        elif data_source_kind == EDataSourceKind.ORACLE:
+            raise 'Common test cases are not supported by Oracle due to the lack of Int32 columns'
+        else:
+            raise f'Unexpected data source kind: {data_source_kind}'
 
         test_cases = []
         for base_tc in base_test_cases:

@@ -4,6 +4,10 @@ namespace NYT::NTabletClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+const TString CustomRuntimeDataWatermarkKey("watermark");
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TWatermarkRuntimeDataConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("column_name", &TThis::ColumnName);

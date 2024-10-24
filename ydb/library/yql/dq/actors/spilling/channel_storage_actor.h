@@ -1,3 +1,9 @@
+#pragma once
+
+#include "spilling_counters.h"
+
+#include <library/cpp/threading/future/future.h>
+
 #include <ydb/library/yql/dq/runtime/dq_channel_storage.h>
 #include "ydb/library/yql/dq/common/dq_common.h"
 
@@ -49,6 +55,8 @@ public:
     virtual NActors::IActor* GetActor() = 0;
 };
 
-IDqChannelStorageActor* CreateDqChannelStorageActor(TTxId txId, ui64 channelId, IDqChannelStorage::TWakeUpCallback&& wakeUp, NActors::TActorSystem* actorSystem);
+
+IDqChannelStorageActor* CreateDqChannelStorageActor(TTxId txId, ui64 channelId, TWakeUpCallback&& wakeUpCallback, TErrorCallback&& errorCallback,
+    TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters, NActors::TActorSystem* actorSystem);
 
 } // namespace NYql::NDq

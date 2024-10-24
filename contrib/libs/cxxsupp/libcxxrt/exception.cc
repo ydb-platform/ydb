@@ -282,7 +282,7 @@ namespace std
 {
 	// Forward declaration of standard library terminate() function used to
 	// abort execution.
-	void terminate(void) _LIBCXXRT_NOEXCEPT;
+	[[noreturn]] void terminate(void) _LIBCXXRT_NOEXCEPT;
 }
 
 using namespace ABI_NAMESPACE;
@@ -1552,6 +1552,19 @@ extern "C" void __cxa_call_unexpected(void*exception)
 }
 
 /**
+ * ABI function, called when an object destructor exits due to an
+ * exception during stack unwinding.
+ *
+ * This function does not return.
+ */
+extern "C" void __cxa_call_terminate(void*exception) _LIBCXXRT_NOEXCEPT
+{
+	std::terminate();
+	// Should not be reached.
+	abort();
+}
+
+/**
  * ABI function, returns the adjusted pointer to the exception object.
  */
 extern "C" void *__cxa_get_exception_ptr(void *exceptionObject)
@@ -1623,7 +1636,7 @@ namespace std
 	 * Terminates the program, calling a custom terminate implementation if
 	 * required.
 	 */
-	void terminate() _LIBCXXRT_NOEXCEPT
+	[[noreturn]] void terminate() _LIBCXXRT_NOEXCEPT
 	{
 		static __cxa_thread_info *info = thread_info();
 		if (0 != info && 0 != info->terminateHandler)

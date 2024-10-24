@@ -74,12 +74,12 @@ int main(int argc, const char* argv[]) {
     {
         TLog emptyLog;
         auto clientParameters = TClientParameters(options.Uri).SetLog(emptyLog);
-        if (!options.SharedSecretKey.Empty()) {
+        if (!options.SharedSecretKey.empty()) {
             clientParameters.SetSharedSecretKey(options.SharedSecretKey);
         }
         auto clientPtr = MakeClient(clientParameters);
         auto sessionParameters = TSessionParameters();
-        if (!options.SessionId.Empty()) {
+        if (!options.SessionId.empty()) {
             sessionParameters.SetSessionId(options.SessionId);
         }
         if (!options.SessionMeta.empty()) {
@@ -95,7 +95,7 @@ int main(int argc, const char* argv[]) {
     TString line;
     while (true) {
         Cin.ReadLine(line);
-        if (line.Empty()) {
+        if (line.empty()) {
             break;
         }
 

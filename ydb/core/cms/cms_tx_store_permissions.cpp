@@ -39,11 +39,13 @@ public:
                 .TaskId = *MaintenanceTaskId,
                 .RequestId = Scheduled->RequestId,
                 .Owner = Scheduled->Owner,
+                .HasSingleCompositeActionGroup = !Scheduled->Request.GetPartialPermissionAllowed()
             });
 
             db.Table<Schema::MaintenanceTasks>().Key(*MaintenanceTaskId).Update(
                 NIceDb::TUpdate<Schema::MaintenanceTasks::RequestID>(Scheduled->RequestId),
-                NIceDb::TUpdate<Schema::MaintenanceTasks::Owner>(Scheduled->Owner)
+                NIceDb::TUpdate<Schema::MaintenanceTasks::Owner>(Scheduled->Owner),
+                NIceDb::TUpdate<Schema::MaintenanceTasks::HasSingleCompositeActionGroup>(!Scheduled->Request.GetPartialPermissionAllowed())
             );
         }
 

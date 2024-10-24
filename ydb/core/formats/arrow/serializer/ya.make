@@ -2,9 +2,9 @@ LIBRARY()
 
 PEERDIR(
     contrib/libs/apache/arrow
-    ydb/core/formats/arrow/common
     ydb/services/metadata/abstract
     ydb/library/actors/core
+    ydb/library/formats/arrow/common
     ydb/core/protos
 )
 

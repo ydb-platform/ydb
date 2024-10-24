@@ -54,7 +54,7 @@ void MediaValidator(const NYT::TNode& value) {
     }
 }
 
-TYtConfiguration::TYtConfiguration()
+TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
 {
     const auto codecValidator = [] (const TString&, TString str) {
         if (!ValidateCompressionCodecValue(str)) {
@@ -168,7 +168,8 @@ TYtConfiguration::TYtConfiguration()
         .Warning("Pragma UseTypeV2 is deprecated. Use UseNativeYtTypes instead");
     REGISTER_SETTING(*this, UseNativeYtTypes);
     REGISTER_SETTING(*this, UseNativeDescSort);
-    REGISTER_SETTING(*this, UseIntermediateSchema);
+    REGISTER_SETTING(*this, UseIntermediateSchema).Deprecated();
+    REGISTER_SETTING(*this, UseIntermediateStreams);
     REGISTER_SETTING(*this, StaticPool);
     REGISTER_SETTING(*this, UseFlow)
         .ValueSetter([this](const TString&, bool value) {
@@ -187,7 +188,7 @@ TYtConfiguration::TYtConfiguration()
             }
         });
     REGISTER_SETTING(*this, ExpirationDeadline)
-        .Lower(Now())
+        .Lower(typeCtx.QContext.CanRead() ? TInstant::Zero() : Now())
         .ValueSetter([this] (const TString& cluster, TInstant value) {
             ExpirationDeadline[cluster] = value;
         });
@@ -219,25 +220,9 @@ TYtConfiguration::TYtConfiguration()
         .NonEmpty()
         .ValueSetter([this] (const TString& cluster, TSet<TString> trees) {
             HybridDqExecution = false;
-            if (ALL_CLUSTERS == cluster) {
-                PoolTrees.UpdateAll([&trees] (const TString&, TSet<TString>& val) {
-                    val.insert(trees.begin(), trees.end());
-                });
-            } else {
-                PoolTrees[cluster].insert(trees.begin(), trees.end());
-            }
+            PoolTrees[cluster] = trees;
         });
-    REGISTER_SETTING(*this, TentativePoolTrees)
-        .NonEmpty()
-        .ValueSetter([this] (const TString& cluster, TSet<TString> trees) {
-            if (ALL_CLUSTERS == cluster) {
-                TentativePoolTrees.UpdateAll([&trees] (const TString&, TSet<TString>& val) {
-                    val.insert(trees.begin(), trees.end());
-                });
-            } else {
-                TentativePoolTrees[cluster].insert(trees.begin(), trees.end());
-            }
-        });
+    REGISTER_SETTING(*this, TentativePoolTrees).NonEmpty();
     REGISTER_SETTING(*this, TentativeTreeEligibilitySampleJobCount);
     REGISTER_SETTING(*this, TentativeTreeEligibilityMaxJobDurationRatio);
     REGISTER_SETTING(*this, TentativeTreeEligibilityMinJobDuration);
@@ -281,6 +266,7 @@ TYtConfiguration::TYtConfiguration()
         })
         ;
     REGISTER_SETTING(*this, ParallelOperationsLimit).Lower(1);
+    REGISTER_SETTING(*this, LocalCalcLimit).Lower(1);
     REGISTER_SETTING(*this, DefaultCalcMemoryLimit);
     REGISTER_SETTING(*this, LayerPaths).NonEmpty()
         .ValueSetter([this](const TString& cluster, const TVector<TString>& value) {
@@ -314,11 +300,12 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, MapJoinUseFlow);
     REGISTER_SETTING(*this, EvaluationTableSizeLimit).Upper(10_MB); // Max 10Mb
     REGISTER_SETTING(*this, LookupJoinLimit).Upper(10_MB); // Same as EvaluationTableSizeLimit
-    REGISTER_SETTING(*this, LookupJoinMaxRows).Upper(1000);
+    REGISTER_SETTING(*this, LookupJoinMaxRows).Upper(10000);
     REGISTER_SETTING(*this, DisableOptimizers);
     REGISTER_SETTING(*this, MaxInputTables).Lower(2).Upper(3000); // 3000 - default max limit on YT clusters
     REGISTER_SETTING(*this, MaxOutputTables).Lower(1).Upper(100); // https://ml.yandex-team.ru/thread/yt/166633186212752141/
     REGISTER_SETTING(*this, MaxInputTablesForSortedMerge).Lower(2).Upper(1000); // https://st.yandex-team.ru/YTADMINREQ-16742
+    REGISTER_SETTING(*this, DisableFuseOperations);
     REGISTER_SETTING(*this, MaxExtraJobMemoryToFuseOperations);
     REGISTER_SETTING(*this, MaxReplicationFactorToFuseOperations).Lower(1.0);
     REGISTER_SETTING(*this, MaxOperationFiles).Lower(2).Upper(1000);
@@ -447,7 +434,7 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, DqPruneKeyFilterLambda);
     REGISTER_SETTING(*this, MergeAdjacentPointRanges);
     REGISTER_SETTING(*this, KeyFilterForStartsWith);
-    REGISTER_SETTING(*this, MaxKeyRangeCount).Upper(1000);
+    REGISTER_SETTING(*this, MaxKeyRangeCount).Upper(10000);
     REGISTER_SETTING(*this, MaxChunksForDqRead).Lower(1);
     REGISTER_SETTING(*this, NetworkProject);
     REGISTER_SETTING(*this, FileCacheTtl);
@@ -459,7 +446,7 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, _EnableYtPartitioning);
     REGISTER_SETTING(*this, UseAggPhases);
     REGISTER_SETTING(*this, UsePartitionsByKeysForFinalAgg);
-    REGISTER_SETTING(*this, _ForceJobSizeAdjuster);
+    REGISTER_SETTING(*this, ForceJobSizeAdjuster);
     REGISTER_SETTING(*this, _EnableWriteReorder);
     REGISTER_SETTING(*this, EnforceJobUtc);
     REGISTER_SETTING(*this, UseRPCReaderInDQ);
@@ -499,6 +486,8 @@ TYtConfiguration::TYtConfiguration()
         });
     REGISTER_SETTING(*this, MinColumnGroupSize).Lower(2);
     REGISTER_SETTING(*this, MaxColumnGroups);
+    REGISTER_SETTING(*this, ExtendedStatsMaxChunkCount);
+    REGISTER_SETTING(*this, _EnableYtDqProcessWriteConstraints);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

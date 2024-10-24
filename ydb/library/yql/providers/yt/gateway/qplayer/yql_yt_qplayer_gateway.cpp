@@ -20,14 +20,17 @@ namespace {
 
 const TString YtGateway_CanonizePaths = "YtGateway_CanonizePaths";
 const TString YtGateway_GetTableInfo = "YtGateway_GetTableInfo";
+const TString YtGateway_GetTableRange = "YtGateway_GetTableRange";
 const TString YtGateway_GetFolder = "YtGateway_GetFolder";
 const TString YtGateway_GetFolders = "YtGateway_GetFolders";
 const TString YtGateway_ResolveLinks = "YtGateway_ResolveLinks";
+const TString YtGateway_PathStat = "YtGateway_PathStat";
+const TString YtGateway_PathStatMissing = "YtGateway_PathStatMissing";
 
 TString MakeHash(const TString& str) {
     SHA256_CTX sha;
     SHA256_Init(&sha);
-    SHA256_Update(&sha, str.Data(), str.Size());
+    SHA256_Update(&sha, str.data(), str.size());
     unsigned char hash[SHA256_DIGEST_LENGTH];
     SHA256_Final(hash, &sha);
     return TString((const char*)hash, sizeof(hash));
@@ -97,7 +100,7 @@ public:
 
                 if (valueNode.HasKey("Ranges")) {
                     p.Ranges.ConstructInPlace();
-                    for (const auto& r : valueNode["Ranges"].AsString()) {
+                    for (const auto& r : valueNode["Ranges"].AsList()) {
                         NYT::TReadRange range;
                         NYT::Deserialize(range, r);
                         p.Ranges->push_back(range);
@@ -300,12 +303,108 @@ public:
             });
     }
 
-    NThreading::TFuture<TTableRangeResult> GetTableRange(TTableRangeOptions&& options) final {
-        if (QContext_.CanRead()) {
-            throw yexception() << "Can't replay GetTableRange";
+    static TString MakeGetTableRangeKey(const TTableRangeOptions& options) {
+        auto keyNode = NYT::TNode()
+            ("Cluster", options.Cluster())
+            ("Prefix", options.Prefix())
+            ("Suffix", options.Suffix());
+
+        if (options.Filter()) {
+            keyNode("Filter", MakeCacheKey(*options.Filter()));
         }
 
-        return Inner_->GetTableRange(std::move(options));
+        return MakeHash(NYT::NodeToCanonicalYsonString(keyNode, NYT::NYson::EYsonFormat::Binary));
+    }
+
+    NThreading::TFuture<TTableRangeResult> GetTableRange(TTableRangeOptions&& options) final {
+        TString key;
+        if (QContext_) {
+            key = MakeGetTableRangeKey(options);
+        }
+
+        if (QContext_.CanRead()) {
+            TTableRangeResult res;
+            res.SetSuccess();
+            auto item = QContext_.GetReader()->Get({YtGateway_GetTableRange, key}).GetValueSync();
+            if (!item) {
+                throw yexception() << "Missing replay data";
+            }
+
+            auto listNode = NYT::NodeFromYsonString(item->Value);
+            for (const auto& valueNode : listNode.AsList()) {
+                TCanonizedPath p;
+                p.Path = valueNode["Path"].AsString();
+                if (valueNode.HasKey("Columns")) {
+                    p.Columns.ConstructInPlace();
+                    for (const auto& c : valueNode["Columns"].AsList()) {
+                        p.Columns->push_back(c.AsString());
+                    }
+                }
+
+                if (valueNode.HasKey("Ranges")) {
+                    p.Ranges.ConstructInPlace();
+                    for (const auto& r : valueNode["Ranges"].AsString()) {
+                        NYT::TReadRange range;
+                        NYT::Deserialize(range, r);
+                        p.Ranges->push_back(range);
+                    }
+                }
+
+                if (valueNode.HasKey("AdditionalAttributes")) {
+                    p.AdditionalAttributes = valueNode["AdditionalAttributes"].AsString();
+                }
+
+                res.Tables.push_back(p);
+            }
+
+            return NThreading::MakeFuture<TTableRangeResult>(res);
+        }
+
+        return Inner_->GetTableRange(std::move(options))
+            .Subscribe([key, qContext = QContext_](const NThreading::TFuture<TTableRangeResult>& future) {
+                if (!qContext.CanWrite() || future.HasException()) {
+                    return;
+                }
+
+                const auto& res = future.GetValueSync();
+                if (!res.Success()) {
+                    return;
+                }
+
+                auto listNode = NYT::TNode::CreateList();
+                for (const auto& t : res.Tables) {
+                    listNode.Add();
+                    auto& valueNode = listNode.AsList().back();
+                    valueNode("Path", t.Path);
+                    if (t.Columns) {
+                        NYT::TNode columnsNode = NYT::TNode::CreateList();
+                        for (const auto& c : *t.Columns) {
+                            columnsNode.Add(NYT::TNode(c));
+                        }
+
+                        valueNode("Columns", columnsNode);
+                    }
+
+                    if (t.Ranges) {
+                        NYT::TNode rangesNode = NYT::TNode::CreateList();
+                        for (const auto& r : *t.Ranges) {
+                            NYT::TNode rangeNode;
+                            NYT::TNodeBuilder builder(&rangeNode);
+                            NYT::Serialize(r, &builder);
+                            rangesNode.Add(rangeNode);
+                        }
+
+                        valueNode("Ranges", rangesNode);
+                    }
+
+                    if (t.AdditionalAttributes) {
+                        valueNode("AdditionalAttributes", NYT::TNode(*t.AdditionalAttributes));
+                    }
+                }
+
+                auto value = NYT::NodeToYsonString(listNode, NYT::NYson::EYsonFormat::Binary);
+                qContext.GetWriter()->Put({YtGateway_GetTableRange, key}, value).GetValueSync();
+        });
     }
 
     static TString MakeGetFolderKey(const TFolderOptions& options) {
@@ -600,20 +699,172 @@ public:
         return Inner_->DropTrackables(std::move(options));
     }
 
-    NThreading::TFuture<TPathStatResult> PathStat(TPathStatOptions&& options) final {
-        if (QContext_.CanRead()) {
-            throw yexception() << "Can't replay PathStat";
+    static TString MakePathStatKey(const TString& cluster, bool extended, const TPathStatReq& req) {
+        auto node = NYT::TNode()
+            ("Cluster", cluster)
+            ("Extended", extended);
+
+        NYT::TNode pathNode;
+        NYT::TNodeBuilder builder(&pathNode);
+        NYT::Serialize(req.Path(), &builder);
+        auto path = NYT::TNode()
+            ("Path", pathNode)
+            ("IsTemp", req.IsTemp())
+            ("IsAnonymous", req.IsAnonymous())
+            ("Epoch", req.Epoch());
+        
+        node("Path", path);
+        return MakeHash(NYT::NodeToCanonicalYsonString(node));
+    }
+
+    static TString SerializePathStat(const TPathStatResult& stat, ui32 index) {
+        Y_ENSURE(index < stat.DataSize.size());
+        Y_ENSURE(index < stat.Extended.size());
+        auto xNode = NYT::TNode();
+        if (!stat.Extended[index].Defined()) {
+            xNode = NYT::TNode::CreateEntity();
+        } else {
+            auto dataWeightMap = NYT::TNode::CreateMap();
+            for (const auto& d : stat.Extended[index]->DataWeight) {
+                dataWeightMap(d.first, d.second);
+            }
+
+            auto uniqCountsMap = NYT::TNode::CreateMap();
+            for (const auto& e : stat.Extended[index]->EstimatedUniqueCounts) {
+                uniqCountsMap(e.first, e.second);
+            }
+
+            xNode = NYT::TNode()
+                ("DataWeight", dataWeightMap)
+                ("EstimatedUniqueCounts", uniqCountsMap);
         }
 
-        return Inner_->PathStat(std::move(options));
+        auto node = NYT::TNode()
+            ("DataSize", stat.DataSize[index])
+            ("Extended", xNode);
+
+        return NYT::NodeToYsonString(node, NYT::NYson::EYsonFormat::Binary);
+    }
+
+    static void DeserializePathStat(const NYT::TNode& node, TPathStatResult& stat, ui32 index) {
+        Y_ENSURE(index < stat.DataSize.size());
+        Y_ENSURE(index < stat.Extended.size());
+        stat.DataSize[index] = node["DataSize"].AsUint64();
+        stat.Extended[index] = Nothing();
+        const auto& x  = node["Extended"];
+        if (!x.IsEntity()) {
+            auto& xValue = stat.Extended[index];
+            xValue.ConstructInPlace();
+            for (const auto& d : x["DataWeight"].AsMap()) {
+                xValue->DataWeight[d.first] = d.second.AsInt64();
+            }
+
+            for (const auto& e : x["EstimatedUniqueCounts"].AsMap()) {
+                xValue->EstimatedUniqueCounts[e.first] = e.second.AsUint64();
+            }
+        }
+    }
+
+    NThreading::TFuture<TPathStatResult> PathStat(TPathStatOptions&& options) final {
+        if (QContext_.CanRead()) {
+            TPathStatResult res;
+            res.DataSize.resize(options.Paths().size(), 0);
+            res.Extended.resize(options.Paths().size());
+
+            for (ui32 index = 0; index < options.Paths().size(); ++index) {
+                const auto& key = MakePathStatKey(options.Cluster(), options.Extended(), options.Paths()[index]);
+                auto item = QContext_.GetReader()->Get({YtGateway_PathStat, key}).GetValueSync();
+                if (!item) {
+                    throw yexception() << "Missing replay data";
+                }
+
+                PathStatKeys_.emplace(key);
+                auto valueNode = NYT::NodeFromYsonString(TStringBuf(item->Value));
+                DeserializePathStat(valueNode, res, index);
+            }
+
+            res.SetSuccess();
+            return NThreading::MakeFuture<TPathStatResult>(res);
+        }
+
+        auto optionsDup = options;
+        return Inner_->PathStat(std::move(options))
+            .Subscribe([optionsDup, qContext = QContext_](const NThreading::TFuture<TPathStatResult>& future) {
+                if (!qContext.CanWrite() || future.HasException()) {
+                    return;
+                }
+
+                const auto& res = future.GetValueSync();
+                if (!res.Success()) {
+                    return;
+                }
+
+                for (ui32 index = 0; index < optionsDup.Paths().size(); ++index) {
+                    const auto& key = MakePathStatKey(optionsDup.Cluster(), optionsDup.Extended(), optionsDup.Paths()[index]);
+                    auto value = SerializePathStat(res, index);
+                    qContext.GetWriter()->Put({YtGateway_PathStat, key}, value).GetValueSync();
+                }
+        });
     }
 
     TPathStatResult TryPathStat(TPathStatOptions&& options) final {
         if (QContext_.CanRead()) {
-            throw yexception() << "Can't replay TryPathStat";
+            TPathStatResult res;
+            res.DataSize.resize(options.Paths().size(), 0);
+            res.Extended.resize(options.Paths().size());
+
+            for (ui32 index = 0; index < options.Paths().size(); ++index) {
+                const auto& key = MakePathStatKey(options.Cluster(), options.Extended(), options.Paths()[index]);
+                bool allow = false;
+                if (PathStatKeys_.contains(key)) {
+                    allow = true;
+                } else {
+                    auto missingItem = QContext_.GetReader()->Get({YtGateway_PathStatMissing, key}).GetValueSync();
+                    if (!missingItem) {
+                        allow = true;
+                        PathStatKeys_.emplace(key);
+                    }
+                }
+
+                if (!allow) {
+                    return res;
+                }
+
+                auto item = QContext_.GetReader()->Get({YtGateway_PathStat, key}).GetValueSync();
+                if (!item) {
+                    return res;
+                }
+
+                auto valueNode = NYT::NodeFromYsonString(TStringBuf(item->Value));
+                DeserializePathStat(valueNode, res, index);
+            }
+
+            res.SetSuccess();
+            return res;
         }
 
-        return Inner_->TryPathStat(std::move(options));
+        auto optionsDup = options;
+        auto res = Inner_->TryPathStat(std::move(options));
+        if (!QContext_.CanWrite()) {
+            return res;
+        }
+
+        if (!res.Success()) {
+            for (ui32 index = 0; index < optionsDup.Paths().size(); ++index) {
+                const auto& key = MakePathStatKey(optionsDup.Cluster(), optionsDup.Extended(), optionsDup.Paths()[index]);
+                QContext_.GetWriter()->Put({YtGateway_PathStatMissing, key}, "1").GetValueSync();
+            }
+
+            return res;
+        }
+
+        for (ui32 index = 0; index < optionsDup.Paths().size(); ++index) {
+            const auto& key = MakePathStatKey(optionsDup.Cluster(), optionsDup.Extended(), optionsDup.Paths()[index]);
+            auto value = SerializePathStat(res, index);
+            QContext_.GetWriter()->Put({YtGateway_PathStat, key}, value).GetValueSync();
+        }
+
+        return res;
     }
 
     bool TryParseYtUrl(const TString& url, TString* cluster, TString* path) const final {
@@ -669,6 +920,7 @@ private:
     const TQContext QContext_;
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
     const TFileStoragePtr FileStorage_;
+    THashSet<TString> PathStatKeys_;
 };
 
 }

@@ -42,6 +42,7 @@ public:
         AddHandler({TYtStatOut::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleDefault));
         AddHandler({TYtDqProcessWrite ::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleDqProcessWrite));
         AddHandler({TYtTryFirst ::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleTryFirst));
+        AddHandler({TYtMaterialize ::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleMaterialize));
     }
 private:
     static void CopyExcept(TExprNode* dst, const TExprNode& from, const TStringBuf& except) {
@@ -447,6 +448,12 @@ private:
         input.Ptr()->CopyConstraints(input.Ref().Tail());
         return TStatus::Ok;
     }
+
+    TStatus HandleMaterialize(TExprBase input, TExprContext&) {
+        input.Ptr()->CopyConstraints(*input.Ref().Child(TYtMaterialize::idx_Input));
+        return TStatus::Ok;
+    }
+
 private:
     const TYtState::TPtr State_;
     const bool SubGraph;

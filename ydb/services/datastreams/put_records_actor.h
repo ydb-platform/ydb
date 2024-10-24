@@ -4,9 +4,11 @@
 #include "events.h"
 
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/pq_rl_helpers.h>
+#include <ydb/core/persqueue/utils.h>
 #include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/persqueue/writer/partition_chooser.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 
@@ -222,13 +224,12 @@ namespace NKikimr::NDataStreams::V1 {
         ~TPutRecordsActorBase() = default;
 
         void Bootstrap(const NActors::TActorContext &ctx);
-        void PreparePartitionActors(const NActors::TActorContext& ctx);
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
         void Die(const TActorContext& ctx) override;
 
     protected:
         void Write(const TActorContext& ctx);
-        void AddRecord(THashMap<ui32, TVector<TPutRecordsItem>>& items, ui32 totalShardsCount, int index);
+        void AddRecord(THashMap<ui32, TVector<TPutRecordsItem>>& items, const std::shared_ptr<NPQ::IPartitionChooser>& chooser, int index);
         ui64 GetPayloadSize() const;
 
     private:
@@ -281,7 +282,7 @@ namespace NKikimr::NDataStreams::V1 {
         if (!error.empty()) {
             return this->ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
                                         Ydb::PersQueue::ErrorCode::BAD_REQUEST,
-                                        error, ctx);
+                                        error);
         }
 
         if (this->Request_->GetSerializedToken().empty()) {
@@ -290,7 +291,7 @@ namespace NKikimr::NDataStreams::V1 {
                                             Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
                                             TStringBuilder() << "Access to stream "
                                             << this->GetProtoRequest()->stream_name()
-                                            << " is denied", ctx);
+                                            << " is denied");
             }
         }
         NACLib::TUserToken token(this->Request_->GetSerializedToken());
@@ -331,7 +332,7 @@ namespace NKikimr::NDataStreams::V1 {
                                             TStringBuilder() << "Access for stream "
                                             << this->GetProtoRequest()->stream_name()
                                             << " is denied for subject "
-                                            << token.GetUserSID(), this->ActorContext());
+                                            << token.GetUserSID());
             }
         }
 
@@ -345,7 +346,7 @@ namespace NKikimr::NDataStreams::V1 {
                                         Ydb::PersQueue::ErrorCode::BAD_REQUEST,
                                         TStringBuilder() << "write to mirrored stream "
                                         << this->GetProtoRequest()->stream_name()
-                                        << " is forbidden", this->ActorContext());
+                                        << " is forbidden");
         }
 
 
@@ -359,12 +360,13 @@ namespace NKikimr::NDataStreams::V1 {
 
     template<class TDerived, class TProto>
     void TPutRecordsActorBase<TDerived, TProto>::Write(const TActorContext& ctx) {
-        THashMap<ui32, TVector<TPutRecordsItem>> items;
         const auto& pqDescription = PQGroupInfo->Description;
-        ui32 totalShardsCount = pqDescription.GetPartitions().size();
+        auto chooser = NPQ::CreatePartitionChooser(pqDescription, true);
+
+        THashMap<ui32, TVector<TPutRecordsItem>> items;
         for (int i = 0; i < static_cast<TDerived*>(this)->GetPutRecordsRequest().records_size(); ++i) {
             PutRecordsResult.add_records();
-            AddRecord(items, totalShardsCount, i);
+            AddRecord(items, chooser, i);
         }
 
         for (auto& partition : pqDescription.GetPartitions()) {
@@ -433,19 +435,22 @@ namespace NKikimr::NDataStreams::V1 {
         }
     }
 
-    template<class TDerived, class TProto>
-    void TPutRecordsActorBase<TDerived, TProto>::AddRecord(THashMap<ui32, TVector<TPutRecordsItem>>& items, ui32 totalShardsCount, int index) {
-        const auto& record = static_cast<TDerived*>(this)->GetPutRecordsRequest().records(index);
-        ui32 shard = 0;
+    inline NYql::NDecimal::TUint128 GetHashKey(const Ydb::DataStreams::V1::PutRecordsRequestEntry& record) {
         if (record.explicit_hash_key().empty()) {
-            auto hashKey = HexBytesToDecimal(MD5::Calc(record.partition_key()));
-            shard = ShardFromDecimal(hashKey, totalShardsCount);
+            return HexBytesToDecimal(MD5::Calc(record.partition_key()));
         } else {
-            auto hashKey = BytesToDecimal(record.explicit_hash_key());
-            shard = ShardFromDecimal(hashKey, totalShardsCount);
+            return BytesToDecimal(record.explicit_hash_key());
         }
-        items[shard].push_back(TPutRecordsItem{record.data(), record.partition_key(), record.explicit_hash_key(), Ip});
-        PartitionToActor[shard].RecordIndexes.push_back(index);
+    }
+
+    template<class TDerived, class TProto>
+    void TPutRecordsActorBase<TDerived, TProto>::AddRecord(THashMap<ui32, TVector<TPutRecordsItem>>& items, const std::shared_ptr<NPQ::IPartitionChooser>& chooser, int index) {
+        const auto& record = static_cast<TDerived*>(this)->GetPutRecordsRequest().records(index);
+
+        TString hashKey = NPQ::AsKeyBound(GetHashKey(record));
+        auto* partition = chooser->GetPartition(hashKey);
+        items[partition->PartitionId].push_back(TPutRecordsItem{record.data(), record.partition_key(), record.explicit_hash_key(), Ip});
+        PartitionToActor[partition->PartitionId].RecordIndexes.push_back(index);
     }
 
     template<class TDerived, class TProto>
@@ -521,10 +526,10 @@ namespace NKikimr::NDataStreams::V1 {
             if (putRecordsResult.records(0).error_code() == "ProvisionedThroughputExceededException"
                 || putRecordsResult.records(0).error_code() == "ThrottlingException")
             {
-                return ReplyWithError(Ydb::StatusIds::OVERLOADED, Ydb::PersQueue::ErrorCode::OVERLOAD, putRecordsResult.records(0).error_message(), ctx);
+                return ReplyWithError(Ydb::StatusIds::OVERLOADED, Ydb::PersQueue::ErrorCode::OVERLOAD, putRecordsResult.records(0).error_message());
             }
             //TODO: other codes - access denied and so on
-            return ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, Ydb::PersQueue::ErrorCode::ERROR, putRecordsResult.records(0).error_message(), ctx);
+            return ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, Ydb::PersQueue::ErrorCode::ERROR, putRecordsResult.records(0).error_message());
 
         }
     }

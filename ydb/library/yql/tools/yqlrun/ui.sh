@@ -19,7 +19,13 @@ if [ "$2" = "--gdb" ]; then
     GDB="ya tool gdb --args"
 fi
 
-${GDB} ${SCRIPT_DIR}/yqlrun ui \
+if [ -z "${ARC_BUILD_DIR}" ]; then
+    PGM=${SCRIPT_DIR}/yqlrun
+else
+    PGM=${ARC_BUILD_DIR}/contrib/ydb/library/yql/tools/yqlrun/yqlrun
+fi
+
+${GDB} ${PGM} ui \
     --mounts ${MOUNTS_CFG} \
     --udfs-dir ${UDFS_DIR} \
     --assets ${ASSETS_DIR} \

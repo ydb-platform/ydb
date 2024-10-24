@@ -7,6 +7,7 @@
 #include <library/cpp/http/server/http.h>
 #include <library/cpp/http/server/response.h>
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 
@@ -16,8 +17,11 @@
 
 using namespace NYdb;
 
-extern const TString TestPrivateKeyContent;
-extern const TString TestPublicKeyContent;
+extern const TString TestRSAPrivateKeyContent;
+extern const TString TestRSAPublicKeyContent;
+extern const TString TestECPrivateKeyContent;
+extern const TString TestECPublicKeyContent;
+extern const TString TestHMACSecretKeyBase64Content;
 
 class TTestTokenExchangeServer: public THttpServer::ICallBack {
 public:
@@ -33,7 +37,7 @@ public:
         TMaybe<TJwtCheck> ActorJwtCheck;
 
         void Check() {
-            UNIT_ASSERT(InputParams || !ExpectRequest);
+            UNIT_ASSERT_C(InputParams || !ExpectRequest, "Request error: " << Error);
             if (InputParams) {
                 if (SubjectJwtCheck || ActorJwtCheck) {
                     TCgiParameters inputParamsCopy = *InputParams;
@@ -925,6 +929,7 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
 
         server.Check.ExpectedInputParams.erase("scope");
         server.Check.ExpectedInputParams.emplace("resource", "test_res");
+        server.Check.ExpectedInputParams.emplace("resource", "test_res_2");
         server.Check.ExpectedInputParams.emplace("actor_token", "act_token");
         server.Check.ExpectedInputParams.emplace("actor_token_type", "act_token_type");
         server.Run(
@@ -932,7 +937,8 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
                 .TokenEndpoint(server.GetEndpoint())
                 .AppendAudience("test_aud")
                 .AppendAudience("test_aud_2")
-                .Resource("test_res")
+                .AppendResource("test_res")
+                .AppendResource("test_res_2")
                 .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type"))
                 .ActorTokenSource(CreateFixedTokenSource("act_token", "act_token_type")),
             "Bearer hello_token"
@@ -945,6 +951,8 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
         server.Check.ExpectedInputParams.emplace("requested_token_type", "test_requested_token_type");
         server.Check.ExpectedInputParams.emplace("subject_token", "test_token");
         server.Check.ExpectedInputParams.emplace("subject_token_type", "test_token_type");
+        server.Check.ExpectedInputParams.emplace("resource", "r1");
+        server.Check.ExpectedInputParams.emplace("resource", "r2");
         server.Check.Response = R"({"access_token": "received_token", "token_type": "bEareR", "expires_in": 42})";
         server.RunFromConfig(
             TTestConfigFile()
@@ -952,6 +960,10 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
                 .Field("unknown", "unknown value")
                 .Field("grant-type", "test_grant_type")
                 .Field("requested-token-type", "test_requested_token_type")
+                .Array("res")
+                    .Value("r1")
+                    .Value("r2")
+                    .Build()
                 .SubMap("subject-credentials")
                     .Field("type", "Fixed")
                     .Field("token", "test_token")
@@ -976,7 +988,7 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
             .Subject("test_sub")
             .Audience("test_aud")
             .Id("test_jti")
-            .Alg<jwt::algorithm::rs384>(TestPublicKeyContent);
+            .Alg<jwt::algorithm::rs384>(TestRSAPublicKeyContent);
         server.Check.ActorJwtCheck.ConstructInPlace()
             .AppendAudience("a1")
             .AppendAudience("a2");
@@ -993,7 +1005,7 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
                     .Field("aud", "test_aud")
                     .Field("jti", "test_jti")
                     .Field("alg", "rs384")
-                    .Field("private-key", TestPrivateKeyContent)
+                    .Field("private-key", TestRSAPrivateKeyContent)
                     .Field("unknown", "unknown value")
                     .Build()
                 .SubMap("actor-credentials")
@@ -1003,7 +1015,33 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
                         .Value("a2")
                         .Build()
                     .Field("alg", "RS256")
-                    .Field("private-key", TestPrivateKeyContent)
+                    .Field("private-key", TestRSAPrivateKeyContent)
+                    .Build()
+                .Build(),
+            "Bearer received_token"
+        );
+
+        // Other signing methods
+        server.Check.SubjectJwtCheck.ConstructInPlace()
+            .Id("jti")
+            .Alg<jwt::algorithm::hs384>(Base64Decode(TestHMACSecretKeyBase64Content));
+        server.Check.ActorJwtCheck.ConstructInPlace()
+            .Alg<jwt::algorithm::es256>(TestECPublicKeyContent)
+            .Issuer("iss");
+        server.RunFromConfig(
+            TTestConfigFile()
+                .Field("token-endpoint", server.GetEndpoint())
+                .SubMap("subject-credentials")
+                    .Field("type", "jwt")
+                    .Field("jti", "jti")
+                    .Field("alg", "HS384")
+                    .Field("private-key", TestHMACSecretKeyBase64Content)
+                    .Build()
+                .SubMap("actor-credentials")
+                    .Field("type", "JWT")
+                    .Field("alg", "ES256")
+                    .Field("private-key", TestECPrivateKeyContent)
+                    .Field("iss", "iss")
                     .Build()
                 .Build(),
             "Bearer received_token"
@@ -1089,7 +1127,7 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
                 .Field("token-endpoint", server.GetEndpoint())
                 .SubMap("subject-credentials")
                     .Field("type", "jwt")
-                    .Field("private-key", TestPrivateKeyContent)
+                    .Field("private-key", TestRSAPrivateKeyContent)
                     .Build()
                 .Build()
         );
@@ -1112,7 +1150,7 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
                 .SubMap("subject-credentials")
                     .Field("type", "jwt")
                     .Field("alg", "rs256")
-                    .Field("private-key", TestPrivateKeyContent)
+                    .Field("private-key", TestRSAPrivateKeyContent)
                     .Field("ttl", "-1s")
                     .Build()
                 .Build()
@@ -1125,7 +1163,7 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
                 .SubMap("subject-credentials")
                     .Field("type", "jwt")
                     .Field("alg", "algorithm")
-                    .Field("private-key", TestPrivateKeyContent)
+                    .Field("private-key", TestRSAPrivateKeyContent)
                     .Build()
                 .Build()
         );
@@ -1138,6 +1176,42 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
                     .Field("type", "jwt")
                     .Field("alg", "rs256")
                     .Field("private-key", "not a key")
+                    .Build()
+                .Build()
+        );
+
+        server.Check.ExpectedErrorPart = "failed to decode HMAC secret from Base64";
+        server.RunFromConfig(
+            TTestConfigFile()
+                .Field("token-endpoint", server.GetEndpoint())
+                .SubMap("subject-credentials")
+                    .Field("type", "jwt")
+                    .Field("alg", "hs256")
+                    .Field("private-key", "\n<not a base64>\n")
+                    .Build()
+                .Build()
+        );
+
+        server.Check.ExpectedErrorPart = "failed to load private key";
+        server.RunFromConfig(
+            TTestConfigFile()
+                .Field("token-endpoint", server.GetEndpoint())
+                .SubMap("subject-credentials")
+                    .Field("type", "jwt")
+                    .Field("alg", "es256")
+                    .Field("private-key", TestRSAPrivateKeyContent) // Need EC key
+                    .Build()
+                .Build()
+        );
+
+        server.Check.ExpectedErrorPart = "failed to load private key";
+        server.RunFromConfig(
+            TTestConfigFile()
+                .Field("token-endpoint", server.GetEndpoint())
+                .SubMap("subject-credentials")
+                    .Field("type", "jwt")
+                    .Field("alg", "ps512")
+                    .Field("private-key", TestHMACSecretKeyBase64Content) // Need RSA key
                     .Build()
                 .Build()
         );

@@ -1,18 +1,34 @@
 #include "tpch.h"
 #include "data_generator.h"
 
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
+
 #include <library/cpp/resource/resource.h>
 #include <util/stream/file.h>
 
 namespace NYdbWorkload {
 
 TTpchWorkloadGenerator::TTpchWorkloadGenerator(const TTpchWorkloadParams& params)
-    : TWorkloadGeneratorBase(params)
+    : TTpcBaseWorkloadGenerator(params)
     , Params(params)
 {}
 
 TString TTpchWorkloadGenerator::DoGetDDLQueries() const {
     auto schema = NResource::Find("tpch_schema.sql");
+    TString floatType;
+    switch (Params.GetFloatMode()) {
+    case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
+        floatType = "Double";
+        break;
+    case TTpcBaseWorkloadParams::EFloatMode::DECIMAL:
+        floatType = "Decimal(12,2)";
+        break;
+    case TTpcBaseWorkloadParams::EFloatMode::DECIMAL_YDB:
+        floatType = "Decimal(" + ::ToString(NKikimr::NScheme::DECIMAL_PRECISION)
+                     + "," + ::ToString(NKikimr::NScheme::DECIMAL_SCALE) + ")";
+        break;
+    }
+    SubstGlobal(schema, "{float_type}", floatType);
     return schema;
 }
 
@@ -71,8 +87,8 @@ TQueryInfoList TTpchWorkloadGenerator::GetWorkload(int type) {
                 TStringBuilder() << "`" << Params.GetFullTableName(name) << "`"
             );
         };
-        SubstGlobal(query, "{% include 'header.sql.jinja' %}", "");
-        SubstGlobal(query, "{path}"      , Params.GetFullTableName(nullptr) + "/");
+        PatchQuery(query);
+        SubstGlobal(query, "{path}", Params.GetFullTableName(nullptr) + "/");
         substTable("customer");
         substTable("lineitem");
         substTable("nation");
@@ -83,6 +99,12 @@ TQueryInfoList TTpchWorkloadGenerator::GetWorkload(int type) {
         substTable("supplier");
         result.emplace_back();
         result.back().Query = query;
+        if (Params.IsCheckCanonical()) {
+            const auto key = "tpch/s1_canonical/q" + ToString(&query - queries.data()) + ".result";
+            if (NResource::Has(key)) {
+                result.back().ExpectedResult = NResource::Find(key);
+            }
+        }
     }
     return result;
 }
@@ -92,11 +114,13 @@ TVector<IWorkloadQueryGenerator::TWorkloadType> TTpchWorkloadGenerator::GetSuppo
 }
 
 void TTpchWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
-    TWorkloadBaseParams::ConfigureOpts(opts, commandType, workloadType);
+    TTpcBaseWorkloadParams::ConfigureOpts(opts, commandType, workloadType);
     switch (commandType) {
     case TWorkloadParams::ECommandType::Run:
         opts.AddLongOption("ext-queries-dir", "Directory with external queries. Naming have to be q[0-N].sql")
             .StoreResult(&ExternalQueriesDir);
+        opts.AddLongOption('c', "check-canonical", "Use deterministic queries and check results with canonical ones.")
+            .NoArgument().StoreTrue(&CheckCanonicalFlag);
         break;
     default:
         break;

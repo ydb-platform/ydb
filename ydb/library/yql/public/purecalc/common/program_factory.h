@@ -24,6 +24,7 @@ namespace NYql {
             IModuleResolver::TPtr ModuleResolver_;
             TUserDataTable UserData_;
             EBlockEngineMode BlockEngineMode_;
+            IOutputStream* ExprOutputStream_;
             THashMap<TString, TString> Modules_;
             NKikimr::NUdf::ICountersProvider* CountersProvider_;
 

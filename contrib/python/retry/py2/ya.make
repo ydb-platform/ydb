@@ -2,8 +2,6 @@
 
 PY2_LIBRARY()
 
-SUBSCRIBER(g:python-contrib)
-
 VERSION(0.9.2)
 
 LICENSE(Apache-2.0)

@@ -293,6 +293,9 @@ class ClusterDetailsProvider(object):
         self.static_cpu_count = self.__cluster_description.get("static_cpu_count", 20)
         self.dynamic_cpu_count = self.__cluster_description.get("dynamic_cpu_count", 8)
         self.force_io_pool_threads = self.__cluster_description.get("force_io_pool_threads", None)
+        self.client_certificate_authorization = self.__cluster_description.get("client_certificate_authorization")
+        self.table_profiles_config = self.__cluster_description.get("table_profiles_config")
+        self.http_proxy_config = self.__cluster_description.get("http_proxy_config")
         self.blob_storage_config = self.__cluster_description.get("blob_storage_config")
         self.pdisk_key_config = self.__cluster_description.get("pdisk_key_config", {})
         if not self.need_txt_files and not self.use_new_style_kikimr_cfg:

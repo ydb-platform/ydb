@@ -396,6 +396,7 @@ struct TRspOffsetCommitTopic
 struct TRspOffsetCommit
 {
     std::vector<TRspOffsetCommitTopic> Topics;
+
     void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
 };
 

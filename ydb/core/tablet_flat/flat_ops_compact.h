@@ -315,7 +315,7 @@ namespace NTabletFlatExecutor {
                     { },
                     std::move(result.Overlay));
 
-                auto fetch = loader.Run();
+                auto fetch = loader.Run(false);
 
                 Y_ABORT_UNLESS(!fetch, "Just compacted part needs to load some pages");
 

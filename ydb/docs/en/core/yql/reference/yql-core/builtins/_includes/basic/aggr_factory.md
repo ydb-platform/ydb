@@ -10,7 +10,7 @@ Arguments:
 The resulting factory can be used as the second parameter of the function [AGGREGATE_BY](../../aggregation.md#aggregateby).
 If the aggregate function is applied to two columns instead of one, as, for example, [MIN_BY](../../aggregation.md#minby), then in [AGGREGATE_BY](../../aggregation.md#aggregateby), the first argument passes a `Tuple` of two values. See more details in the description of the applicable aggregate function.
 
-**Examples:**
+### Examples
 
 ```yql
 $factory = AggregationFactory("MIN");
@@ -19,7 +19,7 @@ SELECT
 FROM my_table;
 ```
 
-## AggregateTransform... {#aggregatetransform}
+## AggregateTransformInput {#aggregatetransform}
 
 `AggregateTransformInput()` converts an [aggregation factory](../../aggregation.md), for example, obtained using the [AggregationFactory](#aggregationfactory) function, to other factory, in which the specified transformation of input items is performed before starting aggregation.
 
@@ -28,16 +28,18 @@ Arguments:
 1. Aggregation factory.
 2. A lambda function with one argument that converts an input item.
 
-**Examples:**
+### Examples
 
 ```yql
 $f = AggregationFactory("sum");
 $g = AggregateTransformInput($f, ($x) -> (cast($x as Int32)));
 $h = AggregateTransformInput($f, ($x) -> ($x * 2));
-select ListAggregate([1,2,3], $f); -- 6
-select ListAggregate(["1","2","3"], $g); -- 6
-select ListAggregate([1,2,3], $h); -- 12
+SELECT ListAggregate([1,2,3], $f); -- 6
+SELECT ListAggregate(["1","2","3"], $g); -- 6
+SELECT ListAggregate([1,2,3], $h); -- 12
 ```
+
+## AggregateTransformOutput {#aggregatetransformoutput}
 
 `AggregateTransformOutput()` converts an [aggregation factory](../../aggregation.md), for example, obtained using the [AggregationFactory](#aggregationfactory) function, to other factory, in which the specified transformation of the result is performed after ending aggregation.
 
@@ -46,13 +48,13 @@ Arguments:
 1. Aggregation factory.
 2. A lambda function with one argument that converts the result.
 
-**Examples:**
+### Examples
 
 ```yql
 $f = AggregationFactory("sum");
 $g = AggregateTransformOutput($f, ($x) -> ($x * 2));
-select ListAggregate([1,2,3], $f); -- 6
-select ListAggregate([1,2,3], $g); -- 12
+SELECT ListAggregate([1,2,3], $f); -- 6
+SELECT ListAggregate([1,2,3], $g); -- 12
 ```
 
 ## AggregateFlatten {#aggregateflatten}
@@ -63,12 +65,12 @@ Arguments:
 
 1. Aggregation factory.
 
-**Examples:**
+### Examples
 
 ```yql
 $i = AggregationFactory("AGGREGATE_LIST_DISTINCT");
 $j = AggregateFlatten($i);
-select AggregateBy(x, $j) from (
+SELECT AggregateBy(x, $j) from (
    select [1,2] as x
    union all
    select [2,3] as x

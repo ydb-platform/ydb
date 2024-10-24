@@ -114,6 +114,7 @@ public:
         ServerSettings->SetKqpSettings(kqpSettings);
         ServerSettings->SetEnableDataColumnForIndexTable(true);
         ServerSettings->SetEnableNotNullColumns(true);
+        ServerSettings->SetEnableParameterizedDecimal(true);
         ServerSettings->SetEnableSystemViews(TestSettings::EnableSystemViews);
         ServerSettings->SetEnableYq(enableYq);
         ServerSettings->Formats = new TFormatFactory;
@@ -150,7 +151,7 @@ public:
 
         NYdbGrpc::TServerOptions grpcOption;
         if (TestSettings::AUTH) {
-            grpcOption.SetUseAuth(true);
+            grpcOption.SetUseAuth(appConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()); // In real life UseAuth is initialized with EnforceUserTokenRequirement. To avoid incorrect tests we must do the same.
         }
         grpcOption.SetPort(grpc);
         if (TestSettings::SSL) {

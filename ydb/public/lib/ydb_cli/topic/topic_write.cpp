@@ -54,7 +54,7 @@ namespace NYdb::NConsoleClient {
                 return;
             }
 
-            Y_ENSURE(delimiter->Size() == 1, "Invalid delimiter size, should be <= 1");
+            Y_ENSURE(delimiter->size() == 1, "Invalid delimiter size, should be <= 1");
             Delimiter_ = TMaybe<char>(delimiter->at(0));
         }
     }

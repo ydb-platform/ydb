@@ -1,0 +1,406 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0038689435a930038c59cd7b6aa3253a
+BELONGS ya.make
+    License text:
+         *  Copyright (c) 2012 Terence Parr
+         *  Copyright (c) 2012 Sam Harwell
+         *  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/tree/IterativeParseTreeWalker.h [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4ae71b56ebdfe548c9e21dc6776d3efa
+BELONGS ya.make
+    License text:
+        Copyright (c) 2012-2022 The ANTLR Project. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 605ef20fede2709d5c2d11c56a786d10
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2012-2021 The ANTLR Project. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/support/Casts.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6216e987e1e22c7b399c9eb26217a878
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2021 The ANTLR Project. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/support/Unicode.h [1:1]
+        src/support/Utf8.cpp [1:1]
+        src/support/Utf8.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b87a6df5f745dd87f65713e3965bc8bb
+BELONGS ya.make
+    License text:
+        // Copyright 2012-2022 The ANTLR Project
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/FlatHashMap.h [1:1]
+        src/FlatHashSet.h [1:1]
+        src/Version.h [1:1]
+        src/atn/ParserATNSimulatorOptions.h [1:1]
+        src/atn/PredictionContextCache.cpp [1:1]
+        src/atn/PredictionContextCache.h [1:1]
+        src/atn/PredictionContextMergeCache.cpp [1:1]
+        src/atn/PredictionContextMergeCache.h [1:1]
+        src/atn/PredictionContextMergeCacheOptions.h [1:1]
+        src/internal/Synchronization.cpp [1:1]
+        src/internal/Synchronization.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c814f02234dec37d81b4a2ae196440c5
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2012-2017 The ANTLR Project. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/ANTLRErrorListener.cpp [1:1]
+        src/ANTLRErrorListener.h [1:1]
+        src/ANTLRErrorStrategy.cpp [1:1]
+        src/ANTLRErrorStrategy.h [1:1]
+        src/ANTLRFileStream.cpp [1:1]
+        src/ANTLRFileStream.h [1:1]
+        src/ANTLRInputStream.cpp [1:1]
+        src/ANTLRInputStream.h [1:1]
+        src/BailErrorStrategy.cpp [1:1]
+        src/BailErrorStrategy.h [1:1]
+        src/BaseErrorListener.cpp [1:1]
+        src/BaseErrorListener.h [1:1]
+        src/BufferedTokenStream.cpp [1:1]
+        src/BufferedTokenStream.h [1:1]
+        src/CharStream.cpp [1:1]
+        src/CharStream.h [1:1]
+        src/CommonToken.cpp [1:1]
+        src/CommonToken.h [1:1]
+        src/CommonTokenFactory.cpp [1:1]
+        src/CommonTokenFactory.h [1:1]
+        src/CommonTokenStream.cpp [1:1]
+        src/CommonTokenStream.h [1:1]
+        src/ConsoleErrorListener.cpp [1:1]
+        src/ConsoleErrorListener.h [1:1]
+        src/DefaultErrorStrategy.cpp [1:1]
+        src/DefaultErrorStrategy.h [1:1]
+        src/DiagnosticErrorListener.cpp [1:1]
+        src/DiagnosticErrorListener.h [1:1]
+        src/Exceptions.cpp [1:1]
+        src/Exceptions.h [1:1]
+        src/FailedPredicateException.cpp [1:1]
+        src/FailedPredicateException.h [1:1]
+        src/InputMismatchException.cpp [1:1]
+        src/InputMismatchException.h [1:1]
+        src/IntStream.cpp [1:1]
+        src/IntStream.h [1:1]
+        src/InterpreterRuleContext.cpp [1:1]
+        src/InterpreterRuleContext.h [1:1]
+        src/Lexer.cpp [1:1]
+        src/Lexer.h [1:1]
+        src/LexerInterpreter.cpp [1:1]
+        src/LexerInterpreter.h [1:1]
+        src/LexerNoViableAltException.cpp [1:1]
+        src/LexerNoViableAltException.h [1:1]
+        src/ListTokenSource.cpp [1:1]
+        src/ListTokenSource.h [1:1]
+        src/NoViableAltException.cpp [1:1]
+        src/NoViableAltException.h [1:1]
+        src/Parser.cpp [1:1]
+        src/Parser.h [1:1]
+        src/ParserInterpreter.cpp [1:1]
+        src/ParserInterpreter.h [1:1]
+        src/ParserRuleContext.cpp [1:1]
+        src/ParserRuleContext.h [1:1]
+        src/ProxyErrorListener.cpp [1:1]
+        src/ProxyErrorListener.h [1:1]
+        src/RecognitionException.cpp [1:1]
+        src/RecognitionException.h [1:1]
+        src/Recognizer.cpp [1:1]
+        src/Recognizer.h [1:1]
+        src/RuleContext.cpp [1:1]
+        src/RuleContext.h [1:1]
+        src/RuleContextWithAltNum.cpp [1:1]
+        src/RuleContextWithAltNum.h [1:1]
+        src/RuntimeMetaData.cpp [1:1]
+        src/RuntimeMetaData.h [1:1]
+        src/Token.cpp [1:1]
+        src/Token.h [1:1]
+        src/TokenFactory.h [1:1]
+        src/TokenSource.cpp [1:1]
+        src/TokenSource.h [1:1]
+        src/TokenStream.cpp [1:1]
+        src/TokenStream.h [1:1]
+        src/TokenStreamRewriter.cpp [1:1]
+        src/TokenStreamRewriter.h [1:1]
+        src/UnbufferedCharStream.cpp [1:1]
+        src/UnbufferedCharStream.h [1:1]
+        src/UnbufferedTokenStream.cpp [1:1]
+        src/UnbufferedTokenStream.h [1:1]
+        src/Vocabulary.cpp [1:1]
+        src/Vocabulary.h [1:1]
+        src/WritableToken.cpp [1:1]
+        src/WritableToken.h [1:1]
+        src/antlr4-common.h [1:1]
+        src/antlr4-runtime.h [1:1]
+        src/atn/ATN.cpp [1:1]
+        src/atn/ATN.h [1:1]
+        src/atn/ATNConfig.cpp [1:1]
+        src/atn/ATNConfig.h [1:1]
+        src/atn/ATNConfigSet.cpp [1:1]
+        src/atn/ATNConfigSet.h [1:1]
+        src/atn/ATNDeserializationOptions.cpp [1:1]
+        src/atn/ATNDeserializationOptions.h [1:1]
+        src/atn/ATNDeserializer.cpp [1:1]
+        src/atn/ATNDeserializer.h [1:1]
+        src/atn/ATNSimulator.cpp [1:1]
+        src/atn/ATNSimulator.h [1:1]
+        src/atn/ATNState.cpp [1:1]
+        src/atn/ATNState.h [1:1]
+        src/atn/ATNStateType.h [1:1]
+        src/atn/ATNType.h [1:1]
+        src/atn/ActionTransition.cpp [1:1]
+        src/atn/ActionTransition.h [1:1]
+        src/atn/AmbiguityInfo.cpp [1:1]
+        src/atn/AmbiguityInfo.h [1:1]
+        src/atn/ArrayPredictionContext.cpp [1:1]
+        src/atn/ArrayPredictionContext.h [2:2]
+        src/atn/AtomTransition.cpp [1:1]
+        src/atn/AtomTransition.h [1:1]
+        src/atn/BasicBlockStartState.h [1:1]
+        src/atn/BasicState.h [1:1]
+        src/atn/BlockEndState.h [1:1]
+        src/atn/BlockStartState.h [1:1]
+        src/atn/ContextSensitivityInfo.cpp [1:1]
+        src/atn/ContextSensitivityInfo.h [1:1]
+        src/atn/DecisionEventInfo.cpp [1:1]
+        src/atn/DecisionEventInfo.h [1:1]
+        src/atn/DecisionInfo.cpp [1:1]
+        src/atn/DecisionInfo.h [1:1]
+        src/atn/DecisionState.cpp [1:1]
+        src/atn/DecisionState.h [1:1]
+        src/atn/EpsilonTransition.cpp [1:1]
+        src/atn/EpsilonTransition.h [1:1]
+        src/atn/ErrorInfo.cpp [1:1]
+        src/atn/ErrorInfo.h [1:1]
+        src/atn/LL1Analyzer.cpp [1:1]
+        src/atn/LL1Analyzer.h [1:1]
+        src/atn/LexerATNConfig.cpp [1:1]
+        src/atn/LexerATNConfig.h [1:1]
+        src/atn/LexerATNSimulator.cpp [1:1]
+        src/atn/LexerATNSimulator.h [1:1]
+        src/atn/LexerAction.h [1:1]
+        src/atn/LexerActionExecutor.cpp [1:1]
+        src/atn/LexerActionExecutor.h [1:1]
+        src/atn/LexerActionType.h [1:1]
+        src/atn/LexerChannelAction.cpp [1:1]
+        src/atn/LexerChannelAction.h [1:1]
+        src/atn/LexerCustomAction.cpp [1:1]
+        src/atn/LexerCustomAction.h [1:1]
+        src/atn/LexerIndexedCustomAction.cpp [1:1]
+        src/atn/LexerIndexedCustomAction.h [1:1]
+        src/atn/LexerModeAction.cpp [1:1]
+        src/atn/LexerModeAction.h [1:1]
+        src/atn/LexerMoreAction.cpp [1:1]
+        src/atn/LexerMoreAction.h [1:1]
+        src/atn/LexerPopModeAction.cpp [1:1]
+        src/atn/LexerPopModeAction.h [1:1]
+        src/atn/LexerPushModeAction.cpp [1:1]
+        src/atn/LexerPushModeAction.h [1:1]
+        src/atn/LexerSkipAction.cpp [1:1]
+        src/atn/LexerSkipAction.h [1:1]
+        src/atn/LexerTypeAction.cpp [1:1]
+        src/atn/LexerTypeAction.h [1:1]
+        src/atn/LookaheadEventInfo.cpp [1:1]
+        src/atn/LookaheadEventInfo.h [1:1]
+        src/atn/LoopEndState.h [1:1]
+        src/atn/NotSetTransition.cpp [1:1]
+        src/atn/NotSetTransition.h [1:1]
+        src/atn/OrderedATNConfigSet.cpp [1:1]
+        src/atn/OrderedATNConfigSet.h [1:1]
+        src/atn/ParseInfo.cpp [1:1]
+        src/atn/ParseInfo.h [1:1]
+        src/atn/ParserATNSimulator.cpp [1:1]
+        src/atn/ParserATNSimulator.h [1:1]
+        src/atn/PlusBlockStartState.h [1:1]
+        src/atn/PlusLoopbackState.h [1:1]
+        src/atn/PrecedencePredicateTransition.cpp [1:1]
+        src/atn/PrecedencePredicateTransition.h [1:1]
+        src/atn/PredicateEvalInfo.cpp [1:1]
+        src/atn/PredicateEvalInfo.h [1:1]
+        src/atn/PredicateTransition.cpp [1:1]
+        src/atn/PredicateTransition.h [1:1]
+        src/atn/PredictionContext.cpp [1:1]
+        src/atn/PredictionContext.h [1:1]
+        src/atn/PredictionContextType.h [1:1]
+        src/atn/PredictionMode.cpp [1:1]
+        src/atn/PredictionMode.h [1:1]
+        src/atn/ProfilingATNSimulator.cpp [1:1]
+        src/atn/ProfilingATNSimulator.h [1:1]
+        src/atn/RangeTransition.cpp [1:1]
+        src/atn/RangeTransition.h [1:1]
+        src/atn/RuleStartState.h [1:1]
+        src/atn/RuleStopState.h [1:1]
+        src/atn/RuleTransition.cpp [1:1]
+        src/atn/RuleTransition.h [1:1]
+        src/atn/SemanticContext.cpp [1:1]
+        src/atn/SemanticContext.h [1:1]
+        src/atn/SemanticContextType.h [1:1]
+        src/atn/SerializedATNView.h [1:1]
+        src/atn/SetTransition.cpp [1:1]
+        src/atn/SetTransition.h [1:1]
+        src/atn/SingletonPredictionContext.cpp [1:1]
+        src/atn/SingletonPredictionContext.h [1:1]
+        src/atn/StarBlockStartState.h [1:1]
+        src/atn/StarLoopEntryState.h [1:1]
+        src/atn/StarLoopbackState.cpp [1:1]
+        src/atn/StarLoopbackState.h [1:1]
+        src/atn/TokensStartState.h [1:1]
+        src/atn/Transition.cpp [1:1]
+        src/atn/Transition.h [1:1]
+        src/atn/TransitionType.h [1:1]
+        src/atn/WildcardTransition.cpp [1:1]
+        src/atn/WildcardTransition.h [1:1]
+        src/dfa/DFA.cpp [1:1]
+        src/dfa/DFA.h [1:1]
+        src/dfa/DFASerializer.cpp [1:1]
+        src/dfa/DFASerializer.h [1:1]
+        src/dfa/DFAState.cpp [1:1]
+        src/dfa/DFAState.h [1:1]
+        src/dfa/LexerDFASerializer.cpp [1:1]
+        src/dfa/LexerDFASerializer.h [1:1]
+        src/misc/InterpreterDataReader.cpp [1:1]
+        src/misc/InterpreterDataReader.h [1:1]
+        src/misc/Interval.cpp [1:1]
+        src/misc/Interval.h [1:1]
+        src/misc/IntervalSet.cpp [1:1]
+        src/misc/IntervalSet.h [1:1]
+        src/misc/MurmurHash.cpp [1:1]
+        src/misc/MurmurHash.h [1:1]
+        src/misc/Predicate.h [1:1]
+        src/support/Any.cpp [1:1]
+        src/support/Any.h [1:1]
+        src/support/Arrays.cpp [1:1]
+        src/support/Arrays.h [1:1]
+        src/support/BitSet.h [1:1]
+        src/support/CPPUtils.cpp [1:1]
+        src/support/CPPUtils.h [1:1]
+        src/support/Declarations.h [1:1]
+        src/support/StringUtils.cpp [1:1]
+        src/support/StringUtils.h [1:1]
+        src/tree/AbstractParseTreeVisitor.h [1:1]
+        src/tree/ErrorNode.h [1:1]
+        src/tree/ErrorNodeImpl.cpp [1:1]
+        src/tree/ErrorNodeImpl.h [1:1]
+        src/tree/IterativeParseTreeWalker.cpp [1:1]
+        src/tree/ParseTree.cpp [1:1]
+        src/tree/ParseTree.h [1:1]
+        src/tree/ParseTreeListener.cpp [1:1]
+        src/tree/ParseTreeListener.h [1:1]
+        src/tree/ParseTreeProperty.h [1:1]
+        src/tree/ParseTreeType.h [1:1]
+        src/tree/ParseTreeVisitor.cpp [1:1]
+        src/tree/ParseTreeVisitor.h [1:1]
+        src/tree/ParseTreeWalker.cpp [1:1]
+        src/tree/ParseTreeWalker.h [1:1]
+        src/tree/TerminalNode.h [1:1]
+        src/tree/TerminalNodeImpl.cpp [1:1]
+        src/tree/TerminalNodeImpl.h [1:1]
+        src/tree/Trees.cpp [1:1]
+        src/tree/Trees.h [1:1]
+        src/tree/pattern/Chunk.cpp [1:1]
+        src/tree/pattern/Chunk.h [1:1]
+        src/tree/pattern/ParseTreeMatch.cpp [1:1]
+        src/tree/pattern/ParseTreeMatch.h [1:1]
+        src/tree/pattern/ParseTreePattern.cpp [1:1]
+        src/tree/pattern/ParseTreePattern.h [1:1]
+        src/tree/pattern/ParseTreePatternMatcher.cpp [1:1]
+        src/tree/pattern/ParseTreePatternMatcher.h [1:1]
+        src/tree/pattern/RuleTagToken.cpp [1:1]
+        src/tree/pattern/RuleTagToken.h [1:1]
+        src/tree/pattern/TagChunk.cpp [1:1]
+        src/tree/pattern/TagChunk.h [1:1]
+        src/tree/pattern/TextChunk.cpp [1:1]
+        src/tree/pattern/TextChunk.h [1:1]
+        src/tree/pattern/TokenTagToken.cpp [1:1]
+        src/tree/pattern/TokenTagToken.h [1:1]
+        src/tree/xpath/XPath.cpp [1:1]
+        src/tree/xpath/XPath.h [1:1]
+        src/tree/xpath/XPathElement.cpp [1:1]
+        src/tree/xpath/XPathElement.h [1:1]
+        src/tree/xpath/XPathLexerErrorListener.cpp [1:1]
+        src/tree/xpath/XPathLexerErrorListener.h [1:1]
+        src/tree/xpath/XPathRuleAnywhereElement.cpp [1:1]
+        src/tree/xpath/XPathRuleAnywhereElement.h [1:1]
+        src/tree/xpath/XPathRuleElement.cpp [1:1]
+        src/tree/xpath/XPathRuleElement.h [1:1]
+        src/tree/xpath/XPathTokenAnywhereElement.cpp [1:1]
+        src/tree/xpath/XPathTokenAnywhereElement.h [1:1]
+        src/tree/xpath/XPathTokenElement.cpp [1:1]
+        src/tree/xpath/XPathTokenElement.h [1:1]
+        src/tree/xpath/XPathWildcardAnywhereElement.cpp [1:1]
+        src/tree/xpath/XPathWildcardAnywhereElement.h [1:1]
+        src/tree/xpath/XPathWildcardElement.cpp [1:1]
+        src/tree/xpath/XPathWildcardElement.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cef5fd247317ab255a0f3d28365b2492
+BELONGS ya.make
+    License text:
+         *  Copyright (c) 2012 Terence Parr
+         *  Copyright (c) 2012 Sam Harwell
+         *  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/tree/IterativeParseTreeWalker.h [3:5]

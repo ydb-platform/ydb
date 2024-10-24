@@ -49,13 +49,13 @@
 {%- endmacro -%}
 
 
-{%- macro TargetOptions(target_name, is_fake_module, target_options, only_option, exclude_options) -%}
+{%- macro TargetOptions(target_name, is_really_fake_module, target_options, only_option, exclude_options) -%}
 {%-     if (target_options.interfaces is defined) -%}
 {{ RenderTargetOptions(target_name, ' INTERFACE', target_options.interfaces, only_option, exclude_options) }}
 {%-     endif -%}
 
 {%-     if (target_options.publics is defined) -%}
-{%-         if is_fake_module -%}
+{%-         if is_really_fake_module -%}
 {%-             set prefix = ' INTERFACE' -%}
 {%-         else -%}
 {%-             set prefix = ' PUBLIC' -%}
@@ -63,8 +63,13 @@
 {{ RenderTargetOptions(target_name, prefix, target_options.publics, only_option, exclude_options) }}
 {%-     endif -%}
 
-{%-     if not(is_fake_module) and (target_options.privates is defined) -%}
-{{ RenderTargetOptions(target_name, ' PRIVATE', target_options.privates, only_option, exclude_options) }}
+{%-     if (target_options.privates is defined) -%}
+{%-         if is_really_fake_module -%}
+{%-             set prefix = ' INTERFACE' -%}
+{%-         else -%}
+{%-             set prefix = ' PRIVATE' -%}
+{%-         endif -%}
+{{ RenderTargetOptions(target_name, prefix, target_options.privates, only_option, exclude_options) }}
 {%-     endif -%}
 {%- endmacro -%}
 
@@ -72,7 +77,7 @@
 {%-     set current_target = target -%}
 {%-     include '[generator]/target_cmake_lists.jinja' -%}
 {%- endif -%}
-{%- if extra_targets is defined -%}
+{%- if extra_targets|length -%}
 {%-     for current_target in extra_targets -%}
 {%-         include '[generator]/target_cmake_lists.jinja' -%}
 {%-     endfor -%}

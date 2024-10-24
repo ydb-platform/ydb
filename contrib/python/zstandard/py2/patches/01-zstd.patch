@@ -1,0 +1,15 @@
+--- contrib/python/zstandard/py2/c-ext/constants.c	(index)
++++ contrib/python/zstandard/py2/c-ext/constants.c	(working tree)
+@@ -77,7 +77,6 @@ void constants_module_init(PyObject* mod) {
+ 	PyModule_AddIntConstant(mod, "CHAINLOG_MAX", ZSTD_CHAINLOG_MAX);
+ 	PyModule_AddIntConstant(mod, "HASHLOG_MIN", ZSTD_HASHLOG_MIN);
+ 	PyModule_AddIntConstant(mod, "HASHLOG_MAX", ZSTD_HASHLOG_MAX);
+-	PyModule_AddIntConstant(mod, "HASHLOG3_MAX", ZSTD_HASHLOG3_MAX);
+ 	PyModule_AddIntConstant(mod, "SEARCHLOG_MIN", ZSTD_SEARCHLOG_MIN);
+ 	PyModule_AddIntConstant(mod, "SEARCHLOG_MAX", ZSTD_SEARCHLOG_MAX);
+ 	PyModule_AddIntConstant(mod, "MINMATCH_MIN", ZSTD_MINMATCH_MIN);
+--- contrib/python/zstandard/py2/zstd.c	(index)
++++ contrib/python/zstandard/py2/zstd.c	(working tree)
+@@ -213,1 +213,1 @@ void zstd_module_init(PyObject* m) {
+-	if (ZSTD_VERSION_NUMBER != 10405 || ZSTD_versionNumber() != 10405) {
++	if (ZSTD_VERSION_NUMBER != 10506 || ZSTD_versionNumber() != 10506) {

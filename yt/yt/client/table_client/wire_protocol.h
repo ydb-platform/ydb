@@ -2,13 +2,12 @@
 
 #include "public.h"
 #include "schema.h"
+#include "unversioned_reader.h"
+#include "unversioned_row.h"
+#include "unversioned_writer.h"
+#include "versioned_row.h"
 
 #include <yt/yt/client/api/public.h>
-
-#include <yt/yt/client/table_client/unversioned_reader.h>
-#include <yt/yt/client/table_client/unversioned_writer.h>
-#include <yt/yt/client/table_client/versioned_row.h>
-#include <yt/yt/client/table_client/unversioned_row.h>
 
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/wire_protocol.pb.h>
 
@@ -171,6 +170,10 @@ public:
         NTableClient::TUnversionedValueRange valueRange,
         const NTableClient::TNameTableToSchemaIdMapping* idMapping = nullptr) = 0;
 
+    virtual void WriteSerializedRowset(
+        size_t rowCount,
+        const std::vector<TSharedRef>& serializedRowset) = 0;
+
     virtual void WriteUnversionedRowset(
         TRange<NTableClient::TUnversionedRow> rowset,
         const NTableClient::TNameTableToSchemaIdMapping* idMapping = nullptr) = 0;
@@ -312,7 +315,7 @@ DEFINE_REFCOUNTED_TYPE(IWireProtocolRowsetWriter)
 
 IWireProtocolRowsetWriterPtr CreateWireProtocolRowsetWriter(
     NCompression::ECodec codecId,
-    size_t desiredUncompressedBlockSize,
+    i64 desiredUncompressedBlockSize,
     NTableClient::TTableSchemaPtr schema,
     bool isSchemaful,
     const NLogging::TLogger& logger);

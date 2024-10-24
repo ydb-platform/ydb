@@ -101,9 +101,9 @@ TMaybe<ui64> TTransactionCache::TEntry::GetColumnarStat(NYT::TRichYPath ytPath) 
 
     auto guard = Guard(Lock_);
     if (auto p = StatisticsCache.FindPtr(NYT::NodeToCanonicalYsonString(NYT::PathToNode(ytPath), NYT::NYson::EYsonFormat::Text))) {
-        ui64 sum = p->LegacyChunksDataWeight;
+        ui64 sum = p->ColumnarStat.LegacyChunksDataWeight;
         for (auto& column: columns) {
-            if (auto c = p->ColumnDataWeight.FindPtr(column)) {
+            if (auto c = p->ColumnarStat.ColumnDataWeight.FindPtr(column)) {
                 sum += *c;
             } else {
                 return Nothing();
@@ -114,30 +114,66 @@ TMaybe<ui64> TTransactionCache::TEntry::GetColumnarStat(NYT::TRichYPath ytPath) 
     return Nothing();
 }
 
+TMaybe<NYT::TTableColumnarStatistics> TTransactionCache::TEntry::GetExtendedColumnarStat(NYT::TRichYPath ytPath) const {
+    TVector<TString> columns(std::move(ytPath.Columns_->Parts_));
+    ytPath.Columns_.Clear();
+    auto cacheKey = NYT::NodeToCanonicalYsonString(NYT::PathToNode(ytPath), NYT::NYson::EYsonFormat::Text);
+
+    auto guard = Guard(Lock_);
+    auto p = StatisticsCache.FindPtr(cacheKey);
+    if (!p) {
+        return Nothing();
+    }
+
+    NYT::TTableColumnarStatistics res;
+    for (auto& column: columns) {
+        if (p->ExtendedStatColumns.count(column) == 0) {
+            return Nothing();
+        }
+        if (auto c = p->ColumnarStat.ColumnDataWeight.FindPtr(column)) {
+            res.ColumnDataWeight[column] = *c;
+        }
+        if (auto c = p->ColumnarStat.ColumnEstimatedUniqueCounts.FindPtr(column)) {
+            res.ColumnEstimatedUniqueCounts[column] = *c;
+        }
+    }
+    return res;
+}
+
 void TTransactionCache::TEntry::UpdateColumnarStat(NYT::TRichYPath ytPath, ui64 size) {
     YQL_ENSURE(ytPath.Columns_.Defined());
     TVector<TString> columns(std::move(ytPath.Columns_->Parts_));
     ytPath.Columns_.Clear();
+    auto cacheKey = NYT::NodeToCanonicalYsonString(NYT::PathToNode(ytPath), NYT::NYson::EYsonFormat::Text);
 
     auto guard = Guard(Lock_);
-    NYT::TTableColumnarStatistics& cacheColumnStat = StatisticsCache[NYT::NodeToCanonicalYsonString(NYT::PathToNode(ytPath), NYT::NYson::EYsonFormat::Text)];
-    cacheColumnStat.LegacyChunksDataWeight = size;
-    for (auto& c: cacheColumnStat.ColumnDataWeight) {
+    auto& cacheEntry = StatisticsCache[cacheKey];
+    cacheEntry.ColumnarStat.LegacyChunksDataWeight = size;
+    for (auto& c: cacheEntry.ColumnarStat.ColumnDataWeight) {
         c.second = 0;
     }
     for (auto& c: columns) {
-        cacheColumnStat.ColumnDataWeight[c] = 0;
+        cacheEntry.ColumnarStat.ColumnDataWeight[c] = 0;
     }
 }
 
-void TTransactionCache::TEntry::UpdateColumnarStat(NYT::TRichYPath ytPath, const NYT::TTableColumnarStatistics& columnStat) {
+void TTransactionCache::TEntry::UpdateColumnarStat(NYT::TRichYPath ytPath, const NYT::TTableColumnarStatistics& columnStat, bool extended) {
+    TVector<TString> columns(std::move(ytPath.Columns_->Parts_));
     ytPath.Columns_.Clear();
     auto guard = Guard(Lock_);
-    NYT::TTableColumnarStatistics& cacheColumnStat = StatisticsCache[NYT::NodeToCanonicalYsonString(NYT::PathToNode(ytPath), NYT::NYson::EYsonFormat::Text)];
-    cacheColumnStat.LegacyChunksDataWeight = columnStat.LegacyChunksDataWeight;
-    cacheColumnStat.TimestampTotalWeight = columnStat.TimestampTotalWeight;
+    auto& cacheEntry = StatisticsCache[NYT::NodeToCanonicalYsonString(NYT::PathToNode(ytPath), NYT::NYson::EYsonFormat::Text)];
+    if (extended) {
+        std::copy(columns.begin(), columns.end(), std::inserter(cacheEntry.ExtendedStatColumns, cacheEntry.ExtendedStatColumns.end()));
+    }
+    cacheEntry.ColumnarStat.LegacyChunksDataWeight = columnStat.LegacyChunksDataWeight;
+    cacheEntry.ColumnarStat.TimestampTotalWeight = columnStat.TimestampTotalWeight;
     for (auto& c: columnStat.ColumnDataWeight) {
-        cacheColumnStat.ColumnDataWeight[c.first] = c.second;
+        cacheEntry.ColumnarStat.ColumnDataWeight[c.first] = c.second;
+    }
+    if (extended) {
+        for (auto& c : columnStat.ColumnEstimatedUniqueCounts) {
+            cacheEntry.ColumnarStat.ColumnEstimatedUniqueCounts[c.first] = c.second;
+        }
     }
 }
 

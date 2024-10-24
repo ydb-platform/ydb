@@ -27,5 +27,5 @@ IQStoragePtr MakeTestYdbQStorage() {
 }
 
 Y_UNIT_TEST_SUITE(TQStorageFileTests) {
-    GENERATE_TESTS(MakeTestYdbQStorage)
+    GENERATE_TESTS(MakeTestYdbQStorage, false)
 }

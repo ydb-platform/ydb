@@ -18,7 +18,7 @@ namespace NYT::NDetail::NRawClient {
 
 using ::ToString;
 
-////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 static void SetTransactionIdParam(TNode* node, const TTransactionId& transactionId)
 {
@@ -105,7 +105,7 @@ void SerializeMasterReadOptions(TNode* node, const TMasterReadOptions<T>& option
     }
 }
 
-////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 TNode SerializeParamsForCreate(
     const TTransactionId& transactionId,
@@ -522,6 +522,15 @@ TNode SerializeParamsForGetJob(
     TNode result;
     SetOperationIdParam(&result, operationId);
     result["job_id"] = GetGuidAsString(jobId);
+    return result;
+}
+
+TNode SerializeParamsForGetJobTrace(
+    const TOperationId& operationId,
+    const TGetJobTraceOptions& /* options */)
+{
+    TNode result;
+    SetOperationIdParam(&result, operationId);
     return result;
 }
 

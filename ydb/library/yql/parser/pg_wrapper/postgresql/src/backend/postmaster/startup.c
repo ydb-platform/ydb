@@ -9,7 +9,7 @@
  * though.)
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -19,7 +19,11 @@
  */
 #include "postgres.h"
 
+#include <unistd.h>
+
 #include "access/xlog.h"
+#include "access/xlogrecovery.h"
+#include "access/xlogutils.h"
 #include "libpq/pqsignal.h"
 #include "miscadmin.h"
 #include "pgstat.h"
@@ -31,6 +35,7 @@
 #include "storage/procsignal.h"
 #include "storage/standby.h"
 #include "utils/guc.h"
+#include "utils/memutils.h"
 #include "utils/timeout.h"
 
 
@@ -57,6 +62,22 @@ static __thread volatile sig_atomic_t promote_signaled = false;
  * that it's safe to just proc_exit.
  */
 static __thread volatile sig_atomic_t in_restore_command = false;
+
+/*
+ * Time at which the most recent startup operation started.
+ */
+static __thread TimestampTz startup_progress_phase_start_time;
+
+/*
+ * Indicates whether the startup progress interval mentioned by the user is
+ * elapsed or not. TRUE if timeout occurred, FALSE otherwise.
+ */
+static __thread volatile sig_atomic_t startup_progress_timer_expired = false;
+
+/*
+ * Time between progress updates for long-running startup operations.
+ */
+__thread int			log_startup_progress_interval = 10000;	/* 10 sec */
 
 /* Signal handlers */
 static void StartupProcTriggerHandler(SIGNAL_ARGS);
@@ -102,7 +123,20 @@ StartupProcShutdownHandler(SIGNAL_ARGS)
 	int			save_errno = errno;
 
 	if (in_restore_command)
-		proc_exit(1);
+	{
+		/*
+		 * If we are in a child process (e.g., forked by system() in
+		 * RestoreArchivedFile()), we don't want to call any exit callbacks.
+		 * The parent will take care of that.
+		 */
+		if (MyProcPid == (int) getpid())
+			proc_exit(1);
+		else
+		{
+			write_stderr_signal_safe("StartupProcShutdownHandler() called in child process\n");
+			_exit(1);
+		}
+	}
 	else
 		shutdown_requested = true;
 	WakeupRecovery();
@@ -183,6 +217,10 @@ HandleStartupProcInterrupts(void)
 	/* Process barrier events */
 	if (ProcSignalBarrierPending)
 		ProcessProcSignalBarrier();
+
+	/* Perform logging of memory contexts of this process */
+	if (LogMemoryContextPending)
+		ProcessLogMemoryContextInterrupt();
 }
 
 
@@ -236,7 +274,7 @@ StartupProcessMain(void)
 	/*
 	 * Unblock signals (they were blocked when the postmaster forked us)
 	 */
-	PG_SETMASK(&UnBlockSig);
+	sigprocmask(SIG_SETMASK, &UnBlockSig, NULL);
 
 	/*
 	 * Do what we came for.
@@ -280,4 +318,85 @@ void
 ResetPromoteSignaled(void)
 {
 	promote_signaled = false;
+}
+
+/*
+ * Set a flag indicating that it's time to log a progress report.
+ */
+void
+startup_progress_timeout_handler(void)
+{
+	startup_progress_timer_expired = true;
+}
+
+void
+disable_startup_progress_timeout(void)
+{
+	/* Feature is disabled. */
+	if (log_startup_progress_interval == 0)
+		return;
+
+	disable_timeout(STARTUP_PROGRESS_TIMEOUT, false);
+	startup_progress_timer_expired = false;
+}
+
+/*
+ * Set the start timestamp of the current operation and enable the timeout.
+ */
+void
+enable_startup_progress_timeout(void)
+{
+	TimestampTz fin_time;
+
+	/* Feature is disabled. */
+	if (log_startup_progress_interval == 0)
+		return;
+
+	startup_progress_phase_start_time = GetCurrentTimestamp();
+	fin_time = TimestampTzPlusMilliseconds(startup_progress_phase_start_time,
+										   log_startup_progress_interval);
+	enable_timeout_every(STARTUP_PROGRESS_TIMEOUT, fin_time,
+						 log_startup_progress_interval);
+}
+
+/*
+ * A thin wrapper to first disable and then enable the startup progress
+ * timeout.
+ */
+void
+begin_startup_progress_phase(void)
+{
+	/* Feature is disabled. */
+	if (log_startup_progress_interval == 0)
+		return;
+
+	disable_startup_progress_timeout();
+	enable_startup_progress_timeout();
+}
+
+/*
+ * Report whether startup progress timeout has occurred. Reset the timer flag
+ * if it did, set the elapsed time to the out parameters and return true,
+ * otherwise return false.
+ */
+bool
+has_startup_progress_timeout_expired(long *secs, int *usecs)
+{
+	long		seconds;
+	int			useconds;
+	TimestampTz now;
+
+	/* No timeout has occurred. */
+	if (!startup_progress_timer_expired)
+		return false;
+
+	/* Calculate the elapsed time. */
+	now = GetCurrentTimestamp();
+	TimestampDifference(startup_progress_phase_start_time, now, &seconds, &useconds);
+
+	*secs = seconds;
+	*usecs = useconds;
+	startup_progress_timer_expired = false;
+
+	return true;
 }

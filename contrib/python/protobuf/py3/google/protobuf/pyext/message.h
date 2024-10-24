@@ -34,6 +34,7 @@
 #ifndef GOOGLE_PROTOBUF_PYTHON_CPP_MESSAGE_H__
 #define GOOGLE_PROTOBUF_PYTHON_CPP_MESSAGE_H__
 
+#define PY_SSIZE_T_CLEAN
 #include <Python.h>
 
 #include <cstdint>
@@ -41,7 +42,7 @@
 #include <string>
 #include <unordered_map>
 
-#include <google/protobuf/stubs/common.h>
+#include "google/protobuf/stubs/common.h"
 
 namespace google {
 namespace protobuf {
@@ -286,46 +287,46 @@ PyObject* SetAllowOversizeProtos(PyObject* m, PyObject* arg);
 #define FIELD_IS_REPEATED(field_descriptor) \
   ((field_descriptor)->label() == FieldDescriptor::LABEL_REPEATED)
 
-#define GOOGLE_CHECK_GET_INT32(arg, value, err)  \
-  int32_t value;                          \
-  if (!CheckAndGetInteger(arg, &value)) { \
-    return err;                           \
+#define PROTOBUF_CHECK_GET_INT32(arg, value, err) \
+  int32_t value;                                  \
+  if (!CheckAndGetInteger(arg, &value)) {         \
+    return err;                                   \
   }
 
-#define GOOGLE_CHECK_GET_INT64(arg, value, err)  \
-  int64_t value;                          \
-  if (!CheckAndGetInteger(arg, &value)) { \
-    return err;                           \
+#define PROTOBUF_CHECK_GET_INT64(arg, value, err) \
+  int64_t value;                                  \
+  if (!CheckAndGetInteger(arg, &value)) {         \
+    return err;                                   \
   }
 
-#define GOOGLE_CHECK_GET_UINT32(arg, value, err) \
-  uint32_t value;                         \
-  if (!CheckAndGetInteger(arg, &value)) { \
-    return err;                           \
+#define PROTOBUF_CHECK_GET_UINT32(arg, value, err) \
+  uint32_t value;                                  \
+  if (!CheckAndGetInteger(arg, &value)) {          \
+    return err;                                    \
   }
 
-#define GOOGLE_CHECK_GET_UINT64(arg, value, err) \
-  uint64_t value;                         \
-  if (!CheckAndGetInteger(arg, &value)) { \
-    return err;                           \
+#define PROTOBUF_CHECK_GET_UINT64(arg, value, err) \
+  uint64_t value;                                  \
+  if (!CheckAndGetInteger(arg, &value)) {          \
+    return err;                                    \
   }
 
-#define GOOGLE_CHECK_GET_FLOAT(arg, value, err) \
-  float value;                           \
-  if (!CheckAndGetFloat(arg, &value)) {  \
-    return err;                          \
+#define PROTOBUF_CHECK_GET_FLOAT(arg, value, err) \
+  float value;                                    \
+  if (!CheckAndGetFloat(arg, &value)) {           \
+    return err;                                   \
   }
 
-#define GOOGLE_CHECK_GET_DOUBLE(arg, value, err) \
-  double value;                           \
-  if (!CheckAndGetDouble(arg, &value)) {  \
-    return err;                           \
+#define PROTOBUF_CHECK_GET_DOUBLE(arg, value, err) \
+  double value;                                    \
+  if (!CheckAndGetDouble(arg, &value)) {           \
+    return err;                                    \
   }
 
-#define GOOGLE_CHECK_GET_BOOL(arg, value, err) \
-  bool value;                           \
-  if (!CheckAndGetBool(arg, &value)) {  \
-    return err;                         \
+#define PROTOBUF_CHECK_GET_BOOL(arg, value, err) \
+  bool value;                                    \
+  if (!CheckAndGetBool(arg, &value)) {           \
+    return err;                                  \
   }
 
 #define FULL_MODULE_NAME "google.protobuf.pyext._message"

@@ -104,14 +104,12 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     }
 
     TOperation::TPtr operation = new TOperation(txId);
-    Operations[txId] = operation; //record is erased at ApplyOnExecute if all parts are done at propose
 
     for (const auto& transaction : record.GetTransaction()) {
         auto quotaResult = operation->ConsumeQuota(transaction, context);
         if (quotaResult.Status != NKikimrScheme::StatusSuccess) {
             response.Reset(new TProposeResponse(quotaResult.Status, ui64(txId), ui64(selfId)));
             response->SetError(quotaResult.Status, quotaResult.Reason);
-            Operations.erase(txId);
             return std::move(response);
         }
     }
@@ -131,7 +129,6 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         if (splitResult.Status != NKikimrScheme::StatusSuccess) {
             response.Reset(new TProposeResponse(splitResult.Status, ui64(txId), ui64(selfId)));
             response->SetError(splitResult.Status, splitResult.Reason);
-            Operations.erase(txId);
             return std::move(response);
         }
 
@@ -140,11 +137,15 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
 
     const TString owner = record.HasOwner() ? record.GetOwner() : BUILTIN_ACL_ROOT;
 
+    bool prevProposeUndoSafe = true;
+
+    Operations[txId] = operation; //record is erased at ApplyOnExecute if all parts are done at propose
+
     for (const auto& transaction : transactions) {
         auto parts = operation->ConstructParts(transaction, context);
 
         if (parts.size() > 1) {
-            // les't allow altering impl index tables as part of consistent operation
+            // allow altering impl index tables as part of consistent operation
             context.IsAllowedPrivateTables = true;
         }
 
@@ -198,23 +199,75 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
                                << ", with reason: " << response->Record.GetReason()
                                << ", tx message: " << SecureDebugString(record));
 
-                context.OnComplete = {}; // recreate
-                context.DbChanges = {};
-
-                for (auto& toAbort : operation->Parts) {
-                    toAbort->AbortPropose(context);
-                }
-
-                context.MemChanges.UnDo(context.SS);
-                context.OnComplete.ApplyOnExecute(context.SS, context.GetTxc(), context.Ctx);
-                Operations.erase(txId);
+                AbortOperationPropose(txId, context);
 
                 return std::move(response);
+            }
+
+            // Check suboperations for undo safety. Log first unsafe suboperation in the schema transaction.
+            if (prevProposeUndoSafe && !context.IsUndoChangesSafe()) {
+                prevProposeUndoSafe = false;
+
+                LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "Operation part proposed ok, but propose itself is undo unsafe"
+                        << ", suboperation type: " << NKikimrSchemeOp::EOperationType_Name(part->GetTransaction().GetOperationType())
+                        << ", opId: " << part->GetOperationId()
+                        << ", at schemeshard:  " << selfId
+                );
             }
         }
     }
 
     return std::move(response);
+}
+
+void TSchemeShard::AbortOperationPropose(const TTxId txId, TOperationContext& context) {
+    Y_ABORT_UNLESS(Operations.contains(txId));
+    TOperation::TPtr operation = Operations.at(txId);
+
+    // Drop operation side effects, undo memory changes
+    // (Local db changes were already applied)
+    context.OnComplete = {};
+    context.DbChanges = {};
+
+    for (auto& i : operation->Parts) {
+        i->AbortPropose(context);
+    }
+
+    context.MemChanges.UnDo(context.SS);
+
+    // And remove aborted operation from existence
+    Operations.erase(txId);
+}
+
+void AbortOperation(TOperationContext& context, const TTxId txId, const TString& reason) {
+    LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxOperationPropose Execute"
+        << ", txId: " << txId
+        << ", operation is rejected and all changes reverted"
+        << ", " << reason
+        << ", at schemeshard: " << context.SS->SelfTabletId()
+    );
+
+    context.GetTxc().DB.RollbackChanges();
+    context.SS->AbortOperationPropose(txId, context);
+}
+
+bool IsCommitRedoSizeOverLimit(TString* reason, TOperationContext& context) {
+    // MaxCommitRedoMB is the ICB control shared with NTabletFlatExecutor::TExecutor.
+    // We subtract from MaxCommitRedoMB additional 1MB for anything extra
+    // that executor/tablet may (or may not) add under the hood
+    const ui64 limitBytes = (context.SS->MaxCommitRedoMB - 1) << 20;  // MB to bytes
+    const ui64 commitRedoBytes = context.GetTxc().DB.GetCommitRedoBytes();
+    if (commitRedoBytes >= limitBytes) {
+        *reason = TStringBuilder()
+            << "local tx commit redo size generated by IgniteOperation() is more than allowed limit: "
+            << "commit redo size " << commitRedoBytes
+            << ", limit " << limitBytes
+            << ", excess " << (commitRedoBytes - limitBytes)
+        ;
+        return true;
+    }
+    return false;
 }
 
 struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
@@ -236,6 +289,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
 
     bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override {
         TTabletId selfId = Self->SelfTabletId();
+        auto txId = TTxId(Request->Get()->Record.GetTxId());
 
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "TTxOperationPropose Execute"
@@ -246,7 +300,6 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
 
         auto [userToken, tokenParseError] = ParseUserToken(Request->Get()->Record.GetUserToken());
         if (tokenParseError) {
-            auto txId = Request->Get()->Record.GetTxId();
             Response = MakeHolder<TProposeResponse>(NKikimrScheme::StatusInvalidParameter, ui64(txId), ui64(selfId), "Failed to parse user token");
             return true;
         }
@@ -258,10 +311,52 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
         TStorageChanges dbChanges;
         TOperationContext context{Self, txc, ctx, OnComplete, memChanges, dbChanges, std::move(userToken)};
 
+        //NOTE: Successful IgniteOperation will leave created operation in Self->Operations and accumulated changes in the context.
+        // Unsuccessful IgniteOperation will leave no operation and context will also be clean.
         Response = Self->IgniteOperation(*Request->Get(), context);
 
-        OnComplete.ApplyOnExecute(Self, txc, ctx);
+        //NOTE: Successfully created operation also must be checked for the size of this local tx.
+        //
+        // Limitation on a commit redo size of local transactions is imposed at the tablet executor level
+        // (See ydb/core/tablet_flat/flat_executor.cpp, NTabletFlatExecutor::TExecutor::ExecuteTransaction()).
+        // And a tablet violating that limit is considered broken and will be stopped unconditionally and immediately.
+        //
+        // So even if operation was ignited successfully, it's local tx size still must be checked
+        // as a precaution measure to avoid infinite loop of schemeshard restarting, attempting to propose
+        // persisted operation again, hitting commit redo size limit and restarting again.
+        //
+        // On unsuccessful check, local tx should be rolled back, operation should be rejected and
+        // all accumulated changes dropped or reverted.
+        //
+
+        // Actually build commit redo (dbChanges could be empty)
         dbChanges.Apply(Self, txc, ctx);
+
+        if (Self->Operations.contains(txId)) {
+            Y_ABORT_UNLESS(Response->IsDone() || Response->IsAccepted() || Response->IsConditionalAccepted());
+
+            // Check local tx commit redo size
+            TString reason;
+            if (IsCommitRedoSizeOverLimit(&reason, context)) {
+                Response = MakeHolder<TProposeResponse>(NKikimrScheme::StatusSchemeError, ui64(txId), ui64(selfId), reason);
+
+                AbortOperation(context, txId, reason);
+
+                if (!context.IsUndoChangesSafe()) {
+                    LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxOperationPropose Execute"
+                        << ", opId: " << txId
+                        << ", operation should be rejected and all changes be reverted"
+                        << ", but context.IsUndoChangesSafe is false, which means some direct writes have been done"
+                        << ", message: " << SecureDebugString(Request->Get()->Record)
+                        << ", at schemeshard: " << context.SS->SelfTabletId()
+                    );
+                }
+            }
+        }
+
+        // Apply accumulated changes (changes could be empty)
+        OnComplete.ApplyOnExecute(Self, txc, ctx);
+
         return true;
     }
 
@@ -817,7 +912,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             create.MutableCreateResourcePool()->SetName(name);
             break;
         default:
-            Y_UNREACHABLE();
+            Y_ABORT("Invariant violation");
         }
 
         result.Transactions.push_back(create);
@@ -883,7 +978,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
     return result;
 }
 
-ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::ETxState txState) const {
+ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::ETxState txState, TOperationContext& context) const {
     switch (txType) {
     case TTxState::ETxType::TxMkDir:
         return CreateMkDir(NextPartId(), txState);
@@ -1079,7 +1174,7 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxAlterView:
         Y_ABORT("TODO: implement");
     // Continuous Backup
-    // Now these functions won't be called because we presist only cdc function internally
+    // Now these txs won't be called because we presist only cdc txs internally
     case TTxState::ETxType::TxCreateContinuousBackup:
         Y_ABORT("TODO: implement");
     case TTxState::ETxType::TxAlterContinuousBackup:
@@ -1095,9 +1190,22 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxAlterResourcePool:
         return CreateAlterResourcePool(NextPartId(), txState);
 
+    case TTxState::ETxType::TxRestoreIncrementalBackupAtTable:
+        return CreateRestoreIncrementalBackupAtTable(NextPartId(), txState);
+
+    // BackupCollection
+    case TTxState::ETxType::TxCreateBackupCollection:
+        return CreateNewBackupCollection(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterBackupCollection:
+        Y_ABORT("TODO: implement");
+    case TTxState::ETxType::TxDropBackupCollection:
+        return CreateDropBackupCollection(NextPartId(), txState);
+
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
     }
+
+    Y_UNUSED(context); // TODO(Enjection): will be used by complex operations later
 
     Y_UNREACHABLE();
 }
@@ -1168,7 +1276,7 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain:
         return {CreateSubDomain(NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain:
-        return {CreateCompatibleSubdomainAlter(context.SS, NextPartId(), tx)};
+        return CreateCompatibleSubdomainAlter(NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSubDomain:
         return {CreateDropSubdomain(NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropSubDomain:
@@ -1240,7 +1348,7 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         Y_ABORT("multipart operations are handled before, also they require transaction details");
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable:
-        Y_ABORT("multipart operations are handled before, also they require transaction details");
+        return {CreateInitializeBuildIndexImplTable(NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexImplTable:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
 
@@ -1342,6 +1450,20 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         return {CreateDropResourcePool(NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
         return {CreateAlterResourcePool(NextPartId(), tx)};
+
+    // IncrementalBackup
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:
+        return CreateRestoreIncrementalBackup(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
+
+    // BackupCollection
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection:
+        return {CreateNewBackupCollection(NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBackupCollection:
+        Y_ABORT("TODO: implement");
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection:
+        return {CreateDropBackupCollection(NextPartId(), tx)};
 
     }
 

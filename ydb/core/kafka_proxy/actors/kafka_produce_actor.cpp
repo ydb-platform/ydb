@@ -1,11 +1,11 @@
 #include "kafka_produce_actor.h"
-#include "../kafka_metrics.h"
-
+#include <ydb/core/kafka_proxy/kafka_metrics.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/util/time_util.h>
 
 #include <ydb/core/persqueue/utils.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 
 namespace NKafka {
 
@@ -263,6 +263,7 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
 
     for (const auto& record : batch->Records) {
         NKikimrPQClient::TDataChunk proto;
+        proto.set_codec(NPersQueueCommon::RAW);
         for(auto& h : record.Headers) {
                 auto res = proto.AddMessageMeta();
             if (h.Key) {

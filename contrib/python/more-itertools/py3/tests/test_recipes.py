@@ -2,11 +2,12 @@ from decimal import Decimal
 from doctest import DocTestSuite
 from fractions import Fraction
 from functools import reduce
-from itertools import combinations, count, permutations
+from itertools import combinations, count, groupby, permutations
 from operator import mul
 from math import factorial
 from sys import version_info
 from unittest import TestCase, skipIf
+from unittest.mock import patch
 
 import more_itertools as mi
 
@@ -134,32 +135,45 @@ class NthTests(TestCase):
 
 
 class AllEqualTests(TestCase):
-    """Tests for ``all_equal()``"""
-
     def test_true(self):
-        """Everything is equal"""
         self.assertTrue(mi.all_equal('aaaaaa'))
         self.assertTrue(mi.all_equal([0, 0, 0, 0]))
 
     def test_false(self):
-        """Not everything is equal"""
         self.assertFalse(mi.all_equal('aaaaab'))
         self.assertFalse(mi.all_equal([0, 0, 0, 1]))
 
     def test_tricky(self):
-        """Not everything is identical, but everything is equal"""
         items = [1, complex(1, 0), 1.0]
         self.assertTrue(mi.all_equal(items))
 
     def test_empty(self):
-        """Return True if the iterable is empty"""
         self.assertTrue(mi.all_equal(''))
         self.assertTrue(mi.all_equal([]))
 
     def test_one(self):
-        """Return True if the iterable is singular"""
         self.assertTrue(mi.all_equal('0'))
         self.assertTrue(mi.all_equal([0]))
+
+    def test_key(self):
+        self.assertTrue(mi.all_equal('4٤໔４৪', key=int))
+        self.assertFalse(mi.all_equal('Abc', key=str.casefold))
+
+    @patch('more_itertools.recipes.groupby', autospec=True)
+    def test_groupby_calls(self, mock_groupby):
+        next_count = 0
+
+        class _groupby(groupby):
+            def __next__(true_self):
+                nonlocal next_count
+                next_count += 1
+                return super().__next__()
+
+        mock_groupby.side_effect = _groupby
+        iterable = iter('aaaaa')
+        self.assertTrue(mi.all_equal(iterable))
+        self.assertEqual(list(iterable), [])
+        self.assertEqual(next_count, 2)
 
 
 class QuantifyTests(TestCase):
@@ -267,6 +281,12 @@ class PairwiseTests(TestCase):
         """ensure an empty iterator if there's not enough values to pair"""
         p = mi.pairwise("a")
         self.assertRaises(StopIteration, lambda: next(p))
+
+    def test_coverage(self):
+        from more_itertools import recipes
+
+        p = recipes._pairwise([1, 2, 3])
+        self.assertEqual([(1, 2), (2, 3)], list(p))
 
 
 class GrouperTests(TestCase):
@@ -392,43 +412,53 @@ class PowersetTests(TestCase):
 
 
 class UniqueEverseenTests(TestCase):
-    """Tests for ``unique_everseen()``"""
-
     def test_everseen(self):
-        """ensure duplicate elements are ignored"""
         u = mi.unique_everseen('AAAABBBBCCDAABBB')
         self.assertEqual(['A', 'B', 'C', 'D'], list(u))
 
     def test_custom_key(self):
-        """ensure the custom key comparison works"""
         u = mi.unique_everseen('aAbACCc', key=str.lower)
         self.assertEqual(list('abC'), list(u))
 
     def test_unhashable(self):
-        """ensure things work for unhashable items"""
         iterable = ['a', [1, 2, 3], [1, 2, 3], 'a']
         u = mi.unique_everseen(iterable)
         self.assertEqual(list(u), ['a', [1, 2, 3]])
 
     def test_unhashable_key(self):
-        """ensure things work for unhashable items with a custom key"""
         iterable = ['a', [1, 2, 3], [1, 2, 3], 'a']
         u = mi.unique_everseen(iterable, key=lambda x: x)
         self.assertEqual(list(u), ['a', [1, 2, 3]])
 
 
 class UniqueJustseenTests(TestCase):
-    """Tests for ``unique_justseen()``"""
-
     def test_justseen(self):
-        """ensure only last item is remembered"""
         u = mi.unique_justseen('AAAABBBCCDABB')
         self.assertEqual(list('ABCDAB'), list(u))
 
     def test_custom_key(self):
-        """ensure the custom key comparison works"""
         u = mi.unique_justseen('AABCcAD', str.lower)
         self.assertEqual(list('ABCAD'), list(u))
+
+
+class UniqueTests(TestCase):
+    def test_basic(self):
+        iterable = [0, 1, 1, 8, 9, 9, 9, 8, 8, 1, 9, 9]
+        actual = list(mi.unique(iterable))
+        expected = [0, 1, 8, 9]
+        self.assertEqual(actual, expected)
+
+    def test_key(self):
+        iterable = ['1', '1', '10', '10', '2', '2', '20', '20']
+        actual = list(mi.unique(iterable, key=int))
+        expected = ['1', '2', '10', '20']
+        self.assertEqual(actual, expected)
+
+    def test_reverse(self):
+        iterable = ['1', '1', '10', '10', '2', '2', '20', '20']
+        actual = list(mi.unique(iterable, key=int, reverse=True))
+        expected = ['20', '10', '2', '1']
+        self.assertEqual(actual, expected)
 
 
 class IterExceptTests(TestCase):
@@ -698,7 +728,7 @@ class NthPermutationTests(TestCase):
         n = factorial(len(iterable)) // factorial(len(iterable) - r)
         for index in [-1 - n, n + 1]:
             with self.assertRaises(IndexError):
-                mi.nth_combination(iterable, r, index)
+                mi.nth_permutation(iterable, r, index)
 
     def test_invalid_r(self):
         iterable = 'abcde'
@@ -706,7 +736,7 @@ class NthPermutationTests(TestCase):
         n = factorial(len(iterable)) // factorial(len(iterable) - r)
         for r in [-1, n + 1]:
             with self.assertRaises(ValueError):
-                mi.nth_combination(iterable, r, 0)
+                mi.nth_permutation(iterable, r, 0)
 
 
 class PrependTests(TestCase):
@@ -825,7 +855,7 @@ class TriplewiseTests(TestCase):
 
 
 class SlidingWindowTests(TestCase):
-    def test_basic(self):
+    def test_islice_version(self):
         for iterable, n, expected in [
             ([], 1, []),
             ([0], 1, [(0,)]),
@@ -839,6 +869,17 @@ class SlidingWindowTests(TestCase):
             with self.subTest(expected=expected):
                 actual = list(mi.sliding_window(iterable, n))
                 self.assertEqual(actual, expected)
+
+    def test_deque_version(self):
+        iterable = map(str, range(100))
+        all_windows = list(mi.sliding_window(iterable, 95))
+        self.assertEqual(all_windows[0], tuple(map(str, range(95))))
+        self.assertEqual(all_windows[-1], tuple(map(str, range(5, 100))))
+
+    def test_zero(self):
+        iterable = map(str, range(100))
+        with self.assertRaises(ValueError):
+            list(mi.sliding_window(iterable, 0))
 
 
 class SubslicesTests(TestCase):

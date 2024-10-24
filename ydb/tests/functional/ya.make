@@ -2,10 +2,12 @@ RECURSE(
     api
     audit
     autoconfig
+    backup
     blobstorage
     canonical
     clickbench
     cms
+    compatibility
     dynumber
     encryption
     hive
@@ -18,6 +20,7 @@ RECURSE(
     query_cache
     rename
     restarts
+    replication
     scheme_shard
     scheme_tests
     script_execution
@@ -26,7 +29,9 @@ RECURSE(
     serverless
     sqs
     suite_tests
+    tpc
     tenants
     ttl
+    wardens
     ydb_cli
 )

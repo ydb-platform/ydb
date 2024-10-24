@@ -3,7 +3,7 @@
 # Creates ya.make in the current directory listing affected ydb targets
 # Parameters: base_commit_sha head_commit_sha
 
-set -ex
+set -exo pipefail
 
 workdir=$(mktemp -d)
 echo Workdir: $workdir

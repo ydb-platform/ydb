@@ -7,7 +7,7 @@
 #include <yt/yt/library/profiling/sensor.h>
 #include <yt/yt/library/syncmap/map.h>
 
-#include <yt/yt/core/misc/atomic_object.h>
+#include <library/cpp/yt/threading/atomic_object.h>
 
 namespace NYT::NRpc {
 
@@ -17,9 +17,9 @@ class TPerUserRequestQueueProvider
     : public TRequestQueueProviderBase
 {
 public:
-    using TReconfigurationCallback = std::function<void(TString, TRequestQueuePtr)>;
+    using TReconfigurationCallback = std::function<void(const std::string, const TRequestQueuePtr&)>;
 
-    TPerUserRequestQueueProvider(
+    explicit TPerUserRequestQueueProvider(
         TReconfigurationCallback reconfigurationCallback = {},
         NProfiling::TProfiler throttlerProfiler = {});
 
@@ -27,17 +27,17 @@ public:
     TRequestQueue* GetQueue(const NProto::TRequestHeader& header) override;
     void ConfigureQueue(TRequestQueue* queue, const TMethodConfigPtr& config) override;
 
-    void ReconfigureUser(const TString& userName);
+    void ReconfigureUser(const std::string& userName);
     void ReconfigureAllUsers();
 
     void UpdateThrottlingEnabledFlags(bool enableWeightThrottling, bool enableBytesThrottling);
     void UpdateDefaultConfigs(const TRequestQueueThrottlerConfigs& configs);
 
 private:
-    TRequestQueue* DoGetQueue(const TString& userName);
+    TRequestQueue* DoGetQueue(const std::string& userName);
     std::pair<bool, bool> ReadThrottlingEnabledFlags();
 
-    NConcurrency::TSyncMap<TString, TRequestQueuePtr> RequestQueues_;
+    NConcurrency::TSyncMap<std::string, TRequestQueuePtr> RequestQueues_;
 
     TAtomicObject<TRequestQueueThrottlerConfigs> DefaultConfigs_;
 

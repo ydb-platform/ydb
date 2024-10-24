@@ -34,6 +34,13 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
     TBase::Send(*ScanActorId, new NKqp::TEvKqpCompute::TEvScanDataAck(FreeSpace, 1, 1));
 }
 
+void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanError::TPtr& ev) {
+    SwitchStage(EStage::WaitData, EStage::Finished);
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "problem_on_restore_data")(
+        "reason", NYql::IssuesFromMessageAsString(ev->Get()->Record.GetIssues()));
+    RestoreTask->OnError(NYql::IssuesFromMessageAsString(ev->Get()->Record.GetIssues()));
+}
+
 void TActor::Bootstrap(const TActorContext& /*ctx*/) {
     auto evStart = RestoreTask->BuildRequestInitiator();
     Send(RestoreTask->GetTabletActorId(), evStart.release());

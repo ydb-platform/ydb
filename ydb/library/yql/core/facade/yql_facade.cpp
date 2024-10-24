@@ -12,6 +12,7 @@
 #include <ydb/library/yql/core/services/yql_eval_params.h>
 #include <ydb/library/yql/utils/log/context.h>
 #include <ydb/library/yql/utils/log/profile.h>
+#include <ydb/library/yql/utils/limiting_allocator.h>
 #include <ydb/library/yql/core/services/yql_out_transformers.h>
 #include <ydb/library/yql/core/extract_predicate/extract_predicate_dbg.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
@@ -30,6 +31,7 @@
 
 #include <util/stream/file.h>
 #include <util/stream/null.h>
+#include <util/string/join.h>
 #include <util/string/split.h>
 #include <util/generic/guid.h>
 #include <util/system/rusage.h>
@@ -51,6 +53,8 @@ const TString ParametersLabel = "Parameters";
 const TString TranslationLabel = "Translation";
 const TString StaticUserFilesLabel = "UserFiles";
 const TString DynamicUserFilesLabel = "DynamicUserFiles";
+const TString StaticCredentialsLabel = "Credentials";
+const TString DynamicCredentialsLabel = "DynamicCredentials";
 
 class TUrlLoader : public IUrlLoader {
 public:
@@ -266,6 +270,8 @@ TProgram::TProgram(
     , RandomProvider_(randomProvider)
     , TimeProvider_(timeProvider)
     , NextUniqueId_(nextUniqueId)
+    , AstRoot_(nullptr)
+    , Modules_(modules)
     , DataProvidersInit_(dataProvidersInit)
     , Credentials_(MakeIntrusive<NYql::TCredentials>(*credentials))
     , UrlListerManager_(urlListerManager)
@@ -279,8 +285,6 @@ TProgram::TProgram(
     , SourceCode_(sourceCode)
     , SourceSyntax_(ESourceSyntax::Unknown)
     , SyntaxVersion_(0)
-    , AstRoot_(nullptr)
-    , Modules_(modules)
     , ExprRoot_(nullptr)
     , SessionId_(sessionId)
     , ResultType_(IDataProvider::EResultFormat::Yson)
@@ -295,8 +299,38 @@ TProgram::TProgram(
         SessionId_ = CreateGuidAsString();
     }
 
+    if (QContext_.CanWrite()) {
+        NYT::TNode credListNode = NYT::TNode::CreateList();
+        Credentials_->ForEach([&](const TString name, const TCredential& cred) {
+            credListNode.Add(NYT::TNode()
+                ("Name", name)
+                ("Category", cred.Category)
+                ("Subcategory", cred.Subcategory));
+        });
+
+        auto credList = NYT::NodeToYsonString(credListNode, NYT::NYson::EYsonFormat::Binary);
+        QContext_.GetWriter()->Put({FacadeComponent, StaticCredentialsLabel}, credList).GetValueSync();
+    } else if (QContext_.CanRead()) {
+        Credentials_ = MakeIntrusive<TCredentials>();
+        Credentials_->SetUserCredentials({
+            .OauthToken = "REPLAY_OAUTH",
+            .BlackboxSessionIdCookie = "REPLAY_SESSIONID"
+        });
+
+        for (const auto& label : {StaticCredentialsLabel, DynamicCredentialsLabel}) {
+            auto item = QContext_.GetReader()->Get({FacadeComponent, label}).GetValueSync();
+            if (item) {
+                auto node = NYT::NodeFromYsonString(item->Value);
+                for (const auto& c : node.AsList()) {
+                    Credentials_->AddCredential(c["Name"].AsString(), TCredential(
+                        c["Category"].AsString(),c["Subcategory"].AsString(),"REPLAY"));
+                }
+            }
+        }
+    }
+
     if (QContext_.CanWrite() && !SavedUserDataTable_.empty()) {
-        NYT::TNode userFilesNode;
+        NYT::TNode userFilesNode = NYT::TNode::CreateList();
         for (const auto& p : SavedUserDataTable_) {
             userFilesNode.Add(p.first.Alias());
         }
@@ -356,6 +390,10 @@ TProgram::TProgram(
 
             if (GatewaysConfig_->HasYqlCore()) {
                 cleaned.MutableYqlCore()->CopyFrom(GatewaysConfig_->GetYqlCore());
+            }
+
+            if (GatewaysConfig_->HasSqlCore()) {
+                cleaned.MutableSqlCore()->CopyFrom(GatewaysConfig_->GetSqlCore());
             }
 
             if (GatewaysConfig_->HasDq()) {
@@ -504,15 +542,21 @@ TString TProgram::GetSessionId() const {
     }
 }
 
-TString TProgram::TakeSessionId() {
-    // post-condition: SessionId_ will be empty
-    with_lock(SessionIdLock_) {
-        return std::move(SessionId_);
-    }
-}
-
 void TProgram::AddCredentials(const TVector<std::pair<TString, TCredential>>& credentials) {
     Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+
+    if (QContext_.CanWrite()) {
+        NYT::TNode credListNode = NYT::TNode::CreateList();
+        for (const auto& c : credentials) {
+            credListNode.Add(NYT::TNode()
+                ("Name", c.first)
+                ("Category", c.second.Category)
+                ("Subcategory", c.second.Subcategory));
+        }
+
+        auto credList = NYT::NodeToYsonString(credListNode, NYT::NYson::EYsonFormat::Binary);
+        QContext_.GetWriter()->Put({FacadeComponent, DynamicCredentialsLabel}, credList).GetValueSync();
+    }
 
     for (const auto& credential : credentials) {
         Credentials_->AddCredential(credential.first, credential.second);
@@ -568,6 +612,30 @@ void TProgram::HandleSourceCode(TString& sourceCode) {
     }
 }
 
+namespace {
+
+THashSet<TString> ExtractSqlFlags(const NYT::TNode& dataNode) {
+    THashSet<TString> result;
+    for (const auto& f : dataNode["SqlFlags"].AsList()) {
+        result.insert(f.AsString());
+    }
+    return result;
+}
+
+} // namespace
+
+void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& flags) {
+    if (qContext.CanRead()) {
+        auto loaded = qContext.GetReader()->Get({FacadeComponent, TranslationLabel}).GetValueSync();
+        if (!loaded) {
+            return;
+        }
+
+        auto dataNode = NYT::NodeFromYsonString(loaded->Value);
+        flags = ExtractSqlFlags(dataNode);
+    }
+}
+
 void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
     const NSQLTranslation::TTranslationSettings*& currentSettings)
 {
@@ -604,11 +672,7 @@ void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& 
             loadedSettings.ClusterMapping[c.first] = c.second.AsString();
         }
 
-        loadedSettings.Flags.clear();
-        for (const auto& f : dataNode["SqlFlags"].AsList()) {
-            loadedSettings.Flags.insert(f.AsString());
-        }
-    
+        loadedSettings.Flags = ExtractSqlFlags(dataNode);
         loadedSettings.V0Behavior = (NSQLTranslation::EV0Behavior)dataNode["V0Behavior"].AsUint64();
         loadedSettings.V0WarnAsError = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["V0WarnAsError"].AsBool());
         loadedSettings.DqDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["DqDefaultAuto"].AsBool());
@@ -813,6 +877,7 @@ TProgram::TFutureStatus TProgram::LineageAsync(const TString& username, IOutputS
         .AddTypeAnnotation()
         .AddPostTypeAnnotation()
         .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
+        .AddCheckExecution(false)
         .AddLineageOptimization(LineageStr_)
         .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
         .Build();
@@ -1078,6 +1143,7 @@ TProgram::TFutureStatus TProgram::LineageAsyncWithConfig(
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
+    pipeline.AddCheckExecution(false);
     pipeline.AddLineageOptimization(LineageStr_);
 
     Transformer_ = pipeline.Build();
@@ -1394,7 +1460,7 @@ TFuture<IGraphTransformer::TStatus> TProgram::AsyncTransformWithFallback(bool ap
     });
 }
 
-TMaybe<TString> TProgram::GetQueryAst() {
+TMaybe<TString> TProgram::GetQueryAst(TMaybe<size_t> memoryLimit) {
     if (ExternalQueryAst_) {
         return ExternalQueryAst_;
     }
@@ -1403,7 +1469,17 @@ TMaybe<TString> TProgram::GetQueryAst() {
     astStream.Reserve(DEFAULT_AST_BUF_SIZE);
 
     if (ExprRoot_) {
-        auto ast = ConvertToAst(*ExprRoot_, *ExprCtx_, TExprAnnotationFlags::None, true);
+        std::unique_ptr<IAllocator> limitingAllocator;
+        TConvertToAstSettings settings;
+        settings.AnnotationFlags = TExprAnnotationFlags::None;
+        settings.RefAtoms = true;
+        settings.Allocator = TDefaultAllocator::Instance();
+        if (memoryLimit) {
+            limitingAllocator = MakeLimitingAllocator(*memoryLimit, TDefaultAllocator::Instance());
+            settings.Allocator = limitingAllocator.get();
+        }
+
+        auto ast = ConvertToAst(*ExprRoot_, *ExprCtx_, settings);
         ast.Root->PrettyPrintTo(astStream, TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine);
         return astStream.Str();
     } else if (AstRoot_) {
@@ -1629,6 +1705,48 @@ NThreading::TFuture<void> TProgram::Abort()
     return CloseLastSession();
 }
 
+TIssues TProgram::Issues() const {
+    TIssues result;
+    if (ExprCtx_) {
+        result.AddIssues(ExprCtx_->IssueManager.GetIssues());
+    }
+    result.AddIssues(FinalIssues_);
+    return result;
+}
+
+TIssues TProgram::CompletedIssues() const {
+    TIssues result;
+    if (ExprCtx_) {
+        result.AddIssues(ExprCtx_->IssueManager.GetCompletedIssues());
+    }
+    result.AddIssues(FinalIssues_);
+    return result;
+}
+
+TIssue MakeNoBlocksInfoIssue(const TVector<TString>& names, bool isTypes) {
+    TIssue result;
+    TString msg = TStringBuilder() << "Most frequent " << (isTypes ? "types " : "callables ")
+                                   << "which do not support block mode: " << JoinRange(", ", names.begin(), names.end());
+    result.SetMessage(msg);
+    result.SetCode(isTypes ? TIssuesIds::CORE_TOP_UNSUPPORTED_BLOCK_TYPES : TIssuesIds::CORE_TOP_UNSUPPORTED_BLOCK_CALLABLES, TSeverityIds::S_INFO);
+    return result;
+}
+
+void TProgram::FinalizeIssues() {
+    FinalIssues_.Clear();
+    if (TypeCtx_) {
+        static const size_t topCount = 10;
+        auto noBlockTypes = TypeCtx_->GetTopNoBlocksTypes(topCount);
+        if (!noBlockTypes.empty()) {
+            FinalIssues_.AddIssue(MakeNoBlocksInfoIssue(noBlockTypes, true));
+        }
+        auto noBlockCallables = TypeCtx_->GetTopNoBlocksCallables(topCount);
+        if (!noBlockCallables.empty()) {
+            FinalIssues_.AddIssue(MakeNoBlocksInfoIssue(noBlockCallables, false));
+        }
+    }
+}
+
 NThreading::TFuture<void> TProgram::CleanupLastSession() {
     YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetSessionId());
 
@@ -1659,14 +1777,22 @@ NThreading::TFuture<void> TProgram::CleanupLastSession() {
 NThreading::TFuture<void> TProgram::CloseLastSession() {
     YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetSessionId());
 
-    TString sessionId = TakeSessionId();
-    if (sessionId.empty()) {
-        return MakeFuture();
-    }
-
     TVector<TDataProviderInfo> dataProviders;
     with_lock (DataProvidersLock_) {
         dataProviders = DataProviders_;
+    }
+
+    auto promise = NThreading::NewPromise<void>();
+
+    TString sessionId;
+    with_lock(SessionIdLock_) {
+        // post-condition: SessionId_ will be empty
+        sessionId = std::move(SessionId_);
+        if (sessionId.empty()) {
+            return CloseLastSessionFuture_;
+        }
+
+        CloseLastSessionFuture_ = promise.GetFuture();
     }
 
     TVector<NThreading::TFuture<void>> closeFutures;
@@ -1676,11 +1802,14 @@ NThreading::TFuture<void> TProgram::CloseLastSession() {
             dp.CloseSession(sessionId);
         }
         if (dp.CloseSessionAsync) {
-            dp.CloseSessionAsync(sessionId);
+            closeFutures.push_back(dp.CloseSessionAsync(sessionId));
         }
     }
 
-    return NThreading::WaitExceptionOrAll(closeFutures);
+    return NThreading::WaitExceptionOrAll(closeFutures)
+        .Apply([promise = std::move(promise)](const NThreading::TFuture<void>&) mutable {
+            promise.SetValue();
+        });
 }
 
 TString TProgram::ResultsAsString() const {

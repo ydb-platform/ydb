@@ -20,6 +20,7 @@
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/console_base.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
 
 #include <ydb/library/grpc/client/grpc_client_low.h>
 
@@ -189,6 +190,38 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         UNIT_ASSERT(allDoneOk);
     }
 
+    std::pair<Ydb::StatusIds::StatusCode, grpc::StatusCode> MakeTestRequest(NGRpcProxy::TGRpcClientConfig& clientConfig, const TString& database, const TString& token) {
+        NYdbGrpc::TCallMeta meta;
+        if (token) { // empty token => no token
+            meta.Aux.push_back({YDB_AUTH_TICKET_HEADER, token});
+        }
+        meta.Aux.push_back({YDB_DATABASE_HEADER, database});
+
+        NYdbGrpc::TGRpcClientLow clientLow;
+        auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Table::V1::TableService>(clientConfig);
+
+        Ydb::StatusIds::StatusCode status;
+        grpc::StatusCode gStatus;
+
+        do {
+            auto promise = NThreading::NewPromise<void>();
+            Ydb::Table::CreateSessionRequest request;
+            NYdbGrpc::TResponseCallback<Ydb::Table::CreateSessionResponse> responseCb =
+                [&status, &gStatus, promise](NYdbGrpc::TGrpcStatus&& grpcStatus, Ydb::Table::CreateSessionResponse&& response)  mutable {
+                    UNIT_ASSERT(!grpcStatus.InternalError);
+                    gStatus = grpc::StatusCode(grpcStatus.GRpcStatusCode);
+                    auto deferred = response.operation();
+                    status = deferred.status();
+                    promise.SetValue();
+                };
+
+            connection->DoRequest(request, std::move(responseCb), &Ydb::Table::V1::TableService::Stub::AsyncCreateSession, meta);
+            promise.GetFuture().Wait();
+        } while (status == Ydb::StatusIds::UNAVAILABLE);
+        Cerr << "TestRequest(database=\"" << database << "\", token=\"" << token << "\") => {" << Ydb::StatusIds::StatusCode_Name(status) << ", " << int(gStatus) << "}" << Endl;
+        return std::make_pair(status, gStatus);
+    }
+
     Y_UNIT_TEST(GrpcRequestProxy) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
@@ -197,38 +230,10 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
-        auto doTest = [&](const TString& database) {
-            NYdbGrpc::TCallMeta meta;
-            meta.Aux.push_back({YDB_AUTH_TICKET_HEADER, "root@builtin"});
-            meta.Aux.push_back({YDB_DATABASE_HEADER, database});
 
-            NYdbGrpc::TGRpcClientLow clientLow;
-            auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Table::V1::TableService>(clientConfig);
-
-            Ydb::StatusIds::StatusCode status;
-            int gStatus;
-
-            do {
-                auto promise = NThreading::NewPromise<void>();
-                Ydb::Table::CreateSessionRequest request;
-                NYdbGrpc::TResponseCallback<Ydb::Table::CreateSessionResponse> responseCb =
-                    [&status, &gStatus, promise](NYdbGrpc::TGrpcStatus&& grpcStatus, Ydb::Table::CreateSessionResponse&& response)  mutable {
-                        UNIT_ASSERT(!grpcStatus.InternalError);
-                        gStatus = grpcStatus.GRpcStatusCode;
-                        auto deferred = response.operation();
-                        status = deferred.status();
-                        promise.SetValue();
-                    };
-
-                connection->DoRequest(request, std::move(responseCb), &Ydb::Table::V1::TableService::Stub::AsyncCreateSession, meta);
-                promise.GetFuture().Wait();
-            } while (status == Ydb::StatusIds::UNAVAILABLE);
-            return std::make_pair(status, gStatus);
-        };
-
-        UNIT_ASSERT_VALUES_EQUAL(doTest("/Root"), std::make_pair(Ydb::StatusIds::SUCCESS, 0));
-        UNIT_ASSERT_VALUES_EQUAL(doTest("/blabla"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, 16));
-        UNIT_ASSERT_VALUES_EQUAL(doTest("blabla"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, 16));
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/Root", "root@builtin"), std::make_pair(Ydb::StatusIds::SUCCESS, grpc::StatusCode::OK));
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/blabla", "root@builtin"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "blabla", "root@builtin"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
     }
 
     Y_UNIT_TEST(GrpcRequestProxyWithoutToken) {
@@ -239,37 +244,47 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
-        auto doTest = [&](const TString& database) {
-            NYdbGrpc::TCallMeta meta;
-            meta.Aux.push_back({YDB_DATABASE_HEADER, database});
 
-            NYdbGrpc::TGRpcClientLow clientLow;
-            auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Table::V1::TableService>(clientConfig);
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/Root", ""), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/blabla", ""), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "blabla", ""), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
+    }
 
-            Ydb::StatusIds::StatusCode status;
-            grpc::StatusCode gStatus;
+    void GrpcRequestProxyCheckTokenWhenItIsSpecified(bool enforceUserTokenCheckRequirement) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenCheckRequirement(enforceUserTokenCheckRequirement);
+        TKikimrWithGrpcAndRootSchemaWithAuth server(appConfig);
 
-            do {
-                auto promise = NThreading::NewPromise<void>();
-                Ydb::Table::CreateSessionRequest request;
-                NYdbGrpc::TResponseCallback<Ydb::Table::CreateSessionResponse> responseCb =
-                    [&status, &gStatus, promise](NYdbGrpc::TGrpcStatus&& grpcStatus, Ydb::Table::CreateSessionResponse&& response)  mutable {
-                        UNIT_ASSERT(!grpcStatus.InternalError);
-                        gStatus = grpc::StatusCode(grpcStatus.GRpcStatusCode);
-                        auto deferred = response.operation();
-                        status = deferred.status();
-                        promise.SetValue();
-                    };
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
 
-                connection->DoRequest(request, std::move(responseCb), &Ydb::Table::V1::TableService::Stub::AsyncCreateSession, meta);
-                promise.GetFuture().Wait();
-            } while (status == Ydb::StatusIds::UNAVAILABLE);
-            return std::make_pair(status, gStatus);
-        };
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/Root", ""), std::make_pair(Ydb::StatusIds::SUCCESS, grpc::StatusCode::OK));
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/blabla", ""), std::make_pair(Ydb::StatusIds::SUCCESS, grpc::StatusCode::OK));
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "blabla", ""), std::make_pair(Ydb::StatusIds::SUCCESS, grpc::StatusCode::OK));
 
-        UNIT_ASSERT_EQUAL(doTest("/Root").second, grpc::StatusCode::UNAUTHENTICATED);
-        UNIT_ASSERT_EQUAL(doTest("/blabla").second, grpc::StatusCode::UNAUTHENTICATED);
-        UNIT_ASSERT_EQUAL(doTest("blabla").second, grpc::StatusCode::UNAUTHENTICATED);
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/Root", "root@builtin"), std::make_pair(Ydb::StatusIds::SUCCESS, grpc::StatusCode::OK));
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/blabla", "root@builtin"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "blabla", "root@builtin"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
+
+        const auto reqResultWithInvalidToken = MakeTestRequest(clientConfig, "/Root", "invalid token");
+        if (enforceUserTokenCheckRequirement) {
+            UNIT_ASSERT_EQUAL(reqResultWithInvalidToken, std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
+        } else {
+            UNIT_ASSERT_EQUAL(reqResultWithInvalidToken, std::make_pair(Ydb::StatusIds::SUCCESS, grpc::StatusCode::OK));
+        }
+
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/blabla", "invalid token"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
+        UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "blabla", "invalid token"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
+    }
+
+    Y_UNIT_TEST(GrpcRequestProxyCheckTokenWhenItIsSpecified_Ignore) {
+        GrpcRequestProxyCheckTokenWhenItIsSpecified(false);
+    }
+
+    Y_UNIT_TEST(GrpcRequestProxyCheckTokenWhenItIsSpecified_Check) {
+        GrpcRequestProxyCheckTokenWhenItIsSpecified(true);
     }
 
     Y_UNIT_TEST(BiStreamPing) {
@@ -3279,9 +3294,9 @@ tx_meta {
 
 namespace {
 
-NKikimrSchemeOp::TCompactionPolicy DEFAULT_COMPACTION_POLICY;
-NKikimrSchemeOp::TCompactionPolicy COMPACTION_POLICY1;
-NKikimrSchemeOp::TCompactionPolicy COMPACTION_POLICY2;
+NKikimrCompaction::TCompactionPolicy DEFAULT_COMPACTION_POLICY;
+NKikimrCompaction::TCompactionPolicy COMPACTION_POLICY1;
+NKikimrCompaction::TCompactionPolicy COMPACTION_POLICY2;
 NKikimrSchemeOp::TPipelineConfig PIPELINE_CONFIG1;
 NKikimrSchemeOp::TPipelineConfig PIPELINE_CONFIG2;
 NKikimrSchemeOp::TStorageConfig STORAGE_CONFIG1;
@@ -3687,7 +3702,7 @@ void CheckTablePartitions(const TKikimrWithGrpcAndRootSchema &server,
     }
 }
 
-void Apply(const NKikimrSchemeOp::TCompactionPolicy &policy,
+void Apply(const NKikimrCompaction::TCompactionPolicy &policy,
            NKikimrSchemeOp::TTableDescription &description)
 {
     description.MutablePartitionConfig()->MutableCompactionPolicy()->CopyFrom(policy);
@@ -4872,7 +4887,7 @@ Ydb::Table::ExecuteQueryResult ExecYql(std::shared_ptr<grpc::Channel> channel, c
     NYql::IssuesFromMessage(deferred.issues(), issues);
     issues.PrintTo(Cerr);
 
-    UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(deferred.status(), Ydb::StatusIds::SUCCESS);
 
     Ydb::Table::ExecuteQueryResult result;
     Y_ABORT_UNLESS(deferred.result().UnpackTo(&result));
@@ -4880,7 +4895,7 @@ Ydb::Table::ExecuteQueryResult ExecYql(std::shared_ptr<grpc::Channel> channel, c
 }
 
 void CheckYqlDecimalValues(std::shared_ptr<grpc::Channel> channel, const TString &sessionId, const TString &yql,
-                           TVector<std::pair<i64, ui64>> vals)
+                           TVector<std::pair<i64, ui64>> vals, ui64 scale)
 {
     auto result = ExecYql(channel, sessionId, yql);
     UNIT_ASSERT_VALUES_EQUAL(result.result_sets_size(), 1);
@@ -4888,7 +4903,7 @@ void CheckYqlDecimalValues(std::shared_ptr<grpc::Channel> channel, const TString
     TVector<std::pair<ui64, ui64>> halves;
     for (auto &pr : vals) {
         NYql::NDecimal::TInt128 val = pr.first;
-        val *= Power(10, NScheme::DECIMAL_SCALE);
+        val *= Power(10ull, scale);
         if (val >= 0)
             val += pr.second;
         else
@@ -4918,18 +4933,23 @@ void CreateTable(std::shared_ptr<grpc::Channel> channel,
     UNIT_ASSERT_VALUES_EQUAL(deferred.status(), Ydb::StatusIds::SUCCESS);
 }
 
-void CreateTable(std::shared_ptr<grpc::Channel> channel)
+void CreateTableDecimal(std::shared_ptr<grpc::Channel> channel)
 {
     Ydb::Table::CreateTableRequest request;
     request.set_path("/Root/table-1");
+    auto &col = *request.add_columns();
+    col.set_name("key");
+    col.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::INT32);
     auto &col1 = *request.add_columns();
-    col1.set_name("key");
-    col1.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::INT32);
-    auto &col2 = *request.add_columns();
-    col2.set_name("value");
-    auto &decimalType = *col2.mutable_type()->mutable_optional_type()->mutable_item()->mutable_decimal_type();
-    decimalType.set_precision(NScheme::DECIMAL_PRECISION);
-    decimalType.set_scale(NScheme::DECIMAL_SCALE);
+    col1.set_name("value1");
+    auto &decimalType1 = *col1.mutable_type()->mutable_optional_type()->mutable_item()->mutable_decimal_type();
+    decimalType1.set_precision(1);
+    decimalType1.set_scale(0);
+    auto &col35 = *request.add_columns();
+    col35.set_name("value35");
+    auto &decimalType35 = *col35.mutable_type()->mutable_optional_type()->mutable_item()->mutable_decimal_type();
+    decimalType35.set_precision(35);
+    decimalType35.set_scale(10);
     request.add_primary_key("key");
 
     CreateTable(channel, request);
@@ -4944,19 +4964,25 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTests) {
             = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
         TString sessionId = CreateSession(channel);
 
-        CreateTable(channel);
+        CreateTableDecimal(channel);
 
         ExecYql(channel, sessionId,
-                "UPSERT INTO `/Root/table-1` (key, value) VALUES "
-                "(1, CAST(\"1\" as DECIMAL(22,9))),"
-                "(2, CAST(\"22.22\" as DECIMAL(22,9))),"
-                "(3, CAST(\"9999999999999.999999999\" as DECIMAL(22,9)));");
+                "UPSERT INTO `/Root/table-1` (key, value1, value35) VALUES "
+                "(1, CAST(\"1\" as DECIMAL(1,0)), CAST(\"1234567890.1234567891\" as DECIMAL(35,10))),"
+                "(2, CAST(\"2\" as DECIMAL(1,0)), CAST(\"2234567890.1234567891\" as DECIMAL(35,10))),"
+                "(3, CAST(\"3\" as DECIMAL(1,0)), CAST(\"3234567890.1234567891\" as DECIMAL(35,10)));");
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=1;",
-                              {{1, 0}});
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value1 FROM `/Root/table-1` WHERE key=1;",
+                              {{1, 0}}, 0);
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3;",
-                              {{1, 0}, {22, 220000000}, {9999999999999, 999999999}});
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value1 FROM `/Root/table-1` WHERE key >= 1 AND key <= 3;",
+                              {{1, 0}, {2, 0}, {3, 0}}, 0);
+
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value35 FROM `/Root/table-1` WHERE key=1;",
+                              {{1234567890, 1234567891}}, 10);
+
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value35 FROM `/Root/table-1` WHERE key >= 1 AND key <= 3;",
+                              {{1234567890, 1234567891}, {2234567890, 1234567891}, {3234567890, 1234567891}}, 10);
     }
 
     Y_UNIT_TEST(NegativeValues) {
@@ -4967,19 +4993,26 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTests) {
             = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
         TString sessionId = CreateSession(channel);
 
-        CreateTable(channel);
+        CreateTableDecimal(channel);
 
         ExecYql(channel, sessionId,
-                "UPSERT INTO `/Root/table-1` (key, value) VALUES "
-                "(1, CAST(\"-1\" as DECIMAL(22,9))),"
-                "(2, CAST(\"-22.22\" as DECIMAL(22,9))),"
-                "(3, CAST(\"-9999999999999.999999999\" as DECIMAL(22,9)));");
+                "UPSERT INTO `/Root/table-1` (key, value1, value35) VALUES "
+                "(1, CAST(\"-1\" as DECIMAL(1,0)), CAST(\"-1234567890.1234567891\" as DECIMAL(35,10))),"
+                "(2, CAST(\"-2\" as DECIMAL(1,0)), CAST(\"-2234567890.1234567891\" as DECIMAL(35,10))),"
+                "(3, CAST(\"-3\" as DECIMAL(1,0)), CAST(\"-3234567890.1234567891\" as DECIMAL(35,10)));");
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=1;",
-                              {{-1, 0}});
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value1 FROM `/Root/table-1` WHERE key=1;",
+                              {{-1, 0}}, 0);
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3;",
-                              {{-1, 0}, {-22, 220000000}, {-9999999999999, 999999999}});
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value1 FROM `/Root/table-1` WHERE key >= 1 AND key <= 3;",
+                              {{-1, 0}, {-2, 0}, {-3, 0}}, 0);
+
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value35 FROM `/Root/table-1` WHERE key=1;",
+                              {{-1234567890, 1234567891}} ,10);
+
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value35 FROM `/Root/table-1` WHERE key >= 1 AND key <= 3;",
+                              {{-1234567890, 1234567891}, {-2234567890, 1234567891}, {-3234567890, 1234567891}}, 10);
+
     }
 
     Y_UNIT_TEST(DecimalKey) {
@@ -4995,8 +5028,8 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTests) {
         auto &col1 = *request.add_columns();
         col1.set_name("key");
         auto &decimalType = *col1.mutable_type()->mutable_optional_type()->mutable_item()->mutable_decimal_type();
-        decimalType.set_precision(NScheme::DECIMAL_PRECISION);
-        decimalType.set_scale(NScheme::DECIMAL_SCALE);
+        decimalType.set_precision(22);
+        decimalType.set_scale(9);
         auto &col2 = *request.add_columns();
         col2.set_name("value");
         col2.mutable_type()->CopyFrom(col1.type());
@@ -5015,33 +5048,33 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTests) {
         )");
 
         CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"1\" as DECIMAL(22,9));",
-                              {{1, 0}});
+                              {{1, 0}}, 9);
 
         CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"22.22\" as DECIMAL(22,9));",
-                              {{22, 220000000}});
+                              {{22, 220000000}}, 9);
 
         CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"9999999999999.999999999\" as DECIMAL(22,9));",
-                              {{9999999999999, 999999999}});
+                              {{9999999999999, 999999999}}, 9);
 
         CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"-1\" as DECIMAL(22,9));",
-                              {{-1, 0}});
+                              {{-1, 0}}, 9);
 
         CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"-22.22\" as DECIMAL(22,9));",
-                              {{-22, 220000000}});
+                              {{-22, 220000000}}, 9);
 
         CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"-9999999999999.999999999\" as DECIMAL(22,9));",
-                              {{-9999999999999, 999999999}});
+                              {{-9999999999999, 999999999}}, 9);
 
         CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key >= CAST(\"-22.22\" as DECIMAL(22,9))",
                               {{-22, 220000000}, {-1, 0},
-                               {1, 0}, {22, 220000000}, {9999999999999, 999999999}});
+                               {1, 0}, {22, 220000000}, {9999999999999, 999999999}}, 9);
 
         CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key < CAST(\"-22.22\" as DECIMAL(22,9))",
-                              {{-9999999999999, 999999999}});
+                              {{-9999999999999, 999999999}}, 9);
 
         CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key > CAST(\"-22.222\" as DECIMAL(22,9)) AND key < CAST(\"22.222\" as DECIMAL(22,9))",
                               {{-22, 220000000}, {-1, 0},
-                               {1, 0}, {22, 220000000}});
+                               {1, 0}, {22, 220000000}}, 9);
     }
 }
 
@@ -5614,7 +5647,7 @@ Y_UNIT_TEST(DisableWritesToDatabase) {
 
     TTenants tenants(server);
     tenants.Run(tenantPath, 1);
-    
+
     TString table = Sprintf("%s/table", tenantPath.c_str());
     ExecSQL(server, sender, Sprintf(R"(
                 CREATE TABLE `%s` (

@@ -24,7 +24,7 @@ struct TMainContext {
     MemoryContext PrevCurrentMemoryContext = nullptr;
     MemoryContext PrevErrorContext = nullptr;
     MemoryContext PrevCacheMemoryContext = nullptr;
-    RecordCacheState CurrentRecordCacheState = { NULL, NULL, NULL, 0, 0, INVALID_TUPLEDESC_IDENTIFIER };
+    RecordCacheState CurrentRecordCacheState = { NULL, NULL, 0, 0, INVALID_TUPLEDESC_IDENTIFIER };
     RecordCacheState PrevRecordCacheState;
     TimestampTz StartTimestamp;
     pg_stack_base_t PrevStackBase;

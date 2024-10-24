@@ -18,6 +18,7 @@
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/shared_cache.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 
 #include "single_thread_ic_mock.h"
 
@@ -230,7 +231,7 @@ public:
 
         appData->DomainsInfo = AppDataInfo.DomainsInfo;
         appData->MonotonicTimeProvider = AppDataInfo.MonotonicTimeProvider;
-        appData->FeatureFlags = AppDataInfo.FeatureFlags;
+        appData->InitFeatureFlags(AppDataInfo.FeatureFlags);
 
         appData->HiveConfig.SetWarmUpBootWaitingPeriod(10);
         appData->HiveConfig.SetMaxNodeUsageToKick(100);
@@ -300,11 +301,13 @@ public:
         TPerNodeInfo& info = PerNodeInfo.at(nodeId);
         info.ActorSystem->Stop();
 
-        for (;;) {
+        bool found;
+        do {
+            found = false;
+
             // delete all mailboxes from this node (expecting that new one can be created during deletion)
             const TMailboxId from(nodeId, 0, 0);
             const TMailboxId to(nodeId + 1, 0, 0);
-            bool found = false;
             for (auto it = Mailboxes.begin(); it != Mailboxes.end(); ) {
                 if (from <= it->first && it->first < to) {
                     TMailboxInfo& mbox = it->second;
@@ -316,36 +319,34 @@ public:
                     ++it;
                 }
             }
-            if (found) {
-                continue;
-            }
 
-            std::deque<TScheduleItem> deleteQueue;
             auto it = ScheduleQ.begin();
             while (it != ScheduleQ.end()) {
                 auto& queue = it->second;
-                bool found = false;
+                bool foundItem = false;
                 for (auto& item : queue) {
                     if (item.NodeId == nodeId) {
-                        found = true;
+                        foundItem = true;
                         break;
                     }
                 }
-                if (found) {
+                if (foundItem) {
                     std::deque<TScheduleItem> newQueue;
                     for (auto& item : queue) {
-                        (item.NodeId == nodeId ? deleteQueue : newQueue).push_back(std::move(item));
+                        if (item.NodeId != nodeId) {
+                            newQueue.push_back(std::move(item));
+                        }
                     }
                     queue.swap(newQueue);
-                    it = queue.empty() ? ScheduleQ.erase(it) : std::next(it);
+                    if (queue.empty()) {
+                        it = ScheduleQ.erase(it);
+                    }
+                    found = true;
                 } else {
                     ++it;
                 }
             }
-            if (deleteQueue.empty()) {
-                break;
-            }
-        }
+        } while (found);
 
         PerNodeInfo.erase(nodeId);
         SetupNode(nodeId, PerNodeInfo[nodeId]);
@@ -562,7 +563,7 @@ public:
             if (FilterFunction && !FilterFunction(item->NodeId, event)) { // event is dropped by the filter function
                 continue;
             }
-            WrapInActorContext(TransformEvent(event.get(), item->NodeId), [&](IActor *actor) {
+            const bool success = WrapInActorContext(TransformEvent(event.get(), item->NodeId), [&](IActor *actor) {
                 TAutoPtr<IEventHandle> ev(event.release());
 
                 const ui32 type = ev->GetTypeRewrite();
@@ -580,14 +581,18 @@ public:
 
                 ++EventsProcessed;
             });
+            if (!success) { // can't find the actor
+                event = IEventHandle::ForwardOnNondelivery(std::move(event), TEvents::TEvUndelivered::ReasonActorUnknown);
+                Send(event.release(), item->NodeId);
+            }
         }
     }
 
     template<typename TCallback>
-    void WrapInActorContext(TActorId actorId, TCallback&& callback) {
+    bool WrapInActorContext(TActorId actorId, TCallback&& callback) {
         const auto mboxIt = Mailboxes.find(actorId);
         if (mboxIt == Mailboxes.end()) {
-            return;
+            return false;
         }
         TMailboxInfo& mbox = mboxIt->second;
         if (IActor *actor = mbox.Header.FindActor(actorId.LocalId())) {
@@ -639,7 +644,9 @@ public:
             if (mbox.Header.IsEmpty()) {
                 Mailboxes.erase(mboxIt);
             }
+            return true;
         }
+        return false;
     }
 
     TActorId AllocateEdgeActor(ui32 nodeId, const char *file = "", int line = 0) {

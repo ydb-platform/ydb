@@ -36,7 +36,7 @@ inline bool PrepareUrl(const std::string_view& keyStr, TUri& parser) {
     } \
     struct udfName##KernelExec : public TUnaryKernelExec<udfName##KernelExec> { \
         template <typename TSink> \
-        static void Process(TBlockItem arg, const TSink& sink) { \
+        static void Process(const IValueBuilder*, TBlockItem arg, const TSink& sink) { \
             if (!arg) { \
                 return sink(TBlockItem()); \
             } \
@@ -60,7 +60,7 @@ BEGIN_SIMPLE_ARROW_UDF(TNormalize, TOptional<char*>(TOptional<char*>)) {
 }
 struct TNormalizeKernelExec : public TUnaryKernelExec<TNormalizeKernelExec> {
     template <typename TSink>
-    static void Process(TBlockItem arg, const TSink& sink) {
+    static void Process(const IValueBuilder*, TBlockItem arg, const TSink& sink) {
         if (!arg) {
             return sink(TBlockItem());
         }
@@ -81,7 +81,7 @@ BEGIN_SIMPLE_STRICT_ARROW_UDF(TGetScheme, char*(TAutoMap<char*>)) {
 }
 struct TGetSchemeKernelExec : public TUnaryKernelExec<TGetSchemeKernelExec> {
     template <typename TSink>
-    static void Process(TBlockItem arg, const TSink& sink) {
+    static void Process(const IValueBuilder*, TBlockItem arg, const TSink& sink) {
         const std::string_view url(arg.AsStringRef());
         const std::string_view prefix(GetSchemePrefix(url));
         const std::string_view scheme = url.substr(std::distance(url.begin(), prefix.begin()), prefix.size());
@@ -124,7 +124,7 @@ BEGIN_SIMPLE_ARROW_UDF(TGetPort, TOptional<ui64>(TOptional<char*>)) {
 }
 struct TGetPortKernelExec : public TUnaryKernelExec<TGetPortKernelExec> {
     template <typename TSink>
-    static void Process(TBlockItem arg, const TSink& sink) {
+    static void Process(const IValueBuilder*, TBlockItem arg, const TSink& sink) {
         if (!arg) {
             return sink(TBlockItem());
         }
@@ -152,7 +152,7 @@ BEGIN_SIMPLE_ARROW_UDF(TGetTail, TOptional<char*>(TOptional<char*>)) {
 }
 struct TGetTailKernelExec : public TUnaryKernelExec<TGetTailKernelExec> {
     template <typename TSink>
-    static void Process(TBlockItem arg, const TSink& sink) {
+    static void Process(const IValueBuilder*, TBlockItem arg, const TSink& sink) {
         if (!arg) {
             return sink(TBlockItem());
         }
@@ -186,7 +186,7 @@ BEGIN_SIMPLE_ARROW_UDF(TGetPath, TOptional<char*>(TOptional<char*>)) {
 }
 struct TGetPathKernelExec : public TUnaryKernelExec<TGetPathKernelExec> {
     template <typename TSink>
-    static void Process(TBlockItem arg, const TSink& sink) {
+    static void Process(const IValueBuilder*, TBlockItem arg, const TSink& sink) {
         if (!arg) {
             return sink(TBlockItem());
         }
@@ -216,7 +216,7 @@ BEGIN_SIMPLE_ARROW_UDF(TGetFragment, TOptional<char*>(TOptional<char*>)) {
 }
 struct TGetFragmentKernelExec : public TUnaryKernelExec<TGetFragmentKernelExec> {
     template <typename TSink>
-    static void Process(TBlockItem arg, const TSink& sink) {
+    static void Process(const IValueBuilder*, TBlockItem arg, const TSink& sink) {
         if (!arg) {
             return sink(TBlockItem());
         }
@@ -256,7 +256,7 @@ BEGIN_SIMPLE_ARROW_UDF(TGetDomain, TOptional<char*>(TOptional<char*>, ui8)) {
 }
 struct TGetDomainKernelExec : public TBinaryKernelExec<TGetDomainKernelExec> {
     template <typename TSink>
-    static void Process(TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
+    static void Process(const IValueBuilder*, TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
         if (!arg1) {
             return sink(TBlockItem());
         }
@@ -276,7 +276,7 @@ BEGIN_SIMPLE_ARROW_UDF(TGetTLD, char*(TAutoMap<char*>)) {
 }
 struct TGetTLDKernelExec : public TUnaryKernelExec<TGetTLDKernelExec> {
     template <typename TSink>
-    static void Process(TBlockItem arg, const TSink& sink) {
+    static void Process(const IValueBuilder*, TBlockItem arg, const TSink& sink) {
         const TStringBuf url(arg.AsStringRef());
         return sink(TBlockItem(GetZone(GetOnlyHost(url))));
     }
@@ -291,7 +291,7 @@ BEGIN_SIMPLE_ARROW_UDF(TGetDomainLevel, ui64(TAutoMap<char*>)) {
 }
 struct TGetDomainLevelKernelExec : public TUnaryKernelExec<TGetDomainLevelKernelExec> {
     template <typename TSink>
-    static void Process(TBlockItem arg, const TSink& sink) {
+    static void Process(const IValueBuilder*, TBlockItem arg, const TSink& sink) {
         std::vector<std::string_view> parts;
         StringSplitter(GetOnlyHost(arg.AsStringRef())).Split('.').AddTo(&parts);
         return sink(TBlockItem(ui64(parts.size())));
@@ -360,7 +360,7 @@ BEGIN_SIMPLE_ARROW_UDF(TGetCGIParam, TOptional<char*>(TOptional<char*>, char*)) 
 }
 struct TGetCGIParamKernelExec : public TBinaryKernelExec<TGetCGIParamKernelExec> {
     template <typename TSink>
-    static void Process(TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
+    static void Process(const IValueBuilder*, TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
         if (!arg1) {
             return sink(TBlockItem());
         }
@@ -387,7 +387,7 @@ BEGIN_SIMPLE_ARROW_UDF(TCutQueryStringAndFragment, char*(TAutoMap<char*>)) {
 }
 struct TCutQueryStringAndFragmentKernelExec : public TUnaryKernelExec<TCutQueryStringAndFragmentKernelExec> {
     template <typename TSink>
-    static void Process(TBlockItem arg, const TSink& sink) {
+    static void Process(const IValueBuilder*, TBlockItem arg, const TSink& sink) {
         const std::string_view input(arg.AsStringRef());
         const auto cut = input.find_first_of("?#");
         sink(TBlockItem(arg.AsStringRef().Substring(0U, cut)));
@@ -407,7 +407,7 @@ BEGIN_SIMPLE_ARROW_UDF(TEncode, TOptional<char*>(TOptional<char*>)) {
 }
 struct TEncodeKernelExec : public TUnaryKernelExec<TEncodeKernelExec> {
     template <typename TSink>
-    static void Process(TBlockItem arg, const TSink& sink) {
+    static void Process(const IValueBuilder*, TBlockItem arg, const TSink& sink) {
         if (!arg) {
             return sink(TBlockItem());
         }
@@ -435,7 +435,7 @@ BEGIN_SIMPLE_ARROW_UDF(TDecode, TOptional<char*>(TOptional<char*>)) {
 }
 struct TDecodeKernelExec : public TUnaryKernelExec<TDecodeKernelExec> {
     template <typename TSink>
-    static void Process(TBlockItem arg, const TSink& sink) {
+    static void Process(const IValueBuilder*, TBlockItem arg, const TSink& sink) {
         if (!arg) {
             return sink(TBlockItem());
         }
@@ -457,7 +457,7 @@ BEGIN_SIMPLE_ARROW_UDF(TIsKnownTLD, bool(TAutoMap<char*>)) {
 }
 struct TIsKnownTLDKernelExec : public TUnaryKernelExec<TIsKnownTLDKernelExec> {
     template <typename TSink>
-    static void Process(TBlockItem arg, const TSink& sink) {
+    static void Process(const IValueBuilder*, TBlockItem arg, const TSink& sink) {
         sink(TBlockItem(static_cast<ui8>(IsTld(arg.AsStringRef()))));
     }
 };
@@ -469,7 +469,7 @@ BEGIN_SIMPLE_ARROW_UDF(TIsWellKnownTLD, bool(TAutoMap<char*>)) {
 }
 struct TIsWellKnownTLDKernelExec : public TUnaryKernelExec<TIsWellKnownTLDKernelExec> {
     template <typename TSink>
-    static void Process(TBlockItem arg, const TSink& sink) {
+    static void Process(const IValueBuilder*, TBlockItem arg, const TSink& sink) {
         sink(TBlockItem(static_cast<ui8>(IsVeryGoodTld(arg.AsStringRef()))));
     }
 };
@@ -483,7 +483,7 @@ BEGIN_SIMPLE_ARROW_UDF(THostNameToPunycode, TOptional<char*>(TAutoMap<char*>)) t
 }
 struct THostNameToPunycodeKernelExec : public TUnaryKernelExec<THostNameToPunycodeKernelExec> {
     template <typename TSink>
-    static void Process(TBlockItem arg, const TSink& sink) try {
+    static void Process(const IValueBuilder*, TBlockItem arg, const TSink& sink) try {
         const TUtf16String& input = UTF8ToWide(arg.AsStringRef());
         return sink(TBlockItem(TStringRef(HostNameToPunycode(input))));
     } catch (TPunycodeError&) {
@@ -498,7 +498,7 @@ BEGIN_SIMPLE_ARROW_UDF(TForceHostNameToPunycode, char*(TAutoMap<char*>)) {
 }
 struct TForceHostNameToPunycodeKernelExec : public TUnaryKernelExec<TForceHostNameToPunycodeKernelExec> {
     template <typename TSink>
-    static void Process(TBlockItem arg, const TSink& sink) {
+    static void Process(const IValueBuilder*, TBlockItem arg, const TSink& sink) {
         const TUtf16String& input = UTF8ToWide(arg.AsStringRef());
         sink(TBlockItem(TStringRef(ForceHostNameToPunycode(input))));
     }
@@ -514,7 +514,7 @@ BEGIN_SIMPLE_ARROW_UDF(TPunycodeToHostName, TOptional<char*>(TAutoMap<char*>)) t
 }
 struct TPunycodeToHostNameKernelExec : public TUnaryKernelExec<TPunycodeToHostNameKernelExec> {
     template <typename TSink>
-    static void Process(TBlockItem arg, const TSink& sink) try {
+    static void Process(const IValueBuilder*, TBlockItem arg, const TSink& sink) try {
         const TStringRef& input = arg.AsStringRef();
         const auto& result = WideToUTF8(PunycodeToHostName(input));
         return sink(TBlockItem(TStringRef(result)));
@@ -531,7 +531,7 @@ BEGIN_SIMPLE_ARROW_UDF(TForcePunycodeToHostName, char*(TAutoMap<char*>)) {
 }
 struct TForcePunycodeToHostNameKernelExec : public TUnaryKernelExec<TForcePunycodeToHostNameKernelExec> {
     template <typename TSink>
-    static void Process(TBlockItem arg, const TSink& sink) {
+    static void Process(const IValueBuilder*, TBlockItem arg, const TSink& sink) {
         const TStringRef& input = arg.AsStringRef();
         const auto& result = WideToUTF8(ForcePunycodeToHostName(input));
         sink(TBlockItem(TStringRef(result)));
@@ -545,7 +545,7 @@ BEGIN_SIMPLE_ARROW_UDF(TCanBePunycodeHostName, bool(TAutoMap<char*>)) {
 }
 struct TCanBePunycodeHostNameKernelExec : public TUnaryKernelExec<TCanBePunycodeHostNameKernelExec> {
     template <typename TSink>
-    static void Process(TBlockItem arg, const TSink& sink) {
+    static void Process(const IValueBuilder*, TBlockItem arg, const TSink& sink) {
         sink(TBlockItem(static_cast<ui8>(CanBePunycodeHostName(arg.AsStringRef()))));
     }
 };

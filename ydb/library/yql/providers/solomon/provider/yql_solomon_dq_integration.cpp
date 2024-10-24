@@ -44,19 +44,6 @@ NSo::NProto::ESolomonClusterType MapClusterType(TSolomonClusterConfig::ESolomonC
     }
 }
 
-const TTypeAnnotationNode* GetItemType(const TExprNode& node) {
-    const TTypeAnnotationNode* typeAnn = node.GetTypeAnn();
-    switch (typeAnn->GetKind()) {
-        case ETypeAnnotationKind::Flow:
-            return typeAnn->Cast<TFlowExprType>()->GetItemType();
-        case ETypeAnnotationKind::Stream:
-            return typeAnn->Cast<TStreamExprType>()->GetItemType();
-        default: break;
-    }
-    YQL_ENSURE(false, "Invalid solomon sink type " << typeAnn->GetKind());
-    return nullptr;
-}
-
 void FillScheme(const TTypeAnnotationNode& itemType, NSo::NProto::TDqSolomonShardScheme& scheme) {
     int index = 0;
     for (const TItemExprType* structItem : itemType.Cast<TStructExprType>()->GetItems()) {
@@ -120,8 +107,10 @@ public:
 
             auto settings = soReadObject.Object().Settings();
             auto& settingsRef = settings.Ref();
-            TString from;
-            TString to;
+            const auto now = TInstant::Now();
+            const auto now1h = now - TDuration::Hours(1);
+            TString from = now1h.ToStringUpToSeconds();
+            TString to = now.ToStringUpToSeconds();
             TString program;
             bool downsamplingDisabled = false;
             TString downsamplingAggregation = "AVG";
@@ -211,6 +200,7 @@ public:
 
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TSoSourceSettings>()
+                    .World(soReadObject.World())
                     .Project(soReadObject.Object().Project())
                     .Token<TCoSecureParam>()
                         .Name().Build(token)
@@ -238,7 +228,7 @@ public:
         return TSoWrite::Match(&write);
     }
 
-    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t) override {
+    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t, TExprContext&) override {
         const TDqSource dqSource(&node);
         const auto maybeSettings = dqSource.Settings().Maybe<TSoSourceSettings>();
         if (!maybeSettings) {
@@ -316,7 +306,7 @@ public:
         shardDesc.SetClusterType(MapClusterType(clusterDesc->GetClusterType()));
         shardDesc.SetUseSsl(clusterDesc->GetUseSsl());
 
-        const TTypeAnnotationNode* itemType = GetItemType(node);
+        const TTypeAnnotationNode* itemType = shard.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
         FillScheme(*itemType, *shardDesc.MutableScheme());
 
         if (auto maybeToken = shard.Token()) {

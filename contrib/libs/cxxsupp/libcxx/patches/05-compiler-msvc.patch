@@ -1,0 +1,27 @@
+diff --git a/include/__functional/bind.h b/include/__functional/bind.h
+index 364ab8d..c91cfc1 100644
+--- a/include/__functional/bind.h
++++ b/include/__functional/bind.h
+@@ -286,6 +286,10 @@ public:
+         }
+ };
+ 
++#if defined(__CUDACC__) && defined(_MSC_VER)
++#   define Y_CUDAFE_MSVC_BUG
++#endif
++
+ template<class _Fp, class ..._BoundArgs>
+ struct is_bind_expression<__bind<_Fp, _BoundArgs...> > : public true_type {};
+ 
+@@ -295,7 +299,11 @@ class __bind_r
+ {
+     typedef __bind<_Fp, _BoundArgs...> base;
+     typedef typename base::_Fd _Fd;
++#if !defined(Y_CUDAFE_MSVC_BUG)
+     typedef typename base::_Td _Td;
++#else
++    typedef typename tuple<typename decay<_BoundArgs>::type...> _Td;
++#endif
+ public:
+     typedef _Rp result_type;
+ 

@@ -34,7 +34,7 @@ def fix_path(p):
 if __name__ == '__main__':
     is_on_win = sys.argv[1] == 'yes'
     path = sys.argv[2]
-    args = filter(None, [fix(s) for s in sys.argv[3:]])
+    args = list(filter(None, [fix(s) for s in sys.argv[3:]]))
     if is_on_win:
         path = fix_path(path)
         try:

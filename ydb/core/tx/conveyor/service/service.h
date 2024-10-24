@@ -4,7 +4,10 @@
 #include <ydb/core/tx/conveyor/usage/events.h>
 #include <ydb/core/tx/columnshard/counters/common/owner.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
+
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+
 #include <queue>
 
 namespace NKikimr::NConveyor {
@@ -86,11 +89,13 @@ private:
 public:
 
     STATEFN(StateMain) {
+        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("name", ConveyorName)
+            ("workers", Workers.size())("waiting", Waiting.size())("actor_id", SelfId());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExecution::TEvNewTask, HandleMain);
             hFunc(TEvInternal::TEvTaskProcessedResult, HandleMain);
             default:
-                ALS_ERROR(NKikimrServices::TX_CONVEYOR) << ConveyorName << ": unexpected event for task executor: " << ev->GetTypeRewrite();
+                AFL_ERROR(NKikimrServices::TX_CONVEYOR)("problem", "unexpected event for task executor")("ev_type", ev->GetTypeName());
                 break;
         }
     }

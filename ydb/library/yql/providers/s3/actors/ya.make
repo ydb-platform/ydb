@@ -47,12 +47,14 @@ PEERDIR(
     ydb/library/yql/public/issue
     ydb/library/yql/public/types
     ydb/library/yql/udfs/common/clickhouse/client
+    ydb/library/yql/utils
 )
 
 IF (CLANG AND NOT WITH_VALGRIND)
 
     SRCS(
         yql_arrow_column_converters.cpp
+        yql_s3_decompressor_actor.cpp
         yql_s3_read_actor.cpp
         yql_s3_source_queue.cpp
     )
@@ -69,3 +71,7 @@ IF (CLANG AND NOT WITH_VALGRIND)
 ENDIF()
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

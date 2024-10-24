@@ -1,5 +1,7 @@
 #pragma once
 
+#include "transaction.h"
+
 #include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
@@ -303,6 +305,18 @@ private:
         i64 Generation;
     };
 
+    struct TTransactionInfo {
+        TSpinLock Lock;
+        bool IsActive = false;
+        bool Subscribed = false;
+        NThreading::TPromise<TStatus> AllAcksReceived;
+        bool CommitCalled = false;
+        ui64 WriteCount = 0;
+        ui64 AckCount = 0;
+    };
+
+    using TTransactionInfoPtr = std::shared_ptr<TTransactionInfo>;
+
     THandleResult OnErrorImpl(NYdb::TPlainStatus&& status); // true - should Start(), false - should Close(), empty - no action
 public:
     TWriteSessionImpl(const TWriteSessionSettings& settings,
@@ -406,14 +420,17 @@ private:
 
     bool TxIsChanged(const Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest) const;
 
+    void TrySubscribeOnTransactionCommit(TTransaction* tx);
+    void CancelTransactions();
+    TTransactionInfoPtr GetOrCreateTxInfo(const TTransactionId& txId);
+    void TrySignalAllAcksReceived(ui64 seqNo);
+    void DeleteTx(const TTransactionId& txId);
+
 private:
     TWriteSessionSettings Settings;
     std::shared_ptr<TTopicClient::TImpl> Client;
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
-    TString TargetCluster;
-    TString InitialCluster;
-    TString CurrentCluster;
-    TString PreferredClusterByCDS;
+
     std::shared_ptr<IWriteSessionConnectionProcessorFactory> ConnectionFactory;
     TDbDriverStatePtr DbDriverState;
     TStringType PrevToken;
@@ -433,7 +450,6 @@ private:
     std::shared_ptr<TServerMessage> ServerMessage; // Server message to write server response to.
 
     TString SessionId;
-    IExecutor::TPtr Executor;
     IExecutor::TPtr CompressionExecutor;
     size_t MemoryUsage = 0; //!< Estimated amount of memory used
     bool FirstTokenSent = false;
@@ -450,15 +466,14 @@ private:
     const size_t MaxBlockMessageCount = 1; //!< Max message count that can be packed into a single block. In block version 0 is equal to 1 for compatibility
     bool Connected = false;
     bool Started = false;
+    std::atomic<bool> SendImplScheduled = false;
     TAtomic Aborting = 0;
     bool SessionEstablished = false;
     ui32 PartitionId = 0;
     TPartitionLocation PreferredPartitionLocation = {};
     ui64 NextId = 0;
-    ui64 MinUnsentId = 1;
     TMaybe<ui64> InitSeqNo;
     TMaybe<bool> AutoSeqNoMode;
-    bool ValidateSeqNoMode = false;
 
     NThreading::TPromise<ui64> InitSeqNoPromise;
     bool InitSeqNoSetDone = false;
@@ -472,6 +487,9 @@ private:
     TMaybe<ui64> DirectWriteToPartitionId;
 protected:
     ui64 MessagesAcquired = 0;
+
+    THashMap<TTransactionId, TTransactionInfoPtr> Txs;
+    THashMap<ui64, TTransactionId> WrittenInTx; // SeqNo -> TxId
 };
 
 }  // namespace NYdb::NTopic

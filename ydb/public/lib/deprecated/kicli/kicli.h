@@ -587,7 +587,8 @@ public:
         ExternalTable,
         ExternalDataSource,
         View,
-        ResourcePool
+        ResourcePool,
+        BackupCollection
     };
 
     TSchemaObject(TSchemaObject&&) = default;
@@ -861,12 +862,6 @@ protected:
     }
 
     void PrepareRequest(NKikimrClient::TSchemeOperation& request) const {
-        if (!SecurityToken.empty()) {
-            request.SetSecurityToken(SecurityToken);
-        }
-    }
-
-    void PrepareRequest(NKikimrClient::TWhoAmI& request) const {
         if (!SecurityToken.empty()) {
             request.SetSecurityToken(SecurityToken);
         }

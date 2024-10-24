@@ -185,7 +185,7 @@ private:
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Start pipe to hive tablet: " << hiveTabletId);
         auto pipeRetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
         pipeRetryPolicy.MaxRetryTime = TDuration::Seconds(1);
-        NTabletPipe::TClientConfig pipeConfig{pipeRetryPolicy};
+        NTabletPipe::TClientConfig pipeConfig{.RetryPolicy = pipeRetryPolicy};
         HivePipeClient = ctx.RegisterWithSameMailbox(
                 NTabletPipe::CreateClient(ctx.SelfID, hiveTabletId, pipeConfig)
         );
@@ -218,6 +218,7 @@ private:
         req->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
         req->Record.MutableRequest()->SetKeepSession(false);
         req->Record.MutableRequest()->SetDatabase(NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig));
+        req->Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
 
         req->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
         req->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
@@ -251,7 +252,7 @@ private:
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "stale response with generation " << ev->Cookie << ", actual is " << Generation->Val());
             return;
         }
-        const auto& record = ev->Get()->Record.GetRef();
+        const auto& record = ev->Get()->Record;
 
         if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
             LOG_ERROR_S(ctx, NKikimrServices::PQ_METACACHE,
@@ -272,11 +273,16 @@ private:
 
     void HandleCheckVersionResult(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
 
-        const auto& record = ev->Get()->Record.GetRef();
+        const auto& record = ev->Get()->Record;
 
-        Y_ABORT_UNLESS(record.GetResponse().GetResults().size() == 1);
-        const auto& rr = record.GetResponse().GetResults(0).GetValue().GetStruct(0);
-        ui64 newVersion = rr.ListSize() == 0 ? 0 : rr.GetList(0).GetStruct(0).GetOptional().GetInt64();
+        Y_VERIFY(record.GetResponse().YdbResultsSize() == 1);
+        NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
+
+        ui64 newVersion = 0;
+        if (parser.RowsCount() != 0) {
+            parser.TryNextRow();
+            newVersion = *parser.ColumnParser(0).GetOptionalInt64();
+        }
 
         LastVersionUpdate = ctx.Now();
         if (newVersion > CurrentTopicsVersion || CurrentTopicsVersion == 0 || SkipVersionCheck) {
@@ -291,19 +297,20 @@ private:
     void HandleGetTopicsResult(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "HandleGetTopicsResult");
 
-        const auto& record = ev->Get()->Record.GetRef();
+        const auto& record = ev->Get()->Record;
 
-        Y_ABORT_UNLESS(record.GetResponse().GetResults().size() == 1);
+        Y_VERIFY(record.GetResponse().YdbResultsSize() == 1);
         TString path, dc;
-        const auto& rr = record.GetResponse().GetResults(0).GetValue().GetStruct(0);
-        for (const auto& row : rr.GetList()) {
-
-            path = row.GetStruct(0).GetOptional().GetText();
-            dc = row.GetStruct(1).GetOptional().GetText();
+        NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
+        const ui32 rowCount = parser.RowsCount();
+        while (parser.TryNextRow()) {
+            path = *parser.ColumnParser(0).GetOptionalUtf8();
+            dc = *parser.ColumnParser(1).GetOptionalUtf8();
 
             NewTopics.emplace_back(decltype(NewTopics)::value_type{path, dc});
         }
-        if (rr.ListSize() > 0) {
+
+        if (rowCount > 0) {
             LastTopicKey = {path, dc};
             return RunQuery(EQueryType::EGetTopics, ctx);
         } else {
@@ -710,7 +717,7 @@ private:
     void ProcessNodesInfoWaitersQueue(bool status, const TActorContext& ctx) {
         if (DynamicNodesMapping == nullptr) {
             Y_ABORT_UNLESS(!status);
-            DynamicNodesMapping.reset(new THashMap<ui32, ui32>); 
+            DynamicNodesMapping.reset(new THashMap<ui32, ui32>);
         }
         while(!NodesMappingWaiters.empty()) {
             ctx.Send(NodesMappingWaiters.front(),

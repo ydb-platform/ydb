@@ -10,7 +10,7 @@ namespace NYql::NDq {
 
     template <typename TDerived>
     class TGenericBaseActor: public NActors::TActorBootstrapped<TDerived> {
-    protected: //Events
+    protected: // Events
         // Event ids
         enum EEventIds: ui32 {
             EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
@@ -89,7 +89,7 @@ namespace NYql::NDq {
             NConnector::NApi::TError Error;
         };
 
-    protected: //TODO move common logic here
+    protected: // TODO move common logic here
     };
 
 } // namespace NYql::NDq

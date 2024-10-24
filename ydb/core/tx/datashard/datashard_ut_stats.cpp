@@ -1,10 +1,13 @@
+#include "datashard_ut_common_kqp.h"
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
-#include "ydb/core/tablet_flat/shared_sausagecache.h"
+#include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_make.h>
+#include <ydb/core/testlib/actors/block_events.h>
 
 namespace NKikimr {
 
 using namespace NKikimr::NDataShard;
+using namespace NKikimr::NDataShard::NKqpHelpers;
 using namespace NSchemeShard;
 using namespace Tests;
 
@@ -441,28 +444,16 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
 
         UpsertRows(server, sender);
-        
-        bool captured = false;
-        auto observer = runtime.AddObserver<NSharedCache::TEvResult>([&](NSharedCache::TEvResult::TPtr& event) {
-            Cerr << "Captured NSharedCache::TEvResult from " << runtime.FindActorName(event->Sender) << " to " << runtime.FindActorName(event->GetRecipientRewrite()) << Endl;
-            if (runtime.FindActorName(event->GetRecipientRewrite()) == "DATASHARD_STATS_BUILDER") {
-                auto& message = *event->Get();
-                event.Reset(static_cast<TEventHandle<NSharedCache::TEvResult> *>(
-                    new IEventHandle(event->Recipient, event->Sender, 
-                        new NSharedCache::TEvResult(message.Origin, message.Cookie, NKikimrProto::NODATA))));
-                captured = true;
-            }
+
+        TBlockEvents<NSharedCache::TEvResult> block(runtime, [&](const NSharedCache::TEvResult::TPtr& event) {
+            return runtime.FindActorName(event->GetRecipientRewrite()) == "DATASHARD_STATS_BUILDER";
         });
 
         CompactTable(runtime, shard1, tableId1, false);
 
-        for (int i = 0; i < 5 && !captured; ++i) {
-            TDispatchOptions options;
-            options.CustomFinalCondition = [&]() { return captured; };
-            runtime.DispatchEvents(options, TDuration::Seconds(5));
-        }
-        UNIT_ASSERT(captured);
-        observer.Remove();
+        runtime.WaitFor("blocked read", [&]{ return block.size(); });
+
+        block.Stop().Unblock();
 
         {
             Cerr << "Waiting stats.." << Endl;
@@ -476,6 +467,54 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         NDataShard::gDbStatsDataSizeResolution = gDbStatsDataSizeResolutionBefore;
         NDataShard::gDbStatsRowCountResolution = gDbStatsRowCountResolutionBefore;
     }
+
+    Y_UNIT_TEST(Follower) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableForceFollowers(true);
+
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+        
+        //runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        auto [shards, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions()
+                .Followers(3));
+        ui64 shard1 = shards.at(0);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2);");
+
+       {
+            Cerr << "... waiting leader stats" << Endl;
+            auto stats = WaitTableStats(runtime, shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowUpdates(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 2);
+        }        
+        
+        {
+            auto selectResult = KqpSimpleStaleRoExec(runtime, "SELECT * FROM `/Root/table-1`", "/Root");
+            TString expectedSelectResult = 
+                "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+                "{ items { uint32_value: 2 } items { uint32_value: 2 } }";
+            UNIT_ASSERT_VALUES_EQUAL(selectResult, expectedSelectResult);
+        }
+
+        {
+            Cerr << "... waiting for follower stats" << Endl;
+            auto stats = WaitTableFollowerStats(runtime, shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
+            UNIT_ASSERT_GE(stats.GetFollowerId(), 1);
+            UNIT_ASSERT_LE(stats.GetFollowerId(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRangeReadRows(), 2);
+        }
+    }    
 
 } // Y_UNIT_TEST_SUITE(DataShardStats)
 

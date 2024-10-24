@@ -1,0 +1,108 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Apache-2.0           2b42edef8fa55315f34f2370b4715ca9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE [2:202]
+
+KEEP     Apache-2.0           4248d6c827c367ff9f1b5e59ca41408e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        highwayhash/arch_specific.cc [3:13]
+        highwayhash/arch_specific.h [3:13]
+        highwayhash/benchmark.cc [3:13]
+        highwayhash/c_bindings.cc [3:13]
+        highwayhash/c_bindings.h [3:13]
+        highwayhash/compiler_specific.h [3:13]
+        highwayhash/data_parallel.h [3:13]
+        highwayhash/data_parallel_benchmark.cc [3:13]
+        highwayhash/data_parallel_test.cc [3:13]
+        highwayhash/endianess.h [3:13]
+        highwayhash/hh_avx2.cc [3:13]
+        highwayhash/hh_avx2.h [3:13]
+        highwayhash/hh_buffer.h [3:13]
+        highwayhash/hh_portable.cc [3:13]
+        highwayhash/hh_portable.h [3:13]
+        highwayhash/hh_sse41.cc [3:13]
+        highwayhash/hh_sse41.h [3:13]
+        highwayhash/hh_types.h [3:13]
+        highwayhash/highwayhash.h [3:13]
+        highwayhash/highwayhash_target.cc [3:13]
+        highwayhash/highwayhash_target.h [3:13]
+        highwayhash/highwayhash_test.cc [3:13]
+        highwayhash/highwayhash_test_avx2.cc [3:13]
+        highwayhash/highwayhash_test_portable.cc [3:13]
+        highwayhash/highwayhash_test_sse41.cc [3:13]
+        highwayhash/highwayhash_test_target.cc [3:13]
+        highwayhash/highwayhash_test_target.h [3:13]
+        highwayhash/iaca.h [3:13]
+        highwayhash/instruction_sets.cc [3:13]
+        highwayhash/instruction_sets.h [3:13]
+        highwayhash/load3.h [3:13]
+        highwayhash/nanobenchmark.cc [3:13]
+        highwayhash/nanobenchmark.h [3:13]
+        highwayhash/nanobenchmark_example.cc [3:13]
+        highwayhash/os_specific.cc [3:13]
+        highwayhash/os_specific.h [3:13]
+        highwayhash/profiler.h [3:13]
+        highwayhash/profiler_example.cc [3:13]
+        highwayhash/robust_statistics.h [3:13]
+        highwayhash/scalar.h [3:13]
+        highwayhash/scalar_sip_tree_hash.cc [3:13]
+        highwayhash/scalar_sip_tree_hash.h [3:13]
+        highwayhash/sip_hash.cc [3:13]
+        highwayhash/sip_hash.h [3:13]
+        highwayhash/sip_hash_test.cc [3:13]
+        highwayhash/sip_tree_hash.cc [3:13]
+        highwayhash/sip_tree_hash.h [3:13]
+        highwayhash/state_helpers.h [3:13]
+        highwayhash/tsc_timer.h [3:13]
+        highwayhash/vector128.h [3:13]
+        highwayhash/vector256.h [3:13]
+        highwayhash/vector_test.cc [3:13]
+        highwayhash/vector_test_avx2.cc [3:13]
+        highwayhash/vector_test_portable.cc [3:13]
+        highwayhash/vector_test_sse41.cc [3:13]
+        highwayhash/vector_test_target.cc [3:13]
+        highwayhash/vector_test_target.h [3:13]

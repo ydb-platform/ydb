@@ -1,5 +1,6 @@
 #include "core_ydb.h"
 #include "core_ydb_impl.h"
+#include "mvp_tokens.h"
 
 #include <ydb/library/actors/http/http_cache.h>
 
@@ -57,12 +58,7 @@ NYdb::NScheme::TSchemeClient TYdbLocation::GetSchemeClient(const TRequest& reque
     if (authToken) {
         clientSettings.AuthToken(authToken);
     }
-    TString database = request.Parameters["database"];
-    if (database) {
-        if (!database.StartsWith('/')) {
-            database.insert(database.begin(), '/');
-        }
-        database.insert(0, RootDomain);
+    if (TString database = TYdbLocation::GetDatabaseName(request)) {
         clientSettings.Database(database);
     }
     return NYdb::NScheme::TSchemeClient(GetDriver(), clientSettings);
@@ -107,23 +103,6 @@ std::unique_ptr<NYdb::NTable::TTableClient> TYdbLocation::GetTableClientPtr(TStr
 
 std::unique_ptr<NYdb::NTopic::TTopicClient> TYdbLocation::GetTopicClientPtr(TStringBuf endpoint, TStringBuf scheme, const NYdb::NTopic::TTopicClientSettings& settings) const {
     return std::make_unique<NYdb::NTopic::TTopicClient>(GetDriver(endpoint, scheme), settings);
-}
-
-NYdb::NTable::TTableClient TYdbLocation::GetTableClient(const TRequest& request, const NYdb::NTable::TClientSettings& defaultClientSettings) const {
-    NYdb::NTable::TClientSettings clientSettings(defaultClientSettings);
-    TString authToken = request.GetAuthToken();
-    if (authToken) {
-        clientSettings.AuthToken(authToken);
-    }
-    TString database = request.Parameters["database"];
-    if (database) {
-        if (!database.StartsWith('/')) {
-            database.insert(database.begin(), '/');
-        }
-        database.insert(0, RootDomain);
-        clientSettings.Database(database);
-    }
-    return GetTableClient(clientSettings);
 }
 
 NYdb::NTable::TTableClient TYdbLocation::GetTableClient(const NYdb::NTable::TClientSettings& clientSettings) const {
@@ -429,4 +408,11 @@ TString GetAuthHeaderValue(const TString& tokenName) {
         authHeaderValue = TYdbLocation::GetUserToken();
     }
     return authHeaderValue;
+}
+
+void SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config) {
+    config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIME_MS] = 20000;
+    config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIMEOUT_MS] = 10000;
+    config.IntChannelParams[GRPC_ARG_HTTP2_MAX_PINGS_WITHOUT_DATA] = 0;
+    config.IntChannelParams[GRPC_ARG_KEEPALIVE_PERMIT_WITHOUT_CALLS] = 1;
 }

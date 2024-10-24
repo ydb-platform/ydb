@@ -252,24 +252,8 @@ Y_ABSL_INTERNAL_END_EXTERN_C
 
 #else  // !defined(Y_ABSL_HAVE_MEMORY_SANITIZER)
 
-// TODO(rogeeff): remove this branch
-#ifdef Y_ABSL_HAVE_THREAD_SANITIZER
-#define Y_ABSL_ANNOTATE_MEMORY_IS_INITIALIZED(address, size) \
-  do {                                                     \
-    (void)(address);                                       \
-    (void)(size);                                          \
-  } while (0)
-#define Y_ABSL_ANNOTATE_MEMORY_IS_UNINITIALIZED(address, size) \
-  do {                                                       \
-    (void)(address);                                         \
-    (void)(size);                                            \
-  } while (0)
-#else
-
 #define Y_ABSL_ANNOTATE_MEMORY_IS_INITIALIZED(address, size)    // empty
 #define Y_ABSL_ANNOTATE_MEMORY_IS_UNINITIALIZED(address, size)  // empty
-
-#endif
 
 #endif  // Y_ABSL_HAVE_MEMORY_SANITIZER
 

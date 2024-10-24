@@ -707,7 +707,7 @@ public:
     }
 
     NUdf::TUnboxedValue DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             state = ctx.HolderFactory.Create<TValue>(ctx, this);
         }
 
@@ -1150,7 +1150,7 @@ public:
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             MakeState(ctx, state);
         }
 
@@ -1201,7 +1201,7 @@ public:
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
 
-        BranchInst::Create(main, make, HasValue(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
 
         block = make;
 
@@ -1309,6 +1309,9 @@ private:
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
+
+        DISubprogramAnnotator annotator(ctx, ctx.Func);
+        
 
         auto args = ctx.Func->arg_begin();
 

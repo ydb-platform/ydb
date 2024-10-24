@@ -1,0 +1,10 @@
+--- a/lib/hard-locale.c	(index)
++++ b/lib/hard-locale.c	(working tree)
+@@ -19,6 +19,7 @@
+ #include <config.h>
+ 
+ #include "hard-locale.h"
++#include "setlocale_null.h"
+ 
+ #include <locale.h>
+ #include <string.h>

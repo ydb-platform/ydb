@@ -21,6 +21,7 @@ namespace NYT::NDriver {
 
 using namespace NApi;
 using namespace NConcurrency;
+using namespace NQueueClient;
 using namespace NTableClient;
 using namespace NTabletClient;
 using namespace NYTree;
@@ -28,13 +29,17 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static NLogging::TLogger WithCommandTag(
+namespace {
+
+NLogging::TLogger WithCommandTag(
     const NLogging::TLogger& logger,
     const ICommandContextPtr& context)
 {
     return logger.WithTag("Command: %v",
         context->Request().CommandName);
 }
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -282,24 +287,23 @@ void TCreateQueueProducerSessionCommand::Register(TRegistrar registrar)
     registrar.Parameter("producer_path", &TThis::ProducerPath);
     registrar.Parameter("queue_path", &TThis::QueuePath);
     registrar.Parameter("session_id", &TThis::SessionId);
-    registrar.Parameter("user_meta", &TThis::UserMeta)
-        .Optional();
+    registrar.ParameterWithUniversalAccessor<INodePtr>(
+        "user_meta",
+        [] (TThis* command) -> auto& {
+            return command->Options.UserMeta;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TCreateQueueProducerSessionCommand::DoExecute(ICommandContextPtr context)
 {
     auto client = context->GetClient();
 
-    std::optional<NYson::TYsonString> requestUserMeta;
-    if (UserMeta) {
-        requestUserMeta = NYson::ConvertToYsonString(UserMeta);
-    }
-
     auto result = WaitFor(client->CreateQueueProducerSession(
         ProducerPath,
         QueuePath,
         SessionId,
-        requestUserMeta))
+        Options))
         .ValueOrThrow();
 
     ProduceOutput(context, [&] (NYson::IYsonConsumer* consumer) {
@@ -328,7 +332,8 @@ void TRemoveQueueProducerSessionCommand::DoExecute(ICommandContextPtr context)
     WaitFor(client->RemoveQueueProducerSession(
         ProducerPath,
         QueuePath,
-        SessionId))
+        SessionId,
+        Options))
         .ThrowOnError();
 
     ProduceEmptyOutput(context);
@@ -338,7 +343,7 @@ void TRemoveQueueProducerSessionCommand::DoExecute(ICommandContextPtr context)
 
 void TPushQueueProducerCommand::Register(TRegistrar registrar)
 {
-    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<TQueueProducerSequenceNumber>>(
         "sequence_number",
         [] (TThis* command) -> auto& {
             return command->Options.SequenceNumber;
@@ -366,10 +371,12 @@ void TPushQueueProducerCommand::DoExecute(ICommandContextPtr context)
     auto queueTableInfoFuture = tableMountCache->GetTableInfo(QueuePath.GetPath());
     auto producerTableInfoFuture = tableMountCache->GetTableInfo(ProducerPath.GetPath());
 
-    auto queueTableInfo = WaitFor(queueTableInfoFuture).ValueOrThrow("Path %v is not valid queue", QueuePath);
+    auto queueTableInfo = WaitFor(queueTableInfoFuture)
+        .ValueOrThrow("Path %v does not point to a valid queue", QueuePath);
     queueTableInfo->ValidateOrdered();
 
-    auto producerTableInfo = WaitFor(producerTableInfoFuture).ValueOrThrow("Path %v is not valid producer", ProducerPath);
+    auto producerTableInfo = WaitFor(producerTableInfoFuture)
+        .ValueOrThrow("Path %v does not point to a valid producer", ProducerPath);
     producerTableInfo->ValidateSorted();
 
     struct TPushQueueProducerBufferTag

@@ -453,10 +453,10 @@ public:
         auto pos = options.Pos();
         try {
             TSession* session = GetSession(options);
-            
+
             TSet<TString> uniqueTables;
-            const auto fullPrefix = options.Prefix().Empty() ? TString() : (options.Prefix() + '/');
-            const auto fullSuffix = options.Suffix().Empty() ? TString() : ('/' + options.Suffix());
+            const auto fullPrefix = options.Prefix().empty() ? TString() : (options.Prefix() + '/');
+            const auto fullSuffix = options.Suffix().empty() ? TString() : ('/' + options.Suffix());
             for (const auto& [tableName, _] : Services_->GetTablesMapping()) {
                 TVector<TString> parts;
                 Split(tableName, ".", parts);
@@ -541,7 +541,7 @@ public:
         auto pos = options.Pos();
         try {
             TSet<TString> uniqueTables;
-            const auto fullPrefix = options.Prefix().Empty() ? "" : (options.Prefix() + '/');
+            const auto fullPrefix = options.Prefix().empty() ? "" : (options.Prefix() + '/');
             for (const auto& [tableName, _] : Services_->GetTablesMapping()) {
                 TVector<TString> parts;
                 Split(tableName, ".", parts);
@@ -653,7 +653,7 @@ public:
             writer.OnBeginMap();
             if (NCommon::HasResOrPullOption(*node, "type")) {
                 writer.OnKeyedItem("Type");
-                NCommon::WriteResOrPullType(writer, node->Child(0)->GetTypeAnn(), columns);
+                NCommon::WriteResOrPullType(writer, node->Child(0)->GetTypeAnn(), TColumnOrder(columns));
             }
 
             bool truncated = false;
@@ -776,7 +776,7 @@ public:
             writer.SetSpecs(spec);
 
             TStringStream err;
-            auto type = BuildType(*tableInfo.RowSpec->GetType(), typeBuilder, err);
+            auto type = BuildType(*tableInfo.RowSpec->GetExtendedType(ctx), typeBuilder, err);
             TValuePacker packer(true, type);
             for (auto& c: content) {
                 auto val = packer.Unpack(c, holderFactory);
@@ -1142,6 +1142,10 @@ private:
             req.Table(), attrs, req.IgnoreYamrDsv(), req.IgnoreWeakSchema()
         );
 
+        if (attrs.AsMap().contains("schema_mode") && attrs["schema_mode"].AsString() == "weak") {
+            info.Attrs["schema_mode"] = attrs["schema_mode"].AsString();
+        }
+
         NYT::TNode schemaAttrs;
         if (req.ForceInferSchema() && req.InferSchemaRows() > 0) {
             info.Attrs.erase(YqlRowSpecAttribute);
@@ -1501,6 +1505,41 @@ private:
                     columnarStatsHistory.insert(TString(c));
                 }
                 res.DataSize.back() += out.Str().size();
+
+                if (options.Extended()) {
+                    if (attrs.HasKey("extended_stats")) {
+                        THashMap<TString, i64> dataWeight;
+                        THashMap<TString, ui64> estimatedUniqueCounts;
+                        auto extendedStats = attrs["extended_stats"].AsList();
+                        std::sort(extendedStats.begin(), extendedStats.end(),
+                            [](NYT::TNode& lhs, NYT::TNode& rhs) {
+                                return lhs.AsMap()["column_name"].AsString() < rhs.AsMap()["column_name"].AsString();
+                            });
+                        for (const auto& column : columns) {
+                            auto pos = std::lower_bound(extendedStats.begin(), extendedStats.end(), nullptr,
+                                [&column](NYT::TNode& item, nullptr_t) {
+                                    return item.AsMap()["column_name"].AsString() < column;
+                                });
+                            if (pos != extendedStats.end() && pos->AsMap()["column_name"] == column) {
+                                const auto& m = pos->AsMap();
+                                auto dataWeightPos = m.find("data_weight");
+                                if (dataWeightPos != m.end()) {
+                                    dataWeight[column] = dataWeightPos->second.ConvertTo<i64>();
+                                }
+                                auto uniqueValPos = m.find("num_unique_vals");
+                                if (uniqueValPos != m.end()) {
+                                    estimatedUniqueCounts[column] = uniqueValPos->second.ConvertTo<ui64>();
+                                }
+                            }
+                        }
+                        res.Extended.push_back(IYtGateway::TPathStatResult::TExtendedResult{
+                            .DataWeight = dataWeight,
+                            .EstimatedUniqueCounts = estimatedUniqueCounts
+                        });
+                    } else {
+                        res.Extended.push_back(Nothing());
+                    }
+                }
             } else {
                 res.DataSize.back() += TFileStat(path).Size;
             }

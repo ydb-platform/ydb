@@ -75,7 +75,7 @@ enum {
     MTYPE_CLIENT_CHOOSE_PROXY = 10468,
     MTYPE_CLIENT_SQS_REQUEST = 10469,
     MTYPE_CLIENT_SQS_RESPONSE = 10470,
-    MTYPE_CLIENT_WHOAMI = 10471,
+    MTYPE_CLIENT_DEPRECATED_10471 = 10471,
     MTYPE_CLIENT_STREAM_REQUEST = 10472,
     MTYPE_CLIENT_S3_LISTING_REQUEST = 10474,
     MTYPE_CLIENT_S3_LISTING_RESPONSE = 10475,
@@ -87,7 +87,7 @@ enum {
     MTYPE_CLIENT_TEST_SHARD_CONTROL = 10481,
     MTYPE_CLIENT_DS_LOAD_REQUEST = 10482, // deprecated
     MTYPE_CLIENT_DS_LOAD_RESPONSE = 10483, // deprecated
-    MTYPE_CLIENT_LOGIN_REQUEST = 10484,
+    /*MTYPE_CLIENT_LOGIN_REQUEST*/ MTYPE_CLIENT_DEPRECATED_10484 = 10484,
 };
 
 template <typename InstanceType, class TBufferRecord, int MType>
@@ -131,13 +131,11 @@ struct TBusCmsResponse : TBusMessage<TBusCmsResponse, NKikimrClient::TCmsRespons
 struct TBusChooseProxy : TBusMessage<TBusChooseProxy, NKikimrClient::TChooseProxyRequest, MTYPE_CLIENT_CHOOSE_PROXY> {};
 struct TBusSqsRequest : TBusMessage<TBusSqsRequest, NKikimrClient::TSqsRequest, MTYPE_CLIENT_SQS_REQUEST> {};
 struct TBusSqsResponse : TBusMessage<TBusSqsResponse, NKikimrClient::TSqsResponse, MTYPE_CLIENT_SQS_RESPONSE> {};
-struct TBusWhoAmI : TBusMessage<TBusWhoAmI, NKikimrClient::TWhoAmI, MTYPE_CLIENT_WHOAMI> {};
 struct TBusStreamRequest : TBusMessage<TBusStreamRequest, NKikimrClient::TRequest, MTYPE_CLIENT_STREAM_REQUEST> {};
 struct TBusInterconnectDebug : TBusMessage<TBusInterconnectDebug, NKikimrClient::TInterconnectDebug, MTYPE_CLIENT_INTERCONNECT_DEBUG> {};
 struct TBusConsoleRequest : TBusMessage<TBusConsoleRequest, NKikimrClient::TConsoleRequest, MTYPE_CLIENT_CONSOLE_REQUEST> {};
 struct TBusConsoleResponse : TBusMessage<TBusConsoleResponse, NKikimrClient::TConsoleResponse, MTYPE_CLIENT_CONSOLE_RESPONSE> {};
 struct TBusTestShardControlRequest : TBusMessage<TBusTestShardControlRequest, NKikimrClient::TTestShardControlRequest, MTYPE_CLIENT_TEST_SHARD_CONTROL> {};
-struct TBusLoginRequest : TBusMessage<TBusLoginRequest, NKikimrClient::TLoginRequest, MTYPE_CLIENT_LOGIN_REQUEST> {};
 
 class TBusResponseStatus : public TBusResponse {
 public:
@@ -214,13 +212,11 @@ public:
         RegisterType(new TBusCmsRequest);
         RegisterType(new TBusCmsResponse);
         RegisterType(new TBusChooseProxy);
-        RegisterType(new TBusWhoAmI);
         RegisterType(new TBusStreamRequest);
         RegisterType(new TBusInterconnectDebug);
         RegisterType(new TBusConsoleRequest);
         RegisterType(new TBusConsoleResponse);
         RegisterType(new TBusTestShardControlRequest);
-        RegisterType(new TBusLoginRequest);
     }
 
     const static ui32 DefaultPort = 2134;

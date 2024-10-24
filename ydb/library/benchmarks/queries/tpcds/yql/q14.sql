@@ -1,7 +1,7 @@
 {% include 'header.sql.jinja' %}
 
 -- NB: Subquerys
-$bla1 = (select iss.i_brand_id brand_id
+$bla1 = (select DISTINCT iss.i_brand_id brand_id
      ,iss.i_class_id class_id
      ,iss.i_category_id category_id
  from {{store_sales}} as store_sales

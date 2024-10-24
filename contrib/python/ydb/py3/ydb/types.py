@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import abc
+from dataclasses import dataclass
 import enum
 import json
 from . import _utilities, _apis
@@ -440,3 +441,9 @@ class BulkUpsertColumns(AbstractTypeBuilder):
 
     def __str__(self):
         return "BulkUpsertColumns<%s>" % ",".join(self.__columns_repr)
+
+
+@dataclass
+class TypedValue:
+    value: typing.Any
+    value_type: typing.Optional[typing.Union[PrimitiveType, AbstractTypeBuilder]] = None

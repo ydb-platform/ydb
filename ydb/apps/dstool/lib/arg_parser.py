@@ -97,7 +97,7 @@ class ValueMetaInfo:
 
     def __eq__(self, other):
         return all((
-            type(self) == type(other),
+            type(self) is type(other),
             self.name == other.name,
             self.type == other.type,
             self.choices == other.choices,

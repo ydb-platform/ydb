@@ -40,19 +40,19 @@ DEFINE_REFCOUNTED_TYPE(THistogramExponentialBounds)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class THistogramConfig
+class TTimeHistogramConfig
     : public NYTree::TYsonStruct
 {
 public:
     std::optional<THistogramExponentialBoundsPtr> ExponentialBounds;
     std::optional<std::vector<TDuration>> CustomBounds;
 
-    REGISTER_YSON_STRUCT(THistogramConfig);
+    REGISTER_YSON_STRUCT(TTimeHistogramConfig);
 
     static void Register(TRegistrar registrar);
 };
 
-DEFINE_REFCOUNTED_TYPE(THistogramConfig)
+DEFINE_REFCOUNTED_TYPE(TTimeHistogramConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -62,8 +62,8 @@ class TServiceCommonConfig
 {
 public:
     bool EnablePerUserProfiling;
-    THistogramConfigPtr HistogramTimerProfiling;
-    bool EnableErrorCodeCounting;
+    TTimeHistogramConfigPtr TimeHistogram;
+    bool EnableErrorCodeCounter;
     ERequestTracingMode TracingMode;
 
     REGISTER_YSON_STRUCT(TServiceCommonConfig);
@@ -96,8 +96,8 @@ class TServiceCommonDynamicConfig
 {
 public:
     std::optional<bool> EnablePerUserProfiling;
-    std::optional<THistogramConfigPtr> HistogramTimerProfiling;
-    std::optional<bool> EnableErrorCodeCounting;
+    std::optional<TTimeHistogramConfigPtr> TimeHistogram;
+    std::optional<bool> EnableErrorCodeCounter;
     std::optional<ERequestTracingMode> TracingMode;
 
     REGISTER_YSON_STRUCT(TServiceCommonDynamicConfig);
@@ -129,9 +129,9 @@ class TServiceConfig
 {
 public:
     std::optional<bool> EnablePerUserProfiling;
-    std::optional<bool> EnableErrorCodeCounting;
+    std::optional<bool> EnableErrorCodeCounter;
     std::optional<ERequestTracingMode> TracingMode;
-    THistogramConfigPtr HistogramTimerProfiling;
+    TTimeHistogramConfigPtr TimeHistogram;
     THashMap<TString, TMethodConfigPtr> Methods;
     std::optional<int> AuthenticationQueueSizeLimit;
     std::optional<TDuration> PendingPayloadsTimeout;
@@ -195,7 +195,12 @@ DEFINE_REFCOUNTED_TYPE(TRetryingChannelConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBalancingChannelConfigBase
+DEFINE_ENUM(EPeerPriorityStrategy,
+    (None)
+    (PreferLocal)
+);
+
+class TViablePeerRegistryConfig
     : public virtual NYTree::TYsonStruct
 {
 public:
@@ -227,22 +232,6 @@ public:
     //! returns a soft failure (i.e. "down" response) to |Discover| request.
     TDuration SoftBackoffTime;
 
-    REGISTER_YSON_STRUCT(TBalancingChannelConfigBase);
-
-    static void Register(TRegistrar registrar);
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-DEFINE_ENUM(EPeerPriorityStrategy,
-    (None)
-    (PreferLocal)
-);
-
-class TViablePeerRegistryConfig
-    : public TBalancingChannelConfigBase
-{
-public:
     //! In case too many peers are known, the registry will only maintain this many peers active.
     int MaxPeerCount;
 
@@ -322,26 +311,39 @@ DEFINE_REFCOUNTED_TYPE(TServiceDiscoveryEndpointsConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBalancingChannelConfig
+class TBalancingChannelConfigBase
     : public TDynamicChannelPoolConfig
 {
 public:
-    //! First option: static list of addresses.
-    std::optional<std::vector<TString>> Addresses;
-
     //! Disables discovery and balancing when just one address is given.
     //! This is vital for jobs since node's redirector is incapable of handling
     //! discover requests properly.
     bool DisableBalancingOnSingleAddress;
-
-    //! Second option: SD endpoints.
-    TServiceDiscoveryEndpointsConfigPtr Endpoints;
 
     //! Delay before sending a hedged request. If null then hedging is disabled.
     std::optional<TDuration> HedgingDelay;
 
     //! Whether to cancel the primary request when backup one is sent.
     bool CancelPrimaryRequestOnHedging;
+
+    REGISTER_YSON_STRUCT(TBalancingChannelConfigBase);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TBalancingChannelConfigBase)
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TBalancingChannelConfig
+    : public TBalancingChannelConfigBase
+{
+public:
+    //! First option: static list of addresses.
+    std::optional<std::vector<std::string>> Addresses;
+
+    //! Second option: SD endpoints.
+    TServiceDiscoveryEndpointsConfigPtr Endpoints;
 
     REGISTER_YSON_STRUCT(TBalancingChannelConfig);
 

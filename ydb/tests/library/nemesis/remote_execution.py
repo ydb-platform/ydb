@@ -26,10 +26,12 @@ def execute_command_with_output(command, timeout=60):
         f_err.flush()
         f_err.seek(0)
         std_err_lines = list(f_err.readlines())
+        std_err_lines = [line.decode("utf-8", errors='replace') for line in std_err_lines]
         if process_return_code is not None:
             f_out.flush()
             f_out.seek(0)
             list_of_lines = list(f_out.readlines())
+            list_of_lines = [line.decode("utf-8", errors='replace') for line in list_of_lines]
 
     logger.info("Finished execution command = {}".format(command))
     if logger.isEnabledFor(logging.DEBUG):
@@ -74,7 +76,7 @@ def execute_command_with_output_on_hosts(list_of_hosts, command, per_host_timeou
 
 def execute_command_with_output_single_host(host, command, timeout=60, username=None):
     username_at_host = host if username is None else username + '@' + host
-    full_cmd = ["ssh", username_at_host] + command
+    full_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-A", username_at_host] + command
 
     retcode, output = execute_command_with_output(full_cmd, timeout=timeout)
     return retcode, output

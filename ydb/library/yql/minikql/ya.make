@@ -13,6 +13,7 @@ SRCS(
     mkql_function_metadata.h
     mkql_function_registry.cpp
     mkql_function_registry.h
+    mkql_mem_info.cpp
     mkql_node.cpp
     mkql_node.h
     mkql_node_builder.cpp
@@ -70,6 +71,7 @@ PEERDIR(
     ydb/library/yql/public/udf
     ydb/library/yql/public/udf/tz
     ydb/library/yql/utils
+    ydb/library/yql/utils/rope
     ydb/library/yql/core/sql_types
     ydb/library/uuid
     ydb/public/lib/scheme_types

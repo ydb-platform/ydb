@@ -1,15 +1,16 @@
+<!-- markdownlint-disable no-trailing-punctuation -->
 
-## FROM ... SELECT ... {#from-select}
+# FROM ... SELECT ...
 
 Перевернутая форма записи, в которой сначала указывается источник данных, а затем — операция.
 
-**Примеры**
+## Примеры
 
-``` yql
+```yql
 FROM my_table SELECT key, value;
 ```
 
-``` yql
+```yql
 FROM a_table AS a
 JOIN b_table AS b
 USING (key)

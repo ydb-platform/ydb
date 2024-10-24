@@ -4,7 +4,7 @@
  *	  WAL replay logic for btrees.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -115,7 +115,7 @@ _bt_restore_meta(XLogReaderState *record, uint8 block_id)
 	md->btm_last_cleanup_num_heap_tuples = -1.0;
 	md->btm_allequalimage = xlrec->allequalimage;
 
-	pageop = (BTPageOpaque) PageGetSpecialPointer(metapg);
+	pageop = BTPageGetOpaque(metapg);
 	pageop->btpo_flags = BTP_META;
 
 	/*
@@ -146,7 +146,7 @@ _bt_clear_incomplete_split(XLogReaderState *record, uint8 block_id)
 	if (XLogReadBufferForRedo(record, block_id, &buf) == BLK_NEEDS_REDO)
 	{
 		Page		page = (Page) BufferGetPage(buf);
-		BTPageOpaque pageop = (BTPageOpaque) PageGetSpecialPointer(page);
+		BTPageOpaque pageop = BTPageGetOpaque(page);
 
 		Assert(P_INCOMPLETE_SPLIT(pageop));
 		pageop->btpo_flags &= ~BTP_INCOMPLETE_SPLIT;
@@ -267,7 +267,7 @@ btree_xlog_split(bool newitemonleft, XLogReaderState *record)
 
 	XLogRecGetBlockTag(record, 0, NULL, NULL, &origpagenumber);
 	XLogRecGetBlockTag(record, 1, NULL, NULL, &rightpagenumber);
-	if (!XLogRecGetBlockTag(record, 2, NULL, NULL, &spagenumber))
+	if (!XLogRecGetBlockTagExtended(record, 2, NULL, NULL, &spagenumber, NULL))
 		spagenumber = P_NONE;
 
 	/*
@@ -292,7 +292,7 @@ btree_xlog_split(bool newitemonleft, XLogReaderState *record)
 	rpage = (Page) BufferGetPage(rbuf);
 
 	_bt_pageinit(rpage, BufferGetPageSize(rbuf));
-	ropaque = (BTPageOpaque) PageGetSpecialPointer(rpage);
+	ropaque = BTPageGetOpaque(rpage);
 
 	ropaque->btpo_prev = origpagenumber;
 	ropaque->btpo_next = spagenumber;
@@ -317,7 +317,7 @@ btree_xlog_split(bool newitemonleft, XLogReaderState *record)
 		 * same for the right page.
 		 */
 		Page		origpage = (Page) BufferGetPage(buf);
-		BTPageOpaque oopaque = (BTPageOpaque) PageGetSpecialPointer(origpage);
+		BTPageOpaque oopaque = BTPageGetOpaque(origpage);
 		OffsetNumber off;
 		IndexTuple	newitem = NULL,
 					left_hikey = NULL,
@@ -442,7 +442,7 @@ btree_xlog_split(bool newitemonleft, XLogReaderState *record)
 		if (XLogReadBufferForRedo(record, 2, &sbuf) == BLK_NEEDS_REDO)
 		{
 			Page		spage = (Page) BufferGetPage(sbuf);
-			BTPageOpaque spageop = (BTPageOpaque) PageGetSpecialPointer(spage);
+			BTPageOpaque spageop = BTPageGetOpaque(spage);
 
 			spageop->btpo_prev = rightpagenumber;
 
@@ -473,7 +473,7 @@ btree_xlog_dedup(XLogReaderState *record)
 	{
 		char	   *ptr = XLogRecGetBlockData(record, 0, NULL);
 		Page		page = (Page) BufferGetPage(buf);
-		BTPageOpaque opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+		BTPageOpaque opaque = BTPageGetOpaque(page);
 		OffsetNumber offnum,
 					minoff,
 					maxoff;
@@ -541,7 +541,7 @@ btree_xlog_dedup(XLogReaderState *record)
 
 		if (P_HAS_GARBAGE(opaque))
 		{
-			BTPageOpaque nopaque = (BTPageOpaque) PageGetSpecialPointer(newpage);
+			BTPageOpaque nopaque = BTPageGetOpaque(newpage);
 
 			nopaque->btpo_flags &= ~BTP_HAS_GARBAGE;
 		}
@@ -639,7 +639,7 @@ btree_xlog_vacuum(XLogReaderState *record)
 		 * Mark the page as not containing any LP_DEAD items --- see comments
 		 * in _bt_delitems_vacuum().
 		 */
-		opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+		opaque = BTPageGetOpaque(page);
 		opaque->btpo_flags &= ~BTP_HAS_GARBAGE;
 
 		PageSetLSN(page, lsn);
@@ -664,11 +664,13 @@ btree_xlog_delete(XLogReaderState *record)
 	 */
 	if (InHotStandby)
 	{
-		RelFileNode rnode;
+		RelFileLocator rlocator;
 
-		XLogRecGetBlockTag(record, 0, &rnode, NULL, NULL);
+		XLogRecGetBlockTag(record, 0, &rlocator, NULL, NULL);
 
-		ResolveRecoveryConflictWithSnapshot(xlrec->latestRemovedXid, rnode);
+		ResolveRecoveryConflictWithSnapshot(xlrec->snapshotConflictHorizon,
+											xlrec->isCatalogRel,
+											rlocator);
 	}
 
 	/*
@@ -699,7 +701,7 @@ btree_xlog_delete(XLogReaderState *record)
 			PageIndexMultiDelete(page, (OffsetNumber *) ptr, xlrec->ndeleted);
 
 		/* Mark the page as not containing any LP_DEAD items */
-		opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+		opaque = BTPageGetOpaque(page);
 		opaque->btpo_flags &= ~BTP_HAS_GARBAGE;
 
 		PageSetLSN(page, lsn);
@@ -737,7 +739,7 @@ btree_xlog_mark_page_halfdead(uint8 info, XLogReaderState *record)
 		BlockNumber rightsib;
 
 		page = (Page) BufferGetPage(buffer);
-		pageop = (BTPageOpaque) PageGetSpecialPointer(page);
+		pageop = BTPageGetOpaque(page);
 
 		poffset = xlrec->poffset;
 
@@ -768,7 +770,7 @@ btree_xlog_mark_page_halfdead(uint8 info, XLogReaderState *record)
 	page = (Page) BufferGetPage(buffer);
 
 	_bt_pageinit(page, BufferGetPageSize(buffer));
-	pageop = (BTPageOpaque) PageGetSpecialPointer(page);
+	pageop = BTPageGetOpaque(page);
 
 	pageop->btpo_prev = xlrec->leftblk;
 	pageop->btpo_next = xlrec->rightblk;
@@ -833,7 +835,7 @@ btree_xlog_unlink_page(uint8 info, XLogReaderState *record)
 		if (XLogReadBufferForRedo(record, 1, &leftbuf) == BLK_NEEDS_REDO)
 		{
 			page = (Page) BufferGetPage(leftbuf);
-			pageop = (BTPageOpaque) PageGetSpecialPointer(page);
+			pageop = BTPageGetOpaque(page);
 			pageop->btpo_next = rightsib;
 
 			PageSetLSN(page, lsn);
@@ -848,7 +850,7 @@ btree_xlog_unlink_page(uint8 info, XLogReaderState *record)
 	page = (Page) BufferGetPage(target);
 
 	_bt_pageinit(page, BufferGetPageSize(target));
-	pageop = (BTPageOpaque) PageGetSpecialPointer(page);
+	pageop = BTPageGetOpaque(page);
 
 	pageop->btpo_prev = leftsib;
 	pageop->btpo_next = rightsib;
@@ -865,7 +867,7 @@ btree_xlog_unlink_page(uint8 info, XLogReaderState *record)
 	if (XLogReadBufferForRedo(record, 2, &rightbuf) == BLK_NEEDS_REDO)
 	{
 		page = (Page) BufferGetPage(rightbuf);
-		pageop = (BTPageOpaque) PageGetSpecialPointer(page);
+		pageop = BTPageGetOpaque(page);
 		pageop->btpo_prev = leftsib;
 
 		PageSetLSN(page, lsn);
@@ -906,7 +908,7 @@ btree_xlog_unlink_page(uint8 info, XLogReaderState *record)
 		page = (Page) BufferGetPage(leafbuf);
 
 		_bt_pageinit(page, BufferGetPageSize(leafbuf));
-		pageop = (BTPageOpaque) PageGetSpecialPointer(page);
+		pageop = BTPageGetOpaque(page);
 
 		pageop->btpo_flags = BTP_HALF_DEAD | BTP_LEAF;
 		pageop->btpo_prev = xlrec->leafleftsib;
@@ -948,7 +950,7 @@ btree_xlog_newroot(XLogReaderState *record)
 	page = (Page) BufferGetPage(buffer);
 
 	_bt_pageinit(page, BufferGetPageSize(buffer));
-	pageop = (BTPageOpaque) PageGetSpecialPointer(page);
+	pageop = BTPageGetOpaque(page);
 
 	pageop->btpo_flags = BTP_ROOT;
 	pageop->btpo_prev = pageop->btpo_next = P_NONE;
@@ -991,7 +993,7 @@ btree_xlog_newroot(XLogReaderState *record)
  * xl_btree_reuse_page record at the point that a page is actually recycled
  * and reused for an entirely unrelated page inside _bt_split().  These
  * records include the same safexid value from the original deleted page,
- * stored in the record's latestRemovedFullXid field.
+ * stored in the record's snapshotConflictHorizon field.
  *
  * The GlobalVisCheckRemovableFullXid() test in BTPageIsRecyclable() is used
  * to determine if it's safe to recycle a page.  This mirrors our own test:
@@ -1005,8 +1007,9 @@ btree_xlog_reuse_page(XLogReaderState *record)
 	xl_btree_reuse_page *xlrec = (xl_btree_reuse_page *) XLogRecGetData(record);
 
 	if (InHotStandby)
-		ResolveRecoveryConflictWithSnapshotFullXid(xlrec->latestRemovedFullXid,
-												   xlrec->node);
+		ResolveRecoveryConflictWithSnapshotFullXid(xlrec->snapshotConflictHorizon,
+												   xlrec->isCatalogRel,
+												   xlrec->locator);
 }
 
 void
@@ -1097,7 +1100,7 @@ btree_mask(char *pagedata, BlockNumber blkno)
 	mask_page_hint_bits(page);
 	mask_unused_space(page);
 
-	maskopaq = (BTPageOpaque) PageGetSpecialPointer(page);
+	maskopaq = BTPageGetOpaque(page);
 
 	if (P_ISLEAF(maskopaq))
 	{

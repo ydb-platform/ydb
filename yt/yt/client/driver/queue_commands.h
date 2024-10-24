@@ -136,8 +136,7 @@ public:
 private:
     NYPath::TRichYPath ProducerPath;
     NYPath::TRichYPath QueuePath;
-    TString SessionId;
-    NYTree::INodePtr UserMeta;
+    NQueueClient::TQueueProducerSessionId SessionId;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -155,7 +154,7 @@ public:
 private:
     NYPath::TRichYPath ProducerPath;
     NYPath::TRichYPath QueuePath;
-    TString SessionId;
+    NQueueClient::TQueueProducerSessionId SessionId;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -178,8 +177,8 @@ public:
 private:
     NYPath::TRichYPath ProducerPath;
     NYPath::TRichYPath QueuePath;
-    TString SessionId;
-    i64 Epoch;
+    NQueueClient::TQueueProducerSessionId SessionId;
+    NQueueClient::TQueueProducerEpoch Epoch;
 
     void DoExecute(ICommandContextPtr context) override;
 };

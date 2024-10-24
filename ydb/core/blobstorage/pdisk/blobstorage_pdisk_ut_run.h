@@ -4,7 +4,6 @@
 #include "blobstorage_pdisk_ut_config.h"
 #include "blobstorage_pdisk_ut_context.h"
 
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/base/services/blobstorage_service_id.h>
 
 #include <util/folder/tempdir.h>
@@ -22,7 +21,6 @@ struct TTestRunConfig {
     bool IsBad = false;
     bool IsErasureEncodeUserLog = false;
     ui32 BeforeTestSleepMs = 100;
-    bool UseT1ha0Hasher = KIKIMR_PDISK_ENABLE_T1HA_HASH_WRITING;
 };
 
 void Run(TVector<IActor*> tests, TTestRunConfig runCfg);

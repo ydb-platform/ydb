@@ -176,7 +176,7 @@ public:
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             MakeState(ctx, state);
         }
 
@@ -272,7 +272,7 @@ public:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         const auto more = BasicBlock::Create(context, "more", ctx.Func);
 
-        BranchInst::Create(main, make, HasValue(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -736,6 +736,9 @@ private:
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
+
+        DISubprogramAnnotator annotator(ctx, ctx.Func);
+        
 
         auto args = ctx.Func->arg_begin();
 

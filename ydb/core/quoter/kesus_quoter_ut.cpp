@@ -237,6 +237,9 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
             return setup.GetPipeFactory().GetPipesCreatedCount() >= 2;
         };
         setup.GetRuntime().DispatchEvents(reconnected);
+
+        // Dispatch some events to let poison pill reach the mock
+        setup.GetRuntime().SimulateSleep(TDuration::Zero());
     }
 
     Y_UNIT_TEST(ReconnectsWithKesusWhenPipeDestroyed) {
@@ -249,6 +252,9 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         setup.SendDestroyed(pipeMock);
 
         setup.WaitPipesCreated(2);
+
+        // Dispatch some events to let poison pill reach the mock
+        setup.GetRuntime().SimulateSleep(TDuration::Zero());
     }
 
     Y_UNIT_TEST(RejectsNotCanonizedResourceName) {
@@ -391,6 +397,9 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         setup.WaitEvent<NKesus::TEvKesus::TEvUpdateConsumptionState>();
         setup.SendCloseSession("res", 42);
         setup.WaitEvent<TEvQuota::TEvProxyCloseSession>();
+
+        // Dispatch some events to let pending events reach their destinations
+        setup.GetRuntime().SimulateSleep(TDuration::Zero());
     }
 
     void SendsProxySessionOnce(bool onSuccess) {

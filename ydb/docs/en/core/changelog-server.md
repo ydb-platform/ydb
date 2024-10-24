@@ -20,10 +20,19 @@ Release date: July 31, 2024.
 * [Sessions timeouts](https://github.com/ydb-platform/ydb/pull/1837) for the coordination service from the server to the client have been optimized. Previously, the timeout was 5 seconds, which in the worst case led to identifying an unresponsive client (and releasing the resources it was holding) within 10 seconds. In the new version, the check time depends on the session waiting time, which provides a faster response when changing the leader or acquiring distributed locks.
 * CPU consumption by [SchemeShard](./concepts/glossary.md#scheme-shard) replicas has been [optimized](https://github.com/ydb-platform/ydb/pull/2391), especially when processing fast updates for tables with a large number of partitions.
 
-
 ### Bug fixes
 
-
+* The error of a possible queue overflow has been [fixed](https://github.com/ydb-platform/ydb/pull/3917). [Change Data Capture](./dev/cdc.md) reserves the capacity of the change queue during the initial scan.
+* A potential deadlock between receiving CDC records and sending them has been [fixed](https://github.com/ydb-platform/ydb/pull/4597).
+* The issue of losing the mediator task queue when reconnecting the mediator has been [fixed](https://github.com/ydb-platform/ydb/pull/2056). The fix allows processing the mediator task queue during resynchronization.
+* A rarely occurring error has been [fixed](https://github.com/ydb-platform/ydb/pull/2624), when with volatile transactions enabled and used, a successful transaction confirmation result was returned before it was successfully committed. Volatile transactions are turned off by default and are under development.
+* A rare error has been [fixed](https://github.com/ydb-platform/ydb/pull/2839) that led to the loss of established locks and the successful confirmation of transactions that should have failed with the Transaction Locks Invalidated error.
+* A rare error that could lead to a possible violation of data integrity guarantees during concurrent writing and reading data by a specific key has been [fixed](https://github.com/ydb-platform/ydb/pull/3074).
+* The problem has been [fixed](https://github.com/ydb-platform/ydb/pull/4343), due to which read replicas stopped processing requests.
+* A rare error has been [fixed](https://github.com/ydb-platform/ydb/pull/4979) that could lead to database processes terminating abnormally if there were uncommitted transactions on a table at the time of its renaming.
+* An error in the logic of determining the status of a static group has been [fixed](https://github.com/ydb-platform/ydb/pull/3632), when a static group was not marked as non-working, although it should have been.
+* An error of partial commit of a distributed transaction with uncommitted changes in case of some races with restarts has been [fixed](https://github.com/ydb-platform/ydb/pull/2169).
+* Anomalies with reading outdated data, which were [detected using Jepsen](https://blog.ydb.tech/hardening-ydb-with-jepsen-lessons-learned-e3238a7ef4f2), have been [fixed](https://github.com/ydb-platform/ydb/pull/2374).
 
 ## Version 23.4 {#23-4}
 

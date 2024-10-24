@@ -5,13 +5,13 @@ This page provides instructions on how to set up monitoring for a local {{ ydb-s
 {{ ydb-short-name }} has multiple system health sensors. Instant sensor values are available in the web interface:
 
 ```http
-http://localhost:31002/counters/
+http://localhost:{{ ydb-ports.https }}/counters/
 ```
 
 Linked sensors are grouped into a subgroup (such as `counters auth`). To only view sensor values for a particular subgroup, follow a URL like:
 
 ```http
-http://localhost:31002/counters/counters=<servicename>/
+http://localhost:{{ ydb-ports.https }}/counters/counters=<servicename>/
 ```
 
 * `<servicename>`: Sensor subgroup name.
@@ -19,13 +19,13 @@ http://localhost:31002/counters/counters=<servicename>/
 > For example, data about the utilization of server hardware resources is available at the URL:
 >
 > ```http
-> http://localhost:31002/counters/counters=utils
+> http://localhost:{{ ydb-ports.https }}/counters/counters=utils
 > ```
 
 You can collect metric values using [Prometheus](https://prometheus.io/), a popular open-source tool. {{ ydb-short-name }} sensor values in [Prometheus format](https://prometheus.io/docs/instrumenting/exposition_formats/) are available at a URL in the following format:
 
 ```http
-http://localhost:31002/counters/counters=<servicename>/prometheus
+http://localhost:{{ ydb-ports.https }}/counters/counters=<servicename>/prometheus
 ```
 
 * `<servicename>`: Sensor subgroup name.

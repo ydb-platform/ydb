@@ -59,3 +59,5 @@ items:
   include:
     mode: link
     path: ydbops/toc_p.yaml
+- name: Default ports assigned to {{ ydb-short-name }}
+  href: ydb-ports.md

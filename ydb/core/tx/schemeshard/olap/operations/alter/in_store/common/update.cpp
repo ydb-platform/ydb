@@ -4,7 +4,7 @@
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
-NKikimr::TConclusionStatus TInStoreTableUpdate::DoStartImpl(const TUpdateStartContext& context) {
+NKikimr::TConclusionStatus TInStoreTableUpdate::DoStartImpl(const NOperations::TUpdateStartContext& context) {
     const auto& inStoreTable = GetTargetEntityAsVerified<TInStoreTable>();
 
     auto tableInfo = GetTargetTableInfoVerified();

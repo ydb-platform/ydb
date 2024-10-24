@@ -6,7 +6,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 
-namespace NKikimr::NSchemeShard::NOlap::NAlter {
+namespace NKikimr::NSchemeShard::NOperations {
 
 class ISSEntityUpdate {
 private:

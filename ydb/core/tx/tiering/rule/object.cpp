@@ -8,6 +8,8 @@
 
 namespace NKikimr::NColumnShard::NTiers {
 
+TTieringRule::TFactory::TRegistrator<TTieringRule> TTieringRule::Registrator(NKikimrSchemeOp::EPathTypeTieringRule);
+
 NJson::TJsonValue TTieringRule::GetDebugJson() const {
     NJson::TJsonValue result = NJson::JSON_MAP;
     result.InsertValue(TDecoder::TieringRuleId, TieringRuleId);

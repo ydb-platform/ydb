@@ -42,6 +42,7 @@ enum EObjectType {
     ExternalDataSource = 25;
     View = 26;
     ResourcePool = 27;
+    TieringRule = 28;
 }
 
 message TBrowseInfo {

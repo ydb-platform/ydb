@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
+
 namespace NKikimr::NOlap::NIndexes::NMax {
 
 class TIndexMeta: public TIndexByColumns {

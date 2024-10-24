@@ -1205,10 +1205,17 @@ message TEvGetRSInfoResponse {
         optional uint64 SeqNo = 6;
     }
 
+    message TExpectation {
+        optional uint64 Source = 1;
+        optional uint64 TxId = 2;
+        optional uint64 Step = 3;
+    }
+
     optional TStatus Status = 1;
     repeated TOutRSInfo OutReadSets = 2;
     repeated TRSAckInfo OutRSAcks = 3;
     repeated TRSAckInfo DelayedRSAcks = 4;
+    repeated TExpectation Expectations = 5;
 }
 
 message TEvGetDataHistogramRequest {

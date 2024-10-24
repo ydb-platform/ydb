@@ -1,5 +1,6 @@
 #include "volatile_tx.h"
 #include "datashard_impl.h"
+#include <library/cpp/resource/resource.h>
 
 namespace NKikimr::NDataShard {
 

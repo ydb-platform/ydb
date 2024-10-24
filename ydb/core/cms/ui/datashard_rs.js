@@ -8,10 +8,15 @@ var ReadSetsState = {
     rs: new Map(),
     acks: new Map(),
     delayedAcks: new Map(),
+    expectations: new Map(),
 };
 
 function makeRSKey(info) {
     return `${info.TxId}-${info.Origin}-${info.Source}-${info.Destination}-${info.SeqNo}`;
+}
+
+function makeRSExpectationKey(info) {
+    return `${info.TxId}-${info.Source}`;
 }
 
 class RSInfo {
@@ -69,6 +74,60 @@ class RSAckInfo {
                 <td>${info.SeqNo}</td>
             </tr>
         `;
+    }
+}
+
+class RSExpectationInfo {
+    constructor(info, body) {
+        this.key = makeRSExpectationKey(info);
+
+        var trHtml = this._makeTrHtml(info);
+        $(trHtml).appendTo($('#' + body));
+    }
+
+    update(info) {
+        $('#ds-rs-expectation-row-' + this.key).replaceWith(this._makeTrHtml(info));
+    }
+
+    remove() {
+        $('#ds-rs-expectation-row-' + this.key).remove();
+    }
+
+    _makeTrHtml(info) {
+        return `
+            <tr id="ds-rs-expectation-row-${this.key}">
+                <td>${info.TxId}</td>
+                <td>${info.Step}</td>
+                <td><a href="app?TabletID=${info.Source}">${info.Source}</a></td>
+            </tr>
+        `;
+    }
+}
+
+function updateReadSetExpectations(data) {
+    var expectations = new Set();
+    if (data.Expectations) {
+        for (var info of data.Expectations) {
+            var key = makeRSExpectationKey(info);
+            expectations.add(key);
+            if (ReadSetsState.expectations.has(key)) {
+                ReadSetsState.expectations.get(key).update(info);
+            } else {
+                ReadSetsState.expectations.set(key, new RSExpectationInfo(info, 'ds-rs-expectations-body'));
+            }
+        }
+    }
+
+    var toRemove = [];
+    for (var key of ReadSetsState.expectations.keys()) {
+        if (!expectations.has(key)) {
+            toRemove.push(key);
+        }
+    }
+
+    for (var key of toRemove) {
+        ReadSetsState.expectations.get(key).remove();
+        ReadSetsState.expectations.delete(key);
     }
 }
 
@@ -154,9 +213,12 @@ function onReadSetsLoaded(data) {
         ReadSetsState.delayedAcks.delete(key);
     }
 
+    updateReadSetExpectations(data);
+
     $('#ds-out-rs-table').trigger('update', [true]);
     $('#ds-out-rs-ack-table').trigger('update', [true]);
     $('#ds-delayed-ack-table').trigger('update', [true]);
+    $('#ds-rs-expectations-table').trigger('update', [true]);
 
     scheduleLoadReadSets(ReadSetsState.fetchInterval);
 }
@@ -209,6 +271,11 @@ function initReadSetsTab() {
                 widgets : ['zebra', 'filter'],
             });
             $('#ds-delayed-ack-table').tablesorter({
+                theme: 'blue',
+                sortList: [[0,0]],
+                widgets : ['zebra', 'filter'],
+            });
+            $('#ds-rs-expectations-table').tablesorter({
                 theme: 'blue',
                 sortList: [[0,0]],
                 widgets : ['zebra', 'filter'],

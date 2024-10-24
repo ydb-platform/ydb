@@ -54,6 +54,11 @@
             "uri": "file://test.test_Get_/results.txt"
         }
     ],
+    "test.test[IgnoreCaseFuncs]": [
+        {
+            "uri": "file://test.test_IgnoreCaseFuncs_/results.txt"
+        }
+    ],
     "test.test[ImplicitSplit]": [
         {
             "uri": "file://test.test_ImplicitSplit_/results.txt"

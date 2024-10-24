@@ -56,11 +56,14 @@ def test(case):
     cfg = yql_utils.get_program_cfg(None, case, DATA_PATH)
     files = {}
     diff_tool = None
+    scan_udfs = False
     for item in cfg:
         if item[0] == 'file':
             files[item[1]] = item[2]
         if item[0] == 'diff_tool':
             diff_tool = item[1:]
+        if item[0] == 'scan_udfs':
+            scan_udfs = True
 
     in_tables = yql_utils.get_input_tables(None, cfg, DATA_PATH, def_attr=yql_utils.KSV_ATTR)
 
@@ -90,7 +93,7 @@ def test(case):
         check_error=not xfail,
         extra_env=extra_env,
         require_udf_resolver=True,
-        scan_udfs=False
+        scan_udfs=scan_udfs
     )
 
     if xfail:

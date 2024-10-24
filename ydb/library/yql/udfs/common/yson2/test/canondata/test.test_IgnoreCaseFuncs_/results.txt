@@ -1,0 +1,65 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Yson"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "DataType";
+                                    "Yson"
+                                ]
+                            ];
+                            [
+                                "column2";
+                                [
+                                    "DataType";
+                                    "Yson"
+                                ]
+                            ];
+                            [
+                                "column3";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Uint64"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            []
+                        ];
+                        {};
+                        {
+                            "$type" = "int64";
+                            "$value" = "1"
+                        };
+                        [
+                            "3"
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

@@ -28,6 +28,10 @@ GENERATE_ENUM_SERIALIZATION(yql_codec_type_flags.h)
 
 END()
 
+RECURSE(
+    arrow
+)
+
 RECURSE_FOR_TESTS(
     ut
 )

@@ -208,17 +208,20 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
 bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
     TPortionConstructors constructors;
     {
+        NColumnShard::TLoadTimeSignals::TLoadTimer timer = SignalCounters.PortionsLoadingTimeCounters.StartGuard();
         TMemoryProfileGuard g("TTxInit/LoadColumns/Portions");
         if (!db.LoadPortions([&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
             const TIndexInfo& indexInfo = portion.GetSchema(VersionedIndex)->GetIndexInfo();
             AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo));
             AFL_VERIFY(constructors.AddConstructorVerified(std::move(portion)));
         })) {
+            timer.AddLoadingFail();
             return false;
         }
     }
 
     {
+        NColumnShard::TLoadTimeSignals::TLoadTimer timer = SignalCounters.ColumnsLoadingTimeCounters.StartGuard();
         TMemoryProfileGuard g("TTxInit/LoadColumns/Records");
         TPortionInfo::TSchemaCursor schema(VersionedIndex);
         if (!db.LoadColumns([&](TPortionInfoConstructor&& portion, const TColumnChunkLoadContext& loadContext) {
@@ -226,18 +229,23 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
             auto* constructor = constructors.MergeConstructor(std::move(portion));
             constructor->LoadRecord(currentSchema->GetIndexInfo(), loadContext);
         })) {
+            timer.AddLoadingFail();
             return false;
         }
     }
+
     {
+        NColumnShard::TLoadTimeSignals::TLoadTimeSignals::TLoadTimer timer = SignalCounters.IndexesLoadingTimeCounters.StartGuard();
         TMemoryProfileGuard g("TTxInit/LoadColumns/Indexes");
         if (!db.LoadIndexes([&](const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext& loadContext) {
             auto* constructor = constructors.GetConstructorVerified(pathId, portionId);
             constructor->LoadIndex(loadContext);
         })) {
+            timer.AddLoadingFail();
             return false;
         };
     }
+
     {
         TMemoryProfileGuard g("TTxInit/LoadColumns/Constructors");
         for (auto&& [granuleId, pathConstructors] : constructors) {

@@ -8,6 +8,7 @@
 #include "scheme/versions/versioned_index.h"
 
 #include <ydb/core/tx/columnshard/common/reverse_accessor.h>
+#include <ydb/core/tx/columnshard/counters/common_data.h>
 
 namespace NKikimr::NColumnShard {
 class TTiersManager;

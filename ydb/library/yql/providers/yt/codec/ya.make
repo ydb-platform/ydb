@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    yt_arrow_converter.cpp
     yt_codec_io.cpp
     yt_codec_io.h
     yt_codec_job.cpp
@@ -15,11 +16,14 @@ PEERDIR(
     library/cpp/yson/node
     yt/cpp/mapreduce/interface
     yt/cpp/mapreduce/io
+    contrib/libs/apache/arrow
     ydb/library/yql/minikql
     ydb/library/yql/public/udf
     ydb/library/yql/utils
     ydb/library/yql/public/result_format
+    ydb/library/yql/public/udf/arrow
     ydb/library/yql/providers/common/codec
+    ydb/library/yql/providers/common/codec/arrow
     ydb/library/yql/providers/common/schema/mkql
     ydb/library/yql/providers/common/schema/parser
     ydb/library/yql/providers/yt/common

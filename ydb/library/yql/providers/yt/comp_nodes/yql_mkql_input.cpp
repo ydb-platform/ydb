@@ -252,8 +252,10 @@ using TBaseComputation = TPairStateWideFlowCodegeneratorNode<TYtWideInputWrapper
 public:
     TYtWideInputWrapper(TComputationMutables& mutables, ui32 width, const TMkqlIOSpecs& specs, NYT::IReaderImplBase* input)
         : TBaseComputation(mutables, this, EValueRepresentation::Boxed, EValueRepresentation::Embedded)
-        , TYtBaseInputWrapper(specs, input), Width(width)
-    {}
+        , TYtBaseInputWrapper(specs, input)
+        , Width(width)
+    {
+    }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, NUdf::TUnboxedValue& current, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         if (state.IsInvalid()) {

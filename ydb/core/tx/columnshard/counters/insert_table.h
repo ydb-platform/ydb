@@ -60,6 +60,7 @@ public:
     const TDataOwnerSignals Inserted;
     const TDataOwnerSignals Committed;
     const TDataOwnerSignals Aborted;
+    const TLoadTimeSignals LoadCounters;
 
     TInsertTableCounters();
 

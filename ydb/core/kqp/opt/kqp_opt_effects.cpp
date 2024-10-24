@@ -231,7 +231,7 @@ TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& table, TPositionH
         .Done();
 }
 
-TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table, const TCoAtomList& columns,
+TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table,
         const bool allowInconsistentWrites, const TStringBuf mode, TExprContext& ctx) {
     Y_DEBUG_ABORT_UNLESS(IsDqPureExpr(expr));
 
@@ -253,7 +253,6 @@ TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table, const 
                 .Index().Value("0").Build()
                 .Settings<TKqpTableSinkSettings>()
                     .Table(table)
-                    .Columns(columns)
                     .InconsistentWrite(allowInconsistentWrites
                         ? ctx.NewAtom(expr.Pos(), "true")
                         : ctx.NewAtom(expr.Pos(), "false"))
@@ -311,7 +310,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     if (IsDqPureExpr(node.Input())) {
         if (sinkEffect) {
             stageInput = RebuildPureStageWithSink(
-                node.Input(), node.Table(), node.Columns(),
+                node.Input(), node.Table(),
                 settings.AllowInconsistentWrites, settings.Mode, ctx);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
                 .Stage(stageInput.Cast().Ptr())
@@ -349,7 +348,6 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
             .Index().Value("0").Build()
             .Settings<TKqpTableSinkSettings>()
                 .Table(node.Table())
-                .Columns(node.Columns())
                 .InconsistentWrite(settings.AllowInconsistentWrites
                     ? ctx.NewAtom(node.Pos(), "true")
                     : ctx.NewAtom(node.Pos(), "false"))
@@ -459,7 +457,7 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
     if (IsDqPureExpr(node.Input())) {
         if (sinkEffect) {
             const auto keyColumns = BuildKeyColumnsList(table, node.Pos(), ctx);
-            stageInput = RebuildPureStageWithSink(node.Input(), node.Table(), keyColumns, false, "delete", ctx);
+            stageInput = RebuildPureStageWithSink(node.Input(), node.Table(), false, "delete", ctx);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
                 .Stage(stageInput.Cast().Ptr())
                 .SinkIndex().Build("0")
@@ -486,7 +484,6 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
     auto input = dqUnion.Output().Stage().Program().Body();
 
     if (sinkEffect) {
-        const auto keyColumns = BuildKeyColumnsList(table, node.Pos(), ctx);
         auto sink = Build<TDqSink>(ctx, node.Pos())
             .DataSink<TKqpTableSink>()
                 .Category(ctx.NewAtom(node.Pos(), NYql::KqpTableSinkName))
@@ -495,7 +492,6 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
             .Index().Value("0").Build()
             .Settings<TKqpTableSinkSettings>()
                 .Table(node.Table())
-                .Columns(keyColumns)
                 .InconsistentWrite(ctx.NewAtom(node.Pos(), "false"))
                 .Mode(ctx.NewAtom(node.Pos(), "delete"))
                 .Settings()

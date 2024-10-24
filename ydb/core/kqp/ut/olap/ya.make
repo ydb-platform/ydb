@@ -13,6 +13,7 @@ ELSE()
 ENDIF()
 
 SRCS(
+    delete_ut.cpp
     kqp_olap_stats_ut.cpp
     GLOBAL kqp_olap_ut.cpp
     sys_view_ut.cpp

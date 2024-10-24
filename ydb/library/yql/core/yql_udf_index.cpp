@@ -197,6 +197,10 @@ TResourceInfo::TPtr TUdfIndex::FindResourceByModule(const TString& moduleName) c
         }
 
         auto n = ICaseModules_.FindPtr(to_lower(moduleName));
+        if (!n) {
+            return nullptr;
+        }
+        
         Y_ENSURE(n->size() > 0);
         if (n->size() > 1) {
             return nullptr;

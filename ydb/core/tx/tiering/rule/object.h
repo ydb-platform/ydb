@@ -40,7 +40,7 @@ public:
     }
 };
 
-class TTieringRule: public NSchemeShard::IMetadataObjectProperties {
+class TTieringRule: public NSchemeShard::TMetadataObjectPropertiesBase<TTieringRule> {
 private:
     YDB_ACCESSOR_DEF(TString, DefaultColumn);
     YDB_ACCESSOR_DEF(std::vector<TTieringInterval>, Intervals);

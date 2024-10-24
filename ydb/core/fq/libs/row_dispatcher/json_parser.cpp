@@ -193,7 +193,7 @@ private:
                     if (Y_UNLIKELY(!resultValue)) {
                         throw yexception() << "failed to parse data type " << typeInfo.Name << " from json string: '" << TruncateString(rawString) << "'";
                     }
-                    Y_ENSURE(resultValue.LockRef() == 1);
+                    LockObject(resultValue);
                     break;
                 }
 
@@ -207,7 +207,7 @@ private:
                         throw yexception() << "found bad json value: '" << TruncateString(rawJson) << "'";
                     }
                     resultValue = NKikimr::NMiniKQL::MakeString(rawJson);
-                    Y_ENSURE(resultValue.LockRef() == 1);
+                    LockObject(resultValue);
                     break;
                 }
 
@@ -236,6 +236,11 @@ private:
             throw yexception() << "number is out of range";
         }
         return NYql::NUdf::TUnboxedValuePod(static_cast<TResult>(number));
+    }
+
+    static void LockObject(NYql::NUdf::TUnboxedValue& value) {
+        const i32 numberRefs = value.LockRef();
+        Y_ENSURE(numberRefs == -1 || numberRefs == 1);
     }
 
     static TString TruncateString(std::string_view rawString, size_t maxSize = 1_KB) {

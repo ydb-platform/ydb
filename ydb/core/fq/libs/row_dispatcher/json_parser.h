@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+
 #include <ydb/public/sdk/cpp/client/ydb_topic/include/read_events.h>
 
 namespace NFq {
@@ -15,10 +17,9 @@ public:
     const TVector<ui64>& GetOffsets() const;
 
     void AddMessages(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
-    const TVector<TVector<std::string_view>>& Parse();
+    const TVector<NKikimr::NMiniKQL::TUnboxedValueVector>& Parse();
 
     TString GetDescription() const;
-    TString GetDebugString(const TVector<TVector<std::string_view>>& parsedValues) const;
 
 private:
     class TImpl;

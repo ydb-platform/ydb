@@ -1,7 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/public/udf/udf_data_type.h>
-#include <ydb/library/yql/public/udf/udf_value.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 
 namespace NFq {
 
@@ -18,7 +17,7 @@ public:
 
     ~TJsonFilter();
 
-    void Push(const TVector<ui64>& offsets, const TVector<TVector<std::string_view>>& values);
+    void Push(const TVector<ui64>& offsets, const TVector<const NKikimr::NMiniKQL::TUnboxedValueVector*>& values);
     TString GetSql();
 
 private:

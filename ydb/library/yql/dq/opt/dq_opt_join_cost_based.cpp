@@ -83,7 +83,8 @@ std::shared_ptr<TJoinOptimizerNode> ConvertToJoinTree(
         right =  *it;
     }
 
-    std::set<std::pair<TJoinColumn, TJoinColumn>> joinConds;
+    TVector<TJoinColumn> leftKeys;
+    TVector<TJoinColumn> rightKeys;
 
     size_t joinKeysCount = joinTuple.LeftKeys().Size() / 2;
     for (size_t i = 0; i < joinKeysCount; ++i) {
@@ -91,15 +92,15 @@ std::shared_ptr<TJoinOptimizerNode> ConvertToJoinTree(
 
         auto leftScope = joinTuple.LeftKeys().Item(keyIndex).StringValue();
         auto leftColumn = joinTuple.LeftKeys().Item(keyIndex + 1).StringValue();
+        leftKeys.push_back(TJoinColumn(leftScope, leftColumn));
+
         auto rightScope = joinTuple.RightKeys().Item(keyIndex).StringValue();
         auto rightColumn = joinTuple.RightKeys().Item(keyIndex + 1).StringValue();
-
-        joinConds.insert( std::make_pair( TJoinColumn(leftScope, leftColumn),
-            TJoinColumn(rightScope, rightColumn)));
+        rightKeys.push_back(TJoinColumn(rightScope, rightColumn));
     }
 
     const auto linkSettings = GetEquiJoinLinkSettings(joinTuple.Options().Ref());
-    return std::make_shared<TJoinOptimizerNode>(left, right, joinConds, ConvertToJoinKind(joinTuple.Type().StringValue()), EJoinAlgoType::Undefined,
+    return std::make_shared<TJoinOptimizerNode>(left, right, leftKeys, rightKeys, ConvertToJoinKind(joinTuple.Type().StringValue()), EJoinAlgoType::Undefined,
         linkSettings.LeftHints.contains("any"), linkSettings.RightHints.contains("any"));
 }
 
@@ -139,11 +140,13 @@ TExprBase BuildTree(TExprContext& ctx, const TCoEquiJoin& equiJoin,
     TVector<TExprBase> rightJoinColumns;
 
     // Build join conditions
-    for( auto pair : reorderResult->JoinConditions) {
-        leftJoinColumns.push_back(BuildAtom(pair.first.RelName, equiJoin.Pos(), ctx));
-        leftJoinColumns.push_back(BuildAtom(pair.first.AttributeName, equiJoin.Pos(), ctx));
-        rightJoinColumns.push_back(BuildAtom(pair.second.RelName, equiJoin.Pos(), ctx));
-        rightJoinColumns.push_back(BuildAtom(pair.second.AttributeName, equiJoin.Pos(), ctx));
+    for( auto leftKey : reorderResult->LeftJoinKeys) {
+        leftJoinColumns.push_back(BuildAtom(leftKey.RelName, equiJoin.Pos(), ctx));
+        leftJoinColumns.push_back(BuildAtom(leftKey.AttributeNameWithAliases, equiJoin.Pos(), ctx));
+    }
+    for( auto rightKey : reorderResult->RightJoinKeys) {
+        rightJoinColumns.push_back(BuildAtom(rightKey.RelName, equiJoin.Pos(), ctx));
+        rightJoinColumns.push_back(BuildAtom(rightKey.AttributeNameWithAliases, equiJoin.Pos(), ctx));
     }
 
     TExprNode::TListType options(1U,
@@ -247,10 +250,10 @@ public:
 
         if (relsCount <= 64) { // The algorithm is more efficient.
             return JoinSearchImpl<TNodeSet64>(joinTree, hints);
-        }
-
-        if (64 < relsCount && relsCount <= 128) {
+        } else if (64 < relsCount && relsCount <= 128) {
             return JoinSearchImpl<TNodeSet128>(joinTree, hints);
+        } else if (128 < relsCount && relsCount <= 192) {
+            return JoinSearchImpl<TNodeSet192>(joinTree, hints);
         }
 
         ComputeStatistics(joinTree, this->Pctx);
@@ -260,6 +263,7 @@ public:
 private:
     using TNodeSet64 = std::bitset<64>;
     using TNodeSet128 = std::bitset<128>;
+    using TNodeSet192 = std::bitset<192>;
 
     template <typename TNodeSet>
     std::shared_ptr<TJoinOptimizerNode> JoinSearchImpl(
@@ -270,14 +274,36 @@ private:
         TDPHypSolver<TNodeSet> solver(hypergraph, this->Pctx);
 
         if (solver.CountCC(MaxDPhypTableSize_) >= MaxDPhypTableSize_) {
-            YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded\n";
+            YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded";
             ComputeStatistics(joinTree, this->Pctx);
             return joinTree;
         }
 
         auto bestJoinOrder = solver.Solve(hints);
-        return ConvertFromInternal(bestJoinOrder);
+        auto resTree = ConvertFromInternal(bestJoinOrder);
+        AddMissingConditions(hypergraph, resTree);
+        return resTree;
     }
+
+    /* Due to cycles we can miss some conditions in edges, because DPHyp enumerates trees */
+    template <typename TNodeSet>
+    void AddMissingConditions(
+        TJoinHypergraph<TNodeSet>& hypergraph,
+        const std::shared_ptr<IBaseOptimizerNode>& node
+    ) {
+        if (node->Kind != EOptimizerNodeKind::JoinNodeType) {
+            return;
+        }
+
+        auto joinNode = std::static_pointer_cast<TJoinOptimizerNode>(node);
+        AddMissingConditions(hypergraph, joinNode->LeftArg);
+        AddMissingConditions(hypergraph, joinNode->RightArg);
+        TNodeSet lhs = hypergraph.GetNodesByRelNames(joinNode->LeftArg->Labels());
+        TNodeSet rhs = hypergraph.GetNodesByRelNames(joinNode->RightArg->Labels());
+
+        hypergraph.FindAllConditionsBetween(lhs, rhs, joinNode->LeftJoinKeys, joinNode->RightJoinKeys);
+    }
+
 private:
     ui32 MaxDPhypTableSize_;
 };

@@ -18,9 +18,8 @@ struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
     TJoinOptimizerNodeInternal(
         const std::shared_ptr<IBaseOptimizerNode>& left, 
         const std::shared_ptr<IBaseOptimizerNode>& right,
-        const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
-        const TVector<TString>& leftJoinKeys,
-        const TVector<TString>& rightJoinKeys, 
+        const TVector<TJoinColumn>& leftJoinKeys,
+        const TVector<TJoinColumn>& rightJoinKeys, 
         const EJoinKind joinType, 
         const EJoinAlgoType joinAlgo,
         const bool leftAny,
@@ -29,7 +28,6 @@ struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
         : IBaseOptimizerNode(JoinNodeType)
         , LeftArg(left)
         , RightArg(right)
-        , JoinConditions(joinConditions)
         , LeftJoinKeys(leftJoinKeys)
         , RightJoinKeys(rightJoinKeys)
         , JoinType(joinType)
@@ -51,9 +49,8 @@ struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
 
     std::shared_ptr<IBaseOptimizerNode> LeftArg;
     std::shared_ptr<IBaseOptimizerNode> RightArg;
-    const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& JoinConditions;
-    const TVector<TString>& LeftJoinKeys;
-    const TVector<TString>& RightJoinKeys;
+    const TVector<TJoinColumn>& LeftJoinKeys;
+    const TVector<TJoinColumn>& RightJoinKeys;
     EJoinKind JoinType;
     EJoinAlgoType JoinAlgo;
     const bool LeftAny;
@@ -66,9 +63,8 @@ struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
 std::shared_ptr<TJoinOptimizerNodeInternal> MakeJoinInternal(
     std::shared_ptr<IBaseOptimizerNode> left,
     std::shared_ptr<IBaseOptimizerNode> right,
-    const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
-    const TVector<TString>& leftJoinKeys,
-    const TVector<TString>& rightJoinKeys,
+    const TVector<TJoinColumn>& leftJoinKeys,
+    const TVector<TJoinColumn>& rightJoinKeys,
     EJoinKind joinKind,
     EJoinAlgoType joinAlgo,
     bool leftAny,

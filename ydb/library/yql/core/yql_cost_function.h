@@ -36,17 +36,22 @@ namespace NDq {
  * attribute name, used in join conditions
 */
 struct TJoinColumn {
-    TString RelName;
-    TString AttributeName;
+    TString RelName{};
+    TString AttributeName{};
+    TString AttributeNameWithAliases{};
+    std::optional<ui32> EquivalenceClass{};
+    bool IsConstant = false;
 
-    TJoinColumn(TString relName, TString attributeName) : RelName(relName),
-        AttributeName(std::move(attributeName)) {}
+    TJoinColumn(TString relName, TString attributeName) : 
+        RelName(relName),
+        AttributeName(attributeName),
+        AttributeNameWithAliases(attributeName) {}
 
     bool operator == (const TJoinColumn& other) const {
         return RelName == other.RelName && AttributeName == other.AttributeName;
     }
 
-    struct HashFunction
+    struct THashFunction
     {
         size_t operator()(const TJoinColumn& c) const
         {

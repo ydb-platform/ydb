@@ -23,7 +23,7 @@
 1. Перейти по ссылке вида
 
     ```bash
-    http://<endpoint>:8765/cms
+    http://<endpoint>:{{ def-ports.mon }}/cms
     ```
 
     Откроется страница `Cluster Management System`.

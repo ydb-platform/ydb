@@ -84,7 +84,7 @@ For ease of use, it is recommended to name terraform files as follows:
 For all resources describing data schema objects, you must specify the database details in which they are located. To do this, provide one of the two arguments:
 
 * The connection string `connection_string` is an expression of the form `grpc(s)://HOST:PORT/?database=/database/path`, where `grpc(s)://HOST:PORT/` endpoint, and `/database/path` is the path of the database.
-  For example, `grpcs://example.com:2135?database=/Root/testdb0`.
+  For example, `grpcs://example.com:{{ def-ports.grpcs }}?database=/Root/testdb0`.
 * `database_endpoint` - used when working with the [topics] resource (#topic_resource) (analogous to `connection_string` when working with table resources).
 
 {% note info %}
@@ -551,7 +551,7 @@ Example:
 
 ```tf
 resource "ydb_topic" "ydb_topic" {
-  database_endpoint = "grpcs://example.com:2135/?database=/Root/testdb0" #database connection example
+  database_endpoint = "grpcs://example.com:{{ def-ports.grpcs }}/?database=/Root/testdb0" #database connection example
   name              = "test/test1"
   supported_codecs  = ["zstd"]
 
@@ -578,7 +578,7 @@ resource "ydb_topic" "ydb_topic" {
 The following arguments are supported:
 
 * `name` - (required) is the name of the topic.
-* `database_endpoint` - (required) is the full path to the database, for example: `"grpcs://example.com:2135/?database=/Root/testdb0"`; analogous to `connection_string` for tables.
+* `database_endpoint` - (required) is the full path to the database, for example: `"grpcs://example.com:{{ def-ports.grpcs }}/?database=/Root/testdb0"`; analogous to `connection_string` for tables.
 * `retention_period_ms` - the duration of data storage in milliseconds; the default value is `86400000` (day).
 * `partitions_count` - the number of partitions; the default value is `2`.
 * `supported_codecs` - supported data compression codecs, the default value is `"gzip", "raw", "zstd"`.

@@ -83,7 +83,7 @@
 Для всех ресурсов, описывающих объекты схемы данных, необходимо задать реквизиты БД, в которой они размещаются. Для этого укажите один из двух аргументов:
 
 * Строка соединения `connection_string` — выражение вида `grpc(s)://HOST:PORT/?database=/database/path`, где `grpc(s)://HOST:PORT/` эндпоинт, а `/database/path` — путь БД.
-  Например, `grpcs://example.com:2135?database=/Root/testdb0`.
+  Например, `grpcs://example.com:{{ def-ports.grpcs }}?database=/Root/testdb0`.
 * `database_endpoint` - используется при работе с ресурсом [топиков](#topic_resource) (аналог `connection_string` при работе с ресурсами строковых таблиц).
 
 {% note info %}
@@ -549,7 +549,7 @@ resource "ydb_table_index" "ydb_table_index" {
 
 ```tf
 resource "ydb_topic" "ydb_topic" {
-  database_endpoint = "grpcs://example.com:2135/?database=/Root/testdb0" #пример подключения к БД
+  database_endpoint = "grpcs://example.com:{{ def-ports.grpcs }}/?database=/Root/testdb0" #пример подключения к БД
   name              = "test/test1"
   supported_codecs  = ["zstd"]
 
@@ -576,7 +576,7 @@ resource "ydb_topic" "ydb_topic" {
 Поддерживаются следующие аргументы:
 
 * `name` - (обязательный) имя топика.
-* `database_endpoint` - (обязательный) полный путь до базы данных, например: `"grpcs://example.com:2135/?database=/Root/testdb0"`; аналог `connection_string` для строковых таблиц.
+* `database_endpoint` - (обязательный) полный путь до базы данных, например: `"grpcs://example.com:{{ def-ports.grpcs }}/?database=/Root/testdb0"`; аналог `connection_string` для строковых таблиц.
 * `retention_period_ms` - длительность хранения данных в миллисекундах, значение по умолчанию - `86400000` (сутки).
 * `partitions_count` - количество партиций, значение по умолчанию - `2`.
 * `supported_codecs` - поддерживаемые кодеки сжатия данных, значение по умолчанию - `"gzip", "raw", "zstd"`.

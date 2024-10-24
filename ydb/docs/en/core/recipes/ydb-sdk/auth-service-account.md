@@ -120,7 +120,7 @@ Below are examples of the code for authentication using a service account file i
   using Ydb.Sdk;
   using Ydb.Sdk.Yc;
 
-  const string endpoint = "grpc://localhost:2136";
+  const string endpoint = "grpc://localhost:{{ def-ports.grpc }}";
   const string database = "/local";
 
   var saProvider = new ServiceAccountProvider(
@@ -147,7 +147,7 @@ Below are examples of the code for authentication using a service account file i
 
   $config = [
       'database'    => '/ru-central1/b1glxxxxxxxxxxxxxxxx/etn0xxxxxxxxxxxxxxxx',
-      'endpoint'    => 'ydb.serverless.yandexcloud.net:2135',
+      'endpoint'    => 'ydb.serverless.yandexcloud.net:{{ def-ports.grpcs }}',
       'discovery'   => false,
       'iam_config'  => [
           'temp_dir'       => './tmp', // Temp directory
@@ -170,7 +170,7 @@ Below are examples of the code for authentication using a service account file i
 
   $config = [
       'database'    => '/ru-central1/b1glxxxxxxxxxxxxxxxx/etn0xxxxxxxxxxxxxxxx',
-      'endpoint'    => 'ydb.serverless.yandexcloud.net:2135',
+      'endpoint'    => 'ydb.serverless.yandexcloud.net:{{ def-ports.grpcs }}',
       'discovery'   => false,
       'iam_config'  => [
           'temp_dir'           => './tmp', // Temp directory

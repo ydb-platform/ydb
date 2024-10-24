@@ -45,12 +45,12 @@ WITH (option = value [, ...])
 CREATE ASYNC REPLICATION my_replication_for_single_table
 FOR original_table AS replica_table
 WITH (
-    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
+    CONNECTION_STRING = 'grpcs://example.com:{{ def-ports.grpcs }}/?database=/Root/another_database',
     TOKEN_SECRET_NAME = 'my_secret'
 );
 ```
 
-Для подключения к базе `/Root/another_database` используется [эндпоинт](../../../concepts/connect.md#endpoint) `grpcs://example.com:2135`, а для аутентификации — токен из секрета `my_secret`.
+Для подключения к базе `/Root/another_database` используется [эндпоинт](../../../concepts/connect.md#endpoint) `grpcs://example.com:{{ def-ports.grpcs }}`, а для аутентификации — токен из секрета `my_secret`.
 
 Создание экземпляра асинхронной репликации для таблиц `original_table_1` и `original_table_2` в `replica_table_1` и `replica_table_2`, соответственно:
 
@@ -58,7 +58,7 @@ WITH (
 CREATE ASYNC REPLICATION my_replication_for_multiple_tables
 FOR original_table_1 AS replica_table_1, original_table_2 AS replica_table_2
 WITH (
-    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
+    CONNECTION_STRING = 'grpcs://example.com:{{ def-ports.grpcs }}/?database=/Root/another_database',
     TOKEN_SECRET_NAME = 'my_secret'
 );
 ```
@@ -69,7 +69,7 @@ WITH (
 CREATE ASYNC REPLICATION my_replication_for_dir
 FOR original_dir AS replica_dir
 WITH (
-    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
+    CONNECTION_STRING = 'grpcs://example.com:{{ def-ports.grpcs }}/?database=/Root/another_database',
     TOKEN_SECRET_NAME = 'my_secret'
 );
 ```
@@ -80,7 +80,7 @@ WITH (
 CREATE ASYNC REPLICATION my_replication_for_database
 FOR `/Root/another_database` AS `/Root/my_database`
 WITH (
-    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
+    CONNECTION_STRING = 'grpcs://example.com:{{ def-ports.grpcs }}/?database=/Root/another_database',
     TOKEN_SECRET_NAME = 'my_secret'
 );
 ```

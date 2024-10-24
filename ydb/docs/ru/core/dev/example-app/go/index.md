@@ -46,7 +46,7 @@ import (
 ```go
 ctx := context.Background()
 // строка подключения
-dsn := "grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1g8skpblkos03malf3s/etn01f8gv9an9sedo9fu"
+dsn := "grpcs://ydb.serverless.yandexcloud.net:{{ def-ports.grpcs }}/?database=/ru-central1/b1g8skpblkos03malf3s/etn01f8gv9an9sedo9fu"
 // IAM-токен
 token := "t1.9euelZrOy8aVmZKJm5HGjceMkMeVj-..."
 // создаем объект подключения db, является входной точкой для сервисов YDB

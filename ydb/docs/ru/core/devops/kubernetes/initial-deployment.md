@@ -188,7 +188,7 @@ kubectl apply -f https://raw.githubusercontent.com/ydb-platform/ydb-kubernetes-o
 
 {% endnote %}
 
-После обработки манифеста будет создан объект `StatefulSet`, который описывает набор динамических нод. Созданная база данных будет доступна изнутри {{ k8s }} кластера по имени `database-sample`, или по FQDN-имени `database-sample.<namespace>.svc.cluster.local`, где `namespace` — название пространства имен, использовавшегося при установке. Подключиться к базе данных можно по порту 2135.
+После обработки манифеста будет создан объект `StatefulSet`, который описывает набор динамических нод. Созданная база данных будет доступна изнутри {{ k8s }} кластера по имени `database-sample`, или по FQDN-имени `database-sample.<namespace>.svc.cluster.local`, где `namespace` — название пространства имен, использовавшегося при установке. Подключиться к базе данных можно по порту {{ def-ports.grpcs }}.
 
 Посмотрите статус созданного ресурса:
 
@@ -260,7 +260,7 @@ Events:
 
     ```bash
     ydb \
-      --endpoint grpc://database-sample-grpc:2135 \
+      --endpoint grpc://database-sample-grpc:{{ def-ports.grpcs }} \
       --database /root/database-sample \
       table query execute --query 'SELECT 2 + 2;'
     ```

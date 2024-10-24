@@ -41,7 +41,7 @@
 # в плагинах ydb_topics_output и ydb_topics_input аналогична
 ydb_storage {
     # Строка подключения к БД, содержит схему, адрес, порт и путь БД
-    connection_string => "grpc://localhost:2136/local"
+    connection_string => "grpc://localhost:{{ def-ports.grpc }}/local"
     # Значение токена аутентификации (режим Access Token)
     token_auth => "<token_value>"
     # Путь до файла со значением токена аутентификации (режим Access Token)
@@ -166,8 +166,8 @@ SELECT * FROM `logstash_demo`;
 В выбранной базе данных {{ ydb-short-name }} заранее создадим топик и читателя, из которого будет производиться чтение:
 
 ```bash
-ydb -e grpc://localhost:2136 -d /local topic create /local/logstash_demo_topic
-ydb -e grpc://localhost:2136 -d /local topic consumer add --consumer logstash-consumer /local/logstash_demo_topic
+ydb -e grpc://localhost:{{ def-ports.grpc }} -d /local topic create /local/logstash_demo_topic
+ydb -e grpc://localhost:{{ def-ports.grpc }} -d /local topic consumer add --consumer logstash-consumer /local/logstash_demo_topic
 ```
 
 #### Настройка плагина в Logstash {#plugin-config}
@@ -177,7 +177,7 @@ ydb -e grpc://localhost:2136 -d /local topic consumer add --consumer logstash-co
 ```ruby
 input {
   ydb_topic {
-    connection_string => "grpc://localhost:2136/local" # Адрес подключения к {{ ydb-short-name }}
+    connection_string => "grpc://localhost:{{ def-ports.grpc }}/local" # Адрес подключения к {{ ydb-short-name }}
     topic_path => "/local/logstash_demo_topic"         # Имя топика
     consumer_name => "logstash-consumer"               # Имя читателя
     schema => "JSON"                                   # Используем JSON в качестве формата сообщений топика
@@ -198,8 +198,8 @@ output {
 Затем отправим несколько тестовых сообщений:
 
 ```bash
-echo '{"message":"test"}' | ydb -e grpc://localhost:2136 -d /local topic write /local/logstash_demo_topic
-echo '{"user":123}' | ydb -e grpc://localhost:2136 -d /local topic write /local/logstash_demo_topic
+echo '{"message":"test"}' | ydb -e grpc://localhost:{{ def-ports.grpc }} -d /local topic write /local/logstash_demo_topic
+echo '{"user":123}' | ydb -e grpc://localhost:{{ def-ports.grpc }} -d /local topic write /local/logstash_demo_topic
 ```
 
 #### Проверка обработки сообщений в Logstash
@@ -236,7 +236,7 @@ echo '{"user":123}' | ydb -e grpc://localhost:2136 -d /local topic write /local/
 В выбранной базе данных {{ ydb-short-name }} заранее создадим топик, в который будет производиться запись:
 
 ```bash
-ydb -e grpc://localhost:2136 -d /local topic create /local/logstash_demo_topic
+ydb -e grpc://localhost:{{ def-ports.grpc }} -d /local topic create /local/logstash_demo_topic
 ```
 
 #### Настройка плагина в Logstash
@@ -246,7 +246,7 @@ ydb -e grpc://localhost:2136 -d /local topic create /local/logstash_demo_topic
 ```ruby
 output {
   ydb_topic {
-    connection_string => "grpc://localhost:2136/local" # Адрес подключения к  {{ ydb-short-name }}
+    connection_string => "grpc://localhost:{{ def-ports.grpc }}/local" # Адрес подключения к  {{ ydb-short-name }}
     topic_path => "/local/logstash_demo_topic"         # Имя топика для записи
   }
 }
@@ -275,8 +275,8 @@ curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:9876/http/ping'
 Для проверки успешности записи в топик создадим нового читателя и прочитаем одно сообщение из топика:
 
 ```bash
-ydb -e grpc://localhost:2136 -d /local topic consumer add --consumer logstash-consumer /local/logstash_demo_topic
-ydb -e grpc://localhost:2136 -d /local topic read /local/logstash_demo_topic --consumer logstash-consumer --commit true
+ydb -e grpc://localhost:{{ def-ports.grpc }} -d /local topic consumer add --consumer logstash-consumer /local/logstash_demo_topic
+ydb -e grpc://localhost:{{ def-ports.grpc }} -d /local topic read /local/logstash_demo_topic --consumer logstash-consumer --commit true
 ```
 
 Чтение вернет содержимое отправленного сообщения:

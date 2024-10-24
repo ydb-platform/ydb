@@ -23,7 +23,7 @@ Below are examples of the code for connecting to {{ ydb-short-name }} (driver cr
     ctx, cancel := context.WithCancel(context.Background())
     defer cancel()
 
-    db, err := ydb.Open(ctx, "grpc://localhost:2136/local")
+    db, err := ydb.Open(ctx, "grpc://localhost:{{ def-ports.grpc }}/local")
     if err != nil {
         panic(err)
     }
@@ -89,7 +89,7 @@ Below are examples of the code for connecting to {{ ydb-short-name }} (driver cr
   )
 
   func main() {
-    db, err := sql.Open("ydb", "grpc://localhost:2136/local")
+    db, err := sql.Open("ydb", "grpc://localhost:{{ def-ports.grpc }}/local")
     if err != nil {
       panic(err)
     }
@@ -112,7 +112,7 @@ Below are examples of the code for connecting to {{ ydb-short-name }} (driver cr
   using Ydb.Sdk;
 
   var config = new DriverConfig(
-      endpoint: "grpc://localhost:2136",
+      endpoint: "grpc://localhost:{{ def-ports.grpc }}",
       database: "/local"
   );
 
@@ -131,7 +131,7 @@ Below are examples of the code for connecting to {{ ydb-short-name }} (driver cr
       'database'    => '/ru-central1/b1glxxxxxxxxxxxxxxxx/etn0xxxxxxxxxxxxxxxx',
 
       // Database endpoint
-      'endpoint'    => 'ydb.serverless.yandexcloud.net:2135',
+      'endpoint'    => 'ydb.serverless.yandexcloud.net:{{ def-ports.grpcs }}',
 
       // Auto discovery (dedicated server only)
       'discovery'   => false,

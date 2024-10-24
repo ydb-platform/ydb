@@ -44,12 +44,12 @@ The following statement creates an asynchronous replication instance to synchron
 CREATE ASYNC REPLICATION my_replication_for_single_table
 FOR original_table AS replica_table
 WITH (
-    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
+    CONNECTION_STRING = 'grpcs://example.com:{{ def-ports.grpcs }}/?database=/Root/another_database',
     TOKEN_SECRET_NAME = 'my_secret'
 );
 ```
 
-The statement above uses the token from the `my_secret` secret for authentication and the `grpcs://example.com:2135` [endpoint](../../../concepts/connect.md#endpoint) to connect to the `/Root/another_database` database.
+The statement above uses the token from the `my_secret` secret for authentication and the `grpcs://example.com:{{ def-ports.grpcs }}` [endpoint](../../../concepts/connect.md#endpoint) to connect to the `/Root/another_database` database.
 
 The following statement creates an asynchronous replication instance to replicate the source tables `original_table_1` and `original_table_2` to the target tables `replica_table_1` and `replica_table_2`:
 
@@ -57,7 +57,7 @@ The following statement creates an asynchronous replication instance to replicat
 CREATE ASYNC REPLICATION my_replication_for_multiple_tables
 FOR original_table_1 AS replica_table_1, original_table_2 AS replica_table_2
 WITH (
-    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
+    CONNECTION_STRING = 'grpcs://example.com:{{ def-ports.grpcs }}/?database=/Root/another_database',
     TOKEN_SECRET_NAME = 'my_secret'
 );
 ```
@@ -68,7 +68,7 @@ The following statement creates an asynchronous replication instance for the obj
 CREATE ASYNC REPLICATION my_replication_for_dir
 FOR original_dir AS replica_dir
 WITH (
-    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
+    CONNECTION_STRING = 'grpcs://example.com:{{ def-ports.grpcs }}/?database=/Root/another_database',
     TOKEN_SECRET_NAME = 'my_secret'
 );
 ```
@@ -79,7 +79,7 @@ The following statement creates an asynchronous replication instance for the obj
 CREATE ASYNC REPLICATION my_replication_for_database
 FOR `/Root/another_database` AS `/Root/my_database`
 WITH (
-    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
+    CONNECTION_STRING = 'grpcs://example.com:{{ def-ports.grpcs }}/?database=/Root/another_database',
     TOKEN_SECRET_NAME = 'my_secret'
 );
 ```

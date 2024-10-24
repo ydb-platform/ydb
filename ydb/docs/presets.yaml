@@ -64,3 +64,14 @@ default:
   ydb-finebi: false
   ydb-superset: false
   ydb-datalens: false
+
+#=== YDB default settings ===#
+
+  def-ports:
+    grpcs: 2135
+    grpc: 2136
+    ic: 19001
+    mon: 8765
+
+  def-domain: ydb-cluster.com
+  def-partlabel: ydb_disk_

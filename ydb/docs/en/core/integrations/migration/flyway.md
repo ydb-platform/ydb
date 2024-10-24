@@ -144,7 +144,7 @@ Contents of SQL files:
 Set `baselineVersion = 3`, then run the following command:
 
 ```bash
-flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration -baselineVersion=3 baseline
+flyway -url=jdbc:ydb:grpc://localhost:{{ def-ports.grpc }}/local -locations=db/migration -baselineVersion=3 baseline
 ```
 
 {% note info %}
@@ -287,7 +287,7 @@ VALUES (1, 1, 1, "Yesterday's Jam", CAST(Date ("2006-02-03") AS Uint64)),
 Let's apply the latest migration using the following command:
 
 ```bash
-flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration migrate
+flyway -url=jdbc:ydb:grpc://localhost:{{ def-ports.grpc }}/local -locations=db/migration migrate
 ```
 
 As a result, `series`, `season`, and `episode` tables will be created and filled with data:
@@ -316,7 +316,7 @@ ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 Let's apply the latest migration using the following command:
 
 ```bash
-flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration migrate
+flyway -url=jdbc:ydb:grpc://localhost:{{ def-ports.grpc }}/local -locations=db/migration migrate
 ```
 
 As a result, a secondary index for the `series` table will be created:
@@ -347,7 +347,7 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
 
 {% endcut %}
 
-The result of executing the `flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration info` will provide detailed information about the status of the migrations:
+The result of executing the `flyway -url=jdbc:ydb:grpc://localhost:{{ def-ports.grpc }}/local -locations=db/migration info` will provide detailed information about the status of the migrations:
 
 ```text
 +-----------+---------+---------------------------+----------+---------------------+--------------------+----------+
@@ -367,7 +367,7 @@ The result of executing the `flyway -url=jdbc:ydb:grpc://localhost:2136/local -l
 
 Command [validate](https://documentation.red-gate.com/flyway/flyway-cli-and-api/usage/command-line/command-line-validate) validates the applied migrations against the available ones.
 
-After applying the `flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration validate` command with current migrations, the logs will show that the latest migration was not applied to our database:
+After applying the `flyway -url=jdbc:ydb:grpc://localhost:{{ def-ports.grpc }}/local -locations=db/migration validate` command with current migrations, the logs will show that the latest migration was not applied to our database:
 
 ```bash
 ERROR: Validate failed: Migrations have failed validation
@@ -395,7 +395,7 @@ Command [repair](https://documentation.red-gate.com/flyway/flyway-cli-and-api/us
 Fix the problem with different `checksum`'s by running the following command:
 
 ```bash
-flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration repair
+flyway -url=jdbc:ydb:grpc://localhost:{{ def-ports.grpc }}/local -locations=db/migration repair
 ```
 
 The result will be an update to the `checksum` column in the `flyway_schema_history` table for the migration entry `V4__load_data.sql`:
@@ -419,7 +419,7 @@ Unlike other database management systems, {{ ydb-short-name }} does not have a c
 Let's delete all the tables in our database using the following command:
 
 ```bash
-flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration -cleanDisabled=false clean
+flyway -url=jdbc:ydb:grpc://localhost:{{ def-ports.grpc }}/local -locations=db/migration -cleanDisabled=false clean
 ```
 
 The result will be an empty database:

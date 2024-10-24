@@ -44,13 +44,13 @@ Where:
 If connecting to a local {{ ydb-short-name }} docker container, the connection string could look like:
 
 ```text
-grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric
+grpc://localhost:{{ def-ports.grpc }}/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric
 ```
 
 Let's store this connection string to an environment variable to re-use it later:
 
 ```bash
-export YDB_CONNECTION_STRING="grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric"
+export YDB_CONNECTION_STRING="grpc://localhost:{{ def-ports.grpc }}/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric"
 ```
 
 Further examples of calling `goose` commands will contain exactly this connection string.
@@ -169,14 +169,14 @@ There are alternative options to see the applied changes:
 
 {% list tabs %}
 
-- Using {{ ydb-short-name }} UI on `http://localhost:8765`
+- Using {{ ydb-short-name }} UI on `http://localhost:{{ def-ports.mon }}`
 
   ![{{ ydb-short-name }} UI after the first migration](_assets/goose-ydb-ui-after-first-migration.png =450x)
 
 - Using {{ ydb-short-name }} CLI
 
   ```bash
-  $ ydb -e grpc://localhost:2136 -d /local scheme describe users
+  $ ydb -e grpc://localhost:{{ def-ports.grpc }} -d /local scheme describe users
   <table> users
 
   Columns:
@@ -263,14 +263,14 @@ Let's use the same methods to see the new changes:
 
 {% list tabs %}
 
-- Using {{ ydb-short-name }} UI on `http://localhost:8765`
+- Using {{ ydb-short-name }} UI on `http://localhost:{{ def-ports.mon }}`
 
   ![YDB UI after apply second migration](_assets/goose-ydb-ui-after-second-migration.png =450x)
 
 - Using {{ ydb-short-name }} CLI
 
   ```bash
-  $ ydb -e grpc://localhost:2136 -d /local scheme describe users
+  $ ydb -e grpc://localhost:{{ def-ports.grpc }} -d /local scheme describe users
   <table> users
 
   Columns:
@@ -329,14 +329,14 @@ Let's check the changes again:
 
 {% list tabs %}
 
-- Using {{ ydb-short-name }} UI on `http://localhost:8765`
+- Using {{ ydb-short-name }} UI on `http://localhost:{{ def-ports.mon }}`
 
   ![{{ ydb-short-name }} UI after apply first migration](_assets/goose-ydb-ui-after-first-migration.png =450x)
 
 - Using YDB CLI
 
   ```bash
-  $ ydb -e grpc://localhost:2136 -d /local scheme describe users
+  $ ydb -e grpc://localhost:{{ def-ports.grpc }} -d /local scheme describe users
   <table> users
 
   Columns:

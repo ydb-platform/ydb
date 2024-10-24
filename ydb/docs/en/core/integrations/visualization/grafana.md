@@ -45,7 +45,7 @@ datasources:
     type: ydbtech-ydb-datasource
     jsonData:
       authKind: '<password>'
-      endpoint: 'grpcs://<hostname>:2135'
+      endpoint: 'grpcs://<hostname>:{{ def-ports.grpcs }}'
       dbLocation: '<location_to_db>'
       user: '<username>'
     secureJsonData:

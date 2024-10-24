@@ -88,7 +88,7 @@ host_configs:
 hosts:
 - host: <DNS-имя хоста>
   host_config_id: <числовой идентификатор типовой конфигурации хоста>
-  port: <порт> # 19001 по умолчанию
+  port: <порт> # {{ def-ports.ic }} по умолчанию
   location:
     unit: <строка с инвентарным номером сервера>
     data_center: <строка с идентификатором зоны доступности>
@@ -104,7 +104,7 @@ hosts:
 - host: hostname1
   host_config_id: 1
   node_id: 1
-  port: 19001
+  port: {{ def-ports.ic }}
   location:
     unit: '1'
     data_center: '1'
@@ -112,7 +112,7 @@ hosts:
 - host: hostname2
   host_config_id: 1
   node_id: 2
-  port: 19001
+  port: {{ def-ports.ic }}
   location:
     unit: '1'
     data_center: '1'

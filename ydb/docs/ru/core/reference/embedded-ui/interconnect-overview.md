@@ -3,7 +3,7 @@
 Обзор соединений узлов кластера друг с другом. Доступен по адресу:
 
 ```text
-http://<ендпоинт>:8765/actors/interconnect/overview
+http://<ендпоинт>:{{ def-ports.mon }}/actors/interconnect/overview
 ```
 
 Показывает для каждого другого узла:

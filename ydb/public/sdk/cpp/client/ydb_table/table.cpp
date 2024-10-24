@@ -251,8 +251,7 @@ static void SerializeTo(const TRenameIndex& rename, Ydb::Table::RenameIndexItem&
     proto.set_replace_destination(rename.ReplaceDestination_);
 }
 
-template <typename TProto>
-TExplicitPartitions TExplicitPartitions::FromProto(const TProto& proto) {
+TExplicitPartitions TExplicitPartitions::FromProto(const Ydb::Table::ExplicitPartitions& proto) {
     TExplicitPartitions out;
     for (const auto& splitPoint : proto.split_points()) {
         TValue value(TType(splitPoint.type()), splitPoint.value());
@@ -2307,13 +2306,12 @@ ui64 TIndexDescription::GetSizeBytes() const {
     return SizeBytes;
 }
 
-template <typename TProto>
-TGlobalIndexSettings TGlobalIndexSettings::FromProto(const TProto& proto) {
-    auto partitionsFromProto = [](const auto& proto) -> TUniformOrExplicitPartitions {
+TGlobalIndexSettings TGlobalIndexSettings::FromProto(const Ydb::Table::GlobalIndexSettings& proto) {
+    auto partitionsFromProto = [](const Ydb::Table::GlobalIndexSettings& proto) -> TUniformOrExplicitPartitions {
         switch (proto.partitions_case()) {
-        case TProto::kUniformPartitions:
+        case Ydb::Table::GlobalIndexSettings::kUniformPartitions:
             return proto.uniform_partitions();
-        case TProto::kPartitionAtKeys:
+        case Ydb::Table::GlobalIndexSettings::kPartitionAtKeys:
             return TExplicitPartitions::FromProto(proto.partition_at_keys());
         default:
             return {};

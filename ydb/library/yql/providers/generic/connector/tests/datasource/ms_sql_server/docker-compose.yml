@@ -1,7 +1,7 @@
 services:
   fq-connector-go:
     container_name: fq-tests-mssql-fq-connector-go
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.5.10-rc.1@sha256:880e626b4701effd0bbfd4dea850798435dfb872102102a32cd79b9dcac2f225
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.5.11-rc.5@sha256:c17f67aea314366690545aea1db9f2bf4391ae1269044ebbac7ea2316972e7ff
     ports:
       - 2130
     volumes:

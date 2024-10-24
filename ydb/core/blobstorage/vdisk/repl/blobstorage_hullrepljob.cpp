@@ -110,14 +110,7 @@ namespace NKikimr {
                 // scan through the index until we have enough blobs to recover or the time is out
                 const TBlobStorageGroupInfo::TTopology& topology = *ReplCtx->VCtx->Top;
 
-                if (StartKey == TLogoBlobID()) {
-                    it.SeekToFirst();
-                } else {
-                    it.Seek(StartKey);
-                    if (it.Valid() && it.GetCurKey() == StartKey) {
-                        it.Next();
-                    }
-                }
+                it.Seek(StartKey);
 
                 auto checkRestart = [&] {
                     if (++counter % 1024 == 0 && GetCycleCountFast() >= plannedEndTime) {

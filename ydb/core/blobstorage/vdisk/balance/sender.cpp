@@ -144,6 +144,9 @@ namespace {
         void SendPartsOnMain(const TActorId& selfId, TVector<TPart>& parts) {
             THashMap<TVDiskID, std::unique_ptr<TEvBlobStorage::TEvVMultiPut>> vDiskToEv;
             for (auto& part: parts) {
+                if (part.PartsData.empty()) {
+                    continue;
+                }
                 auto localParts = part.PartsMask;
                 for (ui8 partIdx = localParts.FirstPosition(), i = 0; partIdx < localParts.GetSize(); partIdx = localParts.NextPosition(partIdx), ++i) {
                     auto key = TLogoBlobID(part.Key, partIdx + 1);
@@ -323,6 +326,8 @@ namespace {
             hFunc(NActors::TEvents::TEvWakeup, TimeoutSend)
             hFunc(TEvBlobStorage::TEvVPutResult, HandlePutResult)
             hFunc(TEvBlobStorage::TEvVMultiPutResult, HandlePutResult)
+
+            cFunc(NPDisk::TEvChunkReadResult::EventType, [](){})  // read results received after timeout
 
             hFunc(TEvVGenerationChange, Handle)
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)

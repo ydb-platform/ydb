@@ -32,7 +32,7 @@ TString ToString(const TParsedTokenList& tokens) {
         if (token.Name == "WS" || token.Name == "EOF") {
             continue;
         }
-        if (!reconstructedQuery.Empty()) {
+        if (!reconstructedQuery.empty()) {
             reconstructedQuery << ' ';
         }
         reconstructedQuery << token.Content;
@@ -571,7 +571,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(WarnUnknownJoinStrategyHint) {
         NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a JOIN /*+ xmerge() */ plato.Input AS b USING (key);");
         UNIT_ASSERT(res.Root);
-        UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:41: Warning: Unsupported join strategy: xmerge, code: 4534\n");
+        UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:41: Warning: Unsupported join hint: xmerge, code: 4534\n");
     }
 
     Y_UNIT_TEST(ReverseLabels) {
@@ -4312,6 +4312,17 @@ select FormatType($f());
                                           "<main>:6:39: Error: Unknown correlation name: t\n");
     }
 
+    Y_UNIT_TEST(ErrOrderByIgnoredButCheckedForMissingColumns) {
+        auto req = "$src = SELECT key FROM (SELECT 1 as key, 2 as subkey) ORDER BY x; SELECT * FROM $src;";
+        ExpectFailWithError(req, "<main>:1:8: Warning: ORDER BY without LIMIT in subquery will be ignored, code: 4504\n"
+                                 "<main>:1:64: Error: Column x is not in source column set\n");
+
+        req = "$src = SELECT key FROM plato.Input ORDER BY x; SELECT * FROM $src;";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Warning: ORDER BY without LIMIT in subquery will be ignored, code: 4504\n");
+    }
+
     Y_UNIT_TEST(InvalidTtlInterval) {
         auto req = R"(
             USE plato;
@@ -5046,10 +5057,10 @@ Y_UNIT_TEST_SUITE(JsonValue) {
                 TStringBuilder query;
                 query << "$json = CAST(@@{\"key\": 1238}@@ as Json);\n"
                     << "SELECT JSON_VALUE($json, \"strict $.key\"";
-                if (!onEmpty.first.Empty()) {
+                if (!onEmpty.first.empty()) {
                     query << " " << onEmpty.first << " ON EMPTY";
                 }
-                if (!onError.first.Empty()) {
+                if (!onError.first.empty()) {
                     query << " " << onError.first << " ON ERROR";
                 }
                 query << ");\n";
@@ -5221,13 +5232,13 @@ Y_UNIT_TEST_SUITE(JsonQuery) {
                     TStringBuilder query;
                     query << R"($json = CAST(@@{"key": [123]}@@ as Json);
                     SELECT JSON_QUERY($json, "strict $.key" )" << wrap.first;
-                    if (!onEmpty.first.Empty()) {
+                    if (!onEmpty.first.empty()) {
                         if (wrap.first.StartsWith("WITH ")) {
                             continue;
                         }
                         query << " " << onEmpty.first << " ON EMPTY";
                     }
-                    if (!onError.first.Empty()) {
+                    if (!onError.first.empty()) {
                         query << " " << onError.first << " ON ERROR";
                     }
                     query << ");\n";
@@ -7040,11 +7051,10 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
     Y_UNIT_TEST(CreateBackupCollectionWithDatabase) {
         NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
-                CREATE BACKUP COLLECTION TestCollection WITH (
+                CREATE BACKUP COLLECTION TestCollection DATABASE WITH (
                     STORAGE="local",
                     TAG="test" -- for testing purposes, not a real thing
-                )
-                    DATABASE;
+                );
             )sql");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
 
@@ -7066,12 +7076,13 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
     Y_UNIT_TEST(CreateBackupCollectionWithTables) {
         NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
-                CREATE BACKUP COLLECTION TestCollection WITH (
+                CREATE BACKUP COLLECTION TestCollection (
+                    TABLE someTable,
+                    TABLE `prefix/anotherTable`
+                ) WITH (
                     STORAGE="local",
                     TAG="test" -- for testing purposes, not a real thing
-                )
-                    TABLE someTable,
-                    TABLE `prefix/anotherTable`;
+                );
             )sql");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
 
@@ -7099,18 +7110,13 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
 
         ExpectFailWithError(R"sql(
                 USE plato;
-                CREATE BACKUP COLLECTION TestCollection TABLE;
-            )sql" , "<main>:3:56: Error: Unexpected token 'TABLE' : syntax error...\n\n");
+                CREATE BACKUP COLLECTION TABLE TestCollection;
+            )sql" , "<main>:3:47: Error: Unexpected token 'TestCollection' : syntax error...\n\n");
 
         ExpectFailWithError(R"sql(
                 USE plato;
-                CREATE BACKUP COLLECTION TestCollection DATABASE `test`;
-            )sql" , "<main>:3:56: Error: Unexpected token 'DATABASE' : syntax error...\n\n");
-
-        ExpectFailWithError(R"sql(
-                USE plato;
-                CREATE BACKUP COLLECTION TestCollection DATABASE, TABLE `test`;
-            )sql" , "<main>:3:56: Error: Unexpected token 'DATABASE' : syntax error...\n\n");
+                CREATE BACKUP COLLECTION DATABASE `test` TestCollection;
+            )sql" , "<main>:3:50: Error: Unexpected token '`test`' : syntax error...\n\n");
 
         ExpectFailWithError(R"sql(
                 USE plato;
@@ -7416,5 +7422,41 @@ Y_UNIT_TEST_SUITE(Restore) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+}
+
+Y_UNIT_TEST_SUITE(ColumnFamily) {
+    Y_UNIT_TEST(CompressionLevel) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            CREATE TABLE tableName (
+                Key Uint32 FAMILY default,
+                Value String FAMILY family1,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = "test",
+                     COMPRESSION = "lz4",
+                     COMPRESSION_LEVEL = 5
+                ),
+                FAMILY family1 (
+                     DATA = "test",
+                     COMPRESSION = "lz4",
+                     COMPRESSION_LEVEL = 3
+                )
+            );
+        )");
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("compression_level"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("5"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("3"));
+            }
+        };
+
+        TWordCountHive elementStat = { { TString("Write"), 0 }, { TString("compression_level"), 0 } };
+        VerifyProgram(res, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["compression_level"]);
     }
 }

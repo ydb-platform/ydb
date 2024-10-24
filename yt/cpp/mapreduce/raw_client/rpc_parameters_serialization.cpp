@@ -525,6 +525,15 @@ TNode SerializeParamsForGetJob(
     return result;
 }
 
+TNode SerializeParamsForGetJobTrace(
+    const TOperationId& operationId,
+    const TGetJobTraceOptions& /* options */)
+{
+    TNode result;
+    SetOperationIdParam(&result, operationId);
+    return result;
+}
+
 TNode SerializeParamsForListJobs(
     const TOperationId& operationId,
     const TListJobsOptions& options)

@@ -68,6 +68,7 @@ private:
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         SetAuthToken(ev, *Request);
         SetDatabase(ev, *Request);
+        ev->Record.MutableRequest()->SetClientAddress(Request->GetPeerName());
 
         if (CheckSession(req->session_id(), Request.get())) {
             ev->Record.MutableRequest()->SetSessionId(req->session_id());
@@ -110,7 +111,7 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
-        const auto& record = ev->Get()->Record.GetRef();
+        const auto& record = ev->Get()->Record;
         FillCommonKqpRespFields(record, Request.get());
 
         auto beginTxResult = TEvBeginTransactionRequest::AllocateResult<Ydb::Query::BeginTransactionResponse>(Request);
@@ -189,6 +190,7 @@ private:
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         SetAuthToken(ev, *Request);
         SetDatabase(ev, *Request);
+        ev->Record.MutableRequest()->SetClientAddress(Request->GetPeerName());
 
         const auto& [sessionId, txId] = GetReqData();
 
@@ -216,7 +218,7 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
-        const auto& record = ev->Get()->Record.GetRef();
+        const auto& record = ev->Get()->Record;
         FillCommonKqpRespFields(record, Request.get());
 
         NYql::TIssues issues;

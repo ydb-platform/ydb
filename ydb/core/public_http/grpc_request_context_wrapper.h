@@ -2,7 +2,7 @@
 
 #include "http_req.h"
 
-#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/library/grpc/server/grpc_request_base.h>
 #include <ydb/core/viewer/json/json.h>
 #include <ydb/library/actors/http/http_proxy.h>
 
@@ -34,6 +34,7 @@ public:
     virtual TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const;
     virtual TVector<TStringBuf> FindClientCert() const {return {};}
     virtual grpc_compression_level GetCompressionLevel() const { return GRPC_COMPRESS_LEVEL_NONE; }
+    virtual TString GetEndpointId() const;
 
     virtual google::protobuf::Arena* GetArena();
 

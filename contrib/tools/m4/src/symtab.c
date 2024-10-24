@@ -1,7 +1,7 @@
 /* GNU m4 -- A simple macro processor
 
-   Copyright (C) 1989-1994, 2003, 2006-2013 Free Software Foundation,
-   Inc.
+   Copyright (C) 1989-1994, 2003, 2006-2014, 2016 Free Software
+   Foundation, Inc.
 
    This file is part of GNU M4.
 
@@ -123,10 +123,10 @@ symtab_init (void)
 static size_t M4_GNUC_PURE
 hash (const char *s)
 {
-  size_t val = 0;
+  register size_t val = 0;
 
-  const char *ptr = s;
-  char ch;
+  register const char *ptr = s;
+  register char ch;
 
   while ((ch = *ptr++) != '\0')
     val = (val << 7) + (val >> (sizeof (val) * CHAR_BIT - 7)) + ch;

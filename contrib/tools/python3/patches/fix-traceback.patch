@@ -1,0 +1,32 @@
+commit 8a9d74e955c9e66e23ca423181d6b4f3b2f35234
+merge: 69071b279955ab8dd08fad10b2540b9f6bae2825 efd33904df73f0175583058fedc0d7234cac6b45
+author: orivej
+date: 2019-07-06T14:14:55+03:00
+revision: 5216942
+
+    Fix tracebacks in py2 import_test and do not read builtin source from FS. DEVTOOLS-5629
+    
+    REVIEW: 869505
+    Note: mandatory check (NEED_CHECK) was skipped
+
+--- contrib/tools/python3/Lib/linecache.py	(69071b279955ab8dd08fad10b2540b9f6bae2825)
++++ contrib/tools/python3/Lib/linecache.py	(8a9d74e955c9e66e23ca423181d6b4f3b2f35234)
+@@ -88,6 +88,18 @@ def updatecache(filename, module_globals=None):
+     if not filename or (filename.startswith('<') and filename.endswith('>')):
+         return []
+ 
++    if not os.path.isabs(filename):
++        # Do not read builtin code from the filesystem.
++        import __res
++
++        key = __res.py_src_key(filename)
++        if data := __res.resfs_read(key):
++            assert data is not None, filename
++            data = data.decode('UTF-8')
++            lines = [line + '\n' for line in data.splitlines()]
++            cache[filename] = (len(data), None, lines, filename)
++            return cache[filename][2]
++
+     fullname = filename
+     try:
+         stat = os.stat(fullname)

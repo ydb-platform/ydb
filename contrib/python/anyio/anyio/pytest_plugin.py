@@ -1,15 +1,21 @@
 from __future__ import annotations
 
+import sys
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from inspect import isasyncgenfunction, iscoroutinefunction
-from typing import Any, Dict, Tuple, cast
+from typing import Any, cast
 
 import pytest
 import sniffio
+from _pytest.outcomes import Exit
 
 from ._core._eventloop import get_all_backends, get_async_backend
+from ._core._exceptions import iterate_exceptions
 from .abc import TestRunner
+
+if sys.version_info < (3, 11):
+    from exceptiongroup import ExceptionGroup
 
 _current_runner: TestRunner | None = None
 _runner_stack: ExitStack | None = None
@@ -21,7 +27,7 @@ def extract_backend_and_options(backend: object) -> tuple[str, dict[str, Any]]:
         return backend, {}
     elif isinstance(backend, tuple) and len(backend) == 2:
         if isinstance(backend[0], str) and isinstance(backend[1], dict):
-            return cast(Tuple[str, Dict[str, Any]], backend)
+            return cast(tuple[str, dict[str, Any]], backend)
 
     raise TypeError("anyio_backend must be either a string or tuple of (string, dict)")
 
@@ -121,7 +127,14 @@ def pytest_pyfunc_call(pyfuncitem: Any) -> bool | None:
             funcargs = pyfuncitem.funcargs
             testargs = {arg: funcargs[arg] for arg in pyfuncitem._fixtureinfo.argnames}
             with get_runner(backend_name, backend_options) as runner:
-                runner.run_test(pyfuncitem.obj, testargs)
+                try:
+                    runner.run_test(pyfuncitem.obj, testargs)
+                except ExceptionGroup as excgrp:
+                    for exc in iterate_exceptions(excgrp):
+                        if isinstance(exc, (Exit, KeyboardInterrupt, SystemExit)):
+                            raise exc from excgrp
+
+                    raise
 
             return True
 

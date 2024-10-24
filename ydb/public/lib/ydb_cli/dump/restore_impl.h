@@ -47,6 +47,7 @@ class TRestoreClient {
 
 public:
     explicit TRestoreClient(
+        TLog& log,
         NImport::TImportClient& importClient,
         NOperation::TOperationClient& operationClient,
         NScheme::TSchemeClient& SchemeClient,
@@ -55,6 +56,7 @@ public:
     TRestoreResult Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings = {});
 
 private:
+    TLog& Log;
     NImport::TImportClient& ImportClient;
     NOperation::TOperationClient& OperationClient;
     NScheme::TSchemeClient& SchemeClient;

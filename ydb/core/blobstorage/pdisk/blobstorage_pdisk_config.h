@@ -4,13 +4,12 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
 #include <ydb/core/control/immediate_control_board_wrapper.h>
-#include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/blobstorage_base.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
 #include <ydb/core/protos/blobstorage_pdisk_config.pb.h>
 #include <ydb/core/protos/blobstorage_disk_color.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
-#include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/pdisk_io/drivedata.h>
 #include <ydb/library/pdisk_io/file_params.h>
@@ -155,6 +154,8 @@ struct TPDiskConfig : public TThrRefBase {
     ui32 MaxMetadataMegabytes = 32; // maximum size of raw metadata (in megabytes)
 
     NKikimrBlobStorage::TPDiskSpaceColor::E SpaceColorBorder = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
+
+    ui32 CompletionThreadsCount = 1;
 
     bool MetadataOnly = false;
 
@@ -310,6 +311,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " YellowLogChunksMultiplier# " << YellowLogChunksMultiplier << x;
         str << " MaxMetadataMegabytes# " << MaxMetadataMegabytes << x;
         str << " SpaceColorBorder# " << SpaceColorBorder << x;
+        str << " CompletionThreadsCount# " << CompletionThreadsCount << x;
         str << "}";
         return str.Str();
     }
@@ -394,8 +396,11 @@ struct TPDiskConfig : public TThrRefBase {
             limit = Max<ui32>(13, limit);
             ChunkBaseLimit = limit;
         }
+
+        if (cfg->HasCompletionThreadsCount()) {
+            CompletionThreadsCount = cfg->GetCompletionThreadsCount();
+        }
     }
 };
 
 } // NKikimr
-

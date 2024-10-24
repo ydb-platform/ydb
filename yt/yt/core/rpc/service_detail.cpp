@@ -2183,10 +2183,12 @@ void TServiceBase::RegisterRequest(TServiceContext* context)
         auto& replyBusData = it->second;
         replyBusData.Contexts.insert(context);
         if (inserted) {
-            replyBusData.BusTerminationHandler = BIND_NO_PROPAGATE(
-                &TServiceBase::OnReplyBusTerminated,
-                MakeWeak(this),
-                MakeWeak(replyBus.Get()));
+            replyBusData.BusTerminationHandler =
+                BIND_NO_PROPAGATE(
+                    &TServiceBase::OnReplyBusTerminated,
+                    MakeWeak(this),
+                    MakeWeak(replyBus))
+                .Via(TDispatcher::Get()->GetHeavyInvoker());
             replyBus->SubscribeTerminated(replyBusData.BusTerminationHandler);
         }
     }

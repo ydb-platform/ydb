@@ -2,6 +2,9 @@
 
 LIBRARY()
 
+BUILD_ONLY_IF(MSVC)
+NO_BUILD_IF(CLANG_CL)
+
 LICENSE(
     Apache-2.0 AND
     Apache-2.0 WITH LLVM-exception AND

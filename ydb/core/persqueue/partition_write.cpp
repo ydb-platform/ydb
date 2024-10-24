@@ -407,7 +407,7 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
         Head.PackedSize = 0;
         Head.Offset = NewHead.Offset;
         Head.PartNo = NewHead.PartNo; //no partNo at this point
-        Head.Batches.clear();
+        Head.ClearBatches();
     }
 
     while (!CompactedKeys.empty()) {
@@ -430,9 +430,8 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     } // head cleared, all data moved to body
 
     //append Head with newHead
-    while (!NewHead.Batches.empty()) {
-        Head.Batches.push_back(NewHead.Batches.front());
-        NewHead.Batches.pop_front();
+    while (!NewHead.GetBatches().empty()) {
+        Head.AddBatch(NewHead.ExtractFirstBatch());
     }
     Head.PackedSize += NewHead.PackedSize;
 
@@ -1035,7 +1034,7 @@ void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobIn
     write->SetKey(newWrite->Key.ToString());
     write->SetValue(newWrite->Value);
     Y_ABORT_UNLESS(!newWrite->Key.IsHead());
-    auto channel = GetChannel(NextChannel(newWrite->Key.IsHead(), newWrite->Value.Size()));
+    auto channel = GetChannel(NextChannel(newWrite->Key.IsHead(), newWrite->Value.size()));
     write->SetStorageChannel(channel);
     write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
 
@@ -1326,22 +1325,22 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                           ctx);
         ui32 countOfLastParts = 0;
         for (auto& x : PartitionedBlob.GetClientBlobs()) {
-            if (NewHead.Batches.empty() || NewHead.Batches.back().Packed) {
-                NewHead.Batches.emplace_back(curOffset, x.GetPartNo(), TVector<TClientBlob>());
+            if (NewHead.GetBatches().empty() || NewHead.GetLastBatch().Packed) {
+                NewHead.AddBatch(TBatch(curOffset, x.GetPartNo()));
                 NewHead.PackedSize += GetMaxHeaderSize(); //upper bound for packed size
             }
             if (x.IsLastPart()) {
                 ++countOfLastParts;
             }
-            Y_ABORT_UNLESS(!NewHead.Batches.back().Packed);
-            NewHead.Batches.back().AddBlob(x);
+            Y_ABORT_UNLESS(!NewHead.GetLastBatch().Packed);
+            NewHead.AddBlob(x);
             NewHead.PackedSize += x.GetBlobSize();
-            if (NewHead.Batches.back().GetUnpackedSize() >= BATCH_UNPACK_SIZE_BORDER) {
-                NewHead.Batches.back().Pack();
-                NewHead.PackedSize += NewHead.Batches.back().GetPackedSize(); //add real packed size for this blob
+            if (NewHead.GetLastBatch().GetUnpackedSize() >= BATCH_UNPACK_SIZE_BORDER) {
+                NewHead.MutableLastBatch().Pack();
+                NewHead.PackedSize += NewHead.GetLastBatch().GetPackedSize(); //add real packed size for this blob
 
                 NewHead.PackedSize -= GetMaxHeaderSize(); //instead of upper bound
-                NewHead.PackedSize -= NewHead.Batches.back().GetUnpackedSize();
+                NewHead.PackedSize -= NewHead.GetLastBatch().GetUnpackedSize();
             }
         }
 
@@ -1418,15 +1417,15 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
     valueD.reserve(res.second);
     ui32 pp = Head.FindPos(key.GetOffset(), key.GetPartNo());
     if (pp < Max<ui32>() && key.GetOffset() < EndOffset) { //this batch trully contains this offset
-        Y_ABORT_UNLESS(pp < Head.Batches.size());
-        Y_ABORT_UNLESS(Head.Batches[pp].GetOffset() == key.GetOffset());
-        Y_ABORT_UNLESS(Head.Batches[pp].GetPartNo() == key.GetPartNo());
-        for (; pp < Head.Batches.size(); ++pp) { //TODO - merge small batches here
-            Y_ABORT_UNLESS(Head.Batches[pp].Packed);
-            Head.Batches[pp].SerializeTo(valueD);
+        Y_ABORT_UNLESS(pp < Head.GetBatches().size());
+        Y_ABORT_UNLESS(Head.GetBatch(pp).GetOffset() == key.GetOffset());
+        Y_ABORT_UNLESS(Head.GetBatch(pp).GetPartNo() == key.GetPartNo());
+        for (; pp < Head.GetBatches().size(); ++pp) { //TODO - merge small batches here
+            Y_ABORT_UNLESS(Head.GetBatch(pp).Packed);
+            Head.GetBatch(pp).SerializeTo(valueD);
         }
     }
-    for (auto& b : NewHead.Batches) {
+    for (auto& b : NewHead.GetBatches()) {
         Y_ABORT_UNLESS(b.Packed);
         b.SerializeTo(valueD);
     }
@@ -1703,7 +1702,7 @@ void TPartition::BeginAppendHeadWithNewWrites(const TActorContext& ctx)
     NewHead.PartNo = 0;
     NewHead.PackedSize = 0;
 
-    Y_ABORT_UNLESS(NewHead.Batches.empty());
+    Y_ABORT_UNLESS(NewHead.GetBatches().empty());
 
     Parameters->OldPartsCleared = false;
     Parameters->HeadCleared = (Head.PackedSize == 0);
@@ -1748,12 +1747,12 @@ void TPartition::EndAppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, co
 
     UpdateWriteBufferIsFullState(ctx.Now());
 
-    if (!NewHead.Batches.empty() && !NewHead.Batches.back().Packed) {
-        NewHead.Batches.back().Pack();
-        NewHead.PackedSize += NewHead.Batches.back().GetPackedSize(); //add real packed size for this blob
+    if (!NewHead.GetBatches().empty() && !NewHead.GetLastBatch().Packed) {
+        NewHead.MutableLastBatch().Pack();
+        NewHead.PackedSize += NewHead.GetLastBatch().GetPackedSize(); //add real packed size for this blob
 
         NewHead.PackedSize -= GetMaxHeaderSize(); //instead of upper bound
-        NewHead.PackedSize -= NewHead.Batches.back().GetUnpackedSize();
+        NewHead.PackedSize -= NewHead.GetLastBatch().GetUnpackedSize();
     }
 
     Y_ABORT_UNLESS((Parameters->HeadCleared ? 0 : Head.PackedSize) + NewHead.PackedSize <= MaxBlobSize); //otherwise last PartitionedBlob.Add must compact all except last cl

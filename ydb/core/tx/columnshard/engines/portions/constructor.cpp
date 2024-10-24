@@ -10,6 +10,8 @@
 namespace NKikimr::NOlap {
 
 TPortionInfo TPortionInfoConstructor::Build(const bool needChunksNormalization) {
+    AFL_VERIFY(!Constructed);
+    Constructed = true;
     TPortionInfo result(MetaConstructor.Build());
     AFL_VERIFY(PathId);
     result.PathId = PathId;
@@ -24,6 +26,16 @@ TPortionInfo TPortionInfoConstructor::Build(const bool needChunksNormalization) 
     }
     result.SchemaVersion = SchemaVersion;
     result.ShardingVersion = ShardingVersion;
+    result.CommitSnapshot = CommitSnapshot;
+    result.InsertWriteId = InsertWriteId;
+    AFL_VERIFY(!CommitSnapshot || !!InsertWriteId);
+
+    if (result.GetMeta().GetProduced() == NPortion::EProduced::INSERTED) {
+//        AFL_VERIFY(!!InsertWriteId);
+    } else {
+        AFL_VERIFY(!CommitSnapshot);
+        AFL_VERIFY(!InsertWriteId);
+    }
 
     if (needChunksNormalization) {
         ReorderChunks();
@@ -70,9 +82,10 @@ TPortionInfo TPortionInfoConstructor::Build(const bool needChunksNormalization) 
         AFL_VERIFY(itBlobIdx == BlobIdxs.end());
     }
 
-    result.Indexes = Indexes;
-    result.Records = Records;
-    result.BlobIds = BlobIds;
+    result.Indexes = std::move(Indexes);
+    result.Records = std::move(Records);
+    result.BlobIds = std::move(BlobIds);
+    result.Precalculate();
     return result;
 }
 

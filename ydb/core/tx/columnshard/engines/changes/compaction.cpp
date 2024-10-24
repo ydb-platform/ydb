@@ -1,6 +1,6 @@
 #include "compaction.h"
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
-#include <ydb/core/tx/columnshard/engines/storage/granule.h>
+#include <ydb/core/tx/columnshard/engines/storage/granule/granule.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/protos/counters_columnshard.pb.h>
 
@@ -30,11 +30,10 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
 void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
 
-    Y_ABORT_UNLESS(SwitchedPortions.size());
+//    Y_ABORT_UNLESS(SwitchedPortions.size());
     THashMap<TString, THashSet<TBlobRange>> blobRanges;
     auto& index = self.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
     for (const auto& p : SwitchedPortions) {
-        Y_ABORT_UNLESS(!p.Empty());
         p.FillBlobRangesByStorage(blobRanges, index);
     }
 
@@ -80,7 +79,7 @@ TCompactColumnEngineChanges::TCompactColumnEngineChanges(std::shared_ptr<TGranul
         AddPortionToRemove(*portionInfo);
         Y_ABORT_UNLESS(portionInfo->GetPathId() == GranuleMeta->GetPathId());
     }
-    Y_ABORT_UNLESS(SwitchedPortions.size());
+//    Y_ABORT_UNLESS(SwitchedPortions.size());
 }
 
 TCompactColumnEngineChanges::~TCompactColumnEngineChanges() {

@@ -59,6 +59,7 @@ namespace NDiscovery {
         const TMap<TActorId, TEvStateStorage::TBoardInfoEntry>&,
         TMap<TActorId, TEvStateStorage::TBoardInfoEntry>,
         TSet<TString>,
+        TString,
         const THolder<TEvInterconnect::TEvNodeInfo>&);
 }
 

@@ -1313,7 +1313,7 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
 void TPDisk::InitiateReadSysLog(const TActorId &pDiskActor) {
     Y_VERIFY_S(PDiskThread.Running(), "expect PDiskThread to be running");
     Y_VERIFY_S(InitPhase == EInitPhase::Uninitialized, "expect InitPhase to be Uninitialized, but InitPhase# "
-            << InitPhase);
+            << InitPhase.load());
     ui32 formatSectorsSize = FormatSectorSize * ReplicationFactor;
     THolder<TEvReadFormatResult> evReadFormatResult(new TEvReadFormatResult(formatSectorsSize, UseHugePages));
     ui8 *formatSectors = evReadFormatResult->FormatSectors.Get();
@@ -1329,7 +1329,7 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
     if (evReadLogResult.Status != NKikimrProto::OK) {
         P_LOG(PRI_ERROR, BPD01, "Error on log read",
             (evReadLogResult, evReadLogResult.ToString()),
-            (InitPhase, InitPhase));
+            (InitPhase, InitPhase.load()));
         switch (InitPhase) {
             case EInitPhase::ReadingSysLog:
                 *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialSysLogReadError;
@@ -1509,7 +1509,7 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
             return;
         }
         default:
-            Y_FAIL_S("Unexpected InitPhase# " << InitPhase);
+            Y_FAIL_S("Unexpected InitPhase# " << InitPhase.load());
     }
 }
 

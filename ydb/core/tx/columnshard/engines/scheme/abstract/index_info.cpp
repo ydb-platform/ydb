@@ -8,8 +8,8 @@
 
 namespace NKikimr::NOlap {
 
-std::shared_ptr<NKikimr::NOlap::TColumnLoader> IIndexInfo::GetColumnLoaderVerified(const ui32 columnId) const {
-    auto result = GetColumnLoaderOptional(columnId);
+const std::shared_ptr<NKikimr::NOlap::TColumnLoader>& IIndexInfo::GetColumnLoaderVerified(const ui32 columnId) const {
+    const auto& result = GetColumnLoaderOptional(columnId);
     AFL_VERIFY(result);
     return result;
 }
@@ -24,9 +24,9 @@ void IIndexInfo::AddDeleteFlagsColumn(NArrow::TGeneralContainer& batch, const bo
 void IIndexInfo::AddSnapshotColumns(NArrow::TGeneralContainer& batch, const TSnapshot& snapshot, const ui64 insertWriteId) {
     const i64 numRows = batch.num_rows();
 
-    batch.AddField(arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()), NArrow::MakeUI64Array(snapshot.GetPlanStep(), numRows)).Validate();
-    batch.AddField(arrow::field(SPEC_COL_TX_ID, arrow::uint64()), NArrow::MakeUI64Array(snapshot.GetTxId(), numRows)).Validate();
-    batch.AddField(arrow::field(SPEC_COL_WRITE_ID, arrow::uint64()), NArrow::MakeUI64Array(insertWriteId, numRows)).Validate();
+    batch.AddField(PlanStepField, NArrow::MakeUI64Array(snapshot.GetPlanStep(), numRows)).Validate();
+    batch.AddField(TxIdField, NArrow::MakeUI64Array(snapshot.GetTxId(), numRows)).Validate();
+    batch.AddField(WriteIdField, NArrow::MakeUI64Array(insertWriteId, numRows)).Validate();
 }
 
 void IIndexInfo::NormalizeDeletionColumn(NArrow::TGeneralContainer& batch) {

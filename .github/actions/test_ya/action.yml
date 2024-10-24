@@ -122,7 +122,7 @@ runs:
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
 
-        python3 -m pip install ydb ydb[yc] codeowners
+        python3 -m pip install ydb ydb[yc] codeowners humanize junitparser
 
         if [ ${{ inputs.testman_token }} ]; then
           TESTMO_PROXY_ADDR=127.0.0.1:8888
@@ -135,7 +135,7 @@ runs:
             --cert-key "$TMP_DIR/key.pem" \
             --target-timeout 3,60 \
             --max-request-time 200 \
-            "$TESTMO_URL" > $PUBLIC_DIR/testmo_proxy.log 2>&1 &
+            "$TESTMO_URL" > $PUBLIC_DIR/testmo_proxy_log.txt 2>&1 &
             
           TESTMO_PROXY_PID=$!
           echo "TESTMO_PROXY_ADDR=$TESTMO_PROXY_ADDR" >> $GITHUB_ENV
@@ -162,8 +162,8 @@ runs:
         ORIGINAL_HEAD=$(git rev-parse HEAD)
         
         if [ "${{ inputs.increment }}" = "true" ]; then
-          GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare.log"
-          GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare.log"
+          GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
+          GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
 
           set +e
           ./.github/scripts/graph_compare.sh $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
@@ -193,7 +193,6 @@ runs:
           --stat
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
           -DUSE_EAT_MY_DATA
-          -DDEBUGINFO_LINES_ONLY
         )
 
         TEST_RETRY_COUNT=${{ inputs.test_retry_count }}
@@ -307,8 +306,8 @@ runs:
 
         YA_MAKE_OUT_DIR=$TMP_DIR/out
 
-        YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.log"
-        YA_MAKE_OUTPUT_URL="$PUBLIC_DIR_URL/ya_make_output.log"
+        YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.txt"
+        YA_MAKE_OUTPUT_URL="$PUBLIC_DIR_URL/ya_make_output.txt"
         echo "20 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
 
         BUILD_FAILED=0
@@ -350,6 +349,7 @@ runs:
           CURRENT_PUBLIC_DIR_RELATIVE=try_$RETRY
           # Can be used in tests in which you want to publish the results in s3 for each retry separately
           export CURRENT_PUBLIC_DIR=$PUBLIC_DIR/$CURRENT_PUBLIC_DIR_RELATIVE
+          export CURRENT_PUBLIC_DIR_URL=$PUBLIC_DIR_URL/$CURRENT_PUBLIC_DIR_RELATIVE
           mkdir $CURRENT_PUBLIC_DIR
 
           if [ ${{ inputs.testman_token }} ]; then
@@ -386,7 +386,7 @@ runs:
           CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
           set +e
           (./ya make $YA_MAKE_TARGET "${params[@]}" \
-            $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.log"  \
+            $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
             --junit "$CURRENT_JUNIT_XML_PATH" --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
           set -e
@@ -399,11 +399,21 @@ runs:
           ya_dir=$(pwd)
           (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl)
 
+          # generate test_bloat
+          ./ydb/ci/build_bloat/test_bloat.py --junit $CURRENT_JUNIT_XML_PATH --output_dir $CURRENT_PUBLIC_DIR/test_bloat || true
+          echo "30 [Test bloat](${CURRENT_PUBLIC_DIR_URL}/test_bloat/tree_map.html)" >> $SUMMARY_LINKS
+
           if [ $RC -ne 0 ]; then
             echo "ya make returned $RC, build failed"
             echo "status=failed" >> $GITHUB_OUTPUT
             BUILD_FAILED=1
-            echo "Build failed, see the [logs]($YA_MAKE_OUTPUT_URL)." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
+            # sed is to remove richness (tags like '[[rst]]')
+            (( \
+              cat $CURRENT_REPORT \
+              | jq -r '.results[] | select((.status == "FAILED") and (.error_type == "REGULAR") and (.type = "build")) | "path: " + .path + "\n\n" + ."rich-snippet" + "\n\n\n"' \
+              | sed 's/\[\[[^]]*]\]//g' \
+            ) || true) > $CURRENT_PUBLIC_DIR/fail_summary.txt
+            echo "Build failed, see the [logs]($YA_MAKE_OUTPUT_URL). Also see [fail summary]($CURRENT_PUBLIC_DIR_URL/fail_summary.txt)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
             break
           fi
 
@@ -453,7 +463,7 @@ runs:
               "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_JUNIT_XML_PATH"
           fi
 
-          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
+          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
 
           if [ "${{ inputs.run_tests }}" = "true" ]; then
             cat summary_text.txt | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color `cat summary_color.txt`
@@ -595,7 +605,7 @@ runs:
         echo "::group::s3-sync"
         .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/"
         echo "00 [Artifacts](${PUBLIC_DIR_URL}/index.html)" >> $SUMMARY_LINKS
-        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
+        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
         echo "::endgroup::"
 
@@ -613,7 +623,6 @@ runs:
         export build_preset="${{ inputs.build_preset }}" 
         export commit_git_sha="$(git rev-parse HEAD)"
 
-        python3 -m pip install ydb ydb[yc]
         python3 .github/scripts/send_build_stats.py
 
     - name: show_build_size_diff
@@ -629,8 +638,6 @@ runs:
         export yellow_treshold=102400
         export red_treshold=2097152 
         export commit_git_sha="$(git rev-parse HEAD)"
-
-        python3 -m pip install ydb ydb[yc] humanize
 
         get_sizes_comment_script=.github/scripts/get_build_diff.py
         comment_raw=`$get_sizes_comment_script`

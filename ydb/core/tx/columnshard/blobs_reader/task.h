@@ -65,7 +65,7 @@ public:
     }
     TString Extract(const TString& storageId, const TBlobRange& range) {
         auto it = BlobsByStorage.find(storageId);
-        AFL_VERIFY(it != BlobsByStorage.end());
+        AFL_VERIFY(it != BlobsByStorage.end())("range", range.ToString())("storage_id", storageId);
         auto result = it->second.Extract(range);
         if (it->second.IsEmpty()) {
             BlobsByStorage.erase(it);

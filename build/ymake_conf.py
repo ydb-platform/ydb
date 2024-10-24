@@ -1527,10 +1527,6 @@ class GnuCompiler(Compiler):
                 '-fwasm-exceptions',
             ]
 
-        self.debug_info_flags = ['-g']
-        if self.target.is_linux:
-            self.debug_info_flags.append('-ggnu-pubnames')
-
         self.cross_suffix = '' if is_positive('FORCE_NO_PIC') else '.pic'
 
         self.optimize = None
@@ -1604,8 +1600,6 @@ class GnuCompiler(Compiler):
         super(GnuCompiler, self).print_compiler()
 
         emit('C_COMPILER', '"{}"'.format(self.tc.c_compiler))
-        emit('C_COMPILER_OLD_UNQUOTED', self.tc.c_compiler)
-        emit('C_COMPILER_OLD', '${quo:C_COMPILER_OLD_UNQUOTED}')
         emit('OPTIMIZE', self.optimize)
         emit('WERROR_MODE', self.tc.werror_mode)
         emit('_C_FLAGS', self.c_flags)
@@ -1619,7 +1613,6 @@ class GnuCompiler(Compiler):
         emit('CXX_COMPILER_OLD', '${quo:CXX_COMPILER_OLD_UNQUOTED}')
         # TODO(somov): Убрать чтение настройки из os.environ
         emit('USE_ARC_PROFILE', 'yes' if preset('USE_ARC_PROFILE') or os.environ.get('USE_ARC_PROFILE') else 'no')
-        emit('DEBUG_INFO_FLAGS', self.debug_info_flags)
 
         if self.build.is_coverage:
             emit('_IS_COVERAGE', 'yes')
@@ -2131,7 +2124,6 @@ class MSVCCompiler(MSVC, Compiler):
         emit('CXX_COMPILER_UNQUOTED', '"{}"'.format(self.tc.cxx_compiler))
         emit('CXX_COMPILER_OLD_UNQUOTED', self.tc.cxx_compiler)
         emit('C_COMPILER_UNQUOTED', '"{}"'.format(self.tc.c_compiler))
-        emit('C_COMPILER_OLD_UNQUOTED', self.tc.c_compiler)
         emit('MASM_COMPILER_UNQUOTED', '"{}"'.format(self.tc.masm_compiler))
         emit('MASM_COMPILER_OLD_UNQUOTED', self.tc.masm_compiler)
         append('C_DEFINES', defines)

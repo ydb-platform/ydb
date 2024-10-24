@@ -40,16 +40,25 @@ bool IsWideRepresentation(const TTypeAnnotationNode* leftType, const TTypeAnnota
     return true;
 }
 
-const TTypeAnnotationNode* MakeInputType(const TTypeAnnotationNode* itemType, const TExprNode::TPtr& setting, TExprContext& ctx) {
-    if (!setting)
+const TTypeAnnotationNode* MakeInputType(const TTypeAnnotationNode* itemType, const TExprNode::TPtr& useFlowSetting, const TExprNode::TPtr& blockInputAppliedSetting, TExprContext& ctx) {
+    if (!useFlowSetting) {
         return ctx.MakeType<TStreamExprType>(itemType);
+    }
 
     if (const auto structType = dynamic_cast<const TStructExprType*>(itemType)) {
-        if (ui32 limit; structType && 2U == setting->ChildrenSize() && TryFromString<ui32>(setting->Tail().Content(), limit) && structType->GetSize() < limit && structType->GetSize() > 0U) {
+        if (ui32 limit; structType && 2U == useFlowSetting->ChildrenSize() && TryFromString<ui32>(useFlowSetting->Tail().Content(), limit) && structType->GetSize() < limit && structType->GetSize() > 0U) {
             TTypeAnnotationNode::TListType types;
             const auto& items = structType->GetItems();
             types.reserve(items.size());
+
             std::transform(items.cbegin(), items.cend(), std::back_inserter(types), std::bind(&TItemExprType::GetItemType, std::placeholders::_1));
+            if (blockInputAppliedSetting) {
+                std::transform(types.begin(), types.end(), types.begin(), [&](auto type) {
+                    return ctx.MakeType<TBlockExprType>(type);
+                });
+                types.push_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+            }
+
             return ctx.MakeType<TFlowExprType>(ctx.MakeType<TMultiExprType>(types));
         }
     }
@@ -86,6 +95,7 @@ public:
         AddHandler({TYtDqWrite::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleDqWrite<false>));
         AddHandler({TYtDqWideWrite::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleDqWrite<true>));
         AddHandler({TYtTryFirst::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleTryFirst));
+        AddHandler({TYtMaterialize::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleMaterialize));
     }
 
 private:
@@ -1060,7 +1070,9 @@ private:
             | EYtSettingType::JobCount
             | EYtSettingType::Flow
             | EYtSettingType::KeepSorted
-            | EYtSettingType::NoDq;
+            | EYtSettingType::NoDq
+            | EYtSettingType::BlockInputReady
+            | EYtSettingType::BlockInputApplied;
         if (!ValidateSettings(map.Settings().Ref(), accpeted, ctx)) {
             return TStatus::Error;
         }
@@ -1084,9 +1096,11 @@ private:
 
         const auto inputItemType = GetInputItemType(map.Input(), ctx);
         const auto useFlow = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::Flow);
-        const auto lambdaInputType = MakeInputType(inputItemType, useFlow, ctx);
+        const auto blockInputApplied = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::BlockInputApplied);
+        const auto lambdaInputType = MakeInputType(inputItemType, useFlow, blockInputApplied, ctx);
 
         auto& lambda = input->ChildRef(TYtMap::idx_Mapper);
+
         if (!UpdateLambdaAllArgumentsTypes(lambda, {lambdaInputType}, ctx)) {
             return TStatus::Error;
         }
@@ -1200,7 +1214,7 @@ private:
         }
 
         const auto useFlow = NYql::GetSetting(reduce.Settings().Ref(), EYtSettingType::Flow);
-        const auto lambdaInputType = MakeInputType(inputItemType, useFlow, ctx);
+        const auto lambdaInputType = MakeInputType(inputItemType, useFlow, TExprNode::TPtr(), ctx);
 
         auto& lambda = input->ChildRef(TYtReduce::idx_Reducer);
         if (!UpdateLambdaAllArgumentsTypes(lambda, {lambdaInputType}, ctx)) {
@@ -1294,7 +1308,7 @@ private:
         auto& mapLambda = input->ChildRef(TYtMapReduce::idx_Mapper);
         TTypeAnnotationNode::TListType mapDirectOutputTypes;
         if (hasMapLambda) {
-            const auto mapLambdaInputType = MakeInputType(itemType, useFlow, ctx);
+            const auto mapLambdaInputType = MakeInputType(itemType, useFlow, TExprNode::TPtr(), ctx);
 
             if (!UpdateLambdaAllArgumentsTypes(mapLambda, {mapLambdaInputType}, ctx)) {
                 return TStatus::Error;
@@ -1401,7 +1415,7 @@ private:
         }
 
         auto& reduceLambda = input->ChildRef(TYtMapReduce::idx_Reducer);
-        const auto reduceLambdaInputType = MakeInputType(itemType, useFlow, ctx);
+        const auto reduceLambdaInputType = MakeInputType(itemType, useFlow, TExprNode::TPtr(), ctx);
 
         if (!UpdateLambdaAllArgumentsTypes(reduceLambda, {reduceLambdaInputType}, ctx)) {
             return TStatus::Error;
@@ -2066,6 +2080,37 @@ private:
         input.Ptr()->SetTypeAnn(input.Ref().Head().GetTypeAnn());
         return TStatus::Ok;
     }
+
+    TStatus HandleMaterialize(TExprBase input, TExprContext& ctx) {
+        if (!EnsureArgsCount(input.Ref(), 4, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!ValidateOpBase(input.Ptr(), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureSeqOrOptionalType(*input.Ref().Child(TYtMaterialize::idx_Input), ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        const auto& itemType = GetSeqItemType(*input.Ref().Child(TYtMaterialize::idx_Input)->GetTypeAnn());
+        if (!EnsurePersistableType(input.Ref().Head().Pos(), itemType, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        // Basic Settings validation
+        if (!EnsureTuple(*input.Ref().Child(TYtMaterialize::idx_Settings), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!ValidateSettings(*input.Ref().Child(TYtMaterialize::idx_Settings), EYtSettingTypes{}, ctx)) {
+            return TStatus::Error;
+        }
+
+        input.Ptr()->SetTypeAnn(ctx.MakeType<TListExprType>(&itemType));
+        return TStatus::Ok;
+    }
+
 private:
     const TYtState::TPtr State_;
 };

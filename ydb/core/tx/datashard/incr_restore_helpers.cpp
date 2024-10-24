@@ -19,7 +19,7 @@ std::optional<TVector<TUpdateOp>> MakeRestoreUpdates(TArrayRef<const TCell> cell
             foundSpecialColumn = true;
             continue;
         }
-        updates.emplace_back(tag, ECellOp::Set, TRawTypeValue(cells.at(pos).AsRef(), it->second.Type));
+        updates.emplace_back(tag, ECellOp::Set, TRawTypeValue(cells.at(pos).AsRef(), it->second.Type.GetTypeId()));
     }
     Y_ABORT_UNLESS(foundSpecialColumn);
 

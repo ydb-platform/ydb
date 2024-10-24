@@ -104,8 +104,6 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
     topicsIter->second.DbPath = pqDescr.GetPQTabletConfig().GetYdbDatabasePath();
     topicsIter->second.IsServerless = entry.DomainInfo->IsServerless();
 
-    NPQ::TPartitionGraph graph = NPQ::MakePartitionGraph(pqDescr);
-
     for (const auto& partitionDescription : pqDescr.GetPartitions()) {
         topicsIter->second.Partitions[partitionDescription.GetPartitionId()] =
             TPartitionInfo{ partitionDescription.GetTabletId() };

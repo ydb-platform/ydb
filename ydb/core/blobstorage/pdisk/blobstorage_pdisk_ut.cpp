@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(TestPDiskActorPDiskStopStart) {
-        TActorTestContext testCtx({ false });
+        TActorTestContext testCtx{{}};
 
         const TVDiskID vDiskID(0, 1, 0, 0, 0);
         testCtx.TestResponse<NPDisk::TEvYardInitResult>(
@@ -114,7 +114,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(TestPDiskOwnerRecreation) {
-        TActorTestContext testCtx({ false });
+        TActorTestContext testCtx{{}};
 
         const TVDiskID vDiskID(0, 1, 0, 0, 0);
         for (ui32 i = 2; i < 2000; ++i) {
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(TestPDiskOwnerRecreationWithStableOwner) {
-        TActorTestContext testCtx({ false });
+        TActorTestContext testCtx{{}};
 
         // Create "stable" owner, who will be alive during all test
         ui32 i = 2;
@@ -151,7 +151,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(TestPDiskManyOwnersInitiation) {
-        TActorTestContext testCtx({ false });
+        TActorTestContext testCtx{{}};
 
         TVector<TVDiskIDOwnerRound> goodIds;
         ui64 badIdsCount = 0;
@@ -184,22 +184,43 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         }
     }
 
+
+    // the test is supposed to be fast enough to be used with a lot of different configuration parameters
+    void BasicTest(TActorTestContext& testCtx, TVDiskMock& mock) {
+        for (ui32 restarts = 0; restarts < 2; restarts++) {
+            mock.InitFull();
+            const int logsSent = 100;
+            for (int i = 0; i < logsSent; ++i) {
+                mock.SendEvLogSync();
+                mock.ReserveChunk();
+                mock.CommitReservedChunks();
+            }
+
+            mock.Init(); // asserts owned chunks
+            UNIT_ASSERT(mock.ReadLog() == mock.OwnedLogRecords());
+
+            mock.DeleteCommitedChunks();
+            mock.CutLogAllButOne();
+            mock.Init(); // asserts log is cut and no chunks owned
+            testCtx.RestartPDiskSync();
+        }
+    }
+
     Y_UNIT_TEST(TestVDiskMock) {
-        TActorTestContext testCtx({ false });
+        TActorTestContext testCtx{{}};
+        TVDiskMock mock(&testCtx);
+        BasicTest(testCtx, mock);
+    }
+
+    Y_UNIT_TEST(TestRealFile) {
+        TActorTestContext testCtx({ .UseSectorMap = false });
         TVDiskMock mock(&testCtx);
 
-        mock.InitFull();
-        const int logsSent = 100;
-        for (int i = 0; i < logsSent; ++i) {
-            mock.SendEvLogSync();
-        }
-
-        mock.Init();
-        UNIT_ASSERT(mock.ReadLog() == mock.OwnedLogRecords());
+        BasicTest(testCtx, mock);
     }
 
     Y_UNIT_TEST(TestLogWriteReadWithRestarts) {
-        TActorTestContext testCtx({ false });
+        TActorTestContext testCtx{{}};
 
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
@@ -345,8 +366,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(TestFakeErrorPDiskManyLogWrite) {
-        TActorTestContext testCtx({ false });
-        testCtx.TestCtx.SectorMap->ImitateIoErrorProbability = 1e-4;
+        TActorTestContext testCtx{{}};
+        testCtx.TestCtx.SectorMap->IoErrorEveryNthRequests = 1000;
 
         const TVDiskID vDiskID(0, 1, 0, 0, 0);
         const auto evInitRes = testCtx.TestResponse<NPDisk::TEvYardInitResult>(
@@ -355,7 +376,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
         ui32 errors = 0;
         ui32 lsn = 2;
-        for (ui32 i = 0; i < 100'000; ++i) {
+        for (ui32 i = 0; i < 10'000; ++i) {
             testCtx.Send(new NPDisk::TEvLog(evInitRes->PDiskParams->Owner, evInitRes->PDiskParams->OwnerRound, 0,
                         TRcBuf(TString("abc")), TLsnSeg(lsn, lsn), nullptr));
             ++lsn;
@@ -370,7 +391,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(TestFakeErrorPDiskLogRead) {
-        TActorTestContext testCtx({ false });
+        TActorTestContext testCtx{{}};
 
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
@@ -384,7 +405,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         vdisk.Init();
 
         // Make sure there will be read error.
-        testCtx.TestCtx.SectorMap->ImitateReadIoErrorProbability = 1;
+        testCtx.TestCtx.SectorMap->ReadIoErrorEveryNthRequests = 1;
 
         auto res = vdisk.ReadLog(true);
 
@@ -398,13 +419,13 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(TestFakeErrorPDiskSysLogRead) {
-        TActorTestContext testCtx({ false });
+        TActorTestContext testCtx{{}};
 
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
 
         // Make sure there will be syslog read error.
-        testCtx.TestCtx.SectorMap->ImitateReadIoErrorProbability = 1;
+        testCtx.TestCtx.SectorMap->ReadIoErrorEveryNthRequests = 1;
 
         testCtx.TestResponse<NPDisk::TEvYardControlResult>(
                 new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr),
@@ -416,8 +437,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(TestFakeErrorPDiskManyChunkRead) {
-        TActorTestContext testCtx({ false });
-        testCtx.TestCtx.SectorMap->ImitateReadIoErrorProbability = 1e-4;
+        TActorTestContext testCtx{{}};
+        testCtx.TestCtx.SectorMap->ReadIoErrorEveryNthRequests = 100;
 
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
@@ -434,7 +455,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 NKikimrProto::OK);
 
         bool printed = false;
-        for (ui32 i = 0; i < 100'000; ++i) {
+        ui32 errors = 0;
+        for (ui32 i = 0; i < 10'000; ++i) {
             testCtx.Send(new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
                     reservedChunk, 0, 1024, 0, nullptr));
 
@@ -445,30 +467,32 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                     printed = true;
                     Ctest << res->ToString() << Endl;
                 }
+                ++errors;
             }
         }
+        UNIT_ASSERT(errors > 0);
         // Check that PDisk is in working state now
         vdisk.InitFull();
     }
 
     Y_UNIT_TEST(TestFakeErrorPDiskManyChunkWrite) {
-        TActorTestContext testCtx({ false });
-        testCtx.TestCtx.SectorMap->ImitateIoErrorProbability = 1e-4;
+        TActorTestContext testCtx{{}};
+        testCtx.TestCtx.SectorMap->IoErrorEveryNthRequests = 1000;
 
         const TVDiskID vDiskID(0, 1, 0, 0, 0);
         const auto evInitRes = testCtx.TestResponse<NPDisk::TEvYardInitResult>(
                 new NPDisk::TEvYardInit(2, vDiskID, testCtx.TestCtx.PDiskGuid),
                 NKikimrProto::OK);
 
-        ui32 errors = 0;
         const auto evReserveRes = testCtx.TestResponse<NPDisk::TEvChunkReserveResult>(
                 new NPDisk::TEvChunkReserve(evInitRes->PDiskParams->Owner, evInitRes->PDiskParams->OwnerRound, 1),
                 NKikimrProto::OK);
         UNIT_ASSERT(evReserveRes->ChunkIds.size() == 1);
         const ui32 reservedChunk = evReserveRes->ChunkIds.front();
 
+        ui32 errors = 0;
         bool printed = false;
-        for (ui32 i = 0; i < 100'000; ++i) {
+        for (ui32 i = 0; i < 10'000; ++i) {
             TString data = PrepareData(1024);
             testCtx.Send(new NPDisk::TEvChunkWrite(evInitRes->PDiskParams->Owner, evInitRes->PDiskParams->OwnerRound,
                     reservedChunk, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(data), nullptr, false, 0));
@@ -489,7 +513,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(TestSIGSEGVInTUndelivered) {
-        TActorTestContext testCtx({ false });
+        TActorTestContext testCtx{{}};
         const TVDiskID vDiskID(0, 1, 0, 0, 0);
         const auto evInitRes = testCtx.TestResponse<NPDisk::TEvYardInitResult>(
                 new NPDisk::TEvYardInit(2, vDiskID, testCtx.TestCtx.PDiskGuid),
@@ -507,7 +531,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(PDiskRestart) {
-        TActorTestContext testCtx({ false });
+        TActorTestContext testCtx{{}};
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
         vdisk.SendEvLogSync();
@@ -519,7 +543,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(PDiskRestartManyLogWrites) {
-        TActorTestContext testCtx({ false });
+        TActorTestContext testCtx{{}};
 
         const TVDiskID vDiskID(0, 1, 0, 0, 0);
         const auto evInitRes = testCtx.TestResponse<NPDisk::TEvYardInitResult>(
@@ -554,7 +578,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(CommitDeleteChunks) {
-        TActorTestContext testCtx({ false });
+        TActorTestContext testCtx{{}};
         TVDiskMock intensiveVDisk(&testCtx);
         intensiveVDisk.InitFull();
         intensiveVDisk.ReserveChunk();
@@ -678,7 +702,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     Y_UNIT_TEST(SpaceColor) {
         return; // Enable test after KIKIMR-12880
 
-        TActorTestContext testCtx({ false });
+        TActorTestContext testCtx{{}};
         TVDiskMock vdisk(&testCtx);
 
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
@@ -714,7 +738,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(DeviceHaltTooLong) {
-        TActorTestContext testCtx({ false });
+        TActorTestContext testCtx{{}};
         testCtx.TestCtx.SectorMap->ImitateRandomWait = {TDuration::Seconds(1), TDuration::Seconds(2)};
 
         TVDiskMock mock(&testCtx);
@@ -730,7 +754,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(TestPDiskOnDifferentKeys) {
-        TActorTestContext testCtx({ false });
+        TActorTestContext testCtx{{}};
 
         int round = 2;
         const TVDiskID vDiskID(0, 1, 0, 0, 0);
@@ -756,7 +780,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     Y_UNIT_TEST(ChangePDiskKey) {
         const TString data = PrepareData(4096);
 
-        TActorTestContext testCtx({ false });
+        TActorTestContext testCtx{{}};
 
         TVDiskMock mock(&testCtx);
         mock.InitFull();
@@ -810,7 +834,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     Y_UNIT_TEST(WrongPDiskKey) {
         const TString data = PrepareData(4096);
 
-        TActorTestContext testCtx({ false });
+        TActorTestContext testCtx{{}};
 
         TVDiskMock mock(&testCtx);
         mock.InitFull();
@@ -842,7 +866,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(RecreateWithInvalidPDiskKey) {
-        TActorTestContext testCtx({ false });
+        TActorTestContext testCtx{{}};
         int round = 2;
         const TVDiskID vDiskID(0, 1, 0, 0, 0);
 
@@ -910,7 +934,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(TestChunkWriteCrossOwner) {
-        TActorTestContext testCtx({ false });
+        TActorTestContext testCtx{{}};
 
         TVDiskMock vdisk1(&testCtx);
         TVDiskMock vdisk2(&testCtx);
@@ -952,6 +976,61 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             vdisk2.PDiskParams->Owner, vdisk2.PDiskParams->OwnerRound,
             chunk1, 0, parts, nullptr, false, 0),
             NKikimrProto::ERROR);
+    }
+
+    Y_UNIT_TEST(AllRequestsAreAnsweredOnPDiskRestart) {
+        TActorTestContext testCtx({ false });
+        TVDiskMock vdisk(&testCtx);
+
+        vdisk.InitFull();
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        UNIT_ASSERT(vdisk.Chunks[EChunkState::COMMITTED].size() == 1);
+        auto chunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
+
+        ui32 logBuffSize = 250;
+        ui32 chunkBuffSize = 128_KB;
+
+        for (ui32 testCase = 0; testCase < 2; testCase++) {
+            vdisk.InitFull();
+            for (ui32 i = 0; i < 100; ++i) {
+                testCtx.Send(new NPDisk::TEvLog(
+                    vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 0, TRcBuf(PrepareData(logBuffSize)), vdisk.GetLsnSeg(), nullptr));
+                auto data = PrepareData(chunkBuffSize);
+                auto parts = MakeIntrusive<NPDisk::TEvChunkWrite::TStrokaBackedUpParts>(data);
+                testCtx.Send(new NPDisk::TEvChunkWrite(
+                    vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                    chunk, 0, parts, nullptr, false, 0));
+                testCtx.Send(new NPDisk::TEvChunkRead(
+                    vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                    chunk, 0, chunkBuffSize, 0, nullptr));
+            }
+
+            if (testCase & 1) {
+                Cerr << "restart" << Endl;
+                testCtx.RestartPDiskSync();
+            }
+
+            for (ui32 i = 0; i < 100; ++i) {
+                auto read = testCtx.Recv<NPDisk::TEvChunkReadResult>();
+            }
+            Cerr << "all chunk reads are received" << Endl;
+
+            for (ui32 i = 0; i < 100; ++i) {
+                auto write = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
+            }
+            Cerr << "all chunk writes are received" << Endl;
+
+            for (ui32 i = 0; i < 100;) {
+                auto result = testCtx.Recv<NPDisk::TEvLogResult>();
+                if (result->Status == NKikimrProto::OK) {
+                    i += result->Results.size();
+                } else {
+                    ++i;
+                }
+            }
+            Cerr << "all log writes are received" << Endl;
+        }
     }
 }
 

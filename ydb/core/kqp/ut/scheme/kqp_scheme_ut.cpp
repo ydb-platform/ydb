@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/fetcher.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
+#include <ydb/core/kqp/workload_service/actors/actors.h>
 #include <ydb/core/kqp/workload_service/ut/common/kqp_workload_service_ut_common.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
@@ -2056,6 +2057,94 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(CreateFamilyWithCompressionLevel) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithCompressionLevel";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName
+                                      << R"(` (
+                Key Uint64,
+                Value1 String,
+                Value2 Uint32,
+                PRIMARY KEY (Key),
+                FAMILY Family1 (
+                     DATA = "test",
+                     COMPRESSION = "lz4",
+                     COMPRESSION_LEVEL = 5
+                ),
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Field `COMPRESSION_LEVEL` is not supported for OLTP tables");
+    }
+
+    Y_UNIT_TEST(AlterCompressionLevelInColumnFamily) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithCompressionLevel";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName
+                                      << R"(` (
+                Key Uint64,
+                Value1 String FAMILY Family1,
+                Value2 Uint32,
+                PRIMARY KEY (Key),
+                FAMILY Family1 (
+                     DATA = "test",
+                     COMPRESSION = "lz4"
+                ),
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto queryAlter = TStringBuilder() << R"(
+            --!syntax_v1
+            ALTER TABLE `)" << tableName << R"(`
+                ALTER FAMILY Family1 SET COMPRESSION_LEVEL 5;)";
+        auto resultAlter = session.ExecuteSchemeQuery(queryAlter).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(resultAlter.GetStatus(), EStatus::BAD_REQUEST, resultAlter.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(resultAlter.GetIssues().ToString(), "Field `COMPRESSION_LEVEL` is not supported for OLTP tables");
+    }
+
+    Y_UNIT_TEST(AddColumnFamilyWithCompressionLevel) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithCompressionLevel";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName
+                                      << R"(` (
+                Key Uint64,
+                Value1 String FAMILY Family1,
+                Value2 Uint32,
+                PRIMARY KEY (Key),
+                FAMILY Family1 (
+                     DATA = "test",
+                     COMPRESSION = "lz4"
+                ),
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto queryAlter = TStringBuilder() << R"(
+            --!syntax_v1
+            ALTER TABLE `)" << tableName << R"(`
+                ADD FAMILY Family2 (
+                     DATA = "test",
+                     COMPRESSION = "lz4",
+                     COMPRESSION_LEVEL = 5
+                );)";
+        auto resultAlter = session.ExecuteSchemeQuery(queryAlter).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(resultAlter.GetStatus(), EStatus::BAD_REQUEST, resultAlter.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(resultAlter.GetIssues().ToString(), "Field `COMPRESSION_LEVEL` is not supported for OLTP tables");
+    }
+
     Y_UNIT_TEST(CreateTableWithDefaultFamily) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -2293,6 +2382,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             );)", tableName.c_str(), precision, scale);
             auto createResult = session.ExecuteSchemeQuery(createQuery).GetValueSync();
 
+            if (precision == 0) {
+                UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::GENERIC_ERROR, createResult.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToString(), "Invalid decimal precision");
+                return;
+            }
+            if (precision == 33) {
+                UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::GENERIC_ERROR, createResult.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToString(), "Invalid decimal parameters");
+                return;
+            }
             if (precision == 36) {
                 UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::GENERIC_ERROR, createResult.GetIssues().ToString());
                 UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToString(), "Invalid decimal precision");
@@ -2323,10 +2422,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(decimalType.Scale, scale);
         };
 
+        createAndCheck(0, 0);
+        createAndCheck(1, 0);
         createAndCheck(2, 1);
         createAndCheck(22, 9);
-        createAndCheck(35, 9);
+        createAndCheck(35, 10);
         createAndCheck(22, 20);
+        createAndCheck(33, 34);
         createAndCheck(36, 35);
         createAndCheck(999, 99);
     }
@@ -2365,8 +2467,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns().size(), 0);
 
             if (type == EIndexTypeSql::GlobalVectorKMeansTree) {
-                const TVectorIndexSettings& vectorIndexSettings = *indexDesc.back().GetVectorIndexSettings();
-                UNIT_ASSERT_VALUES_EQUAL(std::get<TVectorIndexSettings::ESimilarity>(vectorIndexSettings.Metric), TVectorIndexSettings::ESimilarity::InnerProduct);
+                const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.back().GetVectorIndexSettings()).Settings;
+                UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, TVectorIndexSettings::EMetric::InnerProduct);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Float);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
             }
@@ -2407,11 +2509,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns().size(), 1);
 
             if (type == EIndexTypeSql::GlobalVectorKMeansTree) {
-                const TVectorIndexSettings& vectorIndexSettings = *indexDesc.back().GetVectorIndexSettings();
-                UNIT_ASSERT_VALUES_EQUAL(std::get<TVectorIndexSettings::ESimilarity>(vectorIndexSettings.Metric), TVectorIndexSettings::ESimilarity::InnerProduct);
+                const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.back().GetVectorIndexSettings()).Settings;
+                UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, TVectorIndexSettings::EMetric::InnerProduct);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Float);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
-            }            
+            }
         }
     }
 
@@ -2466,7 +2568,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
             auto indexDesc = describe.GetTableDescription();
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPartitioningSettings().GetPartitionSizeMb(), partitionSizeMb);
-        }        
+        }
     }
 
     Y_UNIT_TEST(AlterTableAlterVectorIndex) {
@@ -2483,8 +2585,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     Key Uint64,
                     Embedding String,
                     PRIMARY KEY (Key),
-                    INDEX vector_idx 
-                        GLOBAL USING vector_kmeans_tree 
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
                         ON (Embedding)
                         WITH (similarity=cosine, vector_type=bit, vector_dimension=1)
                 );
@@ -2498,7 +2600,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto indexDesc = describe.GetTableDescription();
             constexpr int defaultPartitionSizeMb = 2048;
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPartitioningSettings().GetPartitionSizeMb(), defaultPartitionSizeMb);
-        }        
+        }
         {
             auto result = session.ExecuteSchemeQuery(R"(
                         ALTER TABLE `/Root/TestTable` ALTER INDEX vector_idx SET AUTO_PARTITIONING_MIN_PARTITIONS_COUNT 1;
@@ -2506,13 +2608,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Only index with one impl table is supported" );
         }
-    }    
+    }
 
     Y_UNIT_TEST(AlterTableAlterMissedIndex) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        CreateSampleTablesWithIndex(session);      
+        CreateSampleTablesWithIndex(session);
         {
             auto result = session.ExecuteSchemeQuery(R"(
                         ALTER TABLE `/Root/SecondaryKeys` ALTER INDEX WrongIndexName SET AUTO_PARTITIONING_MIN_PARTITIONS_COUNT 1;
@@ -2520,7 +2622,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown index name: WrongIndexName");
         }
-    }    
+    }
 
     Y_UNIT_TEST(AlterIndexImplTable) {
         TKikimrRunner kikimr;
@@ -2739,13 +2841,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     Key Uint64,
                     Embedding String,
                     PRIMARY KEY (Key),
-                    INDEX vector_idx 
-                        GLOBAL USING vector_kmeans_tree 
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
                         ON (Embedding)
                         WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)
                 );
             )";
-            
+
             auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -2761,16 +2863,17 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns()[0], "Embedding");
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns().size(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(std::get<NYdb::NTable::TVectorIndexSettings::ESimilarity>(indexDesc.GetVectorIndexSettings()->Metric), NYdb::NTable::TVectorIndexSettings::ESimilarity::InnerProduct);
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetVectorIndexSettings()->VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetVectorIndexSettings()->VectorDimension, 1024);
+            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetVectorIndexSettings()).Settings;
+            UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::InnerProduct);
+            UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
+            UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
         }
         {
             auto describeLevelTable = session.DescribeTable("/Root/TestTable/vector_idx/indexImplLevelTable").GetValueSync();
             UNIT_ASSERT_C(describeLevelTable.IsSuccess(), describeLevelTable.GetIssues().ToString());
             auto describePostingTable = session.DescribeTable("/Root/TestTable/vector_idx/indexImplPostingTable").GetValueSync();
             UNIT_ASSERT_C(describePostingTable.IsSuccess(), describePostingTable.GetIssues().ToString());
-        }   
+        }
     }
 
 
@@ -2789,8 +2892,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     Embedding String,
                     Covered String,
                     PRIMARY KEY (Key),
-                    INDEX vector_idx 
-                        GLOBAL USING vector_kmeans_tree 
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
                         ON (Embedding)
                         COVER (Covered)
                         WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)
@@ -2812,11 +2915,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns()[0], "Embedding");
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns()[0], "Covered");
-            UNIT_ASSERT_VALUES_EQUAL(std::get<NYdb::NTable::TVectorIndexSettings::ESimilarity>(indexDesc.GetVectorIndexSettings()->Metric), NYdb::NTable::TVectorIndexSettings::ESimilarity::InnerProduct);
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetVectorIndexSettings()->VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetVectorIndexSettings()->VectorDimension, 1024);
+            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetVectorIndexSettings()).Settings;
+            UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::InnerProduct);
+            UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
+            UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
         }
-    } 
+    }
 
 
     Y_UNIT_TEST(CreateTableWithVectorIndexCaseIncentive) {
@@ -2833,15 +2937,15 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     Key Uint64,
                     Embedding String,
                     PRIMARY KEY (Key),
-                    INDEX vector_idx 
-                        GLOBAL USING vector_KMEANS_tree 
+                    INDEX vector_idx
+                        GLOBAL USING vector_KMEANS_tree
                         ON (Embedding)
                         WITH (similarity=COSINE, VECTOR_TYPE=float, vector_DIMENSION=1024)
                 );
             )";
             auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }    
+        }
     }
 
     Y_UNIT_TEST(CreateTableWithVectorIndexNoFeatureFlag) {
@@ -2856,8 +2960,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     Embedding String,
                     Covered String,
                     PRIMARY KEY (Key),
-                    INDEX vector_idx 
-                        GLOBAL USING vector_kmeans_tree 
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
                         ON (Embedding)
                         WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)
                 );
@@ -2866,8 +2970,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
         }
-    } 
-   
+    }
+
     Y_UNIT_TEST(CreateTableWithVectorIndexPublicApi) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
@@ -2880,10 +2984,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 .AddNullableColumn("Key", EPrimitiveType::Uint64)
                 .AddNullableColumn("Embedding", EPrimitiveType::String)
                 .SetPrimaryKeyColumn("Key")
-                .AddVectorKMeansTreeSecondaryIndex("vector_idx", {"Embedding"},
-                    { NYdb::NTable::TVectorIndexSettings::EDistance::Cosine, 
-                      NYdb::NTable::TVectorIndexSettings::EVectorType::Float, 
-                      1024});
+                .AddVectorKMeansTreeIndex("vector_idx", {"Embedding"}, {TVectorIndexSettings{ 
+                    NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
+                    NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
+                    1024,
+                }});
 
             auto result = session.CreateTable("/Root/TestTable", builder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -2899,11 +3004,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns()[0], "Embedding");
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns().size(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(std::get<NYdb::NTable::TVectorIndexSettings::EDistance>(indexDesc.GetVectorIndexSettings()->Metric), NYdb::NTable::TVectorIndexSettings::EDistance::Cosine);
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetVectorIndexSettings()->VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetVectorIndexSettings()->VectorDimension, 1024);
+            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetVectorIndexSettings()).Settings;
+            UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
+            UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
+            UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
         }
-    } 
+    }
 
     Y_UNIT_TEST(CreateTableWithVectorIndexCoveredPublicApi) {
         NKikimrConfig::TFeatureFlags featureFlags;
@@ -2918,10 +3024,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 .AddNullableColumn("Embedding", EPrimitiveType::String)
                 .AddNullableColumn("Covered", EPrimitiveType::String)
                 .SetPrimaryKeyColumn("Key")
-                .AddVectorKMeansTreeSecondaryIndex("vector_idx", {"Embedding"}, {"Covered"},
-                    { NYdb::NTable::TVectorIndexSettings::EDistance::Cosine, 
-                      NYdb::NTable::TVectorIndexSettings::EVectorType::Float, 
-                      1024});
+                .AddVectorKMeansTreeIndex("vector_idx", {"Embedding"}, {"Covered"}, {TVectorIndexSettings{ 
+                    NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
+                    NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
+                    1024,
+                }});
 
             auto result = session.CreateTable("/Root/TestTable", builder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -2938,11 +3045,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns()[0], "Embedding");
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns()[0], "Covered");
-            UNIT_ASSERT_VALUES_EQUAL(std::get<NYdb::NTable::TVectorIndexSettings::EDistance>(indexDesc.GetVectorIndexSettings()->Metric), NYdb::NTable::TVectorIndexSettings::EDistance::Cosine);
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetVectorIndexSettings()->VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetVectorIndexSettings()->VectorDimension, 1024);
+            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetVectorIndexSettings()).Settings;
+            UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
+            UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
+            UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
         }
-    }    
+    }
 
     Y_UNIT_TEST(AlterTableWithDecimalColumn) {
         TKikimrRunner kikimr;
@@ -2968,6 +3076,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )", tableName.c_str(), columnName.c_str(), precision, scale);
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
 
+            if (precision == 0) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid decimal precision");
+                return;
+            }
+            if (precision == 33) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid decimal parameters");
+                return;
+            }
             if (precision == 36) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
                 UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid decimal precision");
@@ -2982,10 +3100,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         };
 
+        addColumn(0, 0);
+        addColumn(1, 0);
         addColumn(2, 1);
         addColumn(22, 9);
-        addColumn(35, 9);
+        addColumn(35, 10);
         addColumn(22, 20);
+        addColumn(33, 34);
         addColumn(36, 35);
         addColumn(999, 99);
 
@@ -2993,7 +3114,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
         auto tableDesc = describe.GetTableDescription();
         TVector<TTableColumn> columns = tableDesc.GetTableColumns();
-        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 7);
 
         auto checkColumn = [&] (ui64 columnIdx, ui32 precision, ui32 scale) {
             TType valueType = columns[columnIdx].Type;
@@ -3002,16 +3123,17 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_EQUAL(optionalKind, TTypeParser::ETypeKind::Optional);
             parser.OpenOptional();
             auto kind = parser.GetKind();
-            UNIT_ASSERT_EQUAL(kind, TTypeParser::ETypeKind::Decimal);
+            UNIT_ASSERT_VALUES_EQUAL(kind, TTypeParser::ETypeKind::Decimal);
             TDecimalType decimalType = parser.GetDecimal();
             UNIT_ASSERT_VALUES_EQUAL(decimalType.Precision, precision);
             UNIT_ASSERT_VALUES_EQUAL(decimalType.Scale, scale);
         };
 
-        checkColumn(2, 2, 1);
-        checkColumn(3, 22, 9);
-        checkColumn(4, 35,9);
-        checkColumn(5, 22, 20);
+        checkColumn(0,22, 20);
+        checkColumn(3, 1, 0);
+        checkColumn(4, 2, 1);
+        checkColumn(5, 22,9);
+        checkColumn(6, 35, 10);
     }
 
     Y_UNIT_TEST(CreateUserWithPassword) {
@@ -4371,6 +4493,64 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(ChangefeedTopicAutoPartitioning) {
+        using namespace NTopic;
+
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto pq = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        { // Uint64 key
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table_tap` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        { // default
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table_tap` ADD CHANGEFEED `feed_1` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON', TOPIC_MIN_ACTIVE_PARTITIONS = 7,  TOPIC_MAX_ACTIVE_PARTITIONS = 777, TOPIC_AUTO_PARTITIONING = 'ENABLED'
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto desc = pq.DescribeTopic("/Root/table_tap/feed_1").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitions().size(), 7);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), 7);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitioningSettings().GetMaxActivePartitions(), 777);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy(), NYdb::NTopic::EAutoPartitioningStrategy::ScaleUp);
+        }
+
+        { // disabled
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table_tap` ADD CHANGEFEED `feed_2` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON', TOPIC_AUTO_PARTITIONING='DISABLED'
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto desc = pq.DescribeTopic("/Root/table_tap/feed_2").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy(), NYdb::NTopic::EAutoPartitioningStrategy::Disabled);
+        }
+    }
+
     Y_UNIT_TEST(ChangefeedAttributes) {
         TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
         auto db = kikimr.GetTableClient();
@@ -4936,6 +5116,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(AlterColumnTableTiering) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
+        runnerSettings.SetEnableTieringInColumnShard(true);
         TKikimrRunner kikimr(runnerSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -6950,7 +7131,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // DROP RESOURCE POOL CLASSIFIER
         checkQuery("DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier;",
             EStatus::GENERIC_ERROR,
-            "Classifier with name MyResourcePoolClassifier not found in database /Root");
+            "Classifier with name MyResourcePoolClassifier not found in database with id /Root");
     }
 
     Y_UNIT_TEST(DisableResourcePoolClassifiersOnServerless) {
@@ -7131,14 +7312,17 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "The rank could not be set automatically, the maximum rank of the resource pool classifier is too high: 9223372036854775807");
     }
 
-    TString FetchResourcePoolClassifiers(TKikimrRunner& kikimr) {
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-        const TActorId edgeActor = runtime.AllocateEdgeActor();
-        runtime.Send(NMetadata::NProvider::MakeServiceId(runtime.GetNodeId()), edgeActor, new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TResourcePoolClassifierSnapshotsFetcher>()));
+    TString FetchResourcePoolClassifiers(TTestActorRuntime& runtime, ui32 nodeIndex) {
+        const TActorId edgeActor = runtime.AllocateEdgeActor(nodeIndex);
+        runtime.Send(NMetadata::NProvider::MakeServiceId(runtime.GetNodeId(nodeIndex)), edgeActor, new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TResourcePoolClassifierSnapshotsFetcher>()), nodeIndex);
 
         const auto response = runtime.GrabEdgeEvent<NMetadata::NProvider::TEvRefreshSubscriberData>(edgeActor);
         UNIT_ASSERT(response);
         return response->Get()->GetSnapshotAs<TResourcePoolClassifierSnapshot>()->SerializeToString();
+    }
+
+    TString FetchResourcePoolClassifiers(TKikimrRunner& kikimr) {
+        return FetchResourcePoolClassifiers(*kikimr.GetTestServer().GetRuntime(), 0);
     }
 
     Y_UNIT_TEST(CreateResourcePoolClassifier) {
@@ -7172,6 +7356,31 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"config\":{\"member_name\":\"test@user\",\"resource_pool\":\"test_pool\"},\"database\":\"\\/Root\"},{\"rank\":1020,\"name\":\"AnotherResourcePoolClassifier\",\"config\":{\"member_name\":\"another@user\",\"resource_pool\":\"test_pool\"},\"database\":\"\\/Root\"}]}");
+    }
+
+    Y_UNIT_TEST(CreateResourcePoolClassifierOnServerless) {
+        auto ydb = NWorkload::TYdbSetupSettings()
+            .CreateSampleTenants(true)
+            .EnableResourcePoolsOnServerless(true)
+            .Create();
+
+        const auto& serverlessTenant = ydb->GetSettings().GetServerlessTenantName();
+        ydb->ExecuteQueryRetry("Wait EnableResourcePoolsOnServerless", R"(
+            CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                RANK=20,
+                RESOURCE_POOL="test_pool"
+            );)",
+            NWorkload::TQueryRunnerSettings()
+                .PoolId("")
+                .Database(serverlessTenant)
+                .NodeIndex(1)
+        );
+
+        const auto pathId = ydb->FetchDatabase(serverlessTenant)->Get()->PathId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            FetchResourcePoolClassifiers(*ydb->GetRuntime(), 1),
+            TStringBuilder() << "{\"resource_pool_classifiers\":[{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"config\":{\"resource_pool\":\"test_pool\"},\"database\":\"" << pathId.OwnerId << ":" << pathId.LocalPathId << ":\\/Root\\/test-serverless\"}]}"
+        );
     }
 
     Y_UNIT_TEST(DoubleCreateResourcePoolClassifier) {
@@ -7283,7 +7492,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Classifier with name MyResourcePoolClassifier not found in database /Root");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Classifier with name MyResourcePoolClassifier not found in database with id /Root");
     }
 
     Y_UNIT_TEST(DropResourcePoolClassifier) {
@@ -7330,7 +7539,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto query = "DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier;";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Classifier with name MyResourcePoolClassifier not found in database /Root");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Classifier with name MyResourcePoolClassifier not found in database with id /Root");
     }
 
     Y_UNIT_TEST(DisableMetadataObjectsOnServerless) {
@@ -7516,11 +7725,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             tableInserter.AddRow().Add(1).Add(1).Add(7).Add((TInstant::Now() - TDuration::Days(30)).MilliSeconds());
             tableInserter.AddRow().Add(1).Add(2).Add(7).Add((TInstant::Now() - TDuration::Days(30)).MilliSeconds());
             testHelper.BulkUpsert(testTable, tableInserter);
-        }
-
-        while (csController->GetInsertFinishedCounter().Val() == 0) {
-            Cout << "Wait indexation..." << Endl;
-            Sleep(TDuration::Seconds(2));
         }
 
         // const auto ruleName = testHelper.CreateTieringRule("tier1", "created_att");
@@ -8805,7 +9009,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         testHelper.CreateTable(testTable);
         std::string jsonString = R"({"col1": "val1", "obj": {"obj_col2_int": 16}})";
         auto maybeJsonDoc = NBinaryJson::SerializeToBinaryJson(jsonString);
-        Y_ABORT_UNLESS(maybeJsonDoc.Defined());
+        Y_ABORT_UNLESS(maybeJsonDoc.IsSuccess());
         const std::string jsonBin(maybeJsonDoc->Data(), maybeJsonDoc->Size());
         {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));

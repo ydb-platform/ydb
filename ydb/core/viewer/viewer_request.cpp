@@ -9,6 +9,8 @@
 #include "viewer_bsgroupinfo.h"
 #include "wb_req.h"
 
+#include <library/cpp/json/json_reader.h>
+
 namespace NKikimr::NViewer {
 
 using namespace NActors;

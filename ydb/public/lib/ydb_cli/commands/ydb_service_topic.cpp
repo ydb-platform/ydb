@@ -306,6 +306,11 @@ namespace {
             .Optional()
             .StoreResult(&MaxActivePartitions_);
         AddAutoPartitioning(config, false);
+
+        config.Opts->AddLongOption("partitions-per-tablet", "Partitions per PQ tablet")
+            .Optional()
+            .Hidden()
+            .StoreResult(&PartitionsPerTablet_);
     }
 
     void TCommandTopicCreate::Parse(TConfig& config) {
@@ -347,6 +352,10 @@ namespace {
 
         settings.RetentionPeriod(TDuration::Hours(RetentionPeriodHours_));
         settings.RetentionStorageMb(RetentionStorageMb_);
+
+        if (PartitionsPerTablet_.Defined()) {
+            settings.AddAttribute("_partitions_per_tablet", ToString(*PartitionsPerTablet_));
+        }
 
         auto status = topicClient.CreateTopic(TopicName, settings).GetValueSync();
         ThrowOnError(status);
@@ -826,6 +835,7 @@ namespace {
 
     NTopic::TReadSessionSettings TCommandTopicRead::PrepareReadSessionSettings() {
         NTopic::TReadSessionSettings settings;
+        settings.AutoPartitioningSupport(true);
         settings.ConsumerName(Consumer_);
         // settings.ReadAll(); // TODO(shmel1k@): change to read only original?
         if (Timestamp_.Defined()) {
@@ -895,6 +905,7 @@ namespace {
         TString description = PrepareAllowedCodecsDescription("Client-side compression algorithm. When read, data will be uncompressed transparently with a codec used on write", allowedCodecs);
         config.Opts->AddLongOption("codec", description)
             .Optional()
+            .DefaultValue("RAW")
             .StoreResult(&CodecStr_);
         AllowedCodecs_ = allowedCodecs;
     }

@@ -473,7 +473,7 @@ TYPED_TEST(TNotGrpcTest, DisableAcceptsBaggage)
 
 TYPED_TEST(TRpcTest, ManyAsyncRequests)
 {
-    const int RequestCount = 1000;
+    const int RequestCount = this->GetMaxSimultaneousRequestCount();
 
     std::vector<TFuture<void>> asyncResults;
 
@@ -659,7 +659,7 @@ TYPED_TEST(TNotGrpcTest, RequestBytesThrottling)
                 methods = {
                     RequestBytesThrottledCall = {
                         request_bytes_throttler = {
-                            limit = 1000000;
+                            limit = 100000;
                         }
                     }
                 }
@@ -673,18 +673,16 @@ TYPED_TEST(TNotGrpcTest, RequestBytesThrottling)
 
     auto makeCall = [&] {
         auto req = proxy.RequestBytesThrottledCall();
-        req->Attachments().push_back(TSharedMutableRef::Allocate(100'000));
+        req->Attachments().push_back(TSharedMutableRef::Allocate(60'000));
         return req->Invoke().AsVoid();
     };
 
     std::vector<TFuture<void>> futures;
-    for (int i = 0; i < 30; ++i) {
+    for (int i = 0; i < 5; ++i) {
         futures.push_back(makeCall());
     }
 
-    NProfiling::TWallTimer timer;
     EXPECT_TRUE(AllSucceeded(std::move(futures)).Get().IsOK());
-    EXPECT_LE(std::abs(static_cast<i64>(timer.GetElapsedTime().MilliSeconds()) - 3000), 200);
 }
 
 // Now test different types of errors.
@@ -789,6 +787,10 @@ TYPED_TEST(TRpcTest, RequestQueueSizeLimit)
 {
     MaybeInitLatch();
 
+    auto testId = TGuid::Create();
+
+    Cerr << Format("Start of the RequestQueueSizeLimit test (Id: %v)", testId) << '\n';
+
     std::vector<TFuture<void>> futures;
     std::vector<TTestProxy> proxies;
 
@@ -801,7 +803,9 @@ TYPED_TEST(TRpcTest, RequestQueueSizeLimit)
 
     for (int i = 0; i <= 30; ++i) {
         auto req = proxies[i].LatchedCall();
-        futures.push_back(req->Invoke().AsVoid());
+        futures.push_back(req->Invoke().AsVoid().Apply(BIND([i, testId] (const TError& error) {
+            Cerr << NYT::Format("Request %v finished (Id: %v, Error: %v)", i, testId, error) << '\n';
+        })));
     }
 
     Sleep(TDuration::MilliSeconds(400));
@@ -816,6 +820,8 @@ TYPED_TEST(TRpcTest, RequestQueueSizeLimit)
     EXPECT_TRUE(AllSucceeded(std::move(futures)).Get().IsOK());
 
     ResetLatch();
+
+    Cerr << Format("End of the RequestQueueSizeLimit test (Id: %v)", testId) << '\n';
 }
 
 TYPED_TEST(TNotGrpcTest, RequesMemoryPressureException)

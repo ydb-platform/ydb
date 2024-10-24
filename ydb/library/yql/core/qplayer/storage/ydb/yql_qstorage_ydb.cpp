@@ -32,9 +32,9 @@ void ThrowOnError(const NYdb::TStatus& status) {
 }
 
 void ProcessString(const TString& str, ui64& totalBytes, ui64& checksum) {
-    ui32 length = str.Size();
+    ui32 length = str.size();
     checksum = crc64(&length, sizeof(length), checksum);
-    checksum = crc64(str.Data(), length, checksum);
+    checksum = crc64(str.data(), length, checksum);
     totalBytes += length;
 }
 

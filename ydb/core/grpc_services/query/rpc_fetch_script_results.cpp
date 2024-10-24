@@ -57,7 +57,7 @@ public:
         }
 
         RowsOffset = 0;
-        if (!req->fetch_token().Empty()) {
+        if (!req->fetch_token().empty()) {
             auto fetch_token = TryFromString<ui64>(req->fetch_token());
             if (fetch_token) {
                 RowsOffset = *fetch_token;

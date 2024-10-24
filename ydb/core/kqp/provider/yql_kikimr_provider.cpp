@@ -601,7 +601,7 @@ void FillLiteralProtoImpl(const NNodes::TCoDataCtor& literal, TProto& proto) {
             break;
         case EDataSlot::String:
         case EDataSlot::DyNumber:
-            protoValue.SetBytes(value.Data(), value.Size());
+            protoValue.SetBytes(value.data(), value.size());
             break;
         case EDataSlot::Utf8:
         case EDataSlot::Json:
@@ -630,7 +630,7 @@ void FillLiteralProtoImpl(const NNodes::TCoDataCtor& literal, TProto& proto) {
             break;
         }
         case EDataSlot::Uuid: {
-            const ui64* uuidData = reinterpret_cast<const ui64*>(value.Data());
+            const ui64* uuidData = reinterpret_cast<const ui64*>(value.data());
             protoValue.SetLow128(uuidData[0]);
             protoValue.SetHi128(uuidData[1]);
             break;
@@ -744,7 +744,7 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto
             break;
         case EDataSlot::String:
         case EDataSlot::DyNumber:
-            protoValue.set_bytes_value(value.Data(), value.Size());
+            protoValue.set_bytes_value(value.data(), value.size());
             break;
         case EDataSlot::Utf8:
         case EDataSlot::Json:
@@ -773,7 +773,7 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto
             break;
         }
         case EDataSlot::Uuid: {
-            const ui64* uuidData = reinterpret_cast<const ui64*>(value.Data());
+            const ui64* uuidData = reinterpret_cast<const ui64*>(value.data());
             protoValue.set_low_128(uuidData[0]);
             protoValue.set_high_128(uuidData[1]);
             break;
@@ -831,7 +831,7 @@ void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperat
     TableDescriptionToTableInfoImpl(desc, op, std::back_inserter(infos));
 }
 
-Ydb::Table::VectorIndexSettings_Distance VectorIndexSettingsParseDistance(std::string_view distance) {
+Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseDistance(std::string_view distance) {
     if (distance == "cosine")
         return Ydb::Table::VectorIndexSettings::DISTANCE_COSINE;
     else if (distance == "manhattan")
@@ -842,7 +842,7 @@ Ydb::Table::VectorIndexSettings_Distance VectorIndexSettingsParseDistance(std::s
         YQL_ENSURE(false, "Wrong index setting distance: " << distance);
 };
 
-Ydb::Table::VectorIndexSettings_Similarity VectorIndexSettingsParseSimilarity(std::string_view similarity) {
+Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseSimilarity(std::string_view similarity) {
     if (similarity == "cosine")
         return Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE;
     else if (similarity == "inner_product")

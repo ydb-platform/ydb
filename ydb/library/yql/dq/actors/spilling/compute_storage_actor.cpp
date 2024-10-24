@@ -9,6 +9,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <util/generic/set.h>
 
 namespace NYql::NDq {
 

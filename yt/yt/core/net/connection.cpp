@@ -645,6 +645,11 @@ public:
             !PeerDisconnectedList_.IsFired();
     }
 
+    bool IsReusable()
+    {
+        return IsIdle();
+    }
+
     TFuture<void> Abort(const TError& error)
     {
         YT_LOG_DEBUG(error, "Aborting connection");
@@ -1120,12 +1125,12 @@ private:
 
     void AbortFromReadTimeout()
     {
-        YT_UNUSED_FUTURE(Abort(TError("Read timeout")));
+        YT_UNUSED_FUTURE(Abort(TError(NYT::EErrorCode::Timeout, "Read timeout")));
     }
 
     void AbortFromWriteTimeout()
     {
-        YT_UNUSED_FUTURE(Abort(TError("Write timeout")));
+        YT_UNUSED_FUTURE(Abort(TError(NYT::EErrorCode::Timeout, "Write timeout")));
     }
 
     void OnPeerDisconnected()
@@ -1211,6 +1216,11 @@ public:
     bool IsIdle() const override
     {
         return Impl_->IsIdle();
+    }
+
+    bool IsReusable() const override
+    {
+        return Impl_->IsReusable();
     }
 
     TFuture<void> Abort() override

@@ -134,14 +134,16 @@ public:
 
         TString cachedMessage, cachedMessageSsl;
 
-        if (services.empty() && !LookupResponse->CachedMessageData->CachedMessage.empty() &&
+        TString endpointId = Request->GetEndpointId();
+
+        if (endpointId.empty() && services.empty() && !LookupResponse->CachedMessageData->CachedMessage.empty() &&
                 !LookupResponse->CachedMessageData->CachedMessageSsl.empty()) {
             cachedMessage = LookupResponse->CachedMessageData->CachedMessage;
             cachedMessageSsl = LookupResponse->CachedMessageData->CachedMessageSsl;
         } else {
             auto cachedMessageData = NDiscovery::CreateCachedMessage(
                 {}, std::move(LookupResponse->CachedMessageData->InfoEntries),
-                std::move(services), NameserviceResponse);
+                std::move(services), std::move(endpointId), NameserviceResponse);
             cachedMessage = std::move(cachedMessageData.CachedMessage);
             cachedMessageSsl = std::move(cachedMessageData.CachedMessageSsl);
         }

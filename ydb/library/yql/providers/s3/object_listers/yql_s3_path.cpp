@@ -112,7 +112,7 @@ TMaybe<TString> BuildS3FilePattern(
     TString effectiveFilePattern = filePattern ? filePattern : "*";
 
     if (partitionedBy.empty()) {
-        if (path.Empty()) {
+        if (path.empty()) {
             return "Can not read from empty path";
         }
 

@@ -29,7 +29,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const TString& uid, const TKqpQueryId& query,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TString& clientAddress,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
     TKqpDbCountersPtr dbCounters, const TGUCSettings::TPtr& gUCSettings, const TMaybe<TString>& applicationName,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, NWilson::TTraceId traceId = {},

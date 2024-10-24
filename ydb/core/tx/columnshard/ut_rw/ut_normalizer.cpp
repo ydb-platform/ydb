@@ -176,6 +176,12 @@ public:
         Y_ABORT_UNLESS(info.SerializeToString(&serialized));
         db.Table<Schema::SchemaPresetVersionInfo>().Key(11, 1, 1).Update(NIceDb::TUpdate<Schema::SchemaPresetVersionInfo::InfoProto>(serialized));
 
+        // Add invalid widow table version, if SchemaVersionCleaner will not erase it, then test will fail
+        NKikimrTxColumnShard::TTableVersionInfo versionInfo;
+        versionInfo.MutableSchema()->SetVersion(minVersion - 1);
+        Y_ABORT_UNLESS(versionInfo.SerializeToString(&serialized));
+        db.Table<Schema::TableVersionInfo>().Key(1, 1, 1).Update(NIceDb::TUpdate<Schema::TableVersionInfo::InfoProto>(serialized));
+
         db.Table<Schema::SchemaPresetInfo>().Key(10).Update(NIceDb::TUpdate<Schema::SchemaPresetInfo::Name>("default"));
 
     }
@@ -212,8 +218,26 @@ public:
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
         for (size_t pathId = 100; pathId != 299; ++pathId) {
-            for (size_t portionId = 1000; portionId != 1199; ++portionId) {
-                db.Table<Schema::IndexPortions>().Key(pathId, portionId).Update();
+            for (size_t portionId = pathId * 100000 + 1000; portionId != pathId * 100000 + 1199; ++portionId) {
+                NKikimrTxColumnShard::TIndexPortionMeta metaProto;
+                metaProto.SetDeletionsCount(0);
+                metaProto.SetIsInserted(true);
+
+                const auto schema = std::make_shared<arrow::Schema>(
+                    arrow::FieldVector({ std::make_shared<arrow::Field>("key1", arrow::uint64()), std::make_shared<arrow::Field>("key2", arrow::uint64()) }));
+                auto batch = NArrow::MakeEmptyBatch(schema, 1);
+                NArrow::TFirstLastSpecialKeys keys(batch);
+                metaProto.SetPrimaryKeyBorders(keys.SerializePayloadToString());
+                metaProto.MutableRecordSnapshotMin()->SetPlanStep(0);
+                metaProto.MutableRecordSnapshotMin()->SetTxId(0);
+                metaProto.MutableRecordSnapshotMax()->SetPlanStep(0);
+                metaProto.MutableRecordSnapshotMax()->SetTxId(0);
+                db.Table<Schema::IndexPortions>()
+                    .Key(pathId, portionId)
+                    .Update(NIceDb::TUpdate<Schema::IndexPortions::SchemaVersion>(1),
+                        NIceDb::TUpdate<Schema::IndexPortions::Metadata>(metaProto.SerializeAsString()),
+                        NIceDb::TUpdate<Schema::IndexPortions::MinSnapshotPlanStep>(10),
+                        NIceDb::TUpdate<Schema::IndexPortions::MinSnapshotTxId>(10));
             }
         }
     }
@@ -315,11 +339,6 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         {
             auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(11, txId), schema);
             UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 20048);
-            while (!csControllerGuard->GetInsertFinishedCounter().Val()) {
-                Cerr << csControllerGuard->GetInsertStartedCounter().Val() << Endl;
-                Wakeup(runtime, writer.GetSender(), TTestTxConfig::TxTablet0);
-                runtime.SimulateSleep(TDuration::Seconds(1));
-            }
         }
         RebootTablet(runtime, TTestTxConfig::TxTablet0, writer.GetSender());
 

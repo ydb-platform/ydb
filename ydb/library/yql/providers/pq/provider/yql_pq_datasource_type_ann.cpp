@@ -137,6 +137,11 @@ public:
         }
 
         TDqPqTopicSource topicSource = input.Cast<TDqPqTopicSource>();
+
+        if (!EnsureWorldType(topicSource.World().Ref(), ctx)) {
+            return TStatus::Error;
+        }
+
         TPqTopic topic = topicSource.Topic();
 
         if (!EnsureCallable(topic.Ref(), ctx)) {

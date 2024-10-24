@@ -4,6 +4,8 @@
 #include <ydb/core/persqueue/utils.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <util/generic/set.h>
+
 #define LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
 
 namespace NKikimr::NKqp::NTopic {

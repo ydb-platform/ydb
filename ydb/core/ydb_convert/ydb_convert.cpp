@@ -512,7 +512,7 @@ Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const Ydb::Value& valu
         case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
             CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "JsonDocument");
             const auto binaryJson = NBinaryJson::SerializeToBinaryJson(value.text_value());
-            if (!binaryJson.Defined()) {
+            if (binaryJson.IsFail()) {
                 throw yexception() << "Invalid JsonDocument value";
             }
             res.SetBytes(binaryJson->Data(), binaryJson->Size());
@@ -524,7 +524,7 @@ Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const Ydb::Value& valu
             if (!dyNumber.Defined()) {
                 throw yexception() << "Invalid DyNumber value";
             }
-            res.SetBytes(dyNumber->Data(), dyNumber->Size());
+            res.SetBytes(dyNumber->data(), dyNumber->size());
             break;
         }
         case NUdf::TDataType<char*>::Id: {
@@ -1238,7 +1238,7 @@ bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Val
         }
     case NScheme::NTypeIds::JsonDocument : {
         const auto binaryJson = NBinaryJson::SerializeToBinaryJson(val.Gettext_value());
-        if (!binaryJson.Defined()) {
+        if (binaryJson.IsFail()) {
             err = "Invalid JSON for JsonDocument provided";
             return false;
         }
@@ -1416,7 +1416,7 @@ void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeI
     case EPrimitiveType::Uuid: {
         ui64 hi;
         ui64 lo;
-        NUuid::UuidBytesToHalfs(cell.AsBuf().Data(), 16, hi, lo);
+        NUuid::UuidBytesToHalfs(cell.AsBuf().data(), 16, hi, lo);
         vb.Uuid(TUuidValue(lo, hi));
         break;
     }

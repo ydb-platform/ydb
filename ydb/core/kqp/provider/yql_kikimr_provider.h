@@ -493,6 +493,10 @@ public:
         return Database;
     }
 
+    TString GetDatabaseId() const {
+        return DatabaseId;
+    }
+
     const TString& GetSessionId() const {
         return SessionId;
     }
@@ -503,6 +507,10 @@ public:
 
     void SetDatabase(const TString& database) {
         Database = database;
+    }
+
+    void SetDatabaseId(const TString& databaseId) {
+        DatabaseId = databaseId;
     }
 
     void SetSessionId(const TString& sessionId) {
@@ -543,6 +551,7 @@ private:
     TString UserName;
     TString Cluster;
     TString Database;
+    TString DatabaseId;
     TString SessionId;
     TKikimrConfiguration::TPtr Configuration;
     TIntrusivePtr<TKikimrTablesData> TablesData;

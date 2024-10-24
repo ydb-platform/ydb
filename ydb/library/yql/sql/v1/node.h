@@ -184,6 +184,7 @@ namespace NSQLTranslationV1 {
         virtual bool SetViewName(TContext& ctx, TPosition pos, const TString& view);
         virtual bool SetPrimaryView(TContext& ctx, TPosition pos);
         void UseAsInner();
+        void DisableSort();
         virtual bool UsedSubquery() const;
         virtual bool IsSelect() const;
         virtual bool HasSelectResult() const;
@@ -275,6 +276,7 @@ namespace NSQLTranslationV1 {
         bool ImplicitLabel = false;
         mutable TNodeState State;
         bool AsInner = false;
+        bool DisableSort_ = false;
     };
     typedef INode::TPtr TNodePtr;
 
@@ -1155,6 +1157,7 @@ namespace NSQLTranslationV1 {
         TIdentifier Name;
         TNodePtr Data;
         TNodePtr Compression;
+        TNodePtr CompressionLevel;
     };
 
     struct TVectorIndexSettings {
@@ -1176,10 +1179,12 @@ namespace NSQLTranslationV1 {
             , Bit           /* "bit" */
         };
 
-        using TMetric = std::variant<std::monostate, EDistance, ESimilarity>;
-        TMetric Metric;
+        std::optional<EDistance> Distance;
+        std::optional<ESimilarity> Similarity;
         std::optional<EVectorType> VectorType;
-        std::optional<ui32> VectorDimension;
+        ui32 VectorDimension = 0;
+        ui32 Clusters = 0;
+        ui32 Levels = 0;
 
         bool Validate(TContext& ctx) const;
     };
@@ -1218,7 +1223,9 @@ namespace NSQLTranslationV1 {
         TNodePtr VirtualTimestamps;
         TNodePtr ResolvedTimestamps;
         TNodePtr RetentionPeriod;
+        TNodePtr TopicAutoPartitioning;
         TNodePtr TopicPartitions;
+        TNodePtr TopicMaxActivePartitions;
         TNodePtr AwsRegion;
         std::optional<std::variant<TLocalSinkSettings>> SinkSettings;
     };

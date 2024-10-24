@@ -28,7 +28,7 @@ https://github.com/ydb-platform/ydb/blob/main/ydb/apps/dstool/README.md
 
 setuptools.setup(
     name="ydb-dstool",
-    version="0.0.9",
+    version="0.0.12",
     description="YDB Distributed Storage Administration Tool",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -64,7 +64,7 @@ setuptools.setup(
         "grpcio>=1.5.0",
         "packaging"
     ),
-    python_requires=">=3.6",
+    python_requires=">=3.7",
     entry_points={
         "console_scripts": [
             "ydb-dstool = ydb.apps.dstool.main:main",

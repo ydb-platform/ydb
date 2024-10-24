@@ -27,6 +27,11 @@ struct TAggregatorFactories {
 
 const IBlockAggregatorFactory& GetBlockAggregatorFactory(TStringBuf name) {
     const auto& f = Singleton<TAggregatorFactories>()->Factories;
+    TStringBuf left, right;
+    if (name.TrySplit('#', left, right)) {
+        name = left;
+    }
+
     auto it = f.find(name);
     if (it == f.end()) {
         throw yexception() << "Unsupported block aggregation function: " << name;

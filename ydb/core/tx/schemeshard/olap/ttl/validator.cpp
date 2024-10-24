@@ -1,6 +1,5 @@
 #include "validator.h"
 #include <ydb/core/tx/schemeshard/common/validation.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -73,10 +72,8 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
             correct = true;
         } else {
             for (auto&& [_, i] : indexes.GetIndexes()) {
-                auto meta = i.GetIndexMeta().GetObjectPtrOptionalAs<NOlap::NIndexes::NMax::TIndexMeta>();
-                if (!meta) {
-                    continue;
-                } else if (meta->GetColumnId() == column->GetId()) {
+                auto proto = i.GetIndexMeta().SerializeToProto();
+                if (proto.HasMaxIndex() && proto.GetMaxIndex().GetColumnId() == column->GetId()) {
                     correct = true;
                     break;
                 }

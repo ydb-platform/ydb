@@ -69,7 +69,7 @@ public:
     TMaybe<TFilePathWithMd5> GetSystemModulePath(const TStringBuf& moduleName) const override {
         with_lock(Lock_) {
             TString moduleNameStr(moduleName);
-            if (!UdfIndex_->ContainsModule(moduleNameStr)) {
+            if (!UdfIndex_->ContainsModuleStrict(moduleNameStr)) {
                 return Nothing();
             }
 
@@ -115,7 +115,7 @@ public:
 
     bool ContainsModule(const TStringBuf& moduleName) const override {
         TString moduleNameStr = TString(moduleName);
-        if (UdfIndex_->ContainsModule(moduleNameStr)) {
+        if (UdfIndex_->ContainsModuleStrict(moduleNameStr)) {
             return true;
         }
 
@@ -142,14 +142,26 @@ private:
         */
 
         TString moduleNameStr = TString(moduleName);
-        if (!UdfIndex_->ContainsModule(moduleNameStr)) {
+        auto moduleStatus = UdfIndex_->ContainsModule(moduleNameStr);
+        if (moduleStatus == TUdfIndex::EStatus::NotFound) {
             fallbackFunction = &function;
             return true;
         }
 
+        if (moduleStatus == TUdfIndex::EStatus::Ambigious) {
+            ctx.AddError(TIssue(function.Pos, TStringBuilder() << "Ambigious module name: " << moduleName));
+            return false;
+        }
+
         TFunctionInfo info;
-        if (!UdfIndex_->FindFunction(moduleNameStr, function.Name, info)) {
+        auto functionStatus = UdfIndex_->FindFunction(moduleNameStr, function.Name, info);
+        if (functionStatus == TUdfIndex::EStatus::NotFound) {
             ctx.AddError(TIssue(function.Pos, TStringBuilder() << "Function not found: " << function.Name));
+            return false;
+        }
+
+        if (functionStatus == TUdfIndex::EStatus::Ambigious) {
+            ctx.AddError(TIssue(function.Pos, TStringBuilder() << "Ambigious function: " << function.Name));
             return false;
         }
 
@@ -161,6 +173,7 @@ private:
         additionalImport = &file->Import_;
 
         if (info.IsTypeAwareness) {
+            function.Name = info.Name;
             fallbackFunction = &function;
             return true;
         }
@@ -170,6 +183,7 @@ private:
             return false;
         }
 
+        function.NormalizedName = info.Name;
         function.CallableType = ParseTypeFromYson(TStringBuf{info.CallableType}, ctx, function.Pos);
         if (!function.CallableType) {
             ctx.AddError(TIssue(function.Pos, TStringBuilder() << "Failed to build callable type from YSON for function " << function.Name));
@@ -205,26 +219,29 @@ private:
     TResourceFile::TPtr DownloadFileWithModule(const TStringBuf& module) const {
         TString moduleName(module);
 
-        const auto it = DownloadedFiles_.find(module);
-        if (it != DownloadedFiles_.end()) {
-            return it->second;
-        }
-
         auto resource = UdfIndex_->FindResourceByModule(moduleName);
         if (!resource) {
             ythrow yexception() << "No resource has been found for registered module " << moduleName;
+        }
+
+        auto canonizedModuleName = moduleName;
+        Y_ENSURE(UdfIndex_->CanonizeModule(canonizedModuleName));
+
+        const auto it = DownloadedFiles_.find(canonizedModuleName);
+        if (it != DownloadedFiles_.end()) {
+            return it->second;
         }
 
         // token is empty for urls for now
         // assumption: file path is frozen already, no need to put into file storage
         const TDownloadLink& downloadLink = resource->Link;
         TFileLinkPtr link = downloadLink.IsUrl ? FileStorage_->PutUrl(downloadLink.Path, {}) : CreateFakeFileLink(downloadLink.Path, downloadLink.Md5);
-        TResourceFile::TPtr file = TResourceFile::Create(moduleName, resource->Modules, link);
+        TResourceFile::TPtr file = TResourceFile::Create(canonizedModuleName, resource->Modules, link);
         for (auto& d : resource->Modules) {
             auto p = DownloadedFiles_.emplace(d, file);
             if (!p.second) {
                 // should not happen because UdfIndex handles conflicts
-                ythrow yexception() << "file already downloaded for module " << moduleName << ", conflicting path " << downloadLink.Path << ", existing local file " << p.first->second->Link_->GetPath();
+                ythrow yexception() << "file already downloaded for module " << canonizedModuleName << ", conflicting path " << downloadLink.Path << ", existing local file " << p.first->second->Link_->GetPath();
             }
         }
 

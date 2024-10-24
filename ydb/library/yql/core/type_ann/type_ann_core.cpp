@@ -7590,11 +7590,16 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     return IGraphTransformer::TStatus::Error;
                 }
 
+                cached.NormalizedName = description.NormalizedName;
                 cached.FunctionType = description.CallableType;
                 cached.RunConfigType = description.RunConfigType ? description.RunConfigType : ctx.Expr.MakeType<TVoidExprType>();
                 cached.NormalizedUserType = description.NormalizedUserType ? description.NormalizedUserType : ctx.Expr.MakeType<TVoidExprType>();
                 cached.SupportsBlocks = description.SupportsBlocks;
                 cached.IsStrict = description.IsStrict;
+
+                if (name != cached.NormalizedName) {
+                    ctx.Types.UdfTypeCache[std::make_tuple(cached.NormalizedName, TString(typeConfig), userType)] = cached;
+                }
             }
 
             TStringBuf typeConfig = "";
@@ -7623,7 +7628,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             TStringBuf fileAlias = udfInfo ? udfInfo->FileAlias : ""_sb;
             auto ret = ctx.Expr.Builder(input->Pos())
                 .Callable("Udf")
-                    .Add(0, input->HeadPtr())
+                    .Atom(0, cached.NormalizedName)
                     .Add(1, runConfigValue)
                     .Add(2, ExpandType(input->Pos(), *cached.NormalizedUserType, ctx.Expr))
                     .Atom(3, typeConfig)

@@ -200,6 +200,7 @@ bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
                 continue;
             }
 
+            udf.NormalizedName = udf.Name;
             udf.CallableType = ConvertMiniKQLType(udf.Pos, funcInfo.FunctionType, ctx);
             YQL_ENSURE(udf.CallableType);
             if (funcInfo.RunConfigType) {

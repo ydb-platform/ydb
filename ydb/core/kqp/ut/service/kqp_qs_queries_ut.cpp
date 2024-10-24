@@ -249,7 +249,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         TExecuteQuerySettings settings;
 
         {  // Existing pool
-            settings.PoolId("default");
+            settings.ResourcePool("default");
 
             const TString query = "SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0 ORDER BY Key";
             auto result = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
@@ -257,7 +257,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
 
         {  // Not existing pool (check workload manager enabled)
-            settings.PoolId("another_pool_id");
+            settings.ResourcePool("another_pool_id");
 
             const TString query = "SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0 ORDER BY Key";
             auto result = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();

@@ -1,5 +1,6 @@
 #include "clickbench.h"
 #include "data_generator.h"
+#include <ydb/library/workload/benchmark_base/workload.h_serialized.h>
 
 #include <library/cpp/resource/resource.h>
 #include <library/cpp/string_utils/csv/csv.h>
@@ -83,7 +84,7 @@ TQueryInfoList TClickbenchWorkloadGenerator::GetWorkload(int type) {
         }
     } else {
         TString resourceName = "click_bench_queries.sql";
-        if (Params.IsPgSyntax()) {
+        if (Params.GetSyntax() == TWorkloadBaseParams::EQuerySyntax::PG) {
             resourceName = "click_bench_queries_pg.sql";
         } else if (Params.IsCheckCanonical()) {
             resourceName = "queries-deterministic.sql";
@@ -97,12 +98,20 @@ TQueryInfoList TClickbenchWorkloadGenerator::GetWorkload(int type) {
         Y_ABORT_UNLESS(v.DeserializeFromString(i));
         vars.emplace_back(v);
     }
-    TString quote = Params.IsPgSyntax() ? "\"" : "`";
+    TString quote;
+    switch (Params.GetSyntax()) {
+    case TWorkloadBaseParams::EQuerySyntax::YQL:
+        quote = "`";
+        break;
+    case TWorkloadBaseParams::EQuerySyntax::PG:
+        quote = "\"";
+        break;
+    };
     vars.emplace_back("table", quote + Params.GetPath() + quote);
     ui32 resultsUsage = 0;
     for (ui32 i = 0; i < queries.size(); ++i) {
         auto& query = queries[i];
-        if (Params.IsPgSyntax()) {
+        if (Params.GetSyntax() == TWorkloadBaseParams::EQuerySyntax::PG) {
             query = "--!syntax_pg\n" + query;
         }
         for (auto&& v : vars) {
@@ -173,8 +182,8 @@ void TClickbenchWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EC
             .StoreResult(&ExternalQueries);
         opts.AddLongOption('c', "check-canonical", "Use deterministic queries and check results with canonical ones.")
             .NoArgument().StoreTrue(&CheckCanonicalFlag);
-        opts.AddLongOption( "pg-syntax", "Use postgree syntax in queries instead YQL one.")
-            .NoArgument().StoreTrue(&PgSyntaxFlag);
+        opts.AddLongOption( "syntax", "Query syntax [" + GetEnumAllNames<EQuerySyntax>() + "].")
+            .StoreResult(&Syntax).DefaultValue(Syntax);
         break;
     default:
         break;

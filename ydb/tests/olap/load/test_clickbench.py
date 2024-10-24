@@ -44,4 +44,4 @@ class TestClickbench(LoadSuiteBase):
 
 
 class TestClickbenchPg(TestClickbench):
-    pg_syntax = True
+    query_syntax = 'pg'

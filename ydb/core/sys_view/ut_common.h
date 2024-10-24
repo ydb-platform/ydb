@@ -16,14 +16,20 @@ NKikimrSubDomains::TSubDomainSettings GetSubDomainDeclareSettings(
 NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSettings(
     const TString &name, const TStoragePools &pools = {});
 
+struct TTestEnvSettings {
+    ui32 StoragePools = 0;
+    ui32 PqTabletsN = 0;
+    bool EnableSVP = false;
+    bool EnableForceFollowers = false;
+};
+
 class TTestEnv {
 public:
     class TDisableSourcesTag {};
     static TDisableSourcesTag DisableSourcesTag;
 
 public:
-    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 4, ui32 storagePools = 0,
-        ui32 pqTabletsN = 0, bool enableSVP = false);
+    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 4, const TTestEnvSettings& settings = {});
 
     ~TTestEnv();
 

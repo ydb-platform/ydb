@@ -78,7 +78,7 @@ void TInsertionSummary::OnNewInserted(TPathInfo& pathInfo, const ui64 dataSize, 
     ++StatsPrepared.Rows;
     StatsPrepared.Bytes += dataSize;
     AFL_VERIFY(Counters.Inserted.GetDataSize() == (i64)StatsPrepared.Bytes);
-    VersionCounters->VersionAddRef(version, 1);
+    VersionCounters->VersionAddRef(version, "insert_table");
 }
 
 void TInsertionSummary::OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize, const ui64 version) noexcept {
@@ -88,7 +88,7 @@ void TInsertionSummary::OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize
     Y_ABORT_UNLESS(StatsPrepared.Bytes >= dataSize);
     StatsPrepared.Bytes -= dataSize;
     AFL_VERIFY(Counters.Inserted.GetDataSize() == (i64)StatsPrepared.Bytes);
-    VersionCounters->VersionRemoveRef(version, 1);
+    VersionCounters->VersionRemoveRef(version, "insert_table");
 }
 
 THashSet<TInsertWriteId> TInsertionSummary::GetExpiredInsertions(const TInstant timeBorder, const ui64 limit) const {
@@ -96,7 +96,7 @@ THashSet<TInsertWriteId> TInsertionSummary::GetExpiredInsertions(const TInstant 
 }
 
 void TInsertionSummary::OnEraseAborted(ui64 const version) {
-    VersionCounters->VersionRemoveRef(version, 1);
+    VersionCounters->VersionRemoveRef(version, "insert_table");
 }
 
 bool TInsertionSummary::EraseAborted(const TInsertWriteId writeId) {
@@ -142,7 +142,7 @@ bool TInsertionSummary::HasCommitted(const TCommittedData& data) {
 }
 
 void TInsertionSummary::OnNewAborted(const ui64 version) {
-    VersionCounters->VersionAddRef(version, 1);
+    VersionCounters->VersionAddRef(version, "insert_table");
 }
 
 const TInsertedData* TInsertionSummary::AddAborted(TInsertedData&& data, const bool load /*= false*/) {

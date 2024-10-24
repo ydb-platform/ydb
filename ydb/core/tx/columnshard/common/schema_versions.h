@@ -35,7 +35,7 @@ public:
         return VersionToKey;
     }
 
-    void VersionAddRef(const ui64 version, const ui32 source = 0) {
+    void VersionAddRef(const ui64 version, const char* source = "portions") {
         ui32& count = VersionCounters[version];
         if (count == 0) {
             VersionsToErase.erase(version);
@@ -45,7 +45,7 @@ public:
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "version_addref")("source", source)("version", version)("ref_count", count);
     }
 
-    ui32 VersionRemoveRef(const ui64 version, const ui32 source = 0) {
+    ui32 VersionRemoveRef(const ui64 version, const char* source = "portions") {
         ui32& count = VersionCounters[version];
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "version_removref")("source", source)("version", version)("ref_count", count - 1);
         AFL_VERIFY(count > 0);
@@ -60,8 +60,9 @@ public:
         return !VersionsToErase.empty();
     }
 
-    THashSet<ui64>& GetVersionsToErase() {
-        return VersionsToErase;
+    void GetVersionsToErase(THashSet<ui64>& versions) {
+        versions = std::move(VersionsToErase);
+        VersionsToErase.clear();
     }
 
     THashMap<ui64, ui32>& GetVersionCounters() {

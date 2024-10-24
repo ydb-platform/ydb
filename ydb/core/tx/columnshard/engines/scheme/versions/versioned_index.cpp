@@ -39,9 +39,9 @@ const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TIndexInf
     LastSchemaVersion = std::max(newVersion, LastSchemaVersion);
     if (LastSchemaVersion != oldLastVersion) {
         if (oldLastVersion != 0) {
-            VersionCounters->VersionRemoveRef(oldLastVersion, 2);
+            VersionCounters->VersionRemoveRef(oldLastVersion, "last");
         }
-        VersionCounters->VersionAddRef(LastSchemaVersion, 2);
+        VersionCounters->VersionAddRef(LastSchemaVersion, "last");
     }
     return &itSnap.first->second->GetIndexInfo();
 }

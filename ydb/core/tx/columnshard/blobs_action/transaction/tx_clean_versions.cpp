@@ -27,8 +27,6 @@ void TTxSchemaVersionsCleanup::Complete(const TActorContext& /*ctx*/) {
     for (ui64 version: VersionsToRemove) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Removing schema version from memory")("vesion", version)("tablet_id", Self->TabletID());
         Self->TablesManager.MutablePrimaryIndex().RemoveSchemaVersion(version);
-        AFL_VERIFY(Self->VersionCounters->GetVersionCounters().find(version) == Self->VersionCounters->GetVersionCounters().end());
-        AFL_VERIFY(Self->VersionCounters->GetVersionsToErase().erase(version));
     }
     VersionsToRemove.clear();
 

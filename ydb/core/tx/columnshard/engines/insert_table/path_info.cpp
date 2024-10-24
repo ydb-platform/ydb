@@ -34,7 +34,7 @@ bool TPathInfo::EraseCommitted(const TCommittedData& data) {
     const bool result = Committed.erase(data);
     if (result) {
         AFL_VERIFY(Summary != nullptr);
-        Summary->VersionCounters->VersionRemoveRef(data.GetSchemaVersion(), 1);
+        Summary->VersionCounters->VersionRemoveRef(data.GetSchemaVersion(), "insert_table");
     }
     AddCommittedSize(-1 * (i64)data.BlobSize(), TCompactionLimits::OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID);
     Summary->AddPriority(*this);
@@ -55,7 +55,7 @@ bool TPathInfo::AddCommitted(TCommittedData&& data, const bool load) {
     bool result = Committed.emplace(std::move(data)).second;
     if (result) {
         AFL_VERIFY(Summary != nullptr);
-        Summary->VersionCounters->VersionAddRef(version, 1);
+        Summary->VersionCounters->VersionAddRef(version, "insert_table");
     }
     Summary->AddPriority(*this);
     Summary->OnNewCommitted(dataSize, load);

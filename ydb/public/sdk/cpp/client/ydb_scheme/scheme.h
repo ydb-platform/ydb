@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb/public/sdk/cpp/client/ydb_retry/retry.h>
 
 namespace Ydb {
     class VirtualTimestamp;
@@ -12,6 +13,12 @@ namespace Ydb {
 }
 
 namespace NYdb {
+
+namespace NRetry::Async {
+template <typename TClient, typename TStatusType>
+class TRetryContext;
+} // namespace NRetry::Async
+
 namespace NScheme {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -146,10 +153,15 @@ struct TModifyPermissionsSettings : public TOperationRequestSettings<TModifyPerm
     explicit TModifyPermissionsSettings(const ::Ydb::Scheme::ModifyPermissionsRequest& request);
 };
 
+using TRetryOperationSettings = NYdb::NRetry::TRetryOperationSettings;
+
 class TSchemeClient {
     class TImpl;
+    friend class NRetry::Async::TRetryContext<TSchemeClient, TAsyncStatus>;
 
 public:
+    using TOperationWithoutSessionFunc = std::function<TAsyncStatus(TSchemeClient& tableClient)>;
+
     TSchemeClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
 
     TAsyncStatus MakeDirectory(const TString& path,
@@ -166,6 +178,9 @@ public:
 
     TAsyncStatus ModifyPermissions(const TString& path,
         const TModifyPermissionsSettings& data);
+
+    TAsyncStatus RetryOperation(TOperationWithoutSessionFunc&& operation,
+        const TRetryOperationSettings& settings = TRetryOperationSettings());
 
 private:
     std::shared_ptr<TImpl> Impl_;

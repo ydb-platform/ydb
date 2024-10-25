@@ -11,6 +11,7 @@ import logging
 from get_diff_lines_of_file import get_diff_lines_of_file
 from mute_utils import pattern_to_re
 from transform_ya_junit import YaMuteCheck
+from update_mute_issues import create_github_issues, generate_github_issue_title_and_body, get_muted_tests_from_issues
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -257,10 +258,58 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
 
     return len(new_muted_ya_tests)
 
+def read_tests_from_file(file_path):
+    result = []
+    with open(file_path, "r") as fp:
+        for line in fp:
+            line = line.strip()
+            try:
+                testsuite, testcase = line.split(" ", maxsplit=1)
+                result.append({'testsuite' : testsuite ,'testcase': testcase , 'full_name' : f"{testsuite}/{testcase}"})
+            except ValueError:
+                log_print(f"cant parse line: {line!r}")
+                continue
+    return result
 
-def mute_applier(args):
-    output_path = args.output_folder
-    os.makedirs(output_path, exist_ok=True)
+def create_mute_issues(all_tests, file_path):
+    tests_from_file = read_tests_from_file(file_path)
+    muted_tests_in_issues = get_muted_tests_from_issues()
+    prepared_tests_by_suite = {}
+    for test in all_tests:
+        for test_from_file in tests_from_file:
+            if test['full_name'] == test_from_file['full_name']:
+                if test['full_name'] in muted_tests_in_issues :
+                    logging.info(f"test {test['full_name']} already have issue, {muted_tests_in_issues[test['full_name']][0]['url']}")
+                else:
+                    key = f"{test_from_file['testsuite']}:{test['owner']}"
+                    if not prepared_tests_by_suite.get(key):
+                        prepared_tests_by_suite[key] = []
+                    prepared_tests_by_suite[key].append({
+                        
+                        'mute_string' :  f"{ test.get('suite_folder')} {test.get('test_name')}",
+                        'test_name': test.get('test_name'),
+                        'suite_folder': test.get('suite_folder'),
+                        'full_name' :  test.get('full_name'),
+                        'success_rate' : test.get('success_rate'),
+                        'days_in_state' : test.get('days_in_state'),
+                        'owner' : test.get('owner'),
+                        'state' : test.get('state'),
+                        'summary' : test.get('summary'),
+                        'fail_count' : test.get('fail_count'),
+                        'pass_count' : test.get('pass_count'),
+                        'branch' : test.get('branch'),
+                    
+                })
+    for item in prepared_tests_by_suite:
+        
+        title, body  = generate_github_issue_title_and_body(prepared_tests_by_suite[item])
+        create_github_issues(title,body)
+        #print(body)
+        #print(title)
+    print(1)
+    
+def mute_worker(args):
+    
 
     # Simplified Connection
     if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
@@ -286,14 +335,34 @@ def mute_applier(args):
         tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
 
         all_tests = execute_query(driver)
-        added_count = apply_and_add_mutes(all_tests, output_path, mute_check)
-        logging.info(f"{added_count} tests added to files.")
+    if args.mode == 'update_muted_ya':
+        output_path = args.output_folder
+        os.makedirs(output_path, exist_ok=True)
+        apply_and_add_mutes(all_tests, output_path, mute_check)
+
+    elif args.mode == 'create_issues':
+        file_path = args.file_path
+        create_mute_issues(all_tests, file_path)
+        
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Add tests to mutes files based on flaky_today condition")
-    parser.add_argument('--output_folder', default=repo_path, required=False, help='Output folder.')
+
+    subparsers = parser.add_subparsers(dest='mode',  help="Mode to perform")
+
+    update_muted_ya_parser = subparsers.add_parser(
+        'update_muted_ya', help='create new muted_ya'
+    )
+    update_muted_ya_parser.add_argument('--output_folder', default=repo_path, required=False, help='Output folder.')
+
+
+    create_issues_parser = subparsers.add_parser(
+        'create_issues',
+        help='create issues by muted_ya like files',
+    )
+    create_issues_parser.add_argument('--file_path', default='/home/kirrysin/fork/mute_update/flaky.txt', required=False, help='file path')
 
     args = parser.parse_args()
 
-    mute_applier(args)
+    mute_worker(args)

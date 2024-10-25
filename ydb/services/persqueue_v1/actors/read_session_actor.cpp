@@ -894,7 +894,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
 template<bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::SetupBytesReadByUserAgentCounter() {
     static constexpr auto protocol = UseMigrationProtocol ? "pqv1" : "topic";
-    BytesReadByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents")
+    BytesReadByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents", false)
         ->GetSubgroup("host", "")
         ->GetSubgroup("protocol", protocol)
         ->GetSubgroup("consumer", ClientPath)

@@ -12,7 +12,7 @@ Release date: July 31, 2024.
 
 ### Embedded UI
 
-* A resource consumption diagnostic dashboard has been added, which is located on the database information tab and allows you to determine the current state of consumption of the main resources: processor cores, RAM, and space in the network distributed storage.
+* The database information tab now includes a resource consumption diagnostic dashboard, which allows users to assess the current consumption of key resources: processor cores, RAM, and distributed storage space.
 * Charts for monitoring the key performance indicators of the {{ ydb-short-name }} cluster have been added.
 
 ### Performance

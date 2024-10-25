@@ -3823,6 +3823,9 @@ TString ExportExtensions(const TMaybe<TSet<ui32>>& filter) {
 
         protoProc->SetIsStrict(desc.IsStrict);
         protoProc->SetLang(desc.Lang);
+        protoProc->SetResultType(desc.ResultType);
+        protoProc->SetReturnSet(desc.ReturnSet);
+        protoProc->SetKind((ui32)desc.Kind);
     }
 
     TVector<TTableInfoKey> extTables;
@@ -4092,6 +4095,9 @@ void ImportExtensions(const TString& exported, bool typesOnly, IExtensionLoader*
             desc.Src = protoProc.GetSrc();
             desc.IsStrict = protoProc.GetIsStrict();
             desc.Lang = protoProc.GetLang();
+            desc.ResultType = protoProc.GetResultType();
+            desc.ReturnSet = protoProc.GetReturnSet();
+            desc.Kind = (EProcKind)protoProc.GetKind();
             for (const auto t : protoProc.GetArgType()) {
                 desc.ArgTypes.push_back(t);
             }

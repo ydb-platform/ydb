@@ -85,7 +85,7 @@ def create_and_add_issue_to_project(title, body, project_id = PROJECT_ID, org_na
         None
     """
    
-
+    result = None
     # Получаем ID полей "State" и "Owner"
     inner_project_id, project_fields = get_project_v2_fields(org_name, project_id)
     state_field_id = None
@@ -134,7 +134,7 @@ def create_and_add_issue_to_project(title, body, project_id = PROJECT_ID, org_na
       print(f"Issue {title} created ")
     else:
       print(f"Error: Issue {title} not created ")
-      return 1
+      return result
     issue_id = issue['data']['createIssue']['issue']['id']
     issue_url = issue['data']['createIssue']['issue']['url']
 
@@ -157,7 +157,7 @@ def create_and_add_issue_to_project(title, body, project_id = PROJECT_ID, org_na
       print(f"Issue {issue_url} added to project.")
     else:
       print(f"Error: Issue {title}: {issue_url} not added to project.")
-      return 1
+      return result
     
     for field_name,filed_value, field_id, value_id  in [['state',state, state_field_id, state_option_id],['owner',owner, owner_field_id, owner_option_id]]:
       query_modify_fields = """
@@ -188,8 +188,9 @@ def create_and_add_issue_to_project(title, body, project_id = PROJECT_ID, org_na
         print(f"Issue {title}: {issue_url} modified :{field_name} = {filed_value}")
       else:
         print(f"Error: Issue {title}: {issue_url}  not modified")
-        return 1
-    print('done')
+        return result
+    result = issue_url
+    return result
     
 
 
@@ -463,8 +464,8 @@ def main():
     #muted_tests = get_muted_tests_from_issues()
     
     #create_github_issues(tests)
-    create_and_add_issue_to_project('test issue','test_issue_body', state = 'Muted', owner = 'fq')
-    print(1)
+   # create_and_add_issue_to_project('test issue','test_issue_body', state = 'Muted', owner = 'fq')
+    #print(1)
     #update_issue_state(muted_tests, github_token, "closed")
 
 if __name__ == "__main__":

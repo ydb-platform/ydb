@@ -11,7 +11,7 @@ import logging
 from get_diff_lines_of_file import get_diff_lines_of_file
 from mute_utils import pattern_to_re
 from transform_ya_junit import YaMuteCheck
-from update_mute_issues import create_github_issues, generate_github_issue_title_and_body, get_muted_tests_from_issues
+from update_mute_issues import create_and_add_issue_to_project, generate_github_issue_title_and_body, get_muted_tests_from_issues
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -303,11 +303,12 @@ def create_mute_issues(all_tests, file_path):
     for item in prepared_tests_by_suite:
         
         title, body  = generate_github_issue_title_and_body(prepared_tests_by_suite[item])
-        create_github_issues(title,body)
-        #print(body)
-        #print(title)
+        result = create_and_add_issue_to_project(title,body, state = 'Muted', owner = item['owner'].split('/',1)[1])
+        if not result:
+           break
+        
     print(1)
-    
+     
 def mute_worker(args):
     
 

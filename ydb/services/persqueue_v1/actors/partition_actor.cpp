@@ -419,6 +419,11 @@ bool FillBatchedData(
         hasOffset = true;
 
         auto proto(GetDeserializedData(r.GetData()));
+
+        if (!proto.has_codec()) {
+            proto.set_codec(NPersQueueCommon::RAW);
+        }
+
         if (proto.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
             continue; //TODO - no such chunks must be on prod
         }

@@ -250,7 +250,7 @@ sudo chmod 700 /opt/ydb/certs
 
 ## Запустите статические узлы {#start-storage}
 
-{% list tabs %}
+{% list tabs group=manual-systemd %}
 
 - Вручную
 
@@ -315,7 +315,7 @@ sudo chmod 700 /opt/ydb/certs
 
 Порядок действий по инициализации кластера зависят от того, включен ли в конфигурационном файле {{ ydb-short-name }} режим аутентификации пользователей.
 
-{% list tabs %}
+{% list tabs group=authentication %}
 
 - Аутентификация включена
 
@@ -364,7 +364,7 @@ sudo chmod 700 /opt/ydb/certs
 
 Порядок действий по созданию базы данных зависит от того, включен ли в конфигурационном файле {{ ydb-short-name }} режим аутентификации пользователей.
 
-{% list tabs %}
+{% list tabs group=authentication %}
 
 - Аутентификация включена
 
@@ -402,7 +402,7 @@ sudo chmod 700 /opt/ydb/certs
 
 ## Запустите динамические узлы {#start-dynnode}
 
-{% list tabs %}
+{% list tabs group=manual-systemd %}
 
 - Вручную
 

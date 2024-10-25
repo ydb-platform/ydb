@@ -17,8 +17,8 @@ Release date: July 31, 2024.
 
 ### Performance
 
-* [Sessions timeouts](https://github.com/ydb-platform/ydb/pull/1837) for the coordination service from the server to the client have been optimized. Previously, the timeout was 5 seconds, which in the worst case led to identifying an unresponsive client (and releasing the resources it was holding) within 10 seconds. In the new version, the check time depends on the session waiting time, which provides a faster response when changing the leader or acquiring distributed locks.
-* CPU consumption by [SchemeShard](./concepts/glossary.md#scheme-shard) replicas has been [optimized](https://github.com/ydb-platform/ydb/pull/2391), especially when processing fast updates for tables with a large number of partitions.
+* [Session timeouts](https://github.com/ydb-platform/ydb/pull/1837) for the coordination service between server and client have been optimized. Previously, the timeout was 5 seconds, which could result in a 10-second delay in identifying an unresponsive client and releasing its resources. In the new version, the check interval depends on the session's wait time, allowing for faster responses during leader changes or when acquiring distributed locks.
+* CPU consumption by [SchemeShard](./concepts/glossary.md#scheme-shard) replicas has been [optimized](https://github.com/ydb-platform/ydb/pull/2391), particularly when handling rapid updates for tables with a large number of partitions.
 
 ### Bug fixes
 

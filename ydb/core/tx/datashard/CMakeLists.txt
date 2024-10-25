@@ -310,6 +310,7 @@ target_sources(core-tx-datashard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/type_serialization.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/upload_stats.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/volatile_tx.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/volatile_tx_mon.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/wait_for_plan_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/wait_for_stream_clearance_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_buffer_raw.cpp
@@ -396,6 +397,12 @@ generate_enum_serilization(core-tx-datashard
   ydb/core/tx/datashard/operation.h
 )
 
+generate_enum_serilization(core-tx-datashard
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/volatile_tx.h
+  INCLUDE_HEADERS
+  ydb/core/tx/datashard/volatile_tx.h
+)
+
 add_global_library_for(core-tx-datashard.global
   core-tx-datashard)
 
@@ -457,14 +464,14 @@ target_link_libraries(core-tx-datashard.global PUBLIC
 )
 
 target_sources(core-tx-datashard.global PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/core/tx/datashard/eacf331f0ffc35d4b482f1d15a887d3b.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/tx/datashard/c2cace4d46ce7c7b8eb886dfb16275a3.cpp
 )
 
 
 resources(core-tx-datashard.global
-  ${PROJECT_BINARY_DIR}/ydb/core/tx/datashard/eacf331f0ffc35d4b482f1d15a887d3b.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/tx/datashard/c2cace4d46ce7c7b8eb886dfb16275a3.cpp
   INPUTS
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/index.html
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/ui/index.html
   KEYS
   datashard/index.html
 )

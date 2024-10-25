@@ -14,6 +14,7 @@
 #include <ydb/core/control/immediate_control_board_impl.h>
 
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/utils.h>
 #include <ydb/services/lib/sharding/sharding.h>
@@ -3074,6 +3075,22 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
                     return NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING;
                 }
             }
+        }
+
+        TString WriteTo(bool needsBuildTable = false) const {
+            using namespace NTableIndex::NTableVectorKmeansTreeIndex;
+            TString name = PostingTable;
+            if (needsBuildTable || NeedsAnotherLevel()) {
+                name += Level % 2 == 0 ? BuildPostingTableSuffix0 : BuildPostingTableSuffix1;
+            }
+            return name;
+        }
+        TString ReadFrom() const {
+            Y_ASSERT(Level != 0);
+            using namespace NTableIndex::NTableVectorKmeansTreeIndex;
+            TString name = PostingTable;
+            name += Level % 2 == 0 ? BuildPostingTableSuffix1 : BuildPostingTableSuffix0;
+            return name;
         }
     };
     TKMeans KMeans;

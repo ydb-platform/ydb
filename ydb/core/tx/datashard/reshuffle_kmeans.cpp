@@ -368,10 +368,11 @@ void TDataShard::Handle(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, const
 void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, const TActorContext& ctx)
 {
     auto& record = ev->Get()->Record;
+    const bool needsSnapshot = record.HasSnapshotStep() || record.HasSnapshotTxId();
     TRowVersion rowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
 
     // Note: it's very unlikely that we have volatile txs before this snapshot
-    if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
+    if (needsSnapshot && VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
         VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));
         return;
     }
@@ -424,14 +425,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
         return;
     }
 
-    if (!record.HasSnapshotStep() || !record.HasSnapshotTxId()) {
-        badRequest(TStringBuilder() << " request doesn't have Shapshot Step or TxId");
-        return;
-    }
-
     const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
-    const TSnapshot* snapshot = SnapshotManager.FindAvailable(snapshotKey);
-    if (!snapshot) {
+    const bool hasSnapshot = needsSnapshot && SnapshotManager.FindAvailable(snapshotKey);
+    if (needsSnapshot && !hasSnapshot) {
         badRequest(TStringBuilder() << "no snapshot has been found" << " , path id is " << pathId.OwnerId << ":"
                                     << pathId.LocalPathId << " , snapshot step is " << snapshotKey.Step
                                     << " , snapshot tx is " << snapshotKey.TxId);

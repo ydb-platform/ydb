@@ -114,13 +114,19 @@ private:
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->GetRecord();
-        const auto status = record.GetStatus();
 
         const auto partsNum = record.GetPathDescription().GetTablePartitions().size();
-        if (status == NKikimrScheme::StatusSuccess && NeedResolveShards && partsNum > 0) {
+        if (record.GetStatus() == NKikimrScheme::StatusSuccess && NeedResolveShards && partsNum > 0) {
             PerformTabletResolve(ev);
-            return;
+        } else {
+            ProcessDescribeSchemeResult(ev, ctx);
         }
+    }
+
+    void ProcessDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
+        const auto& record = ev->Get()->GetRecord();
+        const auto status = record.GetStatus();
+
         if (record.HasReason()) {
             auto issue = NYql::TIssue(record.GetReason());
             Request_->RaiseIssue(issue);
@@ -253,9 +259,8 @@ private:
         }
 
         ShardNodes = std::move(reply.ShardNodes);
-        NeedResolveShards = false;
 
-        Handle(PendingDescribeResult, ctx);
+        ProcessDescribeSchemeResult(PendingDescribeResult, ctx);
     }
 
     void SendProposeRequest(const TString& path, const TActorContext& ctx) {

@@ -27,6 +27,10 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
 
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
+    const TCounterPtr FreshBytes;
+    const TCounterPtr StagingBytes;
+    const TCounterPtr WarmBytes;
+
     const TCounterPtr MemLimitBytes;
     const TCounterPtr ConfigLimitBytes;
     const TCounterPtr ActivePages;
@@ -55,7 +59,7 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
 struct TSharedPageCacheConfig {
     using TReplacementPolicy = NKikimrSharedCache::TReplacementPolicy;
     
-    TIntrusivePtr<TCacheCacheConfig> CacheConfig;
+    ui64 LimitBytes;
     ui64 TotalScanQueueInFlyLimit = 512 * 1024 * 1024;
     ui64 TotalAsyncQueueInFlyLimit = 512 * 1024 * 1024;
     TString CacheName = "SharedPageCache";

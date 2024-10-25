@@ -18,10 +18,10 @@
 namespace NKikimr {
 
 TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters> &group)
-    : Counters(counters)
-    , FreshBytes(counters->GetCounter("fresh"))
-    , StagingBytes(counters->GetCounter("staging"))
-    , WarmBytes(counters->GetCounter("warm")) 
+    : Counters(group)
+    , FreshBytes(group->GetCounter("fresh"))
+    , StagingBytes(group->GetCounter("staging"))
+    , WarmBytes(group->GetCounter("warm")) 
     , MemLimitBytes(group->GetCounter("MemLimitBytes"))
     , ConfigLimitBytes(group->GetCounter("ConfigLimitBytes"))
     , ActivePages(group->GetCounter("ActivePages"))
@@ -482,7 +482,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
     // 0 means unlimited
     ui64 MemLimitBytes = 0;
-    ui64 ConfigLimitBytes;
 
     THolder<ICacheCache<TPage>> CreateCache() {
         // TODO: pass actual limit to cache config
@@ -502,24 +501,22 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void ActualizeCacheSizeLimit() {
-        if ((ui64)SizeOverride != Config->CacheConfig->Limit) {
-            Config->CacheConfig->SetLimit(SizeOverride);
+        if ((ui64)SizeOverride != Config->LimitBytes) {
+            Config->LimitBytes = SizeOverride;
         }
 
-        ConfigLimitBytes = Config->CacheConfig->Limit;
-
-        ui64 limit = ConfigLimitBytes;
-        if (MemLimitBytes && ConfigLimitBytes > MemLimitBytes) {
+        ui64 limit = Config->LimitBytes;
+        if (MemLimitBytes && Config->LimitBytes > MemLimitBytes) {
             limit = MemLimitBytes;
         }
 
         // limit of cache depends only on config and mem because passive pages may go in and out arbitrary
         // we may have some passive bytes, so if we fully fill this Cache we may exceed the limit
         // because of that DoGC should be called to ensure limits
-        Cache->UpdateCacheSize(limit);
+        Cache.UpdateLimit(limit);
 
         if (Config->Counters) {
-            Config->Counters->ConfigLimitBytes->Set(ConfigLimitBytes);
+            Config->Counters->ConfigLimitBytes->Set(Config->LimitBytes);
             Config->Counters->ActiveLimitBytes->Set(limit);
         }
     }
@@ -529,13 +526,13 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         // update StatActiveBytes + StatPassiveBytes
         ProcessGCList();
 
-        ui64 configActiveReservedBytes = ConfigLimitBytes * Config->ActivePagesReservationPercent / 100;
+        ui64 configActiveReservedBytes = Config->LimitBytes * Config->ActivePagesReservationPercent / 100;
 
         THashSet<TCollection*> recheck;
         while (MemLimitBytes && GetStatAllBytes() > MemLimitBytes
-                || GetStatAllBytes() > ConfigLimitBytes && StatActiveBytes > configActiveReservedBytes) {
+                || GetStatAllBytes() > Config->LimitBytes && StatActiveBytes > configActiveReservedBytes) {
             TIntrusiveList<TPage> pages = Cache.EvictNext();
-            if (!page) {
+            if (pages.Empty()) {
                 break;
             }
             while (!pages.Empty()) {
@@ -575,12 +572,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         DoGC();
 
-        if (MemLimitBytes && MemLimitBytes < ConfigLimitBytes) {
+        if (MemLimitBytes && MemLimitBytes < Config->LimitBytes) {
             // in normal scenario we expect that we can fill the whole shared cache
-            ui64 memTableReservedBytes = ConfigLimitBytes * Config->MemTableReservationPercent / 100;
+            ui64 memTableReservedBytes = Config->LimitBytes * Config->MemTableReservationPercent / 100;
             ui64 memTableTotal = MemTableTracker->GetTotalConsumption();
             if (memTableTotal > memTableReservedBytes) {
-                ui64 toCompact = Min(ConfigLimitBytes - MemLimitBytes, memTableTotal - memTableReservedBytes);
+                ui64 toCompact = Min(Config->LimitBytes - MemLimitBytes, memTableTotal - memTableReservedBytes);
                 auto registrations = MemTableTracker->SelectForCompaction(toCompact);
                 for (auto registration : registrations) {
                     Send(registration.first->Owner, new NSharedCache::TEvMemTableCompact(registration.first->Table, registration.second));
@@ -1396,9 +1393,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         const auto* msg = ev->Get();
 
         if (msg->Record.GetMemoryLimit() != 0) {
-            Config->CacheConfig->SetLimit(msg->Record.GetMemoryLimit());
-            SizeOverride = Config->CacheConfig->Limit;
-            // limit will be updated with ActualizeCacheSizeLimit call
+            Config->LimitBytes = msg->Record.GetMemoryLimit();
+            SizeOverride = Config->LimitBytes;
+            ActualizeCacheSizeLimit();
         }
 
         if (msg->Record.HasActivePagesReservationPercent()) {
@@ -1491,9 +1488,8 @@ public:
         : MemObserver(std::move(memObserver))
         , MemTableTracker(std::make_shared<TSharedPageCacheMemTableTracker>(config->Counters))
         , Config(std::move(config))
-        , SizeOverride(Config->CacheConfig->Limit, 1, Max<i64>())
-        , ConfigLimitBytes(Config->CacheConfig->Limit)
-        , Cache(CreateCache())
+        , Cache(1, CreateCache(), Config->Counters->ReplacementPolicySize(Config->ReplacementPolicy))
+        , SizeOverride(Config->LimitBytes, 1, Max<i64>())
     {
         AsyncRequests.Limit = Config->TotalAsyncQueueInFlyLimit;
         ScanRequests.Limit = Config->TotalScanQueueInFlyLimit;

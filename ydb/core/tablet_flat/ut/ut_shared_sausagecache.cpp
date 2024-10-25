@@ -124,10 +124,13 @@ void WaitEvent(TMyEnvBase& env, ui32 eventType, ui32 requiredCount = 1) {
 
 void RestartAndClearCache(TMyEnvBase& env) {
     env.SendSync(new TEvents::TEvPoison, false, true);
-    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0_MB));
-    WaitEvent(env, NMemory::EvConsumerLimit);
-    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(8_MB));
-    WaitEvent(env, NMemory::EvConsumerLimit);
+
+    env->GetMemObserver()->NotifyStat({200*MB, 100*MB, 100*MB});
+    WaitEvent(env, NSharedCache::EvMem);
+
+    env->GetMemObserver()->NotifyStat({100*MB, 200*MB, 200*MB});
+    WaitEvent(env, NSharedCache::EvMem);
+
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 }
 
@@ -260,8 +263,9 @@ Y_UNIT_TEST(MemTableLimits) {
         Cerr << "...waiting until compacted" << Endl;
         env.WaitFor<NFake::TEvCompacted>();
 
+        TRetriedCounters retried;
         for (i64 key = 0; key < 10; ++key) {
-            env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key) });
+            env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) });
         }
 
         // write 10 rows, each ~50KB

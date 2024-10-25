@@ -1858,7 +1858,6 @@ void TPartition::ProcessCommitQueue() {
         return this->ExecUserActionOrTransaction(event, request);
     };
     while (!UserActionAndTxPendingCommit.empty()) {
-        // UserActionAndTxPendingCommit.pop_front();
         auto& front = UserActionAndTxPendingCommit.front();
         auto state = ECommitState::Committed;
         if (auto* tx = get_if<TSimpleSharedPtr<TTransaction>>(&front.Event)) {
@@ -2027,8 +2026,9 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
         Y_ABORT_UNLESS(t->ChangeConfig);
 
         Y_ABORT_UNLESS(!ChangeConfig && !ChangingConfig);
-        if (!FirstEvent)
+        if (!FirstEvent) {
             return EProcessResult::Blocked;
+        }
         ChangingConfig = true;
         // Should remove this and add some id to TEvChangeConfig if we want to batch change of configs
         t->State = ECommitState::Committed;

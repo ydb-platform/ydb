@@ -814,7 +814,7 @@ public:
     }
 
     bool HandleReply(TEvHive::TEvUpdateDomainReply::TPtr& ev, TOperationContext& context) override {
-        const TTabletId hive = TTabletId(ev->Get()->Record.GetOrigin()); 
+        const TTabletId hive = TTabletId(ev->Get()->Record.GetOrigin());
 
         LOG_I(DebugHint() << "HandleReply TEvUpdateDomainReply"
             << ", from hive: " << hive);
@@ -1086,7 +1086,13 @@ ISubOperation::TPtr CreateAlterExtSubDomain(TOperationId id, TTxState::ETxState 
 }
 
 TVector<ISubOperation::TPtr> CreateCompatibleAlterExtSubDomain(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
-    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterExtSubDomain);
+    //NOTE: Accepting ESchemeOpAlterSubDomain operation for an ExtSubDomain is a special compatibility case
+    // for those old subdomains that at the time went through migration to a separate tenants.
+    // Console tablet holds records about types of the subdomains but they hadn't been updated
+    // at the migration time. So Console still thinks that old subdomains are plain subdomains
+    // whereas they had been migrated to the extsubdomains.
+    // This compatibility case should be upholded until Console records would be updated.
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterExtSubDomain || tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterSubDomain);
 
     LOG_I("CreateCompatibleAlterExtSubDomain, opId " << id
         << ", feature flag EnableAlterDatabaseCreateHiveFirst " << context.SS->EnableAlterDatabaseCreateHiveFirst

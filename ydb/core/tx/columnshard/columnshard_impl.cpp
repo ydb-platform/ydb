@@ -89,7 +89,9 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , BackgroundController(Counters.GetBackgroundControllerCounters())
     , NormalizerController(StoragesManager, Counters.GetSubscribeCounters())
-    , SysLocks(this) {
+    , SysLocks(this)
+    , PrechargeTimeCounters("Precharge")
+{
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {

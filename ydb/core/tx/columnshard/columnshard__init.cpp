@@ -99,8 +99,12 @@ bool TTxInit::Precharge(TTransactionContext& txc) {
 }
 
 bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx) {
-    if (!Precharge(txc)) {
-        return false;
+    {
+        TLoadTimeSignals::TLoadTimer timer = Self->PrechargeTimeCounters.StartGuard();
+        if (!Precharge(txc)) {
+            timer.AddLoadingFail();
+            return false;
+        }
     }
 
     NIceDb::TNiceDb db(txc.DB);

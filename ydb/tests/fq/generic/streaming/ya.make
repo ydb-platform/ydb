@@ -4,6 +4,8 @@ STYLE_PYTHON()
 
 NO_CHECK_IMPORTS()
 
+DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/fq-connector-go)
+
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
  
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/token_accessor_mock/recipe.inc)

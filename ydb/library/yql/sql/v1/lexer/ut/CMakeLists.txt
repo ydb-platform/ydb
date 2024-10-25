@@ -12,23 +12,9 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(sql-v1-lexer)
-
-
-target_link_libraries(sql-v1-lexer PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  core-issue-protos
-  proto_ast-gen-v1
-  proto_ast-gen-v1_ansi
-  proto_ast-gen-v1_antlr4
-  proto_ast-gen-v1_ansi_antlr4
-)
-
-target_sources(sql-v1-lexer PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/sql/v1/lexer/lexer.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+endif()
 

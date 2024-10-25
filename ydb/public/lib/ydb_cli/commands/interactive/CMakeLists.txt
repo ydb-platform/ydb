@@ -22,8 +22,9 @@ target_link_libraries(ydb_cli-commands-interactive PUBLIC
   contrib-libs-cxxsupp
   yutil
   restricted-patched-replxx
-  contrib-libs-antlr4_cpp_runtime
-  proto_ast-gen-v1_antlr4
+  yql-parser-lexer_common
+  sql-v1-lexer
+  library-yql-utils
   common
 )
 
@@ -31,5 +32,6 @@ target_sources(ydb_cli-commands-interactive PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/line_reader.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/yql_highlight.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/yql_position.cpp
 )
 

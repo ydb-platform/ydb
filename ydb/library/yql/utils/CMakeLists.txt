@@ -52,6 +52,7 @@ target_sources(library-yql-utils PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/future_action.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/hash.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/limiting_allocator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/line_split.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/md5_stream.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/method_index.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/multi_resource_lock.cpp

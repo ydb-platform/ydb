@@ -15,7 +15,6 @@
 #include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 #include <util/stream/file.h>
-#include <util/string/builder.h>
 #include <util/string/join.h>
 
 namespace NYdb {
@@ -82,6 +81,61 @@ bool IsOperationStarted(TStatus operationStatus) {
 }
 
 } // anonymous
+
+namespace NPrivate {
+
+TLocation::TLocation(TStringBuf file, ui64 lineNo)
+    : File(file)
+    , LineNo(lineNo)
+{
+}
+
+void TLocation::Out(IOutputStream& out) const {
+    out << File << ":" << LineNo;
+}
+
+TLine::TLine(TString&& data, TStringBuf file, ui64 lineNo)
+    : Data(std::move(data))
+    , Location(file, lineNo)
+{
+}
+
+TLine::TLine(TString&& data, const TLocation& location)
+    : Data(std::move(data))
+    , Location(location)
+{
+}
+
+void TBatch::Add(const TLine& line) {
+    Data << line.GetData() << "\n";
+    Locations.push_back(line.GetLocation());
+}
+
+TString TBatch::GetLocation() const {
+    THashMap<TStringBuf, std::pair<ui64, ui64>> locations;
+    for (const auto& location : Locations) {
+        auto it = locations.find(location.File);
+        if (it == locations.end()) {
+            it = locations.emplace(location.File, std::make_pair(Max<ui64>(), Min<ui64>())).first;
+        }
+        it->second.first = Min(location.LineNo, it->second.first);
+        it->second.second = Max(location.LineNo, it->second.second);
+    }
+
+    TStringBuilder result;
+    bool comma = false;
+    for (const auto& [file, range] : locations) {
+        if (comma) {
+            result << ", ";
+        }
+        result << file << ":" << range.first << "-" << range.second;
+        comma = true;
+    }
+
+    return result;
+}
+
+} // NPrivate
 
 TRestoreClient::TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog>& log)
     : ImportClient(driver)
@@ -371,7 +425,7 @@ TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString&
                 return Result<TRestoreResult>(dbPath, std::move(descResult));
             }
 
-            accumulator.Reset(CreateImportDataAccumulator(desc, *actualDesc, settings));
+            accumulator.Reset(CreateImportDataAccumulator(desc, *actualDesc, settings, Log));
             writer.Reset(CreateImportDataWriter(dbPath, desc, ImportClient, TableClient, accumulator.Get(), settings, Log));
 
             break;
@@ -379,17 +433,27 @@ TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString&
     }
 
     TWriterWaiter waiter(*writer);
+
     ui32 dataFileId = 0;
     TFsPath dataFile = fsPath.Child(DataFileName(dataFileId));
+    TVector<TString> dataFileNames;
 
     while (dataFile.Exists()) {
         LOG_D("Read data from " << dataFile.GetPath().Quote());
 
+        dataFileNames.push_back(dataFile);
         TFileInput input(dataFile, settings.FileBufferSize_);
         TString line;
+        ui64 lineNo = 0;
 
         while (input.ReadLine(line)) {
-            while (!accumulator->Fits(line)) {
+            auto l = NPrivate::TLine(std::move(line), dataFileNames.back(), ++lineNo);
+            for (auto status = accumulator->Check(l); status != NPrivate::IDataAccumulator::OK; status = accumulator->Check(l)) {
+                if (status == NPrivate::IDataAccumulator::ERROR) {
+                    return Result<TRestoreResult>(dbPath, EStatus::GENERIC_ERROR,
+                        TStringBuilder() << "Invalid data: " << l.GetLocation());
+                }
+
                 if (!accumulator->Ready(true)) {
                     LOG_E("Error reading data from " << dataFile.GetPath().Quote());
                     return Result<TRestoreResult>(dbPath, EStatus::INTERNAL_ERROR, "Data is not ready");
@@ -401,7 +465,7 @@ TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString&
                 }
             }
 
-            accumulator->Feed(std::move(line));
+            accumulator->Feed(std::move(l));
             if (accumulator->Ready()) {
                 if (!writer->Push(accumulator->GetData())) {
                     LOG_E("Error writing data to " << dbPath.Quote() << ", file: " << dataFile.GetPath().Quote());
@@ -518,3 +582,7 @@ TRestoreResult TRestoreClient::RestoreEmptyDir(const TFsPath& fsPath, const TStr
 
 } // NDump
 } // NYdb
+
+Y_DECLARE_OUT_SPEC(, NYdb::NDump::NPrivate::TLocation, o, x) {
+    return x.Out(o);
+}

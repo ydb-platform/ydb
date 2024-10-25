@@ -10,7 +10,8 @@ namespace NDump {
 NPrivate::IDataAccumulator* CreateImportDataAccumulator(
     const NTable::TTableDescription& dumpedDesc,
     const NTable::TTableDescription& actualDesc,
-    const TRestoreSettings& settings);
+    const TRestoreSettings& settings,
+    const std::shared_ptr<TLog>& log);
 
 NPrivate::IDataWriter* CreateImportDataWriter(
     const TString& path,

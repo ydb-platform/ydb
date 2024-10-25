@@ -22,8 +22,8 @@ get_built_tool_path(
 add_subdirectory(writer)
 add_subdirectory(events)
 add_subdirectory(config)
-add_subdirectory(codecs)
 add_subdirectory(partition_key_range)
+add_subdirectory(codecs)
 add_subdirectory(ut)
 add_subdirectory(dread_cache_service)
 

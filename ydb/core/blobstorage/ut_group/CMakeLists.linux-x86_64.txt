@@ -32,6 +32,7 @@ target_link_libraries(ydb-core-blobstorage-ut_group PUBLIC
   blobstorage-vdisk-common
   core-tx-scheme_board
   ydb-core-util
+  core-util-actorsys_test
 )
 
 target_allocator(ydb-core-blobstorage-ut_group

@@ -13,6 +13,6 @@
 # changes in this file.
 
 add_subdirectory(pgwire)
+add_subdirectory(version)
 add_subdirectory(ydb)
 add_subdirectory(ydbd)
-add_subdirectory(version)

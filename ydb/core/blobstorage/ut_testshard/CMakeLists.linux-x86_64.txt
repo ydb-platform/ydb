@@ -43,6 +43,7 @@ target_link_libraries(ydb-core-blobstorage-ut_testshard PUBLIC
   udf-service-stub
   yql-sql-pg_dummy
   cpp-testing-unittest
+  core-util-actorsys_test
 )
 
 target_allocator(ydb-core-blobstorage-ut_testshard

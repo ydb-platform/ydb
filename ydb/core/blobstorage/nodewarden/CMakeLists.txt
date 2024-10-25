@@ -32,6 +32,7 @@ target_link_libraries(core-blobstorage-nodewarden PUBLIC
   ydb-core-control
   ydb-library-pdisk_io
   ydb-library-yaml_config
+  core-util-actorsys_test
 )
 
 target_sources(core-blobstorage-nodewarden PRIVATE

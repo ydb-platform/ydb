@@ -87,12 +87,12 @@ target_link_libraries(library-workload-tpcds.global PUBLIC
 
 target_sources(library-workload-tpcds.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/registrar.cpp
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpcds/d0a69dd50cc5b2933cefcb3f0a754a12.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpcds/9ab65819ad3b4a25b181ed9255aa9212.cpp
 )
 
 
 resources(library-workload-tpcds.global
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpcds/d0a69dd50cc5b2933cefcb3f0a754a12.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpcds/9ab65819ad3b4a25b181ed9255aa9212.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/tpcds_schema.sql
   ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/yql/q1.sql
@@ -194,6 +194,105 @@ resources(library-workload-tpcds.global
   ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/yql/q97.sql
   ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/yql/q98.sql
   ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/yql/q99.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q01.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q02.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q03.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q04.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q05.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q06.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q07.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q08.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q09.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q10.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q11.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q12.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q13.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q14.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q15.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q16.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q17.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q18.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q19.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q20.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q21.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q22.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q23.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q24.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q25.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q26.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q27.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q28.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q29.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q30.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q31.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q32.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q33.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q34.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q35.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q36.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q37.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q38.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q39.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q40.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q41.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q42.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q43.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q44.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q45.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q46.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q47.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q48.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q49.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q50.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q51.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q52.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q53.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q54.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q55.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q56.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q57.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q58.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q59.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q60.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q61.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q62.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q63.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q64.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q65.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q66.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q67.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q68.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q69.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q70.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q71.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q72.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q73.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q74.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q75.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q76.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q77.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q78.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q79.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q80.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q81.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q82.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q83.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q84.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q85.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q86.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q87.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q88.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q89.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q90.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q91.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q92.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q93.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q94.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q95.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q96.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q97.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q98.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpcds/pg/q99.sql
   KEYS
   tpcds_schema.sql
   tpcds/yql/q1.sql
@@ -295,4 +394,103 @@ resources(library-workload-tpcds.global
   tpcds/yql/q97.sql
   tpcds/yql/q98.sql
   tpcds/yql/q99.sql
+  tpcds/pg/q1.sql
+  tpcds/pg/q2.sql
+  tpcds/pg/q3.sql
+  tpcds/pg/q4.sql
+  tpcds/pg/q5.sql
+  tpcds/pg/q6.sql
+  tpcds/pg/q7.sql
+  tpcds/pg/q8.sql
+  tpcds/pg/q9.sql
+  tpcds/pg/q10.sql
+  tpcds/pg/q11.sql
+  tpcds/pg/q12.sql
+  tpcds/pg/q13.sql
+  tpcds/pg/q14.sql
+  tpcds/pg/q15.sql
+  tpcds/pg/q16.sql
+  tpcds/pg/q17.sql
+  tpcds/pg/q18.sql
+  tpcds/pg/q19.sql
+  tpcds/pg/q20.sql
+  tpcds/pg/q21.sql
+  tpcds/pg/q22.sql
+  tpcds/pg/q23.sql
+  tpcds/pg/q24.sql
+  tpcds/pg/q25.sql
+  tpcds/pg/q26.sql
+  tpcds/pg/q27.sql
+  tpcds/pg/q28.sql
+  tpcds/pg/q29.sql
+  tpcds/pg/q30.sql
+  tpcds/pg/q31.sql
+  tpcds/pg/q32.sql
+  tpcds/pg/q33.sql
+  tpcds/pg/q34.sql
+  tpcds/pg/q35.sql
+  tpcds/pg/q36.sql
+  tpcds/pg/q37.sql
+  tpcds/pg/q38.sql
+  tpcds/pg/q39.sql
+  tpcds/pg/q40.sql
+  tpcds/pg/q41.sql
+  tpcds/pg/q42.sql
+  tpcds/pg/q43.sql
+  tpcds/pg/q44.sql
+  tpcds/pg/q45.sql
+  tpcds/pg/q46.sql
+  tpcds/pg/q47.sql
+  tpcds/pg/q48.sql
+  tpcds/pg/q49.sql
+  tpcds/pg/q50.sql
+  tpcds/pg/q51.sql
+  tpcds/pg/q52.sql
+  tpcds/pg/q53.sql
+  tpcds/pg/q54.sql
+  tpcds/pg/q55.sql
+  tpcds/pg/q56.sql
+  tpcds/pg/q57.sql
+  tpcds/pg/q58.sql
+  tpcds/pg/q59.sql
+  tpcds/pg/q60.sql
+  tpcds/pg/q61.sql
+  tpcds/pg/q62.sql
+  tpcds/pg/q63.sql
+  tpcds/pg/q64.sql
+  tpcds/pg/q65.sql
+  tpcds/pg/q66.sql
+  tpcds/pg/q67.sql
+  tpcds/pg/q68.sql
+  tpcds/pg/q69.sql
+  tpcds/pg/q70.sql
+  tpcds/pg/q71.sql
+  tpcds/pg/q72.sql
+  tpcds/pg/q73.sql
+  tpcds/pg/q74.sql
+  tpcds/pg/q75.sql
+  tpcds/pg/q76.sql
+  tpcds/pg/q77.sql
+  tpcds/pg/q78.sql
+  tpcds/pg/q79.sql
+  tpcds/pg/q80.sql
+  tpcds/pg/q81.sql
+  tpcds/pg/q82.sql
+  tpcds/pg/q83.sql
+  tpcds/pg/q84.sql
+  tpcds/pg/q85.sql
+  tpcds/pg/q86.sql
+  tpcds/pg/q87.sql
+  tpcds/pg/q88.sql
+  tpcds/pg/q89.sql
+  tpcds/pg/q90.sql
+  tpcds/pg/q91.sql
+  tpcds/pg/q92.sql
+  tpcds/pg/q93.sql
+  tpcds/pg/q94.sql
+  tpcds/pg/q95.sql
+  tpcds/pg/q96.sql
+  tpcds/pg/q97.sql
+  tpcds/pg/q98.sql
+  tpcds/pg/q99.sql
 )

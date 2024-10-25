@@ -78,12 +78,12 @@ target_link_libraries(library-workload-tpch.global PUBLIC
 target_sources(library-workload-tpch.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/data_generator.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/registrar.cpp
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/951996b19eae83323d70b8d80413274a.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/a7560ce62d0f39a0f744f48303710697.cpp
 )
 
 
 resources(library-workload-tpch.global
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/951996b19eae83323d70b8d80413274a.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/a7560ce62d0f39a0f744f48303710697.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/tpch_schema.sql
   ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/gen/tpch-dbgen/dists.dss
@@ -109,6 +109,28 @@ resources(library-workload-tpch.global
   ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/yql/q20.sql
   ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/yql/q21.sql
   ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/yql/q22.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/pg/q1.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/pg/q2.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/pg/q3.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/pg/q4.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/pg/q5.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/pg/q6.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/pg/q7.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/pg/q8.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/pg/q9.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/pg/q10.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/pg/q11.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/pg/q12.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/pg/q13.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/pg/q14.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/pg/q15.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/pg/q16.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/pg/q17.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/pg/q18.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/pg/q19.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/pg/q20.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/pg/q21.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/pg/q22.sql
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1_canonical/q1.result
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1_canonical/q2.result
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1_canonical/q3.result
@@ -156,6 +178,28 @@ resources(library-workload-tpch.global
   tpch/yql/q20.sql
   tpch/yql/q21.sql
   tpch/yql/q22.sql
+  tpch/pg/q1.sql
+  tpch/pg/q2.sql
+  tpch/pg/q3.sql
+  tpch/pg/q4.sql
+  tpch/pg/q5.sql
+  tpch/pg/q6.sql
+  tpch/pg/q7.sql
+  tpch/pg/q8.sql
+  tpch/pg/q9.sql
+  tpch/pg/q10.sql
+  tpch/pg/q11.sql
+  tpch/pg/q12.sql
+  tpch/pg/q13.sql
+  tpch/pg/q14.sql
+  tpch/pg/q15.sql
+  tpch/pg/q16.sql
+  tpch/pg/q17.sql
+  tpch/pg/q18.sql
+  tpch/pg/q19.sql
+  tpch/pg/q20.sql
+  tpch/pg/q21.sql
+  tpch/pg/q22.sql
   tpch/s1_canonical/q1.result
   tpch/s1_canonical/q2.result
   tpch/s1_canonical/q3.result

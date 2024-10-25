@@ -32,6 +32,7 @@ target_link_libraries(ydb-core-blobstorage-backpressure-ut_client PUBLIC
   blobstorage-vdisk-common
   core-tx-scheme_board
   udf-service-stub
+  core-util-actorsys_test
 )
 
 target_allocator(ydb-core-blobstorage-backpressure-ut_client

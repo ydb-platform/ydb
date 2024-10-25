@@ -42,6 +42,7 @@ target_link_libraries(blobstorage-ut_blobstorage-lib PUBLIC
   minikql-comp_nodes-llvm14
   udf-service-exception_policy
   yql-sql-pg_dummy
+  core-util-actorsys_test
 )
 
 target_sources(blobstorage-ut_blobstorage-lib PRIVATE

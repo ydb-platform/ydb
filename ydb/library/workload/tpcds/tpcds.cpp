@@ -71,11 +71,12 @@ TQueryInfoList TTpcdsWorkloadGenerator::GetWorkload(int type) {
         }
     } else {
         NResource::TResources qresources;
-        NResource::FindMatch("tpcds/yql/q", &qresources);
+        const auto prefix = "tpcds/" +  ToString(Params.GetSyntax()) + "/q";
+        NResource::FindMatch(prefix, &qresources);
         for (const auto& r: qresources) {
             ui32 num;
             TStringBuf q(r.Key);
-            if (!q.SkipPrefix("tpcds/yql/q") || !q.ChopSuffix(".sql") || !TryFromString(q, num)) {
+            if (!q.SkipPrefix(prefix) || !q.ChopSuffix(".sql") || !TryFromString(q, num)) {
                 continue;
             }
             if (queries.size() < num + 1) {
@@ -85,38 +86,32 @@ TQueryInfoList TTpcdsWorkloadGenerator::GetWorkload(int type) {
         }
     }
     for (auto& query : queries) {
-        auto substTable= [this, &query](const char* name) {
-            SubstGlobal(query, 
-                TStringBuilder() << "{{" << name << "}}", 
-                TStringBuilder() << "`" << Params.GetFullTableName(name) << "`"
-            );
-        };
-        PatchQuery(query);
-        SubstGlobal(query, "{path}", Params.GetFullTableName(nullptr) + "/");
-        substTable("customer_address");
-        substTable("customer_demographics");
-        substTable("date_dim");
-        substTable("warehouse");
-        substTable("ship_mode");
-        substTable("time_dim");
-        substTable("reason");
-        substTable("income_band");
-        substTable("item");
-        substTable("store");
-        substTable("call_center");
-        substTable("customer");
-        substTable("web_site");
-        substTable("store_returns");
-        substTable("household_demographics");
-        substTable("web_page");
-        substTable("promotion");
-        substTable("catalog_page");
-        substTable("inventory");
-        substTable("catalog_returns");
-        substTable("web_returns");
-        substTable("web_sales");
-        substTable("catalog_sales");
-        substTable("store_sales");
+        PatchQuery(query , {
+            "customer_address",
+            "customer_demographics",
+            "date_dim",
+            "warehouse",
+            "ship_mode",
+            "time_dim",
+            "reason",
+            "income_band",
+            "item",
+            "store",
+            "call_center",
+            "customer",
+            "web_site",
+            "store_returns",
+            "household_demographics",
+            "web_page",
+            "promotion",
+            "catalog_page",
+            "inventory",
+            "catalog_returns",
+            "web_returns",
+            "web_sales",
+            "catalog_sales",
+            "store_sales",
+        });
         result.emplace_back();
         result.back().Query = query;
     }

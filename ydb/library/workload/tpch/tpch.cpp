@@ -67,11 +67,12 @@ TQueryInfoList TTpchWorkloadGenerator::GetWorkload(int type) {
         }
     } else {
         NResource::TResources qresources;
-        NResource::FindMatch("tpch/yql/q", &qresources);
+        const auto prefix = "tpch/" + ToString(Params.GetSyntax()) + "/q";
+        NResource::FindMatch(prefix, &qresources);
         for (const auto& r: qresources) {
             ui32 num;
             TStringBuf q(r.Key);
-            if (!q.SkipPrefix("tpch/yql/q") || !q.ChopSuffix(".sql") || !TryFromString(q, num)) {
+            if (!q.SkipPrefix(prefix) || !q.ChopSuffix(".sql") || !TryFromString(q, num)) {
                 continue;
             }
             if (queries.size() < num + 1) {
@@ -81,22 +82,16 @@ TQueryInfoList TTpchWorkloadGenerator::GetWorkload(int type) {
         }
     }
     for (auto& query : queries) {
-        auto substTable= [this, &query](const char* name) {
-            SubstGlobal(query, 
-                TStringBuilder() << "{{" << name << "}}", 
-                TStringBuilder() << "`" << Params.GetFullTableName(name) << "`"
-            );
-        };
-        PatchQuery(query);
-        SubstGlobal(query, "{path}", Params.GetFullTableName(nullptr) + "/");
-        substTable("customer");
-        substTable("lineitem");
-        substTable("nation");
-        substTable("orders");
-        substTable("part");
-        substTable("partsupp");
-        substTable("region");
-        substTable("supplier");
+        PatchQuery(query, {
+            "customer",
+            "lineitem",
+            "nation",
+            "orders",
+            "part",
+            "partsupp",
+            "region",
+            "supplier"
+        });
         result.emplace_back();
         result.back().Query = query;
         if (Params.IsCheckCanonical()) {

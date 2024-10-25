@@ -14,6 +14,7 @@ public:
     };
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
     YDB_READONLY(EFloatMode, FloatMode, EFloatMode::FLOAT);
+    YDB_READONLY(EQuerySyntax, Syntax, EQuerySyntax::YQL);
 };
 
 class TTpcBaseWorkloadGenerator: public TWorkloadGeneratorBase {
@@ -21,7 +22,7 @@ public:
     explicit TTpcBaseWorkloadGenerator(const TTpcBaseWorkloadParams& params);
 
 protected:
-    void PatchQuery(TString& query) const;
+    void PatchQuery(TString& query, const TVector<TString>& tables) const;
 
 private:
     const TTpcBaseWorkloadParams& Params;

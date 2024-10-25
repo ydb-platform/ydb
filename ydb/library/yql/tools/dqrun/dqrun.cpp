@@ -143,6 +143,7 @@ struct TRunOptions {
     IOutputStream* ResultOut = &Cout;
     IOutputStream* ErrStream = &Cerr;
     IOutputStream* TracePlan = &Cerr;
+    IOutputStream* IssuesStream = nullptr;
     bool UseMetaFromGraph = false;
     bool WithFinalIssues = false;
     bool ValidateResultFormat = false;
@@ -402,6 +403,9 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
         fail = !program->ParseYql();
     }
     program->PrintErrorsTo(*options.ErrStream);
+    if (options.IssuesStream) {
+        program->Issues().PrintTo(*options.IssuesStream);
+    }
     if (fail) {
         return 1;
     }
@@ -411,6 +415,9 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
     Cout << "Compile program..." << Endl;
     fail = !program->Compile(options.User);
     program->PrintErrorsTo(*options.ErrStream);
+    if (options.IssuesStream) {
+        program->Issues().PrintTo(*options.IssuesStream);
+    }
     if (options.TraceOpt) {
         program->Print(&Cerr, nullptr);
     }
@@ -439,6 +446,9 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
         program->FinalizeIssues();
     }
     program->PrintErrorsTo(*options.ErrStream);
+    if (options.IssuesStream) {
+        program->Issues().PrintTo(*options.IssuesStream);
+    }
     if (status == TProgram::TStatus::Error) {
         if (options.TraceOpt) {
             program->Print(&Cerr, nullptr);
@@ -537,6 +547,7 @@ int RunMain(int argc, const char* argv[])
     TString resultFile;
     TString planFile;
     TString errFile;
+    TString issuesFile;
     TString paramsFile;
     TString fileStorageCfg;
     TVector<TString> udfsPaths;
@@ -658,6 +669,7 @@ int RunMain(int argc, const char* argv[])
     opts.AddLongOption("result-file", "print program execution result to file").StoreResult<TString>(&resultFile);
     opts.AddLongOption("plan-file", "print program plan to file").StoreResult<TString>(&planFile);
     opts.AddLongOption("err-file", "print validate/optimize/runtime errors to file").StoreResult<TString>(&errFile);
+    opts.AddLongOption("issues-file", "print issues to file").StoreResult<TString>(&issuesFile);
     opts.AddLongOption("params-file", "Query parameters values in YSON format").StoreResult(&paramsFile);
     opts.AddLongOption("tmp-dir", "directory for temporary tables").StoreResult<TString>(&tmpDir);
     opts.AddLongOption('G', "gateways", "used gateways").SplitHandler(&gatewayTypes, ',').DefaultValue(DqProviderName);
@@ -816,13 +828,18 @@ int RunMain(int argc, const char* argv[])
     if (res.Has("threads")) {
         threads = res.Get<int>("threads");
     }
-
     THolder<TFixedBufferFileOutput> exprFileHolder;
     if (res.Has("print-expr")) {
         runOptions.ExprOut = &Cout;
     } else if (!exprFile.empty()) {
         exprFileHolder.Reset(new TFixedBufferFileOutput(exprFile));
         runOptions.ExprOut = exprFileHolder.Get();
+    }
+
+    THolder<TFixedBufferFileOutput> issuesFileHolder;
+    if (!issuesFile.empty()) {
+        issuesFileHolder.Reset(new TFixedBufferFileOutput(issuesFile));
+        runOptions.IssuesStream = issuesFileHolder.Get();
     }
     THolder<TFixedBufferFileOutput> errFileHolder;
     if (!errFile.empty()) {

@@ -385,7 +385,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvGet, requestSize, duration.SecondsFloat() * 1000.0, tabletId,
                 evResult->GroupId, channel, NKikimrBlobStorage::EGetHandleClass_Name(handleClass),
                 success);
-        DSP_LOG_LOG_S(success ? NLog::PRI_INFO : NLog::PRI_NOTICE, "BPG68", "Result# " << evResult->Print(false));
+        DSP_LOG_LOG_S(success ? NLog::PRI_INFO : NLog::PRI_NOTICE, "BPG68", "Result# " << evResult->Print(false) <<" GroupId# " << Info->GroupID);
 
         if (TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) {
             if (AllowToReport(GetImpl.GetHandleClass())) {

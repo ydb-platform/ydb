@@ -1,0 +1,10 @@
+--- a/src/google/protobuf/compiler/importer.h	(0dd6d02cb89a06c67e29040284d9239dfe0024b7)
++++ b/src/google/protobuf/compiler/importer.h	(192810303a994f7cbd6bf596a3d56393bfefee6c)
+@@ -216,7 +216,6 @@ class PROTOBUF_EXPORT MultiFileErrorCollector {
+     PROTOBUF_IGNORE_DEPRECATION_STOP
+   }
+ 
+- private:
+   // These should never be called directly, but if a legacy class overrides
+   // them they'll get routed to by the Record* methods.
+   Y_ABSL_DEPRECATED("Use RecordError")

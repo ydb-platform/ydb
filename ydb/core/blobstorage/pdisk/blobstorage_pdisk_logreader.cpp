@@ -201,7 +201,10 @@ struct TLogReader::TSectorData {
         , PreparedOffset(0)
         , PreparedSize(0)
         , IsScheduled(false)
-    {}
+    {
+        Y_VERIFY_S(buffer && dataSize <= buffer->Size(), "buffer has size less than log reader's sector, dataSize# "
+                << dataSize << " bufferSize# " << (buffer ? (i64)buffer->Size() : -1));
+    }
 
     TString ToString() {
         TStringStream str;
@@ -252,15 +255,17 @@ struct TLogReader::TSectorData {
 };
 
 class TLogReader::TDoubleBuffer {
+    const ui64 PDiskSectorSize;
+    const ui32 BufferSizeSectors;
     THolder<TSectorData> SectorA;
     THolder<TSectorData> SectorB;
-    const ui64 PDiskSectorSize;
 
 public:
-    TDoubleBuffer(TPDisk *pdisk)
-        : SectorA(MakeHolder<TSectorData>(pdisk->BufferPool->Pop(), pdisk->Format.SectorSize * BufferSizeSectors))
-        , SectorB(MakeHolder<TSectorData>(pdisk->BufferPool->Pop(), pdisk->Format.SectorSize * BufferSizeSectors))
-        , PDiskSectorSize(pdisk->Format.SectorSize)
+    TDoubleBuffer(TPDisk *pdisk, ui32 bufferSizeSectors)
+        : PDiskSectorSize(pdisk->Format.SectorSize)
+        , BufferSizeSectors(bufferSizeSectors)
+        , SectorA(MakeHolder<TSectorData>(pdisk->BufferPool->Pop(), PDiskSectorSize * BufferSizeSectors))
+        , SectorB(MakeHolder<TSectorData>(pdisk->BufferPool->Pop(), PDiskSectorSize * BufferSizeSectors))
     {}
 
     ui64 BufferIdxFromOffset(ui64 innerOffset) const {
@@ -294,9 +299,10 @@ TLogReader::TLogReader(bool isInitial,TPDisk *pDisk, TActorSystem * const actorS
     , SizeLimit(sizeLimit)
     , Result(new NPDisk::TEvReadLogResult(
         NKikimrProto::ERROR, position, TLogPosition::Invalid(), false,
-        pDisk->GetStatusFlags(owner, ownerGroupType), nullptr, owner))
+        pDisk->GetStatusFlags(owner, ownerGroupType), "", owner))
     , ChunkInfo(nullptr)
-    , Sector(new TDoubleBuffer(pDisk))
+    , BufferSizeSectors(pDisk->BufferPool->GetBufferSize() / pDisk->Format.SectorSize)
+    , Sector(new TDoubleBuffer(pDisk, BufferSizeSectors))
     , ChunkOwnerMap(IsInitial ? new TMap<ui32, TChunkState>() : nullptr)
     , State(ELogReaderState::PrepareToRead)
     , IsReplied(false)
@@ -374,7 +380,7 @@ void TLogReader::Exec(ui64 offsetRead, TVector<ui64> &badOffsets, TActorSystem *
         bool isOk = RegisterBadOffsets(badOffsets);
         if (!isOk) {
             P_LOG(PRI_ERROR, BPD01, "Log is damaged and unrevocerable");
-                
+
             ReplyError();
             return;
         }
@@ -1133,7 +1139,7 @@ void TLogReader::Reply() {
             PDisk->Format.Offset(ChunkIdx + 1, 0)
         );
     }
-    P_LOG(PRI_DEBUG, BPD01, "Reply to owner", (OwnerId, (ui32)Owner), (Result, Result->ToString()));
+    P_LOG(PRI_NOTICE, BPD01, "Reply to owner", (OwnerId, (ui32)Owner), (Result, Result->ToString()));
     PCtx->ActorSystem->Send(ReplyTo, Result.Release());
     if (!IsInitial) {
         PDisk->Mon.LogRead.CountResponse(ResultSize);

@@ -6,6 +6,8 @@
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/mvp/core/core_ydb.h>
+#include "context.h"
 
 
 namespace NMVP {
@@ -13,16 +15,41 @@ namespace NOIDC {
 
 struct TOpenIdConnectSettings;
 
+struct TRestoreOidcContextResult {
+    struct TStatus {
+        bool IsSuccess = true;
+        bool IsErrorRetryable = false;
+        TString ErrorMessage;
+    };
+
+    TContext Context;
+    TStatus Status;
+
+    TRestoreOidcContextResult(const TStatus& status = {.IsSuccess = true, .IsErrorRetryable = false, .ErrorMessage = ""}, const TContext& context = TContext());
+
+    bool IsSuccess() const;
+};
+
+struct TCheckStateResult {
+    bool Success = true;
+    TString ErrorMessage;
+
+    TCheckStateResult(bool success = true, const TString& errorMessage = "");
+
+    bool IsSuccess() const;
+};
+
 TString HmacSHA256(TStringBuf key, TStringBuf data);
+TString HmacSHA1(TStringBuf key, TStringBuf data);
 void SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const TString& value);
-TString GenerateCookie(TStringBuf state, TStringBuf redirectUrl, const TString& secret, bool isAjaxRequest);
-NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, bool isAjaxRequest = false);
-bool DetectAjaxRequest(const NHttp::THeaders& headers);
+NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings);
 TString CreateNameYdbOidcCookie(TStringBuf key, TStringBuf state);
 TString CreateNameSessionCookie(TStringBuf key);
 const TString& GetAuthCallbackUrl();
 TString CreateSecureCookie(const TString& name, const TString& value);
 void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder* const headers);
+TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, const TString& key);
+TCheckStateResult CheckState(const TString& state, const TString& key);
 
 template <typename TSessionService>
 std::unique_ptr<NYdbGrpc::TServiceConnection<TSessionService>> CreateGRpcServiceConnection(const TString& endpoint) {
@@ -34,6 +61,7 @@ std::unique_ptr<NYdbGrpc::TServiceConnection<TSessionService>> CreateGRpcService
     config.Locator = host;
     config.EnableSsl = (scheme == "grpcs");
     static NYdbGrpc::TGRpcClientLow client;
+    SetGrpcKeepAlive(config);
     return client.CreateGRpcServiceConnection<TSessionService>(config);
 }
 

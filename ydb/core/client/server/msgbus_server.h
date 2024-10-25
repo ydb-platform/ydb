@@ -87,6 +87,7 @@ public:
     void SendReplyMove(NBus::TBusMessageAutoPtr response);
     void Swap(TBusMessageContext& msg);
     TVector<TStringBuf> FindClientCert() const;
+    TString GetPeerName() const;
 
 private:
     friend class TMessageBusSessionIdentHolder;
@@ -277,8 +278,6 @@ IActor* CreateMessageBusLocalSchemeTx(TBusMessageContext &msg);
 IActor* CreateMessageBusSchemeInitRoot(TBusMessageContext &msg);
 IActor* CreateMessageBusGetTypes(TBusMessageContext &msg);
 IActor* CreateMessageBusHiveCreateTablet(TBusMessageContext &msg);
-IActor* CreateMessageBusLocalEnumerateTablets(TBusMessageContext &msg);
-IActor* CreateMessageBusKeyValue(TBusMessageContext &msg);
 IActor* CreateMessageBusPersQueue(TBusMessageContext &msg);
 IActor* CreateMessageBusChooseProxy(TBusMessageContext &msg);
 IActor* CreateMessageBusTabletStateRequest(TBusMessageContext &msg);

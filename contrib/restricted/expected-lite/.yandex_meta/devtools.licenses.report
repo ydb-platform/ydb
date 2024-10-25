@@ -1,0 +1,79 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+SKIP     IPL-1.0              18358e6da236a2ee9e6e43715ed951f6
+BELONGS ya.make
+	# Not a license
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: IPL-1.0
+        Score           : 57.14
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/ibmpl.php, https://spdx.org/licenses/IPL-1.0
+    Files with this license:
+        README.md [3:3]
+
+KEEP     BSL-1.0              2c7a3fa82e66676005cd4ee2608fd7d2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        LICENSE.txt [1:23]
+
+KEEP     BSL-1.0              73a2516db620f6413502ee77bdb4af88
+BELONGS ya.make
+    License text:
+        *expected lite* is distributed under the [Boost Software License](https://github.com/martinmoene/XXXX-lite/blob/master/LICENSE.txt).
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [76:76]
+
+KEEP     BSL-1.0              cccf0dd010adef3878bb56734414eca6
+BELONGS ya.make
+FILE_INCLUDE LICENSE.txt found in files: include/nonstd/expected.hpp at line 6
+    License text:
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/nonstd/expected.hpp [5:6]

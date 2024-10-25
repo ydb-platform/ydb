@@ -19,21 +19,21 @@ ADDINCL(
 
 NO_COMPILER_WARNINGS()
 
-IF(NOT Y_ABSL_DONT_USE_DEBUG)
-SRCS(
-    failure_signal_handler.cc
-    internal/address_is_readable.cc
-    internal/decode_rust_punycode.cc
-    internal/demangle.cc
-    internal/demangle_rust.cc
-    internal/elf_mem_image.cc
-    internal/examine_stack.cc
-    internal/utf8_for_code_point.cc
-    internal/vdso_support.cc
-    leak_check.cc
-    stacktrace.cc
-    symbolize.cc
-)
+IF (NOT Y_ABSL_DONT_USE_DEBUG)
+    SRCS(
+        failure_signal_handler.cc
+        internal/address_is_readable.cc
+        internal/decode_rust_punycode.cc
+        internal/demangle.cc
+        internal/demangle_rust.cc
+        internal/elf_mem_image.cc
+        internal/examine_stack.cc
+        internal/utf8_for_code_point.cc
+        internal/vdso_support.cc
+        leak_check.cc
+        stacktrace.cc
+        symbolize.cc
+    )
 ENDIF()
 
 END()

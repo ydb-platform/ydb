@@ -1,4 +1,4 @@
-# Работа с базами данных YDB
+# Работа с базами данных {{ ydb-short-name }}
 
 {{ ydb-full-name }} может выступать в качестве внешнего источника данных для другой базы {{ ydb-full-name }}. В данном разделе рассматривается организация совместной работы двух независимых баз данных {{ ydb-short-name }} в режиме обработки федеративных запросов.
 
@@ -52,6 +52,23 @@ SELECT * FROM ydb_datasource.<table_name>
 
 1. {% include [!](_includes/supported_requests.md) %}
 1. {% include [!](_includes/predicate_pushdown.md) %}
+
+    |Тип данных {{ ydb-short-name }}|
+    |----|
+    |`Bool`|
+    |`Int8`|
+    |`Uint8`|
+    |`Int16`|
+    |`Uint16`|
+    |`Int32`|
+    |`Uint32`|
+    |`Int64`|
+    |`Uint64`|
+    |`Float`|
+    |`Double`|
+    |`String`|
+    |`Utf8`|
+
 
 ## Поддерживаемые типы данных
 

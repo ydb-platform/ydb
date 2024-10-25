@@ -260,8 +260,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     const NScheme::TTypeRegistry& typeRegistry,
     const TSchemeLimits& limits,
     const TSubDomainInfo& subDomain,
-    bool pgTypesEnabled,
-    bool datetime64TypesEnabled,
+    const TCreateAlterDataFeatureFlags& featureFlags,
     TString& errStr,
     const THashSet<TString>& localSequences)
 {
@@ -305,12 +304,11 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         }
 
         if (!IsValidColumnName(colName, allowSystemColumns)) {
-            errStr = Sprintf("Invalid name for column '%s'", colName.data());
+            errStr = Sprintf("Invalid name for %s column '%s'", allowSystemColumns ? "any" : "user", colName.data());
             return nullptr;
         }
 
         auto typeName = NMiniKQL::AdaptLegacyYqlType(col.GetType());
-        const NScheme::IType* type = typeRegistry.GetType(typeName);
 
         NKikimrSchemeOp::TFamilyDescription* columnFamily = nullptr;
         if (col.HasFamily() && col.HasFamilyName()) {
@@ -447,39 +445,36 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
 
             NScheme::TTypeInfo typeInfo;
-            TString typeMod;
-            if (type) {
-                // Only allow YQL types
-                if (!NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
-                    errStr = Sprintf("Type '%s' specified for column '%s' is no longer supported", col.GetType().data(), colName.data());
-                    return nullptr;
-                }
-                typeInfo = NScheme::TTypeInfo(type->GetTypeId());
+            if (!GetTypeInfo(typeRegistry.GetType(typeName), col.GetTypeInfo(), typeName, colName, typeInfo, errStr)) {
+                return nullptr;
+            }
 
-                if (!datetime64TypesEnabled) {
-                    switch (type->GetTypeId()) {
-                        case NScheme::NTypeIds::Date32:
-                        case NScheme::NTypeIds::Datetime64:
-                        case NScheme::NTypeIds::Timestamp64:
-                        case NScheme::NTypeIds::Interval64:
-                            errStr = Sprintf("Type '%s' specified for column '%s', but support for new date/time 64 types is disabled (EnableTableDatetime64 feature flag is off)", col.GetType().data(), colName.data());
-                            return nullptr;
-                        default:
-                            break;
-                    }
-                }
-            } else {
-                auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
-                if (!typeDesc) {
-                    errStr = Sprintf("Type '%s' specified for column '%s' is not supported by storage", col.GetType().data(), colName.data());
+            switch (typeInfo.GetTypeId()) {
+            case NScheme::NTypeIds::Date32:
+            case NScheme::NTypeIds::Datetime64:
+            case NScheme::NTypeIds::Timestamp64:
+            case NScheme::NTypeIds::Interval64:
+                if (!featureFlags.EnableTableDatetime64) {
+                    errStr = Sprintf("Type '%s' specified for column '%s', but support for new date/time 64 types is disabled (EnableTableDatetime64 feature flag is off)", col.GetType().data(), colName.data());
                     return nullptr;
                 }
-                if (!pgTypesEnabled) {
+                break;
+            case NScheme::NTypeIds::Decimal: {
+                const auto decimalType = NScheme::TDecimalType::ParseTypeName(typeName);
+                if (!featureFlags.EnableParameterizedDecimal && decimalType != NScheme::TDecimalType::Default()){
+                    errStr = Sprintf("Type '%s' specified for column '%s', but support for parametrized decimal is disabled (EnableParameterizedDecimal feature flag is off)", col.GetType().data(), colName.data());
+                    return nullptr;
+                }   
+                break;
+            }
+            case NScheme::NTypeIds::Pg:
+                if (!featureFlags.EnableTablePgTypes) {
                     errStr = Sprintf("Type '%s' specified for column '%s', but support for pg types is disabled (EnableTablePgTypes feature flag is off)", col.GetType().data(), colName.data());
                     return nullptr;
                 }
-                typeInfo = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
-                typeMod = NPg::TypeModFromPgTypeName(typeName);
+                break;                             
+            default:
+                break;
             }
 
             ui32 colId = col.HasId() ? col.GetId() : alterData->NextColumnId;
@@ -497,7 +492,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
             colName2Id[colName] = colId;
             TTableInfo::TColumn& column = alterData->Columns[colId];
-            column = TTableInfo::TColumn(colName, colId, typeInfo, typeMod, col.GetNotNull());
+            column = TTableInfo::TColumn(colName, colId, typeInfo, typeInfo.GetPgTypeMod(typeName), col.GetNotNull());
             column.Family = columnFamily ? columnFamily->GetId() : 0;
             column.IsBuildInProgress = col.GetIsBuildInProgress();
             if (source)
@@ -1441,14 +1436,14 @@ bool TPartitionConfigMerger::VerifyAlterParams(
     return true;
 }
 
-bool TPartitionConfigMerger::VerifyCompactionPolicy(const NKikimrSchemeOp::TCompactionPolicy &policy, TString &err)
+bool TPartitionConfigMerger::VerifyCompactionPolicy(const NKikimrCompaction::TCompactionPolicy &policy, TString &err)
 {
     if (policy.HasCompactionStrategy()) {
         switch (policy.GetCompactionStrategy()) {
-        case NKikimrSchemeOp::CompactionStrategyUnset:
-        case NKikimrSchemeOp::CompactionStrategyGenerational:
+        case NKikimrCompaction::CompactionStrategyUnset:
+        case NKikimrCompaction::CompactionStrategyGenerational:
             break;
-        case NKikimrSchemeOp::CompactionStrategySharded:
+        case NKikimrCompaction::CompactionStrategySharded:
         default:
             err = TStringBuilder()
                     << "Unsupported compaction strategy.";

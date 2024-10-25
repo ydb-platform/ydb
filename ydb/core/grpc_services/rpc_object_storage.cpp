@@ -144,6 +144,19 @@ bool CellFromTuple(NScheme::TTypeInfo type,
         }
         break;
     }
+    case NScheme::NTypeIds::Decimal:
+    {
+        if (tupleValue.Haslow_128()) {
+            NYql::NDecimal::TInt128 int128 = NYql::NDecimal::FromHalfs(tupleValue.Getlow_128(), tupleValue.Gethigh_128());
+            auto &data = memoryOwner.emplace_back();
+            data.resize(sizeof(NYql::NDecimal::TInt128));
+            std::memcpy(data.Detach(), &int128, sizeof(NYql::NDecimal::TInt128));
+            c = TCell(data);                
+        } else {
+            CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type Decimal in tuple at position %" PRIu32, position));
+        }
+        break;
+    }    
     default:
         CHECK_OR_RETURN_ERROR(false, Sprintf("Unsupported typeId %" PRIu16 " at index %" PRIu32, typeId, position));
         break;
@@ -820,11 +833,18 @@ private:
         };
 
         const auto getTypeFromColMeta = [&](const auto &colMeta) {
-            if (colMeta.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
+            const NScheme::TTypeInfo& typeInfo = colMeta.PType;
+            switch (typeInfo.GetTypeId()) {
+            case NScheme::NTypeIds::Pg:
                 return NYdb::TTypeBuilder().Pg(getPgTypeFromColMeta(colMeta)).Build();
-            } else {
+            case NScheme::NTypeIds::Decimal:
+                return NYdb::TTypeBuilder().Decimal(NYdb::TDecimalType(
+                        typeInfo.GetDecimalType().GetPrecision(), 
+                        typeInfo.GetDecimalType().GetScale()))
+                    .Build();
+            default:
                 return NYdb::TTypeBuilder()
-                    .Primitive((NYdb::EPrimitiveType)colMeta.PType.GetTypeId())
+                    .Primitive((NYdb::EPrimitiveType)typeInfo.GetTypeId())
                     .Build();
             }
         };
@@ -852,8 +872,17 @@ private:
                     }
                     const NYdb::TPgValue pgValue{cell.IsNull() ? NYdb::TPgValue::VK_NULL : NYdb::TPgValue::VK_TEXT, pgResult.Str, getPgTypeFromColMeta(colMeta)};
                     vb.Pg(pgValue);
-                }
-                else {
+                } else if (colMeta.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
+                    using namespace NYql::NDecimal;
+
+                    const auto loHi = cell.AsValue<std::pair<ui64, i64>>();
+                    Ydb::Value valueProto;
+                    valueProto.set_low_128(loHi.first);
+                    valueProto.set_high_128(loHi.second);
+                    const NYdb::TDecimalValue decimal(valueProto, 
+                        {static_cast<ui8>(colMeta.PType.GetDecimalType().GetPrecision()), static_cast<ui8>(colMeta.PType.GetDecimalType().GetScale())});
+                    vb.Decimal(decimal);
+                } else {
                     const NScheme::TTypeInfo& typeInfo = colMeta.PType;
 
                     if (cell.IsNull()) {

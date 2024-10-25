@@ -1,6 +1,8 @@
 LIBRARY()
 
 SRCS(
+    yql_yt_block_input_filter.cpp
+    yql_yt_block_input.cpp
     yql_yt_datasink_constraints.cpp
     yql_yt_datasink_exec.cpp
     yql_yt_datasink_finalize.cpp
@@ -31,6 +33,7 @@ SRCS(
     yql_yt_peephole.cpp
     yql_yt_physical_finalizing.cpp
     yql_yt_physical_optimize.cpp
+    yql_yt_provider_context.cpp
     yql_yt_provider_impl.cpp
     yql_yt_provider.cpp
     yql_yt_provider.h

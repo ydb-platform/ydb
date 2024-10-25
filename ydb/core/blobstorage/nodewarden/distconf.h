@@ -1,9 +1,11 @@
 #pragma once
 
-#include "defs.h"
 #include "bind_queue.h"
 #include "node_warden.h"
 #include "node_warden_events.h"
+
+#include <util/generic/hash_multi_map.h>
+#include <ydb/core/mind/bscontroller/group_mapper.h>
 
 namespace NKikimr::NStorage {
 

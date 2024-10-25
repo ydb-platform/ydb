@@ -60,6 +60,7 @@ struct TJoinOptions {
 
     bool Flatten = false;
     bool StrictKeys = false;
+    bool Compact = false;
 };
 
 IGraphTransformer::TStatus ValidateEquiJoinOptions(
@@ -146,6 +147,7 @@ struct TEquiJoinLinkSettings {
     EJoinAlgoType JoinAlgo = EJoinAlgoType::Undefined;
     // JOIN implementation may ignore this flags if SortedMerge strategy is not supported
     bool ForceSortedMerge = false;
+    bool Compact = false;
 };
 
 TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings);

@@ -16,11 +16,11 @@ def generate_table_data(schema: Schema, bytes_soft_limit: int) -> Sequence[Seque
         row = []
 
         for col in schema.columns:
-            match col.ydb_type:
-                case Type.INT64:
+            match col.ydb_type.type_id:
+                case Type.INT32:
                     row.append(ix)
-                    actual_size += 8
-                case Type.UTF8:
+                    actual_size += 4
+                case Type.STRING:
                     value = hashlib.md5(str(ix).encode('ascii')).hexdigest()
                     row.append(value)
                     actual_size += len(value)

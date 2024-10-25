@@ -440,7 +440,10 @@ bool TActiveTransaction::BuildSchemeTx()
         + (ui32)SchemeTx->HasCreateCdcStreamNotice()
         + (ui32)SchemeTx->HasAlterCdcStreamNotice()
         + (ui32)SchemeTx->HasDropCdcStreamNotice()
-        + (ui32)SchemeTx->HasMoveIndex();
+        + (ui32)SchemeTx->HasMoveIndex()
+        + (ui32)SchemeTx->HasCreateIncrementalRestoreSrc()
+        + (ui32)SchemeTx->HasCreateIncrementalBackupSrc()
+        ;
     if (count != 1)
         return false;
 
@@ -476,6 +479,10 @@ bool TActiveTransaction::BuildSchemeTx()
         SchemeTxType = TSchemaOperation::ETypeDropCdcStream;
     else if (SchemeTx->HasMoveIndex())
         SchemeTxType = TSchemaOperation::ETypeMoveIndex;
+    else if (SchemeTx->HasCreateIncrementalRestoreSrc())
+        SchemeTxType = TSchemaOperation::ETypeCreateIncrementalRestoreSrc;
+    else if (SchemeTx->HasCreateIncrementalBackupSrc())
+        SchemeTxType = TSchemaOperation::ETypeCreateIncrementalBackupSrc;
     else
         SchemeTxType = TSchemaOperation::ETypeUnknown;
 
@@ -536,7 +543,7 @@ void TActiveTransaction::ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBas
                                        const TActorContext &ctx) {
     ReleasedTxDataSize = provider.GetMemoryLimit() + provider.GetRequestedMemory();
 
-    if (!DataTx || DataTx->IsTxDataReleased())
+    if (!DataTx || DataTx->GetIsReleased())
         return;
 
     DataTx->ReleaseTxData();
@@ -858,6 +865,7 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::CreateCdcStream);
         plan.push_back(EExecutionUnitKind::AlterCdcStream);
         plan.push_back(EExecutionUnitKind::DropCdcStream);
+        plan.push_back(EExecutionUnitKind::CreateIncrementalRestoreSrc);
         plan.push_back(EExecutionUnitKind::CompleteOperation);
         plan.push_back(EExecutionUnitKind::CompletedOperations);
     } else {

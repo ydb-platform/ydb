@@ -912,7 +912,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             create.MutableCreateResourcePool()->SetName(name);
             break;
         default:
-            Y_UNREACHABLE();
+            Y_ABORT("Invariant violation");
         }
 
         result.Transactions.push_back(create);
@@ -978,7 +978,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
     return result;
 }
 
-ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::ETxState txState) const {
+ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::ETxState txState, TOperationContext& context) const {
     switch (txType) {
     case TTxState::ETxType::TxMkDir:
         return CreateMkDir(NextPartId(), txState);
@@ -1190,9 +1190,22 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxAlterResourcePool:
         return CreateAlterResourcePool(NextPartId(), txState);
 
+    case TTxState::ETxType::TxRestoreIncrementalBackupAtTable:
+        return CreateRestoreIncrementalBackupAtTable(NextPartId(), txState);
+
+    // BackupCollection
+    case TTxState::ETxType::TxCreateBackupCollection:
+        return CreateNewBackupCollection(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterBackupCollection:
+        Y_ABORT("TODO: implement");
+    case TTxState::ETxType::TxDropBackupCollection:
+        return CreateDropBackupCollection(NextPartId(), txState);
+
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
     }
+
+    Y_UNUSED(context); // TODO(Enjection): will be used by complex operations later
 
     Y_UNREACHABLE();
 }
@@ -1335,7 +1348,7 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         Y_ABORT("multipart operations are handled before, also they require transaction details");
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable:
-        Y_ABORT("multipart operations are handled before, also they require transaction details");
+        return {CreateInitializeBuildIndexImplTable(NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexImplTable:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
 
@@ -1441,6 +1454,17 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
     // IncrementalBackup
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:
         return CreateRestoreIncrementalBackup(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
+
+    // BackupCollection
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection:
+        return {CreateNewBackupCollection(NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBackupCollection:
+        Y_ABORT("TODO: implement");
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection:
+        return {CreateDropBackupCollection(NextPartId(), tx)};
+
     }
 
     Y_UNREACHABLE();

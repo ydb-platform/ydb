@@ -133,9 +133,17 @@ protected:
                         Requests.emplace_back(CurrentRequest);
                         CurrentRequest->Timer.Reset();
                         if (CurrentRequest->IsReady()) {
-                            LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -> (" << CurrentRequest->Method << " " << CurrentRequest->URL << ")");
-                            ctx.Send(Endpoint->Proxy, new TEvHttpProxy::TEvHttpIncomingRequest(CurrentRequest));
-                            CurrentRequest = nullptr;
+                            if (Endpoint->RateLimiter.Check(ctx.Now())) {
+                                LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -> (" << CurrentRequest->Method << " " << CurrentRequest->URL << ")");
+                                ctx.Send(Endpoint->Proxy, new TEvHttpProxy::TEvHttpIncomingRequest(CurrentRequest));
+                                CurrentRequest = nullptr;
+                            } else {
+                                bool success = Respond(CurrentRequest->CreateResponseTooManyRequests(), ctx);
+                                if (!success) {
+                                    return;
+                                }
+                                CurrentRequest = nullptr;
+                            }
                         } else if (CurrentRequest->IsError()) {
                             LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -! (" << CurrentRequest->Method << " " << CurrentRequest->URL << ")");
                             bool success = Respond(CurrentRequest->CreateResponseBadRequest(), ctx);
@@ -209,7 +217,7 @@ protected:
                         << ","
                         << Address
                         << ") Response: "
-                        << TString(response->GetRawData()).substr(0, MAX_LOGGED_SIZE));
+                        << response->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE));
         }
         THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildIncomingRequestSensors(request, response));
         ctx.Send(Endpoint->Owner, sensors.Release());

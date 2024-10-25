@@ -66,39 +66,47 @@ WITH (
 
 - Создание строковой таблицы
 
-{% if feature_column_container_type %}
+  {% if feature_column_container_type %}
 
-```yql
-  CREATE TABLE <table_name> (
-    a Uint64,
-    b Uint64,
-    c Float,
-    d "List<List<Int32>>"
-    PRIMARY KEY (a, b)
-  );
-  ```
+  ```yql
+    CREATE TABLE <table_name> (
+      a Uint64,
+      b Uint64,
+      c Float,
+      d "List<List<Int32>>"
+      PRIMARY KEY (a, b)
+    );
+    ```
 
-{% else %}
+  {% else %}
 
-```yql
-  CREATE TABLE <table_name> (
-    a Uint64,
-    b Uint64,
-    c Float,
-    PRIMARY KEY (a, b)
-  );
-  ```
+  ```yql
+    CREATE TABLE <table_name> (
+      a Uint64,
+      b Uint64,
+      c Float,
+      PRIMARY KEY (a, b)
+    );
+    ```
 
-{% endif %}
+  {% endif %}
 
 
   {% if feature_column_container_type == true %}
 
-  Для неключевых колонок допускаются любые типы данных, для ключевых - только [примитивные](../../types/primitive.md). При указании сложных типов (например, `List<String>`) тип заключается в двойные кавычки.
-
+  Для неключевых колонок допускаются любые типы данных{% if feature_serial %} , кроме [серийных](../../types/serial.md) {% endif %}, для ключевых - только [примитивные](../../types/primitive.md){% if feature_serial %} и [серийные](../../types/serial.md){% endif %}. При указании сложных типов (например, `List<String>`) тип заключается в двойные кавычки.
+  
   {% else %}
 
+  {% if feature_serial %}
+
+  Для ключевых колонок допускаются только [примитивные](../../types/primitive.md) и [серийные](../../types/serial.md) типы данных, для неключевых колонок допускаются только [примитивные](../../types/primitive.md).
+
+  {% else %}
+  
   Для ключевых и неключевых колонок допускаются только [примитивные](../../types/primitive.md) типы данных.
+
+  {% endif %}
 
   {% endif %}
 
@@ -126,19 +134,58 @@ WITH (
 
   {% endif %}
 
+  Пример создания строковой таблицы с использованием опций партиционирования:
+
+  ```yql
+  CREATE TABLE <table_name> (
+    a Uint64,
+    b Uint64,
+    c Float,
+    PRIMARY KEY (a, b)
+  )
+  WITH (
+    AUTO_PARTITIONING_BY_SIZE = ENABLED,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 512
+  );
+  ```
+
+  Такой код создаст строковую таблицу с включенным автоматическим партиционированием по размеру партиции (`AUTO_PARTITIONING_BY_SIZE`) и предпочитаемым размером каждой партиции (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) в 512 мегабайт. Полный список опций партиционирования строковой таблицы находится в разделе [{#T}](../../../../concepts/datamodel/table.md#partitioning_row_table) статьи [{#T}](../../../../concepts/datamodel/table.md).
+
 - Создание колоночной таблицы
 
   ```yql
   CREATE TABLE table_name (
     a Uint64 NOT NULL,
-    b Uint64 NOT NULL,
+    b Timestamp NOT NULL,
     c Float,
     PRIMARY KEY (a, b)
   )
+  PARTITION BY HASH(b)
   WITH (
     STORE = COLUMN
   );
   ```
+
+  При создании колоночных таблиц обязательно нужно использовать конструкцию `PARTITION BY HASH` с указанием первичных ключей, которые имеют высококардинальный тип данных (например, `Timestamp`), так как колоночные таблицы партиционируют данные не по первичным ключам, а по специально выделенным ключам — ключам партицирования. Подробно про ключи партиционирования колоночных таблиц изложено в статье [{#T}](../../../../dev/primary-key/column-oriented.md).
+
+  В настоящий момент колоночные таблицы не поддерживают автоматического репартицирования, поэтому важно указывать правильное число партиций при создании таблицы с помощью параметра `AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`:
+
+  ```yql
+  CREATE TABLE table_name (
+    a Uint64 NOT NULL,
+    b Timestamp NOT NULL,
+    c Float,
+    PRIMARY KEY (a, b)
+  )
+  PARTITION BY HASH(b)
+  WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+  );
+  ```
+  
+  Такой код создаст колоночную таблицу с 10-ю партициями. С полным списком опций партиционирования колоночных таблиц можно ознакомиться в разделе [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning) статьи [{#T}](../../../../concepts/datamodel/table.md).
+
 
 {% endlist %}
 
@@ -191,7 +238,7 @@ CREATE TABLE <table_name> (
 
 {% endif %}
 
-{% if backend_name == "YDB" %}
+{% if backend_name == "YDB" and oss == true %}
 
 При создании строковых таблиц возможно задать:
 

@@ -2,7 +2,7 @@
 #include <library/cpp/json/json_reader.h>
 
 TGUCSettings::TGUCSettings(const TString &serialized) {
-    if (!serialized.Empty()) {
+    if (!serialized.empty()) {
         NJson::TJsonValue gucJson;
         Y_ENSURE(NJson::ReadJsonTree(serialized, &gucJson), "Error parsing GUCSettings");
         this->ImportFromJson(gucJson);

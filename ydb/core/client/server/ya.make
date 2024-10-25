@@ -15,7 +15,6 @@ SRCS(
     msgbus_server_drain_node.cpp
     msgbus_server_fill_node.cpp
     msgbus_server_hive_create_tablet.cpp
-    msgbus_server_keyvalue.cpp
     msgbus_server_persqueue.cpp
     msgbus_server_persqueue.h
     msgbus_server_pq_metacache.h
@@ -25,7 +24,6 @@ SRCS(
     msgbus_server_pq_read_session_info.cpp
     msgbus_server_resolve_node.cpp
     msgbus_server_ic_debug.cpp
-    msgbus_server_local_enumerate_tablets.cpp
     msgbus_server_local_minikql.cpp
     msgbus_server_local_scheme_tx.cpp
     msgbus_server_node_registration.cpp

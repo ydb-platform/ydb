@@ -190,6 +190,7 @@ namespace NYdb {
                 case TOKEN(ASSUME):
                 case TOKEN(ASYMMETRIC):
                 case TOKEN(ASYNC):
+                case TOKEN(AT):
                 case TOKEN(ATTACH):
                 case TOKEN(ATTRIBUTES):
                 case TOKEN(AUTOINCREMENT):
@@ -482,8 +483,8 @@ namespace NYdb {
                 case TOKEN(RPAREN):
                 case TOKEN(QUESTION):
                 case TOKEN(COLON):
-                case TOKEN(AT):
-                case TOKEN(DOUBLE_AT):
+                case TOKEN(COMMAT):
+                case TOKEN(DOUBLE_COMMAT):
                 case TOKEN(DOLLAR):
                 case TOKEN(QUOTE_DOUBLE):
                 case TOKEN(QUOTE_SINGLE):

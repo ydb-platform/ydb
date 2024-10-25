@@ -281,6 +281,8 @@ private:
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("type", "portion");
         result.InsertValue("info", Portion->DebugString());
+        result.InsertValue("commit", Portion->GetCommitSnapshotOptional().value_or(TSnapshot::Zero()).DebugString());
+        result.InsertValue("insert", (ui64)Portion->GetInsertWriteIdOptional().value_or(TInsertWriteId(0)));
         return result;
     }
 
@@ -314,7 +316,13 @@ private:
 
 public:
     virtual bool DoAddTxConflict() override {
-        GetContext()->GetReadMetadata()->SetBrokenWithCommitted();
+        if (Portion->HasCommitSnapshot() || !Portion->HasInsertWriteId()) {
+            GetContext()->GetReadMetadata()->SetBrokenWithCommitted();
+            return true;
+        } else if (!GetContext()->GetReadMetadata()->IsMyUncommitted(Portion->GetInsertWriteIdVerified())) {
+            GetContext()->GetReadMetadata()->SetConflictedWriteId(Portion->GetInsertWriteIdVerified());
+            return true;
+        }
         return false;
     }
 
@@ -353,7 +361,7 @@ public:
                     selectedInMem.emplace(i);
                 }
             }
-            result = Portion->GetMinMemoryForReadColumns(selectedSeq) + Portion->GetColumnBlobBytes(selectedSeq) +
+            result = Portion->GetMinMemoryForReadColumns(selectedSeq) + Portion->GetColumnBlobBytes(selectedSeq, false) +
                    Portion->GetColumnRawBytes(selectedInMem, false);
         } else {
             result = Portion->GetColumnRawBytes(columnsIds, false);
@@ -379,7 +387,8 @@ public:
     }
 
     TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context)
-        : TBase(sourceIdx, context, portion->IndexKeyStart(), portion->IndexKeyEnd(), portion->RecordSnapshotMin(), portion->RecordSnapshotMax(),
+        : TBase(sourceIdx, context, portion->IndexKeyStart(), portion->IndexKeyEnd(), portion->RecordSnapshotMin(TSnapshot::Zero()),
+              portion->RecordSnapshotMax(TSnapshot::Zero()),
               portion->GetRecordsCount(), portion->GetShardingVersionOptional(), portion->GetMeta().GetDeletionsCount())
         , Portion(portion)
         , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*Portion)) {
@@ -420,11 +429,11 @@ private:
     }
 
     virtual bool DoAddTxConflict() override {
-        if (CommittedBlob.HasSnapshot()) {
+        if (CommittedBlob.IsCommitted()) {
             GetContext()->GetReadMetadata()->SetBrokenWithCommitted();
             return true;
-        } else if (!GetContext()->GetReadMetadata()->IsMyUncommitted(CommittedBlob.GetWriteIdVerified())) {
-            GetContext()->GetReadMetadata()->SetConflictedWriteId(CommittedBlob.GetWriteIdVerified());
+        } else if (!GetContext()->GetReadMetadata()->IsMyUncommitted(CommittedBlob.GetInsertWriteId())) {
+            GetContext()->GetReadMetadata()->SetConflictedWriteId(CommittedBlob.GetInsertWriteId());
             return true;
         }
         return false;
@@ -467,8 +476,8 @@ public:
     }
 
     TCommittedDataSource(const ui32 sourceIdx, const TCommittedBlob& committed, const std::shared_ptr<TSpecialReadContext>& context)
-        : TBase(sourceIdx, context, committed.GetFirst(), committed.GetLast(), committed.GetSnapshotDef(TSnapshot::Zero()),
-              committed.GetSnapshotDef(TSnapshot::Zero()), committed.GetRecordsCount(), {}, committed.GetIsDelete())
+        : TBase(sourceIdx, context, committed.GetFirst(), committed.GetLast(), committed.GetCommittedSnapshotDef(TSnapshot::Zero()),
+              committed.GetCommittedSnapshotDef(TSnapshot::Zero()), committed.GetRecordsCount(), {}, committed.GetIsDelete())
         , CommittedBlob(committed) {
     }
 };

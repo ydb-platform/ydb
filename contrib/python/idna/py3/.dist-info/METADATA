@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: idna
-Version: 3.8
+Version: 3.10
 Summary: Internationalized Domain Names in Applications (IDNA)
 Author-email: Kim Davies <kim+pypi@gumleaf.org>
 Requires-Python: >=3.6
@@ -26,9 +26,14 @@ Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Topic :: Internet :: Name Service (DNS)
 Classifier: Topic :: Software Development :: Libraries :: Python Modules
 Classifier: Topic :: Utilities
+Requires-Dist: ruff >= 0.6.2 ; extra == "all"
+Requires-Dist: mypy >= 1.11.2 ; extra == "all"
+Requires-Dist: pytest >= 8.3.2 ; extra == "all"
+Requires-Dist: flake8 >= 7.1.1 ; extra == "all"
 Project-URL: Changelog, https://github.com/kjd/idna/blob/master/HISTORY.rst
 Project-URL: Issue tracker, https://github.com/kjd/idna/issues
 Project-URL: Source, https://github.com/kjd/idna
+Provides-Extra: all
 
 Internationalized Domain Names in Applications (IDNA)
 =====================================================

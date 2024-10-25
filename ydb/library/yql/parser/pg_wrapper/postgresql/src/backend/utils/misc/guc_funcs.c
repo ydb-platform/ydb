@@ -916,7 +916,8 @@ show_all_settings(PG_FUNCTION_ARGS)
 		funcctx->attinmeta = attinmeta;
 
 		/* collect the variables, in sorted order */
-		guc_vars = get_guc_variables(&num_vars);
+		guc_vars = NULL;
+		num_vars = 0;
 
 		/* use user_fctx to remember the array location */
 		funcctx->user_fctx = guc_vars;

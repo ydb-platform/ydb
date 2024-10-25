@@ -2,7 +2,7 @@ PY3TEST()
 
     TAG(ya:manual)
 
-    TIMEOUT(600)
+    SIZE(LARGE)
 
     PY_SRCS (
         conftest.py
@@ -19,6 +19,7 @@ PY3TEST()
         contrib/python/allure-python-commons
         ydb/public/sdk/python/enable_v3_new_behavior
         ydb/tests/olap/lib
+        ydb/tests/olap/scenario/helpers
         library/python/testing/yatest_common
         ydb/public/sdk/python
     )

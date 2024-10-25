@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(THttpSenderTests) {
         auto [_, event] = bootstrap.Grab<NYql::NDq::TEvHttpBase::TEvSendResult>();
         UNIT_ASSERT(event->IsTerminal);
         UNIT_ASSERT_EQUAL(event->RetryCount, 0);
-        UNIT_ASSERT(event->HttpIncomingResponse->Get()->GetError().Empty());
+        UNIT_ASSERT(event->HttpIncomingResponse->Get()->GetError().empty());
     }
 
     Y_UNIT_TEST(FailResponse)
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(THttpSenderTests) {
         auto [_, event] = bootstrap.Grab<NYql::NDq::TEvHttpBase::TEvSendResult>();
         UNIT_ASSERT(event->IsTerminal);
         UNIT_ASSERT_EQUAL(event->RetryCount, 0);
-        UNIT_ASSERT(!event->HttpIncomingResponse->Get()->GetError().Empty());
+        UNIT_ASSERT(!event->HttpIncomingResponse->Get()->GetError().empty());
     }
 
     Y_UNIT_TEST(RetrySuccess)
@@ -158,7 +158,7 @@ Y_UNIT_TEST_SUITE(THttpSenderTests) {
             auto [_, event] = bootstrap.Grab<NYql::NDq::TEvHttpBase::TEvSendResult>();
             UNIT_ASSERT(!event->IsTerminal);
             UNIT_ASSERT_EQUAL(event->RetryCount, 0);
-            UNIT_ASSERT(!event->HttpIncomingResponse->Get()->GetError().Empty());
+            UNIT_ASSERT(!event->HttpIncomingResponse->Get()->GetError().empty());
         }
 
         bootstrap.RaiseHttpProxySuccessResponse();
@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(THttpSenderTests) {
             auto [_, event] = bootstrap.Grab<NYql::NDq::TEvHttpBase::TEvSendResult>();
             UNIT_ASSERT(event->IsTerminal);
             UNIT_ASSERT_EQUAL(event->RetryCount, 1);
-            UNIT_ASSERT(event->HttpIncomingResponse->Get()->GetError().Empty());
+            UNIT_ASSERT(event->HttpIncomingResponse->Get()->GetError().empty());
         }
     }
 
@@ -189,7 +189,7 @@ Y_UNIT_TEST_SUITE(THttpSenderTests) {
             auto [_, event] = bootstrap.Grab<NYql::NDq::TEvHttpBase::TEvSendResult>();
             UNIT_ASSERT(!event->IsTerminal);
             UNIT_ASSERT_EQUAL(event->RetryCount, 0);
-            UNIT_ASSERT(!event->HttpIncomingResponse->Get()->GetError().Empty());
+            UNIT_ASSERT(!event->HttpIncomingResponse->Get()->GetError().empty());
         }
 
         bootstrap.RaiseHttpProxyErrorResponse();
@@ -197,7 +197,7 @@ Y_UNIT_TEST_SUITE(THttpSenderTests) {
             auto [_, event] = bootstrap.Grab<NYql::NDq::TEvHttpBase::TEvSendResult>();
             UNIT_ASSERT(event->IsTerminal);
             UNIT_ASSERT_EQUAL(event->RetryCount, 1);
-            UNIT_ASSERT(!event->HttpIncomingResponse->Get()->GetError().Empty());
+            UNIT_ASSERT(!event->HttpIncomingResponse->Get()->GetError().empty());
         }
     }
 };

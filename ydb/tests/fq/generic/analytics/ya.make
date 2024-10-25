@@ -52,6 +52,8 @@ IF (OPENSOURCE)
 ENDIF()
 
 PEERDIR(
+    ydb/library/yql/providers/generic/connector/api/common
+    ydb/library/yql/providers/generic/connector/tests/utils
     ydb/tests/fq/generic/utils
     library/python/testing/recipe
     library/python/testing/yatest_common

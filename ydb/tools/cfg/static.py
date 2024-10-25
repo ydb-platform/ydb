@@ -396,6 +396,12 @@ class StaticConfigGenerator(object):
         if self.__cluster_details.client_certificate_authorization is not None:
             normalized_config["client_certificate_authorization"] = self.__cluster_details.client_certificate_authorization
 
+        if self.__cluster_details.table_profiles_config is not None:
+            normalized_config["table_profiles_config"] = self.__cluster_details.table_profiles_config
+
+        if self.__cluster_details.http_proxy_config is not None:
+            normalized_config["http_proxy_config"] = self.__cluster_details.http_proxy_config
+
         if self.__cluster_details.blob_storage_config is not None:
             normalized_config["blob_storage_config"] = self.__cluster_details.blob_storage_config
         else:
@@ -637,7 +643,16 @@ class StaticConfigGenerator(object):
             tablet.AllowDynamicConfiguration = True
 
         if explicit_node_ids:
-            node_ids = explicit_node_ids
+            node_ids = []
+            for item in explicit_node_ids:
+                if type(item) is list:
+                    try:
+                        node_ids.append(item[index])
+                    except IndexError:
+                        logger.error("nodes count for tablet type %s wrong, nodeid for tablet index: %d not found" % (tablet_name, index))
+                        exit(1)
+                else:
+                    node_ids.append(item)
         tablet.Node.extend(node_ids)
 
         for channel_id in range(int(number_of_channels)):

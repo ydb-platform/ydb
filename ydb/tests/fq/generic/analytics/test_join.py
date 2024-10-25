@@ -6,6 +6,16 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
 
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 from ydb.tests.fq.generic.utils.settings import Settings
+from ydb.library.yql.providers.generic.connector.tests.utils.one_time_waiter import OneTimeWaiter
+from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
+import conftest
+
+
+one_time_waiter = OneTimeWaiter(
+    data_source_kind=EDataSourceKind.YDB,
+    docker_compose_file_path=conftest.docker_compose_file_path,
+    expected_tables=["join_table", "dummy_table"],
+)
 
 
 class TestJoinAnalytics:
@@ -46,6 +56,8 @@ class TestJoinAnalytics:
             login=settings.postgresql.username,
             password=settings.postgresql.password,
         )
+
+        one_time_waiter.wait()
 
         fq_client.create_ydb_connection(
             name=ydb_conn_name,

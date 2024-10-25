@@ -31,7 +31,14 @@ class DartValueError(ValueError):
 
 
 def create_dart_record(fields, *args):
-    return reduce(operator.or_, (value for field in fields if (value := field(*args))), {})
+    try:
+        return reduce(operator.or_, (value for field in fields if (value := field(*args))), {})
+    except Exception as e:
+        if str(e) != "":
+            ymake.report_configure_error("Exception: {}".format(e))
+        else:
+            raise (e)
+        return None
 
 
 def with_fields(fields):
@@ -259,13 +266,28 @@ def _get_ts_test_data_dirs(unit):
     )
 
 
-@_common.lazy
+@_common.cache_by_second_arg
 def get_linter_configs(unit, config_paths):
     rel_config_path = _common.rootrel_arc_src(config_paths, unit)
     arc_config_path = unit.resolve_arc_path(rel_config_path)
     abs_config_path = unit.resolve(arc_config_path)
     with open(abs_config_path, 'r') as fd:
-        return list(json.load(fd).values())
+        return json.load(fd)
+
+
+def _reference_group_var(varname: str, extensions: list[str] | None = None) -> str:
+    if extensions is None:
+        return f'"${{join=\\;:{varname}}}"'
+
+    return serialize_list(f'${{ext={ext};join=\\;:{varname}}}' for ext in extensions)
+
+
+def assert_file_exists(unit, path):
+    path = unit.resolve(SOURCE_ROOT_SHORT + path)
+    if not os.path.exists(path):
+        message = 'File {} is not found'.format(path)
+        ymake.report_configure_error(message)
+        raise DartValueError()
 
 
 class AndroidApkTestActivity:
@@ -552,24 +574,55 @@ class LintConfigs:
     KEY = 'LINT-CONFIGS'
 
     @classmethod
-    def value(cls, unit, flat_args, spec_args):
+    def python_configs(cls, unit, flat_args, spec_args):
         resolved_configs = []
-        configs = spec_args.get('CONFIGS', [])
-        for cfg in configs:
-            filename = unit.resolve(SOURCE_ROOT_SHORT + cfg)
-            if not os.path.exists(filename):
-                message = 'Configuration file {} is not found'.format(filename)
-                raise DartValueError(message)
-            resolved_configs.append(cfg)
-            if os.path.splitext(filename)[-1] == '.json':
-                cfgs = get_linter_configs(unit, cfg)
-                for c in cfgs:
-                    filename = unit.resolve(SOURCE_ROOT_SHORT + c)
-                    if not os.path.exists(filename):
-                        message = 'Configuration file {} is not found'.format(filename)
-                        raise DartValueError(message)
-                    resolved_configs.append(c)
+
+        project_to_config_map = spec_args.get('PROJECT_TO_CONFIG_MAP', [])
+        if project_to_config_map:
+            # ruff, TODO rewrite once custom configs migrated to autoincludes scheme
+            project_to_config_map = project_to_config_map[0]
+            assert_file_exists(unit, project_to_config_map)
+            resolved_configs.append(project_to_config_map)
+            cfgs = get_linter_configs(unit, project_to_config_map).values()
+            for c in cfgs:
+                assert_file_exists(unit, c)
+                resolved_configs.append(c)
+            return {cls.KEY: serialize_list(resolved_configs)}
+
+        custom_config = spec_args.get('CUSTOM_CONFIG', [])
+        if custom_config:
+            # black if custom config is passed
+            # TODO rewrite once custom configs migrated to autoincludes scheme
+            custom_config = custom_config[0]
+            assert_file_exists(unit, custom_config)
+            resolved_configs.append(custom_config)
+            return {cls.KEY: serialize_list(resolved_configs)}
+
+        config = spec_args['CONFIGS'][0]
+        # black without custom config or flake8, using default configs file
+        assert_file_exists(unit, config)
+        name = spec_args['NAME'][0]
+        cfg = get_linter_configs(unit, config)[name]
+        assert_file_exists(unit, cfg)
+        resolved_configs.append(cfg)
+        if name in ('flake8', 'py2_flake8'):
+            resolved_configs.extend(spec_args.get('FLAKE_MIGRATIONS_CONFIG', []))
         return {cls.KEY: serialize_list(resolved_configs)}
+
+    @classmethod
+    def cpp_configs(cls, unit, flat_args, spec_args):
+        custom_config = spec_args.get('CUSTOM_CONFIG')
+        if custom_config:
+            config = custom_config[0]
+            assert_file_exists(unit, config)
+        else:
+            # file with default configs
+            config = spec_args.get('CONFIGS')[0]
+            assert_file_exists(unit, config)
+            name = spec_args['NAME'][0]
+            config = get_linter_configs(unit, config)[name]
+            assert_file_exists(unit, config)
+        return {cls.KEY: serialize_list([config])}
 
 
 class LintExtraParams:
@@ -581,7 +634,8 @@ class LintExtraParams:
         for arg in extra_params:
             if '=' not in arg:
                 message = 'Wrong EXTRA_PARAMS value: "{}". Values must have format "name=value".'.format(arg)
-                raise DartValueError(message)
+                ymake.report_configure_error(message)
+                raise DartValueError()
         return {cls.KEY: serialize_list(extra_params)}
 
 
@@ -600,7 +654,8 @@ class LintName:
     def value(cls, unit, flat_args, spec_args):
         lint_name = spec_args['NAME'][0]
         if lint_name in ('flake8', 'py2_flake8') and (unit.get('DISABLE_FLAKE8') or 'no') == 'yes':
-            raise DartValueError('Flake8 linting is disabled by `DISABLE_FLAKE8`')
+            unit.message(['INFO', 'Flake8 linting is disabled by `DISABLE_FLAKE8`'])
+            raise DartValueError()
         return {cls.KEY: lint_name}
 
 
@@ -792,12 +847,8 @@ class TestClasspath:
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        test_classpath_origins = unit.get('TEST_CLASSPATH_VALUE')
         ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
-        if test_classpath_origins:
-            value = '${TEST_CLASSPATH_MANAGED}'
-            return {cls.KEY: value}
-        elif ymake_java_test:
+        if ymake_java_test:
             value = '${DART_CLASSPATH}'
             return {cls.KEY: value}
 
@@ -807,20 +858,9 @@ class TestClasspathDeps:
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        test_classpath_origins = unit.get('TEST_CLASSPATH_VALUE')
         ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
-        if not test_classpath_origins and ymake_java_test:
+        if ymake_java_test:
             return {cls.KEY: '${DART_CLASSPATH_DEPS}'}
-
-
-class TestClasspathOrigins:
-    KEY = 'TEST_CLASSPATH_ORIGINS'
-
-    @classmethod
-    def value(cls, unit, flat_args, spec_args):
-        test_classpath_origins = unit.get('TEST_CLASSPATH_VALUE')
-        if test_classpath_origins:
-            return {cls.KEY: test_classpath_origins}
 
 
 class TestCwd:
@@ -924,6 +964,35 @@ class TestData:
     @classmethod
     def from_unit(cls, unit, flat_args, spec_args):
         return {cls.KEY: serialize_list(get_values_list(unit, "TEST_DATA_VALUE"))}
+
+
+class DockerImage:
+    KEY = 'DOCKER-IMAGES'
+
+    @staticmethod
+    def _validate(images):
+        docker_image_re = consts.DOCKER_LINK_RE
+        for img in images:
+            msg = None
+            if "=" in img:
+                link, _ = img.rsplit('=', 1)
+                if docker_image_re.match(link) is None:
+                    msg = 'Invalid docker url format: {}. Link should be provided in format docker://<repo>@sha256:<digest>'.format(
+                        link
+                    )
+            else:
+                msg = 'Invalid docker image: {}. Image should be provided in format <link>=<tag>'.format(img)
+            if msg:
+                ymake.report_configure_error(msg)
+                raise DartValueError(msg)
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        raw_value = get_values_list(unit, 'DOCKER_IMAGES_VALUE')
+        images = sorted(raw_value)
+        if images:
+            cls._validate(images)
+        return {cls.KEY: serialize_list(images)}
 
 
 class TsConfigPath:
@@ -1115,6 +1184,11 @@ class TestFiles:
         test_files = serialize_list(test_files)
         return {cls.KEY: test_files, cls.KEY2: test_files}
 
+    @classmethod
+    def cpp_linter_files(cls, unit, flat_args, spec_args):
+        files_dart = _reference_group_var("ALL_SRCS", consts.STYLE_CPP_ALL_EXTS)
+        return {cls.KEY: files_dart, cls.KEY2: files_dart}
+
 
 class TestEnv:
     KEY = 'TEST-ENV'
@@ -1145,9 +1219,8 @@ class TestJar:
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        test_classpath_origins = unit.get('TEST_CLASSPATH_VALUE')
         ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
-        if not test_classpath_origins and ymake_java_test:
+        if ymake_java_test:
             if unit.get('UNITTEST_DIR'):
                 value = '${UNITTEST_MOD}'
             else:

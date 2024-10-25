@@ -53,6 +53,8 @@ const TString ParametersLabel = "Parameters";
 const TString TranslationLabel = "Translation";
 const TString StaticUserFilesLabel = "UserFiles";
 const TString DynamicUserFilesLabel = "DynamicUserFiles";
+const TString StaticCredentialsLabel = "Credentials";
+const TString DynamicCredentialsLabel = "DynamicCredentials";
 
 class TUrlLoader : public IUrlLoader {
 public:
@@ -297,8 +299,38 @@ TProgram::TProgram(
         SessionId_ = CreateGuidAsString();
     }
 
+    if (QContext_.CanWrite()) {
+        NYT::TNode credListNode = NYT::TNode::CreateList();
+        Credentials_->ForEach([&](const TString name, const TCredential& cred) {
+            credListNode.Add(NYT::TNode()
+                ("Name", name)
+                ("Category", cred.Category)
+                ("Subcategory", cred.Subcategory));
+        });
+
+        auto credList = NYT::NodeToYsonString(credListNode, NYT::NYson::EYsonFormat::Binary);
+        QContext_.GetWriter()->Put({FacadeComponent, StaticCredentialsLabel}, credList).GetValueSync();
+    } else if (QContext_.CanRead()) {
+        Credentials_ = MakeIntrusive<TCredentials>();
+        Credentials_->SetUserCredentials({
+            .OauthToken = "REPLAY_OAUTH",
+            .BlackboxSessionIdCookie = "REPLAY_SESSIONID"
+        });
+
+        for (const auto& label : {StaticCredentialsLabel, DynamicCredentialsLabel}) {
+            auto item = QContext_.GetReader()->Get({FacadeComponent, label}).GetValueSync();
+            if (item) {
+                auto node = NYT::NodeFromYsonString(item->Value);
+                for (const auto& c : node.AsList()) {
+                    Credentials_->AddCredential(c["Name"].AsString(), TCredential(
+                        c["Category"].AsString(),c["Subcategory"].AsString(),"REPLAY"));
+                }
+            }
+        }
+    }
+
     if (QContext_.CanWrite() && !SavedUserDataTable_.empty()) {
-        NYT::TNode userFilesNode;
+        NYT::TNode userFilesNode = NYT::TNode::CreateList();
         for (const auto& p : SavedUserDataTable_) {
             userFilesNode.Add(p.first.Alias());
         }
@@ -358,6 +390,10 @@ TProgram::TProgram(
 
             if (GatewaysConfig_->HasYqlCore()) {
                 cleaned.MutableYqlCore()->CopyFrom(GatewaysConfig_->GetYqlCore());
+            }
+
+            if (GatewaysConfig_->HasSqlCore()) {
+                cleaned.MutableSqlCore()->CopyFrom(GatewaysConfig_->GetSqlCore());
             }
 
             if (GatewaysConfig_->HasDq()) {
@@ -509,6 +545,19 @@ TString TProgram::GetSessionId() const {
 void TProgram::AddCredentials(const TVector<std::pair<TString, TCredential>>& credentials) {
     Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
 
+    if (QContext_.CanWrite()) {
+        NYT::TNode credListNode = NYT::TNode::CreateList();
+        for (const auto& c : credentials) {
+            credListNode.Add(NYT::TNode()
+                ("Name", c.first)
+                ("Category", c.second.Category)
+                ("Subcategory", c.second.Subcategory));
+        }
+
+        auto credList = NYT::NodeToYsonString(credListNode, NYT::NYson::EYsonFormat::Binary);
+        QContext_.GetWriter()->Put({FacadeComponent, DynamicCredentialsLabel}, credList).GetValueSync();
+    }
+
     for (const auto& credential : credentials) {
         Credentials_->AddCredential(credential.first, credential.second);
     }
@@ -563,6 +612,30 @@ void TProgram::HandleSourceCode(TString& sourceCode) {
     }
 }
 
+namespace {
+
+THashSet<TString> ExtractSqlFlags(const NYT::TNode& dataNode) {
+    THashSet<TString> result;
+    for (const auto& f : dataNode["SqlFlags"].AsList()) {
+        result.insert(f.AsString());
+    }
+    return result;
+}
+
+} // namespace
+
+void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& flags) {
+    if (qContext.CanRead()) {
+        auto loaded = qContext.GetReader()->Get({FacadeComponent, TranslationLabel}).GetValueSync();
+        if (!loaded) {
+            return;
+        }
+
+        auto dataNode = NYT::NodeFromYsonString(loaded->Value);
+        flags = ExtractSqlFlags(dataNode);
+    }
+}
+
 void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
     const NSQLTranslation::TTranslationSettings*& currentSettings)
 {
@@ -599,11 +672,7 @@ void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& 
             loadedSettings.ClusterMapping[c.first] = c.second.AsString();
         }
 
-        loadedSettings.Flags.clear();
-        for (const auto& f : dataNode["SqlFlags"].AsList()) {
-            loadedSettings.Flags.insert(f.AsString());
-        }
-    
+        loadedSettings.Flags = ExtractSqlFlags(dataNode);
         loadedSettings.V0Behavior = (NSQLTranslation::EV0Behavior)dataNode["V0Behavior"].AsUint64();
         loadedSettings.V0WarnAsError = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["V0WarnAsError"].AsBool());
         loadedSettings.DqDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["DqDefaultAuto"].AsBool());

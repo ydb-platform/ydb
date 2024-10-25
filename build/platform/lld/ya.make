@@ -5,12 +5,8 @@ DEFAULT(LLD_VERSION ${CLANG_VER})
 TOOLCHAIN(lld)
 VERSION(${LLD_VERSION})
 
-IF (LLD_VERSION == 14)
-    DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(LLD_ROOT lld14.json)
-ELSE()
-    # fallback on latest version
-    DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(LLD_ROOT lld16.json)
-ENDIF()
+# lld16 is the only supported version at the time
+DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(LLD_ROOT lld16.json)
 
 IF (OS_ANDROID)
     # Use LLD shipped with Android NDK.
@@ -48,20 +44,10 @@ ELSEIF (OS_LINUX)
         -Wl,--build-id=sha1
     )
 ELSEIF (OS_DARWIN OR OS_IOS)
-    IF (MAPSMOBI_BUILD_TARGET AND XCODE)
-        LDFLAGS(
-            -fuse-ld=${LLD_ROOT_RESOURCE_GLOBAL}/bin/ld64.lld
-        )
-    ELSEIF (XCODE)
-        LDFLAGS(-DYA_XCODE)
-    ELSE()
-        LDFLAGS(
-            -fuse-ld=lld
-            --ld-path=${LLD_ROOT_RESOURCE_GLOBAL}/bin/ld64.lld
-            # FIXME: Remove fake linker version flag when clang 16 version arrives
-            -mlinker-version=705
-        )
-    ENDIF()
+    LDFLAGS(
+        -fuse-ld=lld
+        --ld-path=${LLD_ROOT_RESOURCE_GLOBAL}/bin/ld64.lld
+    )
 ELSEIF (OS_EMSCRIPTEN)
     LDFLAGS(
         -fuse-ld=${LLD_ROOT_RESOURCE_GLOBAL}/bin/wasm-ld

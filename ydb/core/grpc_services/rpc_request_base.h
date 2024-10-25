@@ -1,6 +1,6 @@
 #pragma once
 
-#include "grpc_request_proxy.h"
+#include "grpc_request_proxy_handle_methods.h"
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>

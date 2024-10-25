@@ -2235,9 +2235,6 @@ TEST(TYsonStructTest, CustomSubStruct)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// NB: Currently TYsonStructLite cannot be used as a field in another config as is.
-// Thus test below uses std::optional + MergeStrategy::Combine instead of plain struct.
-
 class TTestSubConfigLiteWithDefaults
     : public TYsonStructLite
 {
@@ -2921,6 +2918,193 @@ TEST(TYsonStructTest, TestPolymorphicYsonStructAsField)
     // Drop by default but holder has recursive throw so it must
     // throw.
     EXPECT_THROW(Deserialize(holder, node->AsMap()), std::exception);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TNonComparable
+{ };
+
+static_assert(!std::equality_comparable<TNonComparable>);
+
+void Deserialize(TNonComparable& /*value*/, auto /*node*/)
+{ }
+
+[[maybe_unused]] void Serialize(const TNonComparable& /*value*/, NYson::IYsonConsumer* consumer)
+{
+    consumer->OnBeginMap();
+    consumer->OnEndMap();
+}
+
+struct TComparableYsonStruct
+    : public TYsonStructLite
+{
+    int Value;
+
+    std::vector<int> Values;
+    TIntrusivePtr<TSimpleYsonStruct> SimpleSubStruct;
+
+    bool UnregisteredValue = false;
+
+    REGISTER_YSON_STRUCT_LITE(TComparableYsonStruct);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("value", &TThis::Value)
+            .Default(0);
+        registrar.Parameter("simple_sub_struct", &TThis::SimpleSubStruct)
+            .DefaultCtor([] {
+                auto ptr = New<TSimpleYsonStruct>();
+                ptr->IntValue = 77;
+                return ptr;
+            });
+        registrar.Parameter("values", &TThis::Values)
+            .Default({1, 2, 3});
+    }
+};
+
+static_assert(std::equality_comparable<TComparableYsonStruct>);
+
+struct TNonComparableYsonStruct
+    : public TYsonStructLite
+{
+    TNonComparable Value;
+
+    REGISTER_YSON_STRUCT_LITE(TNonComparableYsonStruct);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("value", &TThis::Value)
+            .Default();
+    }
+};
+
+static_assert(std::equality_comparable<TNonComparableYsonStruct>);
+
+struct TComparableBase
+{
+    static inline int BaseComparisonCalls = 0;
+
+    bool operator==(const TComparableBase&) const
+    {
+        ++BaseComparisonCalls;
+        return true;
+    }
+};
+
+inline int TemplatedComparisonCalls = 0;
+
+template <class T>
+concept CWithTemplatedComparison = requires {
+    typename T::TEnableTemplatedComparison;
+};
+
+template <CWithTemplatedComparison T>
+bool operator==(const T&, const T&)
+{
+    ++TemplatedComparisonCalls;
+    return true;
+}
+
+struct TYsonStructWithComparableBase
+    : public TYsonStructLite
+    , public TComparableBase
+{
+    REGISTER_YSON_STRUCT_LITE(TYsonStructWithComparableBase);
+
+    static void Register(TRegistrar /*registrar*/)
+    { }
+};
+
+static_assert(std::equality_comparable<TYsonStructWithComparableBase>);
+
+struct TYsonStructWithTemplatedComparison
+    : public TYsonStructLite
+{
+    using TEnableTemplatedComparison = void;
+
+    REGISTER_YSON_STRUCT_LITE(TYsonStructWithTemplatedComparison);
+
+    static void Register(TRegistrar /*registrar*/)
+    { }
+};
+
+static_assert(std::equality_comparable<TYsonStructWithTemplatedComparison>);
+
+TEST(TYsonStructTest, CompareComparable)
+{
+    TComparableYsonStruct lhs;
+    TComparableYsonStruct rhs;
+
+    EXPECT_TRUE(lhs == lhs);
+    EXPECT_TRUE(lhs == rhs);
+
+    rhs.Value = 42;
+    EXPECT_FALSE(lhs == rhs);
+}
+
+TEST(TYsonStructTest, CompareNonComparable)
+{
+    TNonComparableYsonStruct lhs;
+    TNonComparableYsonStruct rhs;
+
+    EXPECT_TRUE(lhs == lhs);
+    EXPECT_FALSE(lhs == rhs);
+}
+
+TEST(TYsonStructTest, CompareRecursively)
+{
+    TComparableYsonStruct lhs;
+    TComparableYsonStruct rhs;
+
+    rhs.SimpleSubStruct->IntValue = 11;
+    EXPECT_FALSE(lhs == rhs);
+}
+
+TEST(TYsonStructTest, CompareDifferentType)
+{
+    TComparableYsonStruct lhs;
+    auto rhs = New<TSimpleYsonStruct>();
+
+    EXPECT_FALSE(static_cast<const TYsonStructBase&>(lhs) == static_cast<const TYsonStructBase&>(*rhs));
+}
+
+TEST(TYsonStructTest, CompareWithDifferentUnregistered)
+{
+    TComparableYsonStruct lhs;
+    TComparableYsonStruct rhs;
+
+    EXPECT_TRUE(lhs == rhs);
+
+    lhs.UnregisteredValue = false;
+    rhs.UnregisteredValue = true;
+    EXPECT_TRUE(lhs == rhs);
+}
+
+TEST(TYsonStructTest, DontOverrideWithComparisonFromBase)
+{
+    TYsonStructWithComparableBase::BaseComparisonCalls = 0;
+    auto cleanup = Finally([] {
+        TYsonStructWithComparableBase::BaseComparisonCalls = 0;
+    });
+
+    TYsonStructWithComparableBase value;
+    EXPECT_TRUE(value == value);
+
+    EXPECT_EQ(TYsonStructWithComparableBase::BaseComparisonCalls, 0);
+}
+
+TEST(TYsonStructTest, OverrideWithComparisonFromTemplatedFunction)
+{
+    TemplatedComparisonCalls = 0;
+    auto cleanup = Finally([] {
+        TemplatedComparisonCalls = 0;
+    });
+
+    TYsonStructWithTemplatedComparison value;
+    EXPECT_TRUE(value == value);
+
+    EXPECT_EQ(TemplatedComparisonCalls, 1);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

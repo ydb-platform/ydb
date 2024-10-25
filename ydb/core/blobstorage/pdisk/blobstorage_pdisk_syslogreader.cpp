@@ -66,7 +66,7 @@ TSysLogReader::TSysLogReader(TPDisk *pDisk, TActorSystem *const actorSystem, con
     , PCtx(pDisk->PCtx)
     , ReqId(reqId)
     , Result(new TEvReadLogResult(NKikimrProto::ERROR, TLogPosition{0, 0}, TLogPosition::Invalid(),
-                true, 0, nullptr, 0))
+                true, 0, "", 0))
     , Cypher(pDisk->Cfg->EnableSectorEncryption)
     , SizeToRead(PDisk->Format.SysLogSectorCount * ReplicationFactor * PDisk->Format.SectorSize)
     , Data(SizeToRead)
@@ -476,4 +476,3 @@ void TSysLogReader::DumpDebugInfo(TStringStream &str, bool isSingleLine) {
 
 } // NPDisk
 } // NKikimr
-

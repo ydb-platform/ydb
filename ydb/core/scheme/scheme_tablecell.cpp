@@ -426,24 +426,11 @@ size_t TOwnedCellVecBatch::Append(TConstArrayRef<TCell> cells) {
 
 
 TString DbgPrintCell(const TCell& r, NScheme::TTypeInfo typeInfo, const NScheme::TTypeRegistry &reg) {
-    auto typeId = typeInfo.GetTypeId();
-    TString res;
-
-    if (typeId == NScheme::NTypeIds::Pg) {
-        res = NPg::PgTypeNameFromTypeDesc(typeInfo.GetPgTypeDesc());
-    } else {
-        NScheme::ITypeSP t = reg.GetType(typeId);
-
-        if (!t.IsKnownType())
-            return Sprintf("Unknow typeId 0x%x", (ui32)typeId);
-
-        res = t->GetName();
-    }
-
-    res += " : ";
-    DbgPrintValue(res, r, typeInfo);
-
-    return res;
+    Y_UNUSED(reg);
+    TString typeName = NScheme::TypeName(typeInfo, "");
+    typeName += " : ";
+    DbgPrintValue(typeName, r, typeInfo);
+    return typeName;
 }
 
 void DbgPrintValue(TString &res, const TCell &r, NScheme::TTypeInfo typeInfo) {
@@ -478,9 +465,17 @@ void DbgPrintValue(TString &res, const TCell &r, NScheme::TTypeInfo typeInfo) {
         case NScheme::NTypeIds::ActorId:
             res += ToString(r.AsValue<NActors::TActorId>());
             break;
-        case NScheme::NTypeIds::Pg:
-            // TODO: support pg types
+        case NScheme::NTypeIds::Decimal:
+            res += typeInfo.GetDecimalType().CellValueToString(r.AsValue<std::pair<ui64, i64>>());
             break;
+        case NScheme::NTypeIds::Pg: {
+            auto convert = NPg::PgNativeTextFromNativeBinary(r.AsBuf(), typeInfo.GetPgTypeDesc());
+            if (!convert.Error)
+                res += convert.Str;
+            else
+                res += *convert.Error;
+            break;
+        }
         default:
             res += EscapeC(r.Data(), r.Size());
         }

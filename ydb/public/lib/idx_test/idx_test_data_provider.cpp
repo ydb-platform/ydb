@@ -174,6 +174,13 @@ NYdb::TValue CreateRow(const TVector<TColumn>& columns, const TRandomValueProvid
             case EPrimitiveType::Utf8:
                 value.AddMember(col.Name).Utf8(Base64Encode(rvp.RandomString()));
                 break;
+            case EPrimitiveType::Uuid:
+                {
+                    ui64 hi = rvp.RandomUi64();
+                    ui64 lo = rvp.RandomUi64();
+                    value.AddMember(col.Name).Uuid(TUuidValue(lo, hi));
+                }
+            break;
             case EPrimitiveType::Json:
                 {
                     auto sb = TStringBuilder() << "[\"" << Base64Encode(rvp.RandomString()) << "\"]";

@@ -5,7 +5,7 @@ from sqlalchemy.exc import CompileError
 
 from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef, EMPTY_TYPE_DEF
 from clickhouse_connect.datatypes.registry import parse_name, type_map
-from clickhouse_connect.driver.query import str_query_value
+from clickhouse_connect.driver.binding import str_query_value
 
 logger = logging.getLogger(__name__)
 

@@ -10,7 +10,7 @@ class TOptimizerHintsParser {
 public:
     TOptimizerHintsParser(const TString& text) 
         : Pos(-1)
-        , Size(static_cast<i32>(text.Size()) - 1)
+        , Size(static_cast<i32>(text.size()) - 1)
         , Text(text)
     {}
 
@@ -22,15 +22,15 @@ public:
 private:
     void Start() {
         while (Pos < Size) {
-            auto hintType = Keyword({"JoinOrder", "JoinAlgo", "Card"});
-            if (hintType == "JoinOrder") {
-                JoinOrder();
-            } else if (hintType == "JoinAlgo") {
-                JoinAlgo();
-            } else if (hintType == "Card"){
-                Card();
+            auto hintType = Keyword({"JoinOrder", "Leading", "JoinType", "Rows"});
+            if (hintType == "JoinOrder" || hintType == "Leading") {
+                JoinOrder(hintType == "Leading");
+            } else if (hintType == "JoinType") {
+                JoinType();
+            } else if (hintType == "Rows"){
+                Rows();
             } else {
-                ParseError(Sprintf("Undefined hints type: %s", hintType.c_str()), Pos - hintType.Size());
+                ParseError(Sprintf("Undefined hints type: %s", hintType.c_str()), Pos - hintType.size());
             }
 
             SkipWhiteSpaces();
@@ -45,15 +45,15 @@ private:
         return labels;
     }
 
-    void JoinAlgo() {        
-        Keyword({"("});
-
+    void JoinType() {        
         i32 beginPos = Pos + 1;
+        
+        Keyword({"("});
 
         i32 labelsBeginPos = Pos + 1;
         TVector<TString> labels = CollectLabels();
         if (labels.size() <= 1) {
-            ParseError(Sprintf("Bad labels for JoinAlgo hint: %s, example of the format: JoinAlgo(t1 t2 Grace)", JoinSeq(", ", labels).c_str()), labelsBeginPos);
+            ParseError(Sprintf("Bad labels for JoinType hint: %s, example of the format: JoinType(t1 t2 Shuffle)", JoinSeq(", ", labels).c_str()), labelsBeginPos);
         }
         TString reqJoinAlgoStr = std::move(labels.back());
         labels.pop_back();
@@ -61,27 +61,30 @@ private:
         Keyword({")"});
         
         TVector<EJoinAlgoType> joinAlgos = {EJoinAlgoType::GraceJoin, EJoinAlgoType::LookupJoin, EJoinAlgoType::MapJoin};
-        TVector<TString> joinAlgosStr = {"Grace", "Lookup", "Map"};
+        TVector<TString> joinAlgosStr = {"Shuffle", "Lookup", "Broadcast"};
 
-        for (const auto& [joinAlgo, joinAlgoStr]: Zip(joinAlgos, joinAlgosStr)) {
+        for (const auto& [JoinType, joinAlgoStr]: Zip(joinAlgos, joinAlgosStr)) {
             if (reqJoinAlgoStr == joinAlgoStr) {
-                Hints.JoinAlgoHints->PushBack(std::move(labels), joinAlgo, "JoinOrder" + Text.substr(beginPos, Pos - beginPos + 1));
+                Hints.JoinAlgoHints->PushBack(std::move(labels), JoinType, "JoinType" + Text.substr(beginPos, Pos - beginPos + 1));
                 return;
             }
         }
        
-        ParseError(Sprintf("Unknown JoinAlgo: '%s', supported algos: [%s]", reqJoinAlgoStr.c_str(), JoinSeq(", ", joinAlgosStr).c_str()), Pos - reqJoinAlgoStr.Size());
+        ParseError(Sprintf("Unknown JoinType: '%s', supported algos: [%s]", reqJoinAlgoStr.c_str(), JoinSeq(", ", joinAlgosStr).c_str()), Pos - reqJoinAlgoStr.size());
         Y_UNREACHABLE();
     }
 
-    void JoinOrder() {
+    void JoinOrder(bool leading /* is keyword "Leading" or "JoinOrder" */) {
         i32 beginPos = Pos + 1;
 
         Keyword({"("});
         auto joinOrderHintTree = JoinOrderLabels();
         Keyword({")"});
 
-        Hints.JoinOrderHints->PushBack(std::move(joinOrderHintTree), "JoinOrder" + Text.substr(beginPos, Pos - beginPos + 1));
+        Hints.JoinOrderHints->PushBack(
+            std::move(joinOrderHintTree), 
+            leading? "Leading" : "JoinOrder" + Text.substr(beginPos, Pos - beginPos + 1)
+        );
     }
 
     std::shared_ptr<TJoinOrderHints::ITreeNode> JoinOrderLabels() {
@@ -103,7 +106,7 @@ private:
         Y_UNREACHABLE();
     }
 
-    void Card() {
+    void Rows() {
         i32 beginPos = Pos + 1;
 
         Keyword({"("});
@@ -124,13 +127,14 @@ private:
             default: {ParseError(Sprintf("Unknown operation: '%c'", sign), Pos - 1); Y_UNREACHABLE();}
         }
 
-        Hints.CardinalityHints->PushBack(std::move(labels), op, value, "Card" + Text.substr(beginPos, Pos - beginPos + 1));
+        Hints.CardinalityHints->PushBack(std::move(labels), op, value, "Rows" + Text.substr(beginPos, Pos - beginPos + 1));
     }
 
 private:
     // Expressions
     void ParseError(const TString& err, i32 pos) {
-        Y_ENSURE(false, Sprintf("Optimizer hints parser error position:%d, msg: %s", pos, err.c_str()));
+        auto [line, linePos] = GetLineAndLinePosFromTextPos(pos);
+        Y_ENSURE(false, Sprintf("Optimizer hints parser error at [line:%d, pos:%d], msg: %s", line, linePos, err.c_str()));
     }
 
     TString Label() {
@@ -158,7 +162,7 @@ private:
             }
         }
 
-        if (term.Empty()) {
+        if (term.empty()) {
             ParseError("Expected a term!", Pos);
         }
         return term;
@@ -212,10 +216,10 @@ private:
 
         for (const auto& keyword: keywords) {
             size_t lowInclude = Pos + 1;
-            size_t highExclude = lowInclude + keyword.Size();
+            size_t highExclude = lowInclude + keyword.size();
 
             if (Text.substr(lowInclude, highExclude - lowInclude).equal(keyword)) {
-                Pos += keyword.Size();
+                Pos += keyword.size();
                 return keyword;
             }
         }
@@ -237,7 +241,7 @@ private:
         try {
             return std::stod(term);
         } catch (...) {
-            ParseError(Sprintf("Expected a number, got [%s]", term.c_str()), Pos - term.Size());
+            ParseError(Sprintf("Expected a number, got [%s]", term.c_str()), Pos - term.size());
         }
         Y_UNREACHABLE();
     }
@@ -280,6 +284,22 @@ private:
     void SkipWhiteSpaces() {
         for (; Pos < Size && isspace(Text[Pos + 1]); ++Pos) {
         }
+    }
+
+    std::pair<i32, i32> GetLineAndLinePosFromTextPos(i32 pos) {
+        i32 Line = 0;
+        i32 LinePos = 0;
+
+        for (i32 i = 0; i <= pos && i < static_cast<i32>(Text.size()); ++i) {
+            if (Text[i] == '\n') {
+                LinePos = 0;
+                ++Line;
+            } else {
+                ++LinePos;
+            }
+        }
+
+        return {Line, LinePos};
     }
 
 private:

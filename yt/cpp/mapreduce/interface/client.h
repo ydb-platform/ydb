@@ -493,6 +493,18 @@ public:
         const TGetJobStderrOptions& options = TGetJobStderrOptions()) = 0;
 
     ///
+    /// @brief Get trace of a job.
+    ///
+    /// @ref NYT::TErrorResponse exception is thrown if it is missing.
+    ///
+    /// @note YT doesn't store all job traces.
+    ///
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#get_job_trace)
+    virtual std::vector<TJobTraceEvent> GetJobTrace(
+        const TOperationId& operationId,
+        const TGetJobTraceOptions& options = TGetJobTraceOptions()) = 0;
+
+    ///
     /// @brief Create one or several rbtorrents for files in a blob table.
     ///
     /// If specified, one torrent is created for each value of `KeyColumns` option.

@@ -451,7 +451,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
 
                 TStringBuilder builder;
 
-                if (name == "Iterator" || name == "Member") {
+                if (name == "Iterator" || name == "Member" || name == "ToFlow") {
                     builder << "Reference";
                 } else {
                     builder << name;
@@ -461,11 +461,25 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     if (auto* limitNode = subNode.GetValueByPath("Limit")) {
                         builder << ": " << limitNode->GetStringSafe();
                     }
+                } else if (name == "Sort") {
+                    if (auto* sortByNode = subNode.GetValueByPath("SortBy")) {
+                        auto sortBy = sortByNode->GetStringSafe();
+                        while (true) {
+                            auto p = sortBy.find("row.");
+                            if (p == sortBy.npos) {
+                                break;
+                            }
+                            sortBy.erase(p, 4);
+                        }
+                        if (sortBy) {
+                            builder << " by " << sortBy;
+                        }
+                    }
                 } else if (name == "Filter") {
                     if (auto* predicateNode = subNode.GetValueByPath("Predicate")) {
                         auto filter = predicateNode->GetStringSafe();
                         prevFilter = filter;
-                        while(true) {
+                        while (true) {
                             auto p = filter.find("item.");
                             if (p == filter.npos) {
                                 break;
@@ -482,14 +496,110 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         }
                         builder << ": " << filter;
                     }
-                } else if (name == "TopSort") {
+                } else if (name == "Aggregate") {
+                    if (auto* aggregationNode = subNode.GetValueByPath("Aggregation")) {
+                        auto aggr = aggregationNode->GetStringSafe();
+                        if (aggr) {
+                            if (aggr.StartsWith("{")) {
+                                aggr.erase(aggr.begin());
+                            }
+                            if (aggr.EndsWith("}")) {
+                                aggr.erase(aggr.end() - 1);
+                            }
+                            while (true) {
+                                auto p = aggr.find("_yql_agg_");
+                                if (p == aggr.npos) {
+                                    break;
+                                }
+                                auto l = 9;
+                                auto p1 = aggr.begin() + p + l;
+                                while (p1 != aggr.end() && *p1 >= '0' && *p1 <= '9') {
+                                    p1++;
+                                    l++;
+                                }
+                                auto yqlAgg = aggr.substr(p, l);
+                                if (p1 != aggr.end() && *p1 == ':') {
+                                    p1++;
+                                    l++;
+                                    if (p1 != aggr.end() && *p1 == ' ') {
+                                        p1++;
+                                        l++;
+                                    }
+                                }
+                                aggr.erase(p, l);
+
+                                auto extraChars = 7;
+                                p = aggr.find(",state." + yqlAgg);
+                                if (p == aggr.npos) {
+                                    p = aggr.find("state." + yqlAgg + ",");
+                                }
+                                if (p == aggr.npos) {
+                                    p = aggr.find("state." + yqlAgg);
+                                    extraChars = 6;
+                                }
+                                if (p != aggr.npos) {
+                                    aggr.erase(p, yqlAgg.size() + extraChars);
+                                }
+                            }
+                            while (true) {
+                                auto p = aggr.find("item.");
+                                if (p == aggr.npos) {
+                                    break;
+                                }
+                                aggr.erase(p, 5);
+                            }
+                            builder << " " << aggr;
+                        }
+                    }
+                    if (auto* groupByNode = subNode.GetValueByPath("GroupBy")) {
+                        auto groupBy = groupByNode->GetStringSafe();
+                        while (true) {
+                            auto p = groupBy.find("item.");
+                            if (p == groupBy.npos) {
+                                break;
+                            }
+                            groupBy.erase(p, 5);
+                        }
+                        if (groupBy) {
+                            builder << ", Group By: " << groupBy;
+                        }
+                    }
+                } else if (name == "TableFullScan") {
+                    if (auto* tableNode = subNode.GetValueByPath("Table")) {
+                        auto table = tableNode->GetStringSafe();
+                        auto n = table.find_last_of('/');
+                        if (n != table.npos) {
+                            table = table.substr(n + 1);
+                        }
+                        builder << " " << table;
+                    }
+                    builder << "(";
+                    if (auto* readColumnsNode = subNode.GetValueByPath("ReadColumns")) {
+                        bool firstColumn = true;
+                        for (const auto& subNode : readColumnsNode->GetArray()) {
+                            if (firstColumn) {
+                                firstColumn = false;
+                            } else {
+                                builder << ", ";
+                            }
+                            builder << subNode.GetStringSafe();
+                        }
+                    }
+                    builder << ")";
+                } else if (name == "TopSort" || name == "Top") {
                     if (auto* limitNode = subNode.GetValueByPath("Limit")) {
-                        builder << ", Limit: " << limitNode->GetStringSafe();
+                        auto limit = limitNode->GetStringSafe();
+                        if (limit) {
+                            builder << ", Limit: " << limit;
+                        }
                     }
                     if (auto* topSortByNode = subNode.GetValueByPath("TopSortBy")) {
-                        builder << ", TopSortBy: " << topSortByNode->GetStringSafe();
+                        auto topSortBy = topSortByNode->GetStringSafe();
+                        if (topSortBy) {
+                            builder << ", TopSortBy: " << topSortBy;
+                        }
                     }
-                } else if (name == "Iterator" || name == "Member") {
+                } else if (name == "Iterator" || name == "Member" || name == "ToFlow") {
                     if (auto* referenceNode = subNode.GetValueByPath(name)) {
                         auto referenceName = referenceNode->GetStringSafe();
                         references.insert(referenceName);
@@ -640,6 +750,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
             }
             if (planNodeType == "Connection") {
                 auto* keyColumnsNode = plan.GetValueByPath("KeyColumns");
+                auto* sortColumnsNode = plan.GetValueByPath("SortColumns");
                 if (auto* subNode = plan.GetValueByPath("Plans")) {
                     for (auto& plan : subNode->GetArray()) {
                         TString nodeType;
@@ -657,6 +768,11 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         if (keyColumnsNode) {
                             for (auto& keyColumn : keyColumnsNode->GetArray()) {
                                 stage->Connections.back()->KeyColumns.push_back(keyColumn.GetStringSafe());
+                            }
+                        }
+                        if (sortColumnsNode) {
+                            for (auto& sortColumn : sortColumnsNode->GetArray()) {
+                                stage->Connections.back()->SortColumns.push_back(sortColumn.GetStringSafe());
                             }
                         }
 
@@ -758,8 +874,9 @@ void TPlan::LoadSource(std::shared_ptr<TSource> source, const NJson::TJsonValue&
                 builder << " " << sourceTypeNode->GetStringSafe();
             }
             if (auto* nameNode = subNode.GetValueByPath("Name")) {
-                builder << " " << nameNode->GetStringSafe() << "(";
+                builder << " " << nameNode->GetStringSafe();
             }
+            builder << "(";
             if (auto* readColumnsNode = subNode.GetValueByPath("ReadColumns")) {
                 bool firstColumn = true;
                 for (const auto& subNode : readColumnsNode->GetArray()) {
@@ -988,7 +1105,7 @@ void TPlan::PrintStageSummary(TStringBuilder& background, TStringBuilder&, ui32 
         background
         << "<rect x='" << x0 << "' y='" << y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
         << "' width='" << textSum.size() * INTERNAL_TEXT_HEIGHT * 7 / 10 << "' height='" << INTERNAL_TEXT_HEIGHT + 1
-        << "' stroke-width='0' opacity='0.5' fill='" << Config.Palette.StageDark << "'/>" << Endl
+        << "' stroke-width='0' opacity='0.5' fill='" << Config.Palette.StageMain << "'/>" << Endl
         << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextSummary << "' x='" << x0
         << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << textSum << "</text>" << Endl;
     }
@@ -1005,29 +1122,29 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
         background
             << "<rect x='" << s->IndentX << "' y='" << s->OffsetY + offsetY
             << "' width='" << Config.HeaderWidth - s->IndentX - INTERNAL_WIDTH << "' height='" << s->Height
-            << "' stroke-width='0' fill='" << Config.Palette.StageDark << "'/>" << Endl;
+            << "' stroke-width='0' fill='" << Config.Palette.StageMain << "'/>" << Endl;
         auto x = Config.HeaderWidth + GAP_X;
         background
             << "<rect x='" << x << "' y='" << s->OffsetY + offsetY
             << "' width='" << Config.SummaryWidth << "' height='" << s->Height
-            << "' stroke-width='0' fill='" << Config.Palette.StageDark << "'/>" << Endl;
+            << "' stroke-width='0' fill='" << Config.Palette.StageMain << "'/>" << Endl;
         x += Config.SummaryWidth + GAP_X;
         background
             << "<rect x='" << x << "' y='" << s->OffsetY + offsetY
             << "' width='" << Config.Width - x << "' height='" << s->Height
-            << "' stroke-width='0' fill='" << Config.Palette.StageDark << "'/>" << Endl;
+            << "' stroke-width='0' fill='" << Config.Palette.StageMain << "'/>" << Endl;
         if (s->Connections.size() > 1) {
             ui32 y = s->OffsetY + s->Height;
             background
                 << "<rect x='" << s->IndentX << "' y='" << y + offsetY
                 << "' width='" << INDENT_X << "' height='" << s->IndentY - y
-                << "' stroke-width='0' fill='" << Config.Palette.StageDark << "'/>" << Endl;
+                << "' stroke-width='0' fill='" << Config.Palette.StageMain << "'/>" << Endl;
         }
         background
             << "<circle cx='" << s->IndentX + INTERNAL_WIDTH / 2
             << "' cy='" << s->OffsetY + s->Height / 2 + offsetY
             << "' r='" << INTERNAL_WIDTH / 2 - 1
-            << "' stroke='" << Config.Palette.StageDark << "' stroke-width='1' fill='" << Config.Palette.StageLight << "' />" << Endl
+            << "' stroke='" << Config.Palette.StageMain << "' stroke-width='1' fill='" << Config.Palette.StageClone << "' />" << Endl
             << "<text text-anchor='middle' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT
             << "px' fill='" << Config.Palette.StageText << "' x='" << s->IndentX + INTERNAL_WIDTH / 2
             << "' y='" << s->OffsetY + s->Height / 2 + offsetY + INTERNAL_TEXT_HEIGHT / 2
@@ -1038,8 +1155,9 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
             if (!s->Info.empty()) {
                 for (auto text : s->Info) {
                     canvas
+                        << "<g><title>" << text << "</title>"
                         << "<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText << "' x='" << s->IndentX + INTERNAL_WIDTH + 2
-                        << "' y='" << y0 << "'>" << text << "</text>" << Endl;
+                        << "' y='" << y0 << "'>" << text << "</text>" << "</g>" << Endl;
                     y0 += (INTERNAL_TEXT_HEIGHT + INTERNAL_GAP_Y);
                 }
             } else {
@@ -1205,22 +1323,22 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
                 background
                     << "<rect x='" << xx << "' y='" << y
                     << "' width='" << Config.HeaderWidth - xx - INTERNAL_WIDTH<< "' height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2
-                    << "' stroke-width='1' stroke='" << Config.Palette.StageDark << "' fill='" << Config.Palette.StageLight << "'/>" << Endl;
+                    << "' stroke-width='1' stroke='" << Config.Palette.StageMain << "' fill='" << Config.Palette.StageClone << "'/>" << Endl;
                 xx = Config.HeaderWidth + GAP_X;
                 background
                     << "<rect x='" << xx << "' y='" << y
                     << "' width='" << Config.SummaryWidth << "' height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2
-                    << "' stroke-width='1' stroke='" << Config.Palette.StageDark << "' fill='" << Config.Palette.StageLight << "'/>" << Endl;
+                    << "' stroke-width='1' stroke='" << Config.Palette.StageMain << "' fill='" << Config.Palette.StageClone << "'/>" << Endl;
                 xx += Config.SummaryWidth + GAP_X;
                 background
                     << "<rect x='" << xx << "' y='" << y
                     << "' width='" << Config.Width - xx << "' height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2
-                    << "' stroke-width='1' stroke='" << Config.Palette.StageDark << "' fill='" << Config.Palette.StageLight << "'/>" << Endl;
+                    << "' stroke-width='1' stroke='" << Config.Palette.StageMain << "' fill='" << Config.Palette.StageClone << "'/>" << Endl;
                 background
                     << "<circle cx='" << c->CteIndentX + INTERNAL_WIDTH * 3 / 2
                     << "' cy='" << c->CteOffsetY + offsetY + INTERNAL_HEIGHT / 2 + INTERNAL_GAP_Y
                     << "' r='" << std::min(INTERNAL_HEIGHT, INTERNAL_WIDTH) / 2 - 1
-                    << "' stroke='" << Config.Palette.StageDark << "' stroke-width='1' fill='" << Config.Palette.StageLight << "' />" << Endl
+                    << "' stroke='" << Config.Palette.StageMain << "' stroke-width='1' fill='" << Config.Palette.StageClone << "' />" << Endl
                     << "<text text-anchor='middle' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT
                     << "px' fill='" << Config.Palette.StageText << "' x='" << c->CteIndentX + INTERNAL_WIDTH * 3 / 2
                     << "' y='" << c->CteOffsetY + offsetY + INTERNAL_HEIGHT / 2 + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT / 2
@@ -1293,6 +1411,18 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
                         canvas << ", ";
                     }
                     canvas << k;
+                }
+            }
+            if (!c->SortColumns.empty()) {
+                canvas << " SortColumns: ";
+                bool first = true;
+                for (auto s : c->SortColumns) {
+                    if (first) {
+                        first = false;
+                    } else {
+                        canvas << ", ";
+                    }
+                    canvas << s;
                 }
             }
             canvas
@@ -1411,8 +1541,8 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
 }
 
 TColorPalette::TColorPalette() {
-    StageDark     = "var(--stage-dark, #F2F2F2)";
-    StageLight    = "var(--stage-dark, #D9D9D9";
+    StageMain     = "var(--stage-main, #F2F2F2)";
+    StageClone    = "var(--stage-clone, #D9D9D9";
     StageText     = "var(--stage-text, #262626)";
     StageTextHighlight = "var(--stage-texthl, #EA0703)";
     StageGrid     = "var(--stage-grid, #B2B2B2";
@@ -1434,6 +1564,7 @@ TColorPalette::TColorPalette() {
     ConnectionText= "var(--conn-text, #393939)";
     MinMaxLine    = "var(--minmax-line, #FFDB4D)";
     TextLight     = "var(--text-light, #FFFFFF)";
+    TextInverted  = "var(--text-inv, #FFFFFF)";
     TextSummary   = "var(--text-summary, #262626)";
     SpillingBytesDark   = "var(--spill-dark, #406B61)";
     SpillingBytesMedium = "var(--spill-medium, #599587)";
@@ -1450,11 +1581,12 @@ TPlanViewConfig::TPlanViewConfig() {
 }
 
 
-void TPlanVisualizer::LoadPlans(const TString& plans) {
+void TPlanVisualizer::LoadPlans(const TString& plans, bool simplified) {
+    Config.Simplified = simplified;
     NJson::TJsonReaderConfig jsonConfig;
     NJson::TJsonValue jsonNode;
     if (NJson::ReadJsonTree(plans, &jsonConfig, &jsonNode)) {
-        if (auto* topNode = jsonNode.GetValueByPath("Plan")) {
+        if (auto* topNode = jsonNode.GetValueByPath(simplified ? "SimplifiedPlan" : "Plan")) {
             if (auto* subNode = topNode->GetValueByPath("Plans")) {
                 for (auto& plan : subNode->GetArray()) {
                     if (auto* typeNode = plan.GetValueByPath("Node Type")) {
@@ -1513,8 +1645,8 @@ TString TPlanVisualizer::PrintSvg() {
     for (auto& p : Plans) {
         offsetY += GAP_Y;
         canvas
-            << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT
-            << "px' x='" << 0 << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>"
+            << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText 
+            << "' x='" << 0 << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>"
             << p.NodeType << "</text>" << Endl;
 
         canvas
@@ -1574,7 +1706,7 @@ TString TPlanVisualizer::PrintSvg() {
             << "  <rect x='" << x - summary3 << "' y='" << offsetY
             << "' width='" << summary3 << "' height='" << TIME_HEIGHT
             << "' stroke-width='0' fill='" << Config.Palette.StageGrid << "'/>" << Endl
-            << "  <text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight << "' x='" << x - 2
+            << "  <text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextInverted << "' x='" << x - 2
             << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>" << FormatTimeMs(p.MaxTime + p.TimeOffset) << "</text>" << Endl
             << "</g>" << Endl;
 
@@ -1631,8 +1763,8 @@ TString TPlanVisualizer::PrintSvg() {
             auto timeLabel = Sprintf("%lu:%.2lu", t / 60, t % 60);
             for (auto& p : Plans) {
                 svg
-                    << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT
-                    << "px' x='" << x + x1 + 2 << "' y='" << p.OffsetY - INTERNAL_HEIGHT - (TIME_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>"
+                    << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText 
+                    << "' x='" << x + x1 + 2 << "' y='" << p.OffsetY - INTERNAL_HEIGHT - (TIME_HEIGHT - INTERNAL_TEXT_HEIGHT) << "'>"
                     << timeLabel << "</text>" << Endl;
             }
         }

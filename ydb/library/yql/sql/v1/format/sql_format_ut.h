@@ -443,6 +443,8 @@ Y_UNIT_TEST(AlterTable) {
             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (resolved_timestamps = Interval(\"PT1S\"));\n"},
         {"alter table user add changefeed user with (topic_min_active_partitions = 1)",
             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (topic_min_active_partitions = 1);\n"},
+        {"alter table user add changefeed user with (topic_auto_partitioning = 'ENABLED', topic_min_active_partitions = 1, topic_max_active_partitions = 7)",
+            "ALTER TABLE user\n\tADD CHANGEFEED user WITH (topic_auto_partitioning = 'ENABLED', topic_min_active_partitions = 1, topic_max_active_partitions = 7);\n"},
     };
 
     TSetup setup;
@@ -1577,8 +1579,18 @@ Y_UNIT_TEST(BackupCollectionOperations) {
     TCases cases = {
         {"creAte  BackuP colLection `-naMe` wIth (a = \"b\")",
             "CREATE BACKUP COLLECTION `-naMe` WITH (a = \"b\");\n"},
-            {"alTer bACKuP coLLECTION naMe resEt (b, c), seT (x=y, z=false)",
+        {"creAte  BackuP colLection `-naMe`     DATabase wIth (a = \"b\")",
+            "CREATE BACKUP COLLECTION `-naMe` DATABASE WITH (a = \"b\");\n"},
+        {"creAte  BackuP colLection    `-naMe`   (   tabLe      `tbl1`      , TablE `tbl2`) wIth (a = \"b\")",
+            "CREATE BACKUP COLLECTION `-naMe` (TABLE `tbl1`, TABLE `tbl2`) WITH (a = \"b\");\n"},
+        {"alTer bACKuP coLLECTION naMe resEt (b, c), seT (x=y, z=false)",
             "ALTER BACKUP COLLECTION naMe\n\tRESET (b, c),\n\tSET (x = y, z = FALSE);\n"},
+        {"alTer bACKuP coLLECTION naMe aDD         DATAbase",
+            "ALTER BACKUP COLLECTION naMe\n\tADD DATABASE;\n"},
+        {"alTer bACKuP coLLECTION naMe DRoP    \n\n    DaTAbase",
+            "ALTER BACKUP COLLECTION naMe\n\tDROP DATABASE;\n"},
+        {"alTer bACKuP coLLECTION naMe add    \n\n    tablE\n\tsometable,drOp TABle `other`",
+            "ALTER BACKUP COLLECTION naMe\n\tADD TABLE sometable,\n\tDROP TABLE `other`;\n"},
         {"DROP backup collectiOn       `/some/path`",
             "DROP BACKUP COLLECTION `/some/path`;\n"},
     };
@@ -1611,6 +1623,26 @@ Y_UNIT_TEST(ResourcePoolClassifierOperations) {
             "ALTER RESOURCE POOL CLASSIFIER eds\n\tRESET (a),\n\tSET (x = y);\n"},
         {"dRop reSourCe poOl ClaSsiFIer naMe",
             "DROP RESOURCE POOL CLASSIFIER naMe;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(Backup) {
+    TCases cases = {
+        {"\tBaCKup\n\n TestCollection      incremENTAl",
+         "BACKUP TestCollection INCREMENTAL;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(Restore) {
+    TCases cases = {
+        {"resToRe\n\n\n TestCollection       aT\n  \t \n     '2024-06-16_20-14-02'",
+         "RESTORE TestCollection AT '2024-06-16_20-14-02';\n"},
     };
 
     TSetup setup;

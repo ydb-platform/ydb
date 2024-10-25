@@ -64,6 +64,10 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
         settings.AutoParametrizeValuesStmt = IsEnablePgConstsToParams;
     }
 
+    if (!settings.PgParser) {
+        settings.Antlr4Parser = IsEnableAntlr4Parser;
+    }
+
     if (QueryType == NYql::EKikimrQueryType::Scan || QueryType == NYql::EKikimrQueryType::Query) {
         SqlVersion = SqlVersion ? *SqlVersion : 1;
     }

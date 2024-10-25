@@ -1,0 +1,91 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3244b00e8ab273a03f19b20a64c26a96
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2023 Andrey Semashev
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/scope/detail/config.hpp [6:6]
+        include/boost/scope/detail/footer.hpp [6:6]
+        include/boost/scope/detail/header.hpp [6:6]
+        include/boost/scope/detail/is_nonnull_default_constructible.hpp [6:6]
+        include/boost/scope/detail/is_not_like.hpp [6:6]
+        include/boost/scope/detail/type_traits/conjunction.hpp [6:6]
+        include/boost/scope/detail/type_traits/disjunction.hpp [6:6]
+        include/boost/scope/detail/type_traits/is_final.hpp [6:6]
+        include/boost/scope/detail/type_traits/is_invocable.hpp [6:6]
+        include/boost/scope/detail/type_traits/is_nothrow_invocable.hpp [6:6]
+        include/boost/scope/detail/type_traits/is_nothrow_swappable.hpp [6:6]
+        include/boost/scope/detail/type_traits/is_swappable.hpp [6:6]
+        include/boost/scope/detail/type_traits/negation.hpp [6:6]
+        include/boost/scope/error_code_checker.hpp [6:6]
+        include/boost/scope/exception_checker.hpp [6:6]
+        include/boost/scope/fd_deleter.hpp [6:6]
+        include/boost/scope/fd_resource_traits.hpp [6:6]
+        include/boost/scope/scope_exit.hpp [6:6]
+        include/boost/scope/unique_fd.hpp [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3f6ec3343e75c2c0c0e1e8956ffabc65
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2022-2024 Andrey Semashev
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/scope/defer.hpp [6:6]
+        include/boost/scope/unique_resource.hpp [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 45666b61e7d8667b41556a93c064e0e8
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2022 Andrey Semashev
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/scope/detail/compact_storage.hpp [6:6]
+        include/boost/scope/detail/move_or_copy_assign_ref.hpp [6:6]
+        include/boost/scope/detail/move_or_copy_construct_ref.hpp [6:6]
+        include/boost/scope/scope_fail.hpp [6:6]
+        include/boost/scope/scope_success.hpp [6:6]
+        include/boost/scope/unique_resource_fwd.hpp [6:6]

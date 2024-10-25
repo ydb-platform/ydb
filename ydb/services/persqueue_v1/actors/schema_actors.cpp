@@ -277,7 +277,7 @@ void TRemoveReadRuleActor::ModifyPersqueueConfig(
         GetProtoRequest()->consumer_name(),
         appData->PQConfig
     );
-    if (!error.Empty()) {
+    if (!error.empty()) {
         return ReplyWithError(Ydb::StatusIds::NOT_FOUND, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error);
     }
 }
@@ -1094,7 +1094,7 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
         }
 
         const auto &config = pqDescr.GetPQTabletConfig();
-        if (AppData(TActivationContext::ActorContextFor(SelfId()))->FeatureFlags.GetEnableTopicSplitMerge()) {
+        if (AppData(TActivationContext::ActorContextFor(SelfId()))->FeatureFlags.GetEnableTopicSplitMerge() && NPQ::SplitMergeEnabled(config)) {
             Result.mutable_partitioning_settings()->set_min_active_partitions(config.GetPartitionStrategy().GetMinPartitionCount());
         } else {
             Result.mutable_partitioning_settings()->set_min_active_partitions(pqDescr.GetTotalGroupCount());

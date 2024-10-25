@@ -288,8 +288,8 @@ public:
 
         for (auto& resultStr : ResultProviderConfig.CommittedResults) {
             queryResult.Results.emplace_back(
-                google::protobuf::Arena::CreateMessage<NKikimrMiniKQL::TResult>(queryResult.ProtobufArenaPtr.get()));
-            NKikimrMiniKQL::TResult* result = queryResult.Results.back();
+                queryResult.ProtobufArenaPtr->Allocate<Ydb::ResultSet>());
+            Ydb::ResultSet* result = queryResult.Results.back();
 
             if (!result->ParseFromArray(resultStr.data(), resultStr.size())) {
                 queryResult = ResultFromError<TResult>("Failed to parse run result.");
@@ -1063,6 +1063,7 @@ public:
         }
 
         SessionCtx->SetDatabase(database);
+        SessionCtx->SetDatabaseId(Gateway->GetDatabaseId());
         SessionCtx->SetCluster(cluster);
         if (tempTablesState) {
             SessionCtx->SetSessionId(tempTablesState->SessionId);
@@ -1230,7 +1231,8 @@ private:
                 .SetIsEnablePgConstsToParams(SessionCtx->Config().EnablePgConstsToParams)
                 .SetQueryParameters(query.ParameterTypes)
                 .SetApplicationName(ApplicationName)
-                .SetIsEnablePgSyntax(SessionCtx->Config().FeatureFlags.GetEnablePgSyntax());
+                .SetIsEnablePgSyntax(SessionCtx->Config().FeatureFlags.GetEnablePgSyntax())
+                .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
             NSQLTranslation::TTranslationSettings effectiveSettings;
             auto astRes = ParseQuery(
                 query.Text,
@@ -1298,7 +1300,8 @@ private:
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, query.Text, SessionCtx->Config().BindingsMode, GUCSettings);
         settingsBuilder
             .SetSqlAutoCommit(false)
-            .SetUsePgParser(settings.UsePgParser);
+            .SetUsePgParser(settings.UsePgParser)
+            .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileYqlQuery(query, /* isSql */ true, *ExprCtx, sqlVersion, settingsBuilder);
 
         return TSplitResult{
@@ -1392,7 +1395,8 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, query.Text, SessionCtx->Config().BindingsMode, GUCSettings);
         settingsBuilder.SetSqlAutoCommit(false)
-            .SetUsePgParser(settings.UsePgParser);
+            .SetUsePgParser(settings.UsePgParser)
+            .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileYqlQuery(query, isSql, ctx, sqlVersion, settingsBuilder);
         if (compileResult.QueryExprs.empty()) {
             return nullptr;
@@ -1452,7 +1456,8 @@ private:
 
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, query.Text, SessionCtx->Config().BindingsMode, GUCSettings);
-        settingsBuilder.SetSqlAutoCommit(false);
+        settingsBuilder.SetSqlAutoCommit(false)
+            .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileYqlQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
         if (compileResult.QueryExprs.empty()) {
             return nullptr;
@@ -1480,7 +1485,8 @@ private:
 
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, queryAst.Text, SessionCtx->Config().BindingsMode, GUCSettings);
-        settingsBuilder.SetSqlAutoCommit(false);
+        settingsBuilder.SetSqlAutoCommit(false)
+            .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileYqlQuery(queryAst, false, ctx, sqlVersion, settingsBuilder);
         if (compileResult.QueryExprs.empty()) {
             return nullptr;
@@ -1526,7 +1532,8 @@ private:
         if (!expr) {
             TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, query.Text, SessionCtx->Config().BindingsMode, GUCSettings);
             settingsBuilder.SetSqlAutoCommit(false)
-                .SetUsePgParser(settings.UsePgParser);
+                .SetUsePgParser(settings.UsePgParser)
+                .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
             auto compileResult = CompileYqlQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
             if (compileResult.QueryExprs.empty()) {
                 return nullptr;
@@ -1563,7 +1570,8 @@ private:
 
         TMaybe<TSqlVersion> sqlVersion = 1;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, query.Text, SessionCtx->Config().BindingsMode, GUCSettings);
-        settingsBuilder.SetSqlAutoCommit(false);
+        settingsBuilder.SetSqlAutoCommit(false)
+            .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileYqlQuery(query, true, ctx, sqlVersion, settingsBuilder);
         if (compileResult.QueryExprs.empty()) {
             return nullptr;
@@ -1584,7 +1592,8 @@ private:
 
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, queryAst.Text, SessionCtx->Config().BindingsMode, GUCSettings);
-        settingsBuilder.SetSqlAutoCommit(false);
+        settingsBuilder.SetSqlAutoCommit(false)
+            .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileYqlQuery(queryAst, false, ctx, sqlVersion, settingsBuilder);
         if (compileResult.QueryExprs.empty()) {
             return nullptr;
@@ -1611,7 +1620,8 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, script.Text, SessionCtx->Config().BindingsMode, GUCSettings);
         settingsBuilder.SetSqlAutoCommit(true)
-            .SetUsePgParser(settings.UsePgParser);
+            .SetUsePgParser(settings.UsePgParser)
+            .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
         if (compileResult.QueryExprs.empty()) {
             return nullptr;
@@ -1640,7 +1650,8 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, script.Text, SessionCtx->Config().BindingsMode, GUCSettings);
         settingsBuilder.SetSqlAutoCommit(true)
-            .SetUsePgParser(settings.UsePgParser);
+            .SetUsePgParser(settings.UsePgParser)
+            .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
         if (compileResult.QueryExprs.empty()) {
             return nullptr;
@@ -1664,7 +1675,8 @@ private:
 
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, script.Text, SessionCtx->Config().BindingsMode, GUCSettings);
-        settingsBuilder.SetSqlAutoCommit(true);
+        settingsBuilder.SetSqlAutoCommit(true)
+            .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
         if (compileResult.QueryExprs.empty()) {
             return nullptr;
@@ -1692,7 +1704,8 @@ private:
 
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, script.Text, SessionCtx->Config().BindingsMode, GUCSettings);
-        settingsBuilder.SetSqlAutoCommit(true);
+        settingsBuilder.SetSqlAutoCommit(true)
+            .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
         if (compileResult.QueryExprs.empty()) {
             return nullptr;

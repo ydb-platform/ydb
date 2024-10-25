@@ -61,13 +61,23 @@ IF (NOT OS_EMSCRIPTEN)
         src/UnwindRegistersSave.S
         src/libunwind.cpp
     )
-ELSEIF (OS_EMSCRIPTEN)
+ELSEIF (OS_EMSCRIPTEN AND ARCH_WASM32)
     PEERDIR(
         contrib/restricted/emscripten/include
     )
     CFLAGS(
-        -D__USING_WASM_EXCEPTIONS__
         -D_LIBUNWIND_HIDE_SYMBOLS
+    )
+    SRCS(
+        src/Unwind-wasm.c
+    )
+ELSEIF (OS_EMSCRIPTEN AND NOT ARCH_WASM32)
+    PEERDIR(
+        contrib/restricted/emscripten/include
+    )
+    CFLAGS(
+        -D_LIBUNWIND_HIDE_SYMBOLS
+        -D__USING_WASM_EXCEPTIONS__
     )
     SRCS(
         src/Unwind-wasm.c

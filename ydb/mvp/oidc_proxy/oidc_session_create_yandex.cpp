@@ -1,5 +1,6 @@
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/library/security/util.h>
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/appdata.h>
 #include <ydb/mvp/core/mvp_log.h>
@@ -61,26 +62,37 @@ void THandlerSessionCreateYandex::HandleCreateSession(TEvPrivate::TEvCreateSessi
     for (const auto& cookie : response.Getset_cookie_header()) {
         responseHeaders.Set("Set-Cookie", ChangeSameSiteFieldInSessionCookie(cookie));
     }
-    NHttp::THttpOutgoingResponsePtr httpResponse;
-    responseHeaders.Set("Location", RedirectUrl);
-    httpResponse = Request->CreateResponse("302", "Cookie set", responseHeaders);
-    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
-    Die(ctx);
+    RetryRequestToProtectedResourceAndDie(&responseHeaders, ctx);
 }
 
 void THandlerSessionCreateYandex::HandleError(TEvPrivate::TEvErrorResponse::TPtr event, const NActors::TActorContext& ctx) {
     LOG_DEBUG_S(ctx, EService::MVP, "SessionService.Create(): " << event->Get()->Status);
-    NHttp::THttpOutgoingResponsePtr httpResponse;
     if (event->Get()->Status == "400") {
-        httpResponse = GetHttpOutgoingResponsePtr(Request, Settings, IsAjaxRequest);
+        RetryRequestToProtectedResourceAndDie(ctx);
     } else {
         NHttp::THeadersBuilder responseHeaders;
         responseHeaders.Set("Content-Type", "text/plain");
-        httpResponse = Request->CreateResponse( event->Get()->Status, event->Get()->Message, responseHeaders, event->Get()->Details);
+        SetCORS(Request, &responseHeaders);
+        NHttp::THttpOutgoingResponsePtr httpResponse = Request->CreateResponse( event->Get()->Status, event->Get()->Message, responseHeaders, event->Get()->Details);
+        ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
+        Die(ctx);
     }
-    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
-    Die(ctx);
 }
 
 } // NOIDC
+
+template<>
+TString SecureShortDebugString(const yandex::cloud::priv::oauth::v1::CreateSessionRequest& request) {
+    yandex::cloud::priv::oauth::v1::CreateSessionRequest copy = request;
+    copy.set_access_token(NKikimr::MaskTicket(copy.access_token()));
+    return copy.ShortDebugString();
+}
+
+template<>
+TString SecureShortDebugString(const yandex::cloud::priv::oauth::v1::CreateSessionResponse& request) {
+    yandex::cloud::priv::oauth::v1::CreateSessionResponse copy = request;
+    copy.clear_set_cookie_header();
+    return copy.ShortDebugString();
+}
+
 } // NMVP

@@ -2,7 +2,7 @@ LIBRARY()
 
 PEERDIR (
     ydb/library/yql/parser/proto_ast/gen/v1_proto_split
-    ydb/library/yql/parser/proto_ast
+    ydb/library/yql/parser/proto_ast/antlr3
 )
 
 SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})
@@ -15,15 +15,16 @@ SET(PROTOBUF_SUFFIX_PATH .pb.main.h)
 
 SET(LEXER_PARSER_NAMESPACE NALPAnsi)
 
-SET(GRAMMAR_STRING_CORE_SINGLE "\"~QUOTE_SINGLE | (QUOTE_SINGLE QUOTE_SINGLE)\"")
-SET(GRAMMAR_STRING_CORE_DOUBLE "\"~QUOTE_DOUBLE | (QUOTE_DOUBLE QUOTE_DOUBLE)\"")
-SET(GRAMMAR_MULTILINE_COMMENT_CORE       "\"MULTILINE_COMMENT | .\"")
-
 CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/Cpp/Cpp.stg.in ${antlr_templates}/Cpp/Cpp.stg)
 
 IF(EXPORT_CMAKE)
     MANUAL_GENERATION(${sql_grammar})
 ELSE()
+    # For exporting CMake this vars fill in epilogue.cmake
+    SET(GRAMMAR_STRING_CORE_SINGLE "\"~QUOTE_SINGLE | (QUOTE_SINGLE QUOTE_SINGLE)\"")
+    SET(GRAMMAR_STRING_CORE_DOUBLE "\"~QUOTE_DOUBLE | (QUOTE_DOUBLE QUOTE_DOUBLE)\"")
+    SET(GRAMMAR_MULTILINE_COMMENT_CORE "\"MULTILINE_COMMENT | .\"")
+
     CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/sql/v1/SQLv1.g.in ${sql_grammar})
 ENDIF()
 

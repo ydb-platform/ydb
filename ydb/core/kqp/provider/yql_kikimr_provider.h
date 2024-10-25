@@ -292,7 +292,6 @@ public:
         Invalidated = false;
         Readonly = false;
         Closed = false;
-        HasUncommittedChangesRead = false;
     }
 
     void SetTempTables(NKikimr::NKqp::TKqpTempTablesState::TConstPtr tempTablesState) {
@@ -409,17 +408,6 @@ public:
             }
 
             auto& currentOps = TableOperations[table];
-            const bool currentModify = currentOps & KikimrModifyOps();
-            if (currentModify) {
-                if (KikimrReadOps() & newOp) {
-                    HasUncommittedChangesRead = true;
-                }
-
-                if ((*info)->GetHasIndexTables()) {
-                    HasUncommittedChangesRead = true;
-                }
-            }
-
             currentOps |= newOp;
         }
 
@@ -429,7 +417,6 @@ public:
     virtual ~TKikimrTransactionContextBase() = default;
 
 public:
-    bool HasUncommittedChangesRead = false;
     THashMap<TString, TYdbOperations> TableOperations;
     THashMap<TKikimrPathId, TString> TableByIdMap;
     TMaybe<NKikimrKqp::EIsolationLevel> EffectiveIsolationLevel;
@@ -493,6 +480,10 @@ public:
         return Database;
     }
 
+    TString GetDatabaseId() const {
+        return DatabaseId;
+    }
+
     const TString& GetSessionId() const {
         return SessionId;
     }
@@ -503,6 +494,10 @@ public:
 
     void SetDatabase(const TString& database) {
         Database = database;
+    }
+
+    void SetDatabaseId(const TString& databaseId) {
+        DatabaseId = databaseId;
     }
 
     void SetSessionId(const TString& sessionId) {
@@ -543,6 +538,7 @@ private:
     TString UserName;
     TString Cluster;
     TString Database;
+    TString DatabaseId;
     TString SessionId;
     TKikimrConfiguration::TPtr Configuration;
     TIntrusivePtr<TKikimrTablesData> TablesData;

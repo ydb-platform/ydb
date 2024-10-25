@@ -277,7 +277,7 @@ private:
                         return false;
                     }
 
-                    if (value.Content().Size() != 1) {
+                    if (value.Content().size() != 1) {
                         ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), "csv_delimiter must be single character"));
                         return false;
                     }

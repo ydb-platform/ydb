@@ -79,6 +79,10 @@ bool TSessionsManager::Load(NTable::TDatabase& database, const TColumnEngineForL
                 AFL_VERIFY(protoSessionCursorStatic->ParseFromString(rowset.GetValue<Schema::SourceSessions::CursorStatic>()));
             }
 
+            if (protoSessionCursorDynamic && !protoSessionCursorStatic) {
+                protoSessionCursorStatic = NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic{};
+            }
+
             AFL_VERIFY(index);
             session->DeserializeFromProto(protoSession, protoSessionCursorDynamic, protoSessionCursorStatic).Validate();
             AFL_VERIFY(SourceSessions.emplace(session->GetSessionId(), session).second);

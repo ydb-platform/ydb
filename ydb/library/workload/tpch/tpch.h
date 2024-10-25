@@ -16,6 +16,7 @@ public:
     YDB_READONLY(ui32, ProcessIndex, 0);
     YDB_READONLY(ui32, ProcessCount, 1);
     YDB_READONLY_DEF(TFsPath, ExternalQueriesDir);
+    YDB_READONLY_FLAG(CheckCanonical, false);
 };
 
 class TTpchWorkloadGenerator final: public TTpcBaseWorkloadGenerator {

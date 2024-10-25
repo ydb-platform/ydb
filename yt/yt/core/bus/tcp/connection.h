@@ -15,7 +15,7 @@
 
 #include <yt/yt/core/net/address.h>
 
-#include <yt/yt/core/misc/atomic_object.h>
+#include <library/cpp/yt/threading/atomic_object.h>
 #include <yt/yt/core/misc/blob.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
 #include <yt/yt/core/misc/ring_queue.h>
@@ -297,7 +297,7 @@ private:
     int GetSocketPort();
 
     void ConnectSocket(const NNet::TNetworkAddress& address);
-    void OnDialerFinished(const TErrorOr<SOCKET>& socketOrError);
+    void OnDialerFinished(const TErrorOr<TFileDescriptor>& fdOrError);
 
     void ResolveAddress();
     void OnAddressResolveFinished(const TErrorOr<NNet::TNetworkAddress>& result);

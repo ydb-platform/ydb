@@ -46,7 +46,7 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
                         currentIt->second.reset(TCountMinSketch::Create());
                     }
 
-                    auto* data = statistic.GetData().Data();
+                    auto* data = statistic.GetData().data();
                     auto* sketch = reinterpret_cast<const TCountMinSketch*>(data);
                     *(currentIt->second) += *sketch;
                 }

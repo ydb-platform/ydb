@@ -58,9 +58,6 @@ public:
     //! Get pointer to the request's message.
     virtual const NProtoBuf::Message* GetRequest() const = 0;
 
-    //! Get mutable pointer to the request's message.
-    virtual NProtoBuf::Message* GetRequestMut() = 0;
-
     //! Get current auth state
     virtual TAuthState& GetAuthState() = 0;
 
@@ -128,6 +125,8 @@ public:
 
     //! Returns true if client was not interested in result (but we still must send response to make grpc happy)
     virtual bool IsClientLost() const = 0;
+
+    virtual TString GetEndpointId() const = 0;
 };
 
 } // namespace NYdbGrpc

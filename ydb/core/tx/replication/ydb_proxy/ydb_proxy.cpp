@@ -273,6 +273,7 @@ private:
     const bool AutoCommit;
     TDeferredCommit DeferredCommit;
     TPartitionEndWatcher PartitionEndWatcher;
+
 }; // TTopicReader
 
 class TYdbProxy: public TBaseProxyActor<TYdbProxy> {

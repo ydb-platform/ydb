@@ -1810,22 +1810,29 @@ bool TSqlQuery::AlterTableAlterFamily(const TRule_alter_table_alter_column_famil
                 << "' in one alter";
             return false;
         }
-        const TString stringValue(Ctx.Token(value.GetAlt_family_setting_value1().GetToken1()));
-        entry->Data = BuildLiteralSmartString(Ctx, stringValue);
+        if (!StoreString(value, entry->Data, Ctx)) {
+            Ctx.Error() << to_upper(settingName.Name) << " value should be a string literal";
+            return false;
+        }
     } else if (to_lower(settingName.Name) == "compression") {
         if (entry->Compression) {
             Ctx.Error() << "Redefinition of 'compression' setting for column family '" << name.Name
                 << "' in one alter";
             return false;
         }
-        const TString stringValue(Ctx.Token(value.GetAlt_family_setting_value1().GetToken1()));
-        entry->Compression = BuildLiteralSmartString(Ctx, stringValue);
+        if (!StoreString(value, entry->Compression, Ctx)) {
+            Ctx.Error() << to_upper(settingName.Name) << " value should be a string literal";
+            return false;
+        }
     } else if (to_lower(settingName.Name) == "compression_level") {
         if (entry->CompressionLevel) {
             Ctx.Error() << "Redefinition of 'compression_level' setting for column family '" << name.Name << "' in one alter";
             return false;
         }
-        entry->CompressionLevel = LiteralNumber(Ctx, value.GetAlt_family_setting_value2().GetRule_integer1());
+        if (!StoreInt(value, entry->CompressionLevel, Ctx)) {
+            Ctx.Error() << to_upper(settingName.Name) << " value should be an integer";
+            return false;
+        }
     } else {
         Ctx.Error() << "Unknown table setting: " << settingName.Name;
         return false;

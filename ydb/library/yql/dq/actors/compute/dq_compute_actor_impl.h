@@ -1379,7 +1379,8 @@ protected:
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
                         .Alloc = Alloc,
-                        .RandomProvider = randomProvider
+                        .RandomProvider = randomProvider,
+                        .TraceId = ComputeActorSpan.GetTraceId(),
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create sink " << outputDesc.GetSink().GetType() << ": " << ex.what();

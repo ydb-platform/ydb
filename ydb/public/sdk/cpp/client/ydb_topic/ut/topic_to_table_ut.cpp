@@ -181,6 +181,10 @@ protected:
 
     NTable::TDataQueryResult ExecuteDataQuery(NTable::TSession session, const TString& query, const NTable::TTxControl& control);
 
+    void Read_Exactly_N_Messages_From_Topic(const TString& topicPath,
+                                            const TString& consumerName,
+                                            size_t count);
+
 private:
     template<class E>
     E ReadEvent(TTopicReadSessionPtr reader, NTable::TTransaction& tx);
@@ -1003,6 +1007,20 @@ void TFixture::RestartLongTxService()
                      0,
                      true);
     }
+}
+
+void TFixture::Read_Exactly_N_Messages_From_Topic(const TString& topicPath,
+                                                  const TString& consumerName,
+                                                  size_t limit)
+{
+    size_t count = 0;
+
+    while (count < limit) {
+        auto messages = ReadFromTopic(topicPath, consumerName, TDuration::Seconds(2));
+        count += messages.size();
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(count, limit);
 }
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_1, TFixture)
@@ -2169,8 +2187,7 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_40, TFixture)
 
     CommitTx(tx, EStatus::SUCCESS);
 
-    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(60));
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 100);
+    Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 100);
 }
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_41, TFixture)
@@ -2205,14 +2222,7 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_42, TFixture)
 
     CommitTx(tx, EStatus::SUCCESS);
 
-    size_t count = 0;
-
-    while (count < 100) {
-        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
-        count += messages.size();
-    }
-
-    UNIT_ASSERT_VALUES_EQUAL(count, 100);
+    Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 100);
 }
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_43, TFixture)
@@ -2230,8 +2240,7 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_43, TFixture)
 
     ExecuteDataQuery(tableSession, "SELECT 1", NTable::TTxControl::Tx(tx).CommitTx(true));
 
-    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(60));
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 100);
+    Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 100);
 }
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_44, TFixture)
@@ -2255,8 +2264,7 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_44, TFixture)
 
     ExecuteDataQuery(tableSession, "SELECT 2", NTable::TTxControl::Tx(tx).CommitTx(true));
 
-    messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(60));
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 100);
+    Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 100);
 }
 
 }

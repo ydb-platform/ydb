@@ -97,21 +97,13 @@ private:
 struct TShortColumnInfo {
     NTable::TTag Tag;
     NScheme::TTypeInfo Type;
-    TString TypeMod;
     TString Name;
 
-    TShortColumnInfo(NTable::TTag tag, NScheme::TTypeInfo type, const TString& typeMod, const TString& name)
+    TShortColumnInfo(NTable::TTag tag, NScheme::TTypeInfo type, const TString& name)
         : Tag(tag)
         , Type(type)
-        , TypeMod(typeMod)
         , Name(name)
     {}
-
-    TString Dump() const {
-        TStringStream ss;
-        ss << "{Tag: " << Tag << ", Type: " << NScheme::TypeName(Type, TypeMod) << ", Name: " << Name << "}";
-        return ss.Str();
-    }
 };
 
 struct TShortTableInfo {
@@ -126,7 +118,7 @@ struct TShortTableInfo {
 
         for (const auto& it: tableInfo->Columns) {
             const auto& column = it.second;
-            Columns.emplace(it.first, TShortColumnInfo(it.first, column.Type, column.TypeMod, column.Name));
+            Columns.emplace(it.first, TShortColumnInfo(it.first, column.Type, column.Name));
         }
     }
 
@@ -141,21 +133,11 @@ struct TShortTableInfo {
         // note that we don't have column names here, but
         // for cellvec we will not need them at all
         for (const auto& col: schema.Cols) {
-            Columns.emplace(col.Tag, TShortColumnInfo(col.Tag, col.TypeInfo, "", ""));
+            Columns.emplace(col.Tag, TShortColumnInfo(col.Tag, col.TypeInfo, ""));
         }
     }
 
     TShortTableInfo& operator =(TShortTableInfo&& other) = default;
-
-    TString Dump() const {
-        TStringStream ss;
-        ss << "{LocalTid: " << LocalTid << ", SchemaVerstion: " << SchemaVersion  << ", Columns: {";
-        for (const auto& it: Columns) {
-            ss << it.second.Dump();
-        }
-        ss << "}";
-        return ss.Str();
-    }
 
     ui32 LocalTid = 0;
     ui64 SchemaVersion = 0;

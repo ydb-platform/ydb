@@ -3622,7 +3622,6 @@ void TPersQueue::ProcessPlanStepQueue(const TActorContext& ctx)
                         Y_ABORT_UNLESS(TxQueue.empty() || (TxQueue.back() < std::make_pair(step, txId)));
 
                         tx.OnPlanStep(step);
-                        // TODO(abcdef): удалить. сначала набрать транзакции в TxQueue, а потом переложить и запустить
                         TryExecuteTxs(ctx, tx);
 
                         TxQueue.emplace_back(step, txId);
@@ -4113,7 +4112,6 @@ void TPersQueue::TryExecuteTxs(const TActorContext& ctx,
         Y_ABORT_UNLESS(Txs.contains(txId));
         auto& tx = Txs.at(txId);
 
-        // TODO(abcdef): можно убрать
         if (!tx.Pending) {
             // The transaction was not postponed for execution.
             break;
@@ -4658,7 +4656,7 @@ void TPersQueue::EndInitTransactions()
 
 void TPersQueue::TryStartTransaction(const TActorContext& ctx)
 {
-    const auto states = {
+    const auto txStateReverseOrder = {
         NKikimrPQ::TTransaction::EXECUTED,
         NKikimrPQ::TTransaction::EXECUTING,
         NKikimrPQ::TTransaction::WAIT_RS,
@@ -4667,7 +4665,7 @@ void TPersQueue::TryStartTransaction(const TActorContext& ctx)
         NKikimrPQ::TTransaction::PLANNED
     };
 
-    for (auto state : states) {
+    for (auto state : txStateReverseOrder) {
         const auto& txQueue = TxsOrder[state];
         if (txQueue.empty()) {
             continue;

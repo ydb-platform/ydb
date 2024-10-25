@@ -164,5 +164,5 @@ jobs:
           cd ..
 
       - name: Upload to S3
-        run: s3cmd --access_key=${{ secrets.CLI_S3_KEY_ID }} --secret_key=${{ secrets.CLI_S3_KEY_SECRET_ID }} --host=${{ inputs.s3_host }} --host-bucket="${{ inputs.s3_dns_host_bucket }}" --region=${{ inputs.s3_region }} sync --recursive ${{ steps.getver.outputs.cli_version }} s3://${{ inputs.s3_bucket }}/release/
+        run: s3cmd --access_key=${{ secrets.CLI_S3_KEY_ID }} --secret_key=${{ secrets.CLI_S3_KEY_SECRET_ID }} --host=${{ inputs.s3_host }} --host-bucket="${{ inputs.s3_dns_host_bucket }}" --region=${{ inputs.s3_region }} sync --recursive ${{ steps.getver.outputs.dstool_version }} s3://${{ inputs.s3_bucket }}/release/
       

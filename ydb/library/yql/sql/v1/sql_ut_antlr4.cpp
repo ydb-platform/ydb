@@ -7482,4 +7482,38 @@ Y_UNIT_TEST_SUITE(ColumnFamily) {
         UNIT_ASSERT(res.Issues.Size() == 1);
         UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "COMPRESSION_LEVEL value should be an integer");
     }
+
+    Y_UNIT_TEST(AlterCompressionCorrectUsage) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION "lz4";
+        )");
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
+    }
+
+    Y_UNIT_TEST(AlterCompressionFieldIsNotString) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION lz4;
+        )");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "mismatched input 'lz4' expecting {STRING_VALUE, DIGITS, INTEGER_VALUE}");
+    }
+
+    Y_UNIT_TEST(AlterCompressionLevelCorrectUsage) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION_LEVEL 5;
+        )");
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
+    }
+
+    Y_UNIT_TEST(AlterCompressionLevelFieldIsNotInteger) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION_LEVEL "5";
+        )");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "COMPRESSION_LEVEL value should be an integer");
+    }
 }

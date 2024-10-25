@@ -8,7 +8,8 @@ THolder<TEvService::TEvRunWorker> MakeTEvRunWorker(const TReplication::TPtr repl
 }
 
 THolder<TEvService::TEvRunWorker> MakeTEvRunWorker(ui64 replicationId, ui64 targetId, ui64 partitionId, const NKikimrReplication::TConnectionParams& connectionParams,
-            const TString& srcStreamPath, const TPathId& dstPathId) {
+        const TString& srcStreamPath, const TPathId& dstPathId)
+{
     auto ev = MakeHolder<TEvService::TEvRunWorker>();
     auto& record = ev->Record;
 

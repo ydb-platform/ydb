@@ -338,6 +338,8 @@ message TSystemStateInfo {
     optional TNodeSharedCache SharedCacheStats = 35; // TODO: use memory stats
     optional uint32 TotalSessions = 36 [(DefaultField) = true];
     optional string NodeName = 37 [(DefaultField) = true];
+    optional double CoresUsed = 39;
+    optional uint32 CoresTotal = 40;
 }
 
 message TEvSystemStateRequest {

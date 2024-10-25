@@ -4,8 +4,8 @@ Planned maintenance or drills, exercises conducted to prepare personnel for pote
 
 ## Diagnostics
 
-{% include notitle [dc-outage](_includes/dc-outage.md) %}
+Check the planned maintenance and drills schedules to see if their timelines match with observed performance issues, otherwise, check the [datacenter outage recommendations](dc-outage.md).
 
 ## Recommendations
 
-Contact your data center support.
+Contact the person responsible for the current maintenance or drill to discuss whether the performance impact is severe enough for it to be finished/canceled early, if possible.

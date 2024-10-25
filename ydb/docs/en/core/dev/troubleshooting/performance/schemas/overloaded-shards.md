@@ -4,7 +4,11 @@
 
 * A table is created without the [AUTO_PARTITIONING_BY_LOAD](../../../../concepts/datamodel/table.md#AUTO_PARTITIONING_BY_LOAD) clause.
 
-    In this case, {{ ydb-short-name }} does not split overloaded shards. If a shard has to process too many queries, it will consume all its CPU resources, leading to increased query response times.
+    In this case, {{ ydb-short-name }} does not split overloaded shards.
+
+    Data shards are single-threaded applications and process queries one by one. A data shard accepts queries up to the limit of 10000 operations. Accepted queries wait for their turn to be executed. So the longer the queue, the higher the latency.
+
+    If a data shard already has 10000 operations in its queue, new queries will return the overloaded error. Retry such queries using a randomized exponential back-off strategy. For more information, see [overloaded errors](../queries/overloaded-errors.md).
 
 * A table was created with the [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT](../../../../concepts/datamodel/table.md#AUTO_PARTITIONING_MAX_PARTITIONS_COUNT) setting and has already reached its partition limit.
 
@@ -26,3 +30,10 @@ Consider the following solutions to address shard overload:
 ## Recommendations for the imbalanced primary key {#pk-recommendations}
 
 Consider modifying the primary key to distribute the load evenly across table partitions. You cannot change the primary key of an existing table. To do that, you will have to create a new table with the modified primary key and then migrate the data to the new table.
+
+{% note info %}
+
+You can also consider changing your application logic for generating primary key values for new rows. For example, generate hashes of values instead of values themselves as the primary key values.
+
+{% endnote %}
+

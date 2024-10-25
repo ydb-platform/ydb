@@ -24,8 +24,6 @@ You can also use the [Healthcheck API](../../../../reference/ydb-sdk/health-chec
 
 {% endnote %}
 
-
-
 ## Recommendations
 
 Add more [storage groups](../../../../concepts/glossary.md#storage-group) to the database.

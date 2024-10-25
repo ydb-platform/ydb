@@ -43,17 +43,27 @@ Database performance issues can be classified into several categories based on t
 
     - **[Insufficient disk I/O bandwidth](hardware/io-bandwidth.md)**. High read/write operations can overwhelm disk subsystems, leading to increased latencies in data access. When the system cannot read or write data quickly enough, queries that require disk access will be delayed.
 
-- **OS and YDB-related issues**.
-
-    - **[YDB updates](system/ydb-updates.md)**. YDB is a distributed system that supports rolling restart, when database administrators update YDB nodes one by one. This helps keep the YDB cluster up and running during the update process. However, when a YDB node is being restarted, Hive moves the tables that run on this node to other nodes, and that may lead to increased latencies for queries that are processed by the moving tables.
+- **OS issues**
 
     - **Hardware resource allocation issues**. Suboptimal allocation of resources, for example poorly configured control groups (cgroups), may result in insufficient resources for {{ ydb-short-name }} and increase query latencies even though physical hardware resources are still available on the database server.
 
     - **[System clock drift](system/system-clock-drift.md)**. If the system clocks on the {{ ydb-short-name }} servers start to drift apart, it will lead to increased distributed transaction latencies. In severe cases, {{ ydb-short-name }} might even refuse to process distributed transactions and return errors.
 
+    - Other processes running on the same nodes as YDB, such as antiviruses, observability agents, etc.
+
+    - Kernel misconfiguration.
+
+- **YDB-related issues**
+
+    - **[Rolling restart](system/ydb-updates.md)**. {{ ydb-short-name }} is a distributed system that supports rolling restart, when database administrators update {{ ydb-short-name }} nodes one by one. This helps keep the {{ ydb-short-name }} cluster up and running during the update process or some {{ ydb-short-name }} configuration changes. However, when a YDB node is being restarted, Hive moves the tables that run on this node to other nodes, and that may lead to increased latencies for queries that are processed by the moving tables.
+
+    - Actor system pools misconfiguration.
+
+    - SDK usage issues (maybe worth being a separate category).
+
 - **Schema design issues**. These issues stem from inefficient decisions made during the creation of tables and indices. They can significantly impact query performance.
 
-- **Query-related issues**. These issues refer to database queries executing slower than expected because of their inefficient design.
+- **Client application issues**. These issues refer to database queries executing slower than expected because of their inefficient design.
 
 ## Instructions {#instructions}
 
@@ -63,10 +73,10 @@ If any known changes occurred in the system around the time the performance issu
 
 1. [Overloaded shards](schemas/overloaded-shards.md)
 1. [Excessive tablet splits and merges](schemas/splits-merges.md)
-1. [Frequent tablet transfers between nodes](system/tablets-moved.md)
+1. [Frequent tablet moves between nodes](system/tablets-moved.md)
 1. Insufficient hardware resources:
-    - Disk I/O bandwidth
-    - Disk space
+    - [Disk I/O bandwidth](hardware/io-bandwidth.md)
+    - [Disk space](hardware/disk-space.md)
     - [Insufficient CPU](hardware/cpu-bottleneck.md)
 1. [Hardware issues](infrastructure/hardware.md) and [data center outages](infrastructure/dc-outage.md)
 1. [Network issues](infrastructure/network.md)

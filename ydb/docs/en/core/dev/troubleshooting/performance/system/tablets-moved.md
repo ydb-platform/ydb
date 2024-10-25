@@ -1,10 +1,10 @@
-# Frequent tablet transfers between nodes
+# Frequent tablet moves between nodes
 
-{{ ydb-short-name }} automatically balances the load by transferring tablets from overloaded nodes to other nodes. This process is managed by [Hive](*hive). When Hive moves tablets, queries affecting those tablets might experience increased latencies while they wait for the tablet to get initialized on the new node.
+{{ ydb-short-name }} automatically balances the load by moving tablets from overloaded nodes to other nodes. This process is managed by [Hive](../../../../concepts/glossary.md#hive). When Hive moves tablets, queries affecting those tablets might experience increased latencies while they wait for the tablet to get initialized on the new node.
 
 <!-- This information is taken from a draft topic Concepts > Hive. -->
 <!-- TODO: When the above-mentioned topic is merged, remove the info from here and add a link.  -->
-YDB considers usage of the following hardware resources for balancing nodes:
+{{ ydb-short-name }} considers usage of the following hardware resources for balancing nodes:
 
 - CPU
 - Memory
@@ -56,16 +56,31 @@ Adjust Hive balancer values:
 
 1. To reduce the chances of balancing, increase the following Hive balancer thresholds:
 
-    - MinCounterScatterToBalance
-    - MinCPUScatterToBalance
-    - MinMemoryScatterToBalance
-    - MinNetworkScatterToBalance
-    - MaxNodeUsageToKick
-    - ObjectImbalanceToBalance
+    #|
+    || Parameter | Description | Default value ||
+    || MinCounterScatterToBalance
+    | The threshold for the counter scatter value. When this value is reached, Hive starts balancing the load.
+    | 0.02 ||
+    || MinCPUScatterToBalance
+    | The threshold for the CPU scatter value. When this value is reached, Hive starts balancing the load.
+    | 0.5 ||
+    || MinMemoryScatterToBalance
+    | The threshold for the memory scatter value. When this value is reached, Hive starts balancing the load.
+    | 0.5 ||
+    || MinNetworkScatterToBalance
+    | The threshold for the network scatter value. When this value is reached, Hive starts balancing the load.
+    | 0.5 ||
+    || MaxNodeUsageToKick
+    | The threshold for the node resource usage. When this value is reached, Hive starts emergency balancing.
+    | 0.9 ||
+    || ObjectImbalanceToBalance
+    | The threshold for the database object imbalance metric.
+    | 0.02 ||
+    |#
 
     {% note info %}
 
-    These parameters use relative values. The `1` value stands for `100$` and disables balancing. If the total value of the hardware resource can exceed 100%, adjust the ratio accordingly.
+    These parameters use relative values. The `1` value stands for `100%` and disables balancing. If the total value of the hardware resource can exceed 100%, adjust the ratio accordingly.
 
     {% endnote %}
 
@@ -73,4 +88,3 @@ Adjust Hive balancer values:
 
 [*counter]: Virtual resource that is used for balanncing tablets, which do not have other hardware resource metrics (CPU, memory, network), and for tablets of column-based tables. If a tablet has this resource, its value always equals to `1`.
 
-[*hive]: A Hive is a system tablet responsible for launching and managing other tablets. Its responsibilities include moving tablets between nodes in case of node failure or overload.

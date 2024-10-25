@@ -1,13 +1,24 @@
-1. Open Grafana.
+1. Analyze CPU utilization in all pools:
 
-1. Compare the following Grafana charts:
+    1. Open the **CPU** dashboard in Grafana.
 
-    - **DB overview** > **Latency** > **Read only tx server latency**
+    1. See if the following charts show any spikes:
 
-        ![](../_assets/cpu-read-only-tx-latency.png)
+        - **CPU by execution pool** chart
+        - **User pool - CPU by host** chart
+        - **System pool - CPU by host** chart
+        - **Batch pool - CPU by host** chart
+        - **IC pool - CPU by host** chart
+        - **IO pool - CPU by host** chart
 
-    - **DataShard** > **RowRead rows**
+1. Analyze changes in the user load that might have caused the CPU bottleneck. See the following charts on the **DB overview** in Grafana:
 
-        ![](../_assets/cpu-row-read-rows.png)
+    - **Requests** chart
 
-If the spikes on these charts align, the increased latencies may be related to the higher number of rows being read from the database. In this case, the available database nodes might not be sufficient to handle the increased load.
+    - **Request size** chart
+
+    - **Response size** chart
+
+    Also, see all of the charts in the **Operations** section of the **DataShard** dashboard. These charts show the number of rows processed per query.
+
+1. Contact your DBA and inquire about {{ ydb-short-name }} backups.

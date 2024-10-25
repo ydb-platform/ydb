@@ -1,5 +1,3 @@
-# Diagnostics of overloaded shards
-
 1. Analyze the **Overloaded shard count** chart in the **DB overview** Grafana dashboard.
 
     ![](../_assets/overloaded-shards-dashboard.png)

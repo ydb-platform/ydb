@@ -380,7 +380,7 @@ std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
 void DumpMem() {
     auto monitor = NKikimr::CreateAllocMonitor(MakeIntrusive<NMonitoring::TDynamicCounters>());
     TStringStream out;
-    Cerr << "Dump AllocMonitor statistic..." << Endl;
+    Cout << "Dump AllocMonitor statistic..." << Endl;
     monitor->Update(TDuration::Seconds(1));
     monitor->DumpForLog(out, 256);
 
@@ -388,10 +388,6 @@ void DumpMem() {
     file.Write(out.Str());
     file.Finish();
 }
-
-// void OnInterrupt(int s) {
-
-// }
 
 void SetSignalHandlers() {
     if (DumpMemPath) {
@@ -623,7 +619,6 @@ int RunMain(int argc, const char* argv[])
     TString ysonAttrs;
     TVector<TString> pqFileList;
     size_t memLimit = 0;
-
 
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     opts.AddLongOption('p', "program", "Program to execute (use '-' to read from stdin)")

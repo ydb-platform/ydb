@@ -255,7 +255,6 @@ private:
             AFL_VERIFY(index < original.SchemaColumnIdsWithSpecials.size());
             const ui32 originalColId = original.SchemaColumnIdsWithSpecials[index];
             SchemaColumnIdsWithSpecials.emplace_back(originalColId);
-            ColumnFeatures.emplace_back(original.ColumnFeatures[index]);
             if (!IIndexInfo::IsSpecialColumn(originalColId)) {
                 AFL_VERIFY(index < original.SchemaColumnIds.size());
                 SchemaColumnIds.emplace_back(originalColId);
@@ -264,47 +263,71 @@ private:
             }
         };
 
-        const auto addFromDiff = [&](const NKikimrSchemeOp::TOlapColumnDescription& col, const std::optional<ui32>& pkIndex) {
+        const auto addFromDiff = [&](const NKikimrSchemeOp::TOlapColumnDescription& col) {
             const ui32 colId = col.GetId();
             AFL_VERIFY(!IIndexInfo::IsSpecialColumn(colId));
             SchemaColumnIdsWithSpecials.emplace_back(colId);
             SchemaColumnIds.emplace_back(colId);
             ColumnNames.emplace_back(TNameInfo(col.GetName(), colId, ColumnNames.size()));
             auto tableCol = BuildColumnFromProto(col, cache);
-            if (pkIndex) {
-                tableCol.KeyOrder = *pkIndex;
-            }
-            ColumnFeatures.emplace_back(CreateColumnFeatures(tableCol, col, operators, cache).DetachResult());
             fields.emplace_back(BuildArrowField(tableCol, cache));
         };
 
-        auto it = diff.GetModifiedColumns().begin();
-        ui32 i = 0;
-        while (i < original.SchemaColumnIdsWithSpecials.size() || it != diff.GetModifiedColumns().end()) {
-            AFL_VERIFY(i != original.SchemaColumnIdsWithSpecials.size());
-            const ui32 originalColId = original.SchemaColumnIdsWithSpecials[i];
+        {
+            auto it = diff.GetModifiedColumns().begin();
+            ui32 i = 0;
+            while (i < original.SchemaColumnIdsWithSpecials.size() || it != diff.GetModifiedColumns().end()) {
+                AFL_VERIFY(i != original.SchemaColumnIdsWithSpecials.size());
+                const ui32 originalColId = original.SchemaColumnIdsWithSpecials[i];
 
-            if (it == diff.GetModifiedColumns().end() || originalColId < it->first) {
-                addFromOriginal(i);
-                ++i;
-            } else if (it->first == originalColId) {
-                if (it->second) {
-                    addFromDiff(*it->second, original.ColumnFeatures[i]->GetPKColumnIndex());
+                if (it == diff.GetModifiedColumns().end() || originalColId < it->first) {
+                    addFromOriginal(i);
+                    ++i;
+                } else if (it->first == originalColId) {
+                    if (it->second) {
+                        addFromDiff(*it->second);
+                    }
+                    ++it;
+                    ++i;
+                } else if (it->first < originalColId) {
+                    AFL_VERIFY(it->second);
+                    addFromDiff(*it->second);
+                    ++it;
                 }
-                ++it;
-                ++i;
-            } else if (it->first < originalColId) {
-                AFL_VERIFY(it->second);
-                addFromDiff(*it->second, std::nullopt);
-                ++it;
+            }
+            Schema = std::make_shared<NArrow::TSchemaLite>(fields);
+            IIndexInfo::AddSpecialFields(fields);
+            SchemaWithSpecials = std::make_shared<NArrow::TSchemaLite>(fields);
+            std::sort(ColumnNames.begin(), ColumnNames.end(), TNameInfo::TNameComparator());
+            PKColumnIds = original.PKColumnIds;
+            PKColumns = original.PKColumns;
+        }
+        {
+            auto it = diff.GetModifiedColumns().begin();
+            ui32 i = 0;
+            while (i < original.SchemaColumnIdsWithSpecials.size() || it != diff.GetModifiedColumns().end()) {
+                AFL_VERIFY(i != original.SchemaColumnIdsWithSpecials.size());
+                const ui32 originalColId = original.SchemaColumnIdsWithSpecials[i];
+
+                if (it == diff.GetModifiedColumns().end() || originalColId < it->first) {
+                    ColumnFeatures.emplace_back(original.ColumnFeatures[i]);
+                    ++i;
+                } else if (it->first == originalColId) {
+                    if (it->second) {
+                        auto tableCol = BuildColumnFromProto(*it->second, cache);
+                        tableCol.KeyOrder = original.ColumnFeatures[i]->GetPKColumnIndex().value_or(Max<NTable::TPos>());
+                        ColumnFeatures.emplace_back(CreateColumnFeatures(tableCol, *it->second, operators, cache).DetachResult());
+                    }
+                    ++it;
+                    ++i;
+                } else if (it->first < originalColId) {
+                    AFL_VERIFY(it->second);
+                    auto tableCol = BuildColumnFromProto(*it->second, cache);
+                    ColumnFeatures.emplace_back(CreateColumnFeatures(tableCol, *it->second, operators, cache).DetachResult());
+                    ++it;
+                }
             }
         }
-        Schema = std::make_shared<NArrow::TSchemaLite>(fields);
-        IIndexInfo::AddSpecialFields(fields);
-        SchemaWithSpecials = std::make_shared<NArrow::TSchemaLite>(fields);
-        std::sort(ColumnNames.begin(), ColumnNames.end(), TNameInfo::TNameComparator());
-        PKColumnIds = original.PKColumnIds;
-        PKColumns = original.PKColumns;
         {
             TMemoryProfileGuard g("TIndexInfo::ApplyDiff::Indexes");
             Indexes = original.Indexes;

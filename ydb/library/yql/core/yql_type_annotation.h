@@ -273,6 +273,7 @@ enum class EBlockEngineMode {
 };
 
 struct TUdfCachedInfo {
+    TString NormalizedName;
     const TTypeAnnotationNode* FunctionType = nullptr;
     const TTypeAnnotationNode* RunConfigType = nullptr;
     const TTypeAnnotationNode* NormalizedUserType = nullptr;

@@ -109,6 +109,7 @@ private:
 
     TString SaveValue(const TFunction* f) const {
         auto node = NYT::TNode()
+            ("NormalizedName", f->NormalizedName)
             ("CallableType", TypeToYsonNode(f->CallableType));
         if (f->NormalizedUserType && f->NormalizedUserType->GetKind() != ETypeAnnotationKind::Void) {
             node("NormalizedUserType", TypeToYsonNode(f->NormalizedUserType));
@@ -131,6 +132,12 @@ private:
 
     void LoadValue(TFunction* f, const TString& value, TExprContext& ctx) const {
         auto node = NYT::NodeFromYsonString(value);
+        if (node.HasKey("NormalizedName")) {
+            f->NormalizedName = node["NormalizedName"].AsString();
+        } else {
+            f->NormalizedName = f->Name;
+        }
+
         f->CallableType = ParseTypeFromYson(node["CallableType"], ctx);
         if (node.HasKey("NormalizedUserType")) {
             f->NormalizedUserType = ParseTypeFromYson(node["NormalizedUserType"], ctx);

@@ -43,7 +43,7 @@ void EnsureLinksEqual(const TDownloadLink& link1, const TDownloadLink& link2) {
 
 void EnsureContainsFunction(TUdfIndex::TPtr index, TString module, const TFunctionInfo& f) {
     TFunctionInfo existingFunc;
-    UNIT_ASSERT(index->FindFunction(module, f.Name, existingFunc));
+    UNIT_ASSERT(index->FindFunction(module, f.Name, existingFunc) == TUdfIndex::EStatus::Found);
     EnsureFunctionsEqual(f, existingFunc);
 }
 }
@@ -52,15 +52,15 @@ Y_UNIT_TEST_SUITE(TUdfIndexTests) {
     Y_UNIT_TEST(Empty) {
         auto index1 = MakeIntrusive<TUdfIndex>();
 
-        UNIT_ASSERT(!index1->ContainsModule("M1"));
+        UNIT_ASSERT_EQUAL(index1->ContainsModule("M1"), TUdfIndex::EStatus::NotFound);
         UNIT_ASSERT(index1->FindResourceByModule("M1") == nullptr);
         TFunctionInfo f1;
-        UNIT_ASSERT(!index1->FindFunction("M1", "M1.F1", f1));
+        UNIT_ASSERT_EQUAL(index1->FindFunction("M1", "M1.F1", f1), TUdfIndex::EStatus::NotFound);
 
         auto index2 = index1->Clone();
-        UNIT_ASSERT(!index2->ContainsModule("M1"));
+        UNIT_ASSERT_EQUAL(index2->ContainsModule("M1"), TUdfIndex::EStatus::NotFound);
         UNIT_ASSERT(index2->FindResourceByModule("M1") == nullptr);
-        UNIT_ASSERT(!index2->FindFunction("M1", "M1.F1", f1));
+        UNIT_ASSERT_EQUAL(index2->FindFunction("M1", "M1.F1", f1), TUdfIndex::EStatus::NotFound);
     }
 
     Y_UNIT_TEST(SingleModuleAndFunction) {
@@ -72,8 +72,8 @@ Y_UNIT_TEST_SUITE(TUdfIndexTests) {
         b.AddFunction(func1);
 
         index1->RegisterResource(b.Build(), TUdfIndex::EOverrideMode::RaiseError);
-        UNIT_ASSERT(index1->ContainsModule("M1"));
-        UNIT_ASSERT(!index1->ContainsModule("M2"));
+        UNIT_ASSERT_EQUAL(index1->ContainsModule("M1"), TUdfIndex::EStatus::Found);
+        UNIT_ASSERT_EQUAL(index1->ContainsModule("M2"), TUdfIndex::EStatus::NotFound);
 
         UNIT_ASSERT(index1->FindResourceByModule("M2") == nullptr);
         auto resource1 = index1->FindResourceByModule("M1");
@@ -81,19 +81,19 @@ Y_UNIT_TEST_SUITE(TUdfIndexTests) {
         EnsureLinksEqual(resource1->Link, link1);
 
         TFunctionInfo f1;
-        UNIT_ASSERT(!index1->FindFunction("M2", "M2.F1", f1));
+        UNIT_ASSERT_EQUAL(index1->FindFunction("M2", "M2.F1", f1), TUdfIndex::EStatus::NotFound);
 
-        UNIT_ASSERT(index1->FindFunction("M1", "M1.F1", f1));
+        UNIT_ASSERT_EQUAL(index1->FindFunction("M1", "M1.F1", f1), TUdfIndex::EStatus::Found);
         EnsureFunctionsEqual(f1, func1);
 
         // ensure both indexes contain the same info
         auto index2 = index1->Clone();
 
-        UNIT_ASSERT(index1->ContainsModule("M1"));
-        UNIT_ASSERT(index2->ContainsModule("M1"));
+        UNIT_ASSERT_EQUAL(index1->ContainsModule("M1"), TUdfIndex::EStatus::Found);
+        UNIT_ASSERT_EQUAL(index2->ContainsModule("M1"), TUdfIndex::EStatus::Found);
 
         TFunctionInfo f2;
-        UNIT_ASSERT(index2->FindFunction("M1", "M1.F1", f2));
+        UNIT_ASSERT_EQUAL(index2->FindFunction("M1", "M1.F1", f2), TUdfIndex::EStatus::Found);
         EnsureFunctionsEqual(f1, f2);
 
         auto resource2 = index2->FindResourceByModule("M1");
@@ -140,11 +140,11 @@ Y_UNIT_TEST_SUITE(TUdfIndexTests) {
         EnsureLinksEqual(r22->Link, link2);
 
         // check modules
-        UNIT_ASSERT(index1->ContainsModule("M1"));
-        UNIT_ASSERT(index1->ContainsModule("M2"));
-        UNIT_ASSERT(index1->ContainsModule("M3"));
-        UNIT_ASSERT(index1->ContainsModule("M4"));
-        UNIT_ASSERT(!index1->ContainsModule("M5"));
+        UNIT_ASSERT_EQUAL(index1->ContainsModule("M1"), TUdfIndex::EStatus::Found);
+        UNIT_ASSERT_EQUAL(index1->ContainsModule("M2"), TUdfIndex::EStatus::Found);
+        UNIT_ASSERT_EQUAL(index1->ContainsModule("M3"), TUdfIndex::EStatus::Found);
+        UNIT_ASSERT_EQUAL(index1->ContainsModule("M4"), TUdfIndex::EStatus::Found);
+        UNIT_ASSERT_EQUAL(index1->ContainsModule("M5"), TUdfIndex::EStatus::NotFound);
 
         EnsureContainsFunction(index1, "M1", func11);
         EnsureContainsFunction(index1, "M1", func12);
@@ -157,8 +157,8 @@ Y_UNIT_TEST_SUITE(TUdfIndexTests) {
 
         TFunctionInfo f;
         // known func, but non-existent module
-        UNIT_ASSERT(!index1->FindFunction("M5", "M1.F1", f));
-        UNIT_ASSERT(!index1->FindFunction("M2", "M3.F1", f));
+        UNIT_ASSERT_EQUAL(index1->FindFunction("M5", "M1.F1", f), TUdfIndex::EStatus::NotFound);
+        UNIT_ASSERT_EQUAL(index1->FindFunction("M2", "M3.F1", f), TUdfIndex::EStatus::NotFound);
     }
 
     Y_UNIT_TEST(ConflictRaiseError) {
@@ -199,7 +199,7 @@ Y_UNIT_TEST_SUITE(TUdfIndexTests) {
         EnsureContainsFunction(index1, "M2", func13);
 
         TFunctionInfo f;
-        UNIT_ASSERT(!index1->FindFunction("M3", "M3.F1", f));
+        UNIT_ASSERT_EQUAL(index1->FindFunction("M3", "M3.F1", f), TUdfIndex::EStatus::NotFound);
     }
 
     Y_UNIT_TEST(ConflictPreserveExisting) {
@@ -240,7 +240,7 @@ Y_UNIT_TEST_SUITE(TUdfIndexTests) {
         EnsureContainsFunction(index1, "M2", func13);
 
         TFunctionInfo f;
-        UNIT_ASSERT(!index1->FindFunction("M3", "M3.F1", f));
+        UNIT_ASSERT_EQUAL(index1->FindFunction("M3", "M3.F1", f), TUdfIndex::EStatus::NotFound);
     }
 
     Y_UNIT_TEST(ConflictReplace1WithNew) {
@@ -299,9 +299,9 @@ Y_UNIT_TEST_SUITE(TUdfIndexTests) {
 
         // not here anymore
         TFunctionInfo f;
-        UNIT_ASSERT(!index1->FindFunction("M1", "M1.F1", f));
-        UNIT_ASSERT(!index1->FindFunction("M1", "M1.F2", f));
-        UNIT_ASSERT(!index1->FindFunction("M2", "M2.F1", f));
+        UNIT_ASSERT_EQUAL(index1->FindFunction("M1", "M1.F1", f), TUdfIndex::EStatus::NotFound);
+        UNIT_ASSERT_EQUAL(index1->FindFunction("M1", "M1.F2", f), TUdfIndex::EStatus::NotFound);
+        UNIT_ASSERT_EQUAL(index1->FindFunction("M2", "M2.F1", f), TUdfIndex::EStatus::NotFound);
     }
 
     Y_UNIT_TEST(ConflictReplace2WithNew) {
@@ -359,10 +359,63 @@ Y_UNIT_TEST_SUITE(TUdfIndexTests) {
 
         // not here anymore
         TFunctionInfo f;
-        UNIT_ASSERT(!index1->FindFunction("M1", "M1.F2", f));
-        UNIT_ASSERT(!index1->FindFunction("M2", "M2.F1", f));
+        UNIT_ASSERT_EQUAL(index1->FindFunction("M1", "M1.F2", f), TUdfIndex::EStatus::NotFound);
+        UNIT_ASSERT_EQUAL(index1->FindFunction("M2", "M2.F1", f), TUdfIndex::EStatus::NotFound);
 
-        UNIT_ASSERT(!index1->FindFunction("M3", "M3.F3", f));
-        UNIT_ASSERT(!index1->FindFunction("M4", "M4.F4", f));
+        UNIT_ASSERT_EQUAL(index1->FindFunction("M3", "M3.F3", f), TUdfIndex::EStatus::NotFound);
+        UNIT_ASSERT_EQUAL(index1->FindFunction("M4", "M4.F4", f), TUdfIndex::EStatus::NotFound);
+    }
+
+    Y_UNIT_TEST(SetInsensitiveSearch) {
+        auto index1 = MakeIntrusive<TUdfIndex>();
+        index1->SetCaseSentiveSearch(false);
+        auto func1 = BuildFunctionInfo("M1.FA", 1);
+        auto func2 = BuildFunctionInfo("M1.fa", 1);
+        auto func3 = BuildFunctionInfo("M1.g", 1);
+        auto func4 = BuildFunctionInfo("mx.h", 1);
+        auto func5 = BuildFunctionInfo("MX.g", 1);
+        auto link1 = TDownloadLink::File("file1");
+
+        TResourceBuilder b(link1);
+        b.AddFunction(func1);
+        b.AddFunction(func2);
+        b.AddFunction(func3);
+        b.AddFunction(func4);
+        b.AddFunction(func5);
+
+        index1->RegisterResource(b.Build(), TUdfIndex::EOverrideMode::RaiseError);
+
+        auto checkIndex = [&](auto index) {
+            UNIT_ASSERT_EQUAL(index->ContainsModule("M1"), TUdfIndex::EStatus::Found);
+            UNIT_ASSERT_EQUAL(index->ContainsModule("m1"), TUdfIndex::EStatus::Found);
+            UNIT_ASSERT_EQUAL(index->ContainsModule("mx"), TUdfIndex::EStatus::Found);
+            UNIT_ASSERT_EQUAL(index->ContainsModule("MX"), TUdfIndex::EStatus::Found);
+            UNIT_ASSERT_EQUAL(index->ContainsModule("mX"), TUdfIndex::EStatus::Ambigious);
+            UNIT_ASSERT_EQUAL(index->ContainsModule("M3"), TUdfIndex::EStatus::NotFound);
+
+            UNIT_ASSERT(index->FindResourceByModule("M3") == nullptr);
+            auto resource1 = index->FindResourceByModule("m1");
+            UNIT_ASSERT(resource1 != nullptr);
+            EnsureLinksEqual(resource1->Link, link1);
+
+            TFunctionInfo f;
+            UNIT_ASSERT_EQUAL(index->FindFunction("m1", "M1.FA", f), TUdfIndex::EStatus::Found);
+            EnsureFunctionsEqual(f, func1);
+            UNIT_ASSERT_EQUAL(index->FindFunction("m1", "m1.Fa", f), TUdfIndex::EStatus::Ambigious);
+            UNIT_ASSERT_EQUAL(index->FindFunction("m1", "M1.fa", f), TUdfIndex::EStatus::Found);
+            EnsureFunctionsEqual(f, func2);
+            UNIT_ASSERT_EQUAL(index->FindFunction("m1", "m1.g", f), TUdfIndex::EStatus::Found);
+            EnsureFunctionsEqual(f, func3);
+            UNIT_ASSERT_EQUAL(index->FindFunction("Mx", "mx.h", f), TUdfIndex::EStatus::Ambigious);
+            UNIT_ASSERT_EQUAL(index->FindFunction("mx", "mx.H", f), TUdfIndex::EStatus::Found);
+            EnsureFunctionsEqual(f, func4);
+            UNIT_ASSERT_EQUAL(index->FindFunction("MX", "mx.g", f), TUdfIndex::EStatus::Found);
+            EnsureFunctionsEqual(f, func5);
+        };
+
+        checkIndex(index1);
+        // ensure both indexes contain the same info
+        auto index2 = index1->Clone();
+        checkIndex(index2);
     }
 }

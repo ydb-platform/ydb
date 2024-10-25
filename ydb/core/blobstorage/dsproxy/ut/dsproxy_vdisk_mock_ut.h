@@ -309,12 +309,17 @@ class TGroupMock {
     const ui32 DrivesPerFailDomain;
 
     TVector<TVDiskMock> VDisks;
+    THashMap<TVDiskID, ui32> VDisksIdxMap;
     TIntrusivePtr<TBlobStorageGroupInfo> Info;
 
     TVDiskMock& GetVDisk(ui32 failDomainIdx, ui32 driveIdx) {
         ui32 i = failDomainIdx * DrivesPerFailDomain + driveIdx;
         Y_ABORT_UNLESS(i < VDisks.size(), "i# %" PRIu32 " size# %" PRIu32, (ui32)i, (ui32)VDisks.size());
         return VDisks[i];
+    }
+
+    TVDiskMock& GetVDisk(TVDiskID vdiskId) {
+        return VDisks[VDisksIdxMap[vdiskId]];
     }
 
     void InitBsInfo() {
@@ -327,11 +332,12 @@ class TGroupMock {
         for (ui64 realmIdx = 0; realmIdx < FailRealms; ++realmIdx) {
         for (ui64 domainIdx = 0; domainIdx < FailDomains; ++domainIdx) {
         for (ui64 driveIdx = 0; driveIdx < DrivesPerFailDomain; ++driveIdx) {
-                // Node = domainIdx
-                // PoolId = driveIdx
-                // LocalId = index in VDisks
-                TVDiskID vDiskId(GroupId, 1, realmIdx, domainIdx, driveIdx);
-                VDisks.emplace_back(vDiskId);
+            // Node = domainIdx
+            // PoolId = driveIdx
+            // LocalId = index in VDisks
+            TVDiskID vDiskId(GroupId, 1, realmIdx, domainIdx, driveIdx);
+            VDisks.emplace_back(vDiskId);
+            VDisksIdxMap[vDiskId] = VDisks.size() - 1;
         }
         }
         }
@@ -433,6 +439,10 @@ public:
         for (ui64 driveIdx = 0; driveIdx < DrivesPerFailDomain; ++driveIdx) {
             GetVDisk(domainIdx, driveIdx).SetError(status);
         }
+    }
+
+    void SetError(TVDiskID vdiskId, NKikimrProto::EReplyStatus status) {
+        GetVDisk(vdiskId).SetError(status);
     }
 
     void SetPredictedDelayNs(ui32 domainIdx, ui64 predictedDelayNs) {

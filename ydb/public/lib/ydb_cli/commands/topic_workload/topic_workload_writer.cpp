@@ -18,7 +18,7 @@ TTopicWorkloadWriterWorker::TTopicWorkloadWriterWorker(
     for (ui32 i = 0; i < Params.ProducersPerThread; ++i) {
         // write to random partition, cause workload CLI tool can be launched in several instances
         // and they need to load different partitions of the topic
-        ui32 partitionId = (Params.PartitionSeed + Params.WriterIdx) % Params.PartitionCount;
+        ui32 partitionId = (Params.PartitionSeed + i) % Params.PartitionCount;
 
         Producers.emplace_back(
                 Params,
@@ -112,7 +112,6 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
         WaitTillNextMessageExpectedCreateTimeAndContinuationToken(producer);
 
         bool writingAllowed = producer.ContinuationToken.Defined();
-        WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "ContinuationToken.Defined() " << producer.ContinuationToken.Defined());
 
         if (Params.BytesPerSec != 0)
         {
@@ -144,7 +143,7 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
 
             if (TxSupport) {
                 TxSupport->AppendRow("");
-                TryCommitTx(Params, commitTime);
+                TryCommitTx(commitTime);
             }
 
             // ToDo: put in callback
@@ -158,7 +157,7 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
         else
         {
             if (TxSupport) {
-                TryCommitTx(Params, commitTime);
+                TryCommitTx(commitTime);
             }
 
             Sleep(TDuration::MilliSeconds(1));
@@ -232,36 +231,47 @@ void TTopicWorkloadWriterWorker::WriterLoop(TTopicWorkloadWriterParams& params, 
     WRITE_LOG(writer.Params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "Writer finished " << Now().ToStringUpToSeconds());
 }
 
-void TTopicWorkloadWriterWorker::TryCommitTx(TTopicWorkloadWriterParams& params,
-                                             TInstant& commitTime)
+void TTopicWorkloadWriterWorker::TryCommitTx(TInstant& commitTime)
 {
     Y_ABORT_UNLESS(TxSupport);
+    auto now = Now();
 
-    if ((commitTime > Now()) && (params.CommitMessages > TxSupport->Rows.size())) {
+    bool commitTimeIsInFuture = now < commitTime;
+    bool notEnoughRowsInCommit = TxSupport->Rows.size() < Params.CommitMessages;
+    if (commitTimeIsInFuture && notEnoughRowsInCommit) {
+        WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
+            << "Not committing: "
+            << "commit time: " << commitTime
+            << " now: " << now
+            << ", messages needed for commit: " << Params.CommitMessages
+            << " current rows in transactions: " << TxSupport->Rows.size()
+        );
         return;
     }
 
-    if (InflightMessagesEmpty()) {
+    if (!InflightMessagesEmpty()) {
         WaitForCommitTx = true;
         return;
     }
 
-    TryCommitTableChanges(params);
+    TryCommitTableChanges();
 
-    commitTime += TDuration::MilliSeconds(params.CommitPeriodMs);
+    commitTime += TDuration::MilliSeconds(Params.CommitPeriodMs);
 
     WaitForCommitTx = false;
 }
 
-void TTopicWorkloadWriterWorker::TryCommitTableChanges(TTopicWorkloadWriterParams& params)
+void TTopicWorkloadWriterWorker::TryCommitTableChanges()
 {
     if (TxSupport->Rows.empty()) {
         return;
     }
 
-    auto execTimes = TxSupport->CommitTx(params.UseTableSelect, params.UseTableUpsert);
+    WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()<< "Starting commit");
 
-    params.StatsCollector->AddWriterSelectEvent(params.WriterIdx, {execTimes.SelectTime.MilliSeconds()});
-    params.StatsCollector->AddWriterUpsertEvent(params.WriterIdx, {execTimes.UpsertTime.MilliSeconds()});
-    params.StatsCollector->AddWriterCommitTxEvent(params.WriterIdx, {execTimes.CommitTime.MilliSeconds()});
+    auto execTimes = TxSupport->CommitTx(Params.UseTableSelect, Params.UseTableUpsert);
+
+    Params.StatsCollector->AddWriterSelectEvent(Params.WriterIdx, {execTimes.SelectTime.MilliSeconds()});
+    Params.StatsCollector->AddWriterUpsertEvent(Params.WriterIdx, {execTimes.UpsertTime.MilliSeconds()});
+    Params.StatsCollector->AddWriterCommitTxEvent(Params.WriterIdx, {execTimes.CommitTime.MilliSeconds()});
 }

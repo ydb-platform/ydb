@@ -59,9 +59,8 @@ namespace NYdb {
 
             TInstant GetExpectedCurrMessageCreationTimestamp() const;
 
-            void TryCommitTx(TTopicWorkloadWriterParams& params,
-                             TInstant& commitTime);
-            void TryCommitTableChanges(TTopicWorkloadWriterParams& params);
+            void TryCommitTx(TInstant& commitTime);
+            void TryCommitTableChanges();
 
             size_t InflightMessagesSize();
             bool InflightMessagesEmpty();

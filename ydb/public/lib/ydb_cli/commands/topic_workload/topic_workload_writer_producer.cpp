@@ -178,7 +178,7 @@ void TTopicWorkloadWriterProducer::HandleAckEvent(NYdb::NTopic::TWriteSessionEve
 }
 
 void TTopicWorkloadWriterProducer::HandleSessionClosed(const NYdb::NTopic::TSessionClosedEvent &event) {
-    WRITE_LOG(Params.Log, ELogPriority::TLOG_EMERG, TStringBuilder()
+    WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
         << "Producer " << ProducerId
         << ": got close event: " << event.DebugString());
     //! Session is closed, stop any work with it.

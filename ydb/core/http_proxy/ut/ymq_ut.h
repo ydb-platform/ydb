@@ -559,7 +559,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], body);
 
         auto receiptHandle = json["Messages"][0]["ReceiptHandle"].GetString();
-        UNIT_ASSERT(!receiptHandle.Empty());
+        UNIT_ASSERT(!receiptHandle.empty());
 
         DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", receiptHandle}, {"UnknownParameter", 123}}, 400);
 
@@ -785,9 +785,9 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
 
         auto receiptHandle0 = messages[0]["ReceiptHandle"].GetString();
-        UNIT_ASSERT(!receiptHandle0.Empty());
+        UNIT_ASSERT(!receiptHandle0.empty());
         auto receiptHandle1 = messages[1]["ReceiptHandle"].GetString();
-        UNIT_ASSERT(!receiptHandle1.Empty());
+        UNIT_ASSERT(!receiptHandle1.empty());
 
         json = DeleteMessageBatch({
             {"QueueUrl", queueUrl},
@@ -885,7 +885,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
         json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}});
         auto receiptHandle = json["Messages"][0]["ReceiptHandle"].GetString();
-        UNIT_ASSERT(!receiptHandle.Empty());
+        UNIT_ASSERT(!receiptHandle.empty());
 
         ChangeMessageVisibility({
             {"QueueUrl", queueUrl},
@@ -933,9 +933,9 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
 
         auto receiptHandle0 = messages[0]["ReceiptHandle"].GetString();
-        UNIT_ASSERT(!receiptHandle0.Empty());
+        UNIT_ASSERT(!receiptHandle0.empty());
         auto receiptHandle1 = messages[1]["ReceiptHandle"].GetString();
-        UNIT_ASSERT(!receiptHandle1.Empty());
+        UNIT_ASSERT(!receiptHandle1.empty());
 
         ChangeMessageVisibilityBatch({
             {"QueueUrl", queueUrl},

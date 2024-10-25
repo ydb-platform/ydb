@@ -6,7 +6,7 @@ namespace NKikimr {
 namespace NDataIntegrity {
 
 inline void LogKeyValue(const TString& key, const TString& value, TStringStream& ss, bool last = false) {
-    ss << key << ": " << (value.Empty() ? "Empty" : value) << (last ? "" : ",");
+    ss << key << ": " << (value.empty() ? "Empty" : value) << (last ? "" : ",");
 }
 
 template <class TransactionSettings>

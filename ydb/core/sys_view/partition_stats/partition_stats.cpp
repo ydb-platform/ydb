@@ -76,6 +76,11 @@ private:
         const auto& domainKey = ev->Get()->DomainKey;
         const auto& pathId = ev->Get()->PathId;
 
+        SVLOG_T("TEvSysView::TEvSetPartitioning: domainKey " << domainKey
+            << " pathId " << pathId
+            << " path " << ev->Get()->Path
+            << " ShardIndices size " << ev->Get()->ShardIndices.size());
+
         auto& tables = DomainTables[domainKey];
         auto tableFound = tables.Stats.find(pathId);
         if (tableFound != tables.Stats.end()) {

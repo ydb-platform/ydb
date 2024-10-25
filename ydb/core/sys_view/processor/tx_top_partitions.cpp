@@ -35,8 +35,13 @@ struct TSysViewProcessor::TTxTopPartitions : public TTxBase {
             partition->CopyFrom(newPartition);
             result.emplace_back(std::move(partition));
 
-            db.Table<Schema::IntervalPartitionTops>().Key((ui32)statsType, tabletId, followerId).Update(
-                NIceDb::TUpdate<Schema::IntervalPartitionTops::Data>(data));
+            if (followerId == 0) {
+                db.Table<Schema::IntervalPartitionTops>().Key((ui32)statsType, tabletId).Update(
+                    NIceDb::TUpdate<Schema::IntervalPartitionTops::Data>(data));
+            } else {
+                db.Table<Schema::IntervalPartitionFollowerTops>().Key((ui32)statsType, tabletId, followerId).Update(
+                    NIceDb::TUpdate<Schema::IntervalPartitionFollowerTops::Data>(data));            
+            }
 
             seen.insert({tabletId, followerId});
             ++index;
@@ -89,7 +94,12 @@ struct TSysViewProcessor::TTxTopPartitions : public TTxBase {
             if (seen.contains({topTabletId, topFollowerId})) {
                 continue;
             }
-            db.Table<Schema::IntervalPartitionTops>().Key((ui32)statsType, topTabletId, topFollowerId).Delete();
+
+            if (topFollowerId == 0) {
+                db.Table<Schema::IntervalPartitionTops>().Key((ui32)statsType, topTabletId).Delete();
+            } else {
+                db.Table<Schema::IntervalPartitionFollowerTops>().Key((ui32)statsType, topTabletId, topFollowerId).Delete();
+            }
         }
 
         top.swap(result);

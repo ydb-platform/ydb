@@ -40,23 +40,15 @@ public:
     }
 
     void MakeParser(TVector<TString> columns) {
-        MakeParser(columns, TVector<TString>(columns.size(), "String"));
+        MakeParser(columns, TVector<TString>(columns.size(), "[DataType; String]"));
     }
 
-    void PushToParser(ui64 offset, const TString& data) {
+    const TVector<NMiniKQL::TUnboxedValueVector>& PushToParser(ui64 offset, const TString& data) {
         Parser->AddMessages({GetMessage(offset, data)});
 
-        ParsedValues = Parser->Parse();
-        ResultNumberValues = ParsedValues ? ParsedValues.front().size() : 0;
-    }
-
-    TVector<TString> GetParsedRow(size_t id) const {
-        TVector<TString> result;
-        result.reserve(ParsedValues.size());
-        for (const auto& columnResult : ParsedValues) {
-            result.emplace_back(columnResult[id]);
-        }
-        return result;
+        const auto& parsedValues = Parser->Parse();
+        ResultNumberValues = parsedValues ? parsedValues.front().size() : 0;
+        return parsedValues;
     }
 
     static NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage GetMessage(ui64 offset, const TString& data) {
@@ -67,54 +59,67 @@ public:
     TActorSystemStub actorSystemStub;
     NActors::TTestActorRuntime Runtime;
     std::unique_ptr<NFq::TJsonParser> Parser;
-
     ui64 ResultNumberValues = 0;
-    TVector<TVector<std::string_view>> ParsedValues;
 };
 
 Y_UNIT_TEST_SUITE(TJsonParserTests) {
     Y_UNIT_TEST_F(Simple1, TFixture) {
-        MakeParser({"a1", "a2"}, {"String", "Optional<Uint64>"});
-        PushToParser(42,R"({"a1": "hello1", "a2": 101, "event": "event1"})");
+        MakeParser({"a1", "a2"}, {"[DataType; String]", "[OptionalType; [DataType; Uint64]]"});
+        const auto& result = PushToParser(42,R"({"a1": "hello1", "a2": 101, "event": "event1"})");
         UNIT_ASSERT_VALUES_EQUAL(1, ResultNumberValues);
 
-        const auto& result = GetParsedRow(0);
         UNIT_ASSERT_VALUES_EQUAL(2, result.size());
-        UNIT_ASSERT_VALUES_EQUAL("hello1", result.front());
-        UNIT_ASSERT_VALUES_EQUAL("101", result.back());
+        UNIT_ASSERT_VALUES_EQUAL("hello1", TString(result[0][0].AsStringRef()));
+        UNIT_ASSERT_VALUES_EQUAL(101, result[1][0].GetOptionalValue().Get<ui64>());
     }
 
     Y_UNIT_TEST_F(Simple2, TFixture) {
         MakeParser({"a2", "a1"});
-        PushToParser(42,R"({"a1": "hello1", "a2": "101", "event": "event1"})");
+        const auto& result = PushToParser(42,R"({"a1": "hello1", "a2": "101", "event": "event1"})");
         UNIT_ASSERT_VALUES_EQUAL(1, ResultNumberValues);
 
-        const auto& result = GetParsedRow(0);
         UNIT_ASSERT_VALUES_EQUAL(2, result.size());
-        UNIT_ASSERT_VALUES_EQUAL("101", result.front());
-        UNIT_ASSERT_VALUES_EQUAL("hello1", result.back());
+        UNIT_ASSERT_VALUES_EQUAL("101", TString(result[0][0].AsStringRef()));
+        UNIT_ASSERT_VALUES_EQUAL("hello1", TString(result[1][0].AsStringRef()));
     }
 
     Y_UNIT_TEST_F(Simple3, TFixture) {
         MakeParser({"a1", "a2"});
-        PushToParser(42,R"({"a2": "hello1", "a1": "101", "event": "event1"})");
+        const auto& result = PushToParser(42,R"({"a2": "hello1", "a1": "101", "event": "event1"})");
         UNIT_ASSERT_VALUES_EQUAL(1, ResultNumberValues);
 
-        const auto& result = GetParsedRow(0);
         UNIT_ASSERT_VALUES_EQUAL(2, result.size());
-        UNIT_ASSERT_VALUES_EQUAL("101", result.front());
-        UNIT_ASSERT_VALUES_EQUAL("hello1", result.back());
+        UNIT_ASSERT_VALUES_EQUAL("101", TString(result[0][0].AsStringRef()));
+        UNIT_ASSERT_VALUES_EQUAL("hello1", TString(result[1][0].AsStringRef()));
     }
 
     Y_UNIT_TEST_F(Simple4, TFixture) {
         MakeParser({"a2", "a1"});
-        PushToParser(42, R"({"a2": "hello1", "a1": "101", "event": "event1"})");
+        const auto& result = PushToParser(42, R"({"a2": "hello1", "a1": "101", "event": "event1"})");
         UNIT_ASSERT_VALUES_EQUAL(1, ResultNumberValues);
 
-        const auto& result = GetParsedRow(0);
         UNIT_ASSERT_VALUES_EQUAL(2, result.size());
-        UNIT_ASSERT_VALUES_EQUAL("hello1", result.front());
-        UNIT_ASSERT_VALUES_EQUAL("101", result.back());
+        UNIT_ASSERT_VALUES_EQUAL("hello1", TString(result[0][0].AsStringRef()));
+        UNIT_ASSERT_VALUES_EQUAL("101", TString(result[1][0].AsStringRef()));
+    }
+
+    Y_UNIT_TEST_F(LargeStrings, TFixture) {
+        MakeParser({"col"});
+
+        const TString largeString = "abcdefghjkl1234567890+abcdefghjkl1234567890";
+        const TString jsonString = TStringBuilder() << "{\"col\": \"" << largeString << "\"}";
+        Parser->AddMessages({
+            GetMessage(42, jsonString),
+            GetMessage(43, jsonString)
+        });
+
+        const auto& result = Parser->Parse();
+        ResultNumberValues = result.front().size();
+        UNIT_ASSERT_VALUES_EQUAL(2, ResultNumberValues);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, result.size());
+        UNIT_ASSERT_VALUES_EQUAL(largeString, TString(result[0][0].AsStringRef()));
+        UNIT_ASSERT_VALUES_EQUAL(largeString, TString(result[0][1].AsStringRef()));
     }
 
     Y_UNIT_TEST_F(ManyValues, TFixture) {
@@ -126,73 +131,116 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
             GetMessage(44, R"({"a2": "101", "a1": "hello1", "event": "event3"})")
         });
 
-        ParsedValues = Parser->Parse();
-        ResultNumberValues = ParsedValues.front().size();
+        const auto& result = Parser->Parse();
+        ResultNumberValues = result.front().size();
         UNIT_ASSERT_VALUES_EQUAL(3, ResultNumberValues);
+        UNIT_ASSERT_VALUES_EQUAL(2, result.size());
         for (size_t i = 0; i < ResultNumberValues; ++i) {
-            const auto& result = GetParsedRow(i);
-            UNIT_ASSERT_VALUES_EQUAL_C(2, result.size(), i);
-            UNIT_ASSERT_VALUES_EQUAL_C("hello1", result.front(), i);
-            UNIT_ASSERT_VALUES_EQUAL_C("101", result.back(), i);
+            UNIT_ASSERT_VALUES_EQUAL_C("hello1", TString(result[0][i].AsStringRef()), i);
+            UNIT_ASSERT_VALUES_EQUAL_C("101", TString(result[1][i].AsStringRef()), i);
         }
     }
 
     Y_UNIT_TEST_F(MissingFields, TFixture) {
-        MakeParser({"a1", "a2"});
+        MakeParser({"a1", "a2"}, {"[OptionalType; [DataType; String]]", "[OptionalType; [DataType; Uint64]]"});
 
         Parser->AddMessages({
-            GetMessage(42, R"({"a1": "hello1", "a2": "101", "event": "event1"})"),
+            GetMessage(42, R"({"a1": "hello1", "a2": 101  , "event": "event1"})"),
             GetMessage(43, R"({"a1": "hello1", "event": "event2"})"),
             GetMessage(44, R"({"a2": "101", "a1": null, "event": "event3"})")
         });
 
-        ParsedValues = Parser->Parse();
-        ResultNumberValues = ParsedValues.front().size();
+        const auto& result = Parser->Parse();
+        ResultNumberValues = result.front().size();
         UNIT_ASSERT_VALUES_EQUAL(3, ResultNumberValues);
+        UNIT_ASSERT_VALUES_EQUAL(2, result.size());
         for (size_t i = 0; i < ResultNumberValues; ++i) {
-            const auto& result = GetParsedRow(i);
-            UNIT_ASSERT_VALUES_EQUAL_C(2, result.size(), i);
-            UNIT_ASSERT_VALUES_EQUAL_C(i != 2 ? "hello1" : "", result.front(), i);
-            UNIT_ASSERT_VALUES_EQUAL_C(i != 1 ? "101" : "", result.back(), i);
+            if (i == 2) {
+                UNIT_ASSERT_C(!result[0][i], i);
+            } else {
+                NYql::NUdf::TUnboxedValue value = result[0][i].GetOptionalValue();
+                UNIT_ASSERT_VALUES_EQUAL_C("hello1", TString(value.AsStringRef()), i);
+            }
+            if (i == 1) {
+                UNIT_ASSERT_C(!result[1][i], i);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(101, result[1][i].GetOptionalValue().Get<ui64>(), i);
+            }
         }
     }
 
     Y_UNIT_TEST_F(NestedTypes, TFixture) {
-        MakeParser({"nested", "a1"}, {"Optional<Json>", "String"});
+        MakeParser({"nested", "a1"}, {"[OptionalType; [DataType; Json]]", "[DataType; String]"});
 
         Parser->AddMessages({
             GetMessage(42, R"({"a1": "hello1", "nested": {"key": "value"}})"),
-            GetMessage(43, R"({"a1": "hello1", "nested": ["key1", "key2"]})")
+            GetMessage(43, R"({"a1": "hello2", "nested": ["key1", "key2"]})")
         });
 
-        ParsedValues = Parser->Parse();
-        ResultNumberValues = ParsedValues.front().size();
+        const auto& result = Parser->Parse();
+        ResultNumberValues = result.front().size();
         UNIT_ASSERT_VALUES_EQUAL(2, ResultNumberValues);
 
-        const auto& nestedJson = GetParsedRow(0);
-        UNIT_ASSERT_VALUES_EQUAL(2, nestedJson.size());
-        UNIT_ASSERT_VALUES_EQUAL("{\"key\": \"value\"}", nestedJson.front());
-        UNIT_ASSERT_VALUES_EQUAL("hello1", nestedJson.back());
+        UNIT_ASSERT_VALUES_EQUAL(2, result.size());
+        UNIT_ASSERT_VALUES_EQUAL("{\"key\": \"value\"}", TString(result[0][0].AsStringRef()));
+        UNIT_ASSERT_VALUES_EQUAL("hello1", TString(result[1][0].AsStringRef()));
 
-        const auto& nestedList = GetParsedRow(1);
-        UNIT_ASSERT_VALUES_EQUAL(2, nestedList.size());
-        UNIT_ASSERT_VALUES_EQUAL("[\"key1\", \"key2\"]", nestedList.front());
-        UNIT_ASSERT_VALUES_EQUAL("hello1", nestedList.back());
+        UNIT_ASSERT_VALUES_EQUAL("[\"key1\", \"key2\"]", TString(result[0][1].AsStringRef()));
+        UNIT_ASSERT_VALUES_EQUAL("hello2", TString(result[1][1].AsStringRef()));
     }
 
-    Y_UNIT_TEST_F(StringTypeValidation, TFixture) {
-        MakeParser({"a1"}, {"String"});
-        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": 1234})"), simdjson::simdjson_error, "INCORRECT_TYPE: The JSON element does not have the requested type.");
+    Y_UNIT_TEST_F(SimpleBooleans, TFixture) {
+        MakeParser({"a"}, {"[DataType; Bool]"});
+        Parser->AddMessages({
+            GetMessage(42, R"({"a": true})"),
+            GetMessage(43, R"({"a": false})")
+        });
+
+        const auto& result = Parser->Parse();
+        ResultNumberValues = result.front().size();
+        UNIT_ASSERT_VALUES_EQUAL(2, ResultNumberValues);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, result.size());
+        UNIT_ASSERT_VALUES_EQUAL(true, result[0][0].Get<bool>());
+        UNIT_ASSERT_VALUES_EQUAL(false, result[0][1].Get<bool>());
     }
 
-    Y_UNIT_TEST_F(JsonTypeValidation, TFixture) {
-        MakeParser({"a1"}, {"Int32"});
-        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": {"key": "value"}})"), yexception, "Failed to parse json string, expected scalar type for column 'a1' with type Int32 but got nested json, please change column type to Json.");
+    Y_UNIT_TEST_F(MissingFieldsValidation, TFixture) {
+        MakeParser({"a1", "a2"}, {"[DataType; String]", "[DataType; Uint64]"});
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": "hello1", "a2": null, "event": "event1"})"), yexception, "Failed to parse json string at offset 42, got parsing error for column 'a2' with type [DataType; Uint64], description: (yexception) found unexpected null value, expected non optional data type Uint64");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a2": 105, "event": "event1"})"), yexception, "Failed to parse json messages, found 1 missing values from offset 42 in non optional column 'a1' with type [DataType; String]");
+    }
+
+    Y_UNIT_TEST_F(TypeKindsValidation, TFixture) {
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            MakeParser({"a2", "a1"}, {"[OptionalType; [DataType; String]]", "[ListType; [DataType; String]]"}),
+            yexception,
+            "Failed to create parser for column 'a1' with type [ListType; [DataType; String]], description: (yexception) unsupported type kind List"
+        );
+    }
+
+    Y_UNIT_TEST_F(NumbersValidation, TFixture) {
+        MakeParser({"a1", "a2"}, {"[OptionalType; [DataType; String]]", "[DataType; Uint8]"});
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": 456, "a2": 42})"), yexception, "Failed to parse json string at offset 42, got parsing error for column 'a1' with type [OptionalType; [DataType; String]], description: (yexception) failed to parse data type String from json number (raw: '456'), error: (yexception) number value is not expected for data type String");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": "456", "a2": -42})"), yexception, "Failed to parse json string at offset 42, got parsing error for column 'a2' with type [DataType; Uint8], description: (yexception) failed to parse data type Uint8 from json number (raw: '-42'), error: (simdjson::simdjson_error) INCORRECT_TYPE: The JSON element does not have the requested type.");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": "str", "a2": 99999})"), yexception, "Failed to parse json string at offset 42, got parsing error for column 'a2' with type [DataType; Uint8], description: (yexception) failed to parse data type Uint8 from json number (raw: '99999'), error: (yexception) number is out of range");
+    }
+
+    Y_UNIT_TEST_F(NestedJsonValidation, TFixture) {
+        MakeParser({"a1", "a2"}, {"[OptionalType; [DataType; Json]]", "[OptionalType; [DataType; String]]"});
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": {"key": "value"}, "a2": {"key2": "value2"}})"), yexception, "Failed to parse json string at offset 42, got parsing error for column 'a2' with type [OptionalType; [DataType; String]], description: (yexception) found unexpected nested value (raw: '{\"key2\": \"value2\"}'), expected data type String, please use Json type for nested values");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": {"key" "value"}, "a2": "str"})"), yexception, "Failed to parse json string at offset 42, got parsing error for column 'a1' with type [OptionalType; [DataType; Json]], description: (simdjson::simdjson_error) TAPE_ERROR: The JSON document has an improper structure: missing or superfluous commas, braces, missing keys, etc.");
+    }
+
+    Y_UNIT_TEST_F(BoolsValidation, TFixture) {
+        MakeParser({"a1", "a2"}, {"[OptionalType; [DataType; String]]", "[DataType; Bool]"});
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": true, "a2": false})"), yexception, "Failed to parse json string at offset 42, got parsing error for column 'a1' with type [OptionalType; [DataType; String]], description: (yexception) found unexpected bool value, expected data type String");
     }
 
     Y_UNIT_TEST_F(ThrowExceptionByError, TFixture) {
-        MakeParser({"a2", "a1"});
+        MakeParser({"a"});
         UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"(ydb)"), simdjson::simdjson_error, "INCORRECT_TYPE: The JSON element does not have the requested type.");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a": "value1"} {"a": "value2"})"), yexception, "Failed to parse json messages, expected 1 json rows from offset 42 but got 2");
     }
 }
 

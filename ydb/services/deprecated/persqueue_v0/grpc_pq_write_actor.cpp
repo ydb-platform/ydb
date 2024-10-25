@@ -258,7 +258,7 @@ void TWriteSessionActor::InitAfterDiscovery(const TActorContext& ctx) {
 
 
 void TWriteSessionActor::SetupBytesWrittenByUserAgentCounter() {
-    BytesWrittenByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents")
+    BytesWrittenByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents", false)
         ->GetSubgroup("host", "")
         ->GetSubgroup("protocol", "pqv0")
         ->GetSubgroup("topic", FullConverter->GetFederationPath())

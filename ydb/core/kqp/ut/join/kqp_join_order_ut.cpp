@@ -55,6 +55,16 @@ void CreateTables(TSession session, const TString& schemaPath, bool useColumnSto
     res.GetIssues().PrintTo(Cerr);
     UNIT_ASSERT(res.IsSuccess());
 }
+
+TString GetPrettyJSON(const NJson::TJsonValue& json) {
+    TStringStream ss;
+    NJsonWriter::TBuf writer;
+    writer.SetIndentSpaces(2);
+    writer.WriteJsonValue(&json);
+    writer.FlushTo(&ss); ss << Endl;
+    return ss.Str();
+}
+
 /*
  * A basic join order test. We define 5 tables sharing the same
  * key attribute and construct various full clique join queries
@@ -552,21 +562,19 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
                 correctJoinOrderPath = correctJoinOrderPath.substr(0, correctJoinOrderPath.find(".json")) + "_column_store.json";      
             }
 
-            auto currentJoinOrder = GetDetailedJoinOrder(result.GetPlan());
-            Cerr << currentJoinOrder << Endl;
+            auto currentJoinOrder = GetPrettyJSON(GetDetailedJoinOrder(result.GetPlan()));
+
             /* to canonize the tests use --test-param CANONIZE_JOIN_ORDER_TESTS=TRUE */
             TString canonize = GetTestParam("CANONIZE_JOIN_ORDER_TESTS"); canonize.to_lower();
             if (canonize.equal("true")) {
                 Cerr << "--------------------CANONIZING THE TESTS--------------------";
                 TOFStream stream(SRC_("data/" + correctJoinOrderPath));
-                NJsonWriter::TBuf writer;
-                writer.SetIndentSpaces(2);
-                writer.WriteJsonValue(&currentJoinOrder);
-                writer.FlushTo(&stream);
-                stream << Endl;
+                stream << currentJoinOrder << Endl;
             }
 
             TString ref = GetStatic(correctJoinOrderPath);
+            Cout << "actual\n" << GetJoinOrder(result.GetPlan()).GetStringRobust() << Endl; 
+            Cout << "expected\n" << GetJoinOrderFromDetailedJoinOrder(ref).GetStringRobust() << Endl;
             UNIT_ASSERT(JoinOrderAndAlgosMatch(result.GetPlan(), ref));
         }
     }

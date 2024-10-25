@@ -350,5 +350,7 @@ NJson::TJsonValue GetDetailedJoinOrder(const TString& deserializedPlan, const TG
 /* Gets tables join order without details : only tables. */
 NJson::TJsonValue GetJoinOrder(const TString& deserializedPlan);
 
+NJson::TJsonValue GetJoinOrderFromDetailedJoinOrder(const TString& deserializedDetailedJoinOrder);
+
 } // namespace NKqp
 } // namespace NKikimr

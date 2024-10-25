@@ -32,6 +32,9 @@ namespace NYql::NDq {
  *
  * This class is templated by std::bitset with the largest number of joins we can process
  * or std::bitset<64>, which has a more efficient implementation of enumerating subsets of set.
+ * 
+ * Also, it has a bool ProcessCycles template parameter, which makes algorithm consider all edges
+ * between csg-cmp. It makes dphyp slower, but without it we can miss a condition in case of cycles
  */
 template <typename TNodeSet>
 class TDPHypSolver {
@@ -58,7 +61,7 @@ private:
 
     void EnumerateCmpRec(const TNodeSet& s1, const TNodeSet& s2, const TNodeSet& x);
 
-    void EmitCsgCmp(const TNodeSet& s1, const TNodeSet& s2, const typename TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge);
+    void EmitCsgCmp(const TNodeSet& s1, const TNodeSet& s2, const typename TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge, const typename TJoinHypergraph<TNodeSet>::TEdge* reversedCsgCmpEdge);
 
 private:
     // Create an exclusion set that contains all the nodes of the graph that are smaller or equal to
@@ -84,10 +87,8 @@ private:
         bool leftAny,
         bool rightAny,
         bool isCommutative,
-        const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
-        const std::set<std::pair<TJoinColumn, TJoinColumn>>& reversedJoinConditions,
-        const TVector<TString>& leftJoinKeys,
-        const TVector<TString>& rightJoinKeys,
+        const TVector<TJoinColumn>& leftJoinKeys,
+        const TVector<TJoinColumn>& rightJoinKeys,
         IProviderContext& ctx,
         TCardinalityHints::TCardinalityHint* maybeCardHint,
         TJoinAlgoHints::TJoinAlgoHint* maybeJoinHint
@@ -327,7 +328,7 @@ template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsg(const TNodeSet
             s2[i] = 1;
 
             if (auto* edge = Graph_.FindEdgeBetween(s1, s2)) {
-                EmitCsgCmp(s1, s2, edge);
+                EmitCsgCmp(s1, s2, edge, &Graph_.GetEdge(edge->ReversedEdgeId));
             }
 
             EnumerateCmpRec(s1, s2, x | MakeB(neighs, GetLowestSetBit(s2)));
@@ -356,7 +357,7 @@ template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EnumerateCmpRec(const 
 
         if (DpTable_.contains(s2 | next)) {
             if (auto* edge = Graph_.FindEdgeBetween(s1, s2 | next)) {
-                EmitCsgCmp(s1, s2 | next, edge);
+                EmitCsgCmp(s1, s2 | next, edge, &Graph_.GetEdge(edge->ReversedEdgeId));
             }
         }
 
@@ -414,17 +415,15 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
     bool leftAny,
     bool rightAny,
     bool isCommutative,
-    const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
-    const std::set<std::pair<TJoinColumn, TJoinColumn>>& reversedJoinConditions,
-    const TVector<TString>& leftJoinKeys,
-    const TVector<TString>& rightJoinKeys,
+    const TVector<TJoinColumn>& leftJoinKeys,
+    const TVector<TJoinColumn>& rightJoinKeys,
     IProviderContext& ctx,
     TCardinalityHints::TCardinalityHint* maybeCardHint,
     TJoinAlgoHints::TJoinAlgoHint* maybeJoinAlgoHint
 ) {
     if (maybeJoinAlgoHint) {
         maybeJoinAlgoHint->Applied = true;
-        return MakeJoinInternal(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinKind, maybeJoinAlgoHint->Algo, leftAny, rightAny, ctx, maybeCardHint);
+        return MakeJoinInternal(left, right, leftJoinKeys, rightJoinKeys, joinKind, maybeJoinAlgoHint->Algo, leftAny, rightAny, ctx, maybeCardHint);
     }
 
     double bestCost = std::numeric_limits<double>::infinity();
@@ -432,7 +431,7 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
     bool bestJoinIsReversed = false;
 
     for (auto joinAlgo : AllJoinAlgos) {
-        if (ctx.IsJoinApplicable(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind)){
+        if (ctx.IsJoinApplicable(left, right, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind)){
             auto cost = ctx.ComputeJoinStats(*left->Stats, *right->Stats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeCardHint).Cost;
             if (cost < bestCost) {
                 bestCost = cost;
@@ -442,7 +441,7 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
         }
 
         if (isCommutative) {
-            if (ctx.IsJoinApplicable(right, left, reversedJoinConditions, rightJoinKeys, leftJoinKeys, joinAlgo, joinKind)){
+            if (ctx.IsJoinApplicable(right, left, rightJoinKeys, leftJoinKeys, joinAlgo, joinKind)){
                 auto cost = ctx.ComputeJoinStats(*right->Stats, *left->Stats,  rightJoinKeys, leftJoinKeys, joinAlgo, joinKind, maybeCardHint).Cost;
                 if (cost < bestCost) {
                     bestCost = cost;
@@ -456,28 +455,32 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
     Y_ENSURE(bestAlgo != EJoinAlgoType::Undefined, "No join was chosen!");
 
     if (bestJoinIsReversed) {
-        return MakeJoinInternal(right, left, reversedJoinConditions, rightJoinKeys, leftJoinKeys, joinKind, bestAlgo, rightAny, leftAny, ctx, maybeCardHint);
+        return MakeJoinInternal(right, left, rightJoinKeys, leftJoinKeys, joinKind, bestAlgo, rightAny, leftAny, ctx, maybeCardHint);
     }
     
-    return MakeJoinInternal(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinKind, bestAlgo, leftAny, rightAny, ctx, maybeCardHint);
+    return MakeJoinInternal(left, right, leftJoinKeys, rightJoinKeys, joinKind, bestAlgo, leftAny, rightAny, ctx, maybeCardHint);
 }
 
 /* 
  * Emit a single CSG + CMP pair
  */
-template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeSet& s1, const TNodeSet& s2, const typename TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge) {
+template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(
+    const TNodeSet& s1, 
+    const TNodeSet& s2, 
+    const typename TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge,
+    const typename TJoinHypergraph<TNodeSet>::TEdge* reversedCsgCmpEdge
+) {
     // Here we actually build the join and choose and compare the
     // new plan to what's in the dpTable, if it there
 
     Y_ENSURE(DpTable_.contains(s1), "DP Table does not contain S1");
     Y_ENSURE(DpTable_.contains(s2), "DP Table does not conaint S2");
 
-    const auto* reversedEdge = &Graph_.GetEdge(csgCmpEdge->ReversedEdgeId);
     auto leftNodes = DpTable_[s1];
     auto rightNodes = DpTable_[s2];
     
     if (csgCmpEdge->IsReversed) {
-        std::swap(csgCmpEdge, reversedEdge);
+        std::swap(csgCmpEdge, reversedCsgCmpEdge);
         std::swap(leftNodes, rightNodes);
     }
 
@@ -493,8 +496,6 @@ template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeS
         csgCmpEdge->LeftAny,
         csgCmpEdge->RightAny,
         csgCmpEdge->IsCommutative,
-        csgCmpEdge->JoinConditions,
-        reversedEdge->JoinConditions,
         csgCmpEdge->LeftJoinKeys,
         csgCmpEdge->RightJoinKeys,
         Pctx_,
@@ -509,7 +510,7 @@ template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeS
     #ifndef NDEBUG
         auto pair = std::make_pair(s1, s2);
         Y_ENSURE (!CheckTable_.contains(pair), "Check table already contains pair S1|S2");
-        CheckTable_[ std::pair<TNodeSet,TNodeSet>(s1, s2) ] = true;
+        CheckTable_[pair] = true;
     #endif
 }
 

@@ -57,7 +57,6 @@ ydb/library/yql/tests/sql/hybrid_file/part1 test.py.test[in-in_noansi_join--Debu
 ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/with_offset_ranges_mode_ut [*/*] chunk chunk
 ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/with_offset_ranges_mode_ut [*/*]+chunk+chunk
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.ReadSessionCorrectClose
-ydb/public/sdk/cpp/client/ydb_topic/ut TxUsage.WriteToTopic_Invalid_Session
 ydb/public/sdk/cpp/client/ydb_topic/ut [*/*] chunk chunk
 ydb/public/sdk/cpp/client/ydb_topic/ut [*/*]+chunk+chunk
 ydb/services/datastreams/ut DataStreams.TestGetRecordsStreamWithSingleShard
@@ -67,7 +66,6 @@ ydb/services/keyvalue/ut KeyValueGRPCService.SimpleConcatUnexistedKey
 ydb/services/keyvalue/ut KeyValueGRPCService.SimpleExecuteTransaction
 ydb/services/keyvalue/ut KeyValueGRPCService.SimpleExecuteTransactionWithWrongGeneration
 ydb/services/keyvalue/ut KeyValueGRPCService.SimpleGetStorageChannelStatus
-ydb/services/keyvalue/ut KeyValueGRPCService.SimpleWriteListRange
 ydb/services/keyvalue/ut KeyValueGRPCService.SimpleWriteReadOverrun
 ydb/services/keyvalue/ut KeyValueGRPCService.SimpleWriteReadWithoutLockGeneration1
 ydb/services/keyvalue/ut sole chunk chunk
@@ -117,8 +115,6 @@ ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_3_sessions
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_filter
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_filter_missing_fields
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_nested_types
-ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_read_raw_format_without_row_dispatcher
-ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_scheme_error
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_simple_optional
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_start_new_query
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_stop_start
@@ -181,7 +177,6 @@ ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generate
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopyRespLoopConnectionError]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopySyntaxError]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestEmptyQuery]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestEncodeAndParseTs]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestEncodeDecode]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestErrorClass]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestErrorDuringStartup]

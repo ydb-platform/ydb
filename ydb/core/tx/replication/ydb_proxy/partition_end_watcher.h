@@ -1,7 +1,8 @@
 #pragma once
 
-#include "ydb/library/yverify_stream/yverify_stream.h"
 #include "ydb_proxy.h"
+
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NReplication {
 

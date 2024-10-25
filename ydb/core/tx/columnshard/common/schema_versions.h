@@ -64,10 +64,6 @@ public:
         VersionsToErase.clear();
         return result;
     }
-
-    THashMap<ui64, ui32>& GetVersionCounters() {
-        return VersionCounters;
-    }
 };
 
 }

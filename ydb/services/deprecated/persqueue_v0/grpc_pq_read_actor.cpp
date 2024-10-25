@@ -839,7 +839,7 @@ void TReadSessionActor::RegisterSessions(const TActorContext& ctx) {
 }
 
 void TReadSessionActor::SetupBytesReadByUserAgentCounter() {
-    BytesReadByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents")
+    BytesReadByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents", false)
         ->GetSubgroup("host", "")
         ->GetSubgroup("protocol", "pqv0")
         ->GetSubgroup("consumer", ClientPath)

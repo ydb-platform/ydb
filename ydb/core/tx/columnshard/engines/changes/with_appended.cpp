@@ -133,6 +133,7 @@ void TChangesWithAppend::DoOnAfterCompile() {
 }
 
 void TChangesWithAppend::DoStart(NColumnShard::TColumnShard& /*self*/) {
+    AFL_VERIFY(PortionsToRemove.size() + PortionsToMove.size());
 }
 
 }   // namespace NKikimr::NOlap

@@ -8,7 +8,6 @@ from ydb.tests.olap.lib.utils import get_external_param
 
 
 class TestClickbench(LoadSuiteBase):
-    suite = 'Clickbench'
     workload_type: WorkloadType = WorkloadType.Clickbench
     refference: str = 'CH.60'
     path = get_external_param('table-path-clickbench', f'{YdbCluster.tables_path}/clickbench/hits')

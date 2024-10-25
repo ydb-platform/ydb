@@ -489,6 +489,9 @@ class TJsonNodes : public TViewerPipeClient {
                 case ENodeFields::Version:
                     groupName = GetVersionForGroup();
                     break;
+                case ENodeFields::SystemState:
+                    groupName = NKikimrWhiteboard::EFlag_Name(GetOverall());
+                    break;
                 default:
                     break;
             }
@@ -514,6 +517,8 @@ class TJsonNodes : public TViewerPipeClient {
                     return MissingDisks;
                 case ENodeFields::Uptime:
                     return UptimeSeconds;
+                case ENodeFields::SystemState:
+                    return static_cast<int>(GetOverall());
                 default:
                     return TString();
             }
@@ -1111,12 +1116,12 @@ public:
                 case ENodeFields::DiskSpaceUsage:
                 case ENodeFields::Missing:
                 case ENodeFields::Version:
+                case ENodeFields::SystemState:
                     GroupCollection();
                     SortCollection(NodeGroups, [](const TNodeGroup& nodeGroup) { return nodeGroup.SortKey; }, true);
                     NeedGroup = false;
                     break;
                 case ENodeFields::NodeInfo:
-                case ENodeFields::SystemState:
                 case ENodeFields::PDisks:
                 case ENodeFields::VDisks:
                 case ENodeFields::Tablets:
@@ -1187,8 +1192,11 @@ public:
                     SortCollection(NodeView, [](const TNode* node) { return node->Database; }, ReverseSort);
                     NeedSort = false;
                     break;
-                case ENodeFields::NodeInfo:
                 case ENodeFields::SystemState:
+                    SortCollection(NodeView, [](const TNode* node) { return static_cast<int>(node->GetOverall()); }, ReverseSort);
+                    NeedSort = false;
+                    break;
+                case ENodeFields::NodeInfo:
                 case ENodeFields::PDisks:
                 case ENodeFields::VDisks:
                 case ENodeFields::Tablets:
@@ -2501,6 +2509,7 @@ public:
                           * `Missing`
                           * `DiskSpaceUsage`
                           * `Database`
+                          * `SystemState`
                     required: false
                     type: string
                   - name: group
@@ -2517,6 +2526,7 @@ public:
                           * `Missing`
                           * `Uptime`
                           * `Version`
+                          * `SystemState`
                     required: false
                     type: string
                   - name: filter_group_by
@@ -2533,6 +2543,7 @@ public:
                           * `Missing`
                           * `Uptime`
                           * `Version`
+                          * `SystemState`
                     required: false
                     type: string
                   - name: filter_group

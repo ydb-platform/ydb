@@ -8,6 +8,7 @@ SRCS(
 
 RESOURCE(
     click_bench_queries.sql click_bench_queries.sql
+    click_bench_queries_pg.sql click_bench_queries_pg.sql
     ${ARCADIA_ROOT}/ydb/tests/functional/clickbench/data/queries-deterministic.sql queries-deterministic.sql
     click_bench_schema.sql click_bench_schema.sql
     click_bench_canonical/q0.result click_bench_canonical/q0.result

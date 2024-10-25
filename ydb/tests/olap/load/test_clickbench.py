@@ -41,3 +41,7 @@ class TestClickbench(LoadSuiteBase):
     @pytest.mark.parametrize('query_num', [i for i in range(0, 43)])
     def test_clickbench(self, query_num):
         self.run_workload_test(self.path, query_num)
+
+
+class TestClickbenchPg(TestClickbench):
+    query_syntax = 'pg'

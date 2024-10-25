@@ -23,6 +23,7 @@ class LoadSuiteBase:
     timeout: float = 1800.
     refference: str = ''
     check_canonical: bool = False
+    query_syntax: str = ''
     query_settings: dict[int, LoadSuiteBase.QuerySettings] = {}
 
     @property
@@ -195,7 +196,8 @@ class LoadSuiteBase:
             iterations=self._get_iterations(query_num),
             workload_type=self.workload_type,
             timeout=self._get_timeout(query_num),
-            check_canonical=self.check_canonical
+            check_canonical=self.check_canonical,
+            query_syntax=self.query_syntax
         )
         allure_test_description(self.suite, self._test_name(query_num), refference_set=self.refference, start_time=start_time, end_time=time())
         self.process_query_result(result, query_num, self._get_iterations(query_num), True)

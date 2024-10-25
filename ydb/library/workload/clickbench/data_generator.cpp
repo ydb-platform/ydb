@@ -30,7 +30,7 @@ TBulkDataGeneratorList TClickbenchWorkloadDataInitializerGenerator::DoGetBulkIni
 }
 
 TClickbenchWorkloadDataInitializerGenerator::TDataGenerartor::TDataGenerartor(const TClickbenchWorkloadDataInitializerGenerator& owner)
-    : IBulkDataGenerator("hits", CalcSize(owner))
+    : IBulkDataGenerator("hits", 99997497)
     , Owner(owner)
 {
     if (Owner.GetDataFiles().IsDirectory()) {
@@ -52,6 +52,22 @@ IBulkDataGenerator::TDataPortions TClickbenchWorkloadDataInitializerGenerator::T
             if (Files.empty()) {
                 return {};
             }
+            if (FirstPortion) {
+                FirstPortion = false;
+                ui64 toSkip = 0;
+                if (Owner.StateProcessor) {
+                    for (const auto& [file, state]: Owner.StateProcessor->GetState()) {
+                        toSkip += state.Position;
+                    }
+                }
+                if (toSkip) {
+                    return { MakeIntrusive<TDataPortion>(
+                        Owner.Params.GetFullTableName(nullptr),
+                        TDataPortion::TSkip(),
+                        toSkip
+                    )};
+                }
+            }
             index = std::hash<std::thread::id>{}(std::this_thread::get_id()) % Files.size();
             file = Files[index];
         }
@@ -67,16 +83,6 @@ IBulkDataGenerator::TDataPortions TClickbenchWorkloadDataInitializerGenerator::T
             }
         }
     }
-}
-
-ui64 TClickbenchWorkloadDataInitializerGenerator::TDataGenerartor::CalcSize(const TClickbenchWorkloadDataInitializerGenerator& owner) {
-    ui64 result = 99997497;
-    if (owner.StateProcessor) {
-        for (const auto& [file, state]: owner.StateProcessor->GetState()) {
-            result -= state.Position;
-        }
-    }
-    return result;
 }
 
 class TClickbenchWorkloadDataInitializerGenerator::TDataGenerartor::TCsvFileBase: public TClickbenchWorkloadDataInitializerGenerator::TDataGenerartor::TFile {
@@ -116,7 +122,8 @@ public:
         with_lock(Lock) {
             TString line;
             if (Owner.Owner.StateProcessor && Owner.Owner.StateProcessor->GetState().contains(Path)) {
-                while(Owner.Owner.StateProcessor->GetState().at(Path).Position > Readed && Decompressor->ReadLine(line)) {
+                auto position = Owner.Owner.StateProcessor->GetState().at(Path).Position;
+                while(position > Readed && Decompressor->ReadLine(line)) {
                     ++Readed;
                 }
             }

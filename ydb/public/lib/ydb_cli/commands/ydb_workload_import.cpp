@@ -84,6 +84,9 @@ public:
         auto convertResult = [](const NTable::TAsyncBulkUpsertResult& result) {
                 return TStatus(result.GetValueSync());
             };
+        if (std::holds_alternative<NYdbWorkload::IBulkDataGenerator::TDataPortion::TSkip>(portion->MutableData())) {
+            return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, NYql::TIssues()));
+        }
         if (auto* value = std::get_if<TValue>(&portion->MutableData())) {
             return Owner.TableClient->BulkUpsert(portion->GetTable(), std::move(*value)).Apply(convertResult);
         }
@@ -118,6 +121,9 @@ public:
     }
 
     TAsyncStatus WriteDataPortion(NYdbWorkload::IBulkDataGenerator::TDataPortionPtr portion) override {
+        if (std::holds_alternative<NYdbWorkload::IBulkDataGenerator::TDataPortion::TSkip>(portion->MutableData())) {
+            return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, NYql::TIssues()));
+        }
         if (auto* value = std::get_if<TValue>(&portion->MutableData())) {
             return NThreading::MakeErrorFuture<TStatus>(std::make_exception_ptr(yexception() << "Not implemented"));
         }
@@ -165,7 +171,7 @@ void TWorkloadCommandImport::TUploadCommand::ProcessDataGenerator(std::shared_pt
                     if (!res.IsSuccess()) {
                         Cerr << "Bulk upset to " << data->GetTable() << " failed, " << res.GetStatus() << ", " << res.GetIssues().ToString() << Endl;
                         AtomicIncrement(ErrorsCount);
-                    } else {
+                    } else if (data->GetSize()) {
                         Bar->AddProgress(data->GetSize());
                     }
                     AtomicDecrement(counter);

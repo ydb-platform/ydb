@@ -260,11 +260,18 @@ class TJsonNodes : public TViewerPipeClient {
         }
 
         void CalcCpuUsage() {
-            float usage = 0;
-            int threads = 0;
-            for (const auto& pool : SystemState.GetPoolStats()) {
-                usage += pool.GetUsage() * pool.GetThreads();
-                threads += pool.GetThreads();
+            float usage = SystemState.GetCoresUsed();
+            int threads = SystemState.GetCoresTotal();
+            if (threads == 0) {
+                for (const auto& pool : SystemState.GetPoolStats()) {
+                    ui32 usageThreads = pool.GetLimit() ? pool.GetLimit() : pool.GetThreads();
+                    usage += pool.GetUsage() * usageThreads;
+                    if (pool.GetName() != "IO") {
+                        threads += pool.GetThreads();
+                    }
+                }
+                SystemState.SetCoresUsed(usage);
+                SystemState.SetCoresTotal(threads);
             }
             CpuUsage = usage / threads;
         }
@@ -1706,6 +1713,17 @@ public:
     void InitWhiteboardRequest(TWhiteboardEvent* request) {
         if (AllWhiteboardFields) {
             request->AddFieldsRequired(-1);
+        }
+    }
+
+    template<>
+    void InitWhiteboardRequest(NKikimrWhiteboard::TEvSystemStateRequest* request) {
+        if (AllWhiteboardFields) {
+            request->AddFieldsRequired(-1);
+        } else {
+            request->MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TSystemStateInfo>());
+            request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresUsedFieldNumber);
+            request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresTotalFieldNumber);
         }
     }
 

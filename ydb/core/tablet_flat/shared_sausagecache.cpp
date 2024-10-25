@@ -154,10 +154,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             return MultiHash(key.LogoBlobID.Hash(), key.PageId);
         }
 
-        static bool Equals(const TPageKey& left, const TPageKey& right) {
-            return left.PageId == right.PageId && left.LogoBlobID == right.LogoBlobID;
-        }
-
         static TString ToString(const TPageKey& key) {
             return TStringBuilder() << "LogoBlobID: " << key.LogoBlobID.ToString() << " PageId: " << key.PageId;
         }

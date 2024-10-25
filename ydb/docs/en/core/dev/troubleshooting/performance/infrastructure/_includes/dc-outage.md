@@ -1,5 +1,3 @@
-# DC Outage
-
 To determine if one of the data centers of the {{ ydb-short-name }} cluster is not available, follow these steps:
 
 1. Open [Embedded UI](../../../../../reference/embedded-ui/index.md).

@@ -1,5 +1,3 @@
-# Diagnostics of a suboptimal ratio between minimum and maximum partitions
-
 1. See if the **Split / Merge partitions** chart in the **DB status** Grafana dashboard shows any spikes.
 
     ![](../_assets/splits-merges.png)

@@ -1,8 +1,8 @@
-# Diagnostics of Transaction Locks Invalidation errors
-
 1. Open the **DB overview** Grafana dashboard.
 
-1. Analyze the **Transaction Locks Invalidation** chart.
+1. See if the **Transaction Locks Invalidation** chart shows any spikes.
 
     ![](../_assets/transactions-locks-invalidation.png)
+
+    This chart shows the number of operations that returned the transaction locks invalidation error per second.
 

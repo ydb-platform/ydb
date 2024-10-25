@@ -1,5 +1,3 @@
-# Diagnosing frequent tablet transfers
-
 1. See if the **Tablets moved by Hive** chart in the **DB status** Grafana dashboard shows any spikes.
 
     ![](../_assets/tablets-moved.png)

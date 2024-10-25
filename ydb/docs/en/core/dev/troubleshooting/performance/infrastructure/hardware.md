@@ -1,10 +1,10 @@
 # Hardware issues
 
-Malfunctioning memory modules and network cards, until replaced, significantly impact database performance up to total unavailability of the affected server.
+Malfunctioning storage drives and network cards, until replaced, significantly impact database performance up to total unavailability of the affected server. CPU issues might lead to server failure and higher load on the remaining {{ ydb-short-name }} nodes.
 
 ## Diagnostics
 
-Use the hardware monitoring tools that your data center provides to diagnose hardware issues.
+Use the hardware monitoring tools that your operating system and data center provide to diagnose hardware issues.
 
 You can also use the **Healthcheck** in [Embedded UI](../../../../reference/embedded-ui/index.md) to diagnose some hardware issues:
 

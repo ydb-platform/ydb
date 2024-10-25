@@ -13,6 +13,6 @@
 
 ## Recommendations
 
-If a YQL query returns an `OVERLOADED` error, retry the query using a randomized exponential back-off strategy.
+If a YQL query returns an `OVERLOADED` error, retry the query using a randomized exponential back-off strategy. The YDB SDK provides a built-in mechanism for handling temporary failures. For more information, see [{#T}](../../../../reference/ydb-sdk/error_handling.md).
 
 Exceeding the limit of open sessions per node may indicate a problem in the application logic.

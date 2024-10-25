@@ -1,5 +1,3 @@
-# Diagnosing network issues
-
 To diagnose network issues, use the healthcheck in the [Embedded UI](../../../../../reference/embedded-ui/index.md):
 
 1. In the [Embedded UI](../../../../../reference/embedded-ui/index.md), go to the **Databases** tab and click on the database.

@@ -343,7 +343,6 @@ private:
 
     void InitSystemWhiteboardRequest(NKikimrWhiteboard::TEvSystemStateRequest* request) {
         request->MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TSystemStateInfo>());
-        request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kMemoryStatsFieldNumber);
         request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresUsedFieldNumber);
         request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresTotalFieldNumber);
     }
@@ -464,13 +463,7 @@ private:
             }
         }
 
-        struct TMemoryStats {
-            ui64 Total = 0;
-            ui64 Limit = 0;
-        };
-
         std::unordered_set<TString> hostPassed;
-        std::unordered_map<TString, TMemoryStats> memoryStats;
 
         for (TNode& node : NodeData) {
             const NKikimrWhiteboard::TSystemStateInfo& systemState = node.SystemState;
@@ -488,16 +481,7 @@ private:
                 ClusterInfo.SetName(systemState.GetClusterName());
             }
             ClusterInfo.SetMemoryUsed(ClusterInfo.GetMemoryUsed() + systemState.GetMemoryUsed());
-            if (systemState.HasMemoryStats()) {
-                TMemoryStats& stats = memoryStats[systemState.GetHost()];
-                if (systemState.GetMemoryLimit() > 0) {
-                    stats.Limit += systemState.GetMemoryLimit();
-                } else {
-                    stats.Total = systemState.GetMemoryStats().GetMemTotal();
-                }
-            } else {
-                ClusterInfo.SetMemoryTotal(ClusterInfo.GetMemoryTotal() + systemState.GetMemoryLimit());
-            }
+            ClusterInfo.SetMemoryTotal(ClusterInfo.GetMemoryTotal() + systemState.GetMemoryLimit());
             if (!node.Disconnected && node.SystemState.HasSystemState()) {
                 ClusterInfo.SetNodesAlive(ClusterInfo.GetNodesAlive() + 1);
             }
@@ -537,14 +521,6 @@ private:
             if (systemState.GetCoresTotal() != 0) {
                 ClusterInfo.SetCoresUsed(ClusterInfo.GetCoresUsed() + systemState.GetCoresUsed());
                 ClusterInfo.SetCoresTotal(ClusterInfo.GetCoresTotal() + systemState.GetCoresTotal());
-            }
-        }
-
-        for (const auto& memStats : memoryStats) {
-            if (memStats.second.Total > 0) {
-                ClusterInfo.SetMemoryTotal(ClusterInfo.GetMemoryTotal() + memStats.second.Total);
-            } else {
-                ClusterInfo.SetMemoryTotal(ClusterInfo.GetMemoryTotal() + memStats.second.Limit);
             }
         }
 

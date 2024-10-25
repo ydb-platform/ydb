@@ -1406,17 +1406,59 @@ TNodePtr TSqlTranslation::SerialTypeNode(const TRule_type_name_or_bind& node) {
     return nullptr;
 }
 
+bool StoreString(const TRule_family_setting_value& from, TNodePtr& to, TContext& ctx) {
+    switch (from.Alt_case()) {
+        case TRule_family_setting_value::kAltFamilySettingValue1: {
+            // STRING_VALUE
+            const TString stringValue(ctx.Token(from.GetAlt_family_setting_value1().GetToken1()));
+            TNodePtr literal = BuildLiteralSmartString(ctx, stringValue);
+            if (!literal) {
+                return false;
+            }
+            to = literal;
+            break;
+        }
+        default:
+            return false;
+    }
+    return true;
+}
+
+bool StoreInt(const TRule_family_setting_value& from, TNodePtr& to, TContext& ctx) {
+    switch (from.Alt_case()) {
+        case TRule_family_setting_value::kAltFamilySettingValue2: {
+            // integer
+            TNodePtr literal = LiteralNumber(ctx, from.GetAlt_family_setting_value2().GetRule_integer1());
+            if (!literal) {
+                return false;
+            }
+            to = literal;
+            break;
+        }
+        default:
+            return false;
+    }
+    return true;
+}
+
 bool TSqlTranslation::FillFamilySettingsEntry(const TRule_family_settings_entry& settingNode, TFamilyEntry& family) {
     TIdentifier id = IdEx(settingNode.GetRule_an_id1(), *this);
     const TRule_family_setting_value& value = settingNode.GetRule_family_setting_value3();
     if (to_lower(id.Name) == "data") {
-        const TString stringValue(Ctx.Token(value.GetAlt_family_setting_value1().GetToken1()));
-        family.Data = BuildLiteralSmartString(Ctx, stringValue);
+        if (!StoreString(value, family.Data, Ctx)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
     } else if (to_lower(id.Name) == "compression") {
-        const TString stringValue(Ctx.Token(value.GetAlt_family_setting_value1().GetToken1()));
-        family.Compression = BuildLiteralSmartString(Ctx, stringValue);
+        if (!StoreString(value, family.Compression, Ctx)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
     } else if (to_lower(id.Name) == "compression_level") {
-        family.CompressionLevel = LiteralNumber(Ctx, value.GetAlt_family_setting_value2().GetRule_integer1());
+        if (!StoreInt(value, family.CompressionLevel, Ctx)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be an integer";
+            return false;
+        }
     } else {
         Ctx.Error() << "Unknown table setting: " << id.Name;
         return false;

@@ -163,7 +163,7 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
         add_lines_to_file(os.path.join(output_path, 'muted_stable.txt'), muted_stable_tests)
 
         muted_stable_tests_debug = set(
-            f"{test.get('suite_folder')} {test.get('test_name')} # owner {test.get('owner')} success_rate {test.get('success_rate')}%, state {test.get('state')} days in state {test.get('days_in_state')}\n"
+            f"{test.get('suite_folder')} {test.get('test_name')} " + f"# owner {test.get('owner')} success_rate {test.get('success_rate')}%, state {test.get('state')} days in state {test.get('days_in_state')}\n"
             for test in all_tests
             if test.get('muted_stable_n_days_today')
         )
@@ -173,7 +173,7 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
 
         # Add all flaky tests
         flaky_tests = set(
-            f"{test.get('suite_folder')} {test.get('test_name')}\n"
+            re.sub(r'\d+/(\d+)\]', r'*/*]', f"{test.get('suite_folder')} {test.get('test_name')}\n")
             for test in all_tests
             if test.get('days_in_state') >= 1
             and test.get('flaky_today')
@@ -184,7 +184,7 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
         add_lines_to_file(os.path.join(output_path, 'flaky.txt'), flaky_tests)
 
         flaky_tests_debug = set(
-            f"{test.get('suite_folder')} {test.get('test_name')} # owner {test.get('owner')} success_rate {test.get('success_rate')}%, state {test.get('state')}, days in state {test.get('days_in_state')}, pass_count {test.get('pass_count')}, fail count {test.get('fail_count')}\n"
+            re.sub(r'\d+/(\d+)\]', r'*/*]', f"{test.get('suite_folder')} {test.get('test_name')}") + f" # owner {test.get('owner')} success_rate {test.get('success_rate')}%, state {test.get('state')}, days in state {test.get('days_in_state')}, pass_count {test.get('pass_count')}, fail count {test.get('fail_count')}\n"
             for test in all_tests
             if test.get('days_in_state') >= 1
             and test.get('flaky_today')

@@ -24,7 +24,7 @@ on:
         description: "S3 endpoint. Details: https://yandex.cloud/en/docs/storage/tools/s3cmd"
       s3_bucket:
         type: string
-        default: "yandexcloud-ydb"
+        default: "yandexcloud-ydb-dstool"
         description: "S3 bucket. S3Uri (without hostname). Details: https://yandex.cloud/en/docs/storage/tools/s3cmd"
       s3_dns_host_bucket:
         type: string

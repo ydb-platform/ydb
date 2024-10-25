@@ -93,6 +93,10 @@
                     <td class="ds-info">Change sender</td>
                     <td class="ds-info" id="tablet-info-change-sender">Loading...</td>
                   </tr>
+                  <tr class="ds-info">
+                    <td class="ds-info">Volatile txs</td>
+                    <td class="ds-info" id="tablet-info-volatile-txs">Loading...</td>
+                  </tr>
                 </tbody>
               </table>
               <table class="ds-info">
@@ -300,6 +304,30 @@
               </tr>
             </thead>
             <tbody id="ds-delayed-ack-body">
+            </tbody>
+          </table>
+          <table id="ds-rs-expectations-table" class="tablesorter">
+            <caption class="ds-info">Expectations</caption>
+            <thead>
+              <tr>
+                <th>TxId</th>
+                <th>Step</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody id="ds-rs-expectations-body">
+            </tbody>
+          </table>
+          <table id="ds-rs-pipes-table" class="tablesorter">
+            <caption class="ds-info">Pipes</caption>
+            <thead>
+              <tr>
+                <th>Destination</th>
+                <th>OutReadSets</th>
+                <th>Subscribed</th>
+              </tr>
+            </thead>
+            <tbody id="ds-rs-pipes-body">
             </tbody>
           </table>
         </div>

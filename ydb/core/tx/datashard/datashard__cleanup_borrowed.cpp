@@ -255,11 +255,8 @@ private:
     bool DryRun = true;
 };
 
-ITransaction* TDataShard::CreateTxMonitoringCleanupBorrowedParts(
-        TDataShard* self,
-        NMon::TEvRemoteHttpInfo::TPtr ev)
-{
-    return new TTxMonitoringCleanupBorrowedParts(self, ev);
+void TDataShard::HandleMonCleanupBorrowedParts(NMon::TEvRemoteHttpInfo::TPtr& ev) {
+    Execute(new TTxMonitoringCleanupBorrowedParts(this, ev));
 }
 
 }

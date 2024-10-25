@@ -8,6 +8,7 @@ RECURSE(
     histogram
     hyperloglog
     ip_base
+    ip_lookup
     json
     json2
     knn

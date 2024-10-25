@@ -44,7 +44,7 @@
  %define arg5   r9
  %define tmp    r11
  %define return rax
- %define func(x) x:
+ %define func(x) x: endbranch
  %define FUNC_SAVE
  %define FUNC_RESTORE
 %endif
@@ -64,16 +64,16 @@
 
 %macro FUNC_SAVE 0
 	sub	rsp, stack_size
-	movdqa	[rsp+16*0],xmm6
-	movdqa	[rsp+16*1],xmm7
-	movdqa	[rsp+16*2],xmm8
-	movdqa	[rsp+16*3],xmm9
-	movdqa	[rsp+16*4],xmm10
-	movdqa	[rsp+16*5],xmm11
-	movdqa	[rsp+16*6],xmm12
-	movdqa	[rsp+16*7],xmm13
-	movdqa	[rsp+16*8],xmm14
-	movdqa	[rsp+16*9],xmm15
+	vmovdqa	[rsp+16*0],xmm6
+	vmovdqa	[rsp+16*1],xmm7
+	vmovdqa	[rsp+16*2],xmm8
+	vmovdqa	[rsp+16*3],xmm9
+	vmovdqa	[rsp+16*4],xmm10
+	vmovdqa	[rsp+16*5],xmm11
+	vmovdqa	[rsp+16*6],xmm12
+	vmovdqa	[rsp+16*7],xmm13
+	vmovdqa	[rsp+16*8],xmm14
+	vmovdqa	[rsp+16*9],xmm15
 	save_reg	r12,  10*16 + 0*8
 	save_reg	r15,  10*16 + 1*8
 	end_prolog
@@ -82,16 +82,16 @@
 %endmacro
 
 %macro FUNC_RESTORE 0
-	movdqa	xmm6, [rsp+16*0]
-	movdqa	xmm7, [rsp+16*1]
-	movdqa	xmm8, [rsp+16*2]
-	movdqa	xmm9, [rsp+16*3]
-	movdqa	xmm10, [rsp+16*4]
-	movdqa	xmm11, [rsp+16*5]
-	movdqa	xmm12, [rsp+16*6]
-	movdqa	xmm13, [rsp+16*7]
-	movdqa	xmm14, [rsp+16*8]
-	movdqa	xmm15, [rsp+16*9]
+	vmovdqa	xmm6, [rsp+16*0]
+	vmovdqa	xmm7, [rsp+16*1]
+	vmovdqa	xmm8, [rsp+16*2]
+	vmovdqa	xmm9, [rsp+16*3]
+	vmovdqa	xmm10, [rsp+16*4]
+	vmovdqa	xmm11, [rsp+16*5]
+	vmovdqa	xmm12, [rsp+16*6]
+	vmovdqa	xmm13, [rsp+16*7]
+	vmovdqa	xmm14, [rsp+16*8]
+	vmovdqa	xmm15, [rsp+16*9]
 	mov	r12,  [rsp + 10*16 + 0*8]
 	mov	r15,  [rsp + 10*16 + 1*8]
 	add	rsp, stack_size
@@ -117,8 +117,8 @@
 %else
 ;;; Use Non-temporal load/stor
  %ifdef NO_NT_LDST
-  %define XLDR vmovdqa
-  %define XSTR vmovdqa
+  %define XLDR vmovdqa64
+  %define XSTR vmovdqa64
  %else
   %define XLDR vmovntdqa
   %define XSTR vmovntdq
@@ -159,13 +159,8 @@ section .text
 %define xtmpl5    zmm23
 
 align 16
-global gf_4vect_mad_avx512:ISAL_SYM_TYPE_FUNCTION
+global gf_4vect_mad_avx512, function
 func(gf_4vect_mad_avx512)
-%ifidn __OUTPUT_FORMAT__, macho64
-global _gf_4vect_mad_avx512:ISAL_SYM_TYPE_FUNCTION
-func(_gf_4vect_mad_avx512)
-%endif
-
 	FUNC_SAVE
 	sub	len, 64
 	jl	.return_fail

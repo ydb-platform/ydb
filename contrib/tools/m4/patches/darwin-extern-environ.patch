@@ -1,0 +1,25 @@
+--- a/lib/execute.c	(index)
++++ b/lib/execute.c	(working tree)
+@@ -48,6 +48,9 @@
+ 
+ #endif
+ 
++#if defined(__FreeBSD__) || defined(__MACH__)
++    extern char** environ;
++#endif
+ 
+ #if defined EINTR && ((defined _WIN32 || defined __WIN32__) && ! defined __CYGWIN__)
+ 
+--- a/lib/spawn-pipe.c	(index)
++++ b/lib/spawn-pipe.c	(working tree)
+@@ -53,7 +53,10 @@
+ # include <spawn.h>
+
+ #endif
+ 
++#if defined(__FreeBSD__) || defined(__MACH__)
++    extern char** environ;
++#endif
+ 
+ #ifdef EINTR
+ 

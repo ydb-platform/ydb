@@ -288,7 +288,7 @@ public:
 
         for (auto& resultStr : ResultProviderConfig.CommittedResults) {
             queryResult.Results.emplace_back(
-                google::protobuf::Arena::CreateMessage<Ydb::ResultSet>(queryResult.ProtobufArenaPtr.get()));
+                queryResult.ProtobufArenaPtr->Allocate<Ydb::ResultSet>());
             Ydb::ResultSet* result = queryResult.Results.back();
 
             if (!result->ParseFromArray(resultStr.data(), resultStr.size())) {

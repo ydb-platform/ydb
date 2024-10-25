@@ -44,18 +44,10 @@ ELSEIF (OS_LINUX)
         -Wl,--build-id=sha1
     )
 ELSEIF (OS_DARWIN OR OS_IOS)
-    IF (MAPSMOBI_BUILD_TARGET AND XCODE)
-        LDFLAGS(
-            -fuse-ld=${LLD_ROOT_RESOURCE_GLOBAL}/bin/ld64.lld
-        )
-    ELSE()
-        LDFLAGS(
-            -fuse-ld=lld
-            --ld-path=${LLD_ROOT_RESOURCE_GLOBAL}/bin/ld64.lld
-            # FIXME: Remove fake linker version flag when clang 16 version arrives
-            -mlinker-version=705
-        )
-    ENDIF()
+    LDFLAGS(
+        -fuse-ld=lld
+        --ld-path=${LLD_ROOT_RESOURCE_GLOBAL}/bin/ld64.lld
+    )
 ELSEIF (OS_EMSCRIPTEN)
     LDFLAGS(
         -fuse-ld=${LLD_ROOT_RESOURCE_GLOBAL}/bin/wasm-ld

@@ -3,13 +3,14 @@
 #include <ydb/library/backup/util.h>
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
+#include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/folder/tempdir.h>
 #include <util/generic/strbuf.h>
-#include <library/cpp/string_utils/quote/quote.h>
 
 namespace NYdb {
 
@@ -20,10 +21,11 @@ void TestResultSetParsedOk(const TString& protoStr, const TString& expect) {
     google::protobuf::TextFormat::ParseFromString(protoStr, &proto);
 
     TResultSet result(proto);
+    auto resultSetParser = TResultSetParser(result);
 
     TStringStream got;
     got.Reserve(1 << 10);
-    NBackup::ProcessResultSet(got, result);
+    NBackup::ProcessResultSet(got, resultSetParser);
     UNIT_ASSERT(got.Size());
     UNIT_ASSERT_NO_DIFF(got.Str(), expect);
 }

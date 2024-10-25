@@ -260,7 +260,12 @@ bool TPartitionFamily::Reset(ETargetStatus targetStatus, const TActorContext& ct
                         GetPrefix() << " has been released for merge but target family is not exists.");
                 return true;
             }
-            Consumer.MergeFamilies(it->second.get(), this, ctx);
+            auto* targetFamily = it->second.get();
+            if (targetFamily->CanAttach(Partitions) && targetFamily->CanAttach(WantedPartitions)) {
+                Consumer.MergeFamilies(targetFamily, this, ctx);
+            } else {
+                WantedPartitions.clear();
+            }
 
             return true;
     }
@@ -396,6 +401,9 @@ void TPartitionFamily::InactivatePartition(ui32 partitionId) {
 }
 
  void TPartitionFamily::ChangePartitionCounters(ssize_t active, ssize_t inactive) {
+    Y_VERIFY_DEBUG((ssize_t)ActivePartitionCount + active >= 0);
+    Y_VERIFY_DEBUG((ssize_t)InactivePartitionCount + inactive >= 0);
+
     ActivePartitionCount += active;
     InactivePartitionCount += inactive;
 
@@ -474,6 +482,23 @@ bool TPartitionFamily::PossibleForBalance(TSession* session) {
     return session->Pipe != LastPipe;
 }
 
+template<typename TCollection>
+bool TPartitionFamily::CanAttach(const TCollection& partitionsIds) {
+    if (partitionsIds.empty()) {
+        return true;
+    }
+
+    if (Consumer.WithCommonSessions) {
+        return true;
+    }
+
+    return AnyOf(SpecialSessions, [&](const auto& s) {
+        return s.second->AllPartitionsReadable(partitionsIds);
+    });
+}
+
+template bool TPartitionFamily::CanAttach(const std::unordered_set<ui32>& partitionsIds);
+template bool TPartitionFamily::CanAttach(const std::vector<ui32>& partitionsIds);
 
 void TPartitionFamily::ClassifyPartitions() {
     auto [activePartitionCount, inactivePartitionCount] = ClassifyPartitions(Partitions);
@@ -583,6 +608,7 @@ TConsumer::TConsumer(TBalancer& balancer, const TString& consumerName)
     : Balancer(balancer)
     , ConsumerName(consumerName)
     , NextFamilyId(0)
+    , WithCommonSessions(false)
     , BalanceScheduled(false)
 {
 }
@@ -878,6 +904,7 @@ void TConsumer::RegisterReadingSession(TSession* session, const TActorContext& c
         }
     } else {
         OrderedSessions.reset();
+        WithCommonSessions = true;
     }
 }
 
@@ -898,6 +925,9 @@ void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext&
     Sessions.erase(session->Pipe);
     if (!session->WithGroups()) {
         OrderedSessions.reset();
+        WithCommonSessions = AnyOf(Sessions, [](const auto s) {
+            return !s.second->WithGroups();
+        });
     }
 
     for (auto* family : Snapshot(Families)) {
@@ -917,6 +947,11 @@ void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext&
                     }
                 }
             }
+
+            if (!family->CanAttach(family->WantedPartitions)) {
+                targetStatus = TPartitionFamily::ETargetStatus::Destroy;
+            }
+
             if (family->Reset(targetStatus, ctx)) {
                 UnreadableFamilies[family->Id] = family;
                 FamiliesRequireBalancing.erase(family->Id);
@@ -985,7 +1020,7 @@ bool TConsumer::SetCommittedState(ui32 partitionId, ui32 generation, ui64 cookie
     return Partitions[partitionId].SetCommittedState(generation, cookie);
 }
 
-bool TConsumer::ProccessReadingFinished(ui32 partitionId, const TActorContext& ctx) {
+bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, const TActorContext& ctx) {
     if (!ScalingSupport()) {
         return false;
     }
@@ -996,7 +1031,9 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, const TActorContext& c
     if (!family) {
         return false;
     }
-    family->InactivatePartition(partitionId);
+    if (!wasInactive) {
+        family->InactivatePartition(partitionId);
+    }
 
     if (!family->IsLonely() && partition.Commited) {
         if (BreakUpFamily(family, partitionId, false, ctx)) {
@@ -1015,34 +1052,41 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, const TActorContext& c
     });
 
     if (partition.NeedReleaseChildren()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                GetPrefix() << "Attache partitions [" << JoinRange(", ", newPartitions.begin(), newPartitions.end()) << "] to " << family->DebugStr());
         for (auto id : newPartitions) {
-            auto* node = GetPartitionGraph().GetPartition(id);
-            bool allParentsMerged = true;
-            if (node->Parents.size() > 1) {
-                // The partition was obtained as a result of the merge.
-                for (auto* c : node->Parents) {
-                    auto* other = FindFamily(c->Id);
-                    if (!other) {
-                        allParentsMerged = false;
-                        continue;
-                    }
+            if (family->CanAttach(std::vector{id})) {
+                auto* node = GetPartitionGraph().GetPartition(id);
+                bool allParentsMerged = true;
+                if (node->Parents.size() > 1) {
+                    // The partition was obtained as a result of the merge.
+                    for (auto* c : node->Parents) {
+                        auto* other = FindFamily(c->Id);
+                        if (!other) {
+                            allParentsMerged = false;
+                            continue;
+                        }
 
-                    if (other != family) {
-                        auto [f, v] = MergeFamilies(family, other, ctx);
-                        allParentsMerged = v;
+                        if (other != family) {
+                            auto [f, v] = MergeFamilies(family, other, ctx);
+                            allParentsMerged = v;
+                            family = f;
+                        }
+                    }
+                }
+
+                if (allParentsMerged) {
+                    auto* other = FindFamily(id);
+                    if (other && other != family) {
+                        auto [f, _] = MergeFamilies(family, other, ctx);
                         family = f;
+                    } else {
+                        family->AttachePartitions({id}, ctx);
                     }
                 }
-            }
-
-            if (allParentsMerged) {
-                auto* other = FindFamily(id);
-                if (other && other != family) {
-                    auto [f, _] = MergeFamilies(family, other, ctx);
-                    family = f;
-                } else {
-                    family->AttachePartitions({id}, ctx);
-                }
+            } else {
+                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                        GetPrefix() << "Can't attache partition " << id << " to " << family->DebugStr());
             }
         }
     } else {
@@ -1065,8 +1109,13 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
     }
 
     auto* partition = GetPartition(partitionId);
+    if (!partition) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                GetPrefix() << "Reading of the partition " << partitionId << " was started by " << ConsumerName << ".");
+    }
 
-    if (partition && partition->StartReading()) {
+    auto wasInactive = partition->IsInactive();
+    if (partition->StartReading()) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                 GetPrefix() << "Reading of the partition " << partitionId << " was started by " << ConsumerName << ". We stop reading from child partitions.");
 
@@ -1080,7 +1129,9 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
             return;
         }
 
-        family->ActivatePartition(partitionId);
+        if (wasInactive) {
+            family->ActivatePartition(partitionId);
+        }
 
         // We releasing all children's partitions because we don't start reading the partition from EndOffset
         GetPartitionGraph().Travers(partitionId, [&](ui32 partitionId) {
@@ -1097,8 +1148,6 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
             return true;
         });
     } else {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "Reading of the partition " << partitionId << " was started by " << ConsumerName << ".");
     }
 }
 
@@ -1139,7 +1188,7 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
                     GetPrefix() << "Reading of the partition " << partitionId << " was finished by " << r.GetConsumer()
                     << ", firstMessage=" << r.GetStartedReadingFromEndOffset() << ", " << GetSdkDebugString0(r.GetScaleAwareSDK()));
 
-        if (ProccessReadingFinished(partitionId, ctx)) {
+        if (ProccessReadingFinished(partitionId, false, ctx)) {
             ScheduleBalance(ctx);
         }
     } else if (!partition.IsInactive()) {
@@ -1540,11 +1589,12 @@ bool TBalancer::SetCommittedState(const TString& consumerName, ui32 partitionId,
         return false;
     }
 
+    auto wasInactive = consumer->IsInactive(partitionId);
     if (consumer->SetCommittedState(partitionId, generation, cookie)) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                 GetPrefix() << "The offset of the partition " << partitionId << " was commited by " << consumerName);
 
-        if (consumer->ProccessReadingFinished(partitionId, ctx)) {
+        if (consumer->ProccessReadingFinished(partitionId, wasInactive, ctx)) {
             consumer->ScheduleBalance(ctx);
         }
 

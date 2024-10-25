@@ -1,10 +1,10 @@
 #include "dq_yt_block_reader.h"
 #include "stream_decoder.h"
 #include "dq_yt_rpc_helpers.h"
-#include "arrow_converter.h"
 
 #include <ydb/library/yql/public/udf/arrow/block_builder.h>
 
+#include <ydb/library/yql/providers/yt/codec/yt_arrow_converter.h>
 #include <ydb/library/yql/providers/yt/codec/yt_codec.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>

@@ -25,7 +25,6 @@ namespace NSharedCache {
         EvRequest,
         EvResult,
         EvUpdated,
-        EvReplacementPolicySwitch,
 
         EvEnd
 
@@ -128,16 +127,6 @@ namespace NSharedCache {
         };
 
         THashMap<TLogoBlobID, TActions> Actions;
-    };
-
-    struct TEvReplacementPolicySwitch : public TEventLocal<TEvReplacementPolicySwitch, EvReplacementPolicySwitch> {
-        using TReplacementPolicy = NKikimrSharedCache::TReplacementPolicy;
-
-        TReplacementPolicy ReplacementPolicy;
-
-        TEvReplacementPolicySwitch(TReplacementPolicy replacementPolicy)
-            : ReplacementPolicy(replacementPolicy)
-        {}
     };
 }
 }

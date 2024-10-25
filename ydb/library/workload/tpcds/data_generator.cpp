@@ -1,5 +1,4 @@
 #include "data_generator.h"
-#include "driver.h"
 #include <ydb/public/api/protos/ydb_formats.pb.h>
 #include <library/cpp/charset/wide.h>
 #include <util/string/escape.h>
@@ -54,19 +53,30 @@ TBulkDataGeneratorList TTpcdsWorkloadDataInitializerGenerator::DoGetBulkInitialD
     return TBulkDataGeneratorList(gens.begin(), gens.end());
 }
 
-ui64 TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::CalcCountToGenerate(const TTpcdsWorkloadDataInitializerGenerator& owner, int tableNum, bool useState) {
+TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TPositions TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::CalcCountToGenerate(const TTpcdsWorkloadDataInitializerGenerator& owner, int tableNum, bool useState) {
+    static const TSet<ui32> allowedModules{1, 2, 4};
+    TPositions result;
     const auto* tdef = getTdefsByNumber(tableNum);
     if (!tdef) {
-        return 0;
+        return result;
     }
-    i64 position = 0;
+    split_work(tableNum, &result.FirstRow, &result.Count);
     if (useState && owner.StateProcessor && owner.StateProcessor->GetState().contains(tdef->name)) {
-        position = owner.StateProcessor->GetState().at(tdef->name).Position;
+        result.Position = owner.StateProcessor->GetState().at(tdef->name).Position;
+        result.Count -= std::min<i64>(result.Count, result.Position);
+
+        //this magic is needed for SCD to work correctly. See setSCDKeys in ydb/library/benchmarks/gen/tpcds-dbgen/scd.c
+        while (result.Position && !allowedModules.contains((result.FirstRow + result.Position) % 6)) {
+            --result.Position;
+            ++result.Count;
+        }
     }
-    ds_key_t firstRow;
-    ds_key_t rowCount;
-    split_work(tableNum, &firstRow, &rowCount);
-    return rowCount > position ? (rowCount - position) : 0;
+    //this magic is needed for SCD to work correctly. See setSCDKeys in ydb/library/benchmarks/gen/tpcds-dbgen/scd.c
+    while (result.FirstRow > 1 && !allowedModules.contains((result.FirstRow + result.Position) % 6)) {
+        --result.FirstRow;
+        ++result.Count;
+    }
+    return result;
 }
 
 TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TContext::TContext(const TBulkDataGenerator& owner, int tableNum)
@@ -116,10 +126,10 @@ TString TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::GetFullTable
 }
 
 TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TBulkDataGenerator(const TTpcdsWorkloadDataInitializerGenerator& owner, int tableNum)
-    : IBulkDataGenerator(getTdefsByNumber(tableNum)->name, CalcCountToGenerate(owner, tableNum, true))
+    : IBulkDataGenerator(getTdefsByNumber(tableNum)->name, CalcCountToGenerate(owner, tableNum, true).Count)
     , TableNum(tableNum)
     , Owner(owner)
-    , TableSize(CalcCountToGenerate(owner, tableNum, false))
+    , TableSize(CalcCountToGenerate(owner, tableNum, false).Count)
 {}
 
 TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TDataPortions TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::GenerateDataPortion() {
@@ -136,16 +146,10 @@ TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TDataPortions TTpcds
     }
 
     auto g = Guard(Lock);
-    ds_key_t firstRow;
-    ds_key_t rowCount;
-    split_work(TableNum, &firstRow, &rowCount);
+    auto positions = CalcCountToGenerate(Owner, TableNum, !Generated);
     if (!Generated) {
-        ui32 toSkip = firstRow - 1;
-        if (!!Owner.StateProcessor && Owner.StateProcessor->GetState().contains(GetName())) {
-            Generated = Owner.StateProcessor->GetState().at(TString(GetName())).Position;
-            toSkip += Generated;
-        }
-        if (toSkip) {
+        Generated = positions.Position;
+        if (const ui32 toSkip = positions.FirstRow + positions.Position - 1) {
             row_skip(TableNum, toSkip);
             if (tdef->flags & FL_PARENT) {
                 row_skip(tdef->nParam, toSkip);
@@ -160,7 +164,7 @@ TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TDataPortions TTpcds
         return result;
     }
     ctxs.front().SetCount(count);
-    ctxs.front().SetStart(firstRow + Generated);
+    ctxs.front().SetStart(positions.FirstRow + Generated);
     Generated += count;
     GenerateRows(ctxs, std::move(g));
     for(auto& ctx: ctxs) {

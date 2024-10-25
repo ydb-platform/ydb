@@ -17,6 +17,10 @@ public:
         Column  /* "column" */,
         ExternalS3      /* "external-s3"     */
     };
+    enum class EQuerySyntax {
+        YQL /* "yql" */,
+        PG /* "pg"*/
+    };
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
     TString GetFullTableName(const char* table) const;
     YDB_ACCESSOR_DEF(TString, Path);

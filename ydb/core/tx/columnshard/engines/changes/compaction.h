@@ -25,7 +25,8 @@ protected:
         NeedGranuleStatusProvide = false;
     }
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
-        return std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier(), SwitchedPortions);
+        const THashSet<ui64> pathIds = { GranuleMeta->GetPathId() };
+        return std::make_shared<NDataLocks::TListTablesLock>(TypeString() + "::" + GetTaskIdentifier(), pathIds);
     }
 
 public:

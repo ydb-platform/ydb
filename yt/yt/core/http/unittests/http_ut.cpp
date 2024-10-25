@@ -206,6 +206,11 @@ struct TFakeConnection
         return true;
     }
 
+    bool IsReusable() const override
+    {
+        return true;
+    }
+
     TFuture<void> Abort() override
     {
         THROW_ERROR_EXCEPTION("Not implemented");

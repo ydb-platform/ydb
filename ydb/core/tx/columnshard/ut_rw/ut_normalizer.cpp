@@ -218,8 +218,26 @@ public:
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
         for (size_t pathId = 100; pathId != 299; ++pathId) {
-            for (size_t portionId = 1000; portionId != 1199; ++portionId) {
-                db.Table<Schema::IndexPortions>().Key(pathId, portionId).Update();
+            for (size_t portionId = pathId * 100000 + 1000; portionId != pathId * 100000 + 1199; ++portionId) {
+                NKikimrTxColumnShard::TIndexPortionMeta metaProto;
+                metaProto.SetDeletionsCount(0);
+                metaProto.SetIsInserted(true);
+
+                const auto schema = std::make_shared<arrow::Schema>(
+                    arrow::FieldVector({ std::make_shared<arrow::Field>("key1", arrow::uint64()), std::make_shared<arrow::Field>("key2", arrow::uint64()) }));
+                auto batch = NArrow::MakeEmptyBatch(schema, 1);
+                NArrow::TFirstLastSpecialKeys keys(batch);
+                metaProto.SetPrimaryKeyBorders(keys.SerializePayloadToString());
+                metaProto.MutableRecordSnapshotMin()->SetPlanStep(0);
+                metaProto.MutableRecordSnapshotMin()->SetTxId(0);
+                metaProto.MutableRecordSnapshotMax()->SetPlanStep(0);
+                metaProto.MutableRecordSnapshotMax()->SetTxId(0);
+                db.Table<Schema::IndexPortions>()
+                    .Key(pathId, portionId)
+                    .Update(NIceDb::TUpdate<Schema::IndexPortions::SchemaVersion>(1),
+                        NIceDb::TUpdate<Schema::IndexPortions::Metadata>(metaProto.SerializeAsString()),
+                        NIceDb::TUpdate<Schema::IndexPortions::MinSnapshotPlanStep>(10),
+                        NIceDb::TUpdate<Schema::IndexPortions::MinSnapshotTxId>(10));
             }
         }
     }

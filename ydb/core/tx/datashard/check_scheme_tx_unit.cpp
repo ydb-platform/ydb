@@ -39,6 +39,7 @@ private:
     bool CheckAlterCdcStream(TActiveTransaction *activeTx);
     bool CheckDropCdcStream(TActiveTransaction *activeTx);
     bool CheckCreateIncrementalRestoreSrc(TActiveTransaction *activeTx);
+    bool CheckCreateIncrementalBackupSrc(TActiveTransaction *activeTx);
 
     bool CheckSchemaVersion(TActiveTransaction *activeTx, ui64 proposedSchemaVersion, ui64 currentSchemaVersion, ui64 expectedSchemaVersion);
 
@@ -383,6 +384,9 @@ bool TCheckSchemeTxUnit::CheckSchemeTx(TActiveTransaction *activeTx)
         break;
     case TSchemaOperation::ETypeCreateIncrementalRestoreSrc:
         res = CheckCreateIncrementalRestoreSrc(activeTx);
+        break;
+    case TSchemaOperation::ETypeCreateIncrementalBackupSrc:
+        res = CheckCreateIncrementalBackupSrc(activeTx);
         break;
     default:
         LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
@@ -753,6 +757,27 @@ bool TCheckSchemeTxUnit::CheckCreateIncrementalRestoreSrc(TActiveTransaction *ac
     }
 
     // TODO: add additional checks
+
+    return true;
+}
+
+bool TCheckSchemeTxUnit::CheckCreateIncrementalBackupSrc(TActiveTransaction *activeTx) {
+    if (HasDuplicate(activeTx, "CreateIncrementalBackupSrc", &TPipeline::HasCreateIncrementalBackupSrc)) {
+        return false;
+    }
+
+    const auto &snap = activeTx->GetSchemeTx().GetCreateIncrementalBackupSrc().GetSendSnapshot();
+    ui64 tableId = snap.GetTableId_Deprecated();
+    if (snap.HasTableId()) {
+        Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == snap.GetTableId().GetOwnerId());
+        tableId = snap.GetTableId().GetTableId();
+    }
+    Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
+
+    const auto &notice = activeTx->GetSchemeTx().GetCreateIncrementalBackupSrc().GetCreateCdcStreamNotice();
+    if (!HasPathId(activeTx, notice, "CreateIncrementalBackupSrc")) {
+        return false;
+    }
 
     return true;
 }

@@ -1157,6 +1157,7 @@ namespace NSQLTranslationV1 {
         TIdentifier Name;
         TNodePtr Data;
         TNodePtr Compression;
+        TNodePtr CompressionLevel;
     };
 
     struct TVectorIndexSettings {
@@ -1533,20 +1534,35 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& topic, const TDropTopicParameters& params,
                             TScopedStatePtr scoped);
 
-    TNodePtr BuildCreateBackupCollection(TPosition pos, const TString& id,
+    TNodePtr BuildCreateBackupCollection(
+        TPosition pos,
+        const TString& prefix,
+        const TString& id,
         const TCreateBackupCollectionParameters& params,
         const TObjectOperatorContext& context);
-    TNodePtr BuildAlterBackupCollection(TPosition pos, const TString& id,
+    TNodePtr BuildAlterBackupCollection(
+        TPosition pos,
+        const TString& prefix,
+        const TString& id,
         const TAlterBackupCollectionParameters& params,
         const TObjectOperatorContext& context);
-    TNodePtr BuildDropBackupCollection(TPosition pos, const TString& id,
+    TNodePtr BuildDropBackupCollection(
+        TPosition pos,
+        const TString& prefix,
+        const TString& id,
         const TDropBackupCollectionParameters& params,
         const TObjectOperatorContext& context);
 
-    TNodePtr BuildBackup(TPosition pos, const TString& id,
+    TNodePtr BuildBackup(
+        TPosition pos,
+        const TString& prefix,
+        const TString& id,
         const TBackupParameters& params,
         const TObjectOperatorContext& context);
-    TNodePtr BuildRestore(TPosition pos, const TString& id,
+    TNodePtr BuildRestore(
+        TPosition pos,
+        const TString& prefix,
+        const TString& id,
         const TRestoreParameters& params,
         const TObjectOperatorContext& context);
 

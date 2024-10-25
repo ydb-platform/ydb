@@ -645,6 +645,11 @@ public:
             !PeerDisconnectedList_.IsFired();
     }
 
+    bool IsReusable()
+    {
+        return IsIdle();
+    }
+
     TFuture<void> Abort(const TError& error)
     {
         YT_LOG_DEBUG(error, "Aborting connection");
@@ -1211,6 +1216,11 @@ public:
     bool IsIdle() const override
     {
         return Impl_->IsIdle();
+    }
+
+    bool IsReusable() const override
+    {
+        return Impl_->IsReusable();
     }
 
     TFuture<void> Abort() override

@@ -25,7 +25,8 @@ private:
 
 public:
     ui64 GetTxVolume() const {
-        return 2 * sizeof(ui64) + sizeof(ui32) + sizeof(OriginalProto) + (SpecialKeysParsed ? SpecialKeysParsed->GetMemoryBytes() : 0);
+        return 512 + 2 * sizeof(ui64) + sizeof(ui32) + sizeof(OriginalProto) + (SpecialKeysParsed ? SpecialKeysParsed->GetMemoryBytes() : 0) +
+               SchemaSubset.GetTxVolume();
     }
 
     TInsertedDataMeta(const NKikimrTxColumnShard::TLogicalMetadata& proto)

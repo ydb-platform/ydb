@@ -60,6 +60,8 @@ public:
 
         TopicSession = Runtime.Register(NewTopicSession(
             topicPath,
+            GetDefaultPqEndpoint(),
+            GetDefaultPqDatabase(),
             Config,
             RowDispatcherActorId,
             0,

@@ -977,6 +977,9 @@ public:
 
     TCopyItem& SetOmitIndexes();
     bool OmitIndexes() const;
+
+    void Out(IOutputStream& out) const;
+
 private:
     TString Source_;
     TString Destination_;

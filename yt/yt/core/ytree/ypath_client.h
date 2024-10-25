@@ -258,13 +258,15 @@ TString SyncYPathGetKey(
 TFuture<NYson::TYsonString> AsyncYPathGet(
     const IYPathServicePtr& service,
     const TYPath& path,
-    const TAttributeFilter& attributeFilter = {});
+    const TAttributeFilter& attributeFilter = {},
+    const IAttributeDictionaryPtr& options = {});
 
 //! Executes |Get| verb assuming #service handles requests synchronously. Throws if an error has occurred.
 NYson::TYsonString SyncYPathGet(
     const IYPathServicePtr& service,
     const TYPath& path,
-    const TAttributeFilter& attributeFilter = {});
+    const TAttributeFilter& attributeFilter = {},
+    const IAttributeDictionaryPtr& options = {});
 
 //! Asynchronously executes |Exists| verb.
 TFuture<bool> AsyncYPathExists(

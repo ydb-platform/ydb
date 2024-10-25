@@ -69,6 +69,17 @@ const TSet<NUdf::EDataSlot> DEFAULT_BLOCK_READER_SUPPORTED_DATA_TYPES =
         NUdf::EDataSlot::String, NUdf::EDataSlot::Json,
         NUdf::EDataSlot::Yson, NUdf::EDataSlot::Utf8
     };
+const TSet<TString> DEFAULT_BLOCK_INPUT_SUPPORTED_TYPES = {"tuple"};
+const TSet<NUdf::EDataSlot> DEFAULT_BLOCK_INPUT_SUPPORTED_DATA_TYPES =
+    {
+        NUdf::EDataSlot::Int8, NUdf::EDataSlot::Uint8,
+        NUdf::EDataSlot::Int16, NUdf::EDataSlot::Uint16,
+        NUdf::EDataSlot::Int32, NUdf::EDataSlot::Uint32,
+        NUdf::EDataSlot::Int64, NUdf::EDataSlot::Uint64,
+        NUdf::EDataSlot::Bool, NUdf::EDataSlot::Double,
+        NUdf::EDataSlot::String, NUdf::EDataSlot::Utf8,
+        NUdf::EDataSlot::Yson
+    };
 
 constexpr auto DEFAULT_SWITCH_MEMORY_LIMIT = 128_MB;
 

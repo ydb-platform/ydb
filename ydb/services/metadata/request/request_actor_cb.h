@@ -10,7 +10,9 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/conclusion/result.h>
+#include <ydb/library/conclusion/generic/result.h>
+#include <ydb/library/conclusion/status.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 namespace NKikimr::NMetadata::NRequest {
 
@@ -64,15 +66,18 @@ private:
     std::shared_ptr<TNextController> NextController;
     const NACLib::TUserToken UserToken;
 protected:
-    TConclusion<typename TNextController::TDialogPolicy::TRequest> BuildNextRequest(typename TCurrentDialogPolicy::TResponse&& result) const {
+    using TYdbConclusionStatus = TConclusionSpecialStatus<Ydb::StatusIds::StatusCode, Ydb::StatusIds::SUCCESS, Ydb::StatusIds::INTERNAL_ERROR>;
+    using TRequestConclusion = TConclusionImpl<TYdbConclusionStatus, typename TNextController::TDialogPolicy::TRequest>;
+
+    TRequestConclusion BuildNextRequest(typename TCurrentDialogPolicy::TResponse&& result) const {
         return DoBuildNextRequest(std::move(result));
     }
 
-    virtual TConclusion<typename TNextController::TDialogPolicy::TRequest> DoBuildNextRequest(typename TCurrentDialogPolicy::TResponse&& result) const = 0;
+    virtual TRequestConclusion DoBuildNextRequest(typename TCurrentDialogPolicy::TResponse&& result) const = 0;
 public:
     using TDialogPolicy = TCurrentDialogPolicy;
     virtual void OnRequestResult(typename TCurrentDialogPolicy::TResponse&& result) override {
-        TConclusion<typename TNextController::TDialogPolicy::TRequest> nextRequest = BuildNextRequest(std::move(result));
+        TRequestConclusion nextRequest = BuildNextRequest(std::move(result));
         if (!nextRequest) {
             OnRequestFailed(nextRequest.GetStatus(), nextRequest.GetErrorMessage());
         } else {
@@ -113,14 +118,14 @@ private:
     TRequest ProtoRequest;
     TSessionContext::TPtr SessionContext;
 protected:
-    virtual TConclusion<typename TDialogPolicy::TRequest> DoBuildNextRequest(TDialogCreateSession::TResponse&& response) const override {
+    virtual TBase::TRequestConclusion DoBuildNextRequest(TDialogCreateSession::TResponse&& response) const override {
         auto result = ProtoRequest;
         Ydb::Table::CreateSessionResponse currentFullReply = std::move(response);
         Ydb::Table::CreateSessionResult session;
         currentFullReply.operation().result().UnpackTo(&session);
         const TString sessionId = session.session_id();
         if (!sessionId) {
-            return TConclusionStatus::Fail("cannot build session for request");
+            return TBase::TYdbConclusionStatus::Fail("cannot build session for request");
         }
         result.set_session_id(sessionId);
         SessionContext->SetSessionId(sessionId);

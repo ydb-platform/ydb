@@ -117,29 +117,6 @@ class PnpmPackageManager(BasePackageManager):
         return ins, outs, resources
 
     # TODO: FBP-1254
-    # def calc_prepare_deps_inouts(self, store_path: str, has_deps: bool) -> (list[str], list[str]):
-    def calc_prepare_deps_inouts(self, store_path, has_deps):
-        ins = [
-            s_rooted(build_pj_path(self.module_path)),
-            s_rooted(build_lockfile_path(self.module_path)),
-        ]
-        outs = [
-            b_rooted(build_ws_config_path(self.module_path)),
-            b_rooted(build_pre_lockfile_path(self.module_path)),
-        ]
-
-        if has_deps:
-            for dep_path in self.get_local_peers_from_package_json():
-                ins.append(b_rooted(build_ws_config_path(dep_path)))
-                ins.append(b_rooted(build_pre_lockfile_path(dep_path)))
-
-            for pkg in self.extract_packages_meta_from_lockfiles([build_lockfile_path(self.sources_path)]):
-                ins.append(b_rooted(self._contrib_tarball_path(pkg)))
-                outs.append(b_rooted(self._tarballs_store_path(pkg, store_path)))
-
-        return ins, outs
-
-    # TODO: FBP-1254
     # def calc_node_modules_inouts(self, local_cli=False) -> (list[str], list[str]):
     def calc_node_modules_inouts(self, local_cli=False):
         """

@@ -43,6 +43,29 @@ RESOURCE(
     ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpch/yql/q20.sql tpch/yql/q20.sql
     ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpch/yql/q21.sql tpch/yql/q21.sql
     ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpch/yql/q22.sql tpch/yql/q22.sql
+
+    s1_canonical/q1.result tpch/s1_canonical/q1.result
+    s1_canonical/q2.result tpch/s1_canonical/q2.result
+    s1_canonical/q3.result tpch/s1_canonical/q3.result
+    s1_canonical/q4.result tpch/s1_canonical/q4.result
+    s1_canonical/q5.result tpch/s1_canonical/q5.result
+    s1_canonical/q6.result tpch/s1_canonical/q6.result
+    s1_canonical/q7.result tpch/s1_canonical/q7.result
+    s1_canonical/q8.result tpch/s1_canonical/q8.result
+    s1_canonical/q9.result tpch/s1_canonical/q9.result
+    s1_canonical/q10.result tpch/s1_canonical/q10.result
+    s1_canonical/q11.result tpch/s1_canonical/q11.result
+    s1_canonical/q12.result tpch/s1_canonical/q12.result
+    s1_canonical/q13.result tpch/s1_canonical/q13.result
+    s1_canonical/q14.result tpch/s1_canonical/q14.result
+    s1_canonical/q15.result tpch/s1_canonical/q15.result
+    s1_canonical/q16.result tpch/s1_canonical/q16.result
+    s1_canonical/q17.result tpch/s1_canonical/q17.result
+    s1_canonical/q18.result tpch/s1_canonical/q18.result
+    s1_canonical/q19.result tpch/s1_canonical/q19.result
+    s1_canonical/q20.result tpch/s1_canonical/q20.result
+    s1_canonical/q21.result tpch/s1_canonical/q21.result
+    s1_canonical/q22.result tpch/s1_canonical/q22.result
 )
 
 PEERDIR(

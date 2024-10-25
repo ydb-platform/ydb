@@ -9,7 +9,7 @@
 #define ROWS M_MAX
 #define COLS K_MAX
 
-static inline int min(int a, int b)
+static inline uint64_t min(const uint64_t a, const uint64_t b)
 {
 	if (a <= b)
 		return a;
@@ -17,10 +17,11 @@ static inline int min(int a, int b)
 		return b;
 }
 
-void gen_sub_matrix(unsigned char *out_matrix, int dim, unsigned char *in_matrix, int rows,
-		    int cols, uint64_t row_indicator, uint64_t col_indicator)
+void gen_sub_matrix(unsigned char *out_matrix, const uint64_t dim, unsigned char *in_matrix,
+		    const uint64_t rows, const uint64_t cols, const uint64_t row_indicator,
+		    const uint64_t col_indicator)
 {
-	int i, j, r, s;
+	uint64_t i, j, r, s;
 
 	for (i = 0, r = 0; i < rows; i++) {
 		if (!(row_indicator & ((uint64_t) 1 << i)))
@@ -51,23 +52,23 @@ uint64_t next_subset(uint64_t * subset, uint64_t element_count, uint64_t subsize
 	return 0;
 }
 
-int are_submatrices_singular(unsigned char *vmatrix, int rows, int cols)
+int are_submatrices_singular(unsigned char *vmatrix, const uint64_t rows, const uint64_t cols)
 {
 	unsigned char matrix[COLS * COLS];
 	unsigned char invert_matrix[COLS * COLS];
-	uint64_t row_indicator, col_indicator, subset_init, subsize;
+	uint64_t subsize;
 
 	/* Check all square subsize x subsize submatrices of the rows x cols
 	 * vmatrix for singularity*/
 	for (subsize = 1; subsize <= min(rows, cols); subsize++) {
-		subset_init = (1 << subsize) - 1;
-		col_indicator = subset_init;
+		const uint64_t subset_init = (1ULL << subsize) - 1ULL;
+		uint64_t col_indicator = subset_init;
 		do {
-			row_indicator = subset_init;
+			uint64_t row_indicator = subset_init;
 			do {
 				gen_sub_matrix(matrix, subsize, vmatrix, rows,
 					       cols, row_indicator, col_indicator);
-				if (gf_invert_matrix(matrix, invert_matrix, subsize))
+				if (gf_invert_matrix(matrix, invert_matrix, (int)subsize))
 					return 1;
 
 			} while (next_subset(&row_indicator, rows, subsize) == 0);
@@ -80,7 +81,7 @@ int are_submatrices_singular(unsigned char *vmatrix, int rows, int cols)
 int main(int argc, char **argv)
 {
 	unsigned char vmatrix[(ROWS + COLS) * COLS];
-	int rows, cols;
+	uint64_t rows, cols;
 
 	if (K_MAX > MAX_CHECK) {
 		printf("K_MAX too large for this test\n");
@@ -108,7 +109,7 @@ int main(int argc, char **argv)
 				break;
 
 		}
-		printf("   k = %2d, m <= %2d \n", cols, rows + cols - 1);
+		printf("   k = %2u, m <= %2u \n", (unsigned)cols, (unsigned)(rows + cols - 1));
 
 	}
 	return 0;

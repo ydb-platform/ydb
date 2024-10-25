@@ -31,9 +31,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         auto ytGateway = CreateYtFileGateway(yqlNativeServices);
         auto typeAnnotationContext = MakeIntrusive<TTypeAnnotationContext>();
         typeAnnotationContext->RandomProvider = CreateDeterministicRandomProvider(1);
-        auto ytState = MakeIntrusive<TYtState>();
+        auto ytState = MakeIntrusive<TYtState>(typeAnnotationContext.Get());
         ytState->Gateway = ytGateway;
-        ytState->Types = typeAnnotationContext.Get();
 
         InitializeYtGateway(ytGateway, ytState);
         typeAnnotationContext->AddDataSink(YtProviderName, CreateYtDataSink(ytState));

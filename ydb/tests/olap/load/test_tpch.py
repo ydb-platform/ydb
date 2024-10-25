@@ -48,6 +48,7 @@ class TestTpch1(TpchSuiteBase):
         'lineitem': 6001215,
     }
     size: int = 1
+    check_canonical: bool = True
 
 
 class TestTpch10(TpchSuiteBase):

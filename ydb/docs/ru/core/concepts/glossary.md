@@ -351,7 +351,7 @@
 
 ### Контроллер памяти {#memory-controller}
 
-**Контроллер памяти** или **memory controller**— это [актор](#actor), который управляет [лимитами памяти](../deploy/configuration/config.md#memory-controller) {{ ydb-short-name }}.
+**Контроллер памяти** или **memory controller**— это [актор](#actor), который управляет [лимитами памяти](../reference/configuration/index.md#memory-controller) {{ ydb-short-name }}.
 
 ### Типы таблеток {#tablet-types}
 

@@ -1,5 +1,9 @@
 #include "table.h"
 
+Y_DECLARE_OUT_SPEC(, NYdb::NTable::TCopyItem, o, x) {
+    return x.Out(o);
+}
+
 Y_DECLARE_OUT_SPEC(, NYdb::NTable::TIndexDescription, o, x) {
     return x.Out(o);
 }

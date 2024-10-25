@@ -187,6 +187,8 @@ void TSingletonsDynamicConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("tcmalloc", &TThis::TCMalloc)
         .Optional();
+    registrar.Parameter("stockpile", &TThis::Stockpile)
+        .Optional();
     registrar.Parameter("protobuf_interop", &TThis::ProtobufInterop)
         .DefaultNew();
 }

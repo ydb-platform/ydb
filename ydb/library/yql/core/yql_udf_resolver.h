@@ -42,6 +42,7 @@ public:
         THashMap<TString, TString> SecureParams;
 
         // output
+        TString NormalizedName;
         const TTypeAnnotationNode* NormalizedUserType = nullptr;
         const TTypeAnnotationNode* RunConfigType = nullptr;
         const TTypeAnnotationNode* CallableType = nullptr;

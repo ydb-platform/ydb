@@ -146,6 +146,8 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
                 TryCommitTx(commitTime);
             }
 
+            ProducerIndex++;
+
             // ToDo: put in callback
             WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
                     << "Written message " << producer.MessageId - 1
@@ -162,8 +164,6 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
 
             Sleep(TDuration::MilliSeconds(1));
         }
-
-        ProducerIndex++;
     }
 }
 

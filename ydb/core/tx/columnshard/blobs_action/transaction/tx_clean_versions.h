@@ -5,9 +5,10 @@
 namespace NKikimr::NColumnShard {
 class TTxSchemaVersionsCleanup: public TTransactionBase<TColumnShard> {
 public:
-    TTxSchemaVersionsCleanup(TColumnShard* self)
-        : TBase(self) {
-        VersionsToRemove = Self->VersionCounters->GetVersionsToErase();
+    TTxSchemaVersionsCleanup(TColumnShard* self, THashSet<ui64>&& versionsToRemove)
+        : TBase(self)
+        , VersionsToRemove(versionsToRemove)
+    {
     }
 
     ~TTxSchemaVersionsCleanup() {

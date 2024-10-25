@@ -904,7 +904,7 @@ void TColumnShard::SetupCleanupUnusedSchemaVersions() {
         return;
     }
     BackgroundController.StartActiveCleanupUnusedSchemaVersions();
-    Execute(new TTxSchemaVersionsCleanup(this));
+    Execute(new TTxSchemaVersionsCleanup(this, std::move(VersionCounters->ExtractVersionsToErase())));
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, const TActorContext& ctx) {

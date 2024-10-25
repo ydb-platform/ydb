@@ -16,8 +16,6 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Removing schema version from db")("vesion", version)("tablet_id", Self->TabletID());
             table.Key(key.GetId(), key.GetPlanStep(), key.GetTxId()).Delete();
         }
-        AFL_VERIFY(Self->VersionCounters->GetVersionCounters().find(version) == Self->VersionCounters->GetVersionCounters().end());
-        AFL_VERIFY(Self->VersionCounters->GetVersionsToErase().erase(version));
     }
 
     return true;

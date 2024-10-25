@@ -89,6 +89,11 @@ namespace NProtoAST {
 
         void CollectTokens(IErrorCollector& errors, const NSQLTranslation::ILexer::TTokenCallback& onNextToken) {
             try {
+                bool error = false;
+                typename antlr4::YqlErrorListener listener(&errors, &error);
+                Lexer.removeErrorListeners();
+                Lexer.addErrorListener(&listener);
+
                 for (;;) {
                     auto token = Lexer.nextToken();
                     auto type = token->getType();

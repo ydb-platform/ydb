@@ -37,11 +37,14 @@ target_link_libraries(library-workload-benchmark_base PUBLIC
 target_sources(library-workload-benchmark_base PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/benchmark_base/workload.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/benchmark_base/state.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/benchmark_base/workload.h_serialized.h
 )
 
 
 generate_enum_serilization(library-workload-benchmark_base
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/benchmark_base/workload.h
+  GEN_HEADER
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/benchmark_base/workload.h_serialized.h
   INCLUDE_HEADERS
   ydb/library/workload/benchmark_base/workload.h
 )

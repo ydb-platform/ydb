@@ -56,14 +56,15 @@ target_link_libraries(library-workload-clickbench.global PUBLIC
 
 target_sources(library-workload-clickbench.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/clickbench/registrar.cpp
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/clickbench/c76f2d0579763b21c645747762833fdd.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/clickbench/268487f6638e88a726f7852e6ee0df2c.cpp
 )
 
 
 resources(library-workload-clickbench.global
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/clickbench/c76f2d0579763b21c645747762833fdd.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/clickbench/268487f6638e88a726f7852e6ee0df2c.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/clickbench/click_bench_queries.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/clickbench/click_bench_queries_pg.sql
   ${PROJECT_SOURCE_DIR}/ydb/tests/functional/clickbench/data/queries-deterministic.sql
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/clickbench/click_bench_schema.sql
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/clickbench/click_bench_canonical/q0.result
@@ -111,6 +112,7 @@ resources(library-workload-clickbench.global
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/clickbench/click_bench_canonical/q42.result
   KEYS
   click_bench_queries.sql
+  click_bench_queries_pg.sql
   queries-deterministic.sql
   click_bench_schema.sql
   click_bench_canonical/q0.result

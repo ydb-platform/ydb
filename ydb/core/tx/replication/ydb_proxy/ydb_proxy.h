@@ -133,7 +133,8 @@ struct TEvYdbProxy {
         using TBase = NYdb::NTopic::TReadSessionSettings;
 
         TTopicReaderSettings()
-            : TBase() {
+            : TBase()
+        {
             AutoPartitioningSupport(true);
         }
 

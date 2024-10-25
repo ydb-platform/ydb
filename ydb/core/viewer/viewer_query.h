@@ -877,6 +877,11 @@ public:
                 description: return ui64 as number to avoid 56-bit js rounding
                 type: boolean
                 required: false
+              - name: resource_pool
+                in: query
+                description: resource pool in which the query will be executed
+                type: string
+                required: false 
             requestBody:
                 description: Executes SQL query
                 required: false

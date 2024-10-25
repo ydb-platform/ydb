@@ -9,13 +9,15 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
     NIceDb::TNiceDb db(txc.DB);
 
     auto table = db.Table<NKikimr::NColumnShard::Schema::SchemaPresetVersionInfo>();
-    for (ui64 version: VersionsToRemove) {
+    for (const ui64 version: VersionsToRemove) {
         auto iter = Self->VersionCounters->GetVersionToKey().find(version);
         AFL_VERIFY(iter != Self->VersionCounters->GetVersionToKey().end());
         for (const NOlap::TVersionCounters::TSchemaKey& key: iter->second) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Removing schema version from db")("vesion", version)("tablet_id", Self->TabletID());
             table.Key(key.GetId(), key.GetPlanStep(), key.GetTxId()).Delete();
         }
+        AFL_VERIFY(Self->VersionCounters->GetVersionCounters().find(version) == Self->VersionCounters->GetVersionCounters().end());
+        AFL_VERIFY(Self->VersionCounters->GetVersionsToErase().erase(version));
     }
 
     return true;
@@ -24,7 +26,7 @@ void TTxSchemaVersionsCleanup::Complete(const TActorContext& /*ctx*/) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TTxSchemaVersionsCleanup::Complete")("tablet_id", Self->TabletID());
     TMemoryProfileGuard mpg("TTxSchemaVersionsCleanup::Complete");
 
-    for (ui64 version: VersionsToRemove) {
+    for (const ui64 version: VersionsToRemove) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Removing schema version from memory")("vesion", version)("tablet_id", Self->TabletID());
         Self->TablesManager.MutablePrimaryIndex().RemoveSchemaVersion(version);
     }

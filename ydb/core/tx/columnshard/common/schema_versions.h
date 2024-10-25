@@ -60,9 +60,8 @@ public:
         return !VersionsToErase.empty();
     }
 
-    void GetVersionsToErase(THashSet<ui64>& versions) {
-        versions = std::move(VersionsToErase);
-        VersionsToErase.clear();
+    THashSet<ui64> GetVersionsToErase() {
+        return VersionsToErase;
     }
 
     THashMap<ui64, ui32>& GetVersionCounters() {

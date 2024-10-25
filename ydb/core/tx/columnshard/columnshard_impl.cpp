@@ -385,6 +385,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
 
     // check schema changed
 
+    std::optional<NKikimrSchemeOp::TColumnTableSchema> schema;
     if (tableProto.HasSchemaPreset()) {
         Y_ABORT_UNLESS(!tableProto.HasSchema(), "Tables has either schema or preset");
 
@@ -398,7 +399,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
         }
     } else {
         Y_ABORT_UNLESS(tableProto.HasSchema(), "Tables has either schema or preset");
-        *tableVerProto.MutableSchema() = tableProto.GetSchema();
+        schema = tableProto.GetSchema();
     }
 
     {
@@ -421,7 +422,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
 
     tableVerProto.SetSchemaPresetVersionAdj(tableProto.GetSchemaPresetVersionAdj());
 
-    TablesManager.AddTableVersion(pathId, version, tableVerProto, db, Tiers);
+    TablesManager.AddTableVersion(pathId, version, tableVerProto, schema, db, Tiers);
     InsertTable->RegisterPathInfo(pathId);
 
     Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, TablesManager.GetTables().size());
@@ -442,11 +443,12 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
         << " at tablet " << TabletID());
 
     NKikimrTxColumnShard::TTableVersionInfo tableVerProto;
+    std::optional<NKikimrSchemeOp::TColumnTableSchema> schema;
     if (alterProto.HasSchemaPreset()) {
         tableVerProto.SetSchemaPresetId(alterProto.GetSchemaPreset().GetId());
         TablesManager.AddSchemaVersion(alterProto.GetSchemaPreset().GetId(), version, alterProto.GetSchemaPreset().GetSchema(), db, Tiers);
     } else if (alterProto.HasSchema()) {
-        *tableVerProto.MutableSchema() = alterProto.GetSchema();
+        schema = alterProto.GetSchema();
     }
 
     const auto& ttlSettings = alterProto.GetTtlSettings(); // Note: Not valid behaviour for full alter implementation
@@ -459,7 +461,7 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
     Schema::SaveTableInfo(db, pathId, tieringUsage);
 
     tableVerProto.SetSchemaPresetVersionAdj(alterProto.GetSchemaPresetVersionAdj());
-    TablesManager.AddTableVersion(pathId, version, tableVerProto, db, Tiers);
+    TablesManager.AddTableVersion(pathId, version, tableVerProto, schema, db, Tiers);
 }
 
 void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProto, const NOlap::TSnapshot& version,

@@ -139,6 +139,7 @@ ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_3_sessions
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_filter
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_filter_missing_fields
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_nested_types
+ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_scheme_error
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_simple_optional
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_start_new_query
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_stop_start

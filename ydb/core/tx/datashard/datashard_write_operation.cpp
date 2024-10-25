@@ -382,6 +382,8 @@ TString TWriteOperation::GetTxBody() const {
 }
 
 void TWriteOperation::SetTxBody(const TString& txBody) {
+    Y_ABORT_UNLESS(!WriteRequest);
+
     NKikimrTxDataShard::TSerializedEvent proto;
     const bool success = proto.ParseFromString(txBody);
     Y_ABORT_UNLESS(success);

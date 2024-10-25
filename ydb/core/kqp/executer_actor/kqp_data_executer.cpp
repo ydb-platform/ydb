@@ -238,7 +238,6 @@ public:
                     ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
 
                     if (TxManager) {
-                        LOG_D("TEST::ADDDSHARD>> R " << lock.GetDataShard() << " " << stageInfo.Meta.TablePath << " " << TxManager->GetShardsCount());
                         TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
                         TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
                         TxManager->AddLock(lock.GetDataShard(), lock);
@@ -286,13 +285,11 @@ public:
 
         if (!BufferActorId || (ReadOnlyTx && Request.LocksOp != ELocksOp::Rollback)) {
             Become(&TKqpDataExecuter::FinalizeState);
-            LOG_D("DON'T SEND ANYTHING " << BufferActorId);
-
             MakeResponseAndPassAway();
             return;
         }  else if (Request.LocksOp == ELocksOp::Commit && !ReadOnlyTx) {
             Become(&TKqpDataExecuter::FinalizeState);
-            LOG_D("SEND BUFFER COMMIT " << BufferActorId);
+            LOG_D("Send Commit to BufferActor=" << BufferActorId);
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
             event->ExecuterActorId = SelfId();
@@ -301,7 +298,7 @@ public:
             return;
         } else if (Request.LocksOp == ELocksOp::Rollback) {
             Become(&TKqpDataExecuter::FinalizeState);
-            LOG_D("SEND BUFFER ROLLBACK " << BufferActorId);
+            LOG_D("Send Rollback to BufferActor=" << BufferActorId);
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvRollback>();
             event->ExecuterActorId = SelfId();
@@ -310,7 +307,7 @@ public:
             return;
         } else if (Request.UseImmediateEffects) {
             Become(&TKqpDataExecuter::FinalizeState);
-            LOG_D("SEND BUFFER FLUSH " << BufferActorId);
+            LOG_D("Send Flush to BufferActor=" << BufferActorId);
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
             event->ExecuterActorId = SelfId();
@@ -318,7 +315,6 @@ public:
             return;
         } else {
             Become(&TKqpDataExecuter::FinalizeState);
-            LOG_D("SEND BUFFER SKIP FLUSH " << BufferActorId);
             MakeResponseAndPassAway();
             return;
         }
@@ -2302,12 +2298,10 @@ private:
         if (ImmediateTx) {
             LOG_D("ActorState: " << CurrentStateFuncName()
                 << ", immediate tx, become ExecuteState");
-            Y_ABORT_UNLESS(CurrentStateFuncName() != "FinalizeState");
             Become(&TKqpDataExecuter::ExecuteState);
         } else {
             LOG_D("ActorState: " << CurrentStateFuncName()
                 << ", not immediate tx, become PrepareState");
-            Y_ABORT_UNLESS(CurrentStateFuncName() != "FinalizeState");
             Become(&TKqpDataExecuter::PrepareState);
         }
     }
@@ -2892,7 +2886,7 @@ private:
 
     void HandleShutdown(TEvents::TEvPoison::TPtr& ev) {
         // Self-poison means timeout - don't wait anymore.
-        LOG_D("Timed out on waiting for Compute Actors to finish - forcing shutdown. Sender: " << ev->Sender);
+        LOG_I("Timed out on waiting for Compute Actors to finish - forcing shutdown. Sender: " << ev->Sender);
 
         if (ev->Sender == SelfId()) {
             PassAway();

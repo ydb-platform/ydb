@@ -200,8 +200,7 @@ public:
     }
 
     void Bootstrap() {
-        LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
-        CA_LOG_D("New TKqpTableWriteActor for table `" << TablePath << "` (" << TableId << ").");
+        LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", Table: `" << TablePath << "` (" << TableId << "), "<< LogPrefix;
         ResolveTable();
         Become(&TKqpTableWriteActor::StateProcessing);
     }
@@ -253,7 +252,7 @@ public:
             operationType,
             std::move(columnsMetadata),
             priority);
-        CA_LOG_D("Open write to " << TableId << " token=" << token);
+        CA_LOG_D("Open: token=" << token);
         return token;
     }
 
@@ -261,7 +260,7 @@ public:
         YQL_ENSURE(!data.IsWide(), "Wide stream is not supported yet");
         YQL_ENSURE(!Closed);
         YQL_ENSURE(ShardedWriteController);
-        CA_LOG_D("Write to " << TableId << " token=" << token);
+        CA_LOG_D("Write: token=" << token);
         try {
             ShardedWriteController->Write(token, data);
             UpdateShards();
@@ -275,7 +274,7 @@ public:
     void Close(TWriteToken token) {
         YQL_ENSURE(!Closed);
         YQL_ENSURE(ShardedWriteController);
-        CA_LOG_D("Close write to " << TableId << " token=" << token);
+        CA_LOG_D("Close: token=" << token);
         try {
             ShardedWriteController->Close(token);
             UpdateShards();
@@ -297,7 +296,6 @@ public:
     void UpdateShards() {
         // TODO: Maybe there are better ways to initialize new shards...
         for (const auto& shardInfo : ShardedWriteController->GetPendingShards()) {
-            CA_LOG_D("TEST::ADDDSHARD>> W " << shardInfo.ShardId << " " << TablePath << " " << TxManager->GetShardsCount());
             TxManager->AddShard(shardInfo.ShardId, IsOlap(), TablePath);
             TxManager->AddAction(shardInfo.ShardId, IKqpTransactionManager::EAction::WRITE);
             if (shardInfo.HasRead) {
@@ -368,7 +366,7 @@ public:
 
         if (ResolveAttempts++ >= MessageSettings.MaxResolveAttempts) {
             CA_LOG_E(TStringBuilder()
-                << "Too many table resolve attempts for table " << TableId << ".");
+                << "Too many table resolve attempts for table `" << TablePath << "` (" << TableId << ").");
             RuntimeError(
                 TStringBuilder()
                 << "Too many table resolve attempts for table `" << TablePath << "`.",
@@ -672,7 +670,7 @@ public:
         CA_LOG_D("Got completed result TxId=" << ev->Get()->Record.GetTxId()
             << ", TabletId=" << ev->Get()->Record.GetOrigin()
             << ", Cookie=" << ev->Cookie
-            << " MODETEST= " << static_cast<int>(Mode)
+            << ", Mode=" << static_cast<int>(Mode)
             << ", Locks=" << [&]() {
                 TStringBuilder builder;
                 for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
@@ -688,7 +686,8 @@ public:
                 NYql::TIssues issues;
                 issues.AddIssue(*TxManager->GetLockIssue());
                 RuntimeError(
-                    TStringBuilder() << "Transaction locks invalidated.",
+                    TStringBuilder() << "Transaction locks invalidated. Table `"
+                        << TablePath << "`.",
                     NYql::NDqProto::StatusIds::ABORTED,
                     issues);
                 return;
@@ -766,8 +765,6 @@ public:
 
         const bool isPrepare = metadata->IsFinal && Mode == EMode::PREPARE;
         const bool isImmediateCommit = metadata->IsFinal && Mode == EMode::IMMEDIATE_COMMIT;
-
-        Y_ABORT_UNLESS(!metadata->IsFinal || isPrepare || isImmediateCommit || Mode == EMode::WRITE); // TODO: delete
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>();
 
@@ -980,8 +977,6 @@ public:
         YQL_ENSURE(Settings.GetPriority() == 0);
         WriteToken = WriteTableActor->Open(GetOperation(Settings.GetType()), std::move(columnsMetadata), Settings.GetPriority());
         WaitingForTableActor = true;
-
-        CA_LOG_D("New TKqpDirectWriteActor for table `" << Settings.GetTable().GetPath() << "` (" << TableId << ").");
     }
 
     static constexpr char ActorName[] = "KQP_DIRECT_WRITE_ACTOR";
@@ -1074,7 +1069,6 @@ private:
     void PassAway() override {
         if (WriteTableActor) {
             WriteTableActor->Terminate();
-            //WriteTableActor->PassAway();
         }
         TActorBootstrapped<TKqpDirectWriteActor>::PassAway();
     }
@@ -1198,7 +1192,7 @@ public:
         WRITING, // Allow to write data to buffer.
         FLUSHING, // Force flush (for uncommitted changes visibility). Can't accept any writes in this state.
         PREPARING, // Do preparation for commit. All writers are closed. New writes wouldn't be accepted.
-        COMMITTING, // Do immediate commit (single shard). All writers are closed. New writes wouldn't be accepted.
+        COMMITTING, // Do commit. All writers are closed. New writes wouldn't be accepted.
         ROLLINGBACK, // Do rollback. New writes wouldn't be accepted.
         FINISHED,
     };
@@ -1356,18 +1350,16 @@ public:
             if (GetTotalFreeSpace() >= item.DataSize) {
                 auto result = std::make_unique<TEvBufferWriteResult>();
                 result->Token = AckQueue.front().Token;
-                CA_LOG_D("ProcessAckQueue ACK" << AckQueue.front().ForwardActorId);
                 Send(AckQueue.front().ForwardActorId, result.release());
                 AckQueue.pop();
             } else {
-                Y_ABORT_UNLESS(false);
+                YQL_ENSURE(false);
                 return;
             }
         }
     }
 
     void ProcessWrite() {
-        Y_ABORT_UNLESS(GetTotalFreeSpace() > 0); // TODO: delete
         const bool needToFlush = GetTotalFreeSpace() <= 0
             || State == EState::FLUSHING
             || State == EState::PREPARING
@@ -1375,7 +1367,7 @@ public:
             || State == EState::ROLLINGBACK;
 
         if (needToFlush) {
-            CA_LOG_D("DO FLUSH");
+            CA_LOG_D("Flush data");
             for (auto& [_, info] : WriteInfos) {
                 if (info.WriteTableActor->IsReady()) {
                     info.WriteTableActor->Flush();
@@ -1385,11 +1377,11 @@ public:
     }
 
     void Flush() {
-        CA_LOG_D("Start FLUSHING");
+        CA_LOG_D("Start flush");
         YQL_ENSURE(State == EState::WRITING);
         State = EState::FLUSHING;
         for (auto& [_, queue] : DataQueues) {
-            Y_ABORT_UNLESS(queue.empty());
+            YQL_ENSURE(queue.empty());
         }
         for (auto& [_, info] : WriteInfos) {
             info.WriteTableActor->FlushBuffers();
@@ -1398,11 +1390,11 @@ public:
     }
 
     void Prepare(const ui64 txId) {
-        CA_LOG_D("Start PREPARE");
+        CA_LOG_D("Start prepare for distributed commit");
         YQL_ENSURE(State == EState::WRITING);
         State = EState::PREPARING;
         for (auto& [_, queue] : DataQueues) {
-            Y_ABORT_UNLESS(queue.empty());
+            YQL_ENSURE(queue.empty());
         }
         TxId = txId;
         for (auto& [_, info] : WriteInfos) {
@@ -1414,13 +1406,12 @@ public:
     }
 
     void ImmediateCommit() {
-        CA_LOG_D("Start COMMIT I");
+        CA_LOG_D("Start immediate commit");
         YQL_ENSURE(State == EState::WRITING);
         State = EState::COMMITTING;
         for (auto& [_, queue] : DataQueues) {
-            Y_ABORT_UNLESS(queue.empty());
+            YQL_ENSURE(queue.empty());
         }
-        CA_LOG_D("Start immediate commit");
         for (auto& [_, info] : WriteInfos) {
             info.WriteTableActor->SetImmediateCommit();
         }
@@ -1429,13 +1420,12 @@ public:
     }
 
     void DistributedCommit() {
-        CA_LOG_D("Start COMMIT D");
+        CA_LOG_D("Start distributed commit with TxId=" << *TxId);
         YQL_ENSURE(State == EState::PREPARING);
         State = EState::COMMITTING;
         for (auto& [_, queue] : DataQueues) {
-            Y_ABORT_UNLESS(queue.empty());
+            YQL_ENSURE(queue.empty());
         }
-        CA_LOG_D("Start distributed commit TxId" << *TxId);
         for (auto& [_, info] : WriteInfos) {
             info.WriteTableActor->SetDistributedCommit();
         }
@@ -1443,7 +1433,7 @@ public:
     }
 
     void Rollback() {
-        CA_LOG_D("Start ROLLBACK");
+        CA_LOG_D("Start rollback");
         State = EState::ROLLINGBACK;
         SendToExternalShards(true);
     }
@@ -1522,7 +1512,9 @@ public:
         }
 
         //TODO: NDataIntegrity
-        CA_LOG_D("Execute planned transaction, coordinator: " << commitInfo.Coordinator << " volitale=" << ((transaction.GetFlags() & TEvTxProxy::TEvProposeTransaction::FlagVolatile) != 0) << " shards=" << affectedSet.size());
+        CA_LOG_D("Execute planned transaction, coordinator: " << commitInfo.Coordinator
+            << ", volitale: " << ((transaction.GetFlags() & TEvTxProxy::TEvProposeTransaction::FlagVolatile) != 0)
+            << ", shards: " << affectedSet.size());
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(ev.Release(), commitInfo.Coordinator, /* subscribe */ true));
     }
 
@@ -1580,14 +1572,12 @@ public:
         for (auto& [_, info] : WriteInfos) {
             if (info.WriteTableActor) {
                 info.WriteTableActor->Terminate();
-                //info.WriteTableActor->PassAway();
             }
         }
         TActorBootstrapped<TKqpBufferWriteActor>::PassAway();
     }
 
     void Handle(TEvTxProxy::TEvProposeTransactionStatus::TPtr &ev) {
-        // TODO: move it to commit actor???
         TEvTxProxy::TEvProposeTransactionStatus* res = ev->Get();
         CA_LOG_D("Got transaction status, status: " << res->GetStatus());
 
@@ -1607,7 +1597,7 @@ public:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclined:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclinedNoSpace:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting:
-                // TODO: CancelProposal
+                // TODO: CancelProposal???
                 ReplyErrorAndDie(TStringBuilder() << "Failed to plan transaction, status: " << res->GetStatus(), NYql::NDqProto::StatusIds::UNAVAILABLE, {});
                 break;
 
@@ -1800,7 +1790,7 @@ public:
 
     void ProcessWritePreparedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         if (State != EState::PREPARING) {
-            CA_LOG_D("ProcessWritePreparedShard: ignored");
+            CA_LOG_D("Ignored write prepared event.");
             return;
         }
         const auto& record = ev->Get()->Record;
@@ -1821,7 +1811,7 @@ public:
 
     void ProcessWriteCompletedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         if (State != EState::COMMITTING) {
-            CA_LOG_D("ProcessWriteCompletedShard: ignored");
+            CA_LOG_D("Ignored write completed event.");
             return;
         }
         CA_LOG_D("Got completed result TxId=" << ev->Get()->Record.GetTxId()
@@ -1844,7 +1834,6 @@ public:
 
     void OnPrepared(IKqpTransactionManager::TPrepareResult&& preparedInfo, ui64 dataSize) override {
         if (State != EState::PREPARING) {
-            CA_LOG_D("OnPrepared: ignored");
             return;
         }
         Y_UNUSED(preparedInfo, dataSize);
@@ -1859,10 +1848,8 @@ public:
 
     void OnCommitted(ui64 shardId, ui64 dataSize) override {
         if (State != EState::COMMITTING) {
-            CA_LOG_D("OnCommitted: ignored");
             return;
         }
-        CA_LOG_D("Recv committed");
         Y_UNUSED(shardId, dataSize);
         if (TxManager->ConsumeCommitResult(shardId)) {
             CA_LOG_D("Committed");
@@ -1994,7 +1981,7 @@ private:
     }
 
     void Handle(TEvBufferWriteResult::TPtr& result) {
-        CA_LOG_D("TKqpForwardWriteActor Recv from=" << BufferActorId);
+        CA_LOG_D("TKqpForwardWriteActor recieve EvBufferWriteResult from " << BufferActorId);
         EgressStats.Bytes += DataSize;
         EgressStats.Chunks++;
         EgressStats.Splits++;
@@ -2008,11 +1995,11 @@ private:
         }
 
         if (Closed) {
-            CA_LOG_D("TKqpForwardWriteActor FINISH");
+            CA_LOG_D("Finished");
             Callbacks->OnAsyncOutputFinished(GetOutputIndex());
             return;
         }
-        CA_LOG_D("TKqpForwardWriteActor RESUME free=" << GetFreeSpace());
+        CA_LOG_D("Resume with freeSpace=" << GetFreeSpace());
         Callbacks->ResumeExecution();
     }
 
@@ -2047,7 +2034,7 @@ private:
             };
         }
 
-        CA_LOG_D("TKqpForwardWriteActor SEND data=" << DataSize << " closed=" << Closed);
+        CA_LOG_D("Send data=" << DataSize << ", closed=" << Closed << ", bufferActorId=" << BufferActorId);
         AFL_ENSURE(Send(BufferActorId, ev.release()));
     }
 
@@ -2081,14 +2068,14 @@ private:
         Data->emplace_back(std::move(data));
         DataSize += size;
 
-        CA_LOG_D("TKqpForwardWriteActor ADD DATA : " << size << " / " << DataSize);
+        CA_LOG_D("Add data: " << size << " / " << DataSize);
         if (Closed || GetFreeSpace() <= 0) {
             WriteToBuffer();
         }
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
-        CA_LOG_E("TKqpForwardWriteActor ERROR : " << message);
+        CA_LOG_E("RuntimeError: " << message);
         NYql::TIssue issue(message);
         for (const auto& i : subIssues) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));

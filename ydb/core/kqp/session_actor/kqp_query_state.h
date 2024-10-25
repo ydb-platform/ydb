@@ -412,10 +412,7 @@ public:
         const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
         auto tx = PreparedQuery->GetPhyTxOrEmpty(CurrentTx);
 
-        //Cerr << ">>> CURRENT " << CurrentTx << Endl;
-
         if (TxCtx->CanDeferEffects()) { 
-            //Cerr << ">>> DEFER " << (tx != nullptr) << " " << (tx && tx->GetHasEffects()) << " " << !TxCtx->HasOlapTable << Endl;
             // At current time sinks require separate tnx with commit.
             while (tx && tx->GetHasEffects() && !TxCtx->HasOlapTable) {
                 QueryData->CreateKqpValueMap(tx);

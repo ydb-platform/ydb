@@ -1344,7 +1344,7 @@ public:
         auto ev = std::make_unique<TEvTxUserProxy::TEvProposeKqpTransaction>(exId);
         Send(MakeTxProxyID(), ev.release());
         if (!isRollback) {
-            Y_ABORT_UNLESS(!ExecuterId);
+            YQL_ENSURE(!ExecuterId);
         }
         ExecuterId = exId;
     }

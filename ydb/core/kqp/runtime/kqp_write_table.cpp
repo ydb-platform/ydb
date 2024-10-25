@@ -178,7 +178,7 @@ std::vector<std::pair<TString, NScheme::TTypeInfo>> BuildBatchBuilderColumns(
     result.reserve(columns.size());
     for (const auto& column : columns) {
         if (inputColumnsIds.contains(column.GetId())) {
-            Y_ABORT_UNLESS(column.HasTypeId());
+            YQL_ENSURE(column.HasTypeId());
             auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
                 column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
             result.emplace_back(column.GetName(), typeInfoMod.TypeInfo);
@@ -648,7 +648,7 @@ class TDataShardPayloadSerializer : public IPayloadSerializer {
         }
 
         ui64 AddRow(TRowWithData&& rowWithData) {
-            Y_ABORT_UNLESS(rowWithData.Cells.size() == ColumnCount);
+            YQL_ENSURE(rowWithData.Cells.size() == ColumnCount);
             ui64 newMemory = 0;
             for (const auto& cell : rowWithData.Cells) {
                 newMemory += cell.Size();
@@ -909,6 +909,7 @@ public:
         void MakeNextBatches(i64 maxDataSize, ui64 maxCount) {
             YQL_ENSURE(BatchesInFlight == 0);
             YQL_ENSURE(!IsEmpty());
+            YQL_ENSURE(maxCount != 0);
             i64 dataSize = 0;
             // For columnshard batch can be slightly larger than the limit.
             while (BatchesInFlight < maxCount
@@ -917,8 +918,8 @@ public:
                 dataSize += GetBatch(BatchesInFlight).GetMemory();
                 ++BatchesInFlight;
             }
-            YQL_ENSURE(BatchesInFlight == Batches.size() || dataSize + GetBatch(BatchesInFlight).GetMemory() > maxDataSize || BatchesInFlight >= maxCount);
-            Y_ABORT_UNLESS(BatchesInFlight == Batches.size());  // TODO: delete
+            YQL_ENSURE(BatchesInFlight != 0);
+            YQL_ENSURE(BatchesInFlight == Batches.size() || BatchesInFlight >= maxCount || dataSize + GetBatch(BatchesInFlight).GetMemory() > maxDataSize);
         }
 
         const TBatchWithMetadata& GetBatch(size_t index) const {
@@ -1321,7 +1322,7 @@ public:
             if (writeInfo.Serializer) {
                 total += writeInfo.Serializer->GetMemory();
             } else {
-                Y_ABORT_UNLESS(writeInfo.Closed);
+                YQL_ENSURE(writeInfo.Closed);
             }
         }
         return total;

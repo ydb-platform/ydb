@@ -104,13 +104,6 @@ struct TShortColumnInfo {
         , Type(type)
         , Name(name)
     {}
-
-    TString Dump() const {
-        TStringStream ss;
-        // TODO: support pg types
-        ss << "{Tag: " << Tag << ", Type: " << Type.GetTypeId() << ", Name: " << Name << "}";
-        return ss.Str();
-    }
 };
 
 struct TShortTableInfo {
@@ -145,16 +138,6 @@ struct TShortTableInfo {
     }
 
     TShortTableInfo& operator =(TShortTableInfo&& other) = default;
-
-    TString Dump() const {
-        TStringStream ss;
-        ss << "{LocalTid: " << LocalTid << ", SchemaVerstion: " << SchemaVersion  << ", Columns: {";
-        for (const auto& it: Columns) {
-            ss << it.second.Dump();
-        }
-        ss << "}";
-        return ss.Str();
-    }
 
     ui32 LocalTid = 0;
     ui64 SchemaVersion = 0;

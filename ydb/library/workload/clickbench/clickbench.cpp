@@ -98,16 +98,8 @@ TQueryInfoList TClickbenchWorkloadGenerator::GetWorkload(int type) {
         Y_ABORT_UNLESS(v.DeserializeFromString(i));
         vars.emplace_back(v);
     }
-    TString quote;
-    switch (Params.GetSyntax()) {
-    case TWorkloadBaseParams::EQuerySyntax::YQL:
-        quote = "`";
-        break;
-    case TWorkloadBaseParams::EQuerySyntax::PG:
-        quote = "\"";
-        break;
-    };
-    vars.emplace_back("table", quote + Params.GetPath() + quote);
+    const auto tablePath = Params.GetTablePathQuote(Params.GetSyntax()) + Params.GetPath() + Params.GetTablePathQuote(Params.GetSyntax());
+    vars.emplace_back("table", tablePath);
     ui32 resultsUsage = 0;
     for (ui32 i = 0; i < queries.size(); ++i) {
         auto& query = queries[i];
@@ -117,7 +109,7 @@ TQueryInfoList TClickbenchWorkloadGenerator::GetWorkload(int type) {
         for (auto&& v : vars) {
             SubstGlobal(query, "{" + v.GetId() + "}", v.GetValue());
         }
-        SubstGlobal(query, "$data", quote + Params.GetPath() + quote);
+        SubstGlobal(query, "$data", tablePath);
         result.emplace_back();
         result.back().Query = query;
         if (const auto* res = MapFindPtr(qResults, i)) {

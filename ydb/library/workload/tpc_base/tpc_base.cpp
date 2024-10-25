@@ -1,5 +1,6 @@
 #include "tpc_base.h"
 
+#include <ydb/library/workload/benchmark_base/workload.h_serialized.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <library/cpp/resource/resource.h>
@@ -14,6 +15,75 @@ TTpcBaseWorkloadGenerator::TTpcBaseWorkloadGenerator(const TTpcBaseWorkloadParam
     , Params(params)
 {}
 
+TQueryInfoList TTpcBaseWorkloadGenerator::GetInitialData() {
+    return {};
+}
+
+TVector<IWorkloadQueryGenerator::TWorkloadType> TTpcBaseWorkloadGenerator::GetSupportedWorkloadTypes() const {
+    return {TWorkloadType(0, "bench", "Perform benchmark", TWorkloadType::EKind::Benchmark)};
+}
+
+TQueryInfoList TTpcBaseWorkloadGenerator::GetWorkload(int type) {
+    TQueryInfoList result;
+    if (type) {
+        return result;
+    }
+    auto resourcePrefix = Params.GetWorkloadName() + "/";
+    SubstGlobal(resourcePrefix, "-", "");
+    resourcePrefix.to_lower();
+    TVector<TString> queries;
+    if (Params.GetExternalQueriesDir().IsDefined()) {
+        TVector<TString> queriesList;
+        TVector<ui32> queriesNums;
+        Params.GetExternalQueriesDir().ListNames(queriesList);
+        for (TStringBuf q: queriesList) {
+            ui32 num;
+            if (q.SkipPrefix("q") && q.ChopSuffix(".sql") && TryFromString(q, num)) {
+                queriesNums.push_back(num);
+            }
+        }
+        for (const auto& fname : queriesList) {
+            ui32 num;
+            TStringBuf q(fname);
+            if (!q.SkipPrefix("q") || !q.ChopSuffix(".sql") || !TryFromString(q, num)) {
+                continue;
+            }
+            if (queries.size() < num + 1) {
+                queries.resize(num + 1);
+            }
+            TFileInput fInput(Params.GetExternalQueriesDir() / fname);
+            queries[num] = fInput.ReadAll();
+        }
+    } else {
+        NResource::TResources qresources;
+        const auto prefix = resourcePrefix + ToString(Params.GetSyntax()) + "/q";
+        NResource::FindMatch(prefix, &qresources);
+        for (const auto& r: qresources) {
+            ui32 num;
+            TStringBuf q(r.Key);
+            if (!q.SkipPrefix(prefix) || !q.ChopSuffix(".sql") || !TryFromString(q, num)) {
+                continue;
+            }
+            if (queries.size() < num + 1) {
+                queries.resize(num + 1);
+            }
+            queries[num] = r.Data;
+        }
+    }
+    for (auto& query : queries) {
+        PatchQuery(query);
+        result.emplace_back();
+        result.back().Query = query;
+        if (Params.GetCheckCanonical()) {
+            const auto key = resourcePrefix + "s1_canonical/q" + ToString(&query - queries.data()) + ".result";
+            if (NResource::Has(key)) {
+                result.back().ExpectedResult = NResource::Find(key);
+            }
+        }
+    }
+    return result;
+}
+
 void TTpcBaseWorkloadGenerator::PatchQuery(TString& query) const {
     TString header;
     switch (Params.GetFloatMode()) {
@@ -27,6 +97,13 @@ void TTpcBaseWorkloadGenerator::PatchQuery(TString& query) const {
     }
     PatchHeader(header);
     SubstGlobal(query, "{% include 'header.sql.jinja' %}", header);
+    SubstGlobal(query, "{path}", Params.GetFullTableName(nullptr) + "/");
+    for (const auto& table: GetTablesList()) {
+        SubstGlobal(query, 
+            TStringBuilder() << "{{" << table << "}}", 
+            TStringBuilder() << Params.GetTablePathQuote(Params.GetSyntax()) << Params.GetPath() << "/" << table << Params.GetTablePathQuote(Params.GetSyntax())
+        );
+    }
 }
 
 TString TTpcBaseWorkloadGenerator::FilterHeader(TStringBuf header, const TString& query) const {
@@ -49,6 +126,9 @@ TString TTpcBaseWorkloadGenerator::FilterHeader(TStringBuf header, const TString
 }
 
 void TTpcBaseWorkloadGenerator::PatchHeader(TString& header) const {
+    if (Params.GetSyntax() == TWorkloadBaseParams::EQuerySyntax::PG) {
+        header = "--!syntax_pg\n" + header;
+    }
     if (Params.GetFloatMode() != TTpcBaseWorkloadParams::EFloatMode::DECIMAL_YDB) {
         return;
     }
@@ -73,6 +153,11 @@ void TTpcBaseWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComm
     TWorkloadBaseParams::ConfigureOpts(opts, commandType, workloadType);
     switch (commandType) {
     case TWorkloadParams::ECommandType::Run:
+        opts.AddLongOption("ext-queries-dir", "Directory with external queries. Naming have to be q[0-N].sql")
+            .StoreResult(&ExternalQueriesDir);
+        opts.AddLongOption( "syntax", "Query syntax [" + GetEnumAllNames<EQuerySyntax>() + "].")
+            .StoreResult(&Syntax).DefaultValue(Syntax);
+        break;
     case TWorkloadParams::ECommandType::Init:
         opts.AddLongOption("float-mode", "Float mode. Can be float, decimal or decimal_ydb. If set to 'float' - float will be used, 'decimal' means that decimal will be used with canonical size and 'decimal_ydb' means that all floats will be converted to decimal(22,9) because YDB supports only this type.")
             .StoreResult(&FloatMode).DefaultValue(FloatMode);
@@ -81,5 +166,6 @@ void TTpcBaseWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComm
         break;
     }
 }
+
 
 }

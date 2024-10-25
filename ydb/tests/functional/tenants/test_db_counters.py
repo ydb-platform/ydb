@@ -134,6 +134,17 @@ class TestKqpCounters(BaseDbCounters):
         self.check_db_counters(sensors_to_check, 'kqp')
 
 
+@pytest.fixture(
+    scope="module",
+    params=[True, False],
+    ids=["enable_separate_disk_space_quotas", "disable_separate_disk_space_quotas"],
+)
+def ydb_cluster_configuration(request):
+    return (
+        dict(extra_feature_flags=["enable_separate_disk_space_quotas"]) if request.param else dict()
+    )
+
+
 @pytest.fixture(scope="function")
 def ydb_database(ydb_cluster, ydb_root, ydb_safe_test_name):
     database = os.path.join(ydb_root, ydb_safe_test_name)
@@ -223,7 +234,17 @@ def describe(client, path):
     return client.describe(path, token="")
 
 
-def check_disk_quota_exceedance(client, database, retries, sleep_duration):
+def get_effective_feature_flag_value(ydb_cluster, feature_flag_snake_case, feature_flag_camel_case) -> bool:
+    set_feature_flags = ydb_cluster.config.yaml_config["feature_flags"]
+    default_feature_flags = config_pb2.TAppConfig().FeatureFlags
+    return (
+        set_feature_flags[feature_flag_snake_case]
+        if feature_flag_snake_case in set_feature_flags
+        else getattr(default_feature_flags, feature_flag_camel_case)
+    )
+
+
+def check_disk_quota_exceedance(client, database, retries=10, sleep_duration=5):
     for attempt in range(retries):
         path_description = describe(client, database)
         domain_description = path_description.PathDescription.DomainDescription
@@ -241,7 +262,18 @@ def check_disk_quota_exceedance(client, database, retries, sleep_duration):
     assert False, "database did not move into DiskQuotaExceeded state"
 
 
-def check_counters(mon_port, sensors_to_check, retries, sleep_duration):
+def wait_for_stats(client, table, retries=10, sleep_duration=5):
+    for attempt in range(retries):
+        usage = describe(client, table).PathDescription.TableStats.StoragePools.PoolsUsage
+        if len(usage) > 0:
+            return usage
+        time.sleep(sleep_duration)
+
+    assert False, "haven't received non-null table stats in the alloted time"
+
+
+# Note: the default total sleep time is 300 seconds, because 200 seconds can sometimes be not enough
+def check_counters(mon_port, sensors_to_check, retries=60, sleep_duration=5):
     for attempt in range(retries + 1):
         counters = get_db_counters(mon_port, "ydb")
         correct_sensors = 0
@@ -309,8 +341,7 @@ class TestStorageCounters:
         slot_mon_port = ydb_cluster.slots[1].mon_port
         # Note 1: limit_bytes is equal to the database's SOFT quota
         # Note 2: .hdd counter aggregates quotas across all storage pool kinds with prefix "hdd", i.e. "hdd" and "hdd1"
-        # Note 3: 200 seconds can sometimes be not enough
-        check_counters(slot_mon_port, {"resources.storage.limit_bytes.hdd": 11}, retries=60, sleep_duration=5)
+        check_counters(slot_mon_port, {"resources.storage.limit_bytes.hdd": 11})
 
         pool = ydb_client_session(database_path)
         with pool.checkout() as session:
@@ -326,16 +357,15 @@ class TestStorageCounters:
             assert_that(new_partition_config.CompactionPolicy.InMemForceSizeToSnapshot, equal_to(1))
 
             insert_data(session, table)
-            check_disk_quota_exceedance(client, database_path, retries=10, sleep_duration=5)
+            if get_effective_feature_flag_value(
+                ydb_cluster, "enable_separate_disk_space_quotas", "EnableSeparateDiskSpaceQuotas"
+            ):
+                check_disk_quota_exceedance(client, database_path)
 
-            set_feature_flags = ydb_cluster.config.yaml_config["feature_flags"]
-            default_feature_flags = config_pb2.TAppConfig().FeatureFlags
-            btree_index_feature_flag = (
-                set_feature_flags["enable_local_dbbtree_index"]
-                if "enable_local_dbbtree_index" in set_feature_flags
-                else default_feature_flags.EnableLocalDBBtreeIndex
+            btree_index_feature_flag = get_effective_feature_flag_value(
+                ydb_cluster, "enable_local_dbbtree_index", "EnableLocalDBBtreeIndex"
             )
-            usage = describe(client, table).PathDescription.TableStats.StoragePools.PoolsUsage
+            usage = wait_for_stats(client, table)
             assert len(usage) == 2
             assert json_format.MessageToDict(usage[0], preserving_proto_field_name=True) == {
                 "PoolKind": "hdd",
@@ -360,8 +390,6 @@ class TestStorageCounters:
                     "resources.storage.table.used_bytes.ssd": 0,
                     "resources.storage.table.used_bytes.hdd": used_bytes_by_tables,
                 },
-                retries=60,
-                sleep_duration=5,
             )
 
             drop_table(session, table)
@@ -376,6 +404,4 @@ class TestStorageCounters:
                     "resources.storage.table.used_bytes.ssd": 0,
                     "resources.storage.table.used_bytes.hdd": 0,
                 },
-                retries=60,
-                sleep_duration=5,
             )

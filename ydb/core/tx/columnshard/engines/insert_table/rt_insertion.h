@@ -142,14 +142,14 @@ private:
 
     void OnNewCommitted(const ui64 dataSize, const bool load = false) noexcept;
     void OnEraseCommitted(TPathInfo& pathInfo, const ui64 dataSize) noexcept;
-    void OnNewInserted(TPathInfo& pathInfo, const ui64 dataSize, const ui64 version, const bool load) noexcept;
-    void OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize, const ui64 version) noexcept;
-    void OnNewAborted(const ui64 version);
-    void OnEraseAborted(const ui64 version);
+    void OnNewInserted(TPathInfo& pathInfo, const ui64 dataSize, const ui64 schemaVversion, const bool load) noexcept;
+    void OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize, const ui64 schemaVersion) noexcept;
+    void OnNewAborted(const ui64 schemaVersion);
+    void OnEraseAborted(const ui64 schemaVersion);
     static TAtomicCounter CriticalInserted;
 
 public:
-    TInsertionSummary(std::shared_ptr<TVersionCounters>& versionCounters)
+    TInsertionSummary(const std::shared_ptr<TVersionCounters>& versionCounters)
         : VersionCounters(versionCounters)
     {
     }

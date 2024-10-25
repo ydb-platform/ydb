@@ -30,6 +30,16 @@ void TGranuleMeta::UpsertPortion(const TPortionInfo& info) {
         }
     } else {
         OnBeforeChangePortion(it->second);
+        if (info.GetSchemaVersionOptional() != it->second->GetSchemaVersionOptional()) {
+            auto schemaVersionOpt = info.GetSchemaVersionOptional();
+            if (schemaVersionOpt.has_value()) {
+                VersionCounters->VersionAddRef(*schemaVersionOpt);
+            }
+            schemaVersionOpt = it->second->GetSchemaVersionOptional();
+            if (schemaVersionOpt.has_value()) {
+                VersionCounters->VersionRemoveRef(*schemaVersionOpt);
+            }
+        }
         it->second = std::make_shared<TPortionInfo>(info);
     }
     OnAfterChangePortion(it->second, nullptr);

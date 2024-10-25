@@ -72,31 +72,31 @@ bool TInsertionSummary::IsOverloaded(const ui64 pathId) const {
     }
 }
 
-void TInsertionSummary::OnNewInserted(TPathInfo& pathInfo, const ui64 dataSize, const ui64 version, const bool load) noexcept {
+void TInsertionSummary::OnNewInserted(TPathInfo& pathInfo, const ui64 dataSize, const ui64 schemaVersion, const bool load) noexcept {
     Counters.Inserted.Add(dataSize, load);
     pathInfo.AddInsertedSize(dataSize, TCompactionLimits::OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID);
     ++StatsPrepared.Rows;
     StatsPrepared.Bytes += dataSize;
     AFL_VERIFY(Counters.Inserted.GetDataSize() == (i64)StatsPrepared.Bytes);
-    VersionCounters->VersionAddRef(version, "insert_table");
+    VersionCounters->VersionAddRef(schemaVersion, "insert_table");
 }
 
-void TInsertionSummary::OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize, const ui64 version) noexcept {
+void TInsertionSummary::OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize, const ui64 schemaVersion) noexcept {
     Counters.Inserted.Erase(dataSize);
     pathInfo.AddInsertedSize(-1 * (i64)dataSize, TCompactionLimits::OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID);
     Y_ABORT_UNLESS(--StatsPrepared.Rows >= 0);
     Y_ABORT_UNLESS(StatsPrepared.Bytes >= dataSize);
     StatsPrepared.Bytes -= dataSize;
     AFL_VERIFY(Counters.Inserted.GetDataSize() == (i64)StatsPrepared.Bytes);
-    VersionCounters->VersionRemoveRef(version, "insert_table");
+    VersionCounters->VersionRemoveRef(schemaVersion, "insert_table");
 }
 
 THashSet<TInsertWriteId> TInsertionSummary::GetExpiredInsertions(const TInstant timeBorder, const ui64 limit) const {
     return Inserted.GetExpired(timeBorder, limit);
 }
 
-void TInsertionSummary::OnEraseAborted(ui64 const version) {
-    VersionCounters->VersionRemoveRef(version, "insert_table");
+void TInsertionSummary::OnEraseAborted(ui64 const schemaVersion) {
+    VersionCounters->VersionRemoveRef(schemaVersion, "insert_table");
 }
 
 bool TInsertionSummary::EraseAborted(const TInsertWriteId writeId) {
@@ -141,8 +141,8 @@ bool TInsertionSummary::HasCommitted(const TCommittedData& data) {
     return pathInfo->HasCommitted(data);
 }
 
-void TInsertionSummary::OnNewAborted(const ui64 version) {
-    VersionCounters->VersionAddRef(version, "insert_table");
+void TInsertionSummary::OnNewAborted(const ui64 schemaVersion) {
+    VersionCounters->VersionAddRef(schemaVersion, "insert_table");
 }
 
 const TInsertedData* TInsertionSummary::AddAborted(TInsertedData&& data, const bool load /*= false*/) {

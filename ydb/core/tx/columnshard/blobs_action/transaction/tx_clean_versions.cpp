@@ -22,13 +22,11 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
 }
 void TTxSchemaVersionsCleanup::Complete(const TActorContext& /*ctx*/) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TTxSchemaVersionsCleanup::Complete")("tablet_id", Self->TabletID());
-    TMemoryProfileGuard mpg("TTxSchemaVersionsCleanup::Complete");
 
     for (const ui64 version: VersionsToRemove) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Removing schema version from memory")("vesion", version)("tablet_id", Self->TabletID());
         Self->TablesManager.MutablePrimaryIndex().RemoveSchemaVersion(version);
     }
-    VersionsToRemove.clear();
 
     Self->BackgroundController.FinishActiveCleanupUnusedSchemaVersions();
 }

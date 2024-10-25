@@ -41,19 +41,18 @@ public:
             VersionsToErase.erase(version);
         }
         count++;
-        Y_UNUSED(count);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "version_addref")("source", source)("version", version)("ref_count", count);
     }
 
-    ui32 VersionRemoveRef(const ui64 version, const char* source = "portions") {
+    void VersionRemoveRef(const ui64 version, const char* source = "portions") {
         ui32& count = VersionCounters[version];
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "version_removref")("source", source)("version", version)("ref_count", count - 1);
         AFL_VERIFY(count > 0);
         if (--count == 0) {
-            VersionsToErase.insert(version);
-            VersionCounters.erase(version);
+            AFL_VERIFY(VersionsToErase.insert(version).second);
+            AFL_VERIFY(VersionCounters.erase(version));
         }
-        return count;
+        return;
     }
 
     bool HasUnusedSchemaVersions() const {

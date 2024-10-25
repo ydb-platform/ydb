@@ -2,11 +2,7 @@
 
 #include "column_engine.h"
 #include "defs.h"
-#include <ydb/core/tx/columnshard/counters/engine_logs.h>
-#include <ydb/core/tx/columnshard/columnshard_ttl.h>
-#include <ydb/core/tx/columnshard/common/limits.h>
-#include <ydb/core/tx/columnshard/common/scalars.h>
-#include <ydb/core/tx/columnshard/common/schema_versions.h>
+
 
 #include "changes/actualization/controller/controller.h"
 #include "scheme/tier_info.h"
@@ -18,6 +14,7 @@
 
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
+#include <ydb/core/tx/columnshard/common/schema_versions.h>
 #include <ydb/core/tx/columnshard/counters/common_data.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 

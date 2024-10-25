@@ -120,9 +120,5 @@ public:
     bool LoadShardingInfo(IDbWrapper& db);
 
     void RemoveVersion(const ui64 version);
-
-    ui64 GetLastSchemaVersion() const {
-        return LastSchemaVersion;
-    }
 };
 }   // namespace NKikimr::NOlap

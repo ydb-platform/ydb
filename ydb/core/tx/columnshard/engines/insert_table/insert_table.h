@@ -17,7 +17,6 @@ class IDbWrapper;
 
 class TInsertTableAccessor {
 protected:
-    std::shared_ptr<NOlap::TVersionCounters> VersionCounters;
     TInsertionSummary Summary;
     THashMap<TUnifiedBlobId, ui32> BlobLinks;
 
@@ -30,8 +29,7 @@ protected:
 
 public:
     TInsertTableAccessor(const std::shared_ptr<NOlap::TVersionCounters>& versionCounters)
-        : VersionCounters(versionCounters)
-        , Summary(VersionCounters)
+        : Summary(versionCounters)
     {
     }
     TPathInfo& RegisterPathInfo(const ui64 pathId) {

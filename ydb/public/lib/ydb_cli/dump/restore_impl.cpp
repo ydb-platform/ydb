@@ -7,9 +7,8 @@
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
+#include <ydb/public/lib/ydb_cli/dump/util/log.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
-
-#include <library/cpp/logger/log.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -18,17 +17,6 @@
 #include <util/stream/file.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
-
-#define LOG_IMPL(log, level, message) \
-    if (log.FiltrationLevel() >= level) { \
-        log.Write(level, TStringBuilder() << message); \
-    } \
-    Y_SEMICOLON_GUARD
-
-#define LOG_D(message) LOG_IMPL(Log, ELogPriority::TLOG_DEBUG, message)
-#define LOG_I(message) LOG_IMPL(Log, ELogPriority::TLOG_INFO, message)
-#define LOG_W(message) LOG_IMPL(Log, ELogPriority::TLOG_WARNING, message)
-#define LOG_E(message) LOG_IMPL(Log, ELogPriority::TLOG_ERR, message)
 
 namespace NYdb {
 namespace NDump {
@@ -48,7 +36,7 @@ bool IsFileExists(const TFsPath& path) {
     return path.Exists() && path.IsFile();
 }
 
-Ydb::Table::CreateTableRequest ReadTableScheme(const TString& fsPath, TLog& log) {
+Ydb::Table::CreateTableRequest ReadTableScheme(const TString& fsPath, const TLog* log) {
     LOG_IMPL(log, ELogPriority::TLOG_DEBUG, "Read scheme from " << fsPath.Quote());
     Ydb::Table::CreateTableRequest proto;
     Y_ENSURE(google::protobuf::TextFormat::ParseFromString(TFileInput(fsPath).ReadAll(), &proto));
@@ -64,7 +52,7 @@ TTableDescription TableDescriptionWithoutIndexesFromProto(Ydb::Table::CreateTabl
     return TableDescriptionFromProto(proto);
 }
 
-Ydb::Scheme::ModifyPermissionsRequest ReadPermissions(const TString& fsPath, TLog& log) {
+Ydb::Scheme::ModifyPermissionsRequest ReadPermissions(const TString& fsPath, const TLog* log) {
     LOG_IMPL(log, ELogPriority::TLOG_DEBUG, "Read ACL from " << fsPath.Quote());
     Ydb::Scheme::ModifyPermissionsRequest proto;
     Y_ENSURE(google::protobuf::TextFormat::ParseFromString(TFileInput(fsPath).ReadAll(), &proto));
@@ -95,17 +83,12 @@ bool IsOperationStarted(TStatus operationStatus) {
 
 } // anonymous
 
-TRestoreClient::TRestoreClient(
-        TLog& log,
-        TImportClient& importClient,
-        TOperationClient& operationClient,
-        TSchemeClient& schemeClient,
-        TTableClient& tableClient)
-    : Log(log)
-    , ImportClient(importClient)
-    , OperationClient(operationClient)
-    , SchemeClient(schemeClient)
-    , TableClient(tableClient)
+TRestoreClient::TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog>& log)
+    : ImportClient(driver)
+    , OperationClient(driver)
+    , SchemeClient(driver)
+    , TableClient(driver)
+    , Log(log)
 {
 }
 
@@ -262,7 +245,7 @@ TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString
             TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
     }
 
-    auto scheme = ReadTableScheme(fsPath.Child(SCHEME_FILE_NAME), Log);
+    auto scheme = ReadTableScheme(fsPath.Child(SCHEME_FILE_NAME), Log.get());
     auto dumpedDesc = TableDescriptionFromProto(scheme);
 
     if (dumpedDesc.GetAttributes().contains(DOC_API_TABLE_VERSION_ATTR) && settings.SkipDocumentTables_) {
@@ -389,7 +372,7 @@ TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString&
             }
 
             accumulator.Reset(CreateImportDataAccumulator(desc, *actualDesc, settings));
-            writer.Reset(CreateImportDataWriter(dbPath, desc, ImportClient, TableClient, accumulator.Get(), settings));
+            writer.Reset(CreateImportDataWriter(dbPath, desc, ImportClient, TableClient, accumulator.Get(), settings, Log));
 
             break;
         }
@@ -509,7 +492,7 @@ TRestoreResult TRestoreClient::RestorePermissions(const TFsPath& fsPath, const T
 
     LOG_D("Restore ACL " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
 
-    auto permissions = ReadPermissions(fsPath.Child(PERMISSIONS_FILE_NAME), Log);
+    auto permissions = ReadPermissions(fsPath.Child(PERMISSIONS_FILE_NAME), Log.get());
     return ModifyPermissions(SchemeClient, dbPath, TModifyPermissionsSettings(permissions));
 }
 

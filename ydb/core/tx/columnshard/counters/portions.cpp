@@ -30,6 +30,7 @@ void TSimplePortionsGroupInfo::AddPortion(const TPortionInfo& p) {
     RawBytes += p.GetTotalRawBytes();
     Count += 1;
     RecordsCount += p.NumRows();
+    ChunksCount += p.GetChunksCount();
 }
 
 void TSimplePortionsGroupInfo::RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
@@ -41,10 +42,12 @@ void TSimplePortionsGroupInfo::RemovePortion(const TPortionInfo& p) {
     RawBytes -= p.GetTotalRawBytes();
     Count -= 1;
     RecordsCount -= p.NumRows();
+    ChunksCount -= p.GetChunksCount();
     AFL_VERIFY(RawBytes >= 0);
     AFL_VERIFY(BlobBytes >= 0);
     AFL_VERIFY(Count >= 0);
     AFL_VERIFY(RecordsCount >= 0);
+    AFL_VERIFY(ChunksCount >= 0);
 }
 
 }   // namespace NKikimr::NOlap

@@ -24,15 +24,6 @@ ydb/core/kqp/ut/olap KqpOlapBlobsSharing.TableReshardingConsistency64
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.TableReshardingModuloN
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.UpsertWhileSplitTest
 ydb/core/kqp/ut/olap KqpOlapStatistics.StatsUsageWithTTL
-ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictStatActualization
-ydb/core/kqp/ut/olap KqpOlapAggregations.Aggregation_SumL_GroupL_OrderL
-ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesActualization
-ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesInBS
-ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesInLocalMetadata
-ydb/core/tx/columnshard/ut_rw Normalizers.CleanEmptyPortionsNormalizer
-ydb/core/kqp/ut/pg KqpPg.CreateIndex
-ydb/core/kqp/ut/query KqpLimits.QueryReplySize
-ydb/core/kqp/ut/query KqpQuery.QueryTimeout
 ydb/core/kqp/ut/query KqpLimits.ComputeActorMemoryAllocationFailureQueryService
 ydb/core/kqp/ut/query KqpLimits.QueryExecTimeoutCancel
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
@@ -44,10 +35,10 @@ ydb/core/kqp/ut/scheme [*/*]+chunk+chunk
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
 ydb/core/kqp/ut/service [*/*] chunk chunk
 ydb/core/kqp/ut/service [*/*]+chunk+chunk
-ydb/core/kqp/workload_service/ut ResourcePoolClassifiersDdl.TestCreateResourcePoolClassifierOnServerless
 ydb/core/mind/hive/ut THiveTest.DrainWithHiveRestart
 ydb/core/persqueue/ut [*/*] chunk chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
+ydb/core/tx/columnshard/ut_rw Normalizers.CleanEmptyPortionsNormalizer
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithData
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-false
@@ -126,7 +117,6 @@ ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_3_sessions
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_filter
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_filter_missing_fields
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_nested_types
-ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_read_raw_format_with_row_dispatcher
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_read_raw_format_without_row_dispatcher
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_scheme_error
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_simple_optional

@@ -2,22 +2,22 @@ services:
   clickhouse:
     container_name: fq-tests-ch-clickhouse
     environment:
+      CLICKHOUSE_ALWAYS_RUN_INITDB_SCRIPTS: 1
       CLICKHOUSE_DB: db
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_PASSWORD: password
       CLICKHOUSE_USER: user
-      CLICKHOUSE_ALWAYS_RUN_INITDB_SCRIPTS: 1
     image: mirror.gcr.io/clickhouse/clickhouse-server:24.3.12-alpine@sha256:65e5846a0d9672714f2625502b27846563f6d01ec226304cf851aa49004ffde8
+    ports:
+      - 9000
+      - 8123
     volumes:
       - ./init:/docker-entrypoint-initdb.d
-    ports:
-    - 9000
-    - 8123
   fq-connector-go:
     container_name: fq-tests-ch-fq-connector-go
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.5.11-rc.5@sha256:c17f67aea314366690545aea1db9f2bf4391ae1269044ebbac7ea2316972e7ff
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.5.11-rc.6@sha256:15d3cf4ca55c11dbee4661c039eca8248e1eff0796630d325d3028a8d7af372a
     ports:
-    - 2130
+      - 2130
     volumes:
-    - ../../fq-connector-go/:/opt/ydb/cfg/
+      - ../../fq-connector-go/:/opt/ydb/cfg/
 version: "3.4"

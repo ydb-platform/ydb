@@ -20,11 +20,11 @@ struct TLog {
     {}
 };
 
-void SetLog(std::shared_ptr<::TLog>&& log) {
-    Singleton<TLog>()->Log = std::move(log);
+void SetLog(const std::shared_ptr<::TLog>& log) {
+    Singleton<TLog>()->Log = log;
 }
 
-std::shared_ptr<::TLog>& GetLog() {
+const std::shared_ptr<::TLog>& GetLog() {
     return Singleton<TLog>()->Log;
 }
 

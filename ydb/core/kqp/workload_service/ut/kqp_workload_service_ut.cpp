@@ -435,12 +435,12 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
             .NodeIndex(1);
 
         const TString& poolId = "my_pool";
-        TSampleQueries::CheckSuccess(ydb->ExecuteQuery(TStringBuilder() << R"(
+        ydb->ExecuteQueryRetry("Wait EnableResourcePoolsOnServerless", TStringBuilder() << R"(
             CREATE RESOURCE POOL )" << poolId << R"( WITH (
                 CONCURRENT_QUERY_LIMIT=1,
                 QUEUE_SIZE=0
             );
-        )", settings));
+        )", settings);
         settings.PoolId(poolId);
 
         auto hangingRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, settings.HangUpDuringExecution(true));
@@ -666,7 +666,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
     }
 
     void CreateSampleResourcePoolClassifier(TIntrusivePtr<IYdbSetup> ydb, const TString& classifierId, const TQueryRunnerSettings& settings, const TString& poolId) {
-        TSampleQueries::CheckSuccess(ydb->ExecuteQuery(TStringBuilder() << R"(
+        ydb->ExecuteQueryRetry("Wait EnableResourcePoolsOnServerless", TStringBuilder() << R"(
             GRANT ALL ON `)" << CanonizePath(settings.Database_ ? settings.Database_ : ydb->GetSettings().DomainName_) << R"(` TO `)" << settings.UserSID_ << R"(`;
             CREATE RESOURCE POOL )" << poolId << R"( WITH (
                 CONCURRENT_QUERY_LIMIT=0
@@ -680,7 +680,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
             .Database(settings.Database_)
             .NodeIndex(settings.NodeIndex_)
             .PoolId(NResourcePool::DEFAULT_POOL_ID)
-        ));
+        );
     }
 
     TString CreateSampleResourcePoolClassifier(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings, const TString& poolId) {

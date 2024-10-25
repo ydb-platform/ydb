@@ -7365,7 +7365,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             .Create();
 
         const auto& serverlessTenant = ydb->GetSettings().GetServerlessTenantName();
-        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(R"(
+        ydb->ExecuteQueryRetry("Wait EnableResourcePoolsOnServerless", R"(
             CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
                 RANK=20,
                 RESOURCE_POOL="test_pool"
@@ -7374,7 +7374,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 .PoolId("")
                 .Database(serverlessTenant)
                 .NodeIndex(1)
-        ));
+        );
 
         const auto pathId = ydb->FetchDatabase(serverlessTenant)->Get()->PathId;
         UNIT_ASSERT_VALUES_EQUAL(

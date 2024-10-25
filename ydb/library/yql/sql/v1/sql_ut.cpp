@@ -7037,7 +7037,9 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"storage" '"local") '('"tag" '"test"))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"storage" (String '"local")))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"tag" (String '"test"))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('entries '()))#");
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'create"));
             }
         };
@@ -7061,9 +7063,10 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"storage" '"local") '('"tag" '"test"))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"storage" (String '"local")))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"tag" (String '"test"))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('entries '('('('type 'database)))))#");
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'create"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'('type 'database)"));
             }
         };
 
@@ -7089,10 +7092,10 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"storage" '"local") '('"tag" '"test"))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"storage" (String '"local")))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"tag" (String '"test"))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('entries '('('('type 'table) '('path '"someTable")) '('('type 'table) '('path '"prefix/anotherTable")))))#");
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'create"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('('('type 'table) '('path '"someTable")))#"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('('('type 'table) '('path '"prefix/anotherTable")))#"));
             }
         };
 
@@ -7148,7 +7151,8 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alter))#");
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('settings '('('"storage" '"remote") '('"tag1" '"123"))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"storage" (String '"remote")))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"tag1" (String '"123"))))#");
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#('('resetSettings '('"tag2" '"tag3")))#");
             }
         };
@@ -7349,7 +7353,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
-                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("'incremental"));
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("'Incremental"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'backup"));
             }
         };
@@ -7370,8 +7374,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'incremental"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'backup"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'backupIncremental"));
             }
         };
 
@@ -7426,7 +7429,7 @@ Y_UNIT_TEST_SUITE(Restore) {
 }
 
 Y_UNIT_TEST_SUITE(ColumnFamily) {
-    Y_UNIT_TEST(CompressionLevel) {
+    Y_UNIT_TEST(CompressionLevelCorrectUsage) {
         NYql::TAstParseResult res = SqlToYql(R"( use plato;
             CREATE TABLE tableName (
                 Key Uint32 FAMILY default,
@@ -7458,5 +7461,90 @@ Y_UNIT_TEST_SUITE(ColumnFamily) {
         VerifyProgram(res, elementStat, verifyLine);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
         UNIT_ASSERT_VALUES_EQUAL(2, elementStat["compression_level"]);
+    }
+
+    Y_UNIT_TEST(FieldDataIsNotString) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            CREATE TABLE tableName (
+                Key Uint32 FAMILY default,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = 1,
+                     COMPRESSION = "lz4",
+                     COMPRESSION_LEVEL = 5
+                )
+            );
+        )");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "DATA value should be a string literal");
+    }
+
+    Y_UNIT_TEST(FieldCompressionIsNotString) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            CREATE TABLE tableName (
+                Key Uint32 FAMILY default,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = "test",
+                     COMPRESSION = 2,
+                     COMPRESSION_LEVEL = 5
+                ),
+            );
+        )");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "COMPRESSION value should be a string literal");
+    }
+
+    Y_UNIT_TEST(FieldCompressionLevelIsNotInteger) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            CREATE TABLE tableName (
+                Key Uint32 FAMILY default,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = "test",
+                     COMPRESSION = "lz4",
+                     COMPRESSION_LEVEL = "5"
+                )
+            );
+        )");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "COMPRESSION_LEVEL value should be an integer");
+    }
+
+    Y_UNIT_TEST(AlterCompressionCorrectUsage) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION "lz4";
+        )");
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
+    }
+
+    Y_UNIT_TEST(AlterCompressionFieldIsNotString) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION lz4;
+        )");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "Unexpected token 'lz4' : cannot match to any predicted input");
+    }
+
+    Y_UNIT_TEST(AlterCompressionLevelCorrectUsage) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION_LEVEL 5;
+        )");
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
+    }
+
+    Y_UNIT_TEST(AlterCompressionLevelFieldIsNotInteger) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION_LEVEL "5";
+        )");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "COMPRESSION_LEVEL value should be an integer");
     }
 }

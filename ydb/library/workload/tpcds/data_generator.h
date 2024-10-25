@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tpcds.h"
+#include "driver.h"
 #include <library/cpp/object_factory/object_factory.h>
 #include <util/string/printf.h>
 
@@ -63,9 +64,9 @@ public:
     private:
         TString GetFullTableName(const char* table) const;
         struct TPositions {
-            i64 FirstRow = 1;
+            ds_key_t FirstRow = 1;
             ui64 Position = 0;
-            i64 Count = 0;
+            ds_key_t Count = 0;
         };
         static TPositions CalcCountToGenerate(const TTpcdsWorkloadDataInitializerGenerator& owner, int tableNum, bool useState);
         const TTpcdsWorkloadDataInitializerGenerator& Owner;

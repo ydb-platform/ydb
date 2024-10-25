@@ -1233,7 +1233,6 @@ public:
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
 
             if (txCtx.HasUncommittedChangesRead || Config->FeatureFlags.GetEnableForceImmediateEffectsExecution() || txCtx.HasOlapTable) {
-                YQL_ENSURE(txCtx.EnableImmediateEffects);
                 request.UseImmediateEffects = true;
             }
         }

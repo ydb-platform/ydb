@@ -51,4 +51,6 @@ namespace NKikimr {
         TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider,
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
         const TString& filePathPrefix = "");
+
+    std::unique_ptr<IAllocMonitor> CreateAllocMonitor(TIntrusivePtr<NMonitoring::TDynamicCounters> group);
 }

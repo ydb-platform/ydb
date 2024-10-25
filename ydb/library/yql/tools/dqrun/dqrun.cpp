@@ -87,6 +87,7 @@
 #include <ydb/core/fq/libs/init/init.h>
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 
+#include <ydb/core/mon_alloc/monitor.h>
 #include <ydb/core/util/pb.h>
 
 #include <yt/cpp/mapreduce/interface/init.h>
@@ -121,6 +122,8 @@
 
 using namespace NKikimr;
 using namespace NYql;
+
+TString DumpMemPath; 
 
 struct TRunOptions {
     bool Sql = false;
@@ -374,6 +377,32 @@ std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
     return std::make_tuple(std::move(actorSystemManager), std::move(actorIds));
 }
 
+void DumpMem() {
+    auto monitor = NKikimr::CreateAllocMonitor(MakeIntrusive<NMonitoring::TDynamicCounters>());
+    TStringStream out;
+    Cerr << "Dump AllocMonitor statistic..." << Endl;
+    monitor->Update(TDuration::Seconds(1));
+    monitor->DumpForLog(out, 256);
+
+    TFileOutput file(DumpMemPath);
+    file.Write(out.Str());
+    file.Finish();
+}
+
+// void OnInterrupt(int s) {
+
+// }
+
+void SetSignalHandlers() {
+    if (DumpMemPath) {
+        signal(SIGINT, [](int s) {
+            DumpMem();
+            signal(s, SIG_DFL);     // call default handler
+            raise(s);
+        });
+    }
+}
+
 int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<TString, TString>& clusters, const THashSet<TString>& sqlFlags) {
     program->SetUseTableMetaFromGraph(options.UseMetaFromGraph);
     bool fail = true;
@@ -494,6 +523,10 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
         }
     }
 
+    if (DumpMemPath) {
+        DumpMem();
+    }
+
     Cout << Endl << "Done" << Endl;
     return 0;
 }
@@ -590,6 +623,7 @@ int RunMain(int argc, const char* argv[])
     TString ysonAttrs;
     TVector<TString> pqFileList;
     size_t memLimit = 0;
+
 
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     opts.AddLongOption('p', "program", "Program to execute (use '-' to read from stdin)")
@@ -765,6 +799,10 @@ int RunMain(int argc, const char* argv[])
     opts.AddLongOption("pg-ext", "pg extensions config file").StoreResult(&pgExtConfig);
     opts.AddLongOption("with-final-issues").NoArgument();
     opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument();
+    opts.AddLongOption("dump-mem", "Dump mem on terminate to file")        
+        .Optional()
+        .RequiredArgument("FILE")
+        .StoreResult(&DumpMemPath);
     opts.AddHelpOption('h');
 
     opts.SetFreeArgsNum(0);
@@ -839,6 +877,7 @@ int RunMain(int argc, const char* argv[])
         planFileHolder.Reset(new TFixedBufferFileOutput(planFile));
         runOptions.TracePlan = planFileHolder.Get();
     }
+    SetSignalHandlers();
 
     for (auto& s: tablesMappingList) {
         TStringBuf tableName, filePath;

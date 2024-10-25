@@ -270,19 +270,6 @@ namespace NKikimr {
             }
         };
 
-        std::unique_ptr<IAllocMonitor> CreateAllocMonitor(TDynamicCountersPtr group) {
-            const auto& info = NMalloc::MallocInfo();
-            TStringBuf name(info.Name);
-
-            std::unique_ptr<IAllocMonitor> monitor;
-            if (name.StartsWith("lf")) {
-                monitor = std::make_unique<TLfAllocMonitor>(std::move(group));
-            } else if (name.StartsWith("tc")) {
-                monitor = std::move(CreateTcMallocMonitor(std::move(group)));
-            }
-
-            return monitor ? std::move(monitor) : std::make_unique<TFakeAllocMonitor>();
-        }
 
         class TMemProfMonitor: public TActorBootstrapped<TMemProfMonitor> {
             struct TDumpLogConfig {
@@ -436,6 +423,20 @@ namespace NKikimr {
                 ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(out.Str()));
             }
         };
+    }
+
+    std::unique_ptr<IAllocMonitor> CreateAllocMonitor(TIntrusivePtr<NMonitoring::TDynamicCounters> group) {
+        const auto& info = NMalloc::MallocInfo();
+        TStringBuf name(info.Name);
+
+        std::unique_ptr<IAllocMonitor> monitor;
+        if (name.StartsWith("lf")) {
+            monitor = std::make_unique<TLfAllocMonitor>(std::move(group));
+        } else if (name.StartsWith("tc")) {
+            monitor = std::move(CreateTcMallocMonitor(std::move(group)));
+        }
+
+        return monitor ? std::move(monitor) : std::make_unique<TFakeAllocMonitor>();
     }
 
     IActor* CreateMemProfMonitor(TDuration interval, TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider, TDynamicCountersPtr counters, const TString& filePathPrefix) {

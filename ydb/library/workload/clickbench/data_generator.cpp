@@ -30,7 +30,7 @@ TBulkDataGeneratorList TClickbenchWorkloadDataInitializerGenerator::DoGetBulkIni
 }
 
 TClickbenchWorkloadDataInitializerGenerator::TDataGenerartor::TDataGenerartor(const TClickbenchWorkloadDataInitializerGenerator& owner)
-    : IBulkDataGenerator("hits", 99997497)
+    : IBulkDataGenerator("hits", DataSetSize)
     , Owner(owner)
 {
     if (Owner.GetDataFiles().IsDirectory()) {

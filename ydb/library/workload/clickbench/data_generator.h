@@ -42,6 +42,7 @@ private:
         TVector<TFile::TPtr> Files;
         TAdaptiveLock Lock;
         bool FirstPortion = true;
+        static constexpr ui64 DataSetSize = 99997497;
     };
 };
 

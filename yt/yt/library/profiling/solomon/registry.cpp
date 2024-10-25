@@ -534,7 +534,7 @@ NProto::TSensorDump TSolomonRegistry::DumpSensors(std::vector<TTagId> extraTags)
         }
 
         auto* cube = dump.add_cubes();
-        cube->set_name(ToProto<TProtobufString>(name));
+        cube->set_name(ToProto(name));
 
         set.DumpCube(cube, extraTags);
     }

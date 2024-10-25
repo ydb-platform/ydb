@@ -449,8 +449,8 @@ void TClientRequest::PrepareHeader()
 
     // COMPAT(danilalexeev): legacy RPC codecs
     if (!EnableLegacyRpcCodecs_) {
-        Header_.set_request_codec(ToProto<int>(RequestCodec_));
-        Header_.set_response_codec(ToProto<int>(ResponseCodec_));
+        Header_.set_request_codec(ToProto(RequestCodec_));
+        Header_.set_response_codec(ToProto(ResponseCodec_));
     }
 
     if (StreamingEnabled_) {

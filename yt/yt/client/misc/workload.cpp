@@ -142,7 +142,7 @@ void ToProto(NYT::NProto::TWorkloadDescriptor* protoDescriptor, const TWorkloadD
 {
     protoDescriptor->set_category(static_cast<int>(descriptor.Category));
     protoDescriptor->set_band(descriptor.Band);
-    protoDescriptor->set_instant(ToProto<i64>(descriptor.Instant));
+    protoDescriptor->set_instant(ToProto(descriptor.Instant));
     ToProto(protoDescriptor->mutable_annotations(), descriptor.Annotations);
 }
 

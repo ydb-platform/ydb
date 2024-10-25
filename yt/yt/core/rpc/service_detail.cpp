@@ -1876,7 +1876,7 @@ void TServiceBase::OnRequestAuthenticated(
                 return;
             }
         }
-        requestHeader.set_user(ToProto<TProtobufString>(authResult.User));
+        requestHeader.set_user(ToProto(authResult.User));
 
         auto* credentialsExt = requestHeader.MutableExtension(
             NRpc::NProto::TCredentialsExt::credentials_ext);

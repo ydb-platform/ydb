@@ -339,9 +339,9 @@ private:
         }
 
         if (auto requestTimeout = httpHeaders->Find(RequestTimeoutHeaderName)) {
-            rpcHeader->set_timeout(ToProto<i64>(TDuration::Seconds(FromString<i64>(*requestTimeout))));
+            rpcHeader->set_timeout(ToProto(TDuration::Seconds(FromString<i64>(*requestTimeout))));
         } else if (auto xRequestTimeout = httpHeaders->Find(XRequestTimeoutHeaderName)) {
-            rpcHeader->set_timeout(ToProto<i64>(TDuration::MilliSeconds(FromString<i64>(*xRequestTimeout))));
+            rpcHeader->set_timeout(ToProto(TDuration::MilliSeconds(FromString<i64>(*xRequestTimeout))));
         }
 
         auto protocolMajor = httpHeaders->Find(ProtocolVersionMajor);
@@ -368,8 +368,8 @@ private:
             *rpcHeader->MutableExtension(NRpc::NProto::TCustomMetadataExt::custom_metadata_ext) = std::move(customMetadataExt);
         }
 
-        rpcHeader->set_request_codec(ToProto<int>(NCompression::ECodec::None));
-        rpcHeader->set_response_codec(ToProto<int>(NCompression::ECodec::None));
+        rpcHeader->set_request_codec(ToProto(NCompression::ECodec::None));
+        rpcHeader->set_response_codec(ToProto(NCompression::ECodec::None));
 
         return {};
     }

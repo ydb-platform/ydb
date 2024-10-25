@@ -1,12 +1,12 @@
 #pragma once
 
-#include "util/string/join.h"
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
+#include <util/string/join.h>
 
 namespace NKikimrReplication {
     class TStaticCredentials;

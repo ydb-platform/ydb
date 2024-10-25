@@ -1,5 +1,5 @@
-#include "ydb_proxy.h"
 #include "partition_end_watcher.h"
+#include "ydb_proxy.h"
 
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>

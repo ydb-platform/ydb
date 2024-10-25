@@ -655,7 +655,7 @@ void DoCreatePqPart(
     if (AppData()->FeatureFlags.GetEnableTopicAutopartitioningForCDC() && IsReplicationSupportTopicAutopartitioning(op)) {
         auto * ps = pqConfig.MutablePartitionStrategy();
         ps->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
-        ps->SetMinPartitionCount(table->GetPartitions().size());
+        ps->SetMinPartitionCount(1);
         ps->SetMaxPartitionCount(std::max<ui32>(table->GetPartitions().size() * 10, 50));
         ps->SetScaleThresholdSeconds(30);
     } else if (op.GetTopicAutoPartitioning()) {

@@ -131,6 +131,7 @@ void RestartAndClearCache(TMyEnvBase& env) {
 void SwitchPolicy(TMyEnvBase& env, NKikimrSharedCache::TReplacementPolicy policy) {
     auto configure = MakeHolder<TEvSharedPageCache::TEvConfigure>();
     configure->Record.SetReplacementPolicy(policy);
+    configure->Record.SetMemoryLimit(8_MB);
     env->Send(MakeSharedPageCacheId(), TActorId{}, configure.Release());
     WaitEvent(env, TEvSharedPageCache::EvConfigure);
 }
@@ -144,6 +145,8 @@ Y_UNIT_TEST(Limits) {
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
+
+    SwitchPolicy(env, NKikimrSharedCache::ThreeLeveledLRU);
 
     // write 300 rows, each ~100KB (~30MB)
     for (i64 key = 0; key < 300; ++key) {
@@ -204,6 +207,8 @@ Y_UNIT_TEST(ThreeLeveledLRU) {
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
+
+    SwitchPolicy(env, NKikimrSharedCache::ThreeLeveledLRU);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -510,6 +515,8 @@ Y_UNIT_TEST(ReplacementPolicySwitch) {
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
+
+    SwitchPolicy(env, NKikimrSharedCache::ThreeLeveledLRU);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {

@@ -574,7 +574,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         }
         SendToRootHivePipe(request.Release());
     }
-    MakeScaleRecommendation();
+    Schedule(GetScaleRecommendationRefreshFrequency(), new TEvPrivate::TEvRefreshScaleRecommendation());
     ProcessPendingOperations();
 }
 
@@ -3468,8 +3468,8 @@ void THive::Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev) {
     Execute(CreateUpdateDcFollowers(ev->Get()->DataCenter));
 }
 
-template<typename It>
-ui32 THive::CalculateRecommendedNodes(It windowBegin, It windowEnd, size_t readyNodes, double target) {
+template <typename TIt>
+ui32 THive::CalculateRecommendedNodes(TIt windowBegin, TIt windowEnd, size_t readyNodes, double target) {
     double maxOnWindow = *std::max_element(windowBegin, windowEnd);
     double ratio = maxOnWindow / target;
     return std::ceil(readyNodes * ratio);
@@ -3521,12 +3521,13 @@ void THive::MakeScaleRecommendation() {
     auto& avgCpuUsageHistory = domain.AvgCpuUsageHistory;
 
     double avgCpuUsage = readyNodesCount != 0 ? cpuUsageSum / readyNodesCount : 0;
-    BLOG_D("[MSR] Total Avg CPU Usage " << avgCpuUsage);
+    BLOG_TRACE("[MSR] Total Avg CPU Usage " << avgCpuUsage);
 
     avgCpuUsageHistory.push_back(avgCpuUsage);
-    if (avgCpuUsageHistory.size() > MAX_HISTORY_SIZE) {
+    while (avgCpuUsageHistory.size() > MAX_HISTORY_SIZE) {
         avgCpuUsageHistory.pop_front();
     }
+    BLOG_TRACE("[MSR] Avg CPU Usage history " << '[' << JoinSeq(", ", avgCpuUsageHistory) << ']');
 
     ui32 recommendedNodes = 0;
 
@@ -3550,9 +3551,11 @@ void THive::MakeScaleRecommendation() {
             );
             BLOG_D("[MSR] Need scale in: " << readyNodesCount << " -> " << recommendedNodes);
         }
+    } else {
+        BLOG_D("[MSR] Not enough history data to scale in");
     }
 
-    if (avgCpuUsageHistory.size() >= SCALE_OUT_WINDOW_SIZE) {
+    if (recommendedNodes == 0 && avgCpuUsageHistory.size() >= SCALE_OUT_WINDOW_SIZE) {
         auto scaleOutWindowBegin = avgCpuUsageHistory.end() - SCALE_OUT_WINDOW_SIZE;
         auto scaleOutWindowEnd = avgCpuUsageHistory.end();
 
@@ -3571,6 +3574,8 @@ void THive::MakeScaleRecommendation() {
             );
             BLOG_D("[MSR] Need scale out: " << readyNodesCount << " -> " << recommendedNodes);
         }
+    } else {
+        BLOG_D("[MSR] Not enough history data to scale out");
     }
 
     if (recommendedNodes != 0) {

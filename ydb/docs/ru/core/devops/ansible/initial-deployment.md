@@ -220,9 +220,9 @@ all:
 
   | Порт                                 | Описание                                                   |
   |--------------------------------------|------------------------------------------------------------|
-  | `{{ ydb-ports.grpcs }}`              | Порт для защищенного GRPCS-соединения (TLS).              |
-  | `{{ ydb-ports.interconnect }}`       | Порт для Interconnect-соединения нод {{ ydb-short-name }}.|
-  | `{{ ydb-ports.https }}`              | HTTPS-порт мониторинга кластера.                          |
+  | `{{ ydb-ports.grpcs }}`              | Порт для защищенного GRPCS-соединения (TLS).               |
+  | `{{ ydb-ports.interconnect }}`       | Порт для Interconnect-соединения нод {{ ydb-short-name }}. |
+  | `{{ ydb-ports.https }}`              | HTTPS-порт мониторинга кластера.                           |
   | `{{ third-party-ports.postgresql }}` | Порт используется для работы совместимости {{ ydb-short-name }} с PostgreSQL. |
 
 - Порты динамических нод
@@ -230,13 +230,13 @@ all:
   Запускаются два процесса: `ydbd-database-a` и `ydbd-database-b`, которые используют порты:
 
   #|
-  || Процесс           | Порт    | Описание  ||
-  || `ydbd-database-a` | `2136`  | Порты для защищенного GRPCS-соединения (TLS). ||
-  || `ydbd-database-b` | `2137`  | ^ ||
+  || Процесс           | Порт    | Описание                                                   ||
+  || `ydbd-database-a` | `2136`  | Порты для защищенного GRPCS-соединения (TLS).              ||
+  || `ydbd-database-b` | `2137`  | ^                                                          ||
   || `ydbd-database-a` | `19002` | Порты для Interconnect-соединения нод {{ ydb-short-name }}.||
-  || `ydbd-database-b` | `19003` | ^ ||
-  || `ydbd-database-a` | `8766`  | HTTPS-порты мониторинга кластера. ||
-  || `ydbd-database-b` | `8767`  | ^ ||
+  || `ydbd-database-b` | `19003` | ^                                                          ||
+  || `ydbd-database-a` | `8766`  | HTTPS-порты мониторинга кластера.                          ||
+  || `ydbd-database-b` | `8767`  | ^                                                          ||
   |#
 
 {% endlist %}

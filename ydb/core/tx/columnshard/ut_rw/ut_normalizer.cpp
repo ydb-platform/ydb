@@ -157,30 +157,26 @@ public:
     virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
-        auto rowset = db.Table<Schema::IndexPortions>().Select();
-        UNIT_ASSERT(rowset.IsReady());
-
-        ui64 minVersion = (ui64)-1;
-        while (!rowset.EndOfSet()) {
-            auto version = rowset.GetValue<Schema::IndexPortions::SchemaVersion>();
-            if (version < minVersion) {
-                minVersion = version;
-            }
-            UNIT_ASSERT(rowset.Next());
+        // Add invalid widow schema, if SchemaVersionCleaner will not erase it, then test will fail
+        {
+            NKikimrTxColumnShard::TSchemaPresetVersionInfo info;
+            info.SetId(1);
+            info.SetSinceStep(5);
+            info.SetSinceTxId(1);
+            info.MutableSchema()->SetVersion(0);
+            db.Table<Schema::SchemaPresetVersionInfo>().Key(1, 5, 1).Update(
+                NIceDb::TUpdate<Schema::SchemaPresetVersionInfo::InfoProto>(info.SerializeAsString()));
         }
 
-        // Add invalid widow schema, if SchemaVersionCleaner will not erase it, then test will fail
-        TString serialized;
-        NKikimrTxColumnShard::TSchemaPresetVersionInfo info;
-        info.MutableSchema()->SetVersion(minVersion - 1);
-        Y_ABORT_UNLESS(info.SerializeToString(&serialized));
-        db.Table<Schema::SchemaPresetVersionInfo>().Key(11, 1, 1).Update(NIceDb::TUpdate<Schema::SchemaPresetVersionInfo::InfoProto>(serialized));
-
-        // Add invalid widow table version, if SchemaVersionCleaner will not erase it, then test will fail
-        NKikimrTxColumnShard::TTableVersionInfo versionInfo;
-        versionInfo.MutableSchema()->SetVersion(minVersion - 1);
-        Y_ABORT_UNLESS(versionInfo.SerializeToString(&serialized));
-        db.Table<Schema::TableVersionInfo>().Key(1, 1, 1).Update(NIceDb::TUpdate<Schema::TableVersionInfo::InfoProto>(serialized));
+        {
+            // Add invalid widow table version, if SchemaVersionCleaner will not erase it, then test will fail
+            NKikimrTxColumnShard::TTableVersionInfo versionInfo;
+            versionInfo.SetSchemaPresetId(1);
+            versionInfo.SetSinceStep(5);
+            versionInfo.SetSinceTxId(1);
+            db.Table<Schema::TableVersionInfo>().Key(1, 5, 1).Update(
+                NIceDb::TUpdate<Schema::TableVersionInfo::InfoProto>(versionInfo.SerializeAsString()));
+        }
 
         db.Table<Schema::SchemaPresetInfo>().Key(10).Update(NIceDb::TUpdate<Schema::SchemaPresetInfo::Name>("default"));
 

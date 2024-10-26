@@ -114,6 +114,7 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
 }
 
 void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
+    AFL_VERIFY(PortionsToRemove.size() + PortionsToMove.size() + AppendedPortions.size());
     for (auto&& i : AppendedPortions) {
         i.GetPortionConstructor().SetPortionId(context.NextPortionId());
         i.GetPortionConstructor().MutableMeta().SetCompactionLevel(TargetCompactionLevel.value_or(0));
@@ -133,7 +134,6 @@ void TChangesWithAppend::DoOnAfterCompile() {
 }
 
 void TChangesWithAppend::DoStart(NColumnShard::TColumnShard& /*self*/) {
-    AFL_VERIFY(PortionsToRemove.size() + PortionsToMove.size() + AppendedPortions.size());
 }
 
 }   // namespace NKikimr::NOlap

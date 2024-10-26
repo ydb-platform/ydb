@@ -137,6 +137,7 @@ ydb/tests/fq/yds test_recovery.py.TestRecovery.test_program_state_recovery_error
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_3_sessions
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_filter
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_filter_missing_fields
+ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_read_raw_format_with_row_dispatcher
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_scheme_error
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_simple_optional
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_start_new_query

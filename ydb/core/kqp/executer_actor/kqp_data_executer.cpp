@@ -2382,7 +2382,6 @@ private:
                 std::sort(receivingShards.begin(), receivingShards.end());
 
                 for (auto& [shardId, shardTx] : datashardTxs) {
-                    AFL_ENSURE(!columnShardArbiter);
                     shardTx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
                     if (columnShardArbiter) {
                         shardTx->MutableLocks()->AddSendingShards(*columnShardArbiter);

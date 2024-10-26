@@ -295,7 +295,7 @@ void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapsho
     if (it == ActualSchemaForPreset.end()) {
         ActualSchemaForPreset.emplace(presetId, schema);
     } else {
-        *versionInfo.MutableDiff() = NOlap::TIndexInfo::MakeSchemasDiff(it->second, schema);
+        *versionInfo.MutableDiff() = NOlap::TSchemaDiffView::MakeSchemasDiff(it->second, schema);
         it->second = schema;
     }
 

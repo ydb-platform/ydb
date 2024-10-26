@@ -475,9 +475,6 @@ message TColumnTableSchema {
     repeated TOlapColumnDescription Columns = 1;
     repeated string KeyColumnNames = 2;
 
-    // A type of engine used by the table
-    optional EColumnTableEngine Engine = 3;
-
     // Internal fields
     optional uint32 NextColumnId = 4;
 

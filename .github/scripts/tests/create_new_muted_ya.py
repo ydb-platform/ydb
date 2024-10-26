@@ -213,25 +213,25 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
             test_string = f"{testsuite} {testcase}\n"
             test_string_debug = f"{testsuite} {testcase} # owner {owner} success_rate {success_rate}%, state {state} days in state {days_in_state}\n"
             test_string = re.sub(r'\d+/(\d+)\]', r'*/*]', test_string)
-            if test_string in flaky_tests:
-                new_muted_ya_tests_with_flaky.append(test_string)
-                new_muted_ya_tests_with_flaky_debug.append(test_string_debug)
+            if (testsuite and testcase and mute_check(testsuite, testcase) or test_string in flaky_tests) and test_string not in new_muted_ya_tests_with_flaky:
+                if test_string not in muted_stable_tests and test_string not in deleted_tests:
+                    new_muted_ya_tests_with_flaky.append(test_string)
+                    new_muted_ya_tests_with_flaky_debug.append(test_string_debug)
+
             if testsuite and testcase and mute_check(testsuite, testcase):
                 muted_before_count += 1
                 if test_string not in new_muted_ya_tests:
 
                     if test_string not in muted_stable_tests and test_string not in deleted_tests:
-                        # if test_string not in deleted_tests:
                         new_muted_ya_tests.append(test_string)
                         new_muted_ya_tests_debug.append(test_string_debug)
-                        new_muted_ya_tests_with_flaky.append(test_string)
-                        new_muted_ya_tests_with_flaky_debug.append(test_string_debug)
-                    elif test_string in muted_stable_tests or test_string in deleted_tests:
                         if test_string in muted_stable_tests:
                             unmuted_stable += 1
                         if test_string in deleted_tests:
                             unmuted_deleted += 1
                         unmuted_tests_debug.append(test_string_debug)
+                 
+
         new_muted_ya_tests = sorted(new_muted_ya_tests)
         add_lines_to_file(os.path.join(output_path, 'new_muted_ya.txt'), new_muted_ya_tests)
         new_muted_ya_tests_debug = sorted(new_muted_ya_tests_debug)
@@ -300,14 +300,17 @@ def create_mute_issues(all_tests, file_path):
                         'branch' : test.get('branch'),
                     
                 })
+    results = []
     for item in prepared_tests_by_suite:
         
         title, body  = generate_github_issue_title_and_body(prepared_tests_by_suite[item])
-        result = create_and_add_issue_to_project(title,body, state = 'Muted', owner = item['owner'].split('/',1)[1])
+        result = create_and_add_issue_to_project(title,body, state = 'Muted', owner = prepared_tests_by_suite[item][0]['owner'].split('/',1)[1])
         if not result:
-           break
-        
-    print(1)
+            break
+        else:
+            results.append(f"Created issue '{title}' for {prepared_tests_by_suite[item][0]['owner']}, url {result['issue_url']}")
+            
+    print("\n".join(results))
      
 def mute_worker(args):
     

@@ -219,17 +219,17 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
                     new_muted_ya_tests_with_flaky_debug.append(test_string_debug)
 
             if testsuite and testcase and mute_check(testsuite, testcase):
-                muted_before_count += 1
+                
                 if test_string not in new_muted_ya_tests:
-
+                    muted_before_count += 1
                     if test_string not in muted_stable_tests and test_string not in deleted_tests:
                         new_muted_ya_tests.append(test_string)
                         new_muted_ya_tests_debug.append(test_string_debug)
-                        if test_string in muted_stable_tests:
-                            unmuted_stable += 1
-                        if test_string in deleted_tests:
-                            unmuted_deleted += 1
-                        unmuted_tests_debug.append(test_string_debug)
+                    if test_string in muted_stable_tests:
+                        unmuted_stable += 1
+                    if test_string in deleted_tests:
+                        unmuted_deleted += 1
+                    unmuted_tests_debug.append(test_string_debug)
                  
 
         new_muted_ya_tests = sorted(new_muted_ya_tests)
@@ -248,7 +248,7 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
         logging.info(f"Muted before script: {muted_before_count} tests")
         logging.info(f"Muted stable : {len(muted_stable_tests)}")
         logging.info(f"Flaky tests : {len(flaky_tests)}")
-        logging.info(f"Deleted (no runs) tests : {len(deleted_tests)}")
+        #logging.info(f"Deleted (no runs) tests : {len(deleted_tests)}")
         logging.info(f"Result: Muted without deleted and stable : {len(new_muted_ya_tests)}")
         logging.info(f"Result: Muted without deleted and stable, with flaky : {len(new_muted_ya_tests_with_flaky)}")
         logging.info(f"Result: Unmuted tests : stable {unmuted_stable} and deleted {unmuted_deleted}")

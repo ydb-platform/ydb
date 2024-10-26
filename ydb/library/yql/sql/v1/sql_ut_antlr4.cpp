@@ -6713,13 +6713,26 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
     }
 
-    Y_UNIT_TEST(CreateViewIfNotExistsGrammarSupport) {
-        NYql::TAstParseResult res = SqlToYql(R"(
+    Y_UNIT_TEST(CreateViewIfNotExists) {
+        constexpr const char* name = "TheView";
+        NYql::TAstParseResult res = SqlToYql(std::format(R"(
                 USE plato;
-                CREATE VIEW IF NOT EXISTS TheView WITH (security_invoker = TRUE) AS SELECT 1;
-            )"
-        );
+                CREATE VIEW IF NOT EXISTS {} AS SELECT 1;
+            )", name
+        ));
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_STRING_CONTAINS(line, name);
+                UNIT_ASSERT_STRING_CONTAINS(line, "createObjectIfNotExists");
+            }
+        };
+
+        TWordCountHive elementStat = { {"Write!"} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
     }
 
     Y_UNIT_TEST(CreateViewFromTable) {
@@ -6801,13 +6814,26 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
     }
 
-    Y_UNIT_TEST(DropViewIfExistsGrammarSupport) {
-        NYql::TAstParseResult res = SqlToYql(R"(
+    Y_UNIT_TEST(DropViewIfExists) {
+        constexpr const char* name = "TheView";
+        NYql::TAstParseResult res = SqlToYql(std::format(R"(
                 USE plato;
-                DROP VIEW IF EXISTS TheView;
-            )"
-        );
+                DROP VIEW IF EXISTS {};
+            )", name
+        ));
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_STRING_CONTAINS(line, name);
+                UNIT_ASSERT_STRING_CONTAINS(line, "dropObjectIfExists");
+            }
+        };
+
+        TWordCountHive elementStat = { {"Write!"} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
     }
 
     Y_UNIT_TEST(CreateViewWithTablePrefix) {

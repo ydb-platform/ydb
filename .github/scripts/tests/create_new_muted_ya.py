@@ -309,7 +309,8 @@ def create_mute_issues(all_tests, file_path):
             break
         else:
             results.append(f"Created issue '{title}' for {prepared_tests_by_suite[item][0]['owner']}, url {result['issue_url']}")
-            
+    
+    print("\n\n")
     print("\n".join(results))
      
 def mute_worker(args):

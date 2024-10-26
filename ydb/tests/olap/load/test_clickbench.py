@@ -12,25 +12,26 @@ class TestClickbench(LoadSuiteBase):
     refference: str = 'CH.60'
     path = get_external_param('table-path-clickbench', f'{YdbCluster.tables_path}/clickbench/hits')
 
-    def do_setup_class(self):
+    @classmethod
+    def do_setup_class(cls):
         if getenv('NO_VERIFY_DATA', '0') == '1' or getenv('NO_VERIFY_DATA_CLICKBECNH', '0') == '1':
             return
 
-        self.check_tables_size(self, folder=None, tables={'clickbench/hits': 99997497})
+        cls.check_tables_size(folder=None, tables={'clickbench/hits': 99997497})
 
         fail_count = 0
         for query_num in range(0, 43):
             try:
                 with allure.step(f'request {query_num}'):
                     result = YdbCliHelper.workload_run(
-                        path=self.path,
+                        path=cls.path,
                         query_num=query_num,
                         iterations=1,
-                        workload_type=self.workload_type,
-                        timeout=self.timeout,
+                        workload_type=cls.workload_type,
+                        timeout=cls._get_timeout(query_num),
                         check_canonical=True
                     )
-                    self.process_query_result(self, result=result, query_num=query_num, iterations=1, upload=False)
+                    cls.process_query_result(result=result, query_num=query_num, iterations=1, upload=False)
             except BaseException:
                 fail_count += 1
 

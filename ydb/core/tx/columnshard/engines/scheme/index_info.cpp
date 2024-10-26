@@ -584,4 +584,10 @@ void TIndexInfo::Validate() const {
     }
 }
 
+TIndexInfo TIndexInfo::BuildDefault() {
+    TIndexInfo result;
+    result.CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault();
+    return result;
+}
+
 }   // namespace NKikimr::NOlap

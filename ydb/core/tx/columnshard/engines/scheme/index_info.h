@@ -253,9 +253,7 @@ public:
         return sb;
     }
 
-    static TIndexInfo BuildDefault() {
-        return TIndexInfo();
-    }
+    static TIndexInfo BuildDefault();
 
     static TIndexInfo BuildDefault(
         const std::shared_ptr<IStoragesManager>& operators, const TColumns& columns, const std::vector<TString>& pkNames) {

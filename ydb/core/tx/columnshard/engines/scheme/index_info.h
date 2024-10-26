@@ -257,7 +257,7 @@ public:
 
     static TIndexInfo BuildDefault(
         const std::shared_ptr<IStoragesManager>& operators, const TColumns& columns, const std::vector<TString>& pkNames) {
-        TIndexInfo result;
+        TIndexInfo result = BuildDefault();
         result.ColumnNames = TNameInfo::BuildColumnNames(columns);
         for (auto&& i : pkNames) {
             const ui32 columnId = result.GetColumnIdVerified(i);

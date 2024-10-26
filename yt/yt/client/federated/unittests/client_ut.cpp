@@ -20,6 +20,7 @@ namespace {
 using namespace NYT::NApi;
 
 using ::testing::_;
+using ::testing::AnyNumber;
 using ::testing::Return;
 using ::testing::StrictMock;
 
@@ -173,7 +174,8 @@ TEST(TFederatedClientTest, CheckHealth)
     auto mockClientSas = New<TStrictMockClient>();
 
     auto mockClientVla = New<TStrictMockClient>();
-    EXPECT_CALL(*mockClientVla, GetClusterName(_));
+    EXPECT_CALL(*mockClientVla, GetClusterName(_))
+        .Times(AnyNumber());
 
     // To identify best (closest) cluster.
     NYson::TYsonString listResult1(TStringBuf(R"(["a-rpc-proxy-a.sas.yp-c.yandex.net:9013"])"));

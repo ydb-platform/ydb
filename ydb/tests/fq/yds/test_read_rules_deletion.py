@@ -4,11 +4,12 @@
 import os
 import pytest
 
+import yatest
+
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 
 from ydb.tests.tools.datastreams_helpers.control_plane import list_read_rules
-import ydb.tests.library.common.yatest_common as yatest_common
 import ydb.public.api.protos.draft.fq_pb2 as fq
 
 
@@ -57,7 +58,7 @@ class TestReadRulesDeletion(TestYdsBase):
 
         client.abort_query(query_id)
         client.wait_query_status(
-            query_id, fq.QueryMeta.ABORTED_BY_USER, timeout=yatest_common.plain_or_under_sanitizer(60, 300)
+            query_id, fq.QueryMeta.ABORTED_BY_USER, timeout=yatest.common.plain_or_under_sanitizer(60, 300)
         )
 
         # Assert that all read rules were removed after query stops

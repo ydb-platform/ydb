@@ -12,7 +12,8 @@ from ydb.tests.library.harness import param_constants # noqa
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory # noqa
 from ydb.tests.library.matchers.collection import is_empty # noqa
 from ydb.tests.library.wardens.factories import safety_warden_factory, liveness_warden_factory # noqa
-from ydb.tests.library.common import yatest_common # noqa
+
+import yatest
 
 logger = logging.getLogger('ydb.connection')
 logger.setLevel(logging.CRITICAL)
@@ -32,7 +33,7 @@ class ImmutableProperty(object):
 
 
 def read_table_profile():
-    with open(yatest_common.source_path('ydb/tests/stability/resources/tbl_profile.txt'), 'r') as reader:
+    with open(yatest.common.source_path('ydb/tests/stability/resources/tbl_profile.txt'), 'r') as reader:
         return reader.read()
 
 
@@ -43,10 +44,10 @@ def get_slice_directory(slice_name):
 class TestSetupForStability(object):
     stress_binaries_deploy_path = '/Berkanavt/nemesis/bin/'
     artifacts = (
-        yatest_common.binary_path('ydb/tests/tools/nemesis/driver/nemesis'),
-        yatest_common.binary_path('ydb/tools/simple_queue/simple_queue'),
-        yatest_common.binary_path('ydb/tools/olap_workload/olap_workload'),
-        yatest_common.binary_path('ydb/tools/statistics_workload/statistics_workload'),
+        yatest.common.binary_path('ydb/tests/tools/nemesis/driver/nemesis'),
+        yatest.common.binary_path('ydb/tools/simple_queue/simple_queue'),
+        yatest.common.binary_path('ydb/tools/olap_workload/olap_workload'),
+        yatest.common.binary_path('ydb/tools/statistics_workload/statistics_workload'),
     )
 
     @classmethod

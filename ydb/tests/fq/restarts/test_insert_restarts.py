@@ -6,9 +6,10 @@ import boto3
 import pytest
 import time
 
+import yatest
+
 import ydb.public.api.protos.draft.fq_pb2 as fq
 
-import ydb.tests.library.common.yatest_common as yatest_common
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
 
 
@@ -71,7 +72,7 @@ class TestS3(object):
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
 
         # Checking insert query
-        timeout = yatest_common.plain_or_under_sanitizer(250, 250 * 5)
+        timeout = yatest.common.plain_or_under_sanitizer(250, 250 * 5)
         start = time.time()
         deadline = start + timeout
         while True:

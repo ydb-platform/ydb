@@ -55,7 +55,7 @@ class TestRecovery(TestYdsBase):
                 return node_index
         assert False, "No active graphs found"
 
-    def dump_workers(self, worker_count, ca_count, wait_time=yatest.common.plain_or_under_sanitizer(30, 150)):
+    def dump_workers(self, worker_count, ca_count, wait_time=plain_or_under_sanitizer(30, 150)):
         deadline = time.time() + wait_time
         while True:
             wcs = 0

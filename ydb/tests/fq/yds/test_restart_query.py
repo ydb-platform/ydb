@@ -8,6 +8,7 @@ import time
 import yatest
 
 import ydb.public.api.protos.draft.fq_pb2 as fq
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.control_plane import delete_stream
@@ -60,7 +61,7 @@ class TestRestartQuery(TestYdsBase):
             ), f'Text "{text}" is expected to be found in transient issues, but was not found. Describe query result:\n{describe_result}'
             return False
 
-        deadline = time.time() + yatest.common.plain_or_under_sanitizer(60, 300)
+        deadline = time.time() + plain_or_under_sanitizer(60, 300)
         while not assert_has_transient_issues("SCHEME_ERROR", deadline):
             time.sleep(0.3)
 

@@ -10,6 +10,7 @@ import yatest
 
 import ydb.public.api.protos.draft.fq_pb2 as fq
 
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
 
 
@@ -72,7 +73,7 @@ class TestS3(object):
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
 
         # Checking insert query
-        timeout = yatest.common.plain_or_under_sanitizer(250, 250 * 5)
+        timeout = plain_or_under_sanitizer(250, 250 * 5)
         start = time.time()
         deadline = start + timeout
         while True:

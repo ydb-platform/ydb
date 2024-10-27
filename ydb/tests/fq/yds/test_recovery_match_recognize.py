@@ -8,6 +8,7 @@ import time
 
 import yatest
 
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
 from ydb.tests.tools.fq_runner.kikimr_runner import TenantConfig
@@ -36,7 +37,7 @@ class TestRecoveryMatchRecognize(TestYdsBase):
         # for retry
         cls.retry_conf = retry.RetryConf().upto(seconds=30).waiting(0.1)
 
-    def dump_workers(self, kikimr, worker_count, ca_count, wait_time=yatest.common.plain_or_under_sanitizer(30, 150)):
+    def dump_workers(self, kikimr, worker_count, ca_count, wait_time=plain_or_under_sanitizer(30, 150)):
         deadline = time.time() + wait_time
         while True:
             wcs = 0

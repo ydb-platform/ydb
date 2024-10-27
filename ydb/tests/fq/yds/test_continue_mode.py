@@ -8,6 +8,7 @@ import time
 import yatest
 
 import ydb.public.api.protos.draft.fq_pb2 as fq
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.fq_runner.fq_client import StreamingDisposition
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
@@ -130,7 +131,7 @@ class TestContinueMode(TestYdsBase):
             streaming_disposition=StreamingDisposition.from_last_checkpoint(True),
         )
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        transient_issues_deadline = time.time() + yatest.common.plain_or_under_sanitizer(60, 300)
+        transient_issues_deadline = time.time() + plain_or_under_sanitizer(60, 300)
         msg = "Topic `continue_2_input` is not found in previous query. Query will use fresh offsets for its partitions"
         while True:
             if assert_has_issues(msg, True, transient_issues_deadline):

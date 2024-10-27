@@ -10,6 +10,7 @@ from google.protobuf import text_format
 
 import yatest
 
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.library.common.wait_for import wait_for
 from . import daemon
 from . import param_constants
@@ -516,7 +517,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._bs_config_invoke(request)
 
     def _bs_config_invoke(self, request):
-        timeout = yatest.common.plain_or_under_sanitizer(120, 240)
+        timeout = plain_or_under_sanitizer(120, 240)
         sleep = 5
         retries, success = timeout / sleep, False
         while retries > 0 and not success:
@@ -569,7 +570,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         def predicate():
             return blobstorage_controller_has_started_on_some_node(monitors)
 
-        timeout_seconds = yatest.common.plain_or_under_sanitizer(120, 240)
+        timeout_seconds = plain_or_under_sanitizer(120, 240)
         bs_controller_started = wait_for(
             predicate=predicate, timeout_seconds=timeout_seconds, step_seconds=1.0, multiply=1.3
         )

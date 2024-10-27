@@ -45,7 +45,7 @@ void TTierPreparationActor::StartChecker() {
 }
 
 void TTierPreparationActor::StartSSFetcher() {
-    if (!Tiers || !TieringRules) {
+    if (!Secrets || !Tiers || !TieringRules) {
         return;
     }
     std::set<TString> tieringIds;
@@ -90,8 +90,10 @@ void TTierPreparationActor::Handle(NSchemeShard::TEvSchemeShard::TEvProcessingRe
 
 void TTierPreparationActor::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
     if (auto snapshot = ev->Get()->GetSnapshotPtrAs<NMetadata::NSecret::TSnapshot>()) {
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "snapshot_fetched")("type", "secret");
         Secrets = snapshot;
     } else if (auto snapshot = ev->Get()->GetSnapshotPtrAs<TTiersSnapshot>()) {
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "snapshot_fetched")("type", "tier");
         Tiers = snapshot;
     } else {
         Y_ABORT_UNLESS(false);
@@ -100,6 +102,7 @@ void TTierPreparationActor::Handle(NMetadata::NProvider::TEvRefreshSubscriberDat
 }
 
 void TTierPreparationActor::Handle(TEvListTieringRulesResult::TPtr& ev) {
+    AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "snapshot_fetched")("type", "tiering_rule");
     const auto& result = ev->Get()->GetResult();
     if (result.IsFail()) {
         Controller->OnPreparationProblem(result.GetErrorMessage());
@@ -116,7 +119,7 @@ void TTierPreparationActor::Bootstrap() {
     Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
         new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TTierSnapshotConstructor>()));
     Register(MakeListTieringRulesActor(SelfId()).Release());
-    Become(&TThis::StateFetchTiering);
+    Become(&TThis::StateFetchMetadata);
 }
 
 TTierPreparationActor::TTierPreparationActor(std::vector<TTierConfig>&& objects,

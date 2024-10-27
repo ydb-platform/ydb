@@ -63,7 +63,7 @@ private:
         return cBehaviour;
     }
 
-    TConclusion<NKikimrSchemeOp::TModifyScheme> MakeRequest(const NKikimrSchemeOp::TMetadataObjectProperties& properties) {
+    TConclusion<NKikimrSchemeOp::TModifyScheme> MakeRequest(const NKikimrSchemeOp::TMetadataObjectProperties& properties) const {
         NKikimrSchemeOp::TModifyScheme modifyScheme;
         modifyScheme.SetWorkingDir(StorageDirectory);
         modifyScheme.SetFailedOnAlreadyExists(!OriginalRequest.GetExistingOk());
@@ -75,7 +75,7 @@ private:
     }
 
     NThreading::TFuture<TYqlConclusionStatus> SendSchemeRequest(TEvTxUserProxy::TEvProposeTransaction* request) const {
-        AFL_DEBUG(NKikimrServices::KQP_GATEWAY)("event", "propose_modify_abstract_object")("request", request->Record.DebugString());
+        AFL_DEBUG(NKikimrServices::KQP_GATEWAY)("event", "propose_modify_metadata_object")("request", request->Record.DebugString());
         auto schemePromise = NThreading::NewPromise<NKqp::TSchemeOpRequestHandler::TResult>();
         const bool failOnExist = request->Record.GetTransaction().GetModifyScheme().GetFailOnExist();
         const bool successOnNotExist = request->Record.GetTransaction().GetModifyScheme().GetSuccessOnNotExist();
@@ -115,11 +115,11 @@ public:
     }
 
     TOperationControllerBase(NThreading::TPromise<TYqlConclusionStatus> promise, NYql::TObjectSettingsImpl settings,
-        const TString& storageDirector, IOperationsManager::TInternalModificationContext context, TActorSystem* actorSystem)
+        const TString& storageDirectory, IOperationsManager::TInternalModificationContext context)
         : Promise(std::move(promise))
-        , ActorSystem(actorSystem)
+        , ActorSystem(context.GetExternalData().GetActorSystem())
         , OriginalRequest(std::move(settings))
-        , StorageDirectory(storageDirector)
+        , StorageDirectory(storageDirectory)
         , Context(std::move(context)) {
         AFL_VERIFY(ActorSystem);
     }
@@ -177,15 +177,107 @@ public:
     using TOperationControllerBase::TOperationControllerBase;
 };
 
+class TOperationControllerBuilderBase {
+public:
+    using TPtr = std::shared_ptr<TOperationControllerBuilderBase>;
+
+private:
+    YDB_READONLY(NThreading::TPromise<IOperationsManager::TYqlConclusionStatus>, Promise,
+        NThreading::NewPromise<IOperationsManager::TYqlConclusionStatus>());
+    YDB_ACCESSOR_DEF(std::optional<NYql::TObjectSettingsImpl>, Settings);
+    YDB_ACCESSOR_DEF(std::optional<TString>, StorageDirectory);
+    YDB_ACCESSOR_DEF(std::optional<IOperationsManager::TInternalModificationContext>, Context);
+
+protected:
+    virtual TOperationControllerBase::TPtr DoMakeController() const = 0;
+    virtual IOperationsManager::EActivityType GetActivityType() const = 0;
+    virtual NKqpProto::TKqpPhyMetadataObjectSettings GetSettingsProto(const NKqpProto::TKqpSchemeOperation& operation) const = 0;
+
+public:
+    bool IsInitialized() const {
+        return Settings && StorageDirectory && Context;
+    }
+
+    void SetContext(IOperationsManager::TExternalModificationContext externalContext) {
+        Context = IOperationsManager::TInternalModificationContext(std::move(externalContext));
+        Context->SetActivityType(GetActivityType());
+    }
+
+    IOperationsManager::TYqlConclusionStatus SetSettingsFromKqpOperation(const NKqpProto::TKqpSchemeOperation& operation) {
+        Settings = NYql::TObjectSettingsImpl();
+        if (!Settings->ParseFromProto(GetSettingsProto(operation))) {
+            return IOperationsManager::TYqlConclusionStatus::Fail("Cannot parse operation description");
+        }
+        return IOperationsManager::TYqlConclusionStatus::Success();
+    }
+
+    TOperationControllerBase::TPtr MakeControllerVerified() const {
+        AFL_VERIFY(IsInitialized())("settings", Settings.has_value())("storage_directory", StorageDirectory.has_value())(
+            "context", Context.has_value());
+        return DoMakeController();
+    }
+
+    NThreading::TFuture<IOperationsManager::TYqlConclusionStatus> GetResultFuture() const {
+        return Promise.GetFuture();
+    }
+
+    virtual ~TOperationControllerBuilderBase() = default;
+};
+
+class TCreateControllerBuilder : public TOperationControllerBuilderBase {
+private:
+    TOperationControllerBase::TPtr DoMakeController() const override {
+        return std::make_shared<TCreateOperationController>(GetPromise(), GetSettings().value(), GetStorageDirectory().value(), GetContext().value());
+    }
+
+    IOperationsManager::EActivityType GetActivityType() const override {
+        return IOperationsManager::EActivityType::Create;
+    }
+
+    NKqpProto::TKqpPhyMetadataObjectSettings GetSettingsProto(const NKqpProto::TKqpSchemeOperation& operation) const override {
+        return operation.GetCreateSchemeObject();
+    }
+};
+
+class TAlterControllerBuilder : public TOperationControllerBuilderBase {
+private:
+    TOperationControllerBase::TPtr DoMakeController() const override {
+        return std::make_shared<TAlterOperationController>(GetPromise(), GetSettings().value(), GetStorageDirectory().value(), GetContext().value());
+    }
+
+    IOperationsManager::EActivityType GetActivityType() const override {
+        return IOperationsManager::EActivityType::Alter;
+    }
+
+    NKqpProto::TKqpPhyMetadataObjectSettings GetSettingsProto(const NKqpProto::TKqpSchemeOperation& operation) const override {
+        return operation.GetAlterSchemeObject();
+    }
+};
+
+class TDropControllerBuilder : public TOperationControllerBuilderBase {
+private:
+    TOperationControllerBase::TPtr DoMakeController() const override {
+        return std::make_shared<TDropOperationController>(GetPromise(), GetSettings().value(), GetStorageDirectory().value(), GetContext().value());
+    }
+
+    IOperationsManager::EActivityType GetActivityType() const override {
+        return IOperationsManager::EActivityType::Drop;
+    }
+
+    NKqpProto::TKqpPhyMetadataObjectSettings GetSettingsProto(const NKqpProto::TKqpSchemeOperation& operation) const override {
+        return operation.GetDropSchemeObject();
+    }
+};
+
 }   // namespace
 
 NThreading::TFuture<TSchemeObjectOperationsManager::TYqlConclusionStatus> TSchemeObjectOperationsManager::DoModify(
     const NYql::TObjectSettingsImpl& settings, const ui32 /*nodeId*/, const IClassBehaviour::TPtr& /*manager*/,
     TInternalModificationContext& context) const {
     AFL_VERIFY(context.GetExternalData().GetActorSystem())("type_id", settings.GetTypeId());
-    NThreading::TPromise<TYqlConclusionStatus> promise = NThreading::NewPromise<TYqlConclusionStatus>();
+    AFL_DEBUG(NKikimrServices::KQP_GATEWAY)("event", "handle_modify_abstract_object")("type", settings.GetTypeId())("object", settings.GetObjectId());
 
-    std::shared_ptr<IBuildRequestController> controller;
+    TOperationControllerBuilderBase::TPtr controllerBuilder;
     switch (context.GetActivityType()) {
         case IOperationsManager::EActivityType::Undefined:
             return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("Operation type is undefined"));
@@ -193,21 +285,55 @@ NThreading::TFuture<TSchemeObjectOperationsManager::TYqlConclusionStatus> TSchem
             return NThreading::MakeFuture<TYqlConclusionStatus>(
                 TYqlConclusionStatus::Fail("Upsert operations are not supported for metadata objects"));
         case IOperationsManager::EActivityType::Create:
-            controller = std::make_shared<TCreateOperationController>(
-                promise, settings, GetStorageDirectory(), context, context.GetExternalData().GetActorSystem());
+            controllerBuilder = std::make_shared<TCreateControllerBuilder>();
             break;
         case IOperationsManager::EActivityType::Alter:
-            controller = std::make_shared<TAlterOperationController>(
-                promise, settings, GetStorageDirectory(), context, context.GetExternalData().GetActorSystem());
+            controllerBuilder = std::make_shared<TAlterControllerBuilder>();
             break;
         case IOperationsManager::EActivityType::Drop:
-            controller = std::make_shared<TDropOperationController>(
-                promise, settings, GetStorageDirectory(), context, context.GetExternalData().GetActorSystem());
+            controllerBuilder = std::make_shared<TDropControllerBuilder>();
             break;
     }
 
-    DoBuildRequestFromSettings(settings, context, controller);
-    return promise.GetFuture();
+    AFL_VERIFY(controllerBuilder);
+    controllerBuilder->SetSettings(settings);
+    controllerBuilder->SetStorageDirectory(GetStorageDirectory());
+    controllerBuilder->SetContext(context);
+
+    DoBuildRequestFromSettings(settings, context, controllerBuilder->MakeControllerVerified());
+    return controllerBuilder->GetResultFuture();
+}
+
+NThreading::TFuture<TSchemeObjectOperationsManager::TYqlConclusionStatus> TSchemeObjectOperationsManager::ExecutePrepared(
+    const NKqpProto::TKqpSchemeOperation& schemeOperation, const ui32 /*nodeId*/, const IClassBehaviour::TPtr& manager,
+    const TExternalModificationContext& context) const {
+    AFL_VERIFY(schemeOperation.GetObjectType() == manager->GetTypeId())("operation", schemeOperation.GetObjectType())(
+                                                      "manager", manager->GetTypeId());
+
+    TOperationControllerBuilderBase::TPtr controllerBuilder;
+    switch (schemeOperation.GetOperationCase()) {
+        case NKqpProto::TKqpSchemeOperation::kCreateSchemeObject:
+            controllerBuilder = std::make_shared<TCreateControllerBuilder>();
+            break;
+        case NKqpProto::TKqpSchemeOperation::kAlterSchemeObject:
+            controllerBuilder = std::make_shared<TAlterControllerBuilder>();
+            break;
+        case NKqpProto::TKqpSchemeOperation::kDropSchemeObject:
+            controllerBuilder = std::make_shared<TDropControllerBuilder>();
+            break;
+        default:
+            return NThreading::MakeFuture(TYqlConclusionStatus::Fail("Invalid operation type"));
+    }
+
+    AFL_VERIFY(controllerBuilder);
+    controllerBuilder->SetSettingsFromKqpOperation(schemeOperation);
+    controllerBuilder->SetStorageDirectory(GetStorageDirectory());
+    controllerBuilder->SetContext(context);
+    AFL_VERIFY(controllerBuilder->IsInitialized());
+
+    DoBuildRequestFromSettings(
+        controllerBuilder->GetSettings().value(), controllerBuilder->MutableContext().value(), controllerBuilder->MakeControllerVerified());
+    return controllerBuilder->GetResultFuture();
 }
 
 }   // namespace NKikimr::NMetadata::NModifications

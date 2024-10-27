@@ -31,12 +31,12 @@ protected:
     void Handle(NSchemeShard::TEvSchemeShard::TEvProcessingResponse::TPtr& ev);
     void Handle(TEvListTieringRulesResult::TPtr& ev);
 public:
-    STATEFN(StateFetchTiering) {
+    STATEFN(StateFetchMetadata) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
             hFunc(TEvListTieringRulesResult, Handle);
             default:
-                break;
+                AFL_VERIFY(false)("event", ev->ToString());
         }
     }
 
@@ -44,7 +44,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NSchemeShard::TEvSchemeShard::TEvProcessingResponse, Handle);
             default:
-                break;
+                AFL_VERIFY(false)("event", ev->ToString());
         }
     }
 

@@ -34,18 +34,33 @@ protected:
     virtual TString GetStorageDirectory() const = 0;
 
 protected:
-    NThreading::TFuture<TYqlConclusionStatus> DoModify(const NYql::TObjectSettingsImpl& settings, const ui32 /*nodeId*/,
+    NThreading::TFuture<TYqlConclusionStatus> DoModify(const NYql::TObjectSettingsImpl& settings, const ui32 nodeId,
         const IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const override;
 
-    TYqlConclusionStatus DoPrepare(NKqpProto::TKqpSchemeOperation& /*schemeOperation*/, const NYql::TObjectSettingsImpl& settings,
-        const IClassBehaviour::TPtr& /*manager*/, TInternalModificationContext& /*context*/) const override {
-        return TYqlConclusionStatus::Fail("Prepare operation is not supported for " + settings.GetTypeId() + " objects.");
+    TYqlConclusionStatus DoPrepare(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings,
+        const IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const override {
+        schemeOperation.SetObjectType(manager->GetTypeId());
+        auto settingsProto = settings.SerializeToProto();
+        switch (context.GetActivityType()) {
+            case IOperationsManager::EActivityType::Undefined:
+                return TYqlConclusionStatus::Fail("Undefined operation type");
+            case IOperationsManager::EActivityType::Upsert:
+                return TYqlConclusionStatus::Fail("Upsert operations are not supported for " + manager->GetTypeId() + " objects");
+            case IOperationsManager::EActivityType::Create:
+                *schemeOperation.MutableCreateSchemeObject() = std::move(settingsProto);
+                break;
+            case IOperationsManager::EActivityType::Alter:
+                *schemeOperation.MutableAlterSchemeObject() = std::move(settingsProto);
+                break;
+            case IOperationsManager::EActivityType::Drop:
+                *schemeOperation.MutableDropSchemeObject() = std::move(settingsProto);
+                break;
+        }
+        return TYqlConclusionStatus::Success();
     }
 
-    NThreading::TFuture<TYqlConclusionStatus> ExecutePrepared(const NKqpProto::TKqpSchemeOperation& /*schemeOperation*/, const ui32 /*nodeId*/,
-        const IClassBehaviour::TPtr& /*manager*/, const TExternalModificationContext& /*context*/) const override {
-        return NThreading::MakeFuture(TYqlConclusionStatus::Fail("Execute prepared operation is not supported for this object."));
-    }
+    NThreading::TFuture<TYqlConclusionStatus> ExecutePrepared(const NKqpProto::TKqpSchemeOperation& schemeOperation, const ui32 nodeId,
+        const IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const override;
 };
 
 }   // namespace NKikimr::NMetadata::NModifications

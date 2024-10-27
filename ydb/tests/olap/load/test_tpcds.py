@@ -8,7 +8,6 @@ from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 
 class TpcdsSuiteBase(LoadSuiteBase):
-    scale: int = 0
     workload_type: WorkloadType = WorkloadType.TPC_DS
     iterations: int = 3
     tables_size: dict[str, int] = {}

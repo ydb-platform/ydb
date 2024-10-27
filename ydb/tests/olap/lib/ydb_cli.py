@@ -62,7 +62,7 @@ class YdbCliHelper:
                      timeout: float,
                      check_canonical: bool,
                      query_syntax: str,
-                     scale: int):
+                     scale: Optional[int]):
             def _get_output_path(ext: str) -> str:
                 return yatest.common.test_output_path(f'q{query_num}.{ext}')
 
@@ -200,7 +200,7 @@ class YdbCliHelper:
                 cmd.append('--check-canonical')
             if self.query_syntax:
                 cmd += ['--syntax', self.query_syntax]
-            if self.scale > 0:
+            if self.scale is not None and self.scale > 0:
                 cmd += ['--scale', str(self.scale)]
             return cmd
 
@@ -231,7 +231,7 @@ class YdbCliHelper:
     @staticmethod
     def workload_run(workload_type: WorkloadType, path: str, query_num: int, iterations: int = 5,
                      timeout: float = 100., check_canonical: bool = False, query_syntax: str = '',
-                     scale: int = 0) -> YdbCliHelper.WorkloadRunResult:
+                     scale: Optional[int] = None) -> YdbCliHelper.WorkloadRunResult:
         return YdbCliHelper.WorkloadProcessor(
             workload_type,
             path,

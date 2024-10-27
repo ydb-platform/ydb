@@ -102,6 +102,9 @@ void TTpcBaseWorkloadGenerator::FilterHeader(IOutputStream& result, TStringBuf h
             continue;
         }
         const auto name = StripString(line.SubString(0, pos));
+        if (name == "$scale_factor") {
+            line = "$scale_factor = " + ToString(Params.GetScale()) + ";"; 
+        } 
         for(auto posInQ = query.find(name); posInQ != query.npos; posInQ = query.find(name, posInQ)) {
             posInQ += name.length();
             if (posInQ >= query.length() || !IsAsciiAlnum(query[posInQ]) && query[posInQ] != '_') {

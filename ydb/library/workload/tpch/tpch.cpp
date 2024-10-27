@@ -57,12 +57,6 @@ TVector<TString> TTpchWorkloadGenerator::GetTablesList() const {
     };
 }
 
-void TTpchWorkloadGenerator::PatchQuery(TString& query) const {
-        // See Specification 2.4.11.3
-    SubstGlobal(query, "$z0_0001_35", "$z0_0001_35 / " + ToString(Params.GetScale()));
-    TTpcBaseWorkloadGenerator::PatchQuery(query);
-}
-
 THolder<IWorkloadQueryGenerator> TTpchWorkloadParams::CreateGenerator() const {
     return MakeHolder<TTpchWorkloadGenerator>(*this);
 }

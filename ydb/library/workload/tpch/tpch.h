@@ -20,7 +20,6 @@ public:
 protected:
     TString DoGetDDLQueries() const override;
     TVector<TString> GetTablesList() const override;
-    void PatchQuery(TString& query) const override;
 
 private:
     const TTpchWorkloadParams& Params;

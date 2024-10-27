@@ -81,10 +81,20 @@ namespace boost { namespace locale { namespace impl_icu {
         using type = TSize;
     };
 
+    template<typename Func>
+    struct is_casemap_func_const;
+
+    template<typename Func>
+    struct is_casemap_func_const<Func*> : is_casemap_func_const<Func> {};
+
+    template<typename TRes, typename TCaseMap, typename... TArgs>
+    struct is_casemap_func_const<TRes(TCaseMap*, TArgs...)> : std::is_const<TCaseMap> {};
+
     template<typename U8Char>
     class raii_casemap {
     public:
         static_assert(sizeof(U8Char) == sizeof(char), "Not an UTF-8 char type");
+        using string_type = std::basic_string<U8Char>;
 
         raii_casemap(const raii_casemap&) = delete;
         void operator=(const raii_casemap&) = delete;
@@ -97,8 +107,24 @@ namespace boost { namespace locale { namespace impl_icu {
             if(!map_)
                 throw std::runtime_error("Failed to create UCaseMap"); // LCOV_EXCL_LINE
         }
+        ~raii_casemap() { ucasemap_close(map_); }
+
         template<typename Conv>
-        std::basic_string<U8Char> convert(Conv func, const U8Char* begin, const U8Char* end) const
+        typename std::enable_if<!is_casemap_func_const<Conv>::value, string_type>::type
+        convert(Conv func, const U8Char* begin, const U8Char* end)
+        {
+            return do_convert(func, begin, end);
+        }
+        template<typename Conv>
+        typename std::enable_if<is_casemap_func_const<Conv>::value, string_type>::type
+        convert(Conv func, const U8Char* begin, const U8Char* end) const
+        {
+            return do_convert(func, begin, end);
+        }
+
+    private:
+        template<typename Conv>
+        string_type do_convert(Conv func, const U8Char* begin, const U8Char* end) const
         {
             using size_type = typename get_casemap_size_type<Conv>::type;
             if((end - begin) >= std::numeric_limits<std::ptrdiff_t>::max() / 11)
@@ -125,9 +151,8 @@ namespace boost { namespace locale { namespace impl_icu {
                             &err);
             }
             check_and_throw_icu_error(err);
-            return std::basic_string<U8Char>(buf.data(), size);
+            return string_type(buf.data(), size);
         }
-        ~raii_casemap() { ucasemap_close(map_); }
 
     private:
         UCaseMap* map_;
@@ -147,7 +172,11 @@ namespace boost { namespace locale { namespace impl_icu {
             switch(how) {
                 case converter_base::upper_case: return map_.convert(ucasemap_utf8ToUpper, begin, end);
                 case converter_base::lower_case: return map_.convert(ucasemap_utf8ToLower, begin, end);
-                case converter_base::title_case: return map_.convert(ucasemap_utf8ToTitle, begin, end);
+                case converter_base::title_case: {
+                    // Non-const method, so need to create a separate map
+                    raii_casemap<U8Char> map(locale_id_);
+                    return map.convert(ucasemap_utf8ToTitle, begin, end);
+                }
                 case converter_base::case_folding: return map_.convert(ucasemap_utf8FoldCase, begin, end);
                 case converter_base::normalization: {
                     icu_std_converter<U8Char> cvt("UTF-8");

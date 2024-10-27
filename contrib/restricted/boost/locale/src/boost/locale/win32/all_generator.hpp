@@ -12,7 +12,7 @@
 
 namespace boost { namespace locale { namespace impl_win {
 
-    class winlocale;
+    struct winlocale;
 
     std::locale create_convert(const std::locale& in, const winlocale& lc, char_facet_t type);
 

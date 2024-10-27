@@ -63,6 +63,9 @@ namespace boost { namespace locale { namespace impl_icu {
         {
             UErrorCode err = U_ZERO_ERROR;
             calendar_.reset(icu::Calendar::createInstance(dat.locale(), err));
+            // Use accuracy of seconds, see #221
+            const double rounded_time = std::floor(calendar_->getTime(err) / U_MILLIS_PER_SECOND) * U_MILLIS_PER_SECOND;
+            calendar_->setTime(rounded_time, err);
             check_and_throw_dt(err);
 #if BOOST_LOCALE_ICU_VERSION < 402
             // workaround old/invalid data, it should be 4 in general
@@ -110,19 +113,23 @@ namespace boost { namespace locale { namespace impl_icu {
             return v;
         }
 
-        void set_time(const posix_time& p) override
-        {
-            double utime = p.seconds * 1000.0 + p.nanoseconds / 1000000.0;
-            UErrorCode code = U_ZERO_ERROR;
-            calendar_->setTime(utime, code);
-            check_and_throw_dt(code);
-        }
         void normalize() override
         {
             // Can't call complete() explicitly (protected)
             // calling get which calls complete
             UErrorCode code = U_ZERO_ERROR;
             calendar_->get(UCAL_YEAR, code);
+            check_and_throw_dt(code);
+        }
+
+        void set_time(const posix_time& p) override
+        {
+            // Ignore `p.nanoseconds / 1e6` for simplicity of users as there is no
+            // easy way to set the sub-seconds via `date_time`.
+            // Matches behavior of other backends that only have seconds resolution
+            const double utime = p.seconds * 1e3;
+            UErrorCode code = U_ZERO_ERROR;
+            calendar_->setTime(utime, code);
             check_and_throw_dt(code);
         }
         posix_time get_time() const override
@@ -146,6 +153,7 @@ namespace boost { namespace locale { namespace impl_icu {
             check_and_throw_dt(code);
             return result;
         }
+
         void set_option(calendar_option_type opt, int /*v*/) override
         {
             switch(opt) {

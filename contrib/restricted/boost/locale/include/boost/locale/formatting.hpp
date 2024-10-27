@@ -8,15 +8,13 @@
 #ifndef BOOST_LOCALE_FORMATTING_HPP_INCLUDED
 #define BOOST_LOCALE_FORMATTING_HPP_INCLUDED
 
+#include <boost/locale/detail/any_string.hpp>
 #include <boost/locale/time_zone.hpp>
-#include <boost/assert.hpp>
-#include <boost/utility/string_view.hpp>
 #include <cstdint>
 #include <cstring>
 #include <istream>
 #include <ostream>
 #include <string>
-#include <typeinfo>
 
 #ifdef BOOST_MSVC
 #    pragma warning(push)
@@ -130,13 +128,13 @@ namespace boost { namespace locale {
         template<typename CharType>
         void date_time_pattern(const std::basic_string<CharType>& str)
         {
-            date_time_pattern_set().set<CharType>(str);
+            datetime_.set<CharType>(str);
         }
         /// Get date/time pattern (strftime like)
         template<typename CharType>
         std::basic_string<CharType> date_time_pattern() const
         {
-            return date_time_pattern_set().get<CharType>();
+            return datetime_.get<CharType>();
         }
 
         /// \cond INTERNAL
@@ -144,51 +142,10 @@ namespace boost { namespace locale {
         /// \endcond
 
     private:
-        class string_set;
-
-        const string_set& date_time_pattern_set() const;
-        string_set& date_time_pattern_set();
-
-        class BOOST_LOCALE_DECL string_set {
-        public:
-            string_set();
-            ~string_set();
-            string_set(const string_set& other);
-            string_set& operator=(string_set other);
-            void swap(string_set& other);
-
-            template<typename Char>
-            void set(const boost::basic_string_view<Char> s)
-            {
-                BOOST_ASSERT(!s.empty());
-                delete[] ptr;
-                ptr = nullptr;
-                type = &typeid(Char);
-                size = sizeof(Char) * s.size();
-                ptr = size ? new char[size] : nullptr;
-                memcpy(ptr, s.data(), size);
-            }
-
-            template<typename Char>
-            std::basic_string<Char> get() const
-            {
-                if(type == nullptr || *type != typeid(Char))
-                    throw std::bad_cast();
-                std::basic_string<Char> result(size / sizeof(Char), Char(0));
-                memcpy(&result.front(), ptr, size);
-                return result;
-            }
-
-        private:
-            const std::type_info* type;
-            size_t size;
-            char* ptr;
-        };
-
         uint64_t flags_;
         int domain_id_;
         std::string time_zone_;
-        string_set datetime_;
+        detail::any_string datetime_;
     };
 
     /// \brief This namespace includes all manipulators that can be used on IO streams

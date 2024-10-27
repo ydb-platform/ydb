@@ -62,13 +62,13 @@ namespace boost { namespace locale { namespace impl_icu {
         calendar_impl(const cdata& dat)
         {
             UErrorCode err = U_ZERO_ERROR;
-            calendar_.reset(icu::Calendar::createInstance(dat.locale, err));
+            calendar_.reset(icu::Calendar::createInstance(dat.locale(), err));
             check_and_throw_dt(err);
 #if BOOST_LOCALE_ICU_VERSION < 402
             // workaround old/invalid data, it should be 4 in general
             calendar_->setMinimalDaysInFirstWeek(4);
 #endif
-            encoding_ = dat.encoding;
+            encoding_ = dat.encoding();
         }
         calendar_impl(const calendar_impl& other)
         {

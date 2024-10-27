@@ -1,5 +1,6 @@
 //
 // Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
+// Copyright (c) 2022-2023 Alexander Grund
 //
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
@@ -25,7 +26,7 @@ namespace boost { namespace locale {
     class BOOST_SYMBOL_VISIBLE info : public std::locale::facet, public detail::facet_id<info> {
     public:
         /// String information about the locale
-        enum string_propery {
+        enum string_property {
             language_property, ///< ISO 639 language id
             country_property,  ///< ISO 3166 country id
             variant_property,  ///< Variant for locale
@@ -57,7 +58,7 @@ namespace boost { namespace locale {
 
     protected:
         /// Get string property by its id \a v
-        virtual std::string get_string_property(string_propery v) const = 0;
+        virtual std::string get_string_property(string_property v) const = 0;
         /// Get integer property by its id \a v
         virtual int get_integer_property(integer_property v) const = 0;
     };

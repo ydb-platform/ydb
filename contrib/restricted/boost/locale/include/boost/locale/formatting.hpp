@@ -363,6 +363,12 @@ namespace boost { namespace locale {
 
         /// \cond INTERNAL
         namespace detail {
+            inline bool is_datetime_display_flags(const uint64_t display_flags)
+            {
+                return (display_flags == flags::date || display_flags == flags::time || display_flags == flags::datetime
+                        || display_flags == flags::strftime);
+            }
+
             template<typename CharType>
             struct add_ftime {
                 std::basic_string<CharType> ftime;

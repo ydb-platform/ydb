@@ -124,7 +124,7 @@ namespace boost { namespace locale { namespace impl_icu {
             return gnu_gettext::pj_winberger_hash_function(reinterpret_cast<char*>(tmp.data()));
         }
 
-        collate_impl(const cdata& d) : cvt_(d.encoding), locale_(d.locale), is_utf8_(d.utf8) {}
+        collate_impl(const cdata& d) : cvt_(d.encoding()), locale_(d.locale()), is_utf8_(d.is_utf8()) {}
 
         icu::Collator* get_collator(collate_level level) const
         {
@@ -180,6 +180,9 @@ namespace boost { namespace locale { namespace impl_icu {
             case char_facet_t::nochar: break;
             case char_facet_t::char_f: return std::locale(in, new collate_impl<char>(cd));
             case char_facet_t::wchar_f: return std::locale(in, new collate_impl<wchar_t>(cd));
+#ifdef __cpp_char8_t
+            case char_facet_t::char8_f: break; // std-facet not available (yet)
+#endif
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
             case char_facet_t::char16_f: return std::locale(in, new collate_impl<char16_t>(cd));
 #endif

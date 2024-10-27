@@ -60,7 +60,10 @@ TFuture<IFileReaderPtr> CreateFileReader(
                     THROW_ERROR_EXCEPTION("Failed to deserialize file stream header");
                 }
 
-                return New<TFileReader>(inputStream, FromProto<TObjectId>(meta.id()), meta.revision());
+                return New<TFileReader>(
+                    inputStream,
+                    FromProto<TObjectId>(meta.id()),
+                    FromProto<NHydra::TRevision>(meta.revision()));
             })).As<IFileReaderPtr>();
         }));
 }

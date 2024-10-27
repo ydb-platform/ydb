@@ -81,7 +81,7 @@ void ToProto(
     for (const auto& item : options.PrerequisiteRevisions) {
         auto* protoItem = proto->add_revisions();
         protoItem->set_path(item->Path);
-        protoItem->set_revision(item->Revision);
+        protoItem->set_revision(ToProto(item->Revision));
     }
 }
 
@@ -599,7 +599,7 @@ void FromProto(NTableClient::TTableSchemaPtr* schema, const NProto::TTableSchema
 void ToProto(NProto::TTabletInfo* protoTabletInfo, const NTabletClient::TTabletInfo& tabletInfo)
 {
     ToProto(protoTabletInfo->mutable_tablet_id(), tabletInfo.TabletId);
-    protoTabletInfo->set_mount_revision(tabletInfo.MountRevision);
+    protoTabletInfo->set_mount_revision(ToProto(tabletInfo.MountRevision));
     protoTabletInfo->set_state(static_cast<i32>(tabletInfo.State));
     ToProto(protoTabletInfo->mutable_pivot_key(), tabletInfo.PivotKey);
     if (tabletInfo.CellId) {
@@ -611,7 +611,7 @@ void FromProto(NTabletClient::TTabletInfo* tabletInfo, const NProto::TTabletInfo
 {
     tabletInfo->TabletId =
         FromProto<TTabletId>(protoTabletInfo.tablet_id());
-    tabletInfo->MountRevision = protoTabletInfo.mount_revision();
+    tabletInfo->MountRevision = FromProto<NHydra::TRevision>(protoTabletInfo.mount_revision());
     tabletInfo->State = CheckedEnumCast<ETabletState>(protoTabletInfo.state());
     tabletInfo->PivotKey = FromProto<NTableClient::TLegacyOwningKey>(protoTabletInfo.pivot_key());
     if (protoTabletInfo.has_cell_id()) {

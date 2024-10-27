@@ -292,7 +292,7 @@ def generate_github_issue_title_and_body( test_data):
     test_full_names = [f"{d['full_name']}" for d in test_data]
     test_mute_strings = [f"{d['mute_string']}" for d in test_data]
     summary = [
-      f"{d['test_name']}: {d['state']} last {d['days_in_state']} days. Today: success_rate {d['success_rate']}%, {d['summary']}" 
+      f"{d['test_name']}: {d['state']} last {d['days_in_state']} days. {d['date_window']}: success_rate {d['success_rate']}%, {d['summary']}" 
       for d in test_data
       ]
     

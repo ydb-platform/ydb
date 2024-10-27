@@ -75,7 +75,7 @@ TQueryInfoList TTpcBaseWorkloadGenerator::GetWorkload(int type) {
         result.emplace_back();
         result.back().Query = query;
         if (Params.GetCheckCanonical()) {
-            const auto key = resourcePrefix + "s1_canonical/q" + ToString(&query - queries.data()) + ".result";
+            const auto key = resourcePrefix + "s" + ToString(Params.GetScale()) + "_canonical/q" + ToString(&query - queries.data()) + ".result";
             if (NResource::Has(key)) {
                 result.back().ExpectedResult = NResource::Find(key);
             }
@@ -85,18 +85,7 @@ TQueryInfoList TTpcBaseWorkloadGenerator::GetWorkload(int type) {
 }
 
 void TTpcBaseWorkloadGenerator::PatchQuery(TString& query) const {
-    TString header;
-    switch (Params.GetFloatMode()) {
-    case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
-        header = FilterHeader(NResource::Find("consts.yql"), query);
-        break;
-    case TTpcBaseWorkloadParams::EFloatMode::DECIMAL:
-    case TTpcBaseWorkloadParams::EFloatMode::DECIMAL_YDB:
-        header = FilterHeader(NResource::Find("consts_decimal.yql"), query);
-        break;
-    }
-    PatchHeader(header);
-    SubstGlobal(query, "{% include 'header.sql.jinja' %}", header);
+    SubstGlobal(query, "{% include 'header.sql.jinja' %}", GetHeader(query));
     SubstGlobal(query, "{path}", Params.GetFullTableName(nullptr) + "/");
     for (const auto& table: GetTablesList()) {
         SubstGlobal(query, 
@@ -106,8 +95,7 @@ void TTpcBaseWorkloadGenerator::PatchQuery(TString& query) const {
     }
 }
 
-TString TTpcBaseWorkloadGenerator::FilterHeader(TStringBuf header, const TString& query) const {
-    TStringBuilder result;
+void TTpcBaseWorkloadGenerator::FilterHeader(IOutputStream& result, TStringBuf header, const TString& query) const {
     for(TStringBuf line; header.ReadLine(line);) {
         const auto pos = line.find('=');
         if (pos == line.npos) {
@@ -122,15 +110,25 @@ TString TTpcBaseWorkloadGenerator::FilterHeader(TStringBuf header, const TString
             }
         }
     }
-    return result;
 }
 
-void TTpcBaseWorkloadGenerator::PatchHeader(TString& header) const {
+TString TTpcBaseWorkloadGenerator::GetHeader(const TString& query) const {
+    TStringBuilder header;
     if (Params.GetSyntax() == TWorkloadBaseParams::EQuerySyntax::PG) {
-        header = "--!syntax_pg\n" + header;
+        header << "--!syntax_pg" << Endl;
     }
+    switch (Params.GetFloatMode()) {
+    case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
+        FilterHeader(header.Out, NResource::Find("consts.yql"), query);
+        break;
+    case TTpcBaseWorkloadParams::EFloatMode::DECIMAL:
+    case TTpcBaseWorkloadParams::EFloatMode::DECIMAL_YDB:
+        FilterHeader(header.Out, NResource::Find("consts_decimal.yql"), query);
+        break;
+    }
+
     if (Params.GetFloatMode() != TTpcBaseWorkloadParams::EFloatMode::DECIMAL_YDB) {
-        return;
+        return header;
     }
     header.to_lower();
     const TStringBuf dec("decimal(");
@@ -147,6 +145,7 @@ void TTpcBaseWorkloadGenerator::PatchHeader(TString& header) const {
         header.replace(p, q - p, newDecParams);
         p = header.find(dec, q);
     }
+    return header;
 }
 
 void TTpcBaseWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
@@ -157,6 +156,10 @@ void TTpcBaseWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComm
             .StoreResult(&ExternalQueriesDir);
         opts.AddLongOption( "syntax", "Query syntax [" + GetEnumAllNames<EQuerySyntax>() + "].")
             .StoreResult(&Syntax).DefaultValue(Syntax);
+        opts.AddLongOption("scale", "scale in percents")
+            .DefaultValue(Scale).StoreResult(&Scale);
+        opts.AddLongOption("float-mode", "Float mode. Can be float, decimal or decimal_ydb. If set to 'float' - float will be used, 'decimal' means that decimal will be used with canonical size and 'decimal_ydb' means that all floats will be converted to decimal(22,9) because YDB supports only this type.")
+            .StoreResult(&FloatMode).DefaultValue(FloatMode);
         break;
     case TWorkloadParams::ECommandType::Init:
         opts.AddLongOption("float-mode", "Float mode. Can be float, decimal or decimal_ydb. If set to 'float' - float will be used, 'decimal' means that decimal will be used with canonical size and 'decimal_ydb' means that all floats will be converted to decimal(22,9) because YDB supports only this type.")
